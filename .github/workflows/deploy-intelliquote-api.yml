@@ -153,22 +153,16 @@ jobs:
           PROJECT="${{ env.GCP_PROJECT_ID }}"
           BUILD_TAG="${{ steps.tags.outputs.backend_build_tag }}"
 
-          echo "Deploying ${IMAGE} to ${SERVICE} (${REGION})"
-
-          # Envs "nao-secret" vao inline via --set-env-vars (mesmo modelo do
-          # deploy-env-vars.yaml que o deploy manual usa). Segredos vao via
-          # --set-secrets lendo do GCP Secret Manager (mesmo modelo do
-          # deploy-cloudrun.ps1) — assim nenhum valor sensivel toca o GitHub.
-          ENV_VARS="NODE_ENV=production"
-          ENV_VARS="${ENV_VARS},CORS_ORIGINS=https://intelliquote.portal-comex.com,https://intelliquote.web.app,https://intelliquote--intelliquote-5qf1ezu3.web.app,http://localhost:3000,http://127.0.0.1:3000"
-          ENV_VARS="${ENV_VARS},INTELLIQUOTE_PORTAL_URL=https://intelliquote.portal-comex.com"
-          ENV_VARS="${ENV_VARS},MAILER_PROVIDER=smtp"
-          ENV_VARS="${ENV_VARS},SMTP_SECURE=false"
-          ENV_VARS="${ENV_VARS},JWT_ACCESS_EXPIRES_IN=15m"
-          ENV_VARS="${ENV_VARS},JWT_REFRESH_EXPIRES_IN=7d"
-          ENV_VARS="${ENV_VARS},COOKIE_SECURE=true"
-          ENV_VARS="${ENV_VARS},PORT=8080"
-          ENV_VARS="${ENV_VARS},BACKEND_BUILD_TAG=${BUILD_TAG}"
+          # --set-env-vars nao aceita virgulas dentro do valor (o que explode
+          # quando CORS_ORIGINS tem varias URLs separadas por virgula).
+          # Solucao: passar via --env-vars-file apontando para um YAML
+          # commitado (deploy-env-vars.yaml). Esse arquivo NAO tem nada
+          # sensivel: so configuracao de runtime publico.
+          ENV_VARS_FILE="programa/deploy-env-vars.yaml"
+          if [ ! -f "$ENV_VARS_FILE" ]; then
+            echo "::error::$ENV_VARS_FILE nao encontrado."
+            exit 1
+          fi
 
           SECRET_REFS="SMTP_PASS=SMTP_PASS:latest"
           SECRET_REFS="${SECRET_REFS},SMTP_HOST=SMTP_HOST:latest"
@@ -181,6 +175,7 @@ jobs:
           SECRET_REFS="${SECRET_REFS},JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest"
           SECRET_REFS="${SECRET_REFS},FIREBASE_SERVICE_ACCOUNT_JSON=FIREBASE_SERVICE_ACCOUNT_JSON:latest"
 
+          echo "Deploying ${IMAGE} to ${SERVICE} (${REGION})"
           gcloud run deploy "${SERVICE}" \
             --project="${PROJECT}" \
             --region="${REGION}" \
@@ -193,7 +188,8 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --timeout=300 \
-            --set-env-vars="${ENV_VARS}" \
+            --env-vars-file="${ENV_VARS_FILE}" \
+            --update-env-vars="BACKEND_BUILD_TAG=${BUILD_TAG}" \
             --set-secrets="${SECRET_REFS}" \
             --quiet
           URL=$(gcloud run services describe "${SERVICE}" \
