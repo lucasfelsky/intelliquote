@@ -764,10 +764,11 @@
             ) {
               return `${window.location.origin}/api`;
             }
-            // Em qualquer outro host (ex.: preview do Firebase Hosting ou
-            // proxy custom), mantemos o origin atual para que CORS e
-            // cookies funcionem sem hardcode do URL do Cloud Run.
-            return `${window.location.origin}/api`;
+            // Hospedado em intelliquote.portal-comex.com (Firebase Hosting).
+            // O firebase.json do projeto Portal COMEX ainda nao tem rewrite
+            // /api/** -> Cloud Run, entao precisamos apontar para o backend
+            // direto. CORS_ORIGINS no backend ja permite esse host.
+            return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
           })();
           try {
             const res = await fetch(`${apiBase}/portal/${encodeURIComponent(token)}/respond`, {
@@ -798,6 +799,9 @@
           try {
             // O backend pode estar hospedado em outro host (Cloud Run direto),
             // entao resolvemos o prefixo /api relativo a este documento.
+            // Em intelliquote.portal-comex.com (Firebase Hosting) o firebase.json
+            // do projeto Portal COMEX ainda nao tem rewrite /api/** -> Cloud Run,
+            // entao apontamos para o backend direto (CORS ja esta liberado).
             const apiBase = (() => {
               if (
                 window.location.hostname.endsWith('.run.app') ||
@@ -806,7 +810,7 @@
               ) {
                 return `${window.location.origin}/api`;
               }
-              return `${window.location.origin}/api`;
+              return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
             })();
             const res = await fetch(`${apiBase}/portal/${encodeURIComponent(token)}`, {
               headers: { Accept: 'application/json' },
