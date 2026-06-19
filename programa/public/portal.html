@@ -754,9 +754,19 @@
             items: collectItems(),
           };
           const apiBase = (() => {
-            if (window.location.hostname.endsWith('portal-comex.com')) {
-              return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
+            // Quando o portal.html e servido pelo Cloud Run direto
+            // (intelliquote-api-...run.app/portal), o JS e o backend
+            // estao no mesmo origin, entao usamos paths relativos.
+            if (
+              window.location.hostname.endsWith('.run.app') ||
+              window.location.hostname === 'localhost' ||
+              window.location.hostname === '127.0.0.1'
+            ) {
+              return `${window.location.origin}/api`;
             }
+            // Em qualquer outro host (ex.: preview do Firebase Hosting ou
+            // proxy custom), mantemos o origin atual para que CORS e
+            // cookies funcionem sem hardcode do URL do Cloud Run.
             return `${window.location.origin}/api`;
           })();
           try {
@@ -789,8 +799,12 @@
             // O backend pode estar hospedado em outro host (Cloud Run direto),
             // entao resolvemos o prefixo /api relativo a este documento.
             const apiBase = (() => {
-              if (window.location.hostname.endsWith('portal-comex.com')) {
-                return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
+              if (
+                window.location.hostname.endsWith('.run.app') ||
+                window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1'
+              ) {
+                return `${window.location.origin}/api`;
               }
               return `${window.location.origin}/api`;
             })();
