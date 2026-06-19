@@ -7,3 +7,7 @@ JWT_ACCESS_EXPIRES_IN: "15m"
 JWT_REFRESH_EXPIRES_IN: "7d"
 COOKIE_SECURE: "true"
 PORT: "8080"
+# BACKEND_BUILD_TAG e injetado pelo workflow via sed no momento do deploy
+# (veja .github/workflows/deploy-intelliquote-api.yml), porque --env-vars-file
+# e --update-env-vars sao mutuamente exclusivos.
+BACKEND_BUILD_TAG: placeholder

@@ -155,14 +155,20 @@ jobs:
 
           # --set-env-vars nao aceita virgulas dentro do valor (o que explode
           # quando CORS_ORIGINS tem varias URLs separadas por virgula).
-          # Solucao: passar via --env-vars-file apontando para um YAML
-          # commitado (deploy-env-vars.yaml). Esse arquivo NAO tem nada
-          # sensivel: so configuracao de runtime publico.
-          ENV_VARS_FILE="programa/deploy-env-vars.yaml"
-          if [ ! -f "$ENV_VARS_FILE" ]; then
-            echo "::error::$ENV_VARS_FILE nao encontrado."
+          # Solucao: gerar um YAML temporario a partir de deploy-env-vars.yaml
+          # (commitado), substituindo o BACKEND_BUILD_TAG pelo valor desta
+          # run. --env-vars-file e --update-env-vars sao mutuamente exclusivos,
+          # entao nao da pra usar os dois.
+          ENV_VARS_FILE_TEMPLATE="programa/deploy-env-vars.yaml"
+          if [ ! -f "$ENV_VARS_FILE_TEMPLATE" ]; then
+            echo "::error::$ENV_VARS_FILE_TEMPLATE nao encontrado."
             exit 1
           fi
+          ENV_VARS_FILE="/tmp/deploy-env-vars.yaml"
+          sed "s|BACKEND_BUILD_TAG: placeholder|BACKEND_BUILD_TAG: ${BUILD_TAG}|" \
+            "${ENV_VARS_FILE_TEMPLATE}" > "${ENV_VARS_FILE}"
+          echo "Env vars file:"
+          cat "${ENV_VARS_FILE}"
 
           SECRET_REFS="SMTP_PASS=SMTP_PASS:latest"
           SECRET_REFS="${SECRET_REFS},SMTP_HOST=SMTP_HOST:latest"
@@ -189,7 +195,6 @@ jobs:
             --max-instances=3 \
             --timeout=300 \
             --env-vars-file="${ENV_VARS_FILE}" \
-            --update-env-vars="BACKEND_BUILD_TAG=${BUILD_TAG}" \
             --set-secrets="${SECRET_REFS}" \
             --quiet
           URL=$(gcloud run services describe "${SERVICE}" \
