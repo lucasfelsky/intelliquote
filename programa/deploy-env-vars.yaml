@@ -6,7 +6,8 @@ SMTP_SECURE: "false"
 JWT_ACCESS_EXPIRES_IN: "15m"
 JWT_REFRESH_EXPIRES_IN: "7d"
 COOKIE_SECURE: "true"
-PORT: "8080"
+# PORT e reservado pelo Cloud Run (injetado automaticamente no container
+# com o valor de --port). Nao pode ser definido via env vars.
 # BACKEND_BUILD_TAG e injetado pelo workflow via sed no momento do deploy
 # (veja .github/workflows/deploy-intelliquote-api.yml), porque --env-vars-file
 # e --update-env-vars sao mutuamente exclusivos.
