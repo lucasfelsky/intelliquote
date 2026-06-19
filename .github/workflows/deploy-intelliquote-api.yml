@@ -58,6 +58,8 @@ env:
   GCP_ARTIFACT_REPO: ${{ vars.GCP_ARTIFACT_REPO }}
   GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
 
+# Variáveis e secrets do GitHub às vezes vêm com whitespace acidental;
+# normaliza no inicio do job para não dar "invalid project id".
 jobs:
   build-and-deploy:
     name: Build (Cloud Build) + Deploy (Cloud Run)
@@ -67,6 +69,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Trim de variáveis (defesa contra whitespace)
+        shell: bash
+        run: |
+          printf '%s\n' "GCP_PROJECT_ID=${GCP_PROJECT_ID// /}" >> "$GITHUB_ENV"
+          printf '%s\n' "GCP_REGION=${GCP_REGION// /}" >> "$GITHUB_ENV"
+          printf '%s\n' "GCP_ARTIFACT_REPO=${GCP_ARTIFACT_REPO// /}" >> "$GITHUB_ENV"
+          printf '%s\n' "GCP_CLOUD_RUN_SERVICE=${GCP_CLOUD_RUN_SERVICE// /}" >> "$GITHUB_ENV"
+          echo "Trimmed envs:"
+          env | grep '^GCP_'
 
       - name: Resolver tag e build tag
         id: tags
