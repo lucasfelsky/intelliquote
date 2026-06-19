@@ -20,12 +20,15 @@
 # exatos: DATABASE_URL, DIRECT_URL, FIREBASE_SERVICE_ACCOUNT_JSON, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER.
 #
 # Pre-requisitos no GCP:
-#   - Cloud Build API + Cloud Run API habilitadas
+#   - Cloud Run API habilitada
 #   - Artifact Registry com o repo `intelliquote` na regiao
-#   - Service account com roles: Cloud Run Admin, Cloud Build Editor,
-#     Artifact Registry Writer, Service Account User (no default
-#     compute SA do Cloud Run).
+#   - Service account com roles: Cloud Run Admin, Artifact Registry Writer,
+#     Service Account User, Logging Log Writer.
 #   - WIF pool + provider configurados para o repo.
+#
+# O build da imagem acontece direto no runner (ubuntu-latest ja tem Docker).
+# Essa abordagem evita o bucket GCS que o `gcloud builds submit` exige, que
+# o GitHub runner nao consegue acessar via WIF de forma confiavel.
 
 name: Deploy backend (Cloud Run)
 
@@ -113,17 +116,30 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
-      - name: Disparar build remoto (Cloud Build)
+      - name: Build (Docker local) + Push (Artifact Registry)
         id: build
         shell: bash
+        env:
+          CLOUDSDK_AUTH_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: |
+          set -euo pipefail
+          # O Cloud Build exige permissao num bucket GCS que o GitHub runner
+          # nao tem — em vez disso construimos a imagem direto no runner e
+          # empurramos para o Artifact Registry via WIF + gcloud auth.
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+          cd programa
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPO}/${GCP_CLOUD_RUN_SERVICE}:${{ steps.tags.outputs.image_tag }}"
           echo "Building ${IMAGE}"
-          gcloud builds submit \
-            --project="${GCP_PROJECT_ID}" \
-            --config=programa/cloudbuild.yaml \
-            --substitutions="_REGION=${GCP_REGION},_SERVICE=${GCP_CLOUD_RUN_SERVICE},_REPOSITORY=${GCP_ARTIFACT_REPO},_TAG=${{ steps.tags.outputs.image_tag }}" \
-            --quiet
+          docker build \
+            --tag "${IMAGE}" \
+            --label "io.intelliquote.build-tag=${{ steps.tags.outputs.backend_build_tag }}" \
+            --label "io.intelliquote.git-sha=${GITHUB_SHA}" \
+            --file Dockerfile \
+            .
+          echo "Pushing ${IMAGE}"
+          docker push "${IMAGE}"
+          cd ..
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy no Cloud Run
