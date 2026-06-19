@@ -19,19 +19,25 @@ programa/web/.env.local
 programa/web/*.tsbuildinfo
 programa/web/vite.config.js
 programa/web/vite.config.d.ts
+/programa/web/vite.config.ts
+/programa/web/tsconfig.json
+/programa/web/tsconfig.node.json
+/programa/web/tsconfig.node.tsbuildinfo
+/programa/web/tsconfig.tsbuildinfo
 
 # Portal COMEX (hosting companion repo is sibling, NOT part of this repo)
 Portal COMEX/
 sq-comex-updates/
 
 # Documentation archives (heavy binaries, kept locally only)
-documentação/*.pdf
-documentação/*.docx
-documentação/*.mp4
-documentação/*.rar
-documentação/*.zip
-documentação/codigo-fonte-intelliquote/
-documentação/Sprint*/
+/documentação/*.pdf
+/documentação/*.docx
+/documentação/*.mp4
+/documentação/*.rar
+/documentação/*.zip
+/documentação/codigo-fonte-intelliquote/
+/documentação/Sprint*
+/documentação/Video pt.*
 
 # OS
 .DS_Store
@@ -43,4 +49,4 @@ Thumbs.db
 *.swp
 
 # Local artifacts
--
+# (placeholder - kept in working tree, not committed)
