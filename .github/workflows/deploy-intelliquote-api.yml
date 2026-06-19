@@ -7,19 +7,17 @@
 #   - manual (workflow_dispatch) com campo `tag` (ex: r46-20260619)
 #   - push de tag no formato `backend-v*` (ex: backend-v46)
 #
-# Pre-requisitos no GitHub:
-#   - Secret `GCP_WORKLOAD_IDENTITY_PROVIDER`
-#   - Secret `GCP_SERVICE_ACCOUNT` (ex: github-actions@PROJECT.iam.gserviceaccount.com)
-#   - Secret `BACKEND_ENV_JSON` (JSON com todas as variaveis de producao:
-#     NODE_ENV, PORT, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
-#     COOKIE_SECURE, CORS_ORIGINS, DATABASE_URL, DIRECT_URL,
-#     FIREBASE_PROJECT_ID, GOOGLE_SERVICE_ACCOUNT_JSON, MAILER_PROVIDER,
-#     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM,
-#     INTELLIQUOTE_COMEX_CC_LIST, INTELLIQUOTE_PORTAL_URL)
-#   - Variable `GCP_PROJECT_ID` (sq-comex-updates-3d22f)
-#   - Variable `GCP_REGION` (southamerica-east1)
-#   - Variable `GCP_ARTIFACT_REPO` (intelliquote)
-#   - Variable `GCP_CLOUD_RUN_SERVICE` (intelliquote-api)
+# Pre-requisitos no GitHub (secrets):
+#   - GCP_WORKLOAD_IDENTITY_PROVIDER  (resource name do WIF provider, ex.:
+#     projects/705697815580/locations/global/workloadIdentityPools/github-pool/providers/github-provider)
+#   - GCP_SERVICE_ACCOUNT              (email da SA com permissoes de deploy, ex.:
+#     github-actions-deployer@PROJECT.iam.gserviceaccount.com)
+# Variaveis (Settings > Variables):
+#   - GCP_PROJECT_ID, GCP_REGION, GCP_ARTIFACT_REPO, GCP_CLOUD_RUN_SERVICE.
+# Nenhum segredo de aplicacao fica no GitHub: os valores sao lidos direto do
+# GCP Secret Manager via `--set-secrets` (mesmo modelo do deploy manual via
+# `deploy-cloudrun.ps1`). Os secrets precisam existir no projeto com estes nomes
+# exatos: DATABASE_URL, DIRECT_URL, FIREBASE_SERVICE_ACCOUNT_JSON, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER.
 #
 # Pre-requisitos no GCP:
 #   - Cloud Build API + Cloud Run API habilitadas
@@ -116,44 +114,48 @@ jobs:
             --quiet
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Quebrar BACKEND_ENV_JSON em variaveis
-        id: env
-        shell: bash
-        env:
-          BACKEND_ENV_JSON: ${{ secrets.BACKEND_ENV_JSON }}
-        run: |
-          if [ -z "$BACKEND_ENV_JSON" ]; then
-            echo "::error::Secret BACKEND_ENV_JSON nao configurado no GitHub."
-            exit 1
-          fi
-          echo "$BACKEND_ENV_JSON" > /tmp/backend_env.json
-          python3 -c "
-          import json, shlex
-          d = json.load(open('/tmp/backend_env.json'))
-          for k, v in d.items():
-            print(f'BACKEND_ENV_{k}={shlex.quote(str(v))}')
-          " >> "$GITHUB_OUTPUT"
-
       - name: Deploy no Cloud Run
         id: deploy
         shell: bash
         run: |
           set -euo pipefail
           IMAGE="${{ steps.build.outputs.image }}"
-          ENV_VARS=""
-          while IFS='=' read -r key value; do
-            stripped=$(printf '%s' "$value" | sed -e "s/^'//" -e "s/'$//")
-            if [ -n "$ENV_VARS" ]; then
-              ENV_VARS="${ENV_VARS},"
-            fi
-            ENV_VARS="${ENV_VARS}${key}=${stripped}"
-          done < <(env | grep '^BACKEND_ENV_' | sed 's/^BACKEND_ENV_//')
-          ENV_VARS="${ENV_VARS},BACKEND_BUILD_TAG=${{ steps.tags.outputs.backend_build_tag }}"
+          SERVICE="${{ env.GCP_CLOUD_RUN_SERVICE }}"
+          REGION="${{ env.GCP_REGION }}"
+          PROJECT="${{ env.GCP_PROJECT_ID }}"
+          BUILD_TAG="${{ steps.tags.outputs.backend_build_tag }}"
 
-          echo "Deploying ${IMAGE} to ${GCP_CLOUD_RUN_SERVICE} (${GCP_REGION})"
-          gcloud run deploy "${GCP_CLOUD_RUN_SERVICE}" \
-            --project="${GCP_PROJECT_ID}" \
-            --region="${GCP_REGION}" \
+          echo "Deploying ${IMAGE} to ${SERVICE} (${REGION})"
+
+          # Envs "nao-secret" vao inline via --set-env-vars (mesmo modelo do
+          # deploy-env-vars.yaml que o deploy manual usa). Segredos vao via
+          # --set-secrets lendo do GCP Secret Manager (mesmo modelo do
+          # deploy-cloudrun.ps1) — assim nenhum valor sensivel toca o GitHub.
+          ENV_VARS="NODE_ENV=production"
+          ENV_VARS="${ENV_VARS},CORS_ORIGINS=https://intelliquote.portal-comex.com,https://intelliquote.web.app,https://intelliquote--intelliquote-5qf1ezu3.web.app,http://localhost:3000,http://127.0.0.1:3000"
+          ENV_VARS="${ENV_VARS},INTELLIQUOTE_PORTAL_URL=https://intelliquote.portal-comex.com"
+          ENV_VARS="${ENV_VARS},MAILER_PROVIDER=smtp"
+          ENV_VARS="${ENV_VARS},SMTP_SECURE=false"
+          ENV_VARS="${ENV_VARS},JWT_ACCESS_EXPIRES_IN=15m"
+          ENV_VARS="${ENV_VARS},JWT_REFRESH_EXPIRES_IN=7d"
+          ENV_VARS="${ENV_VARS},COOKIE_SECURE=true"
+          ENV_VARS="${ENV_VARS},PORT=8080"
+          ENV_VARS="${ENV_VARS},BACKEND_BUILD_TAG=${BUILD_TAG}"
+
+          SECRET_REFS="SMTP_PASS=SMTP_PASS:latest"
+          SECRET_REFS="${SECRET_REFS},SMTP_HOST=SMTP_HOST:latest"
+          SECRET_REFS="${SECRET_REFS},SMTP_USER=SMTP_USER:latest"
+          SECRET_REFS="${SECRET_REFS},SMTP_PORT=SMTP_PORT:latest"
+          SECRET_REFS="${SECRET_REFS},SMTP_FROM=SMTP_FROM:latest"
+          SECRET_REFS="${SECRET_REFS},DATABASE_URL=DATABASE_URL:latest"
+          SECRET_REFS="${SECRET_REFS},DIRECT_URL=DIRECT_URL:latest"
+          SECRET_REFS="${SECRET_REFS},JWT_ACCESS_SECRET=JWT_ACCESS_SECRET:latest"
+          SECRET_REFS="${SECRET_REFS},JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest"
+          SECRET_REFS="${SECRET_REFS},FIREBASE_SERVICE_ACCOUNT_JSON=FIREBASE_SERVICE_ACCOUNT_JSON:latest"
+
+          gcloud run deploy "${SERVICE}" \
+            --project="${PROJECT}" \
+            --region="${REGION}" \
             --image="${IMAGE}" \
             --platform=managed \
             --allow-unauthenticated \
@@ -164,10 +166,11 @@ jobs:
             --max-instances=3 \
             --timeout=300 \
             --set-env-vars="${ENV_VARS}" \
+            --set-secrets="${SECRET_REFS}" \
             --quiet
-          URL=$(gcloud run services describe "${GCP_CLOUD_RUN_SERVICE}" \
-            --project="${GCP_PROJECT_ID}" \
-            --region="${GCP_REGION}" \
+          URL=$(gcloud run services describe "${SERVICE}" \
+            --project="${PROJECT}" \
+            --region="${REGION}" \
             --format='value(status.url)')
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
           echo "Service URL: ${URL}"
