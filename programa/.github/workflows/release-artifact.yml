@@ -1,0 +1,26 @@
+name: release-artifact
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-image-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        run: docker build -t intelliquote:${{ github.sha }} .
+
+      - name: Save image artifact
+        run: docker save intelliquote:${{ github.sha }} | gzip > intelliquote-${{ github.sha }}.tar.gz
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: intelliquote-image
+          path: intelliquote-${{ github.sha }}.tar.gz

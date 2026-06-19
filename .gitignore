@@ -1,0 +1,46 @@
+# Backend (Node/Express/Prisma) deploy
+node_modules/
+dist/
+.env
+.env.local
+.env.production
+*.log
+prisma/migrations/migration_lock.toml.bak
+programa/dist/
+programa/node_modules/
+programa/.env
+programa/.env.local
+programa/scripts/*.bak
+
+# Frontend SPA
+programa/web/node_modules/
+programa/web/dist/
+programa/web/.env.local
+programa/web/*.tsbuildinfo
+programa/web/vite.config.js
+programa/web/vite.config.d.ts
+
+# Portal COMEX (hosting companion repo is sibling, NOT part of this repo)
+Portal COMEX/
+sq-comex-updates/
+
+# Documentation archives (heavy binaries, kept locally only)
+documentação/*.pdf
+documentação/*.docx
+documentação/*.mp4
+documentação/*.rar
+documentação/*.zip
+documentação/codigo-fonte-intelliquote/
+documentação/Sprint*/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Local artifacts
+-

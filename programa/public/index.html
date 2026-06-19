@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IntelliQuote</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="auth-gate" class="auth-gate">
+      <section class="auth-card">
+        <img src="/logo.png" alt="IntelliQuote" class="auth-card__logo" />
+        <p class="eyebrow">Acesso Seguro</p>
+        <h2>Acesso ao IntelliQuote</h2>
+        <p class="auth-copy">
+          Entre com as credenciais configuradas para o seu ambiente para aceder ao painel.
+        </p>
+        <form id="login-form" class="auth-form">
+          <label>
+            E-mail
+            <input id="login-email" type="email" placeholder="admin@intelliquote.local" required />
+          </label>
+          <label>
+            Palavra-passe
+            <input id="login-password" type="password" placeholder="********" required />
+          </label>
+          <button type="submit" class="primary-button">Entrar</button>
+          <button type="button" id="forgot-password-button" class="ghost-button">
+            Esqueci a palavra-passe
+          </button>
+        </form>
+        <form id="reset-password-form" class="auth-form hidden">
+          <label>
+            Token de recuperacao
+            <input id="reset-token" type="text" required />
+          </label>
+          <label>
+            Nova palavra-passe
+            <input id="reset-password" type="password" minlength="8" required />
+          </label>
+          <button type="submit" class="primary-button">Atualizar palavra-passe</button>
+          <button type="button" id="reset-cancel-button" class="ghost-button">
+            Voltar ao login
+          </button>
+        </form>
+        <form id="forgot-password-form" class="auth-form hidden">
+          <label>
+            E-mail cadastrado
+            <input id="forgot-email" type="email" required />
+          </label>
+          <button type="submit" class="primary-button">Gerar link de recuperacao</button>
+          <button type="button" id="forgot-cancel-button" class="ghost-button">
+            Voltar ao login
+          </button>
+          <p class="auth-hint">
+            Em ambiente de desenvolvimento, o link e o token sao exibidos no painel
+            do administrador (modulo Usuarios &gt; Tokens).
+          </p>
+        </form>
+        <p id="auth-feedback" class="auth-feedback hidden"></p>
+        <p class="auth-hint">Utilize o utilizador configurado no seed ou no seu ambiente.</p>
+      </section>
+    </div>
+
+    <div id="app-shell" class="page-shell hidden">
+      <header class="hero">
+        <div class="hero__brand">
+          <img src="/logo.png" alt="IntelliQuote" class="hero__logo" />
+          <div>
+            <p class="eyebrow">Plataforma de Cotacoes Internacionais</p>
+            <h1>IntelliQuote</h1>
+          <p class="hero-copy">
+            Gere fornecedores, cotacoes e propostas internacionais num unico
+            painel, com comparacao matematica automatica para destacar a melhor
+            oferta.
+          </p>
+        </div>
+        <div class="hero-status">
+          <div class="status-pill">
+            <span class="status-dot"></span>
+            MVP operacional
+          </div>
+          <button id="logout-button" type="button" class="ghost-button">Sair</button>
+          <p id="feedback" class="feedback">Sistema pronto a utilizar.</p>
+        </div>
+      </header>
+
+      <nav class="workspace-tabs" aria-label="Modulos do IntelliQuote">
+        <button type="button" class="tab-button active" data-tab-target="overview">
+          Visao geral
+        </button>
+        <button type="button" class="tab-button" data-tab-target="suppliers">
+          Fornecedores
+        </button>
+        <button type="button" class="tab-button" data-tab-target="quotes">
+          Cotacoes
+        </button>
+        <button type="button" class="tab-button" data-tab-target="items">
+          Itens
+        </button>
+        <button type="button" class="tab-button" data-tab-target="responses">
+          Propostas
+        </button>
+        <button type="button" class="tab-button" data-tab-target="comparison">
+          Comparacao
+        </button>
+        <button type="button" class="tab-button" data-tab-target="reports">
+          Relatorios
+        </button>
+        <button type="button" class="tab-button" data-tab-target="company-profile">
+          Empresa
+        </button>
+        <button type="button" class="tab-button" data-tab-target="users">
+          Usuarios
+        </button>
+        <button type="button" class="tab-button" data-tab-target="help">
+          Ajuda
+        </button>
+        <button type="button" class="tab-button" data-tab-target="audit">
+          Auditoria
+        </button>
+      </nav>
+
+      <section class="tab-panel" data-tab-panel="overview">
+        <section class="panel onboarding-panel" id="onboarding-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Primeiros passos</p>
+              <h2>Bem-vindo ao IntelliQuote</h2>
+            </div>
+            <button type="button" class="ghost-button" id="onboarding-dismiss">
+              Ocultar
+            </button>
+          </div>
+          <p class="feedback" id="onboarding-message">
+            Vamos comecar: cadastre um fornecedor, crie uma cotacao, registre propostas e compare os
+            resultados. Use o menu superior para navegar.
+          </p>
+          <ol class="onboarding-steps" id="onboarding-steps"></ol>
+        </section>
+        <section class="metrics" id="metrics"></section>
+        <section class="analytics-grid">
+          <article class="panel analytics-card">
+            <div class="panel-heading">
+              <div>
+                <p class="section-tag">Analise</p>
+                <h2>Propostas por fornecedor</h2>
+              </div>
+            </div>
+            <canvas id="suppliers-chart" height="220"></canvas>
+          </article>
+          <article class="panel analytics-card">
+            <div class="panel-heading">
+              <div>
+                <p class="section-tag">Analise</p>
+                <h2>Estado das cotacoes</h2>
+              </div>
+            </div>
+            <canvas id="quote-status-chart" height="220"></canvas>
+          </article>
+        </section>
+      </section>
+
+      <main class="dashboard">
+        <section class="panel tab-panel hidden" data-tab-panel="suppliers">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Cadastro</p>
+              <h2>Fornecedores</h2>
+            </div>
+            <p class="feedback">
+              <span aria-hidden="true">&#9432;</span>
+              Cadastre fornecedores, defina incoterms aceites, status e mantenha uma lista
+              de contatos para facilitar a comunicacao.
+            </p>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field">
+              Procurar fornecedor
+              <input id="supplier-search" placeholder="Nome ou e-mail" />
+            </label>
+          </div>
+          <form id="supplier-form" class="form-grid">
+            <input type="hidden" id="supplier-id" />
+            <label>
+              Nome
+              <input id="supplier-name" name="name" required />
+            </label>
+            <label>
+              E-mail
+              <input id="supplier-email" name="email" type="email" required />
+            </label>
+            <label>
+              Website
+              <input id="supplier-website" name="website" type="url" />
+            </label>
+            <label>
+              Pais
+              <input id="supplier-country" name="country" placeholder="Ex.: Brasil" />
+            </label>
+            <label>
+              Estado
+              <select id="supplier-status" name="status">
+                <option value="active">Ativo</option>
+                <option value="inactive">Inativo</option>
+                <option value="blocked">Bloqueado</option>
+              </select>
+            </label>
+            <label class="full-span">
+              Incoterms aceites
+              <select
+                id="supplier-incoterms"
+                name="acceptedIncoterms"
+                multiple
+                size="6"
+                required
+              ></select>
+            </label>
+            <label class="full-span">
+              Observacoes
+              <textarea id="supplier-notes" name="notes" rows="2"></textarea>
+            </label>
+            <div class="form-actions full-span">
+              <button type="submit" class="primary-button">Guardar fornecedor</button>
+              <button type="button" id="supplier-cancel" class="ghost-button hidden">
+                Cancelar edicao
+              </button>
+            </div>
+          </form>
+          <section class="panel subpanel" id="supplier-contacts-panel">
+            <h3>Contatos do fornecedor</h3>
+            <p class="feedback">
+              Defina ate dois contatos por fornecedor. Marque um como principal para que
+              apareca destacado na listagem.
+            </p>
+            <form id="supplier-contact-form" class="form-grid">
+              <input type="hidden" id="supplier-contact-id" />
+              <label>
+                Nome
+                <input id="supplier-contact-name" required />
+              </label>
+              <label>
+                E-mail
+                <input id="supplier-contact-email" type="email" required />
+              </label>
+              <label>
+                Telefone
+                <input id="supplier-contact-phone" />
+              </label>
+              <label>
+                Cargo
+                <input id="supplier-contact-position" />
+              </label>
+              <label>
+                <span>Contato principal?</span>
+                <input id="supplier-contact-is-primary" type="checkbox" />
+              </label>
+              <div class="form-actions full-span">
+                <button type="submit" class="primary-button">Adicionar contato</button>
+                <button type="button" id="supplier-contact-cancel" class="ghost-button hidden">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>E-mail</th>
+                    <th>Cargo</th>
+                    <th>Principal</th>
+                    <th>Acoes</th>
+                  </tr>
+                </thead>
+                <tbody id="supplier-contacts-body"></tbody>
+              </table>
+            </div>
+          </section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>E-mail</th>
+                  <th>Pais</th>
+                  <th>Status</th>
+                  <th>Incoterms</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="suppliers-body"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="suppliers-pagination"></div>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="quotes">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Procura</p>
+              <h2>Cotacoes</h2>
+            </div>
+            <p class="feedback">
+              <span aria-hidden="true">&#9432;</span>
+              Defina prazo, moeda, descricao tecnica e o codigo da cotacao. O codigo pode
+              ser gerado automaticamente ou informado manualmente.
+            </p>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field">
+              Procurar cotacao
+              <input id="quote-request-search" placeholder="Produto" />
+            </label>
+            <label class="toolbar-field toolbar-select">
+              Estado
+              <select id="quote-request-filter-status">
+                <option value="all">Todas</option>
+                <option value="open">Abertas</option>
+                <option value="closed">Fechadas</option>
+              </select>
+            </label>
+          </div>
+          <form id="quote-request-form" class="form-grid">
+            <input type="hidden" id="quote-request-id" />
+            <label>
+              Codigo (opcional)
+              <input id="quote-request-code" placeholder="QR-2026-001" />
+            </label>
+            <label>
+              Produto
+              <input id="quote-product-name" required />
+            </label>
+            <label>
+              Quantidade
+              <input id="quote-quantity" type="number" min="1" required />
+            </label>
+            <label>
+              Incoterm pretendido
+              <select id="quote-desired-incoterm" required></select>
+            </label>
+            <label>
+              Moeda
+              <input id="quote-currency" value="USD" maxlength="3" required />
+            </label>
+            <label>
+              Prazo limite
+              <input id="quote-deadline" type="date" />
+            </label>
+            <label class="full-span">
+              Descricao tecnica
+              <textarea id="quote-description" rows="3"></textarea>
+            </label>
+            <div class="form-actions full-span">
+              <button type="submit" class="primary-button">Guardar cotacao</button>
+              <button type="button" id="quote-request-cancel" class="ghost-button hidden">
+                Cancelar edicao
+              </button>
+            </div>
+          </form>
+          <section class="panel subpanel" id="quote-request-attachments-panel">
+            <h3>Anexos da cotacao</h3>
+            <p class="feedback">
+              Adicione contratos, fichas tecnicas ou planilhas (limite 5MB por arquivo).
+            </p>
+            <form id="quote-request-attachment-form" class="form-grid">
+              <label class="full-span">
+                Arquivo
+                <input id="quote-request-attachment-file" type="file" required />
+              </label>
+              <div class="form-actions full-span">
+                <button type="submit" class="primary-button">Adicionar anexo</button>
+              </div>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Arquivo</th>
+                    <th>Tamanho</th>
+                    <th>Enviado por</th>
+                    <th>Acoes</th>
+                  </tr>
+                </thead>
+                <tbody id="quote-request-attachments-body"></tbody>
+              </table>
+            </div>
+          </section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Codigo</th>
+                  <th>Produto</th>
+                  <th>Quantidade</th>
+                  <th>Incoterm</th>
+                  <th>Moeda</th>
+                  <th>Estado</th>
+                  <th>Melhor proposta</th>
+                  <th>Criada em</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="quote-requests-body"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="quote-requests-pagination"></div>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="items">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Escopo</p>
+              <h2>Itens da cotacao</h2>
+            </div>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field">
+              Procurar item
+              <input id="quote-item-search" placeholder="Codigo, produto ou cotacao" />
+            </label>
+            <label class="toolbar-field toolbar-select">
+              Cotacao
+              <select id="quote-item-filter-quote-request"></select>
+            </label>
+          </div>
+          <form id="quote-item-form" class="form-grid">
+            <input type="hidden" id="quote-item-id" />
+            <label>
+              Cotacao
+              <select id="quote-item-quote-request" required></select>
+            </label>
+            <label>
+              Codigo
+              <input id="quote-item-code" placeholder="ITEM-001" />
+            </label>
+            <label>
+              Produto
+              <input id="quote-item-product-name" required />
+            </label>
+            <label>
+              Quantidade
+              <input id="quote-item-quantity" type="number" min="1" required />
+            </label>
+            <label>
+              Unidade
+              <input id="quote-item-unit" value="UN" required />
+            </label>
+            <label>
+              Preco alvo
+              <input id="quote-item-target-price" type="number" min="0" step="0.01" />
+            </label>
+            <label class="full-span">
+              Descricao tecnica
+              <input id="quote-item-description" />
+            </label>
+            <label class="full-span">
+              Observacoes
+              <input id="quote-item-notes" />
+            </label>
+            <div class="form-actions full-span">
+              <button type="submit" class="primary-button">Guardar item</button>
+              <button type="button" id="quote-item-cancel" class="ghost-button hidden">
+                Cancelar edicao
+              </button>
+            </div>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cotacao</th>
+                  <th>Codigo</th>
+                  <th>Produto</th>
+                  <th>Quantidade</th>
+                  <th>Preco alvo</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="quote-request-items-body"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="quote-request-items-pagination"></div>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="responses">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Respostas</p>
+              <h2>Propostas recebidas</h2>
+            </div>
+            <p class="feedback">
+              <span aria-hidden="true">&#9432;</span>
+              Preencha o wizard em 4 passos para registrar uma proposta completa. O sistema
+              salva o rascunho ao alternar entre passos.
+            </p>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field">
+              Procurar proposta
+              <input id="quote-response-search" placeholder="Fornecedor ou cotacao" />
+            </label>
+            <label class="toolbar-field toolbar-select">
+              Mostrar
+              <select id="quote-response-filter-winner">
+                <option value="all">Todas</option>
+                <option value="winner">So vencedoras</option>
+                <option value="non-winner">So nao vencedoras</option>
+              </select>
+            </label>
+          </div>
+          <form id="quote-response-form" class="form-grid">
+            <input type="hidden" id="quote-response-id" />
+            <ol class="wizard-steps" id="wizard-steps">
+              <li class="active" data-wizard-step="1">1. Identificacao</li>
+              <li data-wizard-step="2">2. Preco &amp; Incoterm</li>
+              <li data-wizard-step="3">3. Custos adicionais</li>
+              <li data-wizard-step="4">4. Impostos &amp; observacoes</li>
+            </ol>
+            <div class="wizard-pane" data-wizard-pane="1">
+              <label>
+                Cotacao
+                <select id="response-quote-request" required></select>
+              </label>
+              <label>
+                Fornecedor
+                <select id="response-supplier" required></select>
+              </label>
+              <label>
+                Moeda
+                <input id="response-currency" value="USD" maxlength="3" required />
+              </label>
+            </div>
+            <div class="wizard-pane hidden" data-wizard-pane="2">
+              <label>
+                Preco proposto
+                <input id="response-price" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Exchange rate para BRL
+                <input id="response-exchange-rate" type="number" min="0" step="0.0001" />
+              </label>
+              <label>
+                Incoterm proposto
+                <select id="response-incoterm" required></select>
+              </label>
+              <label>
+                Prazo de pagamento
+                <input id="response-payment-terms" type="number" min="0" required />
+              </label>
+            </div>
+            <div class="wizard-pane hidden" data-wizard-pane="3">
+              <label>
+                Frete internacional
+                <input id="response-freight-cost" type="number" min="0" step="0.01" value="0" />
+              </label>
+              <label>
+                Seguro internacional
+                <input id="response-insurance-cost" type="number" min="0" step="0.01" value="0" />
+              </label>
+              <label>
+                Outras taxas
+                <input id="response-other-fees" type="number" min="0" step="0.01" value="0" />
+              </label>
+            </div>
+            <div class="wizard-pane hidden" data-wizard-pane="4">
+              <label>
+                II %
+                <input id="response-import-duty" type="number" min="0" step="0.01" value="0" />
+              </label>
+              <label>
+                IPI %
+                <input id="response-ipi" type="number" min="0" step="0.01" value="0" />
+              </label>
+              <label>
+                PIS %
+                <input id="response-pis" type="number" min="0" step="0.01" value="0" />
+              </label>
+              <label>
+                COFINS %
+                <input id="response-cofins" type="number" min="0" step="0.01" value="0" />
+              </label>
+              <label class="full-span">
+                Observacoes
+                <textarea id="response-notes" rows="2"></textarea>
+              </label>
+            </div>
+            <div class="wizard-actions full-span">
+              <button type="button" id="wizard-prev" class="ghost-button">&laquo; Voltar</button>
+              <button type="button" id="wizard-next" class="ghost-button">Proximo &raquo;</button>
+              <button type="submit" class="primary-button" id="wizard-submit">Guardar proposta</button>
+              <button type="button" id="quote-response-cancel" class="ghost-button hidden">
+                Cancelar edicao
+              </button>
+            </div>
+          </form>
+          <section class="panel subpanel" id="quote-response-attachments-panel">
+            <h3>Anexos da proposta</h3>
+            <p class="feedback">PDFs, planilhas ou imagens que sustentam a proposta.</p>
+            <form id="quote-response-attachment-form" class="form-grid">
+              <label class="full-span">
+                Arquivo
+                <input id="quote-response-attachment-file" type="file" required />
+              </label>
+              <div class="form-actions full-span">
+                <button type="submit" class="primary-button">Adicionar anexo</button>
+              </div>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Arquivo</th>
+                    <th>Tamanho</th>
+                    <th>Enviado por</th>
+                    <th>Acoes</th>
+                  </tr>
+                </thead>
+                <tbody id="quote-response-attachments-body"></tbody>
+              </table>
+            </div>
+          </section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cotacao</th>
+                  <th>Fornecedor</th>
+                  <th>Preco</th>
+                  <th>Incoterm</th>
+                  <th>Prazo</th>
+                  <th>Vencedora</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="quote-responses-body"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="quote-responses-pagination"></div>
+        </section>
+
+        <section class="panel comparison-panel tab-panel hidden" data-tab-panel="comparison">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Motor de Decisao</p>
+              <h2>Comparador de propostas</h2>
+            </div>
+            <p class="feedback">
+              <span aria-hidden="true">&#9432;</span>
+              Defina os pesos abaixo antes de comparar. O total deve somar 100.
+            </p>
+          </div>
+          <div class="comparison-controls">
+            <label>
+              Seleccione a cotacao
+              <select id="comparison-quote-request"></select>
+            </label>
+            <label>
+              Peso preco
+              <input id="weight-price" type="number" min="0" max="100" value="50" />
+            </label>
+            <label>
+              Peso pagamento
+              <input id="weight-payment" type="number" min="0" max="100" value="30" />
+            </label>
+            <label>
+              Peso incoterm
+              <input id="weight-incoterm" type="number" min="0" max="100" value="20" />
+            </label>
+            <button id="compare-button" class="primary-button" type="button">
+              Comparar propostas
+            </button>
+            <button id="export-comparison-button" class="ghost-button" type="button">
+              Exportar CSV
+            </button>
+          </div>
+          <div id="comparison-weights-warning" class="feedback hidden"></div>
+          <div id="comparison-results" class="comparison-results empty-state">
+            Execute a comparacao para ver a pontuacao das propostas.
+          </div>
+          <div class="comparison-history-wrap">
+            <div class="panel-heading comparison-history-heading">
+              <div>
+                <p class="section-tag">Memoria Auditavel</p>
+                <h3>Historico de comparacoes</h3>
+              </div>
+            </div>
+            <div id="comparison-history" class="comparison-history empty-state">
+              Seleccione uma cotacao para rever o historico auditavel.
+            </div>
+          </div>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="reports">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Inteligencia</p>
+              <h2>Relatorios gerenciais</h2>
+            </div>
+            <p class="feedback">
+              Selecione um periodo para gerar o relatorio. Todos os dados refletem o estado atual
+              do sistema.
+            </p>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field">
+              De
+              <input id="report-from" type="date" />
+            </label>
+            <label class="toolbar-field">
+              Ate
+              <input id="report-to" type="date" />
+            </label>
+            <button id="report-refresh" type="button" class="primary-button">Atualizar</button>
+          </div>
+          <div class="report-grid">
+            <article class="panel subpanel" id="report-summary">
+              <h3>Resumo</h3>
+              <p class="feedback">Cotacoes, propostas e comparacoes no periodo.</p>
+              <div class="report-body"></div>
+            </article>
+            <article class="panel subpanel" id="report-savings">
+              <h3>Economia por fornecedor</h3>
+              <div class="report-body"></div>
+            </article>
+            <article class="panel subpanel" id="report-lead-time">
+              <h3>Lead-time medio</h3>
+              <div class="report-body"></div>
+            </article>
+            <article class="panel subpanel" id="report-top-suppliers">
+              <h3>Top fornecedores por vitorias</h3>
+              <div class="report-body"></div>
+            </article>
+            <article class="panel subpanel" id="report-award-rate">
+              <h3>Taxa de adjudicacao</h3>
+              <div class="report-body"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="users">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Governanca</p>
+              <h2>Usuarios do sistema</h2>
+            </div>
+            <p class="feedback">
+              Apenas administradores podem cadastrar, ativar ou redefinir acessos. As senhas
+              sao armazenadas com hash bcrypt.
+            </p>
+          </div>
+          <form id="user-form" class="form-grid">
+            <input type="hidden" id="user-id" />
+            <label>
+              Nome
+              <input id="user-name" required />
+            </label>
+            <label>
+              E-mail
+              <input id="user-email" type="email" required />
+            </label>
+            <label>
+              Perfil
+              <select id="user-role">
+                <option value="buyer">Comprador</option>
+                <option value="manager">Gestor</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </label>
+            <label>
+              Senha
+              <input id="user-password" type="password" minlength="8" placeholder="Deixe em branco para manter" />
+            </label>
+            <label>
+              <span>Ativo</span>
+              <input id="user-active" type="checkbox" checked />
+            </label>
+            <div class="form-actions full-span">
+              <button type="submit" class="primary-button">Guardar usuario</button>
+              <button type="button" id="user-cancel" class="ghost-button hidden">
+                Cancelar edicao
+              </button>
+            </div>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>E-mail</th>
+                  <th>Perfil</th>
+                  <th>Status</th>
+                  <th>Ultimo acesso</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="users-body"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="users-pagination"></div>
+          <section class="panel subpanel" id="user-tokens-panel">
+            <h3>Tokens de recuperacao de senha</h3>
+            <p class="feedback">
+              Lista dos tokens gerados pelos utilizadores para redefinicao de senha. Apenas
+              administradores tem visibilidade.
+            </p>
+            <button id="user-tokens-refresh" type="button" class="ghost-button">Atualizar</button>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Token</th>
+                    <th>Expira em</th>
+                    <th>Usado</th>
+                    <th>Criado em</th>
+                  </tr>
+                </thead>
+                <tbody id="user-tokens-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="company-profile">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Configuracao</p>
+              <h2>Perfil da empresa</h2>
+            </div>
+            <p class="feedback">
+              Estes dados aparecem nos envios automaticos de cotacao aos fornecedores.
+              Configure o e-mail de compras (purchasingEmail) para liberar o disparo.
+            </p>
+          </div>
+          <form id="company-profile-form" class="form-grid">
+            <label class="toolbar-field">
+              Razao social *
+              <input id="company-profile-name" required />
+            </label>
+            <label class="toolbar-field">
+              Nome fantasia
+              <input id="company-profile-trade-name" />
+            </label>
+            <label class="toolbar-field">
+              CNPJ / Tax ID
+              <input id="company-profile-tax-id" />
+            </label>
+            <label class="toolbar-field">
+              E-mail de compras *
+              <input id="company-profile-purchasing-email" type="email" required />
+            </label>
+            <label class="toolbar-field">
+              Telefone de compras
+              <input id="company-profile-purchasing-phone" />
+            </label>
+            <label class="toolbar-field">
+              Site
+              <input id="company-profile-website" />
+            </label>
+            <label class="toolbar-field">
+              Endereco (linha 1)
+              <input id="company-profile-address-1" />
+            </label>
+            <label class="toolbar-field">
+              Endereco (linha 2)
+              <input id="company-profile-address-2" />
+            </label>
+            <label class="toolbar-field">
+              Cidade
+              <input id="company-profile-city" />
+            </label>
+            <label class="toolbar-field">
+              Estado / Provincia
+              <input id="company-profile-state" />
+            </label>
+            <label class="toolbar-field">
+              CEP
+              <input id="company-profile-postal-code" />
+            </label>
+            <label class="toolbar-field">
+              Pais
+              <input id="company-profile-country" />
+            </label>
+            <label class="toolbar-field">
+              URL do logotipo
+              <input id="company-profile-logo-url" />
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="primary-button">Salvar perfil</button>
+              <span class="feedback" id="company-profile-feedback"></span>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="help">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Suporte</p>
+              <h2>Ajuda contextual</h2>
+            </div>
+            <p class="feedback">
+              Pesquise artigos para entender cada modulo da plataforma. Os artigos sao atualizados
+              a cada versao.
+            </p>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field">
+              Procurar artigo
+              <input id="help-search" placeholder="Ex.: comparacao de propostas" />
+            </label>
+            <label class="toolbar-field toolbar-select">
+              Categoria
+              <select id="help-filter-category">
+                <option value="all">Todas</option>
+              </select>
+            </label>
+          </div>
+          <div id="help-article-list" class="help-list"></div>
+          <article id="help-article-detail" class="help-detail hidden"></article>
+        </section>
+
+        <section class="panel tab-panel hidden" data-tab-panel="audit">
+          <div class="panel-heading">
+            <div>
+              <p class="section-tag">Governanca</p>
+              <h2>Auditoria operacional</h2>
+            </div>
+          </div>
+          <div class="toolbar">
+            <label class="toolbar-field toolbar-select">
+              Entidade
+              <select id="audit-entity-type">
+                <option value="all">Todas</option>
+                <option value="supplier">Fornecedores</option>
+                <option value="quote_request">Cotacoes</option>
+                <option value="quote_request_item">Itens</option>
+                <option value="quote_response">Propostas</option>
+              </select>
+            </label>
+            <label class="toolbar-field toolbar-select">
+              Acao
+              <select id="audit-action">
+                <option value="all">Todas</option>
+                <option value="create">Criacao</option>
+                <option value="update">Atualizacao</option>
+                <option value="delete">Eliminacao</option>
+                <option value="close">Fecho</option>
+                <option value="reopen">Reabertura</option>
+                <option value="compare">Comparacao</option>
+              </select>
+            </label>
+            <label class="toolbar-field">
+              ID da entidade
+              <input id="audit-entity-id" placeholder="Ex.: 7" />
+            </label>
+            <button id="audit-refresh-button" type="button" class="ghost-button">
+              Atualizar
+            </button>
+          </div>
+          <div id="audit-log-list" class="audit-log-list empty-state">
+            Os registos de auditoria vao aparecer aqui.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="modal-root"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

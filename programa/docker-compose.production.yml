@@ -1,0 +1,10 @@
+services:
+  app:
+    container_name: intelliquote-production
+    build:
+      context: .
+    env_file:
+      - .env.production
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

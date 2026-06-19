@@ -1,0 +1,52 @@
+{
+  "name": "intelliquote-backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "build:web": "node ./scripts/copy-web.js",
+    "start": "node dist/src/server.js",
+    "healthcheck:local": "node ./scripts/healthcheck.js http://localhost:3000/health/ready",
+    "smoke:local": "node ./scripts/smoke-local.js",
+    "test": "vitest run --pool=threads",
+    "test:watch": "vitest --pool=threads",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "ts-node-dev --transpile-only prisma/seed.ts",
+    "verify:env:local": "node ./scripts/verify-env.js local",
+    "verify:env:staging": "node ./scripts/verify-env.js staging",
+    "verify:env:production": "node ./scripts/verify-env.js production"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.3.1",
+    "firebase-admin": "^12.7.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.10.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.1",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.13.14",
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.1",
+    "@types/supertest": "^7.2.0",
+    "prisma": "^6.6.0",
+    "supertest": "^7.2.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.8.2",
+    "vitest": "^4.1.1"
+  }
+}

@@ -1,0 +1,40 @@
+# Cloud Build: builda a imagem e envia para o Artifact Registry do projeto
+# Acionado por: gcloud builds submit --config=cloudbuild.yaml
+#
+# Variaveis esperadas (definidas via --substitutions):
+#   _REGION             -> regiao do Artifact Registry e Cloud Run (ex: southamerica-east1)
+#   _SERVICE            -> nome do servico no Cloud Run
+#   _REPOSITORY         -> nome do repositorio no Artifact Registry
+#   _TAG                -> tag da imagem (padrao: latest)
+#
+# IMPORTANTE: os placeholders devem estar entre aspas para o gcloud nao expandir
+# `${VAR}` com valores de ambiente locais (PowerShell estava quebrando).
+
+substitutions:
+  _REGION: southamerica-east1
+  _SERVICE: intelliquote-api
+  _REPOSITORY: intelliquote
+  _TAG: latest
+
+steps:
+  # 1. Build da imagem com Docker (apenas Dockerfile local)
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+      - "-f"
+      - "Dockerfile"
+      - "."
+
+  # 2. Push da tag
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+
+images:
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

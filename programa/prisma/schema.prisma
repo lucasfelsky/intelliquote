@@ -1,0 +1,520 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum QuoteRequestStatus {
+  open
+  closed
+}
+
+enum SupplierStatus {
+  active
+  inactive
+  blocked
+}
+
+enum Incoterm {
+  EXW
+  FCA
+  FAS
+  FOB
+  CFR
+  CIF
+  CPT
+  CIP
+  DAP
+  DPU
+  DDP
+}
+
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id                    Int                   @id @default(autoincrement())
+  name                  String
+  email                 String                @unique
+  passwordHash          String
+  isActive              Boolean               @default(true)
+  roleId                Int
+  role                  Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  sessions              Session[]
+  createdSuppliers      Supplier[]            @relation("SupplierCreatedBy")
+  createdQuoteRequests  QuoteRequest[]        @relation("QuoteRequestCreatedBy")
+  createdQuoteResponses QuoteResponse[]       @relation("QuoteResponseCreatedBy")
+  executedComparisons   QuoteComparison[]     @relation("QuoteComparisonExecutedBy")
+  auditLogs             AuditLog[]            @relation("AuditPerformedBy")
+  uploadedAttachments   Attachment[]          @relation("AttachmentUploadedBy")
+  passwordResetTokens   PasswordResetToken[]
+  companyProfileUpdates CompanyProfile[]      @relation("CompanyProfileUpdatedBy")
+  emailTemplatesUpdated EmailTemplate[]       @relation("EmailTemplateUpdatedBy")
+  createdDispatchEvents DispatchEvent[]       @relation("DispatchEventCreatedBy")
+  createdPortalTokens   SupplierPortalToken[] @relation("SupplierPortalTokenCreatedBy")
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([roleId])
+}
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  userId    Int
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           Int
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Supplier {
+  id                Int                      @id @default(autoincrement())
+  name              String
+  website           String?
+  status            SupplierStatus           @default(active)
+  country           String?
+  notes             String?
+  paymentTermsDays  Int                      @default(30)
+  createdById       Int?
+  acceptedIncoterms Incoterm[]
+  contacts          SupplierContact[]
+  quoteResponses    QuoteResponse[]
+  portalTokens      SupplierPortalToken[]
+  portalResponses   SupplierPortalResponse[]
+  createdBy         User?                    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@index([status])
+  @@index([createdById])
+}
+
+model QuoteRequest {
+  id              Int                      @id @default(autoincrement())
+  requestCode     String                   @unique
+  productName     String?
+  quantity        Int?
+  description     String?
+  desiredIncoterm Incoterm
+  currency        String                   @default("USD")
+  deadlineAt      DateTime?
+  status          QuoteRequestStatus       @default(open)
+  closedAt        DateTime?
+  createdById     Int?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  items           QuoteRequestItem[]
+  quoteResponses  QuoteResponse[]
+  comparisons     QuoteComparison[]
+  portalTokens    SupplierPortalToken[]
+  portalResponses SupplierPortalResponse[]
+  dispatchEvents  DispatchEvent[]
+  createdBy       User?                    @relation("QuoteRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([createdById])
+}
+
+model QuoteRequestItem {
+  id                  Int                          @id @default(autoincrement())
+  quoteRequestId      Int
+  catalogItemId       Int?
+  itemCode            String?
+  productName         String
+  description         String?
+  quantity            Int
+  unit                String                       @default("UN")
+  targetPrice         Decimal?                     @db.Decimal(12, 2)
+  notes               String?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  quoteRequest        QuoteRequest                 @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  catalogItem         CatalogItem?                 @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  portalResponseItems SupplierPortalResponseItem[]
+
+  @@index([quoteRequestId])
+  @@index([catalogItemId])
+}
+
+model CatalogItem {
+  id                Int                @id @default(autoincrement())
+  commercialName    String
+  marketName        String
+  ncm               String?
+  dbcorpCode        String?
+  isDangerousGood   Boolean            @default(false)
+  notes             String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  quoteRequestItems QuoteRequestItem[]
+
+  @@unique([marketName])
+  @@index([marketName])
+  @@index([commercialName])
+  @@index([isDangerousGood])
+}
+
+model QuoteResponse {
+  id                Int                     @id @default(autoincrement())
+  quoteRequestId    Int
+  supplierId        Int
+  offeredPrice      Decimal                 @db.Decimal(12, 2)
+  currency          String                  @default("USD")
+  exchangeRate      Decimal                 @default(1.0) @db.Decimal(14, 6)
+  freightCost       Decimal                 @default(0.0) @db.Decimal(14, 2)
+  insuranceCost     Decimal                 @default(0.0) @db.Decimal(14, 2)
+  otherFees         Decimal                 @default(0.0) @db.Decimal(14, 2)
+  importDuty        Decimal                 @default(0.0) @db.Decimal(8, 4)
+  ipi               Decimal                 @default(0.0) @db.Decimal(8, 4)
+  pis               Decimal                 @default(0.0) @db.Decimal(8, 4)
+  cofins            Decimal                 @default(0.0) @db.Decimal(8, 4)
+  totalLandedCost   Decimal                 @default(0.0) @db.Decimal(14, 2)
+  offeredIncoterm   Incoterm
+  paymentTermsDays  Int
+  leadTimeDays      Int?
+  notes             String?
+  submittedAt       DateTime                @default(now())
+  version           Int                     @default(1)
+  isWinner          Boolean                 @default(false)
+  createdById       Int?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  quoteRequest      QuoteRequest            @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  supplier          Supplier                @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  createdBy         User?                   @relation("QuoteResponseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  comparisonResults QuoteComparisonResult[]
+  wonComparisons    QuoteComparison[]       @relation("ComparisonWinner")
+
+  @@unique([quoteRequestId, supplierId])
+  @@index([quoteRequestId])
+  @@index([supplierId])
+  @@index([createdById])
+}
+
+model QuoteComparison {
+  id                    Int                     @id @default(autoincrement())
+  quoteRequestId        Int
+  executedById          Int?
+  priceWeight           Int
+  paymentTermsWeight    Int
+  incotermWeight        Int
+  winnerQuoteResponseId Int?
+  createdAt             DateTime                @default(now())
+  quoteRequest          QuoteRequest            @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  executedBy            User?                   @relation("QuoteComparisonExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+  winnerQuoteResponse   QuoteResponse?          @relation("ComparisonWinner", fields: [winnerQuoteResponseId], references: [id], onDelete: SetNull)
+  results               QuoteComparisonResult[]
+
+  @@index([quoteRequestId])
+  @@index([executedById])
+  @@index([createdAt])
+}
+
+model QuoteComparisonResult {
+  id                Int             @id @default(autoincrement())
+  comparisonId      Int
+  quoteResponseId   Int?
+  supplierId        Int
+  offeredPrice      Decimal         @db.Decimal(12, 2)
+  offeredIncoterm   Incoterm
+  paymentTermsDays  Int
+  exchangeRate      Decimal         @db.Decimal(14, 6)
+  freightCost       Decimal         @db.Decimal(14, 2)
+  insuranceCost     Decimal         @db.Decimal(14, 2)
+  otherFees         Decimal         @db.Decimal(14, 2)
+  importDutyRate    Decimal         @db.Decimal(8, 4)
+  ipiRate           Decimal         @db.Decimal(8, 4)
+  pisRate           Decimal         @db.Decimal(8, 4)
+  cofinsRate        Decimal         @db.Decimal(8, 4)
+  cifValue          Decimal         @db.Decimal(14, 2)
+  importDutyAmount  Decimal         @db.Decimal(14, 2)
+  ipiAmount         Decimal         @db.Decimal(14, 2)
+  pisCofinsAmount   Decimal         @db.Decimal(14, 2)
+  totalLandedCost   Decimal         @db.Decimal(14, 2)
+  priceScore        Float
+  paymentTermsScore Float
+  incotermScore     Float
+  totalScore        Float
+  isWinner          Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  comparison        QuoteComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  quoteResponse     QuoteResponse?  @relation(fields: [quoteResponseId], references: [id], onDelete: SetNull)
+
+  @@index([comparisonId])
+  @@index([quoteResponseId])
+  @@index([supplierId])
+}
+
+model AuditLog {
+  id            Int      @id @default(autoincrement())
+  entityType    String
+  entityId      String
+  action        String
+  performedById Int?
+  beforeData    Json?
+  afterData     Json?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  performedBy   User?    @relation("AuditPerformedBy", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([entityType])
+  @@index([entityId])
+  @@index([action])
+  @@index([performedById])
+  @@index([createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
+model SupplierContact {
+  id              Int                      @id @default(autoincrement())
+  supplierId      Int
+  name            String
+  email           String
+  phone           String?
+  position        String?
+  isPrimary       Boolean                  @default(false)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  supplier        Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  portalTokens    SupplierPortalToken[]
+  portalResponses SupplierPortalResponse[]
+
+  @@index([supplierId])
+  @@index([supplierId, isPrimary])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  fileName     String
+  fileUrl      String
+  fileType     String
+  fileSize     Int
+  entityType   String
+  entityId     String
+  uploadedById Int?
+  createdAt    DateTime @default(now())
+  uploadedBy   User?    @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([entityId, entityType])
+  @@index([uploadedById])
+}
+
+// =================== Supplier Portal (magic-link flow) ===================
+
+enum MailLogStatus {
+  queued
+  sent
+  failed
+  bounced
+  suppressed
+}
+
+model CompanyProfile {
+  id              Int      @id @default(autoincrement())
+  companyName     String   @default("SQ Quimica")
+  tradeName       String?
+  taxId           String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  state           String?
+  postalCode      String?
+  country         String   @default("Brazil")
+  purchasingEmail String?
+  purchasingPhone String?
+  website         String?
+  logoUrl         String?
+  updatedAt       DateTime @updatedAt
+  updatedById     Int?
+  updatedBy       User?    @relation("CompanyProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+model DispatchEvent {
+  id              Int                   @id @default(autoincrement())
+  quoteRequestId  Int
+  createdById     Int
+  recipientsCount Int
+  subject         String
+  ccList          String?
+  locale          String                @default("en")
+  status          String                @default("completed")
+  createdAt       DateTime              @default(now())
+  quoteRequest    QuoteRequest          @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  createdBy       User                  @relation("DispatchEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  tokens          SupplierPortalToken[]
+
+  @@index([quoteRequestId])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model EmailTemplate {
+  id          Int      @id @default(autoincrement())
+  key         String
+  locale      String   @default("en")
+  subject     String
+  htmlBody    String
+  textBody    String
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  updatedById Int?
+  updatedBy   User?    @relation("EmailTemplateUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@unique([key, locale])
+  @@index([key])
+}
+
+model SupplierPortalToken {
+  id                Int                      @id @default(autoincrement())
+  quoteRequestId    Int
+  supplierId        Int
+  supplierContactId Int
+  tokenHash         String                   @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  firstSeenAt       DateTime?
+  lastSeenAt        DateTime?
+  accessCount       Int                      @default(0)
+  respondedAt       DateTime?
+  responseId        Int?                     @unique
+  createdById       Int
+  dispatchEventId   Int?
+  createdAt         DateTime                 @default(now())
+  quoteRequest      QuoteRequest             @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  supplier          Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierContact   SupplierContact          @relation(fields: [supplierContactId], references: [id], onDelete: Cascade)
+  createdBy         User                     @relation("SupplierPortalTokenCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  dispatchEvent     DispatchEvent?           @relation(fields: [dispatchEventId], references: [id], onDelete: SetNull)
+  response          SupplierPortalResponse?  @relation("SupplierPortalTokenResponse")
+  logs              SupplierPortalTokenLog[]
+
+  @@index([quoteRequestId])
+  @@index([supplierId])
+  @@index([supplierContactId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@index([respondedAt])
+  @@index([dispatchEventId])
+}
+
+model SupplierPortalResponse {
+  id                 Int                          @id @default(autoincrement())
+  portalTokenId      Int                          @unique
+  quoteRequestId     Int
+  supplierId         Int
+  supplierContactId  Int
+  currency           String                       @default("USD")
+  incoterm           Incoterm
+  paymentTermsDays   Int                          @default(30)
+  totalPrice         Decimal                      @db.Decimal(14, 2)
+  totalPriceCurrency String                       @default("USD")
+  validityDays       Int                          @default(30)
+  notes              String?
+  submittedAt        DateTime                     @default(now())
+  submitterIp        String?
+  submitterUserAgent String?
+  portalToken        SupplierPortalToken          @relation("SupplierPortalTokenResponse", fields: [portalTokenId], references: [id], onDelete: Cascade)
+  quoteRequest       QuoteRequest                 @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  supplier           Supplier                     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierContact    SupplierContact              @relation(fields: [supplierContactId], references: [id], onDelete: Cascade)
+  items              SupplierPortalResponseItem[]
+
+  @@index([quoteRequestId])
+  @@index([supplierId])
+  @@index([supplierContactId])
+}
+
+model SupplierPortalResponseItem {
+  id                 Int                    @id @default(autoincrement())
+  responseId         Int
+  quoteRequestItemId Int
+  unitPrice          Decimal                @db.Decimal(14, 2)
+  quantity           Int
+  totalPrice         Decimal                @db.Decimal(14, 2)
+  leadTimeDays       Int?
+  notes              String?
+  response           SupplierPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  quoteRequestItem   QuoteRequestItem       @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)
+
+  @@index([responseId])
+  @@index([quoteRequestItemId])
+}
+
+model SupplierPortalTokenLog {
+  id         Int                 @id @default(autoincrement())
+  tokenId    Int
+  kind       String
+  ip         String?
+  userAgent  String?
+  meta       Json?
+  occurredAt DateTime            @default(now())
+  token      SupplierPortalToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([tokenId])
+  @@index([occurredAt])
+  @@index([kind])
+}
+
+model MailLog {
+  id                Int           @id @default(autoincrement())
+  provider          String
+  providerMessageId String?
+  fromAddress       String
+  toEmail           String
+  toName            String?
+  ccList            String?
+  subject           String
+  templateId        String?
+  templateVars      Json?
+  status            MailLogStatus @default(queued)
+  sentAt            DateTime?
+  errorMessage      String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime      @default(now())
+
+  @@index([status])
+  @@index([provider])
+  @@index([relatedEntityType, relatedEntityId])
+  @@index([toEmail])
+  @@index([createdAt])
+}
+
+model ExchangeRate {
+  id            Int      @id @default(autoincrement())
+  currency      String
+  rateToBrl     Decimal  @db.Decimal(14, 6)
+  referenceDate DateTime @db.Date
+  fetchedAt     DateTime @default(now())
+  source        String   @default("BCB_PTAX")
+
+  @@unique([currency, referenceDate])
+  @@index([currency])
+  @@index([fetchedAt])
+}

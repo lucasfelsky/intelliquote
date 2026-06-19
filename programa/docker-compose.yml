@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: intelliquote-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI: http://localhost:8025
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

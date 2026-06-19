@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Supplier Portal - IntelliQuote</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      :root {
+        --portal-bg: #f3f7f5;
+        --portal-bg-grad-1: #eaf3ef;
+        --portal-bg-grad-2: #f6fbf9;
+        --portal-ink: #102a32;
+        --portal-ink-soft: #4a5560;
+        --portal-muted: #7a848c;
+        --portal-line: #d8e4e0;
+        --portal-line-soft: #ecf1ef;
+        --portal-primary: #00ae91;
+        --portal-primary-700: #048972;
+        --portal-primary-50: #e6f8f3;
+        --portal-accent: #184054;
+        --portal-accent-700: #133848;
+        --portal-warn-bg: #fff5dc;
+        --portal-warn-fg: #8a6a0e;
+        --portal-warn-line: #f0e2a8;
+        --portal-err-bg: #fdecec;
+        --portal-err-fg: #9b1c1c;
+        --portal-err-line: #f4b6b6;
+        --portal-ok-bg: #e9f8f1;
+        --portal-ok-fg: #1d6f4a;
+        --portal-ok-line: #b6e3c8;
+        --portal-radius: 18px;
+        --portal-radius-sm: 12px;
+        --portal-shadow: 0 14px 40px rgba(15, 42, 50, 0.08);
+        --portal-shadow-soft: 0 6px 18px rgba(15, 42, 50, 0.06);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: 'Manrope', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        color: var(--portal-ink);
+        background:
+          radial-gradient(1200px 600px at 20% -10%, #dff1ea 0%, transparent 60%),
+          radial-gradient(800px 500px at 100% 10%, #e3edf3 0%, transparent 60%),
+          linear-gradient(180deg, var(--portal-bg-grad-1) 0%, var(--portal-bg-grad-2) 100%);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .portal-shell {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 36px 20px 80px;
+      }
+      .portal-card {
+        background: #ffffff;
+        border-radius: var(--portal-radius);
+        box-shadow: var(--portal-shadow);
+        border: 1px solid var(--portal-line);
+        overflow: hidden;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-size: 11px;
+        color: var(--portal-primary-700);
+        font-weight: 700;
+        margin: 0 0 8px;
+      }
+      h1, h2, h3 { font-family: 'Space Grotesk', 'Manrope', sans-serif; color: var(--portal-ink); }
+      .portal-hero {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 28px 32px;
+        background:
+          linear-gradient(135deg, #184054 0%, #133848 100%),
+          radial-gradient(400px 200px at 80% 20%, rgba(0, 174, 145, 0.25), transparent 60%);
+        color: #ffffff;
+        position: relative;
+      }
+      .portal-hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(280px 140px at 90% 100%, rgba(0, 174, 145, 0.35), transparent 60%),
+          radial-gradient(220px 120px at 10% 0%, rgba(255, 255, 255, 0.08), transparent 60%);
+        pointer-events: none;
+      }
+      .portal-hero > * { position: relative; z-index: 1; }
+      .portal-hero img {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 6px;
+        object-fit: cover;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+      }
+      .portal-hero h1 {
+        margin: 0;
+        font-size: 22px;
+        color: #ffffff;
+        line-height: 1.2;
+      }
+      .portal-hero .eyebrow {
+        color: #5fe0bf;
+        margin: 0 0 4px;
+      }
+      .portal-hero p {
+        margin: 4px 0 0;
+        color: #d6e6e2;
+        font-size: 14px;
+        line-height: 1.55;
+        max-width: 56ch;
+      }
+
+      .portal-main { padding: 28px 32px 32px; }
+      .portal-title-block h1 {
+        margin: 4px 0 8px;
+        font-size: 28px;
+        line-height: 1.15;
+      }
+      .portal-title-block p {
+        margin: 0 0 20px;
+        color: var(--portal-ink-soft);
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
+      .supplier-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: linear-gradient(180deg, #f8fbfa 0%, #f1f7f4 100%);
+        border: 1px solid var(--portal-line);
+        border-radius: var(--portal-radius-sm);
+        padding: 16px 20px;
+        margin-bottom: 24px;
+      }
+      .supplier-card .avatar {
+        width: 44px; height: 44px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--portal-primary) 0%, var(--portal-primary-700) 100%);
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+        font-size: 18px;
+        flex-shrink: 0;
+      }
+      .supplier-card .supplier-info { flex: 1; min-width: 0; }
+      .supplier-card .supplier-info .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: var(--portal-muted);
+        font-weight: 600;
+        margin: 0 0 2px;
+      }
+      .supplier-card .supplier-info .name {
+        margin: 0;
+        font-weight: 700;
+        color: var(--portal-ink);
+        font-size: 16px;
+      }
+      .supplier-card .supplier-info .contact {
+        margin: 2px 0 0;
+        font-size: 13px;
+        color: var(--portal-ink-soft);
+      }
+      .supplier-card .supplier-info .contact a {
+        color: var(--portal-primary-700);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .supplier-card .supplier-info .contact a:hover { text-decoration: underline; }
+      .supplier-card .expires {
+        text-align: right;
+        font-size: 12px;
+        color: var(--portal-muted);
+        line-height: 1.4;
+        white-space: nowrap;
+      }
+      .supplier-card .expires strong {
+        display: block;
+        font-size: 13px;
+        color: var(--portal-ink);
+        font-weight: 700;
+      }
+
+      .section-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 24px 0 12px;
+        font-size: 18px;
+        color: var(--portal-ink);
+      }
+      .section-title::before {
+        content: "";
+        width: 4px;
+        height: 18px;
+        border-radius: 4px;
+        background: var(--portal-primary);
+        display: inline-block;
+      }
+
+      .items-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-bottom: 24px;
+        font-size: 14px;
+        background: #ffffff;
+        border: 1px solid var(--portal-line);
+        border-radius: var(--portal-radius-sm);
+        overflow: hidden;
+      }
+      .items-table thead th {
+        background: #f1f7f4;
+        color: var(--portal-ink);
+        text-align: left;
+        padding: 12px 14px;
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        border-bottom: 1px solid var(--portal-line);
+      }
+      .items-table thead th:last-child { text-align: right; }
+      .items-table tbody td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--portal-line-soft);
+        vertical-align: top;
+        color: var(--portal-ink);
+      }
+      .items-table tbody tr:last-child td { border-bottom: none; }
+      .items-table tbody tr:nth-child(even) td { background: #fafdfb; }
+      .items-table td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+      }
+      .items-table .item-code {
+        font-size: 12px;
+        color: var(--portal-muted);
+        margin-top: 2px;
+      }
+      .dg-badge {
+        background: var(--portal-warn-bg);
+        color: var(--portal-warn-fg);
+        border: 1px solid var(--portal-warn-line);
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+      }
+      .commercial-name {
+        font-size: 12px;
+        color: var(--portal-muted);
+        margin-top: 4px;
+      }
+
+      .item-row {
+        background: #ffffff;
+        border: 1px solid var(--portal-line);
+        border-radius: var(--portal-radius-sm);
+        padding: 18px;
+        margin-bottom: 12px;
+        box-shadow: var(--portal-shadow-soft);
+      }
+      .item-row h3 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        color: var(--portal-ink);
+      }
+      .item-row .item-meta {
+        font-size: 12px;
+        color: var(--portal-muted);
+        margin: 0 0 14px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .item-row .item-meta .chip {
+        background: var(--portal-primary-50);
+        color: var(--portal-primary-700);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-weight: 600;
+      }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 16px;
+      }
+      .form-grid label {
+        display: flex;
+        flex-direction: column;
+        font-size: 12px;
+        color: var(--portal-ink-soft);
+        font-weight: 600;
+        gap: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+      }
+      .form-grid input,
+      .form-grid select,
+      .form-grid textarea {
+        margin-top: 2px;
+        padding: 10px 12px;
+        border: 1px solid var(--portal-line);
+        border-radius: 10px;
+        font-size: 14px;
+        color: var(--portal-ink);
+        font-family: inherit;
+        background: #ffffff;
+        text-transform: none;
+        letter-spacing: normal;
+        font-weight: 500;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+      }
+      .form-grid input:focus,
+      .form-grid select:focus,
+      .form-grid textarea:focus {
+        outline: none;
+        border-color: var(--portal-primary);
+        box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.18);
+      }
+      .form-grid textarea {
+        resize: vertical;
+        min-height: 70px;
+      }
+      .form-grid .full { grid-column: 1 / -1; }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        margin-top: 28px;
+        padding-top: 20px;
+        border-top: 1px solid var(--portal-line-soft);
+      }
+      .actions button {
+        font-family: inherit;
+        font-weight: 700;
+        font-size: 14px;
+        border-radius: 999px;
+        padding: 12px 24px;
+        border: none;
+        cursor: pointer;
+        letter-spacing: 0.3px;
+        transition: transform 80ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+      .actions .primary {
+        background: linear-gradient(135deg, var(--portal-primary) 0%, var(--portal-primary-700) 100%);
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(0, 174, 145, 0.28);
+      }
+      .actions .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(0, 174, 145, 0.32); }
+      .actions .ghost {
+        background: #ffffff;
+        color: var(--portal-accent);
+        border: 1px solid var(--portal-line);
+      }
+      .actions .ghost:hover { background: var(--portal-primary-50); border-color: var(--portal-primary); color: var(--portal-primary-700); }
+      .actions .primary:disabled,
+      .actions .ghost:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .status-banner {
+        padding: 14px 18px;
+        border-radius: var(--portal-radius-sm);
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 18px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .status-banner.error { background: var(--portal-err-bg); color: var(--portal-err-fg); border: 1px solid var(--portal-err-line); }
+      .status-banner.success { background: var(--portal-ok-bg); color: var(--portal-ok-fg); border: 1px solid var(--portal-ok-line); }
+      .status-banner.warn { background: var(--portal-warn-bg); color: var(--portal-warn-fg); border: 1px solid var(--portal-warn-line); }
+      .status-banner.info { background: #eef4f9; color: #1f3a4d; border: 1px solid #cddde7; }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        font-weight: 800;
+      }
+      .badge::before {
+        content: "";
+        width: 6px; height: 6px; border-radius: 50%;
+        background: currentColor; opacity: 0.8;
+      }
+      .badge.read-only { background: var(--portal-warn-bg); color: var(--portal-warn-fg); }
+      .badge.expired { background: var(--portal-err-bg); color: var(--portal-err-fg); }
+      .badge.ok { background: var(--portal-ok-bg); color: var(--portal-ok-fg); }
+      .badge.info { background: #eef4f9; color: #1f3a4d; }
+
+      .portal-loading {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--portal-ink-soft);
+        font-size: 14px;
+      }
+      .portal-loading .spinner {
+        width: 18px; height: 18px; border-radius: 50%;
+        border: 2px solid var(--portal-line);
+        border-top-color: var(--portal-primary);
+        animation: portal-spin 0.8s linear infinite;
+      }
+      @keyframes portal-spin { to { transform: rotate(360deg); } }
+
+      .footer-note {
+        font-size: 12px;
+        color: var(--portal-muted);
+        text-align: center;
+        margin-top: 24px;
+        line-height: 1.6;
+      }
+      .footer-note strong { color: var(--portal-ink-soft); }
+
+      @media (max-width: 640px) {
+        .portal-shell { padding: 20px 12px 60px; }
+        .portal-hero { padding: 22px 20px; }
+        .portal-main { padding: 22px 18px 24px; }
+        .form-grid { grid-template-columns: 1fr; }
+        .supplier-card { flex-wrap: wrap; }
+        .supplier-card .expires { width: 100%; text-align: left; }
+        .items-table thead { display: none; }
+        .items-table tbody tr {
+          display: block;
+          padding: 10px 0;
+          border-bottom: 1px solid var(--portal-line-soft);
+        }
+        .items-table tbody td {
+          display: flex;
+          justify-content: space-between;
+          padding: 4px 0;
+          border: none;
+        }
+        .items-table td.num { text-align: right; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="portal-shell">
+      <header class="portal-card">
+        <div class="portal-hero">
+          <img src="/logo.png" alt="IntelliQuote" />
+          <div>
+            <p class="eyebrow">SQ Quimica &middot; Supplier Portal</p>
+            <h1>Sourcing proposal</h1>
+            <p>
+              Welcome. This secure page is linked to a single sourcing request.
+              Please review the items, fill in your prices and submit the form
+              before the link expires.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main class="portal-card" style="margin-top: 16px;">
+        <div class="portal-main">
+          <div id="portal-status"></div>
+          <section id="portal-content">
+            <div class="portal-loading">
+              <span class="spinner"></span>
+              <span>Loading your request...</span>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <p class="footer-note">
+        <strong>IntelliQuote</strong> &middot; Secure portal powered by a single-use
+        magic link &middot; please do not share this URL with third parties.
+      </p>
+    </div>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+
+        const status = document.getElementById('portal-status');
+        const content = document.getElementById('portal-content');
+
+        function setStatus(kind, message) {
+          if (!message) {
+            status.innerHTML = '';
+            return;
+          }
+          status.innerHTML = `<div class="status-banner ${kind}">${message}</div>`;
+        }
+
+        function formatDate(value) {
+          if (!value) return '-';
+          try {
+            return new Intl.DateTimeFormat('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }).format(new Date(value));
+          } catch (e) {
+            return value;
+          }
+        }
+
+        function formatNumber(value, decimals) {
+          if (value === null || value === undefined || value === '') return '-';
+          const n = Number(value);
+          if (!Number.isFinite(n)) return value;
+          return n.toLocaleString('en-GB', {
+            minimumFractionDigits: decimals ?? 0,
+            maximumFractionDigits: decimals ?? 4,
+          });
+        }
+
+        function initials(name) {
+          if (!name) return '?';
+          const parts = name.trim().split(/\s+/);
+          if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+          return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+
+        function renderSupplierCard(data) {
+          const supplierName = data.supplier?.name || '-';
+          const contact = data.contact || {};
+          return `
+            <div class="supplier-card">
+              <div class="avatar">${initials(supplierName)}</div>
+              <div class="supplier-info">
+                <p class="label">Supplier</p>
+                <p class="name">${supplierName}</p>
+                <p class="contact">
+                  ${contact.name || 'Contact'}
+                  ${contact.email ? `&middot; <a href="mailto:${contact.email}">${contact.email}</a>` : ''}
+                </p>
+              </div>
+              <div class="expires">
+                <span>Link expires</span>
+                <strong>${formatDate(data.expiresAt)}</strong>
+              </div>
+            </div>`;
+        }
+
+        function renderItemsTable(items) {
+          if (!items || items.length === 0) return '';
+          return `
+            <h2 class="section-title">Requested items</h2>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th style="text-align:right;">Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items
+                  .map(
+                    (it) => `
+                  <tr>
+                    <td>
+                      <strong>${it.productName}</strong>
+                      ${it.commercialName && it.commercialName !== it.productName ? `<div class="commercial-name">Ref: ${it.commercialName}</div>` : ''}
+                    </td>
+                    <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
+                  </tr>`,
+                  )
+                  .join('')}
+              </tbody>
+            </table>`;
+        }
+
+        function renderForm(data, readOnly) {
+          const items = data.quoteRequest.items || [];
+          const isPreview = !data.response && !readOnly;
+          const defaultPaymentTermsDays =
+            typeof data.supplier?.paymentTermsDays === 'number' ? data.supplier.paymentTermsDays : 30;
+          return `
+            <form id="portal-form" autocomplete="off">
+              <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
+              <h2 class="section-title">Commercial terms</h2>
+              <div class="form-grid">
+                <label>Currency
+                  <select name="currency" required>
+                    ${['USD', 'EUR', 'CNY', 'BRL']
+                      .map(
+                        (c) =>
+                          `<option value="${c}" ${(data.quoteRequest.currency || 'USD') === c ? 'selected' : ''}>${c}</option>`,
+                      )
+                      .join('')}
+                  </select>
+                </label>
+                <label>Incoterm
+                  <select name="incoterm" required>
+                    ${['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP']
+                      .map(
+                        (i) =>
+                          `<option value="${i}" ${data.quoteRequest.desiredIncoterm === i ? 'selected' : ''}>${i}</option>`,
+                      )
+                      .join('')}
+                  </select>
+                </label>
+                <label>Payment terms (days)
+                  <input type="number" min="0" max="365" name="paymentTermsDays" value="${defaultPaymentTermsDays}" required />
+                </label>
+                <label>Offer validity (days)
+                  <input type="number" min="1" max="365" name="validityDays" value="30" required />
+                </label>
+                <label>Total price
+                  <input type="number" min="0" step="0.01" name="totalPrice" required />
+                </label>
+                <label class="full">Notes
+                  <textarea name="notes" rows="3" placeholder="Optional context for the buyer"></textarea>
+                </label>
+              </div>
+
+              <h2 class="section-title">Item pricing</h2>
+              <div id="portal-items">
+                ${items
+                  .map(
+                    (it) => `
+                  <div class="item-row" data-item-id="${it.id}">
+                    <h3>${it.productName}</h3>
+                    <p class="item-meta">
+                      <span class="chip">${it.quantity} ${it.unit || ''}</span>
+                      ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
+                    </p>
+                    <div class="form-grid">
+                      <label>Unit price
+                        <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" required />
+                      </label>
+                      <label>Quantity
+                        <input type="number" min="0" name="quantity" value="${it.quantity}" required />
+                      </label>
+                      <label>Lead time (days)
+                        <input type="number" min="0" name="leadTimeDays" />
+                      </label>
+                      <label>Item notes
+                        <input type="text" name="notes" />
+                      </label>
+                    </div>
+                  </div>`,
+                  )
+                  .join('')}
+              </div>
+
+              <div class="actions">
+                <button type="button" class="ghost" id="portal-cancel">Clear</button>
+                <button type="submit" class="primary" id="portal-submit" ${isPreview ? '' : 'disabled'}>
+                  ${isPreview ? 'Submit proposal' : 'Already submitted'}
+                </button>
+              </div>
+            </form>`;
+        }
+
+        function attachFormBehavior(data) {
+          const form = document.getElementById('portal-form');
+          if (!form) return;
+          const totalInput = form.elements.namedItem('totalPrice');
+          // O exchange rate nao e exibido para o fornecedor; o sistema usa
+          // a PTAX do BCB (sugerida pelo backend) ou a taxa que o backend
+          // resolver de QuoteResponse previas.
+          const updateTotal = () => {
+            let sum = 0;
+            document.querySelectorAll('.item-row').forEach((row) => {
+              const unit = Number(row.querySelector('input[name="unitPrice"]').value || 0);
+              const qty = Number(row.querySelector('input[name="quantity"]').value || 0);
+              const itemTotal = unit * qty;
+              sum += Number.isFinite(itemTotal) ? itemTotal : 0;
+            });
+            totalInput.value = sum ? sum.toFixed(2) : '';
+          };
+          document.querySelectorAll('.item-row input').forEach((el) => {
+            el.addEventListener('input', updateTotal);
+          });
+          document.getElementById('portal-cancel').addEventListener('click', () => {
+            form.reset();
+            updateTotal();
+          });
+          form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            await submitResponse(form, data);
+          });
+          updateTotal();
+        }
+
+        function collectItems() {
+          const items = [];
+          document.querySelectorAll('.item-row').forEach((row) => {
+            const quoteRequestItemId = Number(row.getAttribute('data-item-id'));
+            const unitPrice = Number(row.querySelector('input[name="unitPrice"]').value);
+            const quantity = Number(row.querySelector('input[name="quantity"]').value);
+            const totalPrice = unitPrice * quantity;
+            const leadTimeDaysRaw = row.querySelector('input[name="leadTimeDays"]').value;
+            const notesRaw = row.querySelector('input[name="notes"]').value;
+            items.push({
+              quoteRequestItemId,
+              unitPrice,
+              quantity,
+              totalPrice,
+              leadTimeDays: leadTimeDaysRaw === '' ? null : Number(leadTimeDaysRaw),
+              notes: notesRaw ? notesRaw : null,
+            });
+          });
+          return items;
+        }
+
+        async function submitResponse(form, data) {
+          const submit = document.getElementById('portal-submit');
+          submit.disabled = true;
+          setStatus('warn', 'Submitting your proposal...');
+          const currency = form.elements.namedItem('currency').value;
+          // Taxa de cambio nao e exibida ao fornecedor; o backend resolve
+          // sozinho (PTAX do BCB via cache ou taxas de QuoteResponse previas).
+          const exchangeRate = null;
+          const payload = {
+            currency,
+            incoterm: form.elements.namedItem('incoterm').value,
+            paymentTermsDays: Number(form.elements.namedItem('paymentTermsDays').value),
+            totalPrice: Number(form.elements.namedItem('totalPrice').value),
+            totalPriceCurrency: currency,
+            validityDays: Number(form.elements.namedItem('validityDays').value),
+            notes: form.elements.namedItem('notes').value || null,
+            exchangeRate: currency === 'BRL' ? null : exchangeRate,
+            items: collectItems(),
+          };
+          const apiBase = (() => {
+            if (window.location.hostname.endsWith('portal-comex.com')) {
+              return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
+            }
+            return `${window.location.origin}/api`;
+          })();
+          try {
+            const res = await fetch(`${apiBase}/portal/${encodeURIComponent(token)}/respond`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              setStatus('error', json.message || `Submission failed (HTTP ${res.status}).`);
+              submit.disabled = false;
+              return;
+            }
+            setStatus('success', 'Proposal submitted successfully. Thank you!');
+            await loadPortal();
+          } catch (error) {
+            setStatus('error', 'Network error while submitting. Please try again.');
+            submit.disabled = false;
+          }
+        }
+
+        async function loadPortal() {
+          if (!token) {
+            setStatus('error', 'Missing access token. Please use the link from the email.');
+            content.innerHTML = '<p class="footer-note">If you believe this is a mistake, please contact your buyer.</p>';
+            return;
+          }
+          try {
+            // O backend pode estar hospedado em outro host (Cloud Run direto),
+            // entao resolvemos o prefixo /api relativo a este documento.
+            const apiBase = (() => {
+              if (window.location.hostname.endsWith('portal-comex.com')) {
+                return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
+              }
+              return `${window.location.origin}/api`;
+            })();
+            const res = await fetch(`${apiBase}/portal/${encodeURIComponent(token)}`, {
+              headers: { Accept: 'application/json' },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 404) {
+              setStatus('error', data.message || 'This link is invalid, expired or revoked.');
+              content.innerHTML = '<p class="footer-note">If you believe this is a mistake, please contact your buyer.</p>';
+              return;
+            }
+            if (res.status === 429) {
+              setStatus('error', data.message || 'Too many attempts. Please wait a few minutes.');
+              return;
+            }
+            if (!res.ok) {
+              setStatus('error', data.message || `Unable to load request (HTTP ${res.status}).`);
+              return;
+            }
+            const readOnly = data.readOnly === true;
+            setStatus(
+              readOnly
+                ? 'warn'
+                : null,
+              readOnly
+                ? '<span class="badge read-only">Submitted</span> This proposal has already been submitted. You can review the data below.'
+                : null,
+            );
+            const description = data.quoteRequest.description
+              ? `<p class="portal-lead">${data.quoteRequest.description}</p>`
+              : '<p class="portal-lead">Please review the items below and submit your commercial proposal.</p>';
+            content.innerHTML = `
+              <div class="portal-title-block">
+                <p class="eyebrow">Sourcing request ${data.quoteRequest.requestCode}</p>
+                <h1>${items.length === 1 ? items[0].productName : `${items.length} items`}</h1>
+                ${description}
+              </div>
+              ${renderSupplierCard(data)}
+              ${renderItemsTable(data.quoteRequest.items)}
+              ${renderForm(data, readOnly)}
+            `;
+            if (!readOnly) {
+              attachFormBehavior(data);
+            }
+          } catch (error) {
+            setStatus('error', 'Network error while loading the request.');
+          }
+        }
+
+        loadPortal();
+      })();
+    </script>
+  </body>
+</html>

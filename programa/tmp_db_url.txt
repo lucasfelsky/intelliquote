@@ -1,0 +1,2 @@
+postgresql://intelliquote_app:7bnlP8L&V]G*xSR[IQc`gW\OXAE_MdwZ@35.247.254.177:5432/intelliquote?schema=public
+
