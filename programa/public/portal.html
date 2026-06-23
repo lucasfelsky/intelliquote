@@ -812,9 +812,20 @@
               }
               return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
             })();
-            const res = await fetch(`${apiBase}/portal/${encodeURIComponent(token)}`, {
-              headers: { Accept: 'application/json' },
-            });
+            const url = `${apiBase}/portal/${encodeURIComponent(token)}`;
+            let res;
+            try {
+              res = await fetch(url, {
+                headers: { Accept: 'application/json' },
+              });
+            } catch (networkErr) {
+              console.error('[portal] fetch failed', {url, apiBase, origin: window.location.origin, error: String(networkErr)});
+              setStatus(
+                'error',
+                `Network error while loading the request. (url=${url}, origin=${window.location.origin})`,
+              );
+              return;
+            }
             const data = await res.json().catch(() => ({}));
             if (res.status === 404) {
               setStatus('error', data.message || 'This link is invalid, expired or revoked.');
