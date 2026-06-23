@@ -38,7 +38,7 @@ function renderSampleVars(): QuoteDispatchVars {
     currency: 'USD',
     deadlineAt: '25 Jun 2026',
     expiresAt: '02 Jul 2026',
-    portalLink: 'https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW',
+    portalLink: 'https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&v=1',
     companyName: 'SQ Quimica',
     tradeName: 'SQ Quimica',
     taxId: '14.111.367/0001-97',

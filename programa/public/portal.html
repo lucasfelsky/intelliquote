@@ -819,10 +819,35 @@
                 headers: { Accept: 'application/json' },
               });
             } catch (networkErr) {
-              console.error('[portal] fetch failed', {url, apiBase, origin: window.location.origin, error: String(networkErr)});
+              // v50: surface the URL/origin/UA in BOTH the banner AND console so
+              // we can see the exact failure in DevTools (browser fetch errors
+              // are notoriously terse). Also note whether the page came from
+              // Firebase Hosting or Cloud Run so we can verify which copy of
+              // portal.html is being executed.
+              const host = window.location.hostname;
+              const servedFrom = host.endsWith('.run.app')
+                ? 'cloud-run'
+                : host === 'localhost' || host === '127.0.0.1'
+                ? 'localhost'
+                : 'firebase-hosting';
+              const ua = navigator.userAgent;
+              const detail = {
+                url,
+                apiBase,
+                origin: window.location.origin,
+                host,
+                servedFrom,
+                ua,
+                error: String(networkErr),
+                errorName: networkErr && networkErr.name,
+              };
+              // eslint-disable-next-line no-console
+              console.error('[portal] fetch failed', detail);
+              // eslint-disable-next-line no-console
+              console.error('[portal] raw error', networkErr);
               setStatus(
                 'error',
-                `Network error while loading the request. (url=${url}, origin=${window.location.origin})`,
+                `Network error while loading the request. (url=${url}, origin=${window.location.origin}, servedFrom=${servedFrom})`,
               );
               return;
             }
