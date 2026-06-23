@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { CompanyProfileService } from '../services/CompanyProfileService';
+import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 import { handleControllerError, HttpError } from '../utils/http';
 
@@ -45,7 +45,14 @@ companyProfileRoutes.get(
   async (_req, res) => {
     try {
       const profile = await CompanyProfileService.get();
-      return res.status(200).json(profile);
+      // dispatchCc e persistido como JSON string para manter compatibilidade
+      // com schemas que nao tem tipo nativo de array. Hidratamos para o
+      // formato que o frontend espera (array de strings) na resposta.
+      const { dispatchCc, ...rest } = profile;
+      return res.status(200).json({
+        ...rest,
+        dispatchCc: readDispatchCc(profile),
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -70,7 +77,12 @@ companyProfileRoutes.put(
         ...parsed.data,
         updatedById: req.user?.id ?? null,
       });
-      return res.status(200).json(updated);
+      // Hidrata dispatchCc para array de strings antes de devolver.
+      const { dispatchCc, ...rest } = updated;
+      return res.status(200).json({
+        ...rest,
+        dispatchCc: readDispatchCc(updated),
+      });
     } catch (error) {
       if (error instanceof HttpError) {
         return res.status(error.status).json({ message: error.message });
