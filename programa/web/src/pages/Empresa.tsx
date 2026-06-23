@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
+
+interface DirectoryUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+}
 
 interface CompanyProfile {
   id?: number;
@@ -49,6 +57,21 @@ function isLikelyEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+function roleLabel(role: string): string {
+  switch (role) {
+    case 'admin':
+      return 'Administrador';
+    case 'comprador':
+      return 'Comprador';
+    case 'gestor':
+      return 'Gestor';
+    case 'viewer':
+      return 'Visualizador';
+    default:
+      return role;
+  }
+}
+
 export default function Empresa() {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<CompanyProfile | null>(null);
@@ -62,29 +85,61 @@ export default function Empresa() {
     queryFn: () => api.get<CompanyProfile>('/api/v1/company-profile'),
   });
 
+  // Diretorio leve de perfis do sistema (sem senha, sem contadores).
+  // Alimenta a grade de checkboxes "Perfis que recebem CC" abaixo.
+  const directory = useQuery({
+    queryKey: ['users-directory'],
+    queryFn: () => api.get<DirectoryUser[]>('/api/v1/users-directory'),
+  });
+
   useEffect(() => {
     if (profile.data && draft === null) {
       setDraft(profile.data);
     }
   }, [profile.data, draft]);
 
+  // E-mails ja escolhidos vem do dispatchCc persistido. Separamos em
+  //  - selectedUserIds: perfis que foram selecionados via checkbox
+  //  - externalEmails: e-mails manuais que nao casam com nenhum perfil
+  // Quando o backend devolve dispatchCc com e-mails de usuarios antigos
+  // (ex: alguem reusou o e-mail mas trocou de cargo), mantemos eles
+  // como externos para nao perder a preferencia do admin.
+  const { selectedUserIds, externalEmails } = useMemo(() => {
+    const list = normalizeCcList(draft?.dispatchCc ?? []);
+    const userEmails = new Map<string, number>();
+    (directory.data ?? []).forEach((u) => {
+      userEmails.set(u.email.trim().toLowerCase(), u.id);
+    });
+    const selected = new Set<number>();
+    const externals: string[] = [];
+    for (const email of list) {
+      const userId = userEmails.get(email);
+      if (typeof userId === 'number') {
+        selected.add(userId);
+      } else {
+        externals.push(email);
+      }
+    }
+    return { selectedUserIds: selected, externalEmails: externals };
+  }, [draft?.dispatchCc, directory.data]);
+
   const save = useMutation({
-    mutationFn: (payload: CompanyProfile) =>
+    mutationFn: (payload: { profile: CompanyProfile; dispatchCc: string[] }) =>
       api.put<CompanyProfile>('/api/v1/company-profile', {
-        companyName: payload.companyName.trim(),
-        tradeName: toNullable(payload.tradeName ?? ''),
-        taxId: toNullable(payload.taxId ?? ''),
-        addressLine1: toNullable(payload.addressLine1 ?? ''),
-        addressLine2: toNullable(payload.addressLine2 ?? ''),
-        city: toNullable(payload.city ?? ''),
-        state: toNullable(payload.state ?? ''),
-        postalCode: toNullable(payload.postalCode ?? ''),
-        country: toNullable(payload.country ?? ''),
-        purchasingEmail: toNullable(payload.purchasingEmail ?? ''),
-        purchasingPhone: toNullable(payload.purchasingPhone ?? ''),
-        website: toNullable(payload.website ?? ''),
-        logoUrl: toNullable(payload.logoUrl ?? ''),
-        dispatchCc: normalizeCcList(payload.dispatchCc ?? []),
+        companyName: payload.profile.companyName.trim(),
+        tradeName: toNullable(payload.profile.tradeName ?? ''),
+        taxId: toNullable(payload.profile.taxId ?? ''),
+        addressLine1: toNullable(payload.profile.addressLine1 ?? ''),
+        addressLine2: toNullable(payload.profile.addressLine2 ?? ''),
+        city: toNullable(payload.profile.city ?? ''),
+        state: toNullable(payload.profile.state ?? ''),
+        postalCode: toNullable(payload.profile.postalCode ?? ''),
+        country: toNullable(payload.profile.country ?? ''),
+        purchasingEmail: toNullable(payload.profile.purchasingEmail ?? ''),
+        purchasingPhone: toNullable(payload.profile.purchasingPhone ?? ''),
+        website: toNullable(payload.profile.website ?? ''),
+        logoUrl: toNullable(payload.profile.logoUrl ?? ''),
+        dispatchCc: payload.dispatchCc,
       }),
     onSuccess: (data) => {
       qc.setQueryData(['company-profile'], data);
@@ -120,7 +175,20 @@ export default function Empresa() {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
 
-  function addCc() {
+  function toggleUser(user: DirectoryUser, checked: boolean) {
+    setDraft((current) => {
+      if (!current) return current;
+      const existing = normalizeCcList(current.dispatchCc ?? []);
+      const userEmail = user.email.trim().toLowerCase();
+      const withoutUser = existing.filter((e) => e !== userEmail);
+      const next = checked
+        ? normalizeCcList([...withoutUser, userEmail])
+        : withoutUser;
+      return { ...current, dispatchCc: next };
+    });
+  }
+
+  function addExternal() {
     setCcError(null);
     const candidate = ccDraft.trim();
     if (!candidate) {
@@ -129,6 +197,25 @@ export default function Empresa() {
     }
     if (!isLikelyEmail(candidate)) {
       setCcError('Formato de e-mail invalido.');
+      return;
+    }
+    // Se o e-mail digitado for de um perfil ja cadastrado, preferimos
+    // marcar o checkbox em vez de duplicar como e-mail externo.
+    const lower = candidate.toLowerCase();
+    const matchedUser = (directory.data ?? []).find(
+      (u) => u.email.trim().toLowerCase() === lower,
+    );
+    if (matchedUser) {
+      setDraft((current) => {
+        if (!current) return current;
+        const existing = normalizeCcList(current.dispatchCc ?? []);
+        if (existing.includes(lower)) return current;
+        return {
+          ...current,
+          dispatchCc: normalizeCcList([...existing, lower]),
+        };
+      });
+      setCcDraft('');
       return;
     }
     setDraft((current) => {
@@ -140,7 +227,7 @@ export default function Empresa() {
     setCcDraft('');
   }
 
-  function removeCc(email: string) {
+  function removeExternal(email: string) {
     setDraft((current) => {
       if (!current) return current;
       const target = email.trim().toLowerCase();
@@ -152,7 +239,7 @@ export default function Empresa() {
   function handleCcKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
-      addCc();
+      addExternal();
     }
   }
 
@@ -163,8 +250,12 @@ export default function Empresa() {
       setFormError('Informe a razão social.');
       return;
     }
-    save.mutate(draft);
+    const dispatchCc = normalizeCcList(draft.dispatchCc ?? []);
+    save.mutate({ profile: draft, dispatchCc });
   }
+
+  const activeUsers = (directory.data ?? []).filter((u) => u.isActive);
+  const inactiveUsers = (directory.data ?? []).filter((u) => !u.isActive);
 
   return (
     <div className="page">
@@ -293,66 +384,217 @@ export default function Empresa() {
           <p className="field-hint">
             Esses e-mails recebem cópia de <strong>todos</strong> os envios de cotação desta empresa,
             além dos destinatários escolhidos no modal de envio. Útil para manter o escritório de
-            compras, a gerência ou o financeiro informados. Você pode adicionar até 50 endereços.
+            compras, a gerência ou o financeiro informados. Marque os perfis do sistema que devem
+            receber cópia automática; adicione e-mails externos manualmente quando precisar
+            (ex: financeiro@sqquimica.com, auditoria@…). Você pode ter até 50 endereços no total.
           </p>
-          <div className="cc-input-row" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <input
-              className="input"
-              type="email"
-              value={ccDraft}
-              onChange={(e) => {
-                setCcDraft(e.target.value);
-                if (ccError) setCcError(null);
-              }}
-              onKeyDown={handleCcKeyDown}
-              onBlur={() => {
-                if (ccDraft.trim().length > 0) addCc();
-              }}
-              placeholder="ex.: financeiro@sqquimica.com"
-            />
-            <button type="button" className="ghost-button" onClick={addCc}>
-              Adicionar
-            </button>
-          </div>
-          {ccError && (
-            <p style={{ color: 'var(--danger)', marginTop: 6, fontSize: 13 }}>{ccError}</p>
-          )}
 
-          <ul className="cc-list" style={{ marginTop: 12, padding: 0, listStyle: 'none' }}>
-            {(draft.dispatchCc ?? []).map((email) => (
-              <li
-                key={email}
-                className="cc-list__item"
+          <fieldset
+            className="cc-users"
+            style={{
+              marginTop: 12,
+              border: '1px solid var(--border, #e3e8ee)',
+              borderRadius: 8,
+              padding: 12,
+            }}
+          >
+            <legend className="field-label" style={{ padding: '0 6px', fontSize: 13 }}>
+              Perfis do sistema ({selectedUserIds.size} selecionado{selectedUserIds.size === 1 ? '' : 's'})
+            </legend>
+            {directory.isLoading && (
+              <p style={{ color: 'var(--text-muted, #6b7785)', fontSize: 13 }}>
+                Carregando perfis…
+              </p>
+            )}
+            {!directory.isLoading && activeUsers.length === 0 && (
+              <p style={{ color: 'var(--text-muted, #6b7785)', fontSize: 13 }}>
+                Nenhum perfil ativo cadastrado.
+              </p>
+            )}
+            {activeUsers.length > 0 && (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {activeUsers.map((user) => {
+                  const checked = selectedUserIds.has(user.id);
+                  return (
+                    <li
+                      key={user.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '6px 4px',
+                        borderBottom: '1px solid var(--border, #eef2f6)',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        id={`cc-user-${user.id}`}
+                        checked={checked}
+                        onChange={(e) => toggleUser(user, e.target.checked)}
+                        style={{ width: 16, height: 16 }}
+                      />
+                      <label
+                        htmlFor={`cc-user-${user.id}`}
+                        style={{ flex: 1, cursor: 'pointer', fontSize: 14 }}
+                      >
+                        <strong>{user.name}</strong>{' '}
+                        <span style={{ color: 'var(--text-muted, #6b7785)' }}>
+                          &lt;{user.email}&gt;
+                        </span>
+                      </label>
+                      <span
+                        className="badge"
+                        style={{ fontSize: 11, padding: '2px 8px' }}
+                      >
+                        {roleLabel(user.role)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {inactiveUsers.length > 0 && (
+              <details style={{ marginTop: 8 }}>
+                <summary
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-muted, #6b7785)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {inactiveUsers.length} perfil{inactiveUsers.length === 1 ? '' : 'is'} inativo
+                  {inactiveUsers.length === 1 ? '' : 's'} (desmarcado{selectedUserIds.size === 0 ? '' : 's'} automaticamente)
+                </summary>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0 0' }}>
+                  {inactiveUsers.map((user) => {
+                    const checked = selectedUserIds.has(user.id);
+                    return (
+                      <li
+                        key={user.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '4px 4px',
+                          opacity: 0.6,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          id={`cc-user-${user.id}`}
+                          checked={checked}
+                          onChange={(e) => toggleUser(user, e.target.checked)}
+                          style={{ width: 16, height: 16 }}
+                        />
+                        <label
+                          htmlFor={`cc-user-${user.id}`}
+                          style={{ flex: 1, cursor: 'pointer', fontSize: 13 }}
+                        >
+                          {user.name}{' '}
+                          <span style={{ color: 'var(--text-muted, #6b7785)' }}>
+                            &lt;{user.email}&gt;
+                          </span>
+                        </label>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted, #6b7785)' }}>
+                          {roleLabel(user.role)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </details>
+            )}
+          </fieldset>
+
+          <div style={{ marginTop: 16 }}>
+            <label className="field-label" style={{ fontSize: 13 }}>
+              E-mails externos
+            </label>
+            <p
+              className="field-hint"
+              style={{ marginTop: 2, marginBottom: 6, fontSize: 12 }}
+            >
+              Para destinatários que não têm login no IntelliQuote (ex: financeiro externo,
+              auditoria). Limite de 50 endereços somando perfis + externos.
+            </p>
+            <div className="cc-input-row" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input
+                className="input"
+                type="email"
+                value={ccDraft}
+                onChange={(e) => {
+                  setCcDraft(e.target.value);
+                  if (ccError) setCcError(null);
+                }}
+                onKeyDown={handleCcKeyDown}
+                onBlur={() => {
+                  if (ccDraft.trim().length > 0) addExternal();
+                }}
+                placeholder="ex.: financeiro@sqquimica.com"
+              />
+              <button type="button" className="ghost-button" onClick={addExternal}>
+                Adicionar
+              </button>
+            </div>
+            {ccError && (
+              <p style={{ color: 'var(--danger)', marginTop: 6, fontSize: 13 }}>{ccError}</p>
+            )}
+
+            {externalEmails.length > 0 && (
+              <ul className="cc-list" style={{ marginTop: 12, padding: 0, listStyle: 'none' }}>
+                {externalEmails.map((email) => (
+                  <li
+                    key={email}
+                    className="cc-list__item"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      border: '1px solid var(--border, #e3e8ee)',
+                      borderRadius: 8,
+                      marginBottom: 6,
+                      background: 'var(--surface-muted, #f7fafc)',
+                      fontSize: 14,
+                    }}
+                  >
+                    <span>{email}</span>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => removeExternal(email)}
+                      style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                    >
+                      Remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {externalEmails.length === 0 && selectedUserIds.size === 0 && (
+              <p
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 12px',
-                  border: '1px solid var(--border, #e3e8ee)',
-                  borderRadius: 8,
-                  marginBottom: 6,
-                  background: 'var(--surface-muted, #f7fafc)',
-                  fontSize: 14,
+                  color: 'var(--text-muted, #6b7785)',
+                  fontSize: 13,
+                  fontStyle: 'italic',
+                  marginTop: 12,
                 }}
               >
-                <span>{email}</span>
-                <button
-                  type="button"
-                  className="link-button"
-                  onClick={() => removeCc(email)}
-                  style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
-                >
-                  Remover
-                </button>
-              </li>
-            ))}
-            {(draft.dispatchCc ?? []).length === 0 && (
-              <li style={{ color: 'var(--text-muted, #6b7785)', fontSize: 13, fontStyle: 'italic' }}>
-                Nenhum e-mail em cópia automática. Envios sairão apenas para os destinatários
-                escolhidos no modal.
-              </li>
+                Nenhum destinatário em cópia automática. Envios sairão apenas para os
+                destinatários escolhidos no modal.
+              </p>
             )}
-          </ul>
+          </div>
+
+          <p
+            className="field-hint"
+            style={{ marginTop: 12, fontSize: 12 }}
+          >
+            Total: <strong>{normalizeCcList(draft.dispatchCc ?? []).length}</strong> endereço
+            {normalizeCcList(draft.dispatchCc ?? []).length === 1 ? '' : 's'} em cópia automática
+            ({selectedUserIds.size} perfil{selectedUserIds.size === 1 ? '' : 'is'} + {externalEmails.length} externo
+            {externalEmails.length === 1 ? '' : 's'}).
+          </p>
         </div>
 
         {formError && (
