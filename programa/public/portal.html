@@ -506,8 +506,8 @@
 
     <script>
       (function () {
-        // v50 diagnostic: also surface this in DOM as early as possible so we
-        // can see in View Source that the new portal.html is being served.
+        // Marca a versão no <html> pra ficar fácil confirmar via DevTools
+        // qual cópia do portal.html está em produção.
         try {
           const host = window.location.hostname;
           const servedFrom = host.endsWith('.run.app')
@@ -515,13 +515,10 @@
             : host === 'localhost' || host === '127.0.0.1'
             ? 'localhost'
             : 'firebase-hosting';
-          // eslint-disable-next-line no-console
-          console.log('[portal] boot', { servedFrom, host, url: window.location.href });
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v52-20260623');
+          document.documentElement.setAttribute('data-portal-version', 'v53-20260623');
         } catch (bootErr) {
-          // eslint-disable-next-line no-console
-          console.error('[portal] boot diag failed', bootErr);
+          /* swallow: nao e critico */
         }
 
         const params = new URLSearchParams(window.location.search);
@@ -837,48 +834,15 @@
                 headers: { Accept: 'application/json' },
               });
             } catch (networkErr) {
-              // v50: surface the URL/origin/UA in BOTH the banner AND console so
-              // we can see the exact failure in DevTools (browser fetch errors
-              // are notoriously terse). Also note whether the page came from
-              // Firebase Hosting or Cloud Run so we can verify which copy of
-              // portal.html is being executed.
-              const host = window.location.hostname;
-              const servedFrom = host.endsWith('.run.app')
-                ? 'cloud-run'
-                : host === 'localhost' || host === '127.0.0.1'
-                ? 'localhost'
-                : 'firebase-hosting';
-              const ua = navigator.userAgent;
-              const detail = {
-                url,
-                apiBase,
-                origin: window.location.origin,
-                host,
-                servedFrom,
-                ua,
-                error: String(networkErr),
-                errorName: networkErr && networkErr.name,
-              };
-              // eslint-disable-next-line no-console
-              console.error('[portal] fetch failed', detail);
-              // eslint-disable-next-line no-console
-              console.error('[portal] raw error', networkErr);
               setStatus(
                 'error',
-                `Network error while loading the request. (url=${url}, origin=${window.location.origin}, servedFrom=${servedFrom})`,
+                'Network error while loading the request. Please check your connection and try again.',
               );
+              // eslint-disable-next-line no-console
+              console.error('[portal] fetch failed', networkErr);
               return;
             }
-            // v51: log the raw response so we can see why a 200 still fails.
-            // eslint-disable-next-line no-console
-            console.log('[portal] response', { status: res.status, ok: res.ok, contentType: res.headers.get('content-type') });
-            const data = await res.json().catch((parseErr) => {
-              // eslint-disable-next-line no-console
-              console.error('[portal] JSON parse failed', parseErr, { status: res.status });
-              return {};
-            });
-            // eslint-disable-next-line no-console
-            console.log('[portal] payload', data);
+            const data = await res.json().catch(() => ({}));
             if (res.status === 404) {
               setStatus('error', data.message || 'This link is invalid, expired or revoked.');
               content.innerHTML = '<p class="footer-note">If you believe this is a mistake, please contact your buyer.</p>';
@@ -892,13 +856,7 @@
               setStatus('error', data.message || `Unable to load request (HTTP ${res.status}).`);
               return;
             }
-            // v51: the API payload shape changed at some point and the portal
-            // was throwing on `data.quoteRequest.requestCode` when that key
-            // was absent. Treat it as an invalid link rather than a generic
-            // "Network error" so the supplier sees something useful.
             if (!data || !data.quoteRequest) {
-              // eslint-disable-next-line no-console
-              console.error('[portal] payload missing quoteRequest', data);
               setStatus(
                 'error',
                 data.message ||
@@ -934,12 +892,11 @@
               attachFormBehavior(data);
             }
           } catch (error) {
-            // v51: if anything in the happy path throws (e.g. payload shape
-            // mismatch), show the actual error in the banner instead of a
-            // generic "Network error" so the supplier can report something
-            // useful.
+            // Fallback feliz-path: se algo na renderizacao quebrar (payload
+            // inesperado, etc), mostra a mensagem real em vez do "Network
+            // error" generico.
             // eslint-disable-next-line no-console
-            console.error('[portal] loadPortal caught error', error);
+            console.error('[portal] loadPortal error', error);
             setStatus('error', `Unable to load request: ${error && error.message ? error.message : 'unknown error'}.`);
           }
         }
