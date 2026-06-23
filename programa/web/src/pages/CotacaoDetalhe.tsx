@@ -217,7 +217,6 @@ export default function CotacaoDetalhe() {
       recipients: DispatchRecipientPreview[];
       preview: { subject: string; html: string; text: string } | null;
       cc: Array<{ email: string; name?: string }>;
-      companyCc: string[];
     } | null>(null);
     const [dispatchResult, setDispatchResult] = useState<DispatchSendResult | null>(null);
 
@@ -449,7 +448,6 @@ export default function CotacaoDetalhe() {
       }, 0);
       return total;
     }, [selectedContactIds, supplierContacts.data]);
-    const ccCount = siblingCcCount + companyCcList.length;
 
     const previewDispatchMutation = useMutation({
       mutationFn: () =>
@@ -460,7 +458,6 @@ export default function CotacaoDetalhe() {
           recipients: data.recipients,
           preview: data.preview,
           cc: data.cc ?? [],
-          companyCc: data.companyCc ?? [],
         });
         if (!dispatchSubject.trim() && data.preview?.subject) {
           setDispatchSubject(data.preview.subject);
@@ -1034,13 +1031,13 @@ export default function CotacaoDetalhe() {
                                   ))}
                                 </div>
 
-                {(dispatchPreview?.companyCc?.length ?? 0) > 0 && (
+                {companyCcList.length > 0 && (
                   <div className="recipient-summary" style={{ marginTop: 8 }}>
                     <span
                       className="recipient-summary__pill recipient-summary__pill--cc"
-                      title={dispatchPreview?.companyCc.join(', ')}
+                      title={companyCcList.join(', ')}
                     >
-                      CC fixo da empresa: {dispatchPreview?.companyCc.join(', ')}
+                      CC fixo da empresa: {companyCcList.join(', ')}
                     </span>
                   </div>
                 )}

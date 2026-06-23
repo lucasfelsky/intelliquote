@@ -28,8 +28,6 @@ function toNullable(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 function normalizeCcList(list: string[] | null | undefined): string[] {
   if (!Array.isArray(list)) return [];
   const seen = new Set<string>();
