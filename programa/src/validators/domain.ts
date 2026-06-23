@@ -267,7 +267,23 @@ export const reportQuerySchema = z.object({
 });
 
 export const helpArticleListQuerySchema = z.object({
-  category: z.string().trim().optional(),
+  category: z
+    .enum([
+      'general',
+      'fornecedor',
+      'cotacao',
+      'proposta',
+      'comparacao',
+      'auditoria',
+      'usuarios',
+      'anexos',
+      'relatorios',
+      'onboarding',
+      'portal',
+      'empresa',
+    ])
+    .optional(),
+  search: z.string().trim().min(2).max(80).optional(),
 });
 
 export {

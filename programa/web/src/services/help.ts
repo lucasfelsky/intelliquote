@@ -14,7 +14,9 @@ export type HelpCategory =
   | 'usuarios'
   | 'anexos'
   | 'relatorios'
-  | 'onboarding';
+  | 'onboarding'
+  | 'portal'
+  | 'empresa';
 
 export interface HelpArticle {
   id: number;
@@ -31,6 +33,7 @@ export interface HelpFilters {
 
 export const HELP_CATEGORIES: readonly { value: HelpCategory; label: string }[] = [
   { value: 'general', label: 'Geral' },
+  { value: 'onboarding', label: 'Onboarding' },
   { value: 'fornecedor', label: 'Fornecedor' },
   { value: 'cotacao', label: 'Cotação' },
   { value: 'proposta', label: 'Proposta' },
@@ -39,7 +42,8 @@ export const HELP_CATEGORIES: readonly { value: HelpCategory; label: string }[] 
   { value: 'usuarios', label: 'Usuários' },
   { value: 'anexos', label: 'Anexos' },
   { value: 'relatorios', label: 'Relatórios' },
-  { value: 'onboarding', label: 'Onboarding' },
+  { value: 'empresa', label: 'Empresa' },
+  { value: 'portal', label: 'Portal do Fornecedor' },
 ];
 
 export async function listHelpArticles(filters: HelpFilters = {}): Promise<HelpArticle[]> {
