@@ -869,7 +869,16 @@
               );
               return;
             }
-            const data = await res.json().catch(() => ({}));
+            // v51: log the raw response so we can see why a 200 still fails.
+            // eslint-disable-next-line no-console
+            console.log('[portal] response', { status: res.status, ok: res.ok, contentType: res.headers.get('content-type') });
+            const data = await res.json().catch((parseErr) => {
+              // eslint-disable-next-line no-console
+              console.error('[portal] JSON parse failed', parseErr, { status: res.status });
+              return {};
+            });
+            // eslint-disable-next-line no-console
+            console.log('[portal] payload', data);
             if (res.status === 404) {
               setStatus('error', data.message || 'This link is invalid, expired or revoked.');
               content.innerHTML = '<p class="footer-note">If you believe this is a mistake, please contact your buyer.</p>';
@@ -881,6 +890,21 @@
             }
             if (!res.ok) {
               setStatus('error', data.message || `Unable to load request (HTTP ${res.status}).`);
+              return;
+            }
+            // v51: the API payload shape changed at some point and the portal
+            // was throwing on `data.quoteRequest.requestCode` when that key
+            // was absent. Treat it as an invalid link rather than a generic
+            // "Network error" so the supplier sees something useful.
+            if (!data || !data.quoteRequest) {
+              // eslint-disable-next-line no-console
+              console.error('[portal] payload missing quoteRequest', data);
+              setStatus(
+                'error',
+                data.message ||
+                  'This link is invalid or the request is no longer available. Please contact your buyer.',
+              );
+              content.innerHTML = '<p class="footer-note">If you believe this is a mistake, please contact your buyer.</p>';
               return;
             }
             const readOnly = data.readOnly === true;
@@ -909,7 +933,13 @@
               attachFormBehavior(data);
             }
           } catch (error) {
-            setStatus('error', 'Network error while loading the request.');
+            // v51: if anything in the happy path throws (e.g. payload shape
+            // mismatch), show the actual error in the banner instead of a
+            // generic "Network error" so the supplier can report something
+            // useful.
+            // eslint-disable-next-line no-console
+            console.error('[portal] loadPortal caught error', error);
+            setStatus('error', `Unable to load request: ${error && error.message ? error.message : 'unknown error'}.`);
           }
         }
 
