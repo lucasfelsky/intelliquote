@@ -78,11 +78,14 @@ app.get('/health', async (_req, res) => {
 // para dist/public/web/ pelo Dockerfile (quando SPA estiver embarcada
 // no container); hoje em producao, o index.html servindo e o do Firebase Hosting.
 //
-// Ja a rota raiz "/" e o `index.html` legacy continuam sendo servidos
-// como uma camada extra de fallback para diagnostico; sera removida
-// na Fase 8 (cleanup) junto com `public/index.html` e `public/app.js`.
+// A raiz "/" passa a responder 404 explicito: o frontend React vive
+// no Firebase Hosting (intelliquote.portal-comex.com) e nao no Cloud Run.
+// Isso substitui o legado `public/index.html` removido na Fase 8.
 app.get('/', (_req, res) => {
-  res.sendFile(path.join(publicPath, 'index.html'));
+  res.status(404).json({
+    message:
+      'API IntelliQuote. O frontend React vive no Firebase Hosting; este endpoint serve apenas /api/** e /portal.',
+  });
 });
 
 // Portal publico do fornecedor: suppliers recebem links magicos

@@ -3,17 +3,17 @@
 # IntelliQuote Backend - Dockerfile multi-stage.
 #
 # Stack alvo:
-# - Backend Node 22 (Express + Prisma + Firebase Admin) servindo /api/** no Cloud Run
-#   (revisado: A Fase 5.D migrou o frontend vanilla JS para React + Vite hospedado
-#   no Firebase Hosting via "Portal COMEX/sq-comex-updates/firebase.intelliquote.json".
-#   O backend agora e APENAS API: nao ha mais `public/index.html` legacy sendo servido
-#   pela rota / nem `app.js` em public/. O portal do fornecedor (`public/portal.html`)
-#   continua sendo servido pelo backend em /portal porque os links publicos batem
-#   diretamente no Cloud Run.)
+# - Backend Node 22 (Express + Prisma + Firebase Admin) servindo /api/** no Cloud Run.
+#   O frontend React/Vite foi migrado na Fase 5.D e vive no Firebase Hosting
+#   (configurado em "Portal COMEX/sq-comex-updates/firebase.intelliquote.json").
+#   O backend agora e APENAS API: nao ha mais `public/index.html` legacy nem
+#   `app.js`. O portal do fornecedor (`public/portal.html`) continua sendo
+#   servido pelo backend em /portal porque os links publicos batem
+#   diretamente no Cloud Run.
 #
 # Notas operacionais:
-# - Mantemos o passo `npm run build:web` para garantir que `dist/public/portal.html`
-#   chegue no container; o `copy-web.js` continua sendo util ate a Fase 8 (cleanup).
+# - O passo `npm run build:web` copia `public/` -> `dist/public/` para que
+#   `dist/public/portal.html` chegue no container.
 # - O healthcheck consulta `/health/ready`, exposto em `src/app.ts` antes do static.
 # - Em producao, prisma migrations rodam via `npx prisma migrate deploy` no CMD.
 # - Nao usamos Alpine porque Prisma + sharp + bcrypt prebuilt preferem glibc.
@@ -41,8 +41,6 @@ RUN npm run build
 # disponivel dentro de dist/src/mailer/templates em runtime (usado
 # por renderQuoteDispatch via fs.readFileSync).
 RUN mkdir -p dist/src/mailer/templates && cp src/mailer/templates/*.html dist/src/mailer/templates/
-# Mantem a copia de public/ -> dist/public/ ate a Fase 8 remover
-# os arquivos legados de vanilla JS.
 RUN npm run build:web
 
 FROM node:22-bookworm-slim AS runtime

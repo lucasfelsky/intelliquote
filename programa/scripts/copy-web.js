@@ -16,10 +16,10 @@
  *   `Portal COMEX/sq-comex-updates/hosting-intelliquote/` e nao precisa
  *   ser embarcado no container do backend.
  *
- * Porem, ate a Fase 8 (cleanup definitivo) o `public/` ainda contem os
- * arquivos legados; este script continua copiando a pasta inteira para
- * nao quebrar o comando `npm run build:web` em pipelines existentes. O
- * Dockerfile de producao ignora `dist/public/index.html` e `dist/public/app.js`.
+ * Fase 8: `public/index.html`, `public/app.js`, `public/styles.css` e
+ * `public/styles.legacy.css` foram removidos definitivamente. Este script
+ * continua existindo para garantir que `portal.html` chegue no container,
+ * mas agora so copia esse arquivo (o resto do public/ sao logos/favicon).
  *
  * Uso: `npm run build:web`
  */
