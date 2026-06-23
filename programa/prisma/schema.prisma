@@ -350,6 +350,11 @@ model CompanyProfile {
   purchasingPhone String?
   website         String?
   logoUrl         String?
+  // Lista de e-mails fixos em copia automatica em TODOS os envios de
+  // cotacao desta empresa. O DispatchController sempre mescla essa
+  // lista com os recipients selecionados no modal (nunca substitui,
+  // dedup case-insensitive). Persistido como JSON array de strings.
+  dispatchCc      String   @default("[]")
   updatedAt       DateTime @updatedAt
   updatedById     Int?
   updatedBy       User?    @relation("CompanyProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)

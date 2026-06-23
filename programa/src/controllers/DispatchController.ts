@@ -2,7 +2,11 @@ import type { Request, Response } from 'express';
 import { QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
-import { CompanyProfileService, requireCompanyProfileFields } from '../services/CompanyProfileService';
+import {
+  CompanyProfileService,
+  readDispatchCc,
+  requireCompanyProfileFields,
+} from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
 import {
   dispatchCreateSchema,
@@ -92,29 +96,33 @@ export class DispatchController {
 
       return res.status(200).json({
         recipientCount: contacts.length,
-              recipients: contacts.map((c) => {
-                const cc = (siblingsBySupplier.get(c.supplierId) ?? []).map((s) => ({
-                  contactId: s.supplierContactId,
-                  email: s.email,
-                  name: s.name,
-                }));
-                return {
-                  supplierContactId: c.supplierContactId,
-                  supplierId: c.supplierId,
-                  supplierName: c.supplierName,
-                  contactName: c.name,
-                  contactEmail: c.email,
-                  ccCount: cc.length,
-                  cc,
-                };
-              }),
-              preview: rendered
-                ? { subject: rendered.subject, html: rendered.html, text: rendered.text }
-                : null,
-              templateSource: rendered?.source ?? 'fallback',
-              cc: getComexCcList(),
-              template: { key: DISPATCH_TEMPLATE_KEY, locale: DISPATCH_DEFAULT_LOCALE, source: rendered?.source ?? 'fallback' },
-            });
+        recipients: contacts.map((c) => {
+          const cc = (siblingsBySupplier.get(c.supplierId) ?? []).map((s) => ({
+            contactId: s.supplierContactId,
+            email: s.email,
+            name: s.name,
+          }));
+          return {
+            supplierContactId: c.supplierContactId,
+            supplierId: c.supplierId,
+            supplierName: c.supplierName,
+            contactName: c.name,
+            contactEmail: c.email,
+            ccCount: cc.length,
+            cc,
+          };
+        }),
+        preview: rendered
+          ? { subject: rendered.subject, html: rendered.html, text: rendered.text }
+          : null,
+        templateSource: rendered?.source ?? 'fallback',
+        cc: getComexCcList(),
+        // E-mails fixos configurados no perfil da empresa que serao
+        // adicionados automaticamente como copia em todos os envios
+        // (mesclados com os recipients do modal; nunca substituem).
+        companyCc: readDispatchCc(await CompanyProfileService.get()),
+        template: { key: DISPATCH_TEMPLATE_KEY, locale: DISPATCH_DEFAULT_LOCALE, source: rendered?.source ?? 'fallback' },
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -188,7 +196,8 @@ export class DispatchController {
             purchasingEmail: fallbackEmail,
           });
             const globalCc = getComexCcList();
-      const userId = req.user?.id;
+            const companyCc = readDispatchCc(profileRecord).map((email) => ({ email, name: '' }));
+            const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ message: 'Sessao expirada. Faca login novamente.' });
       }
@@ -205,9 +214,16 @@ export class DispatchController {
                 createdById: userId,
                 recipientsCount: recipients.length,
                 subject: subjectBase,
-                      ccList: globalCc.length
-                        ? globalCc.map((c) => (c.name ? `${c.name} <${c.email}>` : c.email)).join(', ')
-                  : null,
+                ccList: (() => {
+                  const parts: string[] = [];
+                  if (globalCc.length) {
+                    parts.push(globalCc.map((c) => (c.name ? `${c.name} <${c.email}>` : c.email)).join(', '));
+                  }
+                  if (companyCc.length) {
+                    parts.push(companyCc.map((c) => c.email).join(', '));
+                  }
+                  return parts.length ? parts.join(' | companyCC: ') : null;
+                })(),
                 locale,
                 status: 'in_progress',
               },
@@ -293,7 +309,21 @@ export class DispatchController {
                     const siblingCc = (siblingsBySupplier.get(contact.supplierId) ?? [])
                       .filter((s) => s.email && s.email.toLowerCase() !== contact.email.toLowerCase())
                       .map((s) => ({ email: s.email, name: s.name }));
-                    const recipientCc = [...globalCc, ...siblingCc];
+                    // companyCc sao os e-mails fixos configurados no perfil
+                    // da empresa (CompanyProfile.dispatchCc). Mesclamos com os
+                    // CCs globais e com os contatos secundarios do mesmo
+                    // fornecedor. Dedupe case-insensitive e nunca repetimos o
+                    // proprio destinatario.
+                    const recipientCc = [...globalCc, ...siblingCc, ...companyCc].reduce<
+                      Array<{ email: string; name: string }>
+                    >((acc, current) => {
+                      if (!current || !current.email) return acc;
+                      const lower = current.email.trim().toLowerCase();
+                      if (!lower || lower === contact.email.toLowerCase()) return acc;
+                      if (acc.some((c) => c.email.toLowerCase() === lower)) return acc;
+                      acc.push({ email: lower, name: current.name ?? '' });
+                      return acc;
+                    }, []);
 
                     const sendResult = await sendAndLog({
                       to: { email: contact.email, name: contact.name },

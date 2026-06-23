@@ -6,6 +6,15 @@ import { handleControllerError, HttpError } from '../utils/http';
 
 const companyProfileRoutes = Router();
 
+// Regex simples: so queremos garantir que cada CC parece um e-mail.
+// A normalizacao completa (trim/lowercase/dedup) acontece no service.
+const emailShape = z
+  .string()
+  .trim()
+  .min(3)
+  .max(254)
+  .email('Informe um e-mail valido.');
+
 const companyProfileUpdateSchema = z.object({
   companyName: z.string().trim().min(1, 'Informe a razao social.'),
   tradeName: z.string().trim().nullable().optional(),
@@ -16,16 +25,17 @@ const companyProfileUpdateSchema = z.object({
   state: z.string().trim().nullable().optional(),
   postalCode: z.string().trim().nullable().optional(),
   country: z.string().trim().nullable().optional(),
-  purchasingEmail: z
-    .string()
-    .trim()
-    .email('Informe um e-mail valido.')
-    .nullable()
-    .optional()
-    .or(z.literal('').transform(() => null)),
+  purchasingEmail: emailShape.nullable().optional().or(z.literal('').transform(() => null)),
   purchasingPhone: z.string().trim().nullable().optional(),
   website: z.string().trim().nullable().optional(),
   logoUrl: z.string().trim().nullable().optional(),
+  // Lista de e-mails que recebem copia automatica em todos os envios
+  // de cotacao desta empresa (CC fixo do escritorio de compras, por
+  // exemplo). Aceitamos ate 50 entradas para evitar abuso.
+  dispatchCc: z
+    .array(emailShape)
+    .max(50, 'Limite de 50 enderecos em copia automatica.')
+    .optional(),
 });
 
 companyProfileRoutes.get(
@@ -51,9 +61,10 @@ companyProfileRoutes.put(
     try {
       const parsed = companyProfileUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ message: 'Dados do perfil invalidos. Confira os campos destacados.' });
+        const first = parsed.error.issues[0];
+        return res.status(400).json({
+          message: first?.message ?? 'Dados do perfil invalidos. Confira os campos destacados.',
+        });
       }
       const updated = await CompanyProfileService.update({
         ...parsed.data,

@@ -122,6 +122,10 @@ export interface DispatchPreviewResult {
   recipients: DispatchRecipientPreview[];
   preview: { subject: string; html: string; text: string } | null;
   cc: Array<{ email: string; name?: string }>;
+  // E-mails fixos em copia automatica configurados no perfil da empresa
+  // (CompanyProfile.dispatchCc). Serao adicionados como CC em todos os
+  // envios desta empresa, independente dos recipients selecionados.
+  companyCc: string[];
 }
 
 export async function previewDispatch(

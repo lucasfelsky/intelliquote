@@ -16,6 +16,10 @@ export interface CompanyProfileInput {
   purchasingPhone?: string | null;
   website?: string | null;
   logoUrl?: string | null;
+  // Lista de e-mails fixos em copia automatica em todos os envios de
+  // cotacao desta empresa. Cada item ja deve estar normalizado
+  // (lowercase, trim). Persistido como JSON array de strings.
+  dispatchCc?: string[] | null;
   updatedById?: number | null;
 }
 
@@ -37,6 +41,8 @@ export class CompanyProfileService {
     input: CompanyProfileInput,
     client: PrismaClient | Prisma.TransactionClient = defaultPrisma,
   ) {
+    const dispatchCcJson = JSON.stringify(normalizeDispatchCc(input.dispatchCc));
+
     const existing = await client.companyProfile.findUnique({ where: { id: 1 } });
     if (!existing) {
       return client.companyProfile.create({
@@ -55,6 +61,7 @@ export class CompanyProfileService {
           purchasingPhone: input.purchasingPhone ?? null,
           website: input.website ?? null,
           logoUrl: input.logoUrl ?? null,
+          dispatchCc: dispatchCcJson,
           updatedById: input.updatedById ?? null,
         },
       });
@@ -76,9 +83,47 @@ export class CompanyProfileService {
         purchasingPhone: input.purchasingPhone ?? null,
         website: input.website ?? null,
         logoUrl: input.logoUrl ?? null,
+        dispatchCc: dispatchCcJson,
         updatedById: input.updatedById ?? null,
       },
     });
+  }
+}
+
+/**
+ * Normaliza a lista de e-mails em copia automatica:
+ *  - remove espacos nas pontas
+ *  - converte para lowercase
+ *  - dedup case-insensitive
+ *  - descarta strings vazias e entradas sem '@'
+ */
+export function normalizeDispatchCc(input: string[] | null | undefined): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@')) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/**
+ * Le o campo dispatchCc do perfil (JSON) com fallback seguro caso esteja
+ * mal-formado (devolve array vazio em vez de quebrar).
+ */
+export function readDispatchCc(profile: { dispatchCc: string | null } | null | undefined): string[] {
+  if (!profile || !profile.dispatchCc) return [];
+  try {
+    const parsed = JSON.parse(profile.dispatchCc);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((s): s is string => typeof s === 'string');
+  } catch {
+    return [];
   }
 }
 

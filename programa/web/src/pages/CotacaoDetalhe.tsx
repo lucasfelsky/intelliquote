@@ -217,6 +217,7 @@ export default function CotacaoDetalhe() {
       recipients: DispatchRecipientPreview[];
       preview: { subject: string; html: string; text: string } | null;
       cc: Array<{ email: string; name?: string }>;
+      companyCc: string[];
     } | null>(null);
     const [dispatchResult, setDispatchResult] = useState<DispatchSendResult | null>(null);
 
@@ -411,7 +412,32 @@ export default function CotacaoDetalhe() {
       enabled: showDispatchModal && Boolean(activeSuppliers.data),
     });
 
-    const ccCount = useMemo(() => {
+    // CC automatico configurado pela empresa (CompanyProfile.dispatchCc).
+    // Igual ao backend: ja chega deduplicado e lowercase, mas usamos Set
+    // aqui tambem para garantir caso o usuario adicione o mesmo e-mail
+    // em outra fonte.
+    const companyProfileQuery = useQuery({
+      queryKey: ['company-profile-cc-hint'],
+      queryFn: () => api.get<{ dispatchCc?: string[] | null }>('/api/v1/company-profile'),
+      enabled: showDispatchModal,
+      staleTime: 60_000,
+    });
+    const companyCcList = useMemo(() => {
+      const raw = companyProfileQuery.data?.dispatchCc;
+      if (!Array.isArray(raw)) return [] as string[];
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const item of raw) {
+        if (typeof item !== 'string') continue;
+        const lower = item.trim().toLowerCase();
+        if (!lower || seen.has(lower)) continue;
+        seen.add(lower);
+        out.push(lower);
+      }
+      return out;
+    }, [companyProfileQuery.data]);
+
+    const siblingCcCount = useMemo(() => {
       const contactsMap = supplierContacts.data ?? {};
       const total = selectedContactIds.reduce((acc, id) => {
         const supplierEntry = Object.entries(contactsMap).find(([, list]) =>
@@ -423,6 +449,7 @@ export default function CotacaoDetalhe() {
       }, 0);
       return total;
     }, [selectedContactIds, supplierContacts.data]);
+    const ccCount = siblingCcCount + companyCcList.length;
 
     const previewDispatchMutation = useMutation({
       mutationFn: () =>
@@ -433,6 +460,7 @@ export default function CotacaoDetalhe() {
           recipients: data.recipients,
           preview: data.preview,
           cc: data.cc ?? [],
+          companyCc: data.companyCc ?? [],
         });
         if (!dispatchSubject.trim() && data.preview?.subject) {
           setDispatchSubject(data.preview.subject);
@@ -914,9 +942,20 @@ export default function CotacaoDetalhe() {
                                 <span className="recipient-summary__pill">
                                   {selectedContactIds.length} destinatario(s) selecionado(s)
                                 </span>
-                                {ccCount > 0 && (
-                                  <span className="recipient-summary__pill recipient-summary__pill--cc">
-                                    +{ccCount} em CC automatico
+                                {companyCcList.length > 0 && (
+                                  <span
+                                    className="recipient-summary__pill recipient-summary__pill--cc"
+                                    title={`Copia automatica configurada pela empresa (${companyCcList.length}): ${companyCcList.join(', ')}`}
+                                  >
+                                    +{companyCcList.length} CC empresa
+                                  </span>
+                                )}
+                                {siblingCcCount > 0 && (
+                                  <span
+                                    className="recipient-summary__pill recipient-summary__pill--cc"
+                                    title="Contatos secundarios do mesmo fornecedor"
+                                  >
+                                    +{siblingCcCount} CC fornecedores
                                   </span>
                                 )}
                               </div>
@@ -994,6 +1033,17 @@ export default function CotacaoDetalhe() {
                                     </span>
                                   ))}
                                 </div>
+
+                {(dispatchPreview?.companyCc?.length ?? 0) > 0 && (
+                  <div className="recipient-summary" style={{ marginTop: 8 }}>
+                    <span
+                      className="recipient-summary__pill recipient-summary__pill--cc"
+                      title={dispatchPreview?.companyCc.join(', ')}
+                    >
+                      CC fixo da empresa: {dispatchPreview?.companyCc.join(', ')}
+                    </span>
+                  </div>
+                )}
 
                 <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
                 {dispatchPreview?.preview ? (
