@@ -88,6 +88,12 @@ export class CompanyProfileService {
       },
     });
   }
+
+  static async normalizeDispatchCcWithUsers(input: {
+    extraEmails: string[];
+  }): Promise<string[]> {
+    return normalizeDispatchCcWithUsers({ extraEmails: input.extraEmails });
+  }
 }
 
 /**
@@ -110,6 +116,27 @@ export function normalizeDispatchCc(input: string[] | null | undefined): string[
     out.push(trimmed);
   }
   return out;
+}
+
+/**
+ * Normaliza a lista de e-mails em copia automatica incluindo os perfis
+ * (id, name, email) atualmente ativos no sistema. E-mails passados em
+ * `extraEmails` sao preservados mesmo que nao correspondam a um perfil
+ * (ex: financeiro@sqquimica.com). Deduplicacao case-insensitive.
+ */
+export async function normalizeDispatchCcWithUsers(input: {
+  extraEmails: string[];
+  client?: PrismaClient | Prisma.TransactionClient;
+}): Promise<string[]> {
+  const userClient = input.client ?? defaultPrisma;
+  const users = await userClient.user.findMany({
+    where: { isActive: true },
+    select: { email: true },
+  });
+  const userEmails = users
+    .map((u) => u.email?.trim().toLowerCase())
+    .filter((e): e is string => Boolean(e) && e.includes('@'));
+  return normalizeDispatchCc([...userEmails, ...input.extraEmails]);
 }
 
 /**

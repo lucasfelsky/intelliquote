@@ -216,6 +216,77 @@ export async function listDispatches(quoteRequestId: number): Promise<DispatchEv
   });
 }
 
+export interface PortalTokenListItem {
+  id: number;
+  supplier: { id: number; name: string };
+  contact: { id: number; name: string; email: string };
+  token: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  accessCount: number;
+  respondedAt: string | null;
+  createdAt: string;
+}
+
+export interface PortalTokenGenerateResult {
+  tokens: Array<{
+    supplierContactId: number;
+    supplierName: string;
+    contactName: string;
+    contactEmail: string;
+    token: PortalTokenListItem;
+  }>;
+  alreadyActiveCount: number;
+  generatedCount: number;
+}
+
+export async function listPortalTokens(
+  quoteRequestId: number,
+): Promise<PortalTokenListItem[]> {
+  const data = await api.get<unknown[]>(
+    `/v1/quote-requests/${quoteRequestId}/portal-tokens`,
+  );
+  if (!Array.isArray(data)) return [];
+  return data.map((raw) => {
+    const obj = raw as Record<string, unknown>;
+    const supplier = (obj.supplier as Record<string, unknown> | null) ?? null;
+    const contact = (obj.contact as Record<string, unknown> | null) ?? null;
+    return {
+      id: Number(obj.id),
+      supplier: {
+        id: Number(supplier?.id ?? 0),
+        name: String(supplier?.name ?? ''),
+      },
+      contact: {
+        id: Number(contact?.id ?? 0),
+        name: String(contact?.name ?? ''),
+        email: String(contact?.email ?? ''),
+      },
+      token: String(obj.token ?? ''),
+      expiresAt: String(obj.expiresAt ?? ''),
+      revokedAt: (obj.revokedAt as string | null) ?? null,
+      firstSeenAt: (obj.firstSeenAt as string | null) ?? null,
+      lastSeenAt: (obj.lastSeenAt as string | null) ?? null,
+      accessCount: Number(obj.accessCount ?? 0),
+      respondedAt: (obj.respondedAt as string | null) ?? null,
+      createdAt: String(obj.createdAt ?? ''),
+    };
+  });
+}
+
+export async function generatePortalTokens(
+  quoteRequestId: number,
+  supplierContactIds: number[],
+  expiresInDays: number,
+): Promise<PortalTokenGenerateResult> {
+  return api.post<PortalTokenGenerateResult>(
+    `/v1/quote-requests/${quoteRequestId}/portal-tokens`,
+    { supplierContactIds, expiresInDays },
+  );
+}
+
 export async function revokePortalToken(tokenId: number): Promise<{ ok: boolean }> {
   return api.post<{ ok: boolean }>(`/v1/portal-tokens/${tokenId}/revoke`, {});
 }

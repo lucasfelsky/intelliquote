@@ -73,4 +73,18 @@ quoteRequestRoutes.post(
   DispatchController.revokeToken,
 );
 
+quoteRequestRoutes.get(
+  '/quote-requests/:id/portal-tokens',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  DispatchController.listPortalTokens,
+);
+
+quoteRequestRoutes.post(
+  '/quote-requests/:id/portal-tokens',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  DispatchController.generatePortalTokens,
+);
+
 export { quoteRequestRoutes };

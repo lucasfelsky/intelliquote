@@ -509,6 +509,191 @@ export class DispatchController {
       return res.status(handled.status).json({ message: handled.message });
     }
   }
+
+  static async listPortalTokens(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID da cotacao invalido.' });
+      }
+
+      const tokens = await prisma.supplierPortalToken.findMany({
+        where: { quoteRequestId: id, revokedAt: null },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          supplier: { select: { id: true, name: true } },
+          supplierContact: { select: { id: true, name: true, email: true } },
+          response: { select: { id: true, submittedAt: true } },
+        },
+      });
+
+      return res.status(200).json(
+        tokens.map((t) => ({
+          id: t.id,
+          supplier: { id: t.supplierId, name: t.supplier.name },
+          contact: {
+            id: t.supplierContactId,
+            name: t.supplierContact.name,
+            email: t.supplierContact.email,
+          },
+          token: t.tokenHash,
+          expiresAt: t.expiresAt,
+          revokedAt: t.revokedAt,
+          firstSeenAt: t.firstSeenAt,
+          lastSeenAt: t.lastSeenAt,
+          accessCount: t.accessCount,
+          respondedAt: t.response?.submittedAt ?? null,
+          createdAt: t.createdAt,
+        })),
+      );
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async generatePortalTokens(
+    req: Request,
+    res: Response,
+  ): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID da cotacao invalido.' });
+      }
+
+      const body = (req.body as
+        | { supplierContactIds?: unknown; expiresInDays?: unknown }
+        | undefined) ?? {};
+      const supplierContactIds = Array.isArray(body.supplierContactIds)
+        ? body.supplierContactIds.filter((x): x is number => typeof x === 'number')
+        : [];
+      const rawTtl = Number(body.expiresInDays);
+      const ttlDays = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 90) : 14;
+
+      if (supplierContactIds.length === 0) {
+        return res
+          .status(400)
+          .json({ message: 'Selecione ao menos um contato.' });
+      }
+
+      const userId = req.user?.id;
+      if (!userId) {
+        return res
+          .status(401)
+          .json({ message: 'Sessao expirada. Faca login novamente.' });
+      }
+
+      const quoteRequest = await prisma.quoteRequest.findUnique({
+        where: { id },
+        select: { id: true, requestCode: true, productName: true },
+      });
+      if (!quoteRequest) {
+        return res.status(404).json({ message: 'Cotacao nao encontrada.' });
+      }
+
+      const contacts = await prisma.supplierContact.findMany({
+        where: { id: { in: supplierContactIds } },
+        include: { supplier: { select: { id: true, name: true } } },
+      });
+      if (contacts.length === 0) {
+        return res
+          .status(404)
+          .json({ message: 'Contatos nao encontrados.' });
+      }
+
+      const generated: Array<{
+        supplierContactId: number;
+        supplierName: string;
+        contactName: string;
+        contactEmail: string;
+        token: {
+          id: number;
+          supplier: { id: number; name: string };
+          contact: { id: number; name: string; email: string };
+          token: string;
+          expiresAt: Date;
+          revokedAt: Date | null;
+          firstSeenAt: Date | null;
+          lastSeenAt: Date | null;
+          accessCount: number;
+          respondedAt: Date | null;
+          createdAt: Date;
+        };
+      }> = [];
+      let alreadyActiveCount = 0;
+
+      for (const contact of contacts) {
+        const existing = await prisma.supplierPortalToken.findFirst({
+          where: {
+            quoteRequestId: id,
+            supplierContactId: contact.id,
+            revokedAt: null,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing) {
+          alreadyActiveCount += 1;
+          continue;
+        }
+
+        const token = await SupplierPortalService.createToken({
+          quoteRequestId: id,
+          supplierId: contact.supplierId,
+          supplierContactId: contact.id,
+          createdById: userId,
+          ttlDays,
+        });
+
+        generated.push({
+          supplierContactId: contact.id,
+          supplierName: contact.supplier.name,
+          contactName: contact.name,
+          contactEmail: contact.email,
+          token: {
+            id: token.id,
+            supplier: { id: contact.supplierId, name: contact.supplier.name },
+            contact: {
+              id: contact.id,
+              name: contact.name,
+              email: contact.email,
+            },
+            token: (token as { rawToken?: string }).rawToken ?? '',
+            expiresAt: token.expiresAt,
+            revokedAt: token.revokedAt,
+            firstSeenAt: token.firstSeenAt,
+            lastSeenAt: token.lastSeenAt,
+            accessCount: token.accessCount,
+            respondedAt: null,
+            createdAt: token.createdAt,
+          },
+        });
+      }
+
+      await AuditLogService.log({
+        entityType: 'supplier_portal_token',
+        entityId: id,
+        action: 'generate',
+        performedById: userId,
+        afterData: {
+          quoteRequestId: id,
+          requested: supplierContactIds.length,
+          generated: generated.length,
+          alreadyActive: alreadyActiveCount,
+          ttlDays,
+        },
+      });
+
+      return res.status(201).json({
+        tokens: generated,
+        alreadyActiveCount,
+        generatedCount: generated.length,
+      });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
 }
 
 function injectCustomMessage(html: string, message: string): string {

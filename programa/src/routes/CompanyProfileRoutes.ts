@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
+import { CompanyProfileService, normalizeDispatchCc, readDispatchCc } from '../services/CompanyProfileService';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 import { handleControllerError, HttpError } from '../utils/http';
 
@@ -66,15 +66,55 @@ companyProfileRoutes.put(
   allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
   async (req, res) => {
     try {
-      const parsed = companyProfileUpdateSchema.safeParse(req.body);
+      // Aceitamos duas representacoes:
+      //   { dispatchCc: ["a@x", ...], includeUserProfiles: true }
+      // ou:
+      //   { dispatchCc: { includeUserProfiles: true, extras: ["a@x", ...] } }
+      //
+      // `includeUserProfiles=true` faz o backend puxar todos os e-mails
+      // dos perfis ativos do sistema alem dos `extras` manuais, de forma
+      // que o admin nao precise marcar usuario por usuario no checkbox
+      // para garantir que a equipe toda esta sempre em copia.
+      const rawBody = (req.body ?? {}) as Record<string, unknown>;
+      const rawCc = rawBody.dispatchCc;
+      const explicit =
+        rawCc && typeof rawCc === 'object' && !Array.isArray(rawCc)
+          ? (rawCc as Record<string, unknown>)
+          : null;
+
+      const includeUsers =
+        typeof rawBody.includeUserProfiles === 'boolean'
+          ? rawBody.includeUserProfiles
+          : explicit
+            ? Boolean(explicit.includeUserProfiles)
+            : false;
+      const extras = explicit && Array.isArray(explicit.extras)
+        ? (explicit.extras as unknown[])
+        : Array.isArray(rawCc)
+          ? (rawCc as unknown[])
+          : [];
+
+      const parsed = companyProfileUpdateSchema.safeParse({
+        ...rawBody,
+        dispatchCc: extras,
+      });
       if (!parsed.success) {
         const first = parsed.error.issues[0];
         return res.status(400).json({
           message: first?.message ?? 'Dados do perfil invalidos. Confira os campos destacados.',
         });
       }
+      let finalCc: string[];
+            if (includeUsers) {
+              finalCc = await CompanyProfileService.normalizeDispatchCcWithUsers({
+                extraEmails: parsed.data.dispatchCc ?? [],
+              });
+            } else {
+              finalCc = normalizeDispatchCc(parsed.data.dispatchCc ?? []);
+            }
       const updated = await CompanyProfileService.update({
         ...parsed.data,
+        dispatchCc: finalCc,
         updatedById: req.user?.id ?? null,
       });
       // Hidrata dispatchCc para array de strings antes de devolver.

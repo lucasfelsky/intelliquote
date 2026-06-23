@@ -79,6 +79,17 @@ export default function Empresa() {
   const [formError, setFormError] = useState<string | null>(null);
   const [ccDraft, setCcDraft] = useState('');
   const [ccError, setCcError] = useState<string | null>(null);
+  // Quando ligado, o backend adiciona todos os perfis ativos do sistema
+  // (admin / comprador / gestor) como copia automatica, alem dos e-mails
+  // externos manuais. O admin usa isso para garantir que a equipe toda
+  // acompanha sem precisar marcar usuario por usuario.
+  const [autoIncludeProfiles, setAutoIncludeProfiles] = useState(true);
+  // Excluidos manuais: perfis que o admin nao quer em copia mesmo com
+  // o auto-include ligado. Mapeamos por id do usuario (precisamos do id
+  // do users-directory para casar).
+  const [excludedProfileIds, setExcludedProfileIds] = useState<Set<number>>(
+    () => new Set<number>(),
+  );
 
   const profile = useQuery({
     queryKey: ['company-profile'],
@@ -98,13 +109,34 @@ export default function Empresa() {
     }
   }, [profile.data, draft]);
 
+  // Hidrata o estado do auto-include a partir do dispatchCc persistido.
+  // Se o backend ja devolve dispatchCc com todos os perfis ativos, ligamos
+  // o toggle. Se nao, mantemos desligado (modo manual legado).
+  useEffect(() => {
+    if (!directory.data || !draft) return;
+    const directoryIds = new Set(
+      directory.data.filter((u) => u.isActive).map((u) => u.id),
+    );
+    const userEmails = new Map<string, number>();
+    directory.data.forEach((u) => userEmails.set(u.email.trim().toLowerCase(), u.id));
+    const list = normalizeCcList(draft.dispatchCc ?? []);
+    const activeUserIds = new Set<number>();
+    list.forEach((email) => {
+      const id = userEmails.get(email);
+      if (typeof id === 'number' && directoryIds.has(id)) activeUserIds.add(id);
+    });
+    setAutoIncludeProfiles(
+      directoryIds.size > 0 && activeUserIds.size === directoryIds.size,
+    );
+  }, [directory.data, draft]);
+
   // E-mails ja escolhidos vem do dispatchCc persistido. Separamos em
   //  - selectedUserIds: perfis que foram selecionados via checkbox
   //  - externalEmails: e-mails manuais que nao casam com nenhum perfil
   // Quando o backend devolve dispatchCc com e-mails de usuarios antigos
   // (ex: alguem reusou o e-mail mas trocou de cargo), mantemos eles
   // como externos para nao perder a preferencia do admin.
-  const { selectedUserIds, externalEmails } = useMemo(() => {
+  const { selectedUserIds, externalEmails, allActiveUserIds } = useMemo(() => {
     const list = normalizeCcList(draft?.dispatchCc ?? []);
     const userEmails = new Map<string, number>();
     (directory.data ?? []).forEach((u) => {
@@ -120,11 +152,39 @@ export default function Empresa() {
         externals.push(email);
       }
     }
-    return { selectedUserIds: selected, externalEmails: externals };
+    const allActive = new Set<number>();
+    (directory.data ?? [])
+      .filter((u) => u.isActive)
+      .forEach((u) => allActive.add(u.id));
+    return {
+      selectedUserIds: selected,
+      externalEmails: externals,
+      allActiveUserIds: allActive,
+    };
   }, [draft?.dispatchCc, directory.data]);
 
+  // Quando o auto-include esta ligado, todos os perfis ativos estao
+  // implicitamente em copia. Os checkboxes ficam marcados, mas a UI
+  // tambem permite desmarcar para "excluir da copia automatica" — esses
+  // ids caem no excludedProfileIds ate o admin salvar.
+  useEffect(() => {
+    if (!autoIncludeProfiles) {
+      setExcludedProfileIds(new Set());
+      return;
+    }
+    const implicit = new Set<number>();
+    allActiveUserIds.forEach((id) => {
+      if (!selectedUserIds.has(id)) implicit.add(id);
+    });
+    setExcludedProfileIds(implicit);
+  }, [autoIncludeProfiles, allActiveUserIds, selectedUserIds]);
+
   const save = useMutation({
-    mutationFn: (payload: { profile: CompanyProfile; dispatchCc: string[] }) =>
+    mutationFn: (payload: {
+      profile: CompanyProfile;
+      dispatchCc: string[];
+      includeUserProfiles: boolean;
+    }) =>
       api.put<CompanyProfile>('/api/v1/company-profile', {
         companyName: payload.profile.companyName.trim(),
         tradeName: toNullable(payload.profile.tradeName ?? ''),
@@ -139,7 +199,10 @@ export default function Empresa() {
         purchasingPhone: toNullable(payload.profile.purchasingPhone ?? ''),
         website: toNullable(payload.profile.website ?? ''),
         logoUrl: toNullable(payload.profile.logoUrl ?? ''),
-        dispatchCc: payload.dispatchCc,
+        dispatchCc: {
+          includeUserProfiles: payload.includeUserProfiles,
+          extras: payload.dispatchCc,
+        },
       }),
     onSuccess: (data) => {
       qc.setQueryData(['company-profile'], data);
@@ -176,6 +239,17 @@ export default function Empresa() {
   }
 
   function toggleUser(user: DirectoryUser, checked: boolean) {
+    if (autoIncludeProfiles) {
+      // No modo auto-include, "desmarcar" = adicionar o id a excluded
+      // para o backend nao inclui-lo. "Marcar" = remover da excluded.
+      setExcludedProfileIds((current) => {
+        const next = new Set(current);
+        if (checked) next.delete(user.id);
+        else next.add(user.id);
+        return next;
+      });
+      return;
+    }
     setDraft((current) => {
       if (!current) return current;
       const existing = normalizeCcList(current.dispatchCc ?? []);
@@ -250,8 +324,29 @@ export default function Empresa() {
       setFormError('Informe a razão social.');
       return;
     }
-    const dispatchCc = normalizeCcList(draft.dispatchCc ?? []);
-    save.mutate({ profile: draft, dispatchCc });
+    // Quando o admin liga o auto-include, mandamos apenas os e-mails
+    // externos como `extras` — o backend adiciona todos os perfis ativos
+    // (com excecao dos excludedProfileIds, se houver). Quando esta
+    // desligado, mandamos exatamente o que o admin marcou na UI.
+    let externals: string[];
+    if (autoIncludeProfiles) {
+      const base = normalizeCcList(draft.dispatchCc ?? []);
+      const kept = base.filter((email) => {
+        const userId = (directory.data ?? []).find(
+          (u) => u.email.trim().toLowerCase() === email,
+        )?.id;
+        if (typeof userId !== 'number') return true;
+        return excludedProfileIds.has(userId);
+      });
+      externals = kept;
+    } else {
+      externals = normalizeCcList(draft.dispatchCc ?? []);
+    }
+    save.mutate({
+      profile: draft,
+      dispatchCc: externals,
+      includeUserProfiles: autoIncludeProfiles,
+    });
   }
 
   const activeUsers = (directory.data ?? []).filter((u) => u.isActive);
@@ -384,10 +479,52 @@ export default function Empresa() {
           <p className="field-hint">
             Esses e-mails recebem cópia de <strong>todos</strong> os envios de cotação desta empresa,
             além dos destinatários escolhidos no modal de envio. Útil para manter o escritório de
-            compras, a gerência ou o financeiro informados. Marque os perfis do sistema que devem
-            receber cópia automática; adicione e-mails externos manualmente quando precisar
-            (ex: financeiro@sqquimica.com, auditoria@…). Você pode ter até 50 endereços no total.
+            compras, a gerência ou o financeiro informados.
           </p>
+
+          <div
+            className="cc-mode-toggle"
+            style={{
+              marginTop: 12,
+              padding: 12,
+              border: '1px solid var(--border, #e3e8ee)',
+              borderRadius: 8,
+              background: 'var(--surface-muted, #f7fafc)',
+            }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={autoIncludeProfiles}
+                onChange={(e) => setAutoIncludeProfiles(e.target.checked)}
+                style={{ width: 16, height: 16, marginTop: 2 }}
+              />
+              <span>
+                <strong>Incluir todos os perfis ativos automaticamente</strong>
+                <span
+                  style={{
+                    display: 'block',
+                    color: 'var(--text-muted, #6b7785)',
+                    fontSize: 12,
+                    marginTop: 2,
+                  }}
+                >
+                  Quando ligado, todo perfil ativo (admin, comprador, gestor, visualizador)
+                  entra em cópia dos envios. Desmarque abaixo quem você não quer
+                  receber. Adicione e-mails externos no campo ao lado para
+                  destinatários que não têm login (ex: financeiro externo, auditoria).
+                </span>
+              </span>
+            </label>
+          </div>
 
           <fieldset
             className="cc-users"
@@ -399,7 +536,9 @@ export default function Empresa() {
             }}
           >
             <legend className="field-label" style={{ padding: '0 6px', fontSize: 13 }}>
-              Perfis do sistema ({selectedUserIds.size} selecionado{selectedUserIds.size === 1 ? '' : 's'})
+              {autoIncludeProfiles
+                ? `Perfis do sistema (${allActiveUserIds.size - excludedProfileIds.size} de ${allActiveUserIds.size} em cópia)`
+                : `Perfis do sistema (${selectedUserIds.size} selecionado${selectedUserIds.size === 1 ? '' : 's'})`}
             </legend>
             {directory.isLoading && (
               <p style={{ color: 'var(--text-muted, #6b7785)', fontSize: 13 }}>
@@ -414,7 +553,9 @@ export default function Empresa() {
             {activeUsers.length > 0 && (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {activeUsers.map((user) => {
-                  const checked = selectedUserIds.has(user.id);
+                  const checked = autoIncludeProfiles
+                    ? !excludedProfileIds.has(user.id)
+                    : selectedUserIds.has(user.id);
                   return (
                     <li
                       key={user.id}
@@ -467,7 +608,9 @@ export default function Empresa() {
                 </summary>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0 0' }}>
                   {inactiveUsers.map((user) => {
-                    const checked = selectedUserIds.has(user.id);
+                    const checked = autoIncludeProfiles
+                      ? !excludedProfileIds.has(user.id)
+                      : selectedUserIds.has(user.id);
                     return (
                       <li
                         key={user.id}
@@ -571,7 +714,7 @@ export default function Empresa() {
                 ))}
               </ul>
             )}
-            {externalEmails.length === 0 && selectedUserIds.size === 0 && (
+            {externalEmails.length === 0 && selectedUserIds.size === 0 && !autoIncludeProfiles && (
               <p
                 style={{
                   color: 'var(--text-muted, #6b7785)',
@@ -590,10 +733,23 @@ export default function Empresa() {
             className="field-hint"
             style={{ marginTop: 12, fontSize: 12 }}
           >
-            Total: <strong>{normalizeCcList(draft.dispatchCc ?? []).length}</strong> endereço
-            {normalizeCcList(draft.dispatchCc ?? []).length === 1 ? '' : 's'} em cópia automática
-            ({selectedUserIds.size} perfil{selectedUserIds.size === 1 ? '' : 'is'} + {externalEmails.length} externo
-            {externalEmails.length === 1 ? '' : 's'}).
+            {autoIncludeProfiles
+              ? `Modo automático ligado: ${allActiveUserIds.size - excludedProfileIds.size} perfil${
+                  allActiveUserIds.size - excludedProfileIds.size === 1 ? '' : 'is'
+                } em cópia${
+                  excludedProfileIds.size > 0
+                    ? ` (${excludedProfileIds.size} excluído${excludedProfileIds.size === 1 ? '' : 's'})`
+                    : ''
+                }, mais ${externalEmails.length} e-mail${
+                  externalEmails.length === 1 ? '' : 's'
+                } externo${externalEmails.length === 1 ? '' : 's'}.`
+              : `Total: ${normalizeCcList(draft.dispatchCc ?? []).length} endereço${
+                  normalizeCcList(draft.dispatchCc ?? []).length === 1 ? '' : 's'
+                } em cópia automática (${selectedUserIds.size} perfil${
+                  selectedUserIds.size === 1 ? '' : 'is'
+                } + ${externalEmails.length} externo${
+                  externalEmails.length === 1 ? '' : 's'
+                }).`}
           </p>
         </div>
 

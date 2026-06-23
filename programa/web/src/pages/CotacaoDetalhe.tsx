@@ -4,11 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  generatePortalTokens,
+  listPortalTokens,
   previewDispatch,
   revokePortalToken,
   sendDispatch,
   type DispatchRecipientPreview,
   type DispatchSendResult,
+  type PortalTokenListItem,
 } from '@/services/dispatch';
 
 type QuoteStatus = 'open' | 'closed';
@@ -220,7 +223,14 @@ export default function CotacaoDetalhe() {
     } | null>(null);
     const [dispatchResult, setDispatchResult] = useState<DispatchSendResult | null>(null);
 
-    const [actionError, setActionError] = useState<string | null>(null);
+  // Tokens do portal (links magicos) ja gerados para esta cotacao. Cada
+  // entrada eh um link unico por contato de fornecedor; o admin pode
+  // copiar a URL e revogar quando quiser.
+  const [showTokensModal, setShowTokensModal] = useState(false);
+  const [tokenActionError, setTokenActionError] = useState<string | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
+
+  const [actionError, setActionError] = useState<string | null>(null);
 
     const canEdit = user?.role === 'admin' || user?.role === 'comprador';
     const canManageStatus = user?.role === 'admin' || user?.role === 'gestor';
@@ -485,9 +495,67 @@ export default function CotacaoDetalhe() {
 
     const revokePortalTokenMutation = useMutation({
       mutationFn: (tokenId: number) => revokePortalToken(tokenId),
-      onError: (err) => setActionError(messageOf(err)),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['portal-tokens', id] });
+        setTokenActionError(null);
+      },
+      onError: (err) => setTokenActionError(messageOf(err)),
     });
-    void revokePortalTokenMutation; // reservada para uso futuro no fluxo de revogacao
+
+    const portalTokensQuery = useQuery({
+      queryKey: ['portal-tokens', id],
+      queryFn: () => listPortalTokens(id),
+      enabled: showTokensModal,
+    });
+
+    const generateTokensMutation = useMutation({
+      mutationFn: (payload: { contactIds: number[]; expiresInDays: number }) =>
+        generatePortalTokens(id, payload.contactIds, payload.expiresInDays),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['portal-tokens', id] });
+        setTokenActionError(null);
+      },
+      onError: (err) => setTokenActionError(messageOf(err)),
+    });
+
+    const activeTokens: PortalTokenListItem[] = portalTokensQuery.data ?? [];
+
+    function buildPortalUrl(token: string): string {
+      const base = (
+        (import.meta.env.VITE_PORTAL_URL as string | undefined) ??
+        'https://intelliquote.portal-comex.com'
+      ).replace(/\/$/, '');
+      // Cache-buster idêntico ao backend (DispatchController.buildPortalLink)
+      // para que o navegador sempre carregue a versão mais recente do
+      // portal.html ao colar o link.
+      return `${base}/portal?token=${encodeURIComponent(token)}&v=${Date.now()}`;
+    }
+
+    async function copyTokenToClipboard(token: PortalTokenListItem) {
+      const url = buildPortalUrl(token.token);
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url);
+        } else {
+          const textarea = document.createElement('textarea');
+          textarea.value = url;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+        }
+        setCopiedTokenId(token.id);
+        window.setTimeout(() => {
+          setCopiedTokenId((current) => (current === token.id ? null : current));
+        }, 2000);
+      } catch (err) {
+        setTokenActionError(
+          err instanceof Error ? err.message : 'Falha ao copiar o link.',
+        );
+      }
+    }
 
   function openNewItem() {
     setEditingItem(null);
@@ -646,19 +714,28 @@ export default function CotacaoDetalhe() {
             {qr.status === 'open' ? 'Aberta' : 'Fechada'}
           </span>
           {canDispatch && qr.status === 'open' && items.length > 0 && (
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={openDispatchModal}
-                      >
-                        Enviar cotacao
-                      </button>
-                    )}
-                    {canEdit && qr.status === 'open' && (
-                      <button type="button" className="ghost-button" onClick={openEditQuote}>
-                        Editar
-                      </button>
-                    )}
+            <button
+              type="button"
+              className="primary-button"
+              onClick={openDispatchModal}
+            >
+              Enviar cotacao
+            </button>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setShowTokensModal(true)}
+            >
+              Links do portal
+            </button>
+          )}
+          {canEdit && qr.status === 'open' && (
+            <button type="button" className="ghost-button" onClick={openEditQuote}>
+              Editar
+            </button>
+          )}
           {canManageStatus && qr.status === 'open' && (
             <button
               type="button"
@@ -1135,12 +1212,209 @@ export default function CotacaoDetalhe() {
                 </table>
 
                 <div className="modal__actions">
-                  <button type="button" className="primary-button" onClick={closeDispatchModal}>
+                  <button type="button" className="ghost-button" onClick={closeDispatchModal}>
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => {
+                      setShowTokensModal(true);
+                    }}
+                  >
+                    Gerenciar links
+                  </button>
+                  <button type="button" className="ghost-button" onClick={closeDispatchModal}>
                     Concluir
                   </button>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {showTokensModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setShowTokensModal(false);
+            setTokenActionError(null);
+            setCopiedTokenId(null);
+          }}
+        >
+          <div
+            className="modal modal--wide"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Links do portal</h2>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+              Gere links mágicos para que fornecedores respondam sem precisar de login.
+              Cada link é único e expira conforme a validade escolhida.
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 12,
+                alignItems: 'flex-end',
+                marginTop: 16,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: '1 1 220px' }}>
+                <label className="field-label" htmlFor="tokensExpires">
+                  Validade (dias)
+                </label>
+                <input
+                  id="tokensExpires"
+                  className="input"
+                  type="number"
+                  min={1}
+                  max={90}
+                  defaultValue={dispatchExpires}
+                  onChange={(e) => setDispatchExpires(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={generateTokensMutation.isPending}
+                onClick={() => {
+                  // Gera tokens para TODOS os fornecedores com pelo menos um
+                  // contato ativo. E mais simples para o admin e
+                  // aproveita a deduplicacao (contatos que ja tem token
+                  // ativo sao ignorados pelo backend).
+                  const ids = (activeSuppliers.data ?? []).flatMap(
+                    (s) => supplierContacts.data?.[s.id]?.map((c) => c.id) ?? [],
+                  );
+                  if (ids.length === 0) return;
+                  generateTokensMutation.mutate({
+                    contactIds: ids,
+                    expiresInDays: Number(dispatchExpires) || 14,
+                  });
+                }}
+              >
+                {generateTokensMutation.isPending ? 'Gerando…' : 'Gerar para todos os fornecedores'}
+              </button>
+            </div>
+
+            {tokenActionError && (
+              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>
+                {tokenActionError}
+              </p>
+            )}
+            {generateTokensMutation.data && (
+              <p
+                style={{
+                  color: 'var(--primary-700)',
+                  marginTop: 12,
+                  fontSize: 13,
+                }}
+              >
+                {generateTokensMutation.data.generatedCount} link(s) novo(s) gerado(s)
+                {generateTokensMutation.data.alreadyActiveCount > 0 &&
+                  ` · ${generateTokensMutation.data.alreadyActiveCount} ja estava(m) ativo(s)`}
+                .
+              </p>
+            )}
+
+            <div style={{ marginTop: 16, maxHeight: 360, overflowY: 'auto' }}>
+              {portalTokensQuery.isLoading && <p>Carregando links…</p>}
+              {portalTokensQuery.data && activeTokens.length === 0 && (
+                <div className="empty-state">
+                  <strong>Nenhum link ativo</strong>
+                  <p>
+                    Gere links para que os fornecedores consigam responder esta cotação
+                    pelo portal.
+                  </p>
+                </div>
+              )}
+              {activeTokens.length > 0 && (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Fornecedor</th>
+                      <th>Contato</th>
+                      <th>Expira</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeTokens.map((token) => {
+                      const expired =
+                        new Date(token.expiresAt).getTime() < Date.now();
+                      return (
+                        <tr key={token.id}>
+                          <td><strong>{token.supplier.name}</strong></td>
+                          <td>
+                            {token.contact.name}
+                            <br />
+                            <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                              {token.contact.email}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                            {formatDateTime(token.expiresAt)}
+                          </td>
+                          <td>
+                            {token.respondedAt ? (
+                              <span className="badge">Respondido</span>
+                            ) : expired ? (
+                              <span className="badge badge--muted">Expirado</span>
+                            ) : (
+                              <span className="badge badge--muted">Pendente</span>
+                            )}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => copyTokenToClipboard(token)}
+                              >
+                                {copiedTokenId === token.id ? 'Copiado!' : 'Copiar link'}
+                              </button>
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                disabled={revokePortalTokenMutation.isPending}
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Revogar o link de ${token.contact.name}? O fornecedor não conseguirá mais responder.`,
+                                    )
+                                  ) {
+                                    revokePortalTokenMutation.mutate(token.id);
+                                  }
+                                }}
+                              >
+                                Revogar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="modal__actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setShowTokensModal(false);
+                  setTokenActionError(null);
+                  setCopiedTokenId(null);
+                }}
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
