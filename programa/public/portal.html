@@ -506,6 +506,24 @@
 
     <script>
       (function () {
+        // v50 diagnostic: also surface this in DOM as early as possible so we
+        // can see in View Source that the new portal.html is being served.
+        try {
+          const host = window.location.hostname;
+          const servedFrom = host.endsWith('.run.app')
+            ? 'cloud-run'
+            : host === 'localhost' || host === '127.0.0.1'
+            ? 'localhost'
+            : 'firebase-hosting';
+          // eslint-disable-next-line no-console
+          console.log('[portal] boot', { servedFrom, host, url: window.location.href });
+          document.documentElement.setAttribute('data-served-from', servedFrom);
+          document.documentElement.setAttribute('data-portal-version', 'v50-20260623');
+        } catch (bootErr) {
+          // eslint-disable-next-line no-console
+          console.error('[portal] boot diag failed', bootErr);
+        }
+
         const params = new URLSearchParams(window.location.search);
         const token = params.get('token');
 
