@@ -518,7 +518,7 @@
           // eslint-disable-next-line no-console
           console.log('[portal] boot', { servedFrom, host, url: window.location.href });
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v51-20260623');
+          document.documentElement.setAttribute('data-portal-version', 'v52-20260623');
         } catch (bootErr) {
           // eslint-disable-next-line no-console
           console.error('[portal] boot diag failed', bootErr);
@@ -919,6 +919,7 @@
             const description = data.quoteRequest.description
               ? `<p class="portal-lead">${data.quoteRequest.description}</p>`
               : '<p class="portal-lead">Please review the items below and submit your commercial proposal.</p>';
+            const items = data.quoteRequest.items || [];
             content.innerHTML = `
               <div class="portal-title-block">
                 <p class="eyebrow">Sourcing request ${data.quoteRequest.requestCode}</p>
@@ -926,7 +927,7 @@
                 ${description}
               </div>
               ${renderSupplierCard(data)}
-              ${renderItemsTable(data.quoteRequest.items)}
+              ${renderItemsTable(items)}
               ${renderForm(data, readOnly)}
             `;
             if (!readOnly) {
