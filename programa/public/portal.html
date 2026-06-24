@@ -35,6 +35,10 @@
         --portal-origin-bg-2: #ffe1b8;
         --portal-origin-fg: #6b3f00;
         --portal-origin-line: #b05f00;
+        --portal-dest-bg-1: #e6f8f3;
+        --portal-dest-bg-2: #c8efe1;
+        --portal-dest-fg: #045d49;
+        --portal-dest-line: #048972;
         --portal-err-bg: #fdecec;
         --portal-err-fg: #9b1c1c;
         --portal-err-line: #f4b6b6;
@@ -263,24 +267,21 @@
         margin-top: 2px;
       }
             .items-table td.incoterm-cell {
-              min-width: 140px;
-            }
-            .incoterm-cell-wrap {
-              display: flex;
-              flex-direction: column;
-              gap: 4px;
+              min-width: 110px;
             }
             .incoterm-pill {
-              display: inline-block;
-              background: var(--portal-primary-50);
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: linear-gradient(135deg, var(--portal-primary-50) 0%, #c8efe1 100%);
               color: var(--portal-primary-700);
-              border: 1px solid rgba(4, 137, 114, 0.2);
-              padding: 2px 10px;
+              border: 1px solid rgba(4, 137, 114, 0.28);
+              padding: 3px 12px;
               border-radius: 999px;
               font-weight: 700;
               font-size: 11px;
-              letter-spacing: 0.5px;
-              align-self: flex-start;
+              letter-spacing: 0.4px;
+              box-shadow: 0 1px 0 rgba(4, 137, 114, 0.08) inset;
             }
             .incoterm-empty {
               display: inline-block;
@@ -288,9 +289,22 @@
               font-size: 12px;
               font-style: italic;
             }
-            .incoterm-port {
-              font-size: 12px;
-              color: var(--portal-ink-soft);
+            .items-table td.destination-cell {
+              min-width: 130px;
+            }
+            .destination-pill {
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              background: linear-gradient(135deg, var(--portal-dest-bg-1) 0%, var(--portal-dest-bg-2) 100%);
+              color: var(--portal-dest-fg);
+              border: 1px solid rgba(4, 137, 114, 0.28);
+              padding: 3px 12px;
+              border-radius: 999px;
+              font-weight: 700;
+              font-size: 11px;
+              letter-spacing: 0.4px;
+              box-shadow: 0 1px 0 rgba(4, 137, 114, 0.08) inset;
             }
             .items-table td.origin-cell {
               min-width: 130px;
@@ -298,22 +312,16 @@
             .origin-pill {
               display: inline-flex;
               align-items: center;
-              gap: 6px;
+              gap: 4px;
               background: linear-gradient(135deg, var(--portal-origin-bg-1) 0%, var(--portal-origin-bg-2) 100%);
               color: var(--portal-origin-fg);
               border: 1px solid rgba(176, 95, 0, 0.28);
-              padding: 3px 11px 3px 8px;
+              padding: 3px 12px;
               border-radius: 999px;
               font-weight: 700;
               font-size: 11px;
               letter-spacing: 0.4px;
               box-shadow: 0 1px 0 rgba(176, 95, 0, 0.08) inset;
-            }
-            .origin-pill::before {
-              content: "✈";
-              font-size: 11px;
-              line-height: 1;
-              color: var(--portal-origin-line);
             }
             .origin-empty {
               display: inline-block;
@@ -544,7 +552,7 @@
         .items-table td.num { text-align: right; }
                 .items-table td.incoterm-cell { display: block; padding: 4px 0; }
                 .items-table td.origin-cell { display: block; padding: 4px 0; }
-                .incoterm-cell-wrap { width: 100%; }
+                .items-table td.destination-cell { display: block; padding: 4px 0; }
               }
     </style>
   </head>
@@ -667,58 +675,59 @@
 
         function renderItemsTable(items) {
           if (!items || items.length === 0) return '';
-                  const hasIncotermColumn = items.some(
-                    (it) => it.desiredIncoterm || it.destinationPort,
-                  );
-                  const hasOriginColumn = items.some(
-                    (it) => it.originPort,
-                  );
-                  return `
-                    <h2 class="section-title">Requested items</h2>
-                    <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}${hasOriginColumn ? ' items-table--with-origin' : ''}">
-                      <thead>
-                        <tr>
-                          <th>Item</th>
-                          ${hasIncotermColumn ? '<th>Incoterm / Destination</th>' : ''}
-                          ${hasOriginColumn ? '<th>Origin</th>' : ''}
-                          <th style="text-align:right;">Quantity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        ${items
-                          .map(
-                            (it) => `
-                          <tr>
-                            <td>
-                              <strong>${it.productName}</strong>
-                              ${it.commercialName && it.commercialName !== it.productName ? `<div class="commercial-name">Ref: ${it.commercialName}</div>` : ''}
-                            </td>
-                            ${hasIncotermColumn ? `<td class="incoterm-cell">${renderIncotermCell(it)}</td>` : ''}
-                            ${hasOriginColumn ? `<td class="origin-cell">${renderOriginCell(it)}</td>` : ''}
-                            <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
-                          </tr>`,
-                          )
-                          .join('')}
-                      </tbody>
-                    </table>`;
-                }
-
-                function renderIncotermCell(item) {
-                  const incoterm = item.desiredIncoterm
-                    ? `<span class="incoterm-pill">${item.desiredIncoterm}</span>`
-                    : '<span class="incoterm-empty">Not specified</span>';
-                  const port = item.destinationPort
-                    ? `<div class="incoterm-port">${item.destinationPort}</div>`
-                    : '';
-                  return `<div class="incoterm-cell-wrap">${incoterm}${port}</div>`;
-                }
-
-                function renderOriginCell(item) {
-                  if (item.originPort) {
-                    return `<span class="origin-pill" title="Origin port">${item.originPort}</span>`;
-                  }
-                  return '<span class="origin-empty">Not specified</span>';
-                }
+          const hasIncotermColumn = items.some(
+            (it) => it.desiredIncoterm || it.destinationPort,
+          );
+          const hasOriginColumn = items.some(
+            (it) => it.originPort,
+          );
+          return `
+            <h2 class="section-title">Requested items</h2>
+            <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}${hasOriginColumn ? ' items-table--with-origin' : ''}">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  ${hasIncotermColumn ? '<th>Incoterm</th>' : ''}
+                  ${hasOriginColumn ? '<th>Origin</th>' : ''}
+                  <th>Destination</th>
+                  <th style="text-align:right;">Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items
+                  .map(
+                    (it) => `
+                  <tr>
+                    <td>
+                      <strong>${it.productName}</strong>
+                      ${it.commercialName && it.commercialName !== it.productName ? `<div class="commercial-name">Ref: ${it.commercialName}</div>` : ''}
+                    </td>
+                    ${hasIncotermColumn
+                      ? `<td class="incoterm-cell">${
+                          it.desiredIncoterm
+                            ? `<span class="incoterm-pill">${it.desiredIncoterm}</span>`
+                            : '<span class="origin-empty">—</span>'
+                        }</td>`
+                      : ''}
+                    ${hasOriginColumn
+                      ? `<td class="origin-cell">${
+                          it.originPort
+                            ? `<span class="origin-pill" title="Origin port">${it.originPort}</span>`
+                            : '<span class="origin-empty">—</span>'
+                        }</td>`
+                      : ''}
+                    <td class="destination-cell">${
+                      it.destinationPort
+                        ? `<span class="destination-pill" title="Destination port">${it.destinationPort}</span>`
+                        : '<span class="origin-empty">—</span>'
+                    }</td>
+                    <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
+                  </tr>`,
+                  )
+                  .join('')}
+              </tbody>
+            </table>`;
+        }
 
         function renderForm(data, readOnly) {
           const items = data.quoteRequest.items || [];
@@ -728,11 +737,7 @@
           return `
             <form id="portal-form" autocomplete="off">
               <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
-              <h2 class="section-title">Commercial terms</h2>
-              <p class="portal-lead" style="margin-top: -4px;">
-                <span class="chip chip--soft">Incoterm: ${data.quoteRequest.desiredIncoterm}</span>
-                ${data.quoteRequest.destinationPort ? `<span class="chip chip--soft">Destination: ${data.quoteRequest.destinationPort}</span>` : ''}
-              </p>
+              <p class="portal-lead" style="margin-top: 0;">${(data.quoteRequest.description || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) || '&nbsp;'}</p>
               <div class="form-grid">
                 <label>Currency
                   <select name="currency" required>
@@ -988,8 +993,8 @@
                 : null,
             );
             const description = data.quoteRequest.description
-              ? `<p class="portal-lead">${data.quoteRequest.description}</p>`
-              : '<p class="portal-lead">Please review the items below and submit your commercial proposal.</p>';
+              ? `<p class="portal-lead">${data.quoteRequest.description.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</p>`
+              : '';
             const items = data.quoteRequest.items || [];
             content.innerHTML = `
               <div class="portal-title-block">
