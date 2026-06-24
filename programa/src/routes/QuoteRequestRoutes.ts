@@ -44,7 +44,7 @@ quoteRequestRoutes.post(
 quoteRequestRoutes.delete(
   '/quote-requests/:id',
   requireAuth,
-  allowRoles(['admin']),
+  allowRoles(['admin', 'comprador']),
   QuoteRequestController.delete,
 );
 

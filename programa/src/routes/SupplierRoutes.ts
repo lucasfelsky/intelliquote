@@ -31,7 +31,7 @@ supplierRoutes.put(
 supplierRoutes.delete(
   '/suppliers/:id',
   requireAuth,
-  allowRoles(['admin']),
+  allowRoles(['admin', 'comprador']),
   SupplierController.delete,
 );
 

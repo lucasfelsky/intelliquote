@@ -77,6 +77,16 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .ghost-button:hover { background: var(--surface-alt); }
 .ghost-button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.ghost-button.danger-button {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+.ghost-button.danger-button:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
 .danger-button {
   background: var(--danger);
   color: #fff;

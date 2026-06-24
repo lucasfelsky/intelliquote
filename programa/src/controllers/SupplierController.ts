@@ -195,7 +195,7 @@ export class SupplierController {
       }
 
       const linkedQuoteResponse = await prisma.quoteResponse.findFirst({
-        where: { supplierId: id },
+        where: { supplierId: id, deletedAt: null },
         select: {
           id: true,
         },
@@ -209,18 +209,21 @@ export class SupplierController {
       }
 
       const deletedAt = new Date();
-      await prisma.supplier.update({
-        where: { id },
-        data: {
-          deletedAt,
-          status: SupplierStatus.inactive,
-        },
-      });
+      await prisma.$transaction(async (tx) => {
+        // Marca respostas arquivadas (ja removidas via cascade de cotacao)
+        // como tambem inativadas do lado do fornecedor para consistencia.
+        await tx.supplierPortalToken.updateMany({
+          where: { supplierId: id, revokedAt: null },
+          data: { revokedAt: deletedAt },
+        });
 
-      // Revogar tokens do portal ainda nao utilizados.
-      await prisma.supplierPortalToken.updateMany({
-        where: { supplierId: id, revokedAt: null },
-        data: { revokedAt: deletedAt },
+        await tx.supplier.update({
+          where: { id },
+          data: {
+            deletedAt,
+            status: SupplierStatus.inactive,
+          },
+        });
       });
 
       await AuditLogService.log({

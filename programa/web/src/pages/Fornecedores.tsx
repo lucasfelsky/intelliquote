@@ -166,7 +166,12 @@ export default function Fornecedores() {
 
   const remove = useMutation({
     mutationFn: (id: number) => api.del<void>(`/api/v1/suppliers/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['suppliers'] }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['suppliers'] });
+      const note = (data as { message?: string } | undefined)?.message;
+      if (note) setFormError(null);
+    },
+    onError: (err) => setFormError(messageOf(err)),
   });
 
     const createContact = useMutation({
@@ -441,9 +446,9 @@ export default function Fornecedores() {
                                   </button>
                                   <button
                                     type="button"
-                                    className="ghost-button"
+                                    className="ghost-button danger-button"
                                     onClick={() => {
-                                      if (window.confirm(`Remover ${s.name}?`)) {
+                                      if (window.confirm(`Remover ${s.name}? Esta ação não pode ser desfeita.`)) {
                                         remove.mutate(s.id);
                                       }
                                     }}

@@ -21,6 +21,7 @@ interface QuoteRequest {
   updatedAt: string;
   closedAt: string | null;
   createdById: number | null;
+  _count?: { quoteResponses?: number; items?: number };
 }
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as const;
@@ -42,6 +43,7 @@ function normalize(qr: unknown): QuoteRequest {
     throw new Error('Resposta inesperada do servidor.');
   }
   const obj = qr as Record<string, unknown>;
+  const countObj = obj._count as { quoteResponses?: number; items?: number } | undefined;
   return {
     id: Number(obj.id),
     requestCode: String(obj.requestCode ?? ''),
@@ -56,6 +58,12 @@ function normalize(qr: unknown): QuoteRequest {
     updatedAt: String(obj.updatedAt ?? ''),
     closedAt: (obj.closedAt as string | null) ?? null,
     createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
+    _count: countObj
+      ? {
+          quoteResponses: typeof countObj.quoteResponses === 'number' ? countObj.quoteResponses : 0,
+          items: typeof countObj.items === 'number' ? countObj.items : 0,
+        }
+      : undefined,
   };
 }
 
@@ -68,7 +76,7 @@ export default function Cotacoes() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
-  const canDelete = user?.role === 'admin';
+  const canDelete = user?.role === 'admin' || user?.role === 'comprador';
 
   const list = useQuery({
     queryKey: ['quote-requests', { search, status: statusFilter }],
@@ -190,8 +198,8 @@ export default function Cotacoes() {
                   <td>{qr.productName}</td>
                   <td>{formatNumber(qr.quantity)}</td>
                   <td>{qr.desiredIncoterm}</td>
-                  <td>{formatNumber((qr as unknown as { _count?: { items?: number } })._count?.items)}</td>
-                  <td>{formatNumber((qr as unknown as { _count?: { quoteResponses?: number } })._count?.quoteResponses)}</td>
+                  <td>{formatNumber(qr._count?.items)}</td>
+                  <td>{formatNumber(qr._count?.quoteResponses)}</td>
                   <td>
                     <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
                       {qr.status === 'open' ? 'Aberta' : 'Fechada'}
@@ -232,9 +240,13 @@ export default function Cotacoes() {
                       {canDelete && (
                         <button
                           type="button"
-                          className="ghost-button"
+                          className="ghost-button danger-button"
                           onClick={() => {
-                            if (window.confirm(`Apagar a cotação ${qr.requestCode}?`)) {
+                            const cascade = qr._count?.quoteResponses ?? 0;
+                            const msg = cascade > 0
+                              ? `Apagar a cotação ${qr.requestCode}? Todas as ${cascade} resposta(s) e os itens associados também serão removidas. Esta ação não pode ser desfeita.`
+                              : `Apagar a cotação ${qr.requestCode}? Esta ação não pode ser desfeita.`;
+                            if (window.confirm(msg)) {
                               remove.mutate(qr.id);
                             }
                           }}

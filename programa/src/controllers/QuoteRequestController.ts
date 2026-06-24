@@ -77,6 +77,9 @@ export class QuoteRequestController {
     try {
       const where = buildQuoteRequestWhere(req);
       const include = {
+        _count: {
+          select: { items: true, quoteResponses: true },
+        },
         items: {
           include: { catalogItem: true },
           orderBy: { createdAt: 'asc' as const },
@@ -371,6 +374,10 @@ export class QuoteRequestController {
 
       const existingQuoteRequest = await prisma.quoteRequest.findFirst({
         where: { id, deletedAt: null },
+        include: {
+          items: { select: { id: true, catalogItemId: true } },
+          quoteResponses: { select: { id: true } },
+        },
       });
 
       if (!existingQuoteRequest) {
@@ -380,15 +387,49 @@ export class QuoteRequestController {
       }
 
       const deletedAt = new Date();
-      await prisma.quoteRequest.update({
-        where: { id },
-        data: { deletedAt, status: QuoteRequestStatus.closed, closedAt: deletedAt },
-      });
 
-      // Revogar tokens do portal vinculados para impedir novos acessos.
-      await prisma.supplierPortalToken.updateMany({
-        where: { quoteRequestId: id, revokedAt: null },
-        data: { revokedAt: deletedAt },
+      // Cascade soft delete: ao remover a cotacao, todas as respostas
+      // (e os itens do portal vinculados a cada resposta), os itens
+      // da cotacao e os tokens do portal sao marcados como removidos
+      // para manter integridade referencial e impedir acessos futuros.
+      await prisma.$transaction(async (tx) => {
+        const responseIds = existingQuoteRequest.quoteResponses.map((r) => r.id);
+
+        if (responseIds.length > 0) {
+          // Itens das respostas primeiro (FK -> SupplierPortalResponse.responseId).
+          // Eles referenciam QuoteRequestItem via quoteRequestItemId; marcamos
+          // tambem para evitar contagens orfas em relatorios futuros.
+          await tx.supplierPortalResponseItem.updateMany({
+            where: { response: { quoteRequestId: id } },
+            data: { deletedAt },
+          });
+
+          await tx.supplierPortalResponse.updateMany({
+            where: { quoteRequestId: id },
+            data: { deletedAt },
+          });
+
+          await tx.quoteResponse.updateMany({
+            where: { id: { in: responseIds } },
+            data: { deletedAt },
+          });
+        }
+
+        await tx.quoteRequestItem.updateMany({
+          where: { quoteRequestId: id },
+          data: { deletedAt },
+        });
+
+        // Revogar tokens do portal vinculados para impedir novos acessos.
+        await tx.supplierPortalToken.updateMany({
+          where: { quoteRequestId: id, revokedAt: null },
+          data: { revokedAt: deletedAt },
+        });
+
+        await tx.quoteRequest.update({
+          where: { id },
+          data: { deletedAt, status: QuoteRequestStatus.closed, closedAt: deletedAt },
+        });
       });
 
       await AuditLogService.log({
@@ -397,10 +438,24 @@ export class QuoteRequestController {
         action: 'soft_delete',
         performedById: req.user?.id ?? null,
         beforeData: existingQuoteRequest,
-        afterData: { deletedAt, status: QuoteRequestStatus.closed },
+        afterData: {
+          deletedAt,
+          status: QuoteRequestStatus.closed,
+          cascadedResponses: existingQuoteRequest.quoteResponses.length,
+          cascadedItems: existingQuoteRequest.items.length,
+        },
+        metadata: {
+          cascade: 'quote_responses+items+portal_tokens',
+        },
       });
 
-      return res.status(200).json({ ok: true, id, deletedAt });
+      return res.status(200).json({
+        ok: true,
+        id,
+        deletedAt,
+        cascadedResponses: existingQuoteRequest.quoteResponses.length,
+        cascadedItems: existingQuoteRequest.items.length,
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

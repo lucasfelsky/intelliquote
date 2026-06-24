@@ -4,11 +4,24 @@ import { hashPassword } from '../src/utils/password';
 
 vi.mock('../src/lib/prisma', () => {
   const tx = {
+    supplierPortalResponseItem: {
+      updateMany: vi.fn(),
+    },
+    supplierPortalResponse: {
+      updateMany: vi.fn(),
+    },
     quoteResponse: {
+      updateMany: vi.fn(),
+    },
+    quoteRequestItem: {
+      updateMany: vi.fn(),
+    },
+    supplierPortalToken: {
       updateMany: vi.fn(),
     },
     quoteRequest: {
       update: vi.fn(),
+      findFirst: vi.fn(),
     },
   };
 
@@ -24,21 +37,35 @@ vi.mock('../src/lib/prisma', () => {
       updateMany: vi.fn(),
     },
     supplier: {},
-    quoteComparison: {
-      findFirst: vi.fn(),
+    supplierPortalToken: {
+      updateMany: vi.fn(),
     },
-    quoteRequest: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
+    supplierPortalResponse: {
+      updateMany: vi.fn(),
+    },
+    supplierPortalResponseItem: {
+      updateMany: vi.fn(),
+    },
+    quoteResponse: {
+      findFirst: vi.fn(),
+      updateMany: vi.fn(),
     },
     quoteRequestItem: {
+      updateMany: vi.fn(),
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
-    quoteResponse: {},
+    quoteComparison: {
+      findFirst: vi.fn(),
+    },
+    quoteRequest: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
     $transaction: vi.fn(async (callback) => callback(tx)),
     __tx: tx,
   };
@@ -65,6 +92,7 @@ const prismaMock = prisma as unknown as {
   };
   quoteRequest: {
     findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
   };
@@ -73,10 +101,36 @@ const prismaMock = prisma as unknown as {
     findUnique: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+  };
+  supplierPortalToken: {
+    updateMany: ReturnType<typeof vi.fn>;
+  };
+  supplierPortalResponse: {
+    updateMany: ReturnType<typeof vi.fn>;
+  };
+  supplierPortalResponseItem: {
+    updateMany: ReturnType<typeof vi.fn>;
+  };
+  quoteResponse: {
+    findFirst: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
   };
   $transaction: ReturnType<typeof vi.fn>;
   __tx: {
+    supplierPortalResponseItem: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
+    supplierPortalResponse: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
     quoteResponse: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
+    quoteRequestItem: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
+    supplierPortalToken: {
       updateMany: ReturnType<typeof vi.fn>;
     };
     quoteRequest: {
@@ -190,6 +244,92 @@ describe('Quote workflow routes', () => {
     expect(response.status).toBe(400);
     expect(response.body.message).toContain('mover um item');
     expect(prismaMock.quoteRequestItem.update).not.toHaveBeenCalled();
+  });
+
+  it('soft-deleta cotacao em cascata: respostas + itens + tokens', async () => {
+    const cookies = await loginAs('comprador');
+
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 5,
+      deletedAt: null,
+      items: [{ id: 10, catalogItemId: 100 }, { id: 11, catalogItemId: 101 }],
+      quoteResponses: [{ id: 21 }, { id: 22 }, { id: 23 }],
+    });
+
+    const response = await request(app)
+      .delete('/api/v1/quote-requests/5')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.cascadedResponses).toBe(3);
+    expect(response.body.cascadedItems).toBe(2);
+
+    // Ordem importa: filhos primeiro, pais depois, terminando na cotacao.
+    expect(prismaMock.__tx.supplierPortalResponseItem.updateMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.__tx.supplierPortalResponseItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { response: { quoteRequestId: 5 } },
+        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      }),
+    );
+    expect(prismaMock.__tx.supplierPortalResponse.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { quoteRequestId: 5 },
+      }),
+    );
+    expect(prismaMock.__tx.quoteResponse.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: [21, 22, 23] } },
+      }),
+    );
+    expect(prismaMock.__tx.quoteRequestItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { quoteRequestId: 5 },
+      }),
+    );
+    expect(prismaMock.__tx.supplierPortalToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { quoteRequestId: 5, revokedAt: null },
+      }),
+    );
+    expect(prismaMock.__tx.quoteRequest.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 5 },
+        data: expect.objectContaining({
+          deletedAt: expect.any(Date),
+          status: 'closed',
+        }),
+      }),
+    );
+  });
+
+  it('permite que admin tambem delete cotacoes', async () => {
+    const cookies = await loginAs('admin');
+
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 6,
+      deletedAt: null,
+      items: [],
+      quoteResponses: [],
+    });
+
+    const response = await request(app)
+      .delete('/api/v1/quote-requests/6')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+  });
+
+  it('bloqueia delete para gestor e viewer', async () => {
+    for (const role of ['gestor', 'viewer'] as const) {
+      const cookies = await loginAs(role);
+      const response = await request(app)
+        .delete('/api/v1/quote-requests/7')
+        .set('Cookie', cookies);
+      expect(response.status).toBe(403);
+    }
   });
 });
 

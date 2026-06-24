@@ -17,7 +17,8 @@ enum SupplierStatus {
   active
   inactive
   blocked
-}enum Incoterm {
+}
+enum Incoterm {
   EXW
   FCA
   FAS
@@ -159,12 +160,14 @@ model QuoteRequestItem {
   notes               String?
   createdAt           DateTime                     @default(now())
   updatedAt           DateTime                     @updatedAt
+  deletedAt           DateTime?
   quoteRequest        QuoteRequest                 @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   catalogItem         CatalogItem?                 @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   portalResponseItems SupplierPortalResponseItem[]
 
   @@index([quoteRequestId])
   @@index([catalogItemId])
+  @@index([deletedAt])
 }
 
 model CatalogItem {
@@ -211,6 +214,7 @@ model QuoteResponse {
   createdById       Int?
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
+  deletedAt         DateTime?
   quoteRequest      QuoteRequest            @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   supplier          Supplier                @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   createdBy         User?                   @relation("QuoteResponseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -221,6 +225,7 @@ model QuoteResponse {
   @@index([quoteRequestId])
   @@index([supplierId])
   @@index([createdById])
+  @@index([deletedAt])
 }
 
 model QuoteComparison {
@@ -450,6 +455,7 @@ model SupplierPortalResponse {
   submittedAt        DateTime                     @default(now())
   submitterIp        String?
   submitterUserAgent String?
+  deletedAt          DateTime?
   portalToken        SupplierPortalToken          @relation("SupplierPortalTokenResponse", fields: [portalTokenId], references: [id], onDelete: Cascade)
   quoteRequest       QuoteRequest                 @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   supplier           Supplier                     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
@@ -459,6 +465,7 @@ model SupplierPortalResponse {
   @@index([quoteRequestId])
   @@index([supplierId])
   @@index([supplierContactId])
+  @@index([deletedAt])
 }
 
 model SupplierPortalResponseItem {
@@ -470,11 +477,13 @@ model SupplierPortalResponseItem {
   totalPrice         Decimal                @db.Decimal(14, 2)
   leadTimeDays       Int?
   notes              String?
+  deletedAt          DateTime?
   response           SupplierPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   quoteRequestItem   QuoteRequestItem       @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)
 
   @@index([responseId])
   @@index([quoteRequestItemId])
+  @@index([deletedAt])
 }
 
 model SupplierPortalTokenLog {

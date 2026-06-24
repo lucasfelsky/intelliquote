@@ -29,6 +29,10 @@ vi.mock('../src/lib/prisma', () => {
     },
     quoteRequest: {},
     quoteComparison: {},
+    $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb({
+      supplierPortalToken: prisma.supplierPortalToken,
+      supplier: prisma.supplier,
+    })),
   };
 
   return { prisma };
@@ -87,6 +91,33 @@ describe('Supplier routes', () => {
     expect(response.status).toBe(400);
     expect(response.body.message).toContain('Inative ou bloqueie');
     expect(prismaMock.supplier.delete).not.toHaveBeenCalled();
+  });
+
+  it('permite que comprador tambem delete fornecedores sem propostas', async () => {
+    const cookies = await loginAs('comprador');
+
+    prismaMock.supplier.findFirst.mockResolvedValue({
+      id: 11,
+      name: 'Fornecedor Limpo',
+    });
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const response = await request(app)
+      .delete('/api/v1/suppliers/11')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+  });
+
+  it('bloqueia delete de fornecedor para gestor e viewer', async () => {
+    for (const role of ['gestor', 'viewer'] as const) {
+      const cookies = await loginAs(role);
+      const response = await request(app)
+        .delete('/api/v1/suppliers/12')
+        .set('Cookie', cookies);
+      expect(response.status).toBe(403);
+    }
   });
 });
 
