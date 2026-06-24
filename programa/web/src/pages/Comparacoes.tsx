@@ -54,6 +54,16 @@ function normalizeQuoteRequest(raw: unknown): QuoteRequestSummary {
   };
 }
 
+function unwrapPaginatedList(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    const obj = data as { data?: unknown; items?: unknown };
+    if (Array.isArray(obj.data)) return obj.data;
+    if (Array.isArray(obj.items)) return obj.items;
+  }
+  return [];
+}
+
 export default function Comparacoes() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -70,8 +80,8 @@ export default function Comparacoes() {
   const quoteRequests = useQuery({
     queryKey: ['quote-requests', 'all'],
     queryFn: async () => {
-      const data = await api.get<unknown[] | { items: unknown[] }>('/v1/quote-requests');
-      const items = Array.isArray(data) ? data : data.items ?? [];
+      const data = await api.get<unknown>('/v1/quote-requests');
+      const items = unwrapPaginatedList(data);
       return items.map(normalizeQuoteRequest);
     },
   });

@@ -84,8 +84,8 @@ export default function Cotacoes() {
       const params: Record<string, string> = {};
       if (search.trim()) params.search = search.trim();
       if (statusFilter !== 'todas') params.status = statusFilter === 'abertas' ? 'open' : 'closed';
-      const data = await api.get<unknown[]>(`/v1/quote-requests`, params);
-      const items = Array.isArray(data) ? data : [];
+      const data = await api.get<unknown>(`/v1/quote-requests`, params);
+      const items = unwrapList(data);
       return items.map(normalize);
     },
   });
@@ -265,6 +265,16 @@ export default function Cotacoes() {
       </section>
     </div>
   );
+}
+
+function unwrapList(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    const obj = data as { data?: unknown; items?: unknown };
+    if (Array.isArray(obj.data)) return obj.data;
+    if (Array.isArray(obj.items)) return obj.items;
+  }
+  return [];
 }
 
 function messageOf(err: unknown): string {

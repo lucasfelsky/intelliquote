@@ -14,7 +14,7 @@ const BASE = (import.meta.env.VITE_INTELLIQUOTE_API_BASE ?? '/api').replace(/\/$
 // o Cloud Run diretamente quando possivel (mesma origem ou configurado
 // via VITE_INTELLIQUOTE_API_BASE=https://intelliquote-api-...run.app).
 // Incrementar BUILD_TAG para invalidar caches do navegador apos deploys.
-export const BUILD_TAG = '2026-06-19-r46-catalog-items-admin';
+export const BUILD_TAG = '2026-06-24-r47-cotacoes-filter-fix';
 
 // Limpa tokens velhos em deploys novos (storage fica sujo entre versoes
 // e causa 401 em /me, que dispara tryRefresh, que cai no fallback HTML
