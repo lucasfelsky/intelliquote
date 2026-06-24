@@ -43,6 +43,7 @@ export class QuoteRequestController {
           description: payload.description ?? null,
           desiredIncoterm: payload.desiredIncoterm as Incoterm,
           destinationPort: payload.destinationPort ?? null,
+          originPort: payload.originPort ?? 'Shanghai',
           currency: payload.currency ?? 'USD',
           deadlineAt: payload.deadlineAt ?? null,
           status: QuoteRequestStatus.open,
@@ -125,8 +126,8 @@ export class QuoteRequestController {
         });
       }
 
-      const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id },
+      const quoteRequest = await prisma.quoteRequest.findFirst({
+        where: { id, deletedAt: null },
         include: {
           items: {
             include: { catalogItem: true },
@@ -207,6 +208,7 @@ export class QuoteRequestController {
           desiredIncoterm: payload.desiredIncoterm as Incoterm | undefined,
           destinationPort:
             payload.destinationPort === undefined ? undefined : payload.destinationPort,
+          originPort: payload.originPort === undefined ? undefined : payload.originPort,
           currency: payload.currency,
           deadlineAt: payload.deadlineAt,
         },
@@ -367,12 +369,8 @@ export class QuoteRequestController {
         });
       }
 
-      const existingQuoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id },
-        include: {
-          items: true,
-          quoteResponses: true,
-        },
+      const existingQuoteRequest = await prisma.quoteRequest.findFirst({
+        where: { id, deletedAt: null },
       });
 
       if (!existingQuoteRequest) {
@@ -381,32 +379,28 @@ export class QuoteRequestController {
         });
       }
 
-      const hasComparisonHistory = await prisma.quoteComparison.findFirst({
-        where: { quoteRequestId: id },
-        select: { id: true },
+      const deletedAt = new Date();
+      await prisma.quoteRequest.update({
+        where: { id },
+        data: { deletedAt, status: QuoteRequestStatus.closed, closedAt: deletedAt },
       });
 
-      if (hasComparisonHistory) {
-        return res.status(400).json({
-          message:
-            'Nao e permitido apagar uma cotacao com historico de comparacao auditavel.',
-        });
-      }
-
-      await prisma.quoteRequest.delete({
-        where: { id },
+      // Revogar tokens do portal vinculados para impedir novos acessos.
+      await prisma.supplierPortalToken.updateMany({
+        where: { quoteRequestId: id, revokedAt: null },
+        data: { revokedAt: deletedAt },
       });
 
       await AuditLogService.log({
         entityType: 'quote_request',
         entityId: existingQuoteRequest.id,
-        action: 'delete',
+        action: 'soft_delete',
         performedById: req.user?.id ?? null,
         beforeData: existingQuoteRequest,
-        afterData: null,
+        afterData: { deletedAt, status: QuoteRequestStatus.closed },
       });
 
-      return res.status(204).send();
+      return res.status(200).json({ ok: true, id, deletedAt });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -426,7 +420,12 @@ function ensureQuoteRequestOpen(
 function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
   const search = parseOptionalQueryString(req.query.search);
   const status = parseOptionalQueryString(req.query.status);
+  const includeDeleted = parseOptionalQueryString(req.query.includeDeleted) === 'true';
   const where: Prisma.QuoteRequestWhereInput = {};
+
+  if (!includeDeleted) {
+    where.deletedAt = null;
+  }
 
   if (search) {
     where.OR = [

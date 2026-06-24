@@ -51,6 +51,7 @@ export interface QuoteDispatchVars {
   unit: string;
   desiredIncoterm: string;
   destinationPort?: string;
+  originPort?: string;
   currency: string;
   deadlineAt: string;
   expiresAt: string;
@@ -140,13 +141,14 @@ export function renderQuoteDispatch(
   fallbackHtml?: string,
 ): { html: string; text: string } {
   const html = renderSections(fallbackHtml ?? loadFileTemplate(), vars);
+  const originPart = vars.originPort ? `Origin port: ${vars.originPort}` : '';
   const text = [
     vars.subject,
     '',
     `Dear ${vars.supplierContactName},`,
     '',
     `We are contacting you on behalf of ${vars.companyName} regarding sourcing request ${vars.requestCode}.`,
-    `Incoterm: ${vars.desiredIncoterm}${vars.destinationPort ? ` | Destination port: ${vars.destinationPort}` : ''} | Currency: ${vars.currency}`,
+    `Incoterm: ${vars.desiredIncoterm}${vars.destinationPort ? ` | Destination port: ${vars.destinationPort}` : ''}${originPart ? ` | ${originPart}` : ''} | Currency: ${vars.currency}`,
     `Response deadline: ${vars.deadlineAt}`,
     `Link expires on: ${vars.expiresAt}`,
     '',

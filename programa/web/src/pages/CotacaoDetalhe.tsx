@@ -25,6 +25,7 @@ interface QuoteRequest {
   description: string | null;
   desiredIncoterm: Incoterm;
   destinationPort: string | null;
+  originPort: string | null;
   currency: string;
   deadlineAt: string | null;
   status: QuoteStatus;
@@ -75,6 +76,7 @@ interface QuoteRequestForm {
   description: string;
   desiredIncoterm: Incoterm;
   destinationPort: string;
+  originPort: string;
   currency: string;
   deadlineAt: string;
 }
@@ -143,6 +145,7 @@ function normalize(qr: unknown): QuoteRequest {
     description: (obj.description as string | null) ?? null,
     desiredIncoterm: asIncoterm(obj.desiredIncoterm),
       destinationPort: (obj.destinationPort as string | null) ?? null,
+      originPort: (obj.originPort as string | null) ?? 'Shanghai',
       currency: String(obj.currency ?? 'USD'),
       deadlineAt: (obj.deadlineAt as string | null) ?? null,
       status: (obj.status as QuoteStatus) ?? 'open',
@@ -289,6 +292,7 @@ export default function CotacaoDetalhe() {
         description: payload.description.trim() || null,
         desiredIncoterm: payload.desiredIncoterm,
           destinationPort: payload.destinationPort.trim() || null,
+          originPort: payload.originPort.trim() || 'Shanghai',
           currency: payload.currency.trim().toUpperCase() || 'USD',
           deadlineAt: payload.deadlineAt ? new Date(`${payload.deadlineAt}T00:00:00`).toISOString() : null,
         };
@@ -633,6 +637,7 @@ export default function CotacaoDetalhe() {
       description: detail.data.description ?? '',
       desiredIncoterm: detail.data.desiredIncoterm,
         destinationPort: detail.data.destinationPort ?? '',
+        originPort: detail.data.originPort ?? 'Shanghai',
         currency: detail.data.currency,
         deadlineAt: toDateInput(detail.data.deadlineAt),
       });
@@ -858,6 +863,10 @@ export default function CotacaoDetalhe() {
           <div>
             <p className="eyebrow">Incoterm desejado</p>
             <p>{qr.desiredIncoterm}</p>
+          </div>
+          <div>
+                      <p className="eyebrow">Porto de embarque</p>
+                      <p>{qr.originPort ?? '—'}</p>
           </div>
           <div>
                       <p className="eyebrow">Porto de destino</p>
@@ -1650,6 +1659,17 @@ export default function CotacaoDetalhe() {
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="field-label" htmlFor="qrOriginPort">Porto de embarque</label>
+                <input
+                  id="qrOriginPort"
+                  className="input"
+                  value={editForm.originPort}
+                  onChange={(e) => setEditForm({ ...editForm, originPort: e.target.value })}
+                  placeholder="Ex.: Shanghai"
+                  maxLength={120}
+                />
               </div>
               <div>
                               <label className="field-label" htmlFor="qrDestinationPort">Porto de destino</label>

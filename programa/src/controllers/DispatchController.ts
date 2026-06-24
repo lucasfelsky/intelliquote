@@ -39,8 +39,8 @@ export class DispatchController {
       const body = (req.body as { recipientContactIds?: number[]; locale?: string } | undefined) ?? {};
       const ids = Array.isArray(body.recipientContactIds) ? body.recipientContactIds : [];
       const contacts = await loadContactsForPreview(id, ids);
-      const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id },
+      const quoteRequest = await prisma.quoteRequest.findFirst({
+        where: { id, deletedAt: null },
         include: {
           items: {
             include: { catalogItem: true },
@@ -69,6 +69,7 @@ export class DispatchController {
                     quantity: quoteRequest.quantity,
                     desiredIncoterm: quoteRequest.desiredIncoterm,
                                 destinationPort: quoteRequest.destinationPort,
+                                originPort: quoteRequest.originPort,
                                 currency: quoteRequest.currency,
                                 deadlineAt: quoteRequest.deadlineAt,
                                 expiresAt: new Date(),
@@ -149,8 +150,8 @@ export class DispatchController {
               });
             }
 
-      const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id },
+      const quoteRequest = await prisma.quoteRequest.findFirst({
+        where: { id, deletedAt: null },
         include: {
           items: {
             include: { catalogItem: true },
@@ -280,6 +281,7 @@ export class DispatchController {
               quantity: quoteRequest.quantity,
               desiredIncoterm: quoteRequest.desiredIncoterm,
                         destinationPort: quoteRequest.destinationPort,
+                        originPort: quoteRequest.originPort,
                         currency: quoteRequest.currency,
                         deadlineAt: quoteRequest.deadlineAt,
                         expiresAt: persistedToken.expiresAt,
@@ -592,8 +594,8 @@ export class DispatchController {
           .json({ message: 'Sessao expirada. Faca login novamente.' });
       }
 
-      const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id },
+      const quoteRequest = await prisma.quoteRequest.findFirst({
+        where: { id, deletedAt: null },
         select: { id: true, requestCode: true, productName: true },
       });
       if (!quoteRequest) {
@@ -742,6 +744,7 @@ function buildTemplateVars(input: {
   quantity: number | null;
   desiredIncoterm: string;
   destinationPort?: string | null;
+  originPort?: string | null;
   currency: string;
   deadlineAt: Date | null;
   expiresAt: Date;
@@ -779,6 +782,7 @@ function buildTemplateVars(input: {
     unit: summaryUnit,
     desiredIncoterm: input.desiredIncoterm,
     destinationPort: input.destinationPort ?? undefined,
+    originPort: input.originPort ?? undefined,
     currency: input.currency,
     deadlineAt: formatDate(input.deadlineAt) || 'as soon as possible',
     expiresAt: formatDate(input.expiresAt) || '-',

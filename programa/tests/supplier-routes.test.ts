@@ -16,7 +16,13 @@ vi.mock('../src/lib/prisma', () => {
     },
     supplier: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       delete: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    supplierPortalToken: {
+      updateMany: vi.fn(),
     },
     quoteResponse: {
       findFirst: vi.fn(),
@@ -44,7 +50,13 @@ const prismaMock = prisma as unknown as {
   };
   supplier: {
     findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+  };
+  supplierPortalToken: {
+    updateMany: ReturnType<typeof vi.fn>;
   };
   quoteResponse: {
     findFirst: ReturnType<typeof vi.fn>;
@@ -59,7 +71,7 @@ describe('Supplier routes', () => {
   it('bloqueia exclusao de fornecedor com propostas registadas', async () => {
     const cookies = await loginAs('admin');
 
-    prismaMock.supplier.findUnique.mockResolvedValue({
+    prismaMock.supplier.findFirst.mockResolvedValue({
       id: 9,
       name: 'Fornecedor Critico',
       email: 'fornecedor@teste.local',

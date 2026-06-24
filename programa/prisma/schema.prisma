@@ -17,9 +17,7 @@ enum SupplierStatus {
   active
   inactive
   blocked
-}
-
-enum Incoterm {
+}enum Incoterm {
   EXW
   FCA
   FAS
@@ -110,9 +108,11 @@ model Supplier {
   createdBy         User?                    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
+  deletedAt         DateTime?
 
   @@index([status])
   @@index([createdById])
+  @@index([deletedAt])
 }
 
 model QuoteRequest {
@@ -123,6 +123,7 @@ model QuoteRequest {
   description     String?
   desiredIncoterm Incoterm
   destinationPort String?
+  originPort      String?                  @default("Shanghai")
   currency        String                   @default("USD")
   deadlineAt      DateTime?
   status          QuoteRequestStatus       @default(open)
@@ -130,6 +131,7 @@ model QuoteRequest {
   createdById     Int?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
+  deletedAt       DateTime?
   items           QuoteRequestItem[]
   quoteResponses  QuoteResponse[]
   comparisons     QuoteComparison[]
@@ -139,6 +141,7 @@ model QuoteRequest {
   createdBy       User?                    @relation("QuoteRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([createdById])
+  @@index([deletedAt])
 }
 
 model QuoteRequestItem {

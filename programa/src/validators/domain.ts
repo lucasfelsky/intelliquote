@@ -128,6 +128,7 @@ export const quoteRequestCreateSchema = z.object({
   description: nullableTrimmedStringField.optional(),
   desiredIncoterm: incotermField,
   destinationPort: nullableTrimmedStringField.optional(),
+  originPort: nullableTrimmedStringField.optional(),
   currency: optionalCurrencyCodeField,
   deadlineAt: nullableDateField.optional(),
   status: z.nativeEnum(QuoteRequestStatus).optional(),
@@ -140,6 +141,7 @@ export const quoteRequestUpdateSchema = z.object({
   description: nullableOptionalTrimmedStringField,
   desiredIncoterm: incotermField.optional(),
   destinationPort: nullableOptionalTrimmedStringField,
+  originPort: nullableOptionalTrimmedStringField,
   currency: optionalCurrencyCodeField,
   deadlineAt: nullableOptionalDateField,
 });

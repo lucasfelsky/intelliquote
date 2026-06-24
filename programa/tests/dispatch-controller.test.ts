@@ -51,6 +51,7 @@ vi.mock('../src/lib/prisma', () => {
     },
     quoteRequest: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     quoteRequestItem: {
       findMany: vi.fn(),
@@ -117,7 +118,7 @@ vi.mock('../src/lib/prisma', () => {
 const prismaMock = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   session: { create: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
-  quoteRequest: { findUnique: ReturnType<typeof vi.fn> };
+  quoteRequest: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   supplier: { findMany: ReturnType<typeof vi.fn> };
   supplierContact: { findMany: ReturnType<typeof vi.fn> };
   supplierPortalToken: {
@@ -241,7 +242,7 @@ describe('Dispatch controller', () => {
       Promise.resolve({ id: 123, ...data }),
     );
 
-    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 5,
       requestCode: 'QR-2026-001',
       productName: 'Acido sulfurico',
@@ -321,7 +322,7 @@ describe('Dispatch controller', () => {
       Promise.resolve({ id: 124, ...data }),
     );
 
-    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 8,
       requestCode: 'QR-2026-004',
       productName: 'Produto',
@@ -382,7 +383,7 @@ describe('Dispatch controller', () => {
       isActive: true,
       role: { name: 'admin' },
     });
-    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 6,
       requestCode: 'QR-2026-002',
       productName: 'X',
@@ -408,7 +409,7 @@ describe('Dispatch controller', () => {
       isActive: true,
       role: { name: 'admin' },
     });
-    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 7,
       requestCode: 'QR-2026-003',
       productName: 'X',

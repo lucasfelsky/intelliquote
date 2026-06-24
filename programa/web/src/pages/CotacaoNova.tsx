@@ -60,6 +60,7 @@ export default function CotacaoNova() {
   const [requestCode, setRequestCode] = useState('');
   const [desiredIncoterm, setDesiredIncoterm] = useState<Incoterm>('FOB');
     const [destinationPort, setDestinationPort] = useState('');
+    const [originPort, setOriginPort] = useState('Shanghai');
     const [currency, setCurrency] = useState('USD');
     const [deadlineAt, setDeadlineAt] = useState('');
     const [description, setDescription] = useState('');
@@ -108,6 +109,7 @@ export default function CotacaoNova() {
       const body: Record<string, unknown> = {
         desiredIncoterm,
             destinationPort: destinationPort.trim() || null,
+            originPort: originPort.trim() || 'Shanghai',
             currency: currency.trim().toUpperCase() || 'USD',
             deadlineAt: deadlineAt ? new Date(`${deadlineAt}T00:00:00`).toISOString() : null,
             description: description.trim() || null,
@@ -304,6 +306,17 @@ export default function CotacaoNova() {
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="originPort">Porto de embarque</label>
+              <input
+                id="originPort"
+                className="input"
+                value={originPort}
+                onChange={(e) => setOriginPort(e.target.value)}
+                placeholder="Ex.: Shanghai"
+                maxLength={120}
+              />
             </div>
             <div>
                           <label className="field-label" htmlFor="destinationPort">Porto de destino</label>

@@ -288,6 +288,19 @@
               font-size: 12px;
               color: var(--portal-ink-soft);
             }
+            .chip--soft {
+              background: var(--portal-primary-50);
+              color: var(--portal-primary-700);
+              border: 1px solid rgba(4, 137, 114, 0.18);
+              padding: 4px 12px;
+              border-radius: 999px;
+              font-size: 12px;
+              font-weight: 600;
+              display: inline-block;
+              margin-right: 6px;
+              margin-bottom: 6px;
+            }
+            .portal-lead { font-size: 13px; color: var(--portal-ink-soft); }
       .dg-badge {
         background: var(--portal-warn-bg);
         color: var(--portal-warn-fg);
@@ -670,6 +683,11 @@
             <form id="portal-form" autocomplete="off">
               <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
               <h2 class="section-title">Commercial terms</h2>
+              <p class="portal-lead" style="margin-top: -4px;">
+                <span class="chip chip--soft">Origin: ${data.quoteRequest.originPort || 'Shanghai'}</span>
+                ${data.quoteRequest.destinationPort ? `<span class="chip chip--soft">Destination: ${data.quoteRequest.destinationPort}</span>` : ''}
+                <span class="chip chip--soft">Incoterm: ${data.quoteRequest.desiredIncoterm}</span>
+              </p>
               <div class="form-grid">
                 <label>Currency
                   <select name="currency" required>
@@ -690,6 +708,9 @@
                       )
                       .join('')}
                   </select>
+                </label>
+                <label>Origin port
+                  <input type="text" name="originPort" value="${data.quoteRequest.originPort || 'Shanghai'}" maxlength="120" />
                 </label>
                 <label>Payment terms (days)
                   <input type="number" min="0" max="365" name="paymentTermsDays" value="${defaultPaymentTermsDays}" required />

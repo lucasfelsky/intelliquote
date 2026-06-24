@@ -98,8 +98,8 @@ export class SupplierController {
         });
       }
 
-      const supplier = await prisma.supplier.findUnique({
-        where: { id },
+      const supplier = await prisma.supplier.findFirst({
+        where: { id, deletedAt: null },
       });
 
       if (!supplier) {
@@ -135,8 +135,8 @@ export class SupplierController {
 
       const payload = parsedBody.data;
 
-      const existingSupplier = await prisma.supplier.findUnique({
-        where: { id },
+      const existingSupplier = await prisma.supplier.findFirst({
+        where: { id, deletedAt: null },
       });
 
       if (!existingSupplier) {
@@ -184,8 +184,8 @@ export class SupplierController {
         });
       }
 
-      const existingSupplier = await prisma.supplier.findUnique({
-        where: { id },
+      const existingSupplier = await prisma.supplier.findFirst({
+        where: { id, deletedAt: null },
       });
 
       if (!existingSupplier) {
@@ -208,20 +208,31 @@ export class SupplierController {
         });
       }
 
-      await prisma.supplier.delete({
+      const deletedAt = new Date();
+      await prisma.supplier.update({
         where: { id },
+        data: {
+          deletedAt,
+          status: SupplierStatus.inactive,
+        },
+      });
+
+      // Revogar tokens do portal ainda nao utilizados.
+      await prisma.supplierPortalToken.updateMany({
+        where: { supplierId: id, revokedAt: null },
+        data: { revokedAt: deletedAt },
       });
 
       await AuditLogService.log({
         entityType: 'supplier',
         entityId: existingSupplier.id,
-        action: 'delete',
+        action: 'soft_delete',
         performedById: req.user?.id ?? null,
         beforeData: existingSupplier,
-        afterData: null,
+        afterData: { deletedAt, status: SupplierStatus.inactive },
       });
 
-      return res.status(204).send();
+      return res.status(200).json({ ok: true, id, deletedAt });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -232,7 +243,12 @@ export class SupplierController {
 function buildSupplierWhere(req: Request): Prisma.SupplierWhereInput {
   const search = parseOptionalQueryString(req.query.search);
   const status = parseOptionalQueryString(req.query.status);
+  const includeDeleted = parseOptionalQueryString(req.query.includeDeleted) === 'true';
   const where: Prisma.SupplierWhereInput = {};
+
+  if (!includeDeleted) {
+    where.deletedAt = null;
+  }
 
   if (search) {
     where.OR = [

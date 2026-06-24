@@ -108,6 +108,7 @@ async function buildPortalView(tokenId: number) {
       description: token.quoteRequest.description,
       desiredIncoterm: token.quoteRequest.desiredIncoterm,
         destinationPort: token.quoteRequest.destinationPort,
+        originPort: token.quoteRequest.originPort ?? 'Shanghai',
         currency: token.quoteRequest.currency,
         deadlineAt: token.quoteRequest.deadlineAt,
         items: token.quoteRequest.items.map((item) => ({
