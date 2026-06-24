@@ -121,6 +121,7 @@ async function buildPortalView(tokenId: number) {
           unit: item.unit,
           desiredIncoterm: item.desiredIncoterm ?? token.quoteRequest.desiredIncoterm,
           destinationPort: item.destinationPort ?? token.quoteRequest.destinationPort,
+          originPort: token.quoteRequest.originPort ?? 'Shanghai',
           notes: item.notes,
           isDangerousGood: item.catalogItem?.isDangerousGood ?? false,
         })),

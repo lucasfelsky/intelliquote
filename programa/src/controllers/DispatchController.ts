@@ -93,7 +93,8 @@ export class DispatchController {
                                   desiredIncoterm: it.desiredIncoterm ?? quoteRequest.desiredIncoterm,
                                  destinationPort:
                                    it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
-                               })),
+                                originPort: quoteRequest.originPort ?? undefined,
+                              })),
                              }),
                              locale,
                            )
@@ -305,6 +306,7 @@ export class DispatchController {
                           desiredIncoterm: it.desiredIncoterm ?? quoteRequest.desiredIncoterm,
                           destinationPort:
                             it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
+                          originPort: quoteRequest.originPort ?? undefined,
                         })),
                       }),
                                 locale,

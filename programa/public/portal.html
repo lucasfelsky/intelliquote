@@ -288,6 +288,26 @@
               font-size: 12px;
               color: var(--portal-ink-soft);
             }
+            .items-table td.origin-cell {
+              min-width: 110px;
+            }
+            .origin-pill {
+              display: inline-block;
+              background: #fff4e0;
+              color: #8a5300;
+              border: 1px solid rgba(138, 83, 0, 0.2);
+              padding: 2px 10px;
+              border-radius: 999px;
+              font-weight: 700;
+              font-size: 11px;
+              letter-spacing: 0.5px;
+            }
+            .origin-empty {
+              display: inline-block;
+              color: var(--portal-muted);
+              font-size: 12px;
+              font-style: italic;
+            }
             .chip--soft {
               background: var(--portal-primary-50);
               color: var(--portal-primary-700);
@@ -510,6 +530,7 @@
         }
         .items-table td.num { text-align: right; }
                 .items-table td.incoterm-cell { display: block; padding: 4px 0; }
+                .items-table td.origin-cell { display: block; padding: 4px 0; }
                 .incoterm-cell-wrap { width: 100%; }
               }
     </style>
@@ -636,13 +657,17 @@
                   const hasIncotermColumn = items.some(
                     (it) => it.desiredIncoterm || it.destinationPort,
                   );
+                  const hasOriginColumn = items.some(
+                    (it) => it.originPort,
+                  );
                   return `
                     <h2 class="section-title">Requested items</h2>
-                    <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}">
+                    <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}${hasOriginColumn ? ' items-table--with-origin' : ''}">
                       <thead>
                         <tr>
                           <th>Item</th>
                           ${hasIncotermColumn ? '<th>Incoterm / Destination</th>' : ''}
+                          ${hasOriginColumn ? '<th>Origin</th>' : ''}
                           <th style="text-align:right;">Quantity</th>
                         </tr>
                       </thead>
@@ -656,6 +681,7 @@
                               ${it.commercialName && it.commercialName !== it.productName ? `<div class="commercial-name">Ref: ${it.commercialName}</div>` : ''}
                             </td>
                             ${hasIncotermColumn ? `<td class="incoterm-cell">${renderIncotermCell(it)}</td>` : ''}
+                            ${hasOriginColumn ? `<td class="origin-cell">${renderOriginCell(it)}</td>` : ''}
                             <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
                           </tr>`,
                           )
@@ -669,9 +695,16 @@
                     ? `<span class="incoterm-pill">${item.desiredIncoterm}</span>`
                     : '<span class="incoterm-empty">Not specified</span>';
                   const port = item.destinationPort
-                    ? `<div class="incoterm-port">Port: ${item.destinationPort}</div>`
+                    ? `<div class="incoterm-port">${item.destinationPort}</div>`
                     : '';
                   return `<div class="incoterm-cell-wrap">${incoterm}${port}</div>`;
+                }
+
+                function renderOriginCell(item) {
+                  if (item.originPort) {
+                    return `<span class="origin-pill">${item.originPort}</span>`;
+                  }
+                  return '<span class="origin-empty">Not specified</span>';
                 }
 
         function renderForm(data, readOnly) {

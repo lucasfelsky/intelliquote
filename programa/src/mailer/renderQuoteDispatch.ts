@@ -40,6 +40,8 @@ export interface QuoteDispatchItem {
   desiredIncoterm?: string;
   /** Porto de destino herdado da cotacao ou sobrescrito por item. */
   destinationPort?: string;
+  /** Porto de embarque (origem) da cotacao - sempre no nivel da cotacao. */
+  originPort?: string;
 }
 
 export interface QuoteDispatchVars {
@@ -83,20 +85,26 @@ function renderItemsRows(items: QuoteDispatchItem[]): string {
   if (items.length === 0) {
     return `
       <tr>
-        <td colspan="3" style="padding:12px;text-align:center;color:#4A5560;font-style:italic;">No items listed.</td>
+        <td colspan="5" style="padding:12px;text-align:center;color:#4A5560;font-style:italic;">No items listed.</td>
       </tr>`;
   }
   const hasIncotermColumn = items.some(
     (i) => i.desiredIncoterm || i.destinationPort,
   );
+  const hasOriginColumn = items.some((i) => i.originPort);
   return items
     .map(
       (item, idx) => {
         const incotermCell = hasIncotermColumn
-          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;">
-              ${item.desiredIncoterm ? `<div style=\"font-weight:600;\">${escapeHtml(item.desiredIncoterm)}</div>` : ''}
-              ${item.destinationPort ? `<div style=\"color:#4A5560;\">Port: ${escapeHtml(item.destinationPort)}</div>` : ''}
+          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">
+              ${item.desiredIncoterm ? `<div style="font-weight:600;">${escapeHtml(item.desiredIncoterm)}</div>` : ''}
+              ${item.destinationPort ? `<div style="color:#4A5560;">${escapeHtml(item.destinationPort)}</div>` : ''}
               ${!item.desiredIncoterm && !item.destinationPort ? '<span style="color:#9aa4ad;font-style:italic;">—</span>' : ''}
+            </td>`
+          : '';
+        const originCell = hasOriginColumn
+          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">
+              ${item.originPort ? escapeHtml(item.originPort) : '<span style="color:#9aa4ad;font-style:italic;">—</span>'}
             </td>`
           : '';
         return `
@@ -105,6 +113,7 @@ function renderItemsRows(items: QuoteDispatchItem[]): string {
           <div style="font-weight:600;color:#1F2933;">${escapeHtml(item.marketName)}</div>
         </td>
         ${incotermCell}
+        ${originCell}
         <td align="right" style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">${item.quantity} ${escapeHtml(item.unit)}</td>
       </tr>`;
       },
@@ -154,9 +163,10 @@ export function renderQuoteDispatch(
     '',
     'Items:',
     ...vars.items.map((i) => {
-      const portPart = i.destinationPort ? ` | Port: ${i.destinationPort}` : '';
+      const portPart = i.destinationPort ? ` | Dest: ${i.destinationPort}` : '';
       const incoPart = i.desiredIncoterm ? ` | ${i.desiredIncoterm}` : '';
-      return `  - ${i.marketName}${incoPart}${portPart} | ${i.quantity} ${i.unit}`;
+      const originPart = i.originPort ? ` | Origin: ${i.originPort}` : '';
+      return `  - ${i.marketName}${incoPart}${portPart}${originPart} | ${i.quantity} ${i.unit}`;
     }),
     '',
     `Submit your proposal: ${vars.portalLink}`,
@@ -190,9 +200,10 @@ export async function renderDispatchFromTemplate(
       .replace(/\{\{itemsText\}\}/g, () =>
         vars.items
           .map((i) => {
-            const portPart = i.destinationPort ? ` | Port: ${i.destinationPort}` : '';
+            const portPart = i.destinationPort ? ` | Dest: ${i.destinationPort}` : '';
             const incoPart = i.desiredIncoterm ? ` | ${i.desiredIncoterm}` : '';
-            return `  - ${i.marketName}${incoPart}${portPart} | ${i.quantity} ${i.unit}`;
+            const originPart = i.originPort ? ` | Origin: ${i.originPort}` : '';
+            return `  - ${i.marketName}${incoPart}${portPart}${originPart} | ${i.quantity} ${i.unit}`;
           })
           .join('\n'),
       );
