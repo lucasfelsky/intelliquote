@@ -88,33 +88,27 @@ function renderItemsRows(items: QuoteDispatchItem[]): string {
         <td colspan="5" style="padding:12px;text-align:center;color:#4A5560;font-style:italic;">No items listed.</td>
       </tr>`;
   }
-  const hasIncotermColumn = items.some(
-    (i) => i.desiredIncoterm || i.destinationPort,
-  );
-  const hasOriginColumn = items.some((i) => i.originPort);
   return items
     .map(
       (item, idx) => {
-        const incotermCell = hasIncotermColumn
-          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">
-              ${item.desiredIncoterm ? `<div style="font-weight:600;">${escapeHtml(item.desiredIncoterm)}</div>` : ''}
-              ${item.destinationPort ? `<div style="color:#4A5560;">${escapeHtml(item.destinationPort)}</div>` : ''}
-              ${!item.desiredIncoterm && !item.destinationPort ? '<span style="color:#9aa4ad;font-style:italic;">—</span>' : ''}
-            </td>`
-          : '';
-        const originCell = hasOriginColumn
-          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">
-              ${item.originPort ? escapeHtml(item.originPort) : '<span style="color:#9aa4ad;font-style:italic;">—</span>'}
-            </td>`
-          : '';
+        const incotermCell = item.desiredIncoterm
+          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">${escapeHtml(item.desiredIncoterm)}</td>`
+          : `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;"><span style="color:#9aa4ad;font-style:italic;">—</span></td>`;
+        const originCell = item.originPort
+          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">${escapeHtml(item.originPort)}</td>`
+          : `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;"><span style="color:#9aa4ad;font-style:italic;">—</span></td>`;
+        const destinationCell = item.destinationPort
+          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">${escapeHtml(item.destinationPort)}</td>`
+          : `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;"><span style="color:#9aa4ad;font-style:italic;">—</span></td>`;
         return `
       <tr style="background:${idx % 2 === 0 ? '#F8FBFA' : '#ffffff'};">
         <td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">
           <div style="font-weight:600;color:#1F2933;">${escapeHtml(item.marketName)}</div>
         </td>
+        <td align="right" style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">${item.quantity} ${escapeHtml(item.unit)}</td>
         ${incotermCell}
         ${originCell}
-        <td align="right" style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">${item.quantity} ${escapeHtml(item.unit)}</td>
+        ${destinationCell}
       </tr>`;
       },
     )
