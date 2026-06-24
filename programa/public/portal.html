@@ -717,7 +717,7 @@
                       ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
                     </p>
                     <div class="form-grid">
-                      <label>Unit price
+                      <label>Unit price (${data.quoteRequest.currency || 'USD'} / ${it.unit || 'unit'})
                         <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" required />
                       </label>
                       <label>Quantity
