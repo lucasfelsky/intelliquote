@@ -5,6 +5,10 @@ Todas as alteracoes relevantes do projeto sao documentadas aqui. O formato segue
 ## [Unreleased] — Portal de Fornecedores (magic link)
 
 ### Adicionado
+- `QuoteRequest.originPort` (default `Shanghai`) e colunas `deletedAt` em `Supplier` e `QuoteRequest` (migration `20260624093000_soft_delete_origin_port`).
+- Soft delete em cotacoes e fornecedores: `DELETE /api/v1/quote-requests/:id` e `DELETE /api/v1/suppliers/:id` marcam `deletedAt`, forcam `status=closed`/`inactive` e revogam tokens ativos do portal. Listagens filtram por `deletedAt: null` por padrao (use `?includeDeleted=true` para ver removidos).
+- Coluna "Origin" na tabela "Requested items" do portal do fornecedor, exibindo o porto de embarque (sempre em nivel de cotacao) ao lado de incoterm/destino.
+- Coluna "Origin" na tabela de itens do e-mail de dispatch, com `originPort` propagado via `QuoteDispatchItem.originPort` e tambem exibido no resumo da cotacao ("Sourcing summary: Incoterm … &middot; Origin …").
 - Schema Prisma: tabelas `SupplierPortalToken`, `SupplierPortalResponse`, `DispatchEvent`, `SupplierPortalTokenLog`, alem de novas colunas em `Supplier` (status `inactive`/`active`, `acceptedIncoterms`, `lastResponseAt`) e `SupplierContact` (aceite de LGPD, ip do aceite).
 - Servico `SupplierPortalService` com ciclo de vida do token: criacao, revogacao, validacao por hash SHA-256, expiracao configuravel e registro de log de acesso.
 - Servico `SupplierPortalResponseService` para persistir e atualizar respostas com transacao, evitando perda de dados entre confirmacao e edicao.
