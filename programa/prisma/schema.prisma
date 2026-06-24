@@ -122,6 +122,7 @@ model QuoteRequest {
   quantity        Int?
   description     String?
   desiredIncoterm Incoterm
+  destinationPort String?
   currency        String                   @default("USD")
   deadlineAt      DateTime?
   status          QuoteRequestStatus       @default(open)
@@ -149,6 +150,8 @@ model QuoteRequestItem {
   description         String?
   quantity            Int
   unit                String                       @default("UN")
+  desiredIncoterm     Incoterm?
+  destinationPort     String?
   targetPrice         Decimal?                     @db.Decimal(12, 2)
   notes               String?
   createdAt           DateTime                     @default(now())

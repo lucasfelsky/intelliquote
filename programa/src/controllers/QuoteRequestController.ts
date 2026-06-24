@@ -42,6 +42,7 @@ export class QuoteRequestController {
           quantity: payload.quantity ?? null,
           description: payload.description ?? null,
           desiredIncoterm: payload.desiredIncoterm as Incoterm,
+          destinationPort: payload.destinationPort ?? null,
           currency: payload.currency ?? 'USD',
           deadlineAt: payload.deadlineAt ?? null,
           status: QuoteRequestStatus.open,
@@ -204,6 +205,8 @@ export class QuoteRequestController {
           quantity: payload.quantity === undefined ? undefined : payload.quantity,
           description: payload.description,
           desiredIncoterm: payload.desiredIncoterm as Incoterm | undefined,
+          destinationPort:
+            payload.destinationPort === undefined ? undefined : payload.destinationPort,
           currency: payload.currency,
           deadlineAt: payload.deadlineAt,
         },

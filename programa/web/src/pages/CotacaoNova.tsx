@@ -59,9 +59,10 @@ export default function CotacaoNova() {
 
   const [requestCode, setRequestCode] = useState('');
   const [desiredIncoterm, setDesiredIncoterm] = useState<Incoterm>('FOB');
-  const [currency, setCurrency] = useState('USD');
-  const [deadlineAt, setDeadlineAt] = useState('');
-  const [description, setDescription] = useState('');
+    const [destinationPort, setDestinationPort] = useState('');
+    const [currency, setCurrency] = useState('USD');
+    const [deadlineAt, setDeadlineAt] = useState('');
+    const [description, setDescription] = useState('');
 
   const [stepError, setStepError] = useState<string | null>(null);
 
@@ -106,10 +107,11 @@ export default function CotacaoNova() {
     mutationFn: async () => {
       const body: Record<string, unknown> = {
         desiredIncoterm,
-        currency: currency.trim().toUpperCase() || 'USD',
-        deadlineAt: deadlineAt ? new Date(`${deadlineAt}T00:00:00`).toISOString() : null,
-        description: description.trim() || null,
-      };
+            destinationPort: destinationPort.trim() || null,
+            currency: currency.trim().toUpperCase() || 'USD',
+            deadlineAt: deadlineAt ? new Date(`${deadlineAt}T00:00:00`).toISOString() : null,
+            description: description.trim() || null,
+          };
       if (requestCode.trim()) body.requestCode = requestCode.trim();
       const created = await api.post<{ id: number; requestCode?: string }>(`/v1/quote-requests`, body);
       return created;
@@ -304,16 +306,27 @@ export default function CotacaoNova() {
               </select>
             </div>
             <div>
-              <label className="field-label" htmlFor="currency">Moeda *</label>
+                          <label className="field-label" htmlFor="destinationPort">Porto de destino</label>
               <input
-                id="currency"
+                            id="destinationPort"
                 className="input"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                maxLength={3}
-                required
+                            value={destinationPort}
+                            onChange={(e) => setDestinationPort(e.target.value)}
+                            placeholder="Ex.: Porto de Santos"
+                            maxLength={120}
               />
             </div>
+                        <div>
+                          <label className="field-label" htmlFor="currency">Moeda *</label>
+                          <input
+                            id="currency"
+                            className="input"
+                            value={currency}
+                            onChange={(e) => setCurrency(e.target.value)}
+                            maxLength={3}
+                            required
+                          />
+                        </div>
             <div>
               <label className="field-label" htmlFor="deadline">Prazo</label>
               <input

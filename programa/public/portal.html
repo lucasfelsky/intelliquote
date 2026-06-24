@@ -258,6 +258,36 @@
         color: var(--portal-muted);
         margin-top: 2px;
       }
+            .items-table td.incoterm-cell {
+              min-width: 140px;
+            }
+            .incoterm-cell-wrap {
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+            }
+            .incoterm-pill {
+              display: inline-block;
+              background: var(--portal-primary-50);
+              color: var(--portal-primary-700);
+              border: 1px solid rgba(4, 137, 114, 0.2);
+              padding: 2px 10px;
+              border-radius: 999px;
+              font-weight: 700;
+              font-size: 11px;
+              letter-spacing: 0.5px;
+              align-self: flex-start;
+            }
+            .incoterm-empty {
+              display: inline-block;
+              color: var(--portal-muted);
+              font-size: 12px;
+              font-style: italic;
+            }
+            .incoterm-port {
+              font-size: 12px;
+              color: var(--portal-ink-soft);
+            }
       .dg-badge {
         background: var(--portal-warn-bg);
         color: var(--portal-warn-fg);
@@ -466,7 +496,9 @@
           border: none;
         }
         .items-table td.num { text-align: right; }
-      }
+                .items-table td.incoterm-cell { display: block; padding: 4px 0; }
+                .incoterm-cell-wrap { width: 100%; }
+              }
     </style>
   </head>
   <body>
@@ -588,31 +620,46 @@
 
         function renderItemsTable(items) {
           if (!items || items.length === 0) return '';
-          return `
-            <h2 class="section-title">Requested items</h2>
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th style="text-align:right;">Quantity</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${items
-                  .map(
-                    (it) => `
-                  <tr>
-                    <td>
-                      <strong>${it.productName}</strong>
-                      ${it.commercialName && it.commercialName !== it.productName ? `<div class="commercial-name">Ref: ${it.commercialName}</div>` : ''}
-                    </td>
-                    <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
-                  </tr>`,
-                  )
-                  .join('')}
-              </tbody>
-            </table>`;
-        }
+                  const hasIncotermColumn = items.some(
+                    (it) => it.desiredIncoterm || it.destinationPort,
+                  );
+                  return `
+                    <h2 class="section-title">Requested items</h2>
+                    <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          ${hasIncotermColumn ? '<th>Incoterm / Destination</th>' : ''}
+                          <th style="text-align:right;">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${items
+                          .map(
+                            (it) => `
+                          <tr>
+                            <td>
+                              <strong>${it.productName}</strong>
+                              ${it.commercialName && it.commercialName !== it.productName ? `<div class="commercial-name">Ref: ${it.commercialName}</div>` : ''}
+                            </td>
+                            ${hasIncotermColumn ? `<td class="incoterm-cell">${renderIncotermCell(it)}</td>` : ''}
+                            <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
+                          </tr>`,
+                          )
+                          .join('')}
+                      </tbody>
+                    </table>`;
+                }
+
+                function renderIncotermCell(item) {
+                  const incoterm = item.desiredIncoterm
+                    ? `<span class="incoterm-pill">${item.desiredIncoterm}</span>`
+                    : '<span class="incoterm-empty">Not specified</span>';
+                  const port = item.destinationPort
+                    ? `<div class="incoterm-port">Port: ${item.destinationPort}</div>`
+                    : '';
+                  return `<div class="incoterm-cell-wrap">${incoterm}${port}</div>`;
+                }
 
         function renderForm(data, readOnly) {
           const items = data.quoteRequest.items || [];

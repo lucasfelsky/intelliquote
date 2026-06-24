@@ -79,6 +79,11 @@ const nullableOptionalNonNegativeIntegerField = z.preprocess(
 );
 
 const incotermField = z.nativeEnum(Incoterm);
+const optionalIncotermField = z.preprocess(
+  (value) =>
+    value === undefined || value === null || value === '' ? undefined : value,
+  incotermField.optional(),
+);
 
 const nullableDateField = z.preprocess(
   (value) =>
@@ -122,6 +127,7 @@ export const quoteRequestCreateSchema = z.object({
   quantity: optionalPositiveIntegerField,
   description: nullableTrimmedStringField.optional(),
   desiredIncoterm: incotermField,
+  destinationPort: nullableTrimmedStringField.optional(),
   currency: optionalCurrencyCodeField,
   deadlineAt: nullableDateField.optional(),
   status: z.nativeEnum(QuoteRequestStatus).optional(),
@@ -133,6 +139,7 @@ export const quoteRequestUpdateSchema = z.object({
   quantity: optionalPositiveIntegerField,
   description: nullableOptionalTrimmedStringField,
   desiredIncoterm: incotermField.optional(),
+  destinationPort: nullableOptionalTrimmedStringField,
   currency: optionalCurrencyCodeField,
   deadlineAt: nullableOptionalDateField,
 });

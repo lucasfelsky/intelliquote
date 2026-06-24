@@ -24,6 +24,7 @@ interface QuoteRequest {
   quantity: number | null;
   description: string | null;
   desiredIncoterm: Incoterm;
+  destinationPort: string | null;
   currency: string;
   deadlineAt: string | null;
   status: QuoteStatus;
@@ -52,6 +53,8 @@ interface QuoteRequestItem {
   unit: string;
   targetPrice: number | null;
   notes: string | null;
+  desiredIncoterm: Incoterm | null;
+  destinationPort: string | null;
   catalogItemId: number | null;
   catalogItem?: CatalogItemLite | null;
   createdAt: string;
@@ -71,6 +74,7 @@ interface QuoteResponseSummary {
 interface QuoteRequestForm {
   description: string;
   desiredIncoterm: Incoterm;
+  destinationPort: string;
   currency: string;
   deadlineAt: string;
 }
@@ -80,6 +84,10 @@ interface ItemForm {
   quantity: string;
   unit: string;
   notes: string;
+  desiredIncoterm: Incoterm | '';
+  destinationPort: string;
+  inheritIncoterm: boolean;
+  inheritPort: boolean;
 }
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as const;
@@ -134,17 +142,18 @@ function normalize(qr: unknown): QuoteRequest {
     quantity: typeof obj.quantity === 'number' ? obj.quantity : 0,
     description: (obj.description as string | null) ?? null,
     desiredIncoterm: asIncoterm(obj.desiredIncoterm),
-    currency: String(obj.currency ?? 'USD'),
-    deadlineAt: (obj.deadlineAt as string | null) ?? null,
-    status: (obj.status as QuoteStatus) ?? 'open',
-    createdAt: String(obj.createdAt ?? ''),
-    updatedAt: String(obj.updatedAt ?? ''),
-    closedAt: (obj.closedAt as string | null) ?? null,
-    createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
-    items,
-    quoteResponses: responses,
-  };
-}
+      destinationPort: (obj.destinationPort as string | null) ?? null,
+      currency: String(obj.currency ?? 'USD'),
+      deadlineAt: (obj.deadlineAt as string | null) ?? null,
+      status: (obj.status as QuoteStatus) ?? 'open',
+      createdAt: String(obj.createdAt ?? ''),
+      updatedAt: String(obj.updatedAt ?? ''),
+      closedAt: (obj.closedAt as string | null) ?? null,
+      createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
+      items,
+      quoteResponses: responses,
+    };
+  }
 
 function normalizeItem(it: unknown): QuoteRequestItem {
   if (typeof it !== 'object' || it === null) {
@@ -162,6 +171,10 @@ function normalizeItem(it: unknown): QuoteRequestItem {
     unit: String(obj.unit ?? ''),
     targetPrice: typeof obj.targetPrice === 'number' ? obj.targetPrice : null,
     notes: (obj.notes as string | null) ?? null,
+    desiredIncoterm: obj.desiredIncoterm
+      ? asIncoterm(obj.desiredIncoterm)
+      : null,
+    destinationPort: (obj.destinationPort as string | null) ?? null,
     catalogItemId:
       typeof obj.catalogItemId === 'number' ? obj.catalogItemId : null,
     catalogItem: catalog
@@ -182,6 +195,10 @@ const emptyItemForm: ItemForm = {
   quantity: '',
   unit: 'UN',
   notes: '',
+  desiredIncoterm: '',
+  destinationPort: '',
+  inheritIncoterm: true,
+  inheritPort: true,
 };
 
 function messageOf(err: unknown): string {
@@ -271,62 +288,83 @@ export default function CotacaoDetalhe() {
       const body: Record<string, unknown> = {
         description: payload.description.trim() || null,
         desiredIncoterm: payload.desiredIncoterm,
-        currency: payload.currency.trim().toUpperCase() || 'USD',
-        deadlineAt: payload.deadlineAt ? new Date(`${payload.deadlineAt}T00:00:00`).toISOString() : null,
-      };
-      return api.put<unknown>(`/v1/quote-requests/${id}`, body);
-    },
-    onSuccess: () => {
-      setEditError(null);
-      qc.invalidateQueries({ queryKey: ['quote-request', id] });
-      qc.invalidateQueries({ queryKey: ['quote-requests'] });
-      setShowEditModal(false);
-      setEditForm(null);
-    },
-    onError: (err) => setEditError(messageOf(err)),
-  });
+          destinationPort: payload.destinationPort.trim() || null,
+          currency: payload.currency.trim().toUpperCase() || 'USD',
+          deadlineAt: payload.deadlineAt ? new Date(`${payload.deadlineAt}T00:00:00`).toISOString() : null,
+        };
+        return api.put<unknown>(`/v1/quote-requests/${id}`, body);
+      },
+      onSuccess: () => {
+        setEditError(null);
+        qc.invalidateQueries({ queryKey: ['quote-request', id] });
+        qc.invalidateQueries({ queryKey: ['quote-requests'] });
+        setShowEditModal(false);
+        setEditForm(null);
+      },
+      onError: (err) => setEditError(messageOf(err)),
+    });
 
-  const createItem = useMutation({
-    mutationFn: (payload: ItemForm) => {
-      const body: Record<string, unknown> = {
-        quantity: Number(payload.quantity),
-        unit: payload.unit,
-        notes: payload.notes.trim() || null,
-      };
-      if (payload.catalogItemId !== null) {
-        body.catalogItemId = payload.catalogItemId;
-      }
-      return api.post<unknown>(`/v1/quote-requests/${id}/items`, body);
-    },
-    onSuccess: () => {
-      setItemError(null);
-      qc.invalidateQueries({ queryKey: ['quote-request', id] });
-      qc.invalidateQueries({ queryKey: ['quote-request-items'] });
-      closeItemModal();
-    },
-    onError: (err) => setItemError(messageOf(err)),
-  });
+    const createItem = useMutation({
+      mutationFn: (payload: ItemForm) => {
+        const body: Record<string, unknown> = {
+          quantity: Number(payload.quantity),
+          unit: payload.unit,
+          notes: payload.notes.trim() || null,
+        };
+        if (payload.catalogItemId !== null) {
+          body.catalogItemId = payload.catalogItemId;
+        }
+        if (!payload.inheritIncoterm && payload.desiredIncoterm) {
+          body.desiredIncoterm = payload.desiredIncoterm;
+        }
+        if (!payload.inheritPort && payload.destinationPort.trim()) {
+          body.destinationPort = payload.destinationPort.trim();
+        }
+        return api.post<unknown>(`/v1/quote-requests/${id}/items`, body);
+      },
+      onSuccess: () => {
+        setItemError(null);
+        qc.invalidateQueries({ queryKey: ['quote-request', id] });
+        qc.invalidateQueries({ queryKey: ['quote-request-items'] });
+        closeItemModal();
+      },
+      onError: (err) => setItemError(messageOf(err)),
+    });
 
-  const updateItem = useMutation({
-    mutationFn: ({ itemId, payload }: { itemId: number; payload: ItemForm }) => {
-      const body: Record<string, unknown> = {
-        quantity: Number(payload.quantity),
-        unit: payload.unit,
-        notes: payload.notes.trim() || null,
-      };
-      if (payload.catalogItemId !== null) {
-        body.catalogItemId = payload.catalogItemId;
-      }
-      return api.put<unknown>(`/v1/quote-request-items/${itemId}`, body);
-    },
-    onSuccess: () => {
-      setItemError(null);
-      qc.invalidateQueries({ queryKey: ['quote-request', id] });
-      qc.invalidateQueries({ queryKey: ['quote-request-items'] });
-      closeItemModal();
-    },
-    onError: (err) => setItemError(messageOf(err)),
-  });
+    const updateItem = useMutation({
+      mutationFn: ({ itemId, payload }: { itemId: number; payload: ItemForm }) => {
+        const body: Record<string, unknown> = {
+          quantity: Number(payload.quantity),
+          unit: payload.unit,
+          notes: payload.notes.trim() || null,
+        };
+        if (payload.catalogItemId !== null) {
+          body.catalogItemId = payload.catalogItemId;
+        }
+        if (payload.inheritIncoterm) {
+          body.desiredIncoterm = null;
+        } else if (payload.desiredIncoterm) {
+          body.desiredIncoterm = payload.desiredIncoterm;
+        } else {
+          body.desiredIncoterm = null;
+        }
+        if (payload.inheritPort) {
+          body.destinationPort = null;
+        } else if (payload.destinationPort.trim()) {
+          body.destinationPort = payload.destinationPort.trim();
+        } else {
+          body.destinationPort = null;
+        }
+        return api.put<unknown>(`/v1/quote-request-items/${itemId}`, body);
+      },
+      onSuccess: () => {
+        setItemError(null);
+        qc.invalidateQueries({ queryKey: ['quote-request', id] });
+        qc.invalidateQueries({ queryKey: ['quote-request-items'] });
+        closeItemModal();
+      },
+      onError: (err) => setItemError(messageOf(err)),
+    });
 
   const removeItem = useMutation({
     mutationFn: (itemId: number) => api.del<void>(`/v1/quote-request-items/${itemId}`),
@@ -566,15 +604,21 @@ export default function CotacaoDetalhe() {
 
   function openEditItem(item: QuoteRequestItem) {
     setEditingItem(item);
-    setItemForm({
-      catalogItemId: item.catalogItemId,
-      quantity: String(item.quantity),
-      unit: item.unit,
-      notes: item.notes ?? '',
-    });
-    setItemError(null);
-    setShowItemModal(true);
-  }
+      const hasIncoterm = !!item.desiredIncoterm;
+      const hasPort = !!item.destinationPort;
+      setItemForm({
+        catalogItemId: item.catalogItemId,
+        quantity: String(item.quantity),
+        unit: item.unit,
+        notes: item.notes ?? '',
+        desiredIncoterm: item.desiredIncoterm ?? '',
+        destinationPort: item.destinationPort ?? '',
+        inheritIncoterm: !hasIncoterm,
+        inheritPort: !hasPort,
+      });
+      setItemError(null);
+      setShowItemModal(true);
+    }
 
   function closeItemModal() {
     setShowItemModal(false);
@@ -588,12 +632,13 @@ export default function CotacaoDetalhe() {
     setEditForm({
       description: detail.data.description ?? '',
       desiredIncoterm: detail.data.desiredIncoterm,
-      currency: detail.data.currency,
-      deadlineAt: toDateInput(detail.data.deadlineAt),
-    });
-    setEditError(null);
-    setShowEditModal(true);
-  }
+        destinationPort: detail.data.destinationPort ?? '',
+        currency: detail.data.currency,
+        deadlineAt: toDateInput(detail.data.deadlineAt),
+      });
+      setEditError(null);
+      setShowEditModal(true);
+    }
 
   function closeEditModal() {
     setShowEditModal(false);
@@ -637,28 +682,36 @@ export default function CotacaoDetalhe() {
       setItemError('Informe a unidade.');
       return;
     }
-    const qty = Number(itemForm.quantity);
-    if (!Number.isFinite(qty) || qty <= 0) {
-      setItemError('Quantidade deve ser maior que zero.');
-      return;
+      if (!itemForm.inheritIncoterm && !itemForm.desiredIncoterm) {
+        setItemError('Escolha o INCOTERM do item ou marque "usar o da cotação".');
+        return;
+      }
+      if (!itemForm.inheritPort && !itemForm.destinationPort.trim()) {
+        setItemError('Informe o porto de destino do item ou marque "usar o da cotação".');
+        return;
+      }
+      const qty = Number(itemForm.quantity);
+      if (!Number.isFinite(qty) || qty <= 0) {
+        setItemError('Quantidade deve ser maior que zero.');
+        return;
+      }
+      if (editingItem) {
+        updateItem.mutate({ itemId: editingItem.id, payload: itemForm });
+      } else {
+        createItem.mutate(itemForm);
+      }
     }
-    if (editingItem) {
-      updateItem.mutate({ itemId: editingItem.id, payload: itemForm });
-    } else {
-      createItem.mutate(itemForm);
-    }
-  }
 
-  function handleEditSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editForm) return;
-    setEditError(null);
-    if (!editForm.currency.trim()) {
-      setEditError('Informe a moeda (código de 3 letras).');
-      return;
+    function handleEditSubmit(e: React.FormEvent) {
+      e.preventDefault();
+      if (!editForm) return;
+      setEditError(null);
+      if (!editForm.currency.trim()) {
+        setEditError('Informe a moeda (código de 3 letras).');
+        return;
+      }
+      updateQuote.mutate(editForm);
     }
-    updateQuote.mutate(editForm);
-  }
 
   if (!Number.isFinite(id)) {
     return (
@@ -807,9 +860,13 @@ export default function CotacaoDetalhe() {
             <p>{qr.desiredIncoterm}</p>
           </div>
           <div>
-            <p className="eyebrow">Moeda</p>
-            <p>{qr.currency}</p>
+                      <p className="eyebrow">Porto de destino</p>
+                      <p>{qr.destinationPort ?? '—'}</p>
           </div>
+                    <div>
+                      <p className="eyebrow">Moeda</p>
+                      <p>{qr.currency}</p>
+                    </div>
           <div>
             <p className="eyebrow">Prazo</p>
             <p>{formatDate(qr.deadlineAt)}</p>
@@ -855,20 +912,24 @@ export default function CotacaoDetalhe() {
                 <th>Nome de mercado</th>
                 <th>Qtd</th>
                 <th>Unidade</th>
-                <th>DG</th>
-                <th>Notas</th>
-                {canEdit && qr.status === 'open' && <th>Ações</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it) => (
-                <tr key={it.id}>
-                  <td><strong>{it.catalogItem?.commercialName ?? it.productName}</strong></td>
-                  <td>{it.catalogItem?.marketName ?? '—'}</td>
-                  <td>{formatNumber(it.quantity)}</td>
-                  <td>{it.unit}</td>
-                  <td>{it.catalogItem?.isDangerousGood ? 'Sim' : '—'}</td>
-                  <td>{it.notes ?? '—'}</td>
+                          <th>Incoterm</th>
+                          <th>Porto</th>
+                          <th>DG</th>
+                          <th>Notas</th>
+                          {canEdit && qr.status === 'open' && <th>Ações</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((it) => (
+                          <tr key={it.id}>
+                            <td><strong>{it.catalogItem?.commercialName ?? it.productName}</strong></td>
+                            <td>{it.catalogItem?.marketName ?? '—'}</td>
+                            <td>{formatNumber(it.quantity)}</td>
+                            <td>{it.unit}</td>
+                            <td>{it.desiredIncoterm ?? qr.desiredIncoterm}</td>
+                            <td>{it.destinationPort ?? qr.destinationPort ?? '—'}</td>
+                            <td>{it.catalogItem?.isDangerousGood ? 'Sim' : '—'}</td>
+                            <td>{it.notes ?? '—'}</td>
                   {canEdit && qr.status === 'open' && (
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
@@ -1494,7 +1555,58 @@ export default function CotacaoDetalhe() {
               onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
             />
 
-            {itemError && (
+                        <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--line)', borderRadius: 8 }}>
+                          <legend style={{ padding: '0 6px', fontSize: 12, fontWeight: 600 }}>Incoterm e destino por item</legend>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13 }}>
+                            <input
+                              type="checkbox"
+                              checked={itemForm.inheritIncoterm}
+                              onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
+                            />
+                            Usar o INCOTERM da cotação ({qr.desiredIncoterm})
+                          </label>
+                          {!itemForm.inheritIncoterm && (
+                            <div style={{ marginBottom: 8 }}>
+                              <label className="field-label" htmlFor="itemIncoterm">INCOTERM deste item *</label>
+                              <select
+                                id="itemIncoterm"
+                                className="select"
+                                value={itemForm.desiredIncoterm}
+                                onChange={(e) =>
+                                  setItemForm({ ...itemForm, desiredIncoterm: e.target.value as Incoterm })
+                                }
+                              >
+                                <option value="">Selecione…</option>
+                                {INCOTERMS.map((t) => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13 }}>
+                            <input
+                              type="checkbox"
+                              checked={itemForm.inheritPort}
+                              onChange={(e) => setItemForm({ ...itemForm, inheritPort: e.target.checked })}
+                            />
+                            Usar o porto da cotação ({qr.destinationPort || 'não definido'})
+                          </label>
+                          {!itemForm.inheritPort && (
+                            <div>
+                              <label className="field-label" htmlFor="itemPort">Porto de destino deste item *</label>
+                              <input
+                                id="itemPort"
+                                className="input"
+                                value={itemForm.destinationPort}
+                                onChange={(e) => setItemForm({ ...itemForm, destinationPort: e.target.value })}
+                                placeholder="Ex.: Porto de Santos"
+                                maxLength={120}
+                              />
+                            </div>
+                          )}
+                        </fieldset>
+
+                        {itemError && (
               <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{itemError}</p>
             )}
 
@@ -1540,16 +1652,27 @@ export default function CotacaoDetalhe() {
                 </select>
               </div>
               <div>
-                <label className="field-label" htmlFor="qrCurrency">Moeda *</label>
+                              <label className="field-label" htmlFor="qrDestinationPort">Porto de destino</label>
                 <input
-                  id="qrCurrency"
+                                id="qrDestinationPort"
                   className="input"
-                  value={editForm.currency}
-                  onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
-                  maxLength={3}
-                  required
+                                value={editForm.destinationPort}
+                                onChange={(e) => setEditForm({ ...editForm, destinationPort: e.target.value })}
+                                placeholder="Ex.: Porto de Santos"
+                                maxLength={120}
                 />
               </div>
+                            <div>
+                              <label className="field-label" htmlFor="qrCurrency">Moeda *</label>
+                              <input
+                                id="qrCurrency"
+                                className="input"
+                                value={editForm.currency}
+                                onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+                                maxLength={3}
+                                required
+                              />
+                            </div>
               <div>
                 <label className="field-label" htmlFor="qrDeadline">Prazo</label>
                 <input

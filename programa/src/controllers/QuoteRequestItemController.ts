@@ -1,3 +1,4 @@
+import { Incoterm, Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
@@ -20,6 +21,8 @@ export class QuoteRequestItemController {
         description,
         quantity,
         unit,
+        desiredIncoterm,
+        destinationPort,
         targetPrice,
         notes,
       } = req.body;
@@ -36,6 +39,13 @@ export class QuoteRequestItemController {
         !isNonEmptyString(unit) ||
         (itemCode !== undefined && itemCode !== null && !isNonEmptyString(itemCode)) ||
         (description !== undefined && description !== null && !isNonEmptyString(description)) ||
+        (desiredIncoterm !== undefined &&
+          desiredIncoterm !== null &&
+          desiredIncoterm !== '' &&
+          !(Object.values(Incoterm) as string[]).includes(String(desiredIncoterm))) ||
+        (destinationPort !== undefined &&
+          destinationPort !== null &&
+          !isNonEmptyString(destinationPort)) ||
         (targetPrice !== undefined && targetPrice !== null && !isPositiveNumber(targetPrice)) ||
         (notes !== undefined && notes !== null && !isNonEmptyString(notes))
       ) {
@@ -87,6 +97,8 @@ export class QuoteRequestItemController {
         resolvedProductName = (productName as string).trim();
       }
 
+      // Se o item nao trouxe incoterm/porto proprio, herda da cotacao para
+      // manter consistencia visual com o portal do fornecedor.
       const item = await prisma.quoteRequestItem.create({
         data: {
           quoteRequestId,
@@ -96,6 +108,12 @@ export class QuoteRequestItemController {
           description: isNonEmptyString(description) ? description.trim() : null,
           quantity: Number(quantity),
           unit: unit.trim().toUpperCase(),
+          desiredIncoterm: (desiredIncoterm
+            ? (String(desiredIncoterm) as Incoterm)
+            : quoteRequest.desiredIncoterm) ?? null,
+          destinationPort: isNonEmptyString(destinationPort)
+            ? (destinationPort as string).trim()
+            : quoteRequest.destinationPort ?? null,
           targetPrice:
             targetPrice !== undefined && targetPrice !== null ? Number(targetPrice) : null,
           notes: isNonEmptyString(notes) ? notes.trim() : null,
@@ -187,6 +205,8 @@ export class QuoteRequestItemController {
         description,
         quantity,
         unit,
+        desiredIncoterm,
+        destinationPort,
         targetPrice,
         notes,
       } = req.body;
@@ -202,6 +222,13 @@ export class QuoteRequestItemController {
         (description !== undefined && description !== null && !isNonEmptyString(description)) ||
         (quantity !== undefined && !isPositiveNumber(quantity)) ||
         (unit !== undefined && !isNonEmptyString(unit)) ||
+        (desiredIncoterm !== undefined &&
+          desiredIncoterm !== null &&
+          desiredIncoterm !== '' &&
+          !(Object.values(Incoterm) as string[]).includes(String(desiredIncoterm))) ||
+        (destinationPort !== undefined &&
+          destinationPort !== null &&
+          !isNonEmptyString(destinationPort)) ||
         (targetPrice !== undefined && targetPrice !== null && !isPositiveNumber(targetPrice)) ||
         (notes !== undefined && notes !== null && !isNonEmptyString(notes))
       ) {
@@ -237,7 +264,7 @@ export class QuoteRequestItemController {
         'Reabra a cotacao antes de alterar os seus itens.',
       );
 
-      const data: Record<string, unknown> = {};
+      const data: Prisma.QuoteRequestItemUncheckedUpdateInput = {};
       if (catalogItemId !== undefined) {
         if (catalogItemId === null) {
           data.catalogItemId = null;
@@ -283,6 +310,20 @@ export class QuoteRequestItemController {
       }
       if (isNonEmptyString(unit)) {
         data.unit = unit.trim().toUpperCase();
+      }
+      if (desiredIncoterm !== undefined) {
+        if (desiredIncoterm === null || desiredIncoterm === '') {
+          data.desiredIncoterm = existingItem.quoteRequest.desiredIncoterm;
+        } else {
+          data.desiredIncoterm = String(desiredIncoterm) as Incoterm;
+        }
+      }
+      if (destinationPort !== undefined) {
+        if (destinationPort === null || destinationPort === '') {
+          data.destinationPort = existingItem.quoteRequest.destinationPort;
+        } else if (isNonEmptyString(destinationPort)) {
+          data.destinationPort = (destinationPort as string).trim();
+        }
       }
       if (targetPrice !== undefined) {
         data.targetPrice =

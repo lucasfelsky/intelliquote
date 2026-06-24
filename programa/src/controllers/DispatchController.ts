@@ -68,31 +68,35 @@ export class DispatchController {
                     productName: quoteRequest.productName,
                     quantity: quoteRequest.quantity,
                     desiredIncoterm: quoteRequest.desiredIncoterm,
-                    currency: quoteRequest.currency,
-                    deadlineAt: quoteRequest.deadlineAt,
-                    expiresAt: new Date(),
-                    portalLink,
-                    companyName: profile.companyName,
-                    tradeName: profile.tradeName ?? undefined,
-                    taxId: profile.taxId ?? undefined,
-                    addressLine1: profile.addressLine1 ?? undefined,
-                    addressLine2: profile.addressLine2 ?? undefined,
-                    city: profile.city ?? undefined,
-                    state: profile.state ?? undefined,
-                    postalCode: profile.postalCode ?? undefined,
-                    country: profile.country ?? undefined,
-                    purchasingEmail: profile.purchasingEmail ?? '',
-                    purchasingPhone: profile.purchasingPhone ?? undefined,
-                    contact: sample,
-                    items: quoteRequest.items.map((it) => ({
-                      marketName: it.catalogItem?.marketName ?? it.productName,
-                      quantity: it.quantity,
-                      unit: it.unit,
-                    })),
-                  }),
-                  locale,
-                )
-              : null;
+                                destinationPort: quoteRequest.destinationPort,
+                                currency: quoteRequest.currency,
+                                deadlineAt: quoteRequest.deadlineAt,
+                                expiresAt: new Date(),
+                                portalLink,
+                                companyName: profile.companyName,
+                                tradeName: profile.tradeName ?? undefined,
+                                taxId: profile.taxId ?? undefined,
+                                addressLine1: profile.addressLine1 ?? undefined,
+                                addressLine2: profile.addressLine2 ?? undefined,
+                                city: profile.city ?? undefined,
+                                state: profile.state ?? undefined,
+                                postalCode: profile.postalCode ?? undefined,
+                                country: profile.country ?? undefined,
+                                purchasingEmail: profile.purchasingEmail ?? '',
+                                purchasingPhone: profile.purchasingPhone ?? undefined,
+                                contact: sample,
+                                items: quoteRequest.items.map((it) => ({
+                                  marketName: it.catalogItem?.marketName ?? it.productName,
+                                  quantity: it.quantity,
+                                  unit: it.unit,
+                                  desiredIncoterm: it.desiredIncoterm ?? quoteRequest.desiredIncoterm,
+                                 destinationPort:
+                                   it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
+                               })),
+                             }),
+                             locale,
+                           )
+                          : null;
 
       return res.status(200).json({
         recipientCount: contacts.length,
@@ -275,30 +279,34 @@ export class DispatchController {
               productName: quoteRequest.productName,
               quantity: quoteRequest.quantity,
               desiredIncoterm: quoteRequest.desiredIncoterm,
-              currency: quoteRequest.currency,
-              deadlineAt: quoteRequest.deadlineAt,
-              expiresAt: persistedToken.expiresAt,
-              portalLink,
-              companyName: profile.companyName,
-              tradeName: profile.tradeName ?? undefined,
-              taxId: profile.taxId ?? undefined,
-              addressLine1: profile.addressLine1 ?? undefined,
-              addressLine2: profile.addressLine2 ?? undefined,
-              city: profile.city ?? undefined,
-              state: profile.state ?? undefined,
-              postalCode: profile.postalCode ?? undefined,
-              country: profile.country ?? undefined,
-              purchasingEmail: profile.purchasingEmail ?? '',
-              purchasingPhone: profile.purchasingPhone ?? undefined,
-              contact,
-              items: quoteRequest.items.map((it) => ({
-                marketName: it.catalogItem?.marketName ?? it.productName,
-                quantity: it.quantity,
-                unit: it.unit,
-              })),
-            }),
-                      locale,
-          );
+                        destinationPort: quoteRequest.destinationPort,
+                        currency: quoteRequest.currency,
+                        deadlineAt: quoteRequest.deadlineAt,
+                        expiresAt: persistedToken.expiresAt,
+                        portalLink,
+                        companyName: profile.companyName,
+                        tradeName: profile.tradeName ?? undefined,
+                        taxId: profile.taxId ?? undefined,
+                        addressLine1: profile.addressLine1 ?? undefined,
+                        addressLine2: profile.addressLine2 ?? undefined,
+                        city: profile.city ?? undefined,
+                        state: profile.state ?? undefined,
+                        postalCode: profile.postalCode ?? undefined,
+                        country: profile.country ?? undefined,
+                        purchasingEmail: profile.purchasingEmail ?? '',
+                        purchasingPhone: profile.purchasingPhone ?? undefined,
+                        contact,
+                        items: quoteRequest.items.map((it) => ({
+                          marketName: it.catalogItem?.marketName ?? it.productName,
+                          quantity: it.quantity,
+                          unit: it.unit,
+                          desiredIncoterm: it.desiredIncoterm ?? quoteRequest.desiredIncoterm,
+                          destinationPort:
+                            it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
+                        })),
+                      }),
+                                locale,
+                    );
 
           const html = injectCustomMessage(rendered.html, customMessage);
           const text = customMessage
@@ -733,6 +741,7 @@ function buildTemplateVars(input: {
   productName: string | null;
   quantity: number | null;
   desiredIncoterm: string;
+  destinationPort?: string | null;
   currency: string;
   deadlineAt: Date | null;
   expiresAt: Date;
@@ -749,7 +758,13 @@ function buildTemplateVars(input: {
   purchasingEmail: string;
   purchasingPhone?: string;
   contact: DispatchRecipient;
-  items: Array<{ marketName: string; quantity: number; unit: string }>;
+  items: Array<{
+    marketName: string;
+    quantity: number;
+    unit: string;
+    desiredIncoterm?: string;
+    destinationPort?: string;
+  }>;
 }) {
   const summaryName =
     input.items[0]?.marketName ?? input.productName ?? 'Sourcing request';
@@ -763,6 +778,7 @@ function buildTemplateVars(input: {
     quantity: summaryQty,
     unit: summaryUnit,
     desiredIncoterm: input.desiredIncoterm,
+    destinationPort: input.destinationPort ?? undefined,
     currency: input.currency,
     deadlineAt: formatDate(input.deadlineAt) || 'as soon as possible',
     expiresAt: formatDate(input.expiresAt) || '-',

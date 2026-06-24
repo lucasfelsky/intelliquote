@@ -36,6 +36,10 @@ export interface QuoteDispatchItem {
   productName?: string;
   code?: string;
   targetPrice?: string;
+  /** INCOTERM herdado da cotacao ou sobrescrito por item. */
+  desiredIncoterm?: string;
+  /** Porto de destino herdado da cotacao ou sobrescrito por item. */
+  destinationPort?: string;
 }
 
 export interface QuoteDispatchVars {
@@ -46,6 +50,7 @@ export interface QuoteDispatchVars {
   quantity: number;
   unit: string;
   desiredIncoterm: string;
+  destinationPort?: string;
   currency: string;
   deadlineAt: string;
   expiresAt: string;
@@ -77,18 +82,31 @@ function renderItemsRows(items: QuoteDispatchItem[]): string {
   if (items.length === 0) {
     return `
       <tr>
-        <td colspan="2" style="padding:12px;text-align:center;color:#4A5560;font-style:italic;">No items listed.</td>
+        <td colspan="3" style="padding:12px;text-align:center;color:#4A5560;font-style:italic;">No items listed.</td>
       </tr>`;
   }
+  const hasIncotermColumn = items.some(
+    (i) => i.desiredIncoterm || i.destinationPort,
+  );
   return items
     .map(
-      (item, idx) => `
+      (item, idx) => {
+        const incotermCell = hasIncotermColumn
+          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;">
+              ${item.desiredIncoterm ? `<div style=\"font-weight:600;\">${escapeHtml(item.desiredIncoterm)}</div>` : ''}
+              ${item.destinationPort ? `<div style=\"color:#4A5560;\">Port: ${escapeHtml(item.destinationPort)}</div>` : ''}
+              ${!item.desiredIncoterm && !item.destinationPort ? '<span style="color:#9aa4ad;font-style:italic;">—</span>' : ''}
+            </td>`
+          : '';
+        return `
       <tr style="background:${idx % 2 === 0 ? '#F8FBFA' : '#ffffff'};">
         <td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">
           <div style="font-weight:600;color:#1F2933;">${escapeHtml(item.marketName)}</div>
         </td>
+        ${incotermCell}
         <td align="right" style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">${item.quantity} ${escapeHtml(item.unit)}</td>
-      </tr>`,
+      </tr>`;
+      },
     )
     .join('');
 }
@@ -128,12 +146,16 @@ export function renderQuoteDispatch(
     `Dear ${vars.supplierContactName},`,
     '',
     `We are contacting you on behalf of ${vars.companyName} regarding sourcing request ${vars.requestCode}.`,
-    `Incoterm: ${vars.desiredIncoterm} | Currency: ${vars.currency}`,
+    `Incoterm: ${vars.desiredIncoterm}${vars.destinationPort ? ` | Destination port: ${vars.destinationPort}` : ''} | Currency: ${vars.currency}`,
     `Response deadline: ${vars.deadlineAt}`,
     `Link expires on: ${vars.expiresAt}`,
     '',
     'Items:',
-    ...vars.items.map((i) => `  - ${i.marketName} | ${i.quantity} ${i.unit}`),
+    ...vars.items.map((i) => {
+      const portPart = i.destinationPort ? ` | Port: ${i.destinationPort}` : '';
+      const incoPart = i.desiredIncoterm ? ` | ${i.desiredIncoterm}` : '';
+      return `  - ${i.marketName}${incoPart}${portPart} | ${i.quantity} ${i.unit}`;
+    }),
     '',
     `Submit your proposal: ${vars.portalLink}`,
     '',
@@ -161,14 +183,18 @@ export async function renderDispatchFromTemplate(
   const varsForRender = { ...vars, subject };
 
   if (dbTemplate) {
-  const html = renderSections(dbTemplate.htmlBody, varsForRender);
-  const text = renderSections(dbTemplate.textBody, varsForRender)
-    .replace(/\{\{itemsText\}\}/g, () =>
-      vars.items
-        .map((i) => `  - ${i.marketName} | ${i.quantity} ${i.unit}`)
-        .join('\n'),
-    );
-  return { html, text, subject, source: 'database' };
+    const html = renderSections(dbTemplate.htmlBody, varsForRender);
+    const text = renderSections(dbTemplate.textBody, varsForRender)
+      .replace(/\{\{itemsText\}\}/g, () =>
+        vars.items
+          .map((i) => {
+            const portPart = i.destinationPort ? ` | Port: ${i.destinationPort}` : '';
+            const incoPart = i.desiredIncoterm ? ` | ${i.desiredIncoterm}` : '';
+            return `  - ${i.marketName}${incoPart}${portPart} | ${i.quantity} ${i.unit}`;
+          })
+          .join('\n'),
+      );
+    return { html, text, subject, source: 'database' };
   }
 
   const fallback = renderQuoteDispatch(varsForRender);
