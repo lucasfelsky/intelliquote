@@ -118,6 +118,8 @@ const smtpEnvSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),
   SMTP_SECURE: z.string().optional(),
+  SMTP_RETRY_ATTEMPTS: z.string().optional(),
+  SMTP_RETRY_BASE_DELAY_MS: z.string().optional(),
   INTELLIQUOTE_COMEX_CC_LIST: z.string().optional(),
   INTELLIQUOTE_PORTAL_URL: z.string().optional(),
   SENDGRID_API_KEY: z.string().optional(),
@@ -169,6 +171,8 @@ export const mailerEnv = {
     pass: parsedMailerEnv.SMTP_PASS ?? '',
     from: parsedMailerEnv.SMTP_FROM ?? '',
     secure: parseBooleanOptional(parsedMailerEnv.SMTP_SECURE) ?? false,
+    retryAttempts: parsePositiveInteger(parsedMailerEnv.SMTP_RETRY_ATTEMPTS, 3),
+    retryBaseDelayMs: parsePositiveInteger(parsedMailerEnv.SMTP_RETRY_BASE_DELAY_MS, 500),
   },
   comexCcList: parseCcList(parsedMailerEnv.INTELLIQUOTE_COMEX_CC_LIST),
   portalUrl:

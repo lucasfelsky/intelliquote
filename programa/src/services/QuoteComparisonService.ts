@@ -187,13 +187,35 @@ export class QuoteComparisonService {
       ...rankedResponses.map((response) => response.totalScore),
     );
 
-    return rankedResponses.map((response, index) => ({
+    // Critério de desempate determinístico entre propostas com o score máximo.
+    // Antes o vencedor era o de menor índice (first-occurrence), o que dependia da
+    // ordem de retorno do banco e não era determinístico. Cascata agora:
+    //   1. menor totalLandedCost (custo real menor vence o empate do score)
+    //   2. maior paymentTermsDays (mais dias para pagar é melhor)
+    //   3. maior nível de Incoterm (DDP=5 > EXW=1; repassa mais responsabilidade ao fornecedor)
+    //   4. menor id (estabilidade final, ordem de cadastro)
+    const winnerId = rankedResponses
+      .filter((response) => response.totalScore === highestScore)
+      .reduce((best, current) => {
+        if (current.totalLandedCost !== best.totalLandedCost) {
+          return current.totalLandedCost < best.totalLandedCost ? current : best;
+        }
+        if (current.paymentTermsDays !== best.paymentTermsDays) {
+          return current.paymentTermsDays > best.paymentTermsDays ? current : best;
+        }
+        const currentIncoterm =
+          QuoteComparisonService.INCOTERM_SCORES[current.offeredIncoterm] ?? 1;
+        const bestIncoterm =
+          QuoteComparisonService.INCOTERM_SCORES[best.offeredIncoterm] ?? 1;
+        if (currentIncoterm !== bestIncoterm) {
+          return currentIncoterm > bestIncoterm ? current : best;
+        }
+        return current.id < best.id ? current : best;
+      }).id;
+
+    return rankedResponses.map((response) => ({
       ...response,
-      isWinner:
-        response.totalScore === highestScore &&
-        rankedResponses.findIndex(
-          (rankedResponse) => rankedResponse.totalScore === highestScore,
-        ) === index,
+      isWinner: response.id === winnerId,
     }));
   }
 
