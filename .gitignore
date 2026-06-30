@@ -49,4 +49,30 @@ Thumbs.db
 *.swp
 
 # Local artifacts
-# (placeholder - kept in working tree, not committed)
+# Scripts utilitarios one-shot na raiz de programa/ (nao versionados; mova para programa/scripts/ se precisar persistir)
+# Cuidado: NAO usar '*.cjs' global - ha 25 scripts .cjs ja versionados em programa/scripts/ e programa/*.cjs
+/programa/check-all.cjs
+/programa/check-current.cjs
+/programa/check-tpl.cjs
+/programa/delete-template.cjs
+/programa/dump-template.cjs
+/programa/dump-template-out.txt
+/programa/final-check.cjs
+/programa/force-update.cjs
+/programa/inspect3.cjs
+/programa/inspect4.cjs
+/programa/list-templates.cjs
+/programa/upsert-from-file.cjs
+# Dumps de debug (gerados por scripts de inspecao one-shot)
+/programa/dump.txt
+/programa/hit-preview-out.txt
+/programa/dump-template-out.txt
+/programa/smoke_qr2.json
+/programa/tmp_db_url.txt
+# Logs temporarios
+/programa/tmp-*.log
+/programa/tmp-server.*.log
+# Resultados de teste do Playwright (gerado em runtime; recriado pelo playwright)
+/programa/test-results/
+/programa/playwright-report/
+*.tmp
