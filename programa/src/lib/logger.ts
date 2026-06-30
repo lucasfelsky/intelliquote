@@ -1,12 +1,16 @@
 // Logger minimalista baseado em console para evitar dependencia extra.
 // Em producao (Cloud Run) os logs vao para stdout/stderr e sao coletados
 // pelo Cloud Logging automaticamente.
+import { getCurrentTraceId } from './traceContext';
+
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
 function emit(level: Level, meta: Record<string, unknown> | undefined, message: string): void {
+  const traceId = getCurrentTraceId();
   const line = {
     level,
     time: new Date().toISOString(),
+    ...(traceId ? { traceId } : {}),
     ...(meta ?? {}),
     msg: message,
   };

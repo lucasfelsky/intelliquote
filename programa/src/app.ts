@@ -8,6 +8,7 @@ import { router } from './routes';
 import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
 import { exchangeRateRoutes } from './routes/ExchangeRateRoutes';
+import { traceIdMiddleware } from './middlewares/traceId';
 
 const app = express();
 const publicPath = process.env.NODE_ENV === 'production'
@@ -16,6 +17,10 @@ const publicPath = process.env.NODE_ENV === 'production'
 const allowedOrigins = new Set(authEnv.corsOrigins);
 
 app.set('trust proxy', 1);
+
+// traceId vem antes de tudo: erros de parse de JSON, CORS e auth também
+// ganham um id de correlação no log.
+app.use(traceIdMiddleware);
 
 app.use(
   helmet({
