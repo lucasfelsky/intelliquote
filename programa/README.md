@@ -200,3 +200,31 @@ Credenciais locais do seed padrao, caso as variaveis `ADMIN_SEED_*` nao sejam de
 4. Executar a comparacao de uma cotacao.
 5. Mostrar a proposta vencedora no comparador e na tabela de cotacoes.
 6. Exportar o resultado em `CSV`.
+
+## CI
+
+GitHub Actions em `.github/workflows/ci.yml` (raiz do monorepo). Roda em push/PR para `main`, `develop`, `feat/**` e `fix/**`.
+
+Dois jobs:
+
+1. **unit-and-build** — `npm ci` → prisma generate → `npm test` (Vitest, 87 casos + 1 skip) → `npm run build` (tsc) → `npm run build` no `web/`.
+2. **e2e** — depende de `unit-and-build`. Sobe **Postgres 16** + **MailHog** como services, roda `prisma migrate deploy` + `prisma:seed`, instala Chromium do Playwright, executa `npm run test:e2e` (8 smoke tests + 2 skipped). Upload de `playwright-report/` em caso de falha (retention 7 dias).
+
+### Secrets necessarios (uma vez)
+
+Em **Settings → Secrets and variables → Actions**:
+
+| Secret | Origem | Usado em |
+|---|---|---|
+| `FIREBASE_TOKEN` | `firebase login:ci` | (futuro deploy; ainda nao usado no CI) |
+
+Para gerar: `npx firebase login:ci` em uma workstation local; copie o token impresso.
+
+### Rodar local
+
+```bash
+npm test                 # unit (rapido, ~14s)
+npm run test:e2e         # E2E (sobe dev se nao estiver up)
+PLAYWRIGHT_BASE_URL=https://intelliquote-staging...run.app npm run test:e2e
+```
+
