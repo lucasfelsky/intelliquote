@@ -12,6 +12,8 @@
     "smoke:local": "node ./scripts/smoke-local.js",
     "test": "vitest run --pool=threads",
     "test:watch": "vitest --pool=threads",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node-dev --transpile-only prisma/seed.ts",
@@ -35,6 +37,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.1",
@@ -43,6 +46,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^8.0.1",
     "@types/supertest": "^7.2.0",
+    "playwright": "^1.50.0",
     "prisma": "^6.6.0",
     "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",

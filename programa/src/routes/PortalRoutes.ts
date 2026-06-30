@@ -112,19 +112,18 @@ async function buildPortalView(tokenId: number) {
         currency: token.quoteRequest.currency,
         deadlineAt: token.quoteRequest.deadlineAt,
         items: token.quoteRequest.items.map((item) => ({
-          id: item.id,
-          itemCode: item.itemCode,
-          productName: item.catalogItem?.marketName ?? item.productName,
-          commercialName: item.productName,
-          description: item.description,
-          quantity: item.quantity,
-          unit: item.unit,
-          desiredIncoterm: item.desiredIncoterm ?? token.quoteRequest.desiredIncoterm,
-          destinationPort: item.destinationPort ?? token.quoteRequest.destinationPort,
-          originPort: token.quoteRequest.originPort ?? 'Shanghai',
-          notes: item.notes,
-          isDangerousGood: item.catalogItem?.isDangerousGood ?? false,
-        })),
+                  id: item.id,
+                  itemCode: item.itemCode,
+                  productName: item.catalogItem?.marketName ?? item.productName,
+                  description: item.description,
+                  quantity: item.quantity,
+                  unit: item.unit,
+                  desiredIncoterm: item.desiredIncoterm ?? token.quoteRequest.desiredIncoterm,
+                  destinationPort: item.destinationPort ?? token.quoteRequest.destinationPort,
+                  originPort: token.quoteRequest.originPort ?? 'Shanghai',
+                  notes: item.notes,
+                  isDangerousGood: item.catalogItem?.isDangerousGood ?? false,
+                })),
       },
     supplier: {
       id: token.supplier.id,
@@ -165,6 +164,12 @@ async function buildPortalView(tokenId: number) {
       : null,
   };
 }
+
+// helper endpoint para checagem de saude do servico publico (sem tocar no token).
+// Deve vir ANTES de GET /api/portal/:token para nao ser capturado pelo parametro.
+portalRoutes.get('/api/portal/_meta', (_req, res) => {
+  res.status(200).json({ ok: true, service: 'supplier-portal' });
+});
 
 portalRoutes.get('/api/portal/:token', portalRateLimiter, async (req, res) => {
   try {
@@ -286,11 +291,6 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
     const handled = handleControllerError(error);
     res.status(handled.status).json({ message: handled.message });
   }
-});
-
-// helper endpoint para checagem de saude do servico publico (sem tocar no token)
-portalRoutes.get('/api/portal/_meta', (_req, res) => {
-  res.status(200).json({ ok: true, service: 'supplier-portal' });
 });
 
 export { portalRoutes };
