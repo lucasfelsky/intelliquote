@@ -5,6 +5,11 @@ name: CI
 # - tsc build do backend
 # - Vite build do web
 # - Playwright E2E com Postgres 16 + MailHog como services
+# - Upload de programa/dist/ + programa/web/dist/ como artifacts (10 dias)
+# - Upload de playwright-report/ em caso de falha (7 dias)
+#
+# Cache: setup-node@4 com cache='npm' ja' cuida do cache de ~/.npm
+# baseado em programa/package-lock.json. Nao precisa de action/cache separado.
 #
 # Secrets necessarios (configurar em Settings > Secrets and variables > Actions):
 #   FIREBASE_TOKEN  - token `firebase login:ci` (so usado em deploy; este workflow nao faz deploy)
@@ -53,6 +58,24 @@ jobs:
       - name: Build web (Vite)
         working-directory: programa/web
         run: npm run build
+
+      - name: Upload backend dist/ artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intelliquote-backend-dist
+          path: programa/dist/
+          retention-days: 10
+          if-no-files-found: error
+
+      - name: Upload web dist/ artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: intelliquote-web-dist
+          path: programa/web/dist/
+          retention-days: 10
+          if-no-files-found: error
 
   e2e:
     name: E2E (Playwright)
