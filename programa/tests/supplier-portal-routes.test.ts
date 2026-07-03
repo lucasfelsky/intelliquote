@@ -183,7 +183,7 @@ describe('Portal routes (public, magic-link)', () => {
         requestCode: 'QR-2026-001',
         productName: 'Acido sulfurico',
         description: 'Lote piloto',
-        desiredIncoterm: 'FOB',
+        desiredIncoterm: ['FOB'],
         currency: 'USD',
         deadlineAt: null,
         items: [{ id: 11, itemCode: 'A1', productName: 'Acido sulfurico', quantity: 1, unit: 'UN', targetPrice: null, description: null, notes: null }],

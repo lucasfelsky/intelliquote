@@ -85,7 +85,7 @@ describeDb('Critical flows on real database', () => {
       .send({
         productName: `${runId} Bomba`,
         quantity: 20,
-        desiredIncoterm: 'FOB',
+        desiredIncoterm: ['FOB'],
         currency: 'USD',
         description: 'Fluxo critico com Postgres real.',
       });

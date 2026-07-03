@@ -5,6 +5,7 @@ import { SupplierPortalResponseService } from '../services/SupplierPortalRespons
 import { ExchangeRateService } from '../services/ExchangeRateService';
 import { supplierPortalResponseSubmitSchema } from '../validators/supplierPortal';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
+import { formatIncoterms } from '../utils/incoterm';
 import { prisma } from '../lib/prisma';
 
 const portalRoutes = Router();
@@ -118,7 +119,7 @@ async function buildPortalView(tokenId: number) {
                   description: item.description,
                   quantity: item.quantity,
                   unit: item.unit,
-                  desiredIncoterm: item.desiredIncoterm ?? token.quoteRequest.desiredIncoterm,
+                  desiredIncoterm: item.desiredIncoterm ?? formatIncoterms(token.quoteRequest.desiredIncoterm),
                   destinationPort: item.destinationPort ?? token.quoteRequest.destinationPort,
                   originPort: token.quoteRequest.originPort ?? 'Shanghai',
                   notes: item.notes,

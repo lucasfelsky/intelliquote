@@ -41,7 +41,7 @@ export class QuoteRequestController {
           productName: payload.productName ?? null,
           quantity: payload.quantity ?? null,
           description: payload.description ?? null,
-          desiredIncoterm: payload.desiredIncoterm as Incoterm,
+          desiredIncoterm: payload.desiredIncoterm,
           destinationPort: payload.destinationPort ?? null,
           originPort: payload.originPort ?? 'Shanghai',
           currency: payload.currency ?? 'USD',
@@ -208,7 +208,7 @@ export class QuoteRequestController {
             payload.productName === undefined ? undefined : payload.productName,
           quantity: payload.quantity === undefined ? undefined : payload.quantity,
           description: payload.description,
-          desiredIncoterm: payload.desiredIncoterm as Incoterm | undefined,
+          desiredIncoterm: payload.desiredIncoterm,
           destinationPort:
             payload.destinationPort === undefined ? undefined : payload.destinationPort,
           originPort: payload.originPort === undefined ? undefined : payload.originPort,
@@ -475,6 +475,7 @@ function ensureQuoteRequestOpen(
 function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
   const search = parseOptionalQueryString(req.query.search);
   const status = parseOptionalQueryString(req.query.status);
+  const incoterm = parseOptionalQueryString(req.query.incoterm);
   const includeDeleted = parseOptionalQueryString(req.query.includeDeleted) === 'true';
   const where: Prisma.QuoteRequestWhereInput = {};
 
@@ -492,6 +493,10 @@ function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
 
   if (status && status !== 'all') {
     where.status = status as QuoteRequestStatus;
+  }
+
+  if (incoterm && (Object.values(Incoterm) as string[]).includes(incoterm)) {
+    where.desiredIncoterm = { has: incoterm as Incoterm };
   }
 
   return where;

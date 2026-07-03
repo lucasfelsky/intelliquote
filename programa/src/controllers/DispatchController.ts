@@ -12,6 +12,7 @@ import {
   dispatchCreateSchema,
 } from '../validators/supplierPortal';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
+import { formatIncoterms } from '../utils/incoterm';
 import { getComexCcList, sendAndLog } from '../mailer/MailerService';
 import {
   DISPATCH_DEFAULT_LOCALE,
@@ -67,7 +68,7 @@ export class DispatchController {
                     requestCode: quoteRequest.requestCode,
                     productName: quoteRequest.productName,
                     quantity: quoteRequest.quantity,
-                    desiredIncoterm: quoteRequest.desiredIncoterm,
+                    desiredIncoterm: formatIncoterms(quoteRequest.desiredIncoterm),
                                 destinationPort: quoteRequest.destinationPort,
                                 originPort: quoteRequest.originPort,
                                 currency: quoteRequest.currency,
@@ -90,7 +91,7 @@ export class DispatchController {
                                   marketName: it.catalogItem?.marketName ?? it.productName,
                                   quantity: it.quantity,
                                   unit: it.unit,
-                                  desiredIncoterm: it.desiredIncoterm ?? quoteRequest.desiredIncoterm,
+                                  desiredIncoterm: it.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
                                  destinationPort:
                                    it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
                                 originPort: quoteRequest.originPort ?? undefined,
@@ -280,7 +281,7 @@ export class DispatchController {
               requestCode: quoteRequest.requestCode,
               productName: quoteRequest.productName,
               quantity: quoteRequest.quantity,
-              desiredIncoterm: quoteRequest.desiredIncoterm,
+              desiredIncoterm: formatIncoterms(quoteRequest.desiredIncoterm),
                         destinationPort: quoteRequest.destinationPort,
                         originPort: quoteRequest.originPort,
                         currency: quoteRequest.currency,
@@ -303,7 +304,7 @@ export class DispatchController {
                           marketName: it.catalogItem?.marketName ?? it.productName,
                           quantity: it.quantity,
                           unit: it.unit,
-                          desiredIncoterm: it.desiredIncoterm ?? quoteRequest.desiredIncoterm,
+                          desiredIncoterm: it.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
                           destinationPort:
                             it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
                           originPort: quoteRequest.originPort ?? undefined,

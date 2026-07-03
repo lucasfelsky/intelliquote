@@ -97,7 +97,11 @@ export class QuoteRequestItemController {
         resolvedProductName = (productName as string).trim();
       }
 
-      // Se o item nao trouxe incoterm/porto proprio, herda da cotacao para
+      // Se o item nao trouxe incoterm proprio, fica null -- a exibicao
+      // (portal, e-mails, telas) resolve o fallback exibindo os incoterms
+      // aceitos pela cotacao. Nao ha um unico valor "herdavel" agora que a
+      // cotacao aceita varios incoterms.
+      // Porto: se o item nao trouxe porto proprio, herda da cotacao para
       // manter consistencia visual com o portal do fornecedor.
       const item = await prisma.quoteRequestItem.create({
         data: {
@@ -108,9 +112,7 @@ export class QuoteRequestItemController {
           description: isNonEmptyString(description) ? description.trim() : null,
           quantity: Number(quantity),
           unit: unit.trim().toUpperCase(),
-          desiredIncoterm: (desiredIncoterm
-            ? (String(desiredIncoterm) as Incoterm)
-            : quoteRequest.desiredIncoterm) ?? null,
+          desiredIncoterm: desiredIncoterm ? (String(desiredIncoterm) as Incoterm) : null,
           destinationPort: isNonEmptyString(destinationPort)
             ? (destinationPort as string).trim()
             : quoteRequest.destinationPort ?? null,
@@ -313,7 +315,7 @@ export class QuoteRequestItemController {
       }
       if (desiredIncoterm !== undefined) {
         if (desiredIncoterm === null || desiredIncoterm === '') {
-          data.desiredIncoterm = existingItem.quoteRequest.desiredIncoterm;
+          data.desiredIncoterm = null;
         } else {
           data.desiredIncoterm = String(desiredIncoterm) as Incoterm;
         }

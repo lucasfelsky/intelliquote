@@ -13,7 +13,7 @@ interface QuoteRequest {
   productName: string;
   quantity: number;
   description: string | null;
-  desiredIncoterm: Incoterm;
+  desiredIncoterm: Incoterm[];
   currency: string;
   deadlineAt: string | null;
   status: QuoteStatus;
@@ -38,6 +38,12 @@ function asIncoterm(value: unknown): Incoterm {
   return (INCOTERMS as readonly string[]).includes(v) ? (v as Incoterm) : 'EXW';
 }
 
+function asIncoterms(value: unknown): Incoterm[] {
+  const arr = Array.isArray(value) ? value : [];
+  const parsed = arr.map(asIncoterm).filter((t, i, self) => self.indexOf(t) === i);
+  return parsed.length > 0 ? parsed : ['EXW'];
+}
+
 function normalize(qr: unknown): QuoteRequest {
   if (typeof qr !== 'object' || qr === null) {
     throw new Error('Resposta inesperada do servidor.');
@@ -50,7 +56,7 @@ function normalize(qr: unknown): QuoteRequest {
     productName: String(obj.productName ?? ''),
     quantity: Number(obj.quantity ?? 0),
     description: (obj.description as string | null) ?? null,
-    desiredIncoterm: asIncoterm(obj.desiredIncoterm),
+    desiredIncoterm: asIncoterms(obj.desiredIncoterm),
     currency: String(obj.currency ?? 'USD'),
     deadlineAt: (obj.deadlineAt as string | null) ?? null,
     status: (obj.status as QuoteStatus) ?? 'open',
@@ -73,17 +79,19 @@ export default function Cotacoes() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
+  const [incotermFilter, setIncotermFilter] = useState<Incoterm | 'todos'>('todos');
   const [actionError, setActionError] = useState<string | null>(null);
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
   const canDelete = user?.role === 'admin' || user?.role === 'comprador';
 
   const list = useQuery({
-    queryKey: ['quote-requests', { search, status: statusFilter }],
+    queryKey: ['quote-requests', { search, status: statusFilter, incoterm: incotermFilter }],
     queryFn: async () => {
       const params: Record<string, string> = {};
       if (search.trim()) params.search = search.trim();
       if (statusFilter !== 'todas') params.status = statusFilter === 'abertas' ? 'open' : 'closed';
+      if (incotermFilter !== 'todos') params.incoterm = incotermFilter;
       const data = await api.get<unknown>(`/v1/quote-requests`, params);
       const items = unwrapList(data);
       return items.map(normalize);
@@ -134,6 +142,17 @@ export default function Cotacoes() {
             <option value="todas">Todas</option>
             <option value="abertas">Abertas</option>
             <option value="fechadas">Fechadas</option>
+          </select>
+          <select
+            className="select"
+            value={incotermFilter}
+            onChange={(e) => setIncotermFilter(e.target.value as Incoterm | 'todos')}
+            style={{ maxWidth: 160 }}
+          >
+            <option value="todos">Incoterm: todos</option>
+            {INCOTERMS.map((t) => (
+              <option key={t} value={t}>Incoterm: {t}</option>
+            ))}
           </select>
           {canCreate && (
             <button
@@ -197,7 +216,13 @@ export default function Cotacoes() {
                   <td><strong>{qr.requestCode}</strong></td>
                   <td>{qr.productName}</td>
                   <td>{formatNumber(qr.quantity)}</td>
-                  <td>{qr.desiredIncoterm}</td>
+                  <td>
+                    <div className="chip-row">
+                      {qr.desiredIncoterm.map((t) => (
+                        <span key={t} className="chip" style={{ cursor: 'default' }}>{t}</span>
+                      ))}
+                    </div>
+                  </td>
                   <td>{formatNumber(qr._count?.items)}</td>
                   <td>{formatNumber(qr._count?.quoteResponses)}</td>
                   <td>

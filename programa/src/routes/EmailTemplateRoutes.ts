@@ -4,6 +4,7 @@ import { EmailTemplateService } from '../services/EmailTemplateService';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 import { AuditLogService } from '../services/AuditLogService';
 import { handleControllerError, HttpError } from '../utils/http';
+import { formatIncoterms } from '../utils/incoterm';
 import { renderSections, renderDispatchTemplate, type QuoteDispatchVars } from '../mailer/renderQuoteDispatch';
 import { prisma } from '../lib/prisma';
 import { CompanyProfileService } from '../services/CompanyProfileService';
@@ -114,7 +115,7 @@ emailTemplateRoutes.get(
         sample.productName = latestQuoteRequest.productName ?? sample.productName;
         sample.quantity = latestQuoteRequest.quantity ?? sample.quantity;
         sample.unit = 'UN';
-        sample.desiredIncoterm = latestQuoteRequest.desiredIncoterm;
+        sample.desiredIncoterm = formatIncoterms(latestQuoteRequest.desiredIncoterm);
         sample.currency = latestQuoteRequest.currency;
         if (latestQuoteRequest.items.length > 0) {
           sample.items = latestQuoteRequest.items.map((it) => ({

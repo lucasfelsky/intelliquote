@@ -23,7 +23,7 @@ interface QuoteRequest {
   productName: string | null;
   quantity: number | null;
   description: string | null;
-  desiredIncoterm: Incoterm;
+  desiredIncoterm: Incoterm[];
   destinationPort: string | null;
   originPort: string | null;
   currency: string;
@@ -76,7 +76,7 @@ interface QuoteResponseSummary {
 
 interface QuoteRequestForm {
   description: string;
-  desiredIncoterm: Incoterm;
+  desiredIncoterm: Incoterm[];
   destinationPort: string;
   originPort: string;
   currency: string;
@@ -146,7 +146,7 @@ function buildResponseMailto(
 
   const itemRows = items.map((it) => {
     const name = it.catalogItem?.commercialName ?? it.productName;
-    const incoterm = it.desiredIncoterm ?? qr.desiredIncoterm;
+    const incoterm = it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm);
     const quantity = `${formatEnNumber(it.quantity)} ${it.unit}`;
     return `${name}\t${incoterm}\t${quantity}\t—\t—`;
   });
@@ -214,6 +214,16 @@ function asIncoterm(value: unknown): Incoterm {
   return (INCOTERMS as readonly string[]).includes(v) ? (v as Incoterm) : 'EXW';
 }
 
+function asIncoterms(value: unknown): Incoterm[] {
+  const arr = Array.isArray(value) ? value : [];
+  const parsed = arr.map(asIncoterm).filter((t, i, self) => self.indexOf(t) === i);
+  return parsed.length > 0 ? parsed : ['EXW'];
+}
+
+function formatIncoterms(incoterms: Incoterm[]): string {
+  return incoterms.join(' / ');
+}
+
 function normalize(qr: unknown): QuoteRequest {
   if (typeof qr !== 'object' || qr === null) {
     throw new Error('Resposta inesperada do servidor.');
@@ -227,7 +237,7 @@ function normalize(qr: unknown): QuoteRequest {
     productName: (obj.productName as string | null) ?? '',
     quantity: typeof obj.quantity === 'number' ? obj.quantity : 0,
     description: (obj.description as string | null) ?? null,
-    desiredIncoterm: asIncoterm(obj.desiredIncoterm),
+    desiredIncoterm: asIncoterms(obj.desiredIncoterm),
       destinationPort: (obj.destinationPort as string | null) ?? null,
       originPort: (obj.originPort as string | null) ?? 'Shanghai',
       currency: String(obj.currency ?? 'USD'),
@@ -797,12 +807,29 @@ export default function CotacaoDetalhe() {
       }
     }
 
+    function toggleEditIncoterm(term: Incoterm) {
+      setEditForm((current) => {
+        if (!current) return current;
+        const has = current.desiredIncoterm.includes(term);
+        return {
+          ...current,
+          desiredIncoterm: has
+            ? current.desiredIncoterm.filter((t) => t !== term)
+            : [...current.desiredIncoterm, term],
+        };
+      });
+    }
+
     function handleEditSubmit(e: React.FormEvent) {
       e.preventDefault();
       if (!editForm) return;
       setEditError(null);
       if (!editForm.currency.trim()) {
         setEditError('Informe a moeda (código de 3 letras).');
+        return;
+      }
+      if (editForm.desiredIncoterm.length === 0) {
+        setEditError('Selecione ao menos um incoterm aceitável.');
         return;
       }
       updateQuote.mutate(editForm);
@@ -951,8 +978,12 @@ export default function CotacaoDetalhe() {
             <p>{formatNumber(qr.quantity)}</p>
           </div>
           <div>
-            <p className="eyebrow">Incoterm desejado</p>
-            <p>{qr.desiredIncoterm}</p>
+            <p className="eyebrow">Incoterms aceitáveis</p>
+            <div className="chip-row">
+              {qr.desiredIncoterm.map((t) => (
+                <span key={t} className="chip" style={{ cursor: 'default' }}>{t}</span>
+              ))}
+            </div>
           </div>
           <div>
                       <p className="eyebrow">Porto de embarque</p>
@@ -1025,7 +1056,7 @@ export default function CotacaoDetalhe() {
                             <td>{it.catalogItem?.marketName ?? '—'}</td>
                             <td>{formatNumber(it.quantity)}</td>
                             <td>{it.unit}</td>
-                            <td>{it.desiredIncoterm ?? qr.desiredIncoterm}</td>
+                            <td>{it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm)}</td>
                             <td>{it.destinationPort ?? qr.destinationPort ?? '—'}</td>
                             <td>{it.catalogItem?.isDangerousGood ? 'Sim' : '—'}</td>
                             <td>{it.notes ?? '—'}</td>
@@ -1673,7 +1704,7 @@ export default function CotacaoDetalhe() {
                               checked={itemForm.inheritIncoterm}
                               onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
                             />
-                            Usar o INCOTERM da cotação ({qr.desiredIncoterm})
+                            Usar o INCOTERM da cotação ({formatIncoterms(qr.desiredIncoterm)})
                           </label>
                           {!itemForm.inheritIncoterm && (
                             <div style={{ marginBottom: 8 }}>
@@ -1746,20 +1777,20 @@ export default function CotacaoDetalhe() {
             <h2>Editar cotação</h2>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div>
-                <label className="field-label" htmlFor="qrIncoterm">Incoterm desejado *</label>
-                <select
-                  id="qrIncoterm"
-                  className="select"
-                  value={editForm.desiredIncoterm}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, desiredIncoterm: e.target.value as Incoterm })
-                  }
-                >
+              <div className="form-grid__full">
+                <label className="field-label">Incoterms aceitáveis *</label>
+                <div className="chip-row">
                   {INCOTERMS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+                    <button
+                      key={t}
+                      type="button"
+                      className={`chip${editForm.desiredIncoterm.includes(t) ? ' chip--active' : ''}`}
+                      onClick={() => toggleEditIncoterm(t)}
+                    >
+                      {t}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="field-label" htmlFor="qrOriginPort">Porto de embarque</label>

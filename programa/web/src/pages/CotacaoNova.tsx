@@ -58,7 +58,7 @@ export default function CotacaoNova() {
   const [step, setStep] = useState<1 | 2>(1);
 
   const [requestCode, setRequestCode] = useState('');
-  const [desiredIncoterm, setDesiredIncoterm] = useState<Incoterm>('FOB');
+  const [desiredIncoterm, setDesiredIncoterm] = useState<Incoterm[]>(['FOB']);
     const [destinationPort, setDestinationPort] = useState('');
     const [originPort, setOriginPort] = useState('Shanghai');
     const [currency, setCurrency] = useState('USD');
@@ -206,10 +206,20 @@ export default function CotacaoNova() {
     closeItemModal();
   }, [activeCatalog, editingTempId, itemForm]);
 
+  function toggleDesiredIncoterm(term: Incoterm) {
+    setDesiredIncoterm((current) =>
+      current.includes(term) ? current.filter((t) => t !== term) : [...current, term],
+    );
+  }
+
   function handleNextStep() {
     setStepError(null);
     if (!currency.trim()) {
       setStepError('Informe a moeda.');
+      return;
+    }
+    if (desiredIncoterm.length === 0) {
+      setStepError('Selecione ao menos um incoterm aceitável.');
       return;
     }
     setStep(2);
@@ -294,18 +304,20 @@ export default function CotacaoNova() {
                 Será gerado automaticamente se ficar em branco.
               </p>
             </div>
-            <div>
-              <label className="field-label" htmlFor="incoterm">Incoterm desejado *</label>
-              <select
-                id="incoterm"
-                className="select"
-                value={desiredIncoterm}
-                onChange={(e) => setDesiredIncoterm(e.target.value as Incoterm)}
-              >
+            <div className="form-grid__full">
+              <label className="field-label">Incoterms aceitáveis *</label>
+              <div className="chip-row">
                 {INCOTERMS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <button
+                    key={t}
+                    type="button"
+                    className={`chip${desiredIncoterm.includes(t) ? ' chip--active' : ''}`}
+                    onClick={() => toggleDesiredIncoterm(t)}
+                  >
+                    {t}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
             <div>
               <label className="field-label" htmlFor="originPort">Porto de embarque</label>

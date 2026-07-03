@@ -751,10 +751,12 @@
                 </label>
                 <label>Incoterm
                   <select name="incoterm" required>
-                    ${['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP']
+                    ${(data.quoteRequest.desiredIncoterm && data.quoteRequest.desiredIncoterm.length > 0
+                        ? data.quoteRequest.desiredIncoterm
+                        : ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'])
                       .map(
-                        (i) =>
-                          `<option value="${i}" ${data.quoteRequest.desiredIncoterm === i ? 'selected' : ''}>${i}</option>`,
+                        (i, idx) =>
+                          `<option value="${i}" ${idx === 0 ? 'selected' : ''}>${i}</option>`,
                       )
                       .join('')}
                   </select>

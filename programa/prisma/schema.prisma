@@ -122,7 +122,7 @@ model QuoteRequest {
   productName     String?
   quantity        Int?
   description     String?
-  desiredIncoterm Incoterm
+  desiredIncoterm Incoterm[]
   destinationPort String?
   originPort      String?                  @default("Shanghai")
   currency        String                   @default("USD")
