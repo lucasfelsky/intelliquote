@@ -35,6 +35,12 @@ quoteResponseRoutes.delete(
   QuoteResponseController.delete,
 );
 quoteResponseRoutes.post(
+  '/quote-responses/:id/reply/preview',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  QuoteResponseController.replyPreview,
+);
+quoteResponseRoutes.post(
   '/quote-responses/:id/reply',
   requireAuth,
   allowRoles(['admin', 'comprador']),

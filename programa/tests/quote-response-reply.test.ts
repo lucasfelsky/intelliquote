@@ -203,4 +203,65 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(res.status).toBe(502);
     expect(res.body.message).toBe('SMTP indisponivel');
   });
+
+  it('aceita subject e message editados na hora, e injeta a mensagem no HTML/texto', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-2' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({
+        subject: 'Contraproposta - PI-TPO',
+        message: 'Nosso preco alvo e US$ 4.20/KG. Podemos fechar nessas condicoes.',
+      });
+
+    expect(res.status).toBe(200);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.subject).toBe('Contraproposta - PI-TPO');
+    expect(call.html).toContain('Nosso preco alvo e US$ 4.20/KG.');
+    expect(call.text).toContain('Nosso preco alvo e US$ 4.20/KG.');
+  });
+
+  it('preview nao envia e-mail, so retorna o render com subject/message aplicados', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply/preview')
+      .set('Cookie', cookieHeader)
+      .send({ message: 'Fechado, favor providenciar o embarque.' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.to).toBe('john@acme.com');
+    expect(res.body.cc).toEqual(['cc1@sqquimica.com', 'cc2@sqquimica.com']);
+    expect(res.body.html).toContain('Fechado, favor providenciar o embarque.');
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+  });
+
+  it('preview retorna 404/400 nos mesmos casos que o envio', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/999/reply/preview')
+      .set('Cookie', cookieHeader)
+      .send({});
+
+    expect(res.status).toBe(404);
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+  });
 });

@@ -190,6 +190,15 @@ export const quoteResponseUpdateSchema = z.object({
   submittedAt: optionalDateField,
 });
 
+// Usado tanto pra preview quanto pro envio de verdade do botao "Responder"
+// (POST /quote-responses/:id/reply[/preview]). `subject`/`message` sao
+// editados na hora, na modal de resposta -- por isso opcionais (sem eles,
+// usa-se o default calculado a partir do item/fornecedor).
+export const quoteResponseReplySchema = z.object({
+  subject: z.string().trim().max(300).optional(),
+  message: z.string().trim().max(4000).optional(),
+});
+
 export const quoteComparisonWeightsSchema = z.object({
   priceWeight: optionalPositiveNumberField,
   paymentTermsWeight: optionalPositiveNumberField,

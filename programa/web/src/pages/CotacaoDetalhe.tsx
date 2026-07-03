@@ -7,12 +7,14 @@ import {
   generatePortalTokens,
   listPortalTokens,
   previewDispatch,
+  previewQuoteResponseReply,
   replyToQuoteResponse,
   revokePortalToken,
   sendDispatch,
   type DispatchRecipientPreview,
   type DispatchSendResult,
   type PortalTokenListItem,
+  type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
 
 type QuoteStatus = 'open' | 'closed';
@@ -282,6 +284,13 @@ export default function CotacaoDetalhe() {
   const [tokenActionError, setTokenActionError] = useState<string | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
   const [replyFeedback, setReplyFeedback] = useState<{ responseId: number; kind: 'ok' | 'err'; msg: string } | null>(null);
+  // Modal de "Responder": assunto/mensagem editaveis antes do envio (preco
+  // alvo, fechamento do pedido, etc.) + preview ao vivo.
+  const [replyTarget, setReplyTarget] = useState<QuoteResponseSummary | null>(null);
+  const [replySubject, setReplySubject] = useState('');
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
+  const [replyModalError, setReplyModalError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -585,19 +594,57 @@ export default function CotacaoDetalhe() {
     // fluxo mailto: + clipboard, que exigia colar a tabela manualmente e
     // so' conseguia enviar texto puro (limitacao do proprio protocolo
     // mailto:, RFC 6068).
-    const replyMutation = useMutation({
-      mutationFn: (responseId: number) => replyToQuoteResponse(responseId),
-      onSuccess: (result, responseId) => {
-        setReplyFeedback({
-          responseId,
-          kind: 'ok',
-          msg: `E-mail enviado para ${result.to}${result.cc.length > 0 ? ` (CC: ${result.cc.join(', ')})` : ''}.`,
-        });
+    //
+    // Assunto e mensagem sao editaveis na modal antes do envio (ex.: preco
+    // alvo, fechamento do pedido) -- a mensagem entra no e-mail por cima do
+    // template, no lugar do marcador CUSTOM_MESSAGE_SLOT (mesmo mecanismo
+    // do "Enviar cotacao").
+    const replyPreviewMutation = useMutation({
+      mutationFn: (vars: { id: number; subject: string; message: string }) =>
+        previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message }),
+      onSuccess: (data) => {
+        setReplyPreviewData(data);
+        setReplyModalError(null);
       },
-      onError: (err, responseId) => {
-        setReplyFeedback({ responseId, kind: 'err', msg: messageOf(err) });
-      },
+      onError: (err) => setReplyModalError(messageOf(err)),
     });
+
+    const replySendMutation = useMutation({
+      mutationFn: () => {
+        if (!replyTarget) throw new Error('Nenhuma resposta selecionada.');
+        return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage });
+      },
+      onSuccess: (result) => {
+        if (replyTarget) {
+          setReplyFeedback({
+            responseId: replyTarget.id,
+            kind: 'ok',
+            msg: `E-mail enviado para ${result.to}${result.cc.length > 0 ? ` (CC: ${result.cc.join(', ')})` : ''}.`,
+          });
+        }
+        closeReplyModal();
+      },
+      onError: (err) => setReplyModalError(messageOf(err)),
+    });
+
+    function openReplyModal(response: QuoteResponseSummary) {
+      const supplierName = response.supplier?.name ?? `Fornecedor #${response.supplierId}`;
+      const itemName = qr.productName || qr.requestCode;
+      const defaultSubject = `${itemName} - SQ QUIMICA - ${supplierName}`;
+      setReplyTarget(response);
+      setReplySubject(defaultSubject);
+      setReplyMessage('');
+      setReplyPreviewData(null);
+      setReplyModalError(null);
+      setReplyFeedback(null);
+      replyPreviewMutation.mutate({ id: response.id, subject: defaultSubject, message: '' });
+    }
+
+    function closeReplyModal() {
+      setReplyTarget(null);
+      setReplyPreviewData(null);
+      setReplyModalError(null);
+    }
 
     const activeTokens: PortalTokenListItem[] = portalTokensQuery.data ?? [];
 
@@ -1081,14 +1128,10 @@ export default function CotacaoDetalhe() {
                     <button
                       type="button"
                       className="ghost-button"
-                      onClick={() => {
-                        setReplyFeedback(null);
-                        replyMutation.mutate(r.id);
-                      }}
-                      disabled={replyMutation.isPending && replyMutation.variables === r.id}
-                      title="Envia um e-mail de resposta ao contato principal do fornecedor, com copia para os e-mails configurados na empresa"
+                      onClick={() => openReplyModal(r)}
+                      title="Abre uma modal pra revisar/editar o e-mail (assunto, preco alvo, fechamento do pedido) antes de enviar ao fornecedor"
                     >
-                      {replyMutation.isPending && replyMutation.variables === r.id ? 'Enviando…' : 'Responder'}
+                      Responder
                     </button>
                   </td>
                 </tr>
@@ -1097,6 +1140,90 @@ export default function CotacaoDetalhe() {
           </table>
         )}
       </section>
+
+      {replyTarget && (
+        <div className="modal-backdrop" onClick={closeReplyModal}>
+          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+            <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+              {qr.requestCode} · {qr.productName}
+            </p>
+
+            <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>
+              Assunto
+            </label>
+            <input
+              id="replySubject"
+              className="input"
+              value={replySubject}
+              onChange={(e) => setReplySubject(e.target.value)}
+            />
+
+            <label className="field-label" htmlFor="replyMessage" style={{ marginTop: 12 }}>
+              Mensagem
+            </label>
+            <textarea
+              id="replyMessage"
+              className="textarea"
+              rows={4}
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              placeholder="Opcional. Ex.: nosso preco alvo e US$ X / unidade; ou confirmando o fechamento do pedido. Aparece no corpo do e-mail, acima da assinatura."
+            />
+
+            <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={replyPreviewMutation.isPending}
+                onClick={() =>
+                  replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage })
+                }
+              >
+                {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
+              </button>
+            </div>
+
+            <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
+            {replyPreviewData ? (
+              <>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
+                  Para: <strong>{replyPreviewData.to}</strong>
+                  {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                </p>
+                <iframe
+                  key={replyPreviewData.html.length}
+                  title="preview-reply-email"
+                  className="preview-frame"
+                  srcDoc={replyPreviewData.html}
+                />
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
+              </p>
+            )}
+
+            {replyModalError && (
+              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
+            )}
+
+            <div className="modal__actions">
+              <button type="button" className="ghost-button" onClick={closeReplyModal}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={replySendMutation.isPending || !replySubject.trim()}
+                onClick={() => replySendMutation.mutate()}
+              >
+                {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDispatchModal && (
         <div className="modal-backdrop" onClick={closeDispatchModal}>

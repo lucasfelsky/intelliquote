@@ -130,3 +130,24 @@ export async function renderReplyFromTemplate(
   const text = renderReplyPlainText(varsForRender);
   return { html, text, subject, source: 'fallback' };
 }
+
+// Insere a mensagem digitada na hora de responder (preco alvo, fechamento
+// do pedido, etc.) no lugar do marcador `<!--CUSTOM_MESSAGE_SLOT-->` do
+// template (mesmo mecanismo do `injectCustomMessage` do dispatch). Se o
+// template customizado no banco nao tiver o marcador, a mensagem
+// simplesmente nao aparece no HTML (mas continua indo no texto puro).
+export function injectReplyCustomMessage(html: string, message: string): string {
+  if (!message) return html;
+  const safe = escapeHtml(message).replace(/\n/g, '<br />');
+  const block = `
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+      <tr>
+        <td style="padding:0 32px 16px 32px;font-family:Arial,sans-serif;font-size:14px;line-height:1.55;color:#1F2933;">${safe}</td>
+      </tr>
+    </table>`;
+  return html.replace('<!--CUSTOM_MESSAGE_SLOT-->', block);
+}
+
+export function withReplyCustomMessageText(text: string, message: string): string {
+  return message ? `${message}\n\n${text}` : text;
+}

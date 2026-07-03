@@ -291,14 +291,46 @@ export async function revokePortalToken(tokenId: number): Promise<{ ok: boolean 
   return api.post<{ ok: boolean }>(`/v1/portal-tokens/${tokenId}/revoke`, {});
 }
 
+export interface QuoteResponseReplyInput {
+  // Editaveis na hora, na modal de "Responder" (ex.: preco alvo, fechamento
+  // do pedido). Sem eles, o backend usa o assunto padrao e nenhuma mensagem
+  // extra.
+  subject?: string;
+  message?: string;
+}
+
 export interface QuoteResponseReplyResult {
   status: 'sent' | 'failed';
   to: string;
   cc: string[];
 }
 
-export async function replyToQuoteResponse(quoteResponseId: number): Promise<QuoteResponseReplyResult> {
-  return api.post<QuoteResponseReplyResult>(`/v1/quote-responses/${quoteResponseId}/reply`, {});
+export interface QuoteResponseReplyPreview {
+  to: string;
+  cc: string[];
+  subject: string;
+  html: string;
+  text: string;
+}
+
+export async function previewQuoteResponseReply(
+  quoteResponseId: number,
+  input: QuoteResponseReplyInput,
+): Promise<QuoteResponseReplyPreview> {
+  return api.post<QuoteResponseReplyPreview>(`/v1/quote-responses/${quoteResponseId}/reply/preview`, {
+    subject: input.subject,
+    message: input.message,
+  });
+}
+
+export async function replyToQuoteResponse(
+  quoteResponseId: number,
+  input: QuoteResponseReplyInput = {},
+): Promise<QuoteResponseReplyResult> {
+  return api.post<QuoteResponseReplyResult>(`/v1/quote-responses/${quoteResponseId}/reply`, {
+    subject: input.subject,
+    message: input.message,
+  });
 }
 
 export { ApiError };

@@ -8,11 +8,16 @@ import {
 } from '../services/QuoteComparisonService';
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
 import { sendAndLog } from '../mailer/MailerService';
-import { renderReplyFromTemplate } from '../mailer/renderQuoteReply';
+import {
+  renderReplyFromTemplate,
+  injectReplyCustomMessage,
+  withReplyCustomMessageText,
+} from '../mailer/renderQuoteReply';
 import { formatIncoterms } from '../utils/incoterm';
 import {
   quoteComparisonWeightsSchema,
   quoteResponseCreateSchema,
+  quoteResponseReplySchema,
   quoteResponseUpdateSchema,
 } from '../validators/domain';
 import {
@@ -415,10 +420,132 @@ export class QuoteResponseController {
     }
   }
 
+  // Monta o contexto comum ao preview e ao envio de verdade do botao
+  // "Responder": proposta + cotacao + itens + contato principal do
+  // fornecedor + CC da empresa. Devolve `null` com a resposta ja escrita
+  // quando algo impede a resposta de ser montada (404/400), pra reply() e
+  // replyPreview() nao duplicarem essa checagem.
+  private static async loadReplyContext(
+    id: number,
+    res: Response,
+  ): Promise<{
+    quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>;
+    primaryContact: { id: number; email: string; name: string };
+    companyCc: Array<{ email: string; name: string }>;
+  } | null> {
+    const quoteResponse = await QuoteResponseController.findReplyQuoteResponse(id);
+    if (!quoteResponse) {
+      res.status(404).json({ message: 'Proposta nao encontrada.' });
+      return null;
+    }
+
+    const primaryContact = await prisma.supplierContact.findFirst({
+      where: { supplierId: quoteResponse.supplierId },
+      orderBy: { isPrimary: 'desc' },
+    });
+
+    if (!primaryContact) {
+      res.status(400).json({
+        message: 'Fornecedor nao possui contato cadastrado para receber a resposta.',
+      });
+      return null;
+    }
+
+    const profile = await CompanyProfileService.get();
+    const companyCc = readDispatchCc(profile).map((email) => ({ email, name: '' }));
+
+    return { quoteResponse, primaryContact, companyCc };
+  }
+
+  private static findReplyQuoteResponse(id: number) {
+    return prisma.quoteResponse.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        supplier: true,
+        quoteRequest: {
+          include: {
+            items: { include: { catalogItem: true }, orderBy: { createdAt: 'asc' } },
+          },
+        },
+      },
+    });
+  }
+
+  // Renderiza o e-mail de resposta para uma proposta, aplicando o
+  // assunto/mensagem digitados na hora (na modal de "Responder") por cima
+  // do template padrao/customizado (`quote_reply`, ver Templates.tsx).
+  private static async renderReplyFor(
+    quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>,
+    overrides: { subject?: string; message?: string },
+  ) {
+    const { quoteRequest, supplier } = quoteResponse;
+    const itemName = quoteRequest.productName || quoteRequest.requestCode;
+    const defaultSubject = `${itemName} - SQ QUIMICA - ${supplier.name}`;
+    const message = overrides.message?.trim() ?? '';
+
+    const rendered = await renderReplyFromTemplate({
+      subject: overrides.subject?.trim() || defaultSubject,
+      quoteRequestId: quoteRequest.id,
+      requestCode: quoteRequest.requestCode,
+      productName: quoteRequest.productName ?? '',
+      supplierName: supplier.name,
+      items: quoteRequest.items.map((item) => ({
+        name: item.catalogItem?.commercialName ?? item.productName,
+        incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
+        quantity: item.quantity,
+        unit: item.unit,
+      })),
+    });
+
+    return {
+      subject: rendered.subject,
+      html: injectReplyCustomMessage(rendered.html, message),
+      text: withReplyCustomMessageText(rendered.text, message),
+    };
+  }
+
+  // Renderiza o e-mail sem enviar nada -- usado pela modal de "Responder"
+  // pra mostrar o preview antes do usuario confirmar o envio (mesmo padrao
+  // do preview de disparo de cotacao).
+  static async replyPreview(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID da proposta invalido.' });
+      }
+
+      const parsedBody = quoteResponseReplySchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
+        return res.status(400).json({
+          message: parsedBody.error.issues[0]?.message ?? 'Dados invalidos.',
+        });
+      }
+
+      const context = await QuoteResponseController.loadReplyContext(id, res);
+      if (!context) return res;
+      const { quoteResponse, primaryContact, companyCc } = context;
+
+      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
+
+      return res.status(200).json({
+        to: primaryContact.email,
+        cc: companyCc.map((c) => c.email),
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+      });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
   // Envia (de verdade, via SMTP) um e-mail de resposta ao fornecedor com a
-  // tabela de itens da cotacao. Substitui o antigo botao "Responder" que
-  // abria um mailto: local -- o corpo em HTML so' sai formatado enviando
-  // pelo servidor, ja que mailto: (RFC 6068) so' aceita texto puro.
+  // tabela de itens da cotacao, com assunto/mensagem editaveis na hora
+  // (preco alvo, fechamento do pedido, etc. -- ver modal de "Responder").
+  // Substitui o antigo botao "Responder" que abria um mailto: local -- o
+  // corpo em HTML so' sai formatado enviando pelo servidor, ja que
+  // mailto: (RFC 6068) so' aceita texto puro.
   static async reply(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseId(req.params.id);
@@ -427,51 +554,18 @@ export class QuoteResponseController {
         return res.status(400).json({ message: 'ID da proposta invalido.' });
       }
 
-      const quoteResponse = await prisma.quoteResponse.findFirst({
-        where: { id, deletedAt: null },
-        include: {
-          supplier: true,
-          quoteRequest: {
-            include: {
-              items: { include: { catalogItem: true }, orderBy: { createdAt: 'asc' } },
-            },
-          },
-        },
-      });
-
-      if (!quoteResponse) {
-        return res.status(404).json({ message: 'Proposta nao encontrada.' });
-      }
-
-      const primaryContact = await prisma.supplierContact.findFirst({
-        where: { supplierId: quoteResponse.supplierId },
-        orderBy: { isPrimary: 'desc' },
-      });
-
-      if (!primaryContact) {
+      const parsedBody = quoteResponseReplySchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
         return res.status(400).json({
-          message: 'Fornecedor nao possui contato cadastrado para receber a resposta.',
+          message: parsedBody.error.issues[0]?.message ?? 'Dados invalidos.',
         });
       }
 
-      const profile = await CompanyProfileService.get();
-      const companyCc = readDispatchCc(profile).map((email) => ({ email, name: '' }));
+      const context = await QuoteResponseController.loadReplyContext(id, res);
+      if (!context) return res;
+      const { quoteResponse, primaryContact, companyCc } = context;
 
-      const { quoteRequest, supplier } = quoteResponse;
-      const itemName = quoteRequest.productName || quoteRequest.requestCode;
-      const rendered = await renderReplyFromTemplate({
-        subject: `${itemName} - SQ QUIMICA - ${supplier.name}`,
-        quoteRequestId: quoteRequest.id,
-        requestCode: quoteRequest.requestCode,
-        productName: quoteRequest.productName ?? '',
-        supplierName: supplier.name,
-        items: quoteRequest.items.map((item) => ({
-          name: item.catalogItem?.commercialName ?? item.productName,
-          incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
-          quantity: item.quantity,
-          unit: item.unit,
-        })),
-      });
+      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
 
       const sendResult = await sendAndLog({
         to: { email: primaryContact.email, name: primaryContact.name },
@@ -481,10 +575,11 @@ export class QuoteResponseController {
         text: rendered.text,
         templateId: 'quote-reply',
         templateVars: {
-          quoteRequestId: quoteRequest.id,
+          quoteRequestId: quoteResponse.quoteRequest.id,
           quoteResponseId: quoteResponse.id,
-          supplierId: supplier.id,
+          supplierId: quoteResponse.supplier.id,
           supplierContactId: primaryContact.id,
+          customMessage: parsedBody.data.message ?? null,
         },
         relatedEntityType: 'quote_response',
         relatedEntityId: String(id),
@@ -499,6 +594,8 @@ export class QuoteResponseController {
           to: primaryContact.email,
           cc: companyCc.map((c) => c.email),
           status: sendResult.status,
+          subject: rendered.subject,
+          hasCustomMessage: Boolean(parsedBody.data.message),
         },
       });
 
