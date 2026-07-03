@@ -291,4 +291,14 @@ export async function revokePortalToken(tokenId: number): Promise<{ ok: boolean 
   return api.post<{ ok: boolean }>(`/v1/portal-tokens/${tokenId}/revoke`, {});
 }
 
+export interface QuoteResponseReplyResult {
+  status: 'sent' | 'failed';
+  to: string;
+  cc: string[];
+}
+
+export async function replyToQuoteResponse(quoteResponseId: number): Promise<QuoteResponseReplyResult> {
+  return api.post<QuoteResponseReplyResult>(`/v1/quote-responses/${quoteResponseId}/reply`, {});
+}
+
 export { ApiError };

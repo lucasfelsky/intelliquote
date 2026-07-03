@@ -7,6 +7,7 @@ import {
   generatePortalTokens,
   listPortalTokens,
   previewDispatch,
+  replyToQuoteResponse,
   revokePortalToken,
   sendDispatch,
   type DispatchRecipientPreview,
@@ -114,93 +115,6 @@ function parseContactsBySupplier(
     });
   }
   return map;
-}
-
-function formatEnNumber(value: number | undefined | null): string {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '0.00';
-  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-// Dados do botao "Responder" de uma resposta de fornecedor: endereco,
-// assunto e a tabela de itens (em HTML, pra colar formatada no e-mail, e em
-// texto puro como fallback). Observacao: QuoteResponse guarda um preco
-// agregado por fornecedor (nao por item), entao Unit Price/Total por linha
-// ficam "-" -- essa granularidade so existe em SupplierPortalResponseItem,
-// que hoje nao esta ligado a este fluxo.
-function buildReplyEmail(
-  qr: QuoteRequest,
-  items: QuoteRequestItem[],
-  response: QuoteResponseSummary,
-  contactsBySupplier: Record<number, Array<{ email: string; isPrimary: boolean }>>,
-  ccList: string[],
-): { mailtoUrl: string; html: string; text: string } {
-  const contacts = contactsBySupplier[response.supplierId] ?? [];
-  const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
-  const to = primaryContact?.email ?? '';
-  const supplierName = response.supplier?.name ?? `Supplier #${response.supplierId}`;
-  const itemName = qr.productName || qr.requestCode;
-  const subject = `${itemName} - SQ QUIMICA - ${supplierName}`;
-
-  const rows = items.map((it) => ({
-    name: it.catalogItem?.commercialName ?? it.productName,
-    incoterm: it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm),
-    quantity: `${formatEnNumber(it.quantity)} ${it.unit}`,
-  }));
-
-  const html = [
-    '<p>Hello,</p>',
-    `<p>Please find below our reference for Quote #${qr.id} (${escapeHtml(qr.requestCode)} — ${escapeHtml(qr.productName ?? '')}):</p>`,
-    '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:sans-serif;font-size:13px;">',
-    '<thead><tr>',
-    '<th>Item</th><th>Incoterm</th><th>Quantity</th><th>Unit Price</th><th>Total</th>',
-    '</tr></thead>',
-    '<tbody>',
-    ...rows.map(
-      (r) =>
-        `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.incoterm)}</td><td>${escapeHtml(r.quantity)}</td><td>—</td><td>—</td></tr>`,
-    ),
-    '</tbody>',
-    '</table>',
-    '<p>Best regards,</p>',
-  ].join('\n');
-
-  const text = [
-    'Hello,',
-    '',
-    `Please find below our reference for Quote #${qr.id} (${qr.requestCode} — ${qr.productName ?? ''}):`,
-    '',
-    'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
-    ...rows.map((r) => `${r.name}\t${r.incoterm}\t${r.quantity}\t—\t—`),
-    '',
-    'Best regards,',
-  ].join('\r\n');
-
-  const bodyPlaceholder = [
-    'Hello,',
-    '',
-    `Please find below our reference for Quote #${qr.id} (${qr.requestCode} — ${qr.productName ?? ''}):`,
-    '',
-    '[Paste the item table here — already copied to your clipboard]',
-    '',
-    'Best regards,',
-  ].join('\r\n');
-
-  const params = [
-    ...(ccList.length > 0 ? [`cc=${encodeURIComponent(ccList.join(','))}`] : []),
-    `subject=${encodeURIComponent(subject)}`,
-    `body=${encodeURIComponent(bodyPlaceholder)}`,
-  ];
-  const mailtoUrl = `mailto:${encodeURIComponent(to)}?${params.join('&')}`;
-
-  return { mailtoUrl, html, text };
 }
 
 function formatDate(iso: string | null): string {
@@ -367,8 +281,7 @@ export default function CotacaoDetalhe() {
   const [showTokensModal, setShowTokensModal] = useState(false);
   const [tokenActionError, setTokenActionError] = useState<string | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
-  const [replyingResponseId, setReplyingResponseId] = useState<number | null>(null);
-  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyFeedback, setReplyFeedback] = useState<{ responseId: number; kind: 'ok' | 'err'; msg: string } | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -570,25 +483,6 @@ export default function CotacaoDetalhe() {
       enabled: showDispatchModal && Boolean(activeSuppliers.data),
     });
 
-    // Contatos dos fornecedores que ja responderam, usados pelo botao
-    // "Responder" (mailto) na secao Respostas.
-    const responseSupplierIds = useMemo(
-      () => Array.from(new Set((detail.data?.quoteResponses ?? []).map((r) => r.supplierId))),
-      [detail.data],
-    );
-
-    const responseContactsQuery = useQuery({
-      queryKey: ['supplier-contacts-responses', responseSupplierIds.join(',')],
-      queryFn: async () => {
-        const data = await api.get<{ bySupplier?: Record<string, unknown[]> }>(
-          '/v1/supplier-contacts',
-          { supplierIds: responseSupplierIds.join(',') },
-        );
-        return parseContactsBySupplier(data);
-      },
-      enabled: responseSupplierIds.length > 0,
-    });
-
     // CC automatico configurado pela empresa (CompanyProfile.dispatchCc).
     // Igual ao backend: ja chega deduplicado e lowercase, mas usamos Set
     // aqui tambem para garantir caso o usuario adicione o mesmo e-mail
@@ -596,8 +490,6 @@ export default function CotacaoDetalhe() {
     const companyProfileQuery = useQuery({
       queryKey: ['company-profile-cc-hint'],
       queryFn: () => api.get<{ dispatchCc?: string[] | null }>('/api/v1/company-profile'),
-      // Tambem usado pelo botao "Responder" (mailto) na secao Respostas,
-      // entao nao fica restrito ao modal de disparo.
       staleTime: 60_000,
     });
     const companyCcList = useMemo(() => {
@@ -687,6 +579,26 @@ export default function CotacaoDetalhe() {
       onError: (err) => setTokenActionError(messageOf(err)),
     });
 
+    // Envia a resposta ao fornecedor direto pelo servidor (SMTP), com o
+    // conteudo do e-mail vindo do template "quote_reply" (editavel em
+    // Templates.tsx) e CC = CompanyProfile.dispatchCc. Substitui o antigo
+    // fluxo mailto: + clipboard, que exigia colar a tabela manualmente e
+    // so' conseguia enviar texto puro (limitacao do proprio protocolo
+    // mailto:, RFC 6068).
+    const replyMutation = useMutation({
+      mutationFn: (responseId: number) => replyToQuoteResponse(responseId),
+      onSuccess: (result, responseId) => {
+        setReplyFeedback({
+          responseId,
+          kind: 'ok',
+          msg: `E-mail enviado para ${result.to}${result.cc.length > 0 ? ` (CC: ${result.cc.join(', ')})` : ''}.`,
+        });
+      },
+      onError: (err, responseId) => {
+        setReplyFeedback({ responseId, kind: 'err', msg: messageOf(err) });
+      },
+    });
+
     const activeTokens: PortalTokenListItem[] = portalTokensQuery.data ?? [];
 
     function buildPortalUrl(token: string): string {
@@ -723,41 +635,6 @@ export default function CotacaoDetalhe() {
         setTokenActionError(
           err instanceof Error ? err.message : 'Falha ao copiar o link.',
         );
-      }
-    }
-
-    // Copia a tabela de itens formatada (HTML) pra area de transferencia e
-    // abre o cliente de e-mail padrao. O corpo do mailto e' sempre texto
-    // puro (limitacao do proprio protocolo mailto:, RFC 6068) -- por isso a
-    // tabela vai pro clipboard pra ser colada manualmente no e-mail aberto.
-    async function handleReply(response: QuoteResponseSummary) {
-      setReplyError(null);
-      setReplyingResponseId(response.id);
-      const { mailtoUrl, html, text } = buildReplyEmail(
-        qr,
-        items,
-        response,
-        responseContactsQuery.data ?? {},
-        companyCcList,
-      );
-      try {
-        if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'text/html': new Blob([html], { type: 'text/html' }),
-              'text/plain': new Blob([text], { type: 'text/plain' }),
-            }),
-          ]);
-        } else if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-        }
-      } catch (err) {
-        setReplyError(
-          err instanceof Error ? err.message : 'Não foi possível copiar a tabela para a área de transferência.',
-        );
-      } finally {
-        window.location.href = mailtoUrl;
-        window.setTimeout(() => setReplyingResponseId(null), 1500);
       }
     }
 
@@ -1158,8 +1035,16 @@ export default function CotacaoDetalhe() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Respostas</h2>
         </div>
-        {replyError && (
-          <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{replyError}</p>
+        {replyFeedback && (
+          <p
+            style={{
+              color: replyFeedback.kind === 'ok' ? 'var(--ok, #1a7f4e)' : 'var(--danger)',
+              fontSize: 13,
+              marginBottom: 12,
+            }}
+          >
+            {replyFeedback.msg}
+          </p>
         )}
         {responses.length === 0 ? (
           <div className="empty-state">
@@ -1196,11 +1081,14 @@ export default function CotacaoDetalhe() {
                     <button
                       type="button"
                       className="ghost-button"
-                      onClick={() => handleReply(r)}
-                      disabled={replyingResponseId === r.id}
-                      title="Copia a tabela de itens e abre o cliente de e-mail padrão com um rascunho de resposta para o fornecedor"
+                      onClick={() => {
+                        setReplyFeedback(null);
+                        replyMutation.mutate(r.id);
+                      }}
+                      disabled={replyMutation.isPending && replyMutation.variables === r.id}
+                      title="Envia um e-mail de resposta ao contato principal do fornecedor, com copia para os e-mails configurados na empresa"
                     >
-                      {replyingResponseId === r.id ? 'Copiando…' : 'Responder'}
+                      {replyMutation.isPending && replyMutation.variables === r.id ? 'Enviando…' : 'Responder'}
                     </button>
                   </td>
                 </tr>

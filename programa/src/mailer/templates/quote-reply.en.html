@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
+    <!--[if mso]>
+    <style type="text/css">
+      table, td, div, h1, h2, h3, p, a { font-family: Arial, sans-serif !important; }
+      .body-text { font-family: Arial, sans-serif; }
+      .h1 { font-size: 20px; line-height: 26px; font-weight: bold; }
+    </style>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+        <o:AllowPNG />
+      </o:OfficeDocumentSettings>
+    </xml>
+    <![endif]-->
+    <title>{{subject}}</title>
+  </head>
+  <body class="body-text" style="margin:0;padding:0;background-color:#F4F8F7;-webkit-text-size-adjust:100%;">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#F4F8F7;">
+      Reply for Quote #{{quoteRequestId}} ({{requestCode}}) — {{supplierName}}.
+    </div>
+
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F4F8F7" style="background-color:#F4F8F7;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+
+          <!--[if mso]>
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" bgcolor="#ffffff"><tr><td>
+          <![endif]-->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="640" style="width:640px;max-width:640px;background-color:#ffffff;border:1px solid #DCE9E5;" bgcolor="#ffffff">
+            <!--[if mso]>
+            </td></tr></table>
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600"><tr><td>
+            <![endif]-->
+
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#184054" style="background-color:#184054;">
+              <tr>
+                <td align="left" style="padding:24px 32px;color:#ffffff;font-family:Arial,sans-serif;">
+                  <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#5FE0BF;margin:0 0 8px 0;">
+                    SQ Quimica &#183; Quote Reply
+                  </div>
+                  <div class="h1" style="font-size:20px;line-height:26px;font-weight:bold;color:#ffffff;margin:0;">
+                    {{subject}}
+                  </div>
+                </td>
+              </tr>
+            </table>
+
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+              <tr>
+                <td style="padding:24px 32px 8px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#1F2933;">
+                  <p style="margin:0 0 12px 0;">Hello,</p>
+                  <p style="margin:0;">Please find below our reference for Quote #{{quoteRequestId}} ({{requestCode}} — {{productName}}):</p>
+                </td>
+              </tr>
+            </table>
+
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+              <tr>
+                <td style="padding:8px 32px 8px 32px;">
+                  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;">
+                    <thead>
+                      <tr bgcolor="#F8FBFA" style="background-color:#F8FBFA;">
+                        <th align="left" width="200" style="width:200px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">ITEM</th>
+                        <th align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">INCOTERM</th>
+                        <th align="right" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">QUANTITY</th>
+                        <th align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">UNIT PRICE</th>
+                        <th align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {{itemsRows}}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+              <tr>
+                <td style="padding:16px 32px 24px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#1F2933;">
+                  <p style="margin:0;">Best regards,</p>
+                </td>
+              </tr>
+            </table>
+
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+              <tr>
+                <td style="padding:0 32px 24px 32px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;color:#7A848C;border-top:1px solid #DCE9E5;padding-top:12px;">
+                  <p style="margin:0;">Quote reference: {{requestCode}}</p>
+                </td>
+              </tr>
+            </table>
+
+          </table>
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

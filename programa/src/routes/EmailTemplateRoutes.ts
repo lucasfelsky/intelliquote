@@ -6,6 +6,13 @@ import { AuditLogService } from '../services/AuditLogService';
 import { handleControllerError, HttpError } from '../utils/http';
 import { formatIncoterms } from '../utils/incoterm';
 import { renderSections, renderDispatchTemplate, type QuoteDispatchVars } from '../mailer/renderQuoteDispatch';
+import {
+  renderReplySections,
+  renderReplyPlainText,
+  loadFileTemplate as loadReplyFileTemplate,
+  REPLY_TEMPLATE_KEY,
+  type QuoteReplyVars,
+} from '../mailer/renderQuoteReply';
 import { prisma } from '../lib/prisma';
 import { CompanyProfileService } from '../services/CompanyProfileService';
 
@@ -26,6 +33,20 @@ const templateUpsertSchema = z.object({
   textBody: z.string().min(1, 'Informe a versao texto.'),
   isActive: z.boolean().optional().default(true),
 });
+
+function renderReplySampleVars(): QuoteReplyVars {
+  return {
+    subject: 'PHOTOINIATOR - SQ QUIMICA - Acme Chemicals',
+    quoteRequestId: 42,
+    requestCode: 'QR-20260618-DEMO01',
+    productName: 'PHOTOINIATOR',
+    supplierName: 'Acme Chemicals',
+    items: [
+      { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG' },
+      { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG' },
+    ],
+  };
+}
 
 function renderSampleVars(): QuoteDispatchVars {
   return {
@@ -82,6 +103,57 @@ emailTemplateRoutes.get(
     try {
       const key = templateKeySchema.parse(req.query.key);
       const locale = localeSchema.parse(req.query.locale ?? 'en');
+
+      if (key === REPLY_TEMPLATE_KEY) {
+        const [replyTemplate, latestQuoteRequestForReply] = await Promise.all([
+          EmailTemplateService.get(key, locale),
+          prisma.quoteRequest.findFirst({
+            orderBy: { createdAt: 'desc' },
+            include: { items: { include: { catalogItem: true }, orderBy: { createdAt: 'asc' } } },
+          }),
+        ]);
+
+        const replySample = renderReplySampleVars();
+        if (latestQuoteRequestForReply) {
+          replySample.quoteRequestId = latestQuoteRequestForReply.id;
+          replySample.requestCode = latestQuoteRequestForReply.requestCode;
+          replySample.productName = latestQuoteRequestForReply.productName ?? replySample.productName;
+          if (latestQuoteRequestForReply.items.length > 0) {
+            replySample.items = latestQuoteRequestForReply.items.map((it) => ({
+              name: it.catalogItem?.commercialName ?? it.productName,
+              incoterm: it.desiredIncoterm ?? formatIncoterms(latestQuoteRequestForReply.desiredIncoterm),
+              quantity: it.quantity,
+              unit: it.unit,
+            }));
+          }
+        }
+
+        if (!replyTemplate) {
+          // Sem customizacao salva ainda: pre-popula o editor com o
+          // template padrao (arquivo .html) em vez de deixar em branco,
+          // pra o admin ter um ponto de partida real pra editar.
+          return res.status(200).json({
+            subject: replySample.subject,
+            html: renderReplySections(loadReplyFileTemplate(), replySample),
+            text: renderReplyPlainText(replySample),
+            isActive: false,
+            source: 'fallback',
+            locale,
+          });
+        }
+
+        const replySubject = renderReplySections(replyTemplate.subject, replySample);
+        const replyVars = { ...replySample, subject: replySubject };
+        return res.status(200).json({
+          subject: replySubject,
+          html: renderReplySections(replyTemplate.htmlBody, replyVars),
+          text: renderReplySections(replyTemplate.textBody, replyVars),
+          isActive: replyTemplate.isActive,
+          source: 'database',
+          locale,
+        });
+      }
+
       const [template, profileRecord, latestQuoteRequest] = await Promise.all([
         EmailTemplateService.get(key, locale),
         CompanyProfileService.get(),

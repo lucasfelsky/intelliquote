@@ -15,15 +15,22 @@ const LOCALE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'es', label: 'es' },
 ];
 
-const VARIABLE_CHIPS = [
-  '{{subject}}', '{{requestCode}}', '{{productName}}', '{{quantity}}', '{{unit}}',
-  '{{desiredIncoterm}}', '{{currency}}', '{{deadlineAt}}', '{{expiresAt}}',
-  '{{portalLink}}', '{{companyName}}', '{{tradeName}}', '{{taxId}}',
-  '{{purchasingEmail}}', '{{supplierContactName}}', '{{itemsRows}}', '{{itemsText}}',
-];
+const VARIABLE_CHIPS: Record<string, string[]> = {
+  quote_dispatch: [
+    '{{subject}}', '{{requestCode}}', '{{productName}}', '{{quantity}}', '{{unit}}',
+    '{{desiredIncoterm}}', '{{currency}}', '{{deadlineAt}}', '{{expiresAt}}',
+    '{{portalLink}}', '{{companyName}}', '{{tradeName}}', '{{taxId}}',
+    '{{purchasingEmail}}', '{{supplierContactName}}', '{{itemsRows}}', '{{itemsText}}',
+  ],
+  quote_reply: [
+    '{{subject}}', '{{quoteRequestId}}', '{{requestCode}}', '{{productName}}',
+    '{{supplierName}}', '{{itemsRows}}', '{{itemsText}}',
+  ],
+};
 
 const TEMPLATE_LABELS: Record<string, string> = {
   quote_dispatch: 'Envio de cotacao para fornecedores',
+  quote_reply: 'Resposta ao fornecedor (botao Responder)',
 };
 
 function templateLabel(key: string): string {
@@ -46,7 +53,11 @@ export default function Templates() {
   });
 
   const availableKeys = useMemo(() => {
-    const set = new Set<string>();
+    // Une as keys ja salvas no banco com as keys conhecidas (TEMPLATE_LABELS),
+    // pra templates ainda nao customizados (ex.: quote_reply recem-criado)
+    // aparecerem no seletor mesmo sem linha no banco ainda — o primeiro
+    // "Salvar template" cria a linha via upsert.
+    const set = new Set<string>([...Object.keys(TEMPLATE_LABELS)]);
     (templatesQuery.data ?? []).forEach((t) => set.add(t.key));
     return Array.from(set).sort();
   }, [templatesQuery.data]);
@@ -74,6 +85,12 @@ export default function Templates() {
     return templatesQuery.data?.find((t) => t.key === selectedKey && t.locale === locale) ?? null;
   }, [templatesQuery.data, selectedKey, locale]);
 
+  const preview = useQuery({
+    queryKey: ['email-templates-preview', selectedKey, locale],
+    queryFn: () => previewEmailTemplate(selectedKey, locale),
+    enabled: Boolean(selectedKey),
+  });
+
   useEffect(() => {
     if (current) {
       setDraft({
@@ -82,16 +99,21 @@ export default function Templates() {
         textBody: current.textBody,
         isActive: current.isActive,
       });
-    } else {
+    } else if (preview.data && preview.data.source === 'fallback' && preview.data.html) {
+      // Sem customizacao salva ainda: pre-popula o editor com o template
+      // padrao (renderizado pelo /preview) em vez de deixar em branco, pra
+      // o admin ter um ponto de partida real em vez de comecar do zero.
+      setDraft({
+        subject: preview.data.subject,
+        htmlBody: preview.data.html,
+        textBody: preview.data.text,
+        isActive: true,
+      });
+    } else if (!current) {
       setDraft({ subject: '', htmlBody: '', textBody: '', isActive: true });
     }
-  }, [current]);
-
-  const preview = useQuery({
-    queryKey: ['email-templates-preview', selectedKey, locale],
-    queryFn: () => previewEmailTemplate(selectedKey, locale),
-    enabled: Boolean(selectedKey),
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, preview.data]);
 
   const save = useMutation({
     mutationFn: (payload: EmailTemplateDraft) => saveEmailTemplate(selectedKey, locale, payload),
@@ -234,7 +256,7 @@ export default function Templates() {
           <h2>Variaveis disponiveis</h2>
           <p className="muted">Clique em uma variavel para inseri-la no HTML.</p>
           <div className="chip-list">
-            {VARIABLE_CHIPS.map((chip) => (
+            {(VARIABLE_CHIPS[selectedKey] ?? []).map((chip) => (
               <button
                 type="button"
                 key={chip}

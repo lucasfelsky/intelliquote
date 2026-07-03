@@ -6,6 +6,10 @@ import {
   QuoteComparisonService,
   type QuoteComparisonWeights,
 } from '../services/QuoteComparisonService';
+import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
+import { sendAndLog } from '../mailer/MailerService';
+import { renderReplyFromTemplate } from '../mailer/renderQuoteReply';
+import { formatIncoterms } from '../utils/incoterm';
 import {
   quoteComparisonWeightsSchema,
   quoteResponseCreateSchema,
@@ -405,6 +409,110 @@ export class QuoteResponseController {
       });
 
       return res.status(204).send();
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Envia (de verdade, via SMTP) um e-mail de resposta ao fornecedor com a
+  // tabela de itens da cotacao. Substitui o antigo botao "Responder" que
+  // abria um mailto: local -- o corpo em HTML so' sai formatado enviando
+  // pelo servidor, ja que mailto: (RFC 6068) so' aceita texto puro.
+  static async reply(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({ message: 'ID da proposta invalido.' });
+      }
+
+      const quoteResponse = await prisma.quoteResponse.findFirst({
+        where: { id, deletedAt: null },
+        include: {
+          supplier: true,
+          quoteRequest: {
+            include: {
+              items: { include: { catalogItem: true }, orderBy: { createdAt: 'asc' } },
+            },
+          },
+        },
+      });
+
+      if (!quoteResponse) {
+        return res.status(404).json({ message: 'Proposta nao encontrada.' });
+      }
+
+      const primaryContact = await prisma.supplierContact.findFirst({
+        where: { supplierId: quoteResponse.supplierId },
+        orderBy: { isPrimary: 'desc' },
+      });
+
+      if (!primaryContact) {
+        return res.status(400).json({
+          message: 'Fornecedor nao possui contato cadastrado para receber a resposta.',
+        });
+      }
+
+      const profile = await CompanyProfileService.get();
+      const companyCc = readDispatchCc(profile).map((email) => ({ email, name: '' }));
+
+      const { quoteRequest, supplier } = quoteResponse;
+      const itemName = quoteRequest.productName || quoteRequest.requestCode;
+      const rendered = await renderReplyFromTemplate({
+        subject: `${itemName} - SQ QUIMICA - ${supplier.name}`,
+        quoteRequestId: quoteRequest.id,
+        requestCode: quoteRequest.requestCode,
+        productName: quoteRequest.productName ?? '',
+        supplierName: supplier.name,
+        items: quoteRequest.items.map((item) => ({
+          name: item.catalogItem?.commercialName ?? item.productName,
+          incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
+          quantity: item.quantity,
+          unit: item.unit,
+        })),
+      });
+
+      const sendResult = await sendAndLog({
+        to: { email: primaryContact.email, name: primaryContact.name },
+        cc: companyCc,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+        templateId: 'quote-reply',
+        templateVars: {
+          quoteRequestId: quoteRequest.id,
+          quoteResponseId: quoteResponse.id,
+          supplierId: supplier.id,
+          supplierContactId: primaryContact.id,
+        },
+        relatedEntityType: 'quote_response',
+        relatedEntityId: String(id),
+      });
+
+      await AuditLogService.log({
+        entityType: 'quote_response',
+        entityId: id,
+        action: 'reply',
+        performedById: req.user?.id ?? null,
+        metadata: {
+          to: primaryContact.email,
+          cc: companyCc.map((c) => c.email),
+          status: sendResult.status,
+        },
+      });
+
+      if (sendResult.status === 'failed') {
+        return res.status(502).json({
+          message: sendResult.error || 'Falha ao enviar o e-mail de resposta.',
+        });
+      }
+
+      return res.status(200).json({
+        status: sendResult.status,
+        to: primaryContact.email,
+        cc: companyCc.map((c) => c.email),
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

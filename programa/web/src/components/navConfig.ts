@@ -23,6 +23,7 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/usuarios',       label: 'Usuários',         icon: '◉', group: 'admin', roles: ['admin'] },
   { to: '/empresa',        label: 'Empresa',          icon: '⌂', group: 'admin', roles: ['admin', 'comprador', 'gestor'] },
   { to: '/auditoria',      label: 'Auditoria',        icon: '⌘', group: 'admin', roles: ['admin', 'gestor'] },
+  { to: '/templates',      label: 'Templates de e-mail', icon: '✉', group: 'admin', roles: ['admin', 'comprador', 'gestor', 'viewer'] },
 ];
 
 export function filterNavByRole(items: NavItem[], role: string | undefined | null): NavItem[] {
