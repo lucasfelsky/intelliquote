@@ -111,6 +111,7 @@ jobs:
           - 8025:8025
     env:
       DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/intelliquote_test?schema=public'
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/intelliquote_test?schema=public'
       # MailHog SMTP (sem TLS)
       SMTP_HOST: localhost
       SMTP_PORT: '1025'
