@@ -97,11 +97,6 @@ interface ItemForm {
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as const;
 const UNITS = ['KG', 'UN', 'M3', 'L', 'TON', 'BOX'] as const;
 
-// CC padrão da equipe interna no botão "Responder" (mailto). Sobrescrito via
-// VITE_INTERNAL_TEAM_EMAIL quando a equipe de cotações usar outro endereço.
-const INTERNAL_TEAM_EMAIL =
-  (import.meta.env.VITE_INTERNAL_TEAM_EMAIL as string | undefined) ?? 'cotacoes@portal-comex.com';
-
 function parseContactsBySupplier(
   data: { bySupplier?: Record<string, unknown[]> } | undefined,
 ): Record<number, Array<{ id: number; name: string; email: string; isPrimary: boolean }>> {
@@ -126,57 +121,86 @@ function formatEnNumber(value: number | undefined | null): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Monta o link mailto do botao "Responder" de uma resposta de fornecedor.
-// Observacao: QuoteResponse guarda um preco agregado por fornecedor (nao por
-// item), entao Unit Price/Total por linha ficam "-" -- essa granularidade so
-// existe em SupplierPortalResponseItem, que hoje nao esta ligado a este
-// fluxo. Os totais (Subtotal/Freight/Grand Total) usam dados reais da
-// resposta.
-function buildResponseMailto(
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Dados do botao "Responder" de uma resposta de fornecedor: endereco,
+// assunto e a tabela de itens (em HTML, pra colar formatada no e-mail, e em
+// texto puro como fallback). Observacao: QuoteResponse guarda um preco
+// agregado por fornecedor (nao por item), entao Unit Price/Total por linha
+// ficam "-" -- essa granularidade so existe em SupplierPortalResponseItem,
+// que hoje nao esta ligado a este fluxo.
+function buildReplyEmail(
   qr: QuoteRequest,
   items: QuoteRequestItem[],
   response: QuoteResponseSummary,
   contactsBySupplier: Record<number, Array<{ email: string; isPrimary: boolean }>>,
-): string {
+  ccList: string[],
+): { mailtoUrl: string; html: string; text: string } {
   const contacts = contactsBySupplier[response.supplierId] ?? [];
   const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
   const to = primaryContact?.email ?? '';
   const supplierName = response.supplier?.name ?? `Supplier #${response.supplierId}`;
-  const subject = `Reply — Quote #${qr.id} — ${supplierName}`;
+  const itemName = qr.productName || qr.requestCode;
+  const subject = `${itemName} - SQ QUIMICA - ${supplierName}`;
 
-  const itemRows = items.map((it) => {
-    const name = it.catalogItem?.commercialName ?? it.productName;
-    const incoterm = it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm);
-    const quantity = `${formatEnNumber(it.quantity)} ${it.unit}`;
-    return `${name}\t${incoterm}\t${quantity}\t—\t—`;
-  });
+  const rows = items.map((it) => ({
+    name: it.catalogItem?.commercialName ?? it.productName,
+    incoterm: it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm),
+    quantity: `${formatEnNumber(it.quantity)} ${it.unit}`,
+  }));
 
-  const freight = Number(response.freightCost ?? 0);
-  const subtotal = Number(response.offeredPrice ?? 0);
-  const grandTotal = Number(response.totalLandedCost ?? 0) || subtotal + freight;
+  const html = [
+    '<p>Hello,</p>',
+    `<p>Please find below our reference for Quote #${qr.id} (${escapeHtml(qr.requestCode)} — ${escapeHtml(qr.productName ?? '')}):</p>`,
+    '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:sans-serif;font-size:13px;">',
+    '<thead><tr>',
+    '<th>Item</th><th>Incoterm</th><th>Quantity</th><th>Unit Price</th><th>Total</th>',
+    '</tr></thead>',
+    '<tbody>',
+    ...rows.map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.incoterm)}</td><td>${escapeHtml(r.quantity)}</td><td>—</td><td>—</td></tr>`,
+    ),
+    '</tbody>',
+    '</table>',
+    '<p>Best regards,</p>',
+  ].join('\n');
 
-  const bodyLines = [
+  const text = [
     'Hello,',
     '',
     `Please find below our reference for Quote #${qr.id} (${qr.requestCode} — ${qr.productName ?? ''}):`,
     '',
     'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
-    ...itemRows,
-    '',
-    `Subtotal: ${response.currency} ${formatEnNumber(subtotal)}`,
-    ...(freight > 0 ? [`Freight: ${response.currency} ${formatEnNumber(freight)}`] : []),
-    `Grand Total: ${response.currency} ${formatEnNumber(grandTotal)}`,
+    ...rows.map((r) => `${r.name}\t${r.incoterm}\t${r.quantity}\t—\t—`),
     '',
     'Best regards,',
-  ];
-  const body = bodyLines.join('\r\n');
+  ].join('\r\n');
 
-  return (
-    `mailto:${encodeURIComponent(to)}` +
-    `?cc=${encodeURIComponent(INTERNAL_TEAM_EMAIL)}` +
-    `&subject=${encodeURIComponent(subject)}` +
-    `&body=${encodeURIComponent(body)}`
-  );
+  const bodyPlaceholder = [
+    'Hello,',
+    '',
+    `Please find below our reference for Quote #${qr.id} (${qr.requestCode} — ${qr.productName ?? ''}):`,
+    '',
+    '[Paste the item table here — already copied to your clipboard]',
+    '',
+    'Best regards,',
+  ].join('\r\n');
+
+  const params = [
+    ...(ccList.length > 0 ? [`cc=${encodeURIComponent(ccList.join(','))}`] : []),
+    `subject=${encodeURIComponent(subject)}`,
+    `body=${encodeURIComponent(bodyPlaceholder)}`,
+  ];
+  const mailtoUrl = `mailto:${encodeURIComponent(to)}?${params.join('&')}`;
+
+  return { mailtoUrl, html, text };
 }
 
 function formatDate(iso: string | null): string {
@@ -343,6 +367,8 @@ export default function CotacaoDetalhe() {
   const [showTokensModal, setShowTokensModal] = useState(false);
   const [tokenActionError, setTokenActionError] = useState<string | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
+  const [replyingResponseId, setReplyingResponseId] = useState<number | null>(null);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -570,7 +596,8 @@ export default function CotacaoDetalhe() {
     const companyProfileQuery = useQuery({
       queryKey: ['company-profile-cc-hint'],
       queryFn: () => api.get<{ dispatchCc?: string[] | null }>('/api/v1/company-profile'),
-      enabled: showDispatchModal,
+      // Tambem usado pelo botao "Responder" (mailto) na secao Respostas,
+      // entao nao fica restrito ao modal de disparo.
       staleTime: 60_000,
     });
     const companyCcList = useMemo(() => {
@@ -696,6 +723,41 @@ export default function CotacaoDetalhe() {
         setTokenActionError(
           err instanceof Error ? err.message : 'Falha ao copiar o link.',
         );
+      }
+    }
+
+    // Copia a tabela de itens formatada (HTML) pra area de transferencia e
+    // abre o cliente de e-mail padrao. O corpo do mailto e' sempre texto
+    // puro (limitacao do proprio protocolo mailto:, RFC 6068) -- por isso a
+    // tabela vai pro clipboard pra ser colada manualmente no e-mail aberto.
+    async function handleReply(response: QuoteResponseSummary) {
+      setReplyError(null);
+      setReplyingResponseId(response.id);
+      const { mailtoUrl, html, text } = buildReplyEmail(
+        qr,
+        items,
+        response,
+        responseContactsQuery.data ?? {},
+        companyCcList,
+      );
+      try {
+        if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([html], { type: 'text/html' }),
+              'text/plain': new Blob([text], { type: 'text/plain' }),
+            }),
+          ]);
+        } else if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        }
+      } catch (err) {
+        setReplyError(
+          err instanceof Error ? err.message : 'Não foi possível copiar a tabela para a área de transferência.',
+        );
+      } finally {
+        window.location.href = mailtoUrl;
+        window.setTimeout(() => setReplyingResponseId(null), 1500);
       }
     }
 
@@ -1096,6 +1158,9 @@ export default function CotacaoDetalhe() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Respostas</h2>
         </div>
+        {replyError && (
+          <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{replyError}</p>
+        )}
         {responses.length === 0 ? (
           <div className="empty-state">
             <strong>Sem respostas ainda</strong>
@@ -1128,13 +1193,15 @@ export default function CotacaoDetalhe() {
                     )}
                   </td>
                   <td>
-                    <a
+                    <button
+                      type="button"
                       className="ghost-button"
-                      href={buildResponseMailto(qr, items, r, responseContactsQuery.data ?? {})}
-                      title="Abre o cliente de e-mail padrão com um rascunho de resposta para o fornecedor"
+                      onClick={() => handleReply(r)}
+                      disabled={replyingResponseId === r.id}
+                      title="Copia a tabela de itens e abre o cliente de e-mail padrão com um rascunho de resposta para o fornecedor"
                     >
-                      Responder
-                    </a>
+                      {replyingResponseId === r.id ? 'Copiando…' : 'Responder'}
+                    </button>
                   </td>
                 </tr>
               ))}
