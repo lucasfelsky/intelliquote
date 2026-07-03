@@ -37,7 +37,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: 'programa/package-lock.json'
+          cache-dependency-path: |
+            programa/package-lock.json
+            programa/web/package-lock.json
 
       - name: Install
         working-directory: programa
@@ -54,6 +56,10 @@ jobs:
       - name: Build backend (tsc)
         working-directory: programa
         run: npm run build
+
+      - name: Install web deps
+        working-directory: programa/web
+        run: npm ci
 
       - name: Build web (Vite)
         working-directory: programa/web
