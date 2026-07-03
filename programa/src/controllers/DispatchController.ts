@@ -581,7 +581,7 @@ export class DispatchController {
         ? body.supplierContactIds.filter((x): x is number => typeof x === 'number')
         : [];
       const rawTtl = Number(body.expiresInDays);
-      const ttlDays = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 90) : 14;
+      const ttlDays = Number.isFinite(rawTtl) && rawTtl > 0 ? Math.min(rawTtl, 60) : 14;
 
       if (supplierContactIds.length === 0) {
         return res

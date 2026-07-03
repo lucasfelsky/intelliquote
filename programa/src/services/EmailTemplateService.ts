@@ -46,11 +46,11 @@ export class EmailTemplateService {
   }
 
   static async get(key: string, locale = DEFAULT_TEMPLATE_LOCALE): Promise<EmailTemplateRecord | null> {
-    const record = await prisma.emailTemplate.findUnique({
-      where: { key_locale: { key, locale } },
-    });
-    return record ? serialize(record) : null;
-  }
+      const record = await prisma.emailTemplate.findUnique({
+        where: { key_locale: { key, locale } },
+      });
+      return record ? serialize(record) : null;
+    }
 
   static async upsert(
     key: string,
@@ -58,7 +58,7 @@ export class EmailTemplateService {
     input: EmailTemplateInput,
     updatedById: number | null,
   ): Promise<EmailTemplateRecord> {
-    const record = await prisma.emailTemplate.upsert({
+      const record = await prisma.emailTemplate.upsert({
       where: { key_locale: { key, locale } },
       create: {
         key,

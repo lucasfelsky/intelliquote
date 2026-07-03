@@ -85,27 +85,28 @@ function renderItemsRows(items: QuoteDispatchItem[]): string {
   if (items.length === 0) {
     return `
       <tr>
-        <td colspan="5" style="padding:12px;text-align:center;color:#4A5560;font-style:italic;">No items listed.</td>
+        <td colspan="5" align="center" style="padding:12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#4A5560;font-style:italic;">No items listed.</td>
       </tr>`;
   }
   return items
     .map(
       (item, idx) => {
+        const bg = idx % 2 === 0 ? '#F8FBFA' : '#ffffff';
         const incotermCell = item.desiredIncoterm
-          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">${escapeHtml(item.desiredIncoterm)}</td>`
-          : `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;"><span style="color:#9aa4ad;font-style:italic;">—</span></td>`;
+          ? `<td align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.desiredIncoterm)}</td>`
+          : `<td align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">&#8212;</td>`;
         const originCell = item.originPort
-          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">${escapeHtml(item.originPort)}</td>`
-          : `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;"><span style="color:#9aa4ad;font-style:italic;">—</span></td>`;
+          ? `<td align="left" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.originPort)}</td>`
+          : `<td align="left" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">&#8212;</td>`;
         const destinationCell = item.destinationPort
-          ? `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;">${escapeHtml(item.destinationPort)}</td>`
-          : `<td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;font-size:13px;color:#1F2933;white-space:nowrap;"><span style="color:#9aa4ad;font-style:italic;">—</span></td>`;
+          ? `<td align="left" width="120" style="width:120px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.destinationPort)}</td>`
+          : `<td align="left" width="120" style="width:120px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">&#8212;</td>`;
         return `
-      <tr style="background:${idx % 2 === 0 ? '#F8FBFA' : '#ffffff'};">
-        <td style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">
-          <div style="font-weight:600;color:#1F2933;">${escapeHtml(item.marketName)}</div>
+      <tr bgcolor="${bg}" style="background-color:${bg};">
+        <td align="left" width="182" style="width:182px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">
+          <div style="font-weight:bold;color:#1F2933;">${escapeHtml(item.marketName)}</div>
         </td>
-        <td align="right" style="padding:10px 12px;border-bottom:1px solid #ECF1EF;">${item.quantity} ${escapeHtml(item.unit)}</td>
+        <td align="right" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${item.quantity} ${escapeHtml(item.unit)}</td>
         ${incotermCell}
         ${originCell}
         ${destinationCell}
@@ -189,8 +190,8 @@ export async function renderDispatchFromTemplate(
   const varsForRender = { ...vars, subject };
 
   if (dbTemplate) {
-    const html = renderSections(dbTemplate.htmlBody, varsForRender);
-    const text = renderSections(dbTemplate.textBody, varsForRender)
+      const html = renderSections(dbTemplate.htmlBody, varsForRender);
+      const text = renderSections(dbTemplate.textBody, varsForRender)
       .replace(/\{\{itemsText\}\}/g, () =>
         vars.items
           .map((i) => {

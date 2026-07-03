@@ -33,13 +33,6 @@ interface TopSupplier {
   averageScore: number;
 }
 
-interface HelpArticle {
-  id: number | string;
-  title: string;
-  category: string;
-  readMinutes?: number;
-}
-
 function formatNumber(value: number | undefined): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
   return new Intl.NumberFormat('pt-BR').format(value);
@@ -75,11 +68,6 @@ export default function Home() {
   const awardRate = useQuery({
     queryKey: ['reports', 'award-rate'],
     queryFn: () => api.get<{ rate: number; comparisons: number; winners: number }>('/api/v1/reports/award-rate'),
-  });
-
-  const help = useQuery({
-    queryKey: ['help', 'list'],
-    queryFn: () => api.get<HelpArticle[]>('/api/v1/help/articles'),
   });
 
   const totals = summary.data?.totals;
@@ -168,29 +156,6 @@ export default function Home() {
           !topSuppliers.isLoading && !topSuppliers.isError && (
             <p className="empty-state">Nenhuma resposta de fornecedor registrada ainda.</p>
           )
-        )}
-      </section>
-
-      <section className="card">
-        <h2>Artigos de ajuda</h2>
-        {help.isLoading && <p>Carregando…</p>}
-        {help.isError && <p className="empty-state">Sem artigos no momento.</p>}
-        {help.data && help.data.length > 0 && (
-          <ul className="help-list">
-            {help.data.slice(0, 5).map((a) => (
-              <li key={a.id}>
-                <strong>{a.title}</strong>
-                <span className="badge badge--muted" style={{ marginLeft: 8 }}>
-                  {a.category}
-                </span>
-                {typeof a.readMinutes === 'number' && (
-                  <small style={{ marginLeft: 8, color: 'var(--ink-soft)' }}>
-                    {a.readMinutes} min de leitura
-                  </small>
-                )}
-              </li>
-            ))}
-          </ul>
         )}
       </section>
     </div>

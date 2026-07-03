@@ -69,6 +69,8 @@ interface QuoteResponseSummary {
   offeredPrice: number;
   currency: string;
   offeredIncoterm: string;
+  freightCost?: number;
+  totalLandedCost?: number;
   isWinner?: boolean;
 }
 
@@ -94,6 +96,88 @@ interface ItemForm {
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as const;
 const UNITS = ['KG', 'UN', 'M3', 'L', 'TON', 'BOX'] as const;
+
+// CC padrão da equipe interna no botão "Responder" (mailto). Sobrescrito via
+// VITE_INTERNAL_TEAM_EMAIL quando a equipe de cotações usar outro endereço.
+const INTERNAL_TEAM_EMAIL =
+  (import.meta.env.VITE_INTERNAL_TEAM_EMAIL as string | undefined) ?? 'cotacoes@portal-comex.com';
+
+function parseContactsBySupplier(
+  data: { bySupplier?: Record<string, unknown[]> } | undefined,
+): Record<number, Array<{ id: number; name: string; email: string; isPrimary: boolean }>> {
+  const map: Record<number, Array<{ id: number; name: string; email: string; isPrimary: boolean }>> = {};
+  const bySupplier = data?.bySupplier ?? {};
+  for (const [key, list] of Object.entries(bySupplier)) {
+    map[Number(key)] = (Array.isArray(list) ? list : []).map((c) => {
+      const obj = c as Record<string, unknown>;
+      return {
+        id: Number(obj.id),
+        name: String(obj.name ?? ''),
+        email: String(obj.email ?? ''),
+        isPrimary: Boolean(obj.isPrimary),
+      };
+    });
+  }
+  return map;
+}
+
+function formatEnNumber(value: number | undefined | null): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '0.00';
+  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Monta o link mailto do botao "Responder" de uma resposta de fornecedor.
+// Observacao: QuoteResponse guarda um preco agregado por fornecedor (nao por
+// item), entao Unit Price/Total por linha ficam "-" -- essa granularidade so
+// existe em SupplierPortalResponseItem, que hoje nao esta ligado a este
+// fluxo. Os totais (Subtotal/Freight/Grand Total) usam dados reais da
+// resposta.
+function buildResponseMailto(
+  qr: QuoteRequest,
+  items: QuoteRequestItem[],
+  response: QuoteResponseSummary,
+  contactsBySupplier: Record<number, Array<{ email: string; isPrimary: boolean }>>,
+): string {
+  const contacts = contactsBySupplier[response.supplierId] ?? [];
+  const primaryContact = contacts.find((c) => c.isPrimary) ?? contacts[0];
+  const to = primaryContact?.email ?? '';
+  const supplierName = response.supplier?.name ?? `Supplier #${response.supplierId}`;
+  const subject = `Reply — Quote #${qr.id} — ${supplierName}`;
+
+  const itemRows = items.map((it) => {
+    const name = it.catalogItem?.commercialName ?? it.productName;
+    const incoterm = it.desiredIncoterm ?? qr.desiredIncoterm;
+    const quantity = `${formatEnNumber(it.quantity)} ${it.unit}`;
+    return `${name}\t${incoterm}\t${quantity}\t—\t—`;
+  });
+
+  const freight = Number(response.freightCost ?? 0);
+  const subtotal = Number(response.offeredPrice ?? 0);
+  const grandTotal = Number(response.totalLandedCost ?? 0) || subtotal + freight;
+
+  const bodyLines = [
+    'Hello,',
+    '',
+    `Please find below our reference for Quote #${qr.id} (${qr.requestCode} — ${qr.productName ?? ''}):`,
+    '',
+    'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
+    ...itemRows,
+    '',
+    `Subtotal: ${response.currency} ${formatEnNumber(subtotal)}`,
+    ...(freight > 0 ? [`Freight: ${response.currency} ${formatEnNumber(freight)}`] : []),
+    `Grand Total: ${response.currency} ${formatEnNumber(grandTotal)}`,
+    '',
+    'Best regards,',
+  ];
+  const body = bodyLines.join('\r\n');
+
+  return (
+    `mailto:${encodeURIComponent(to)}` +
+    `?cc=${encodeURIComponent(INTERNAL_TEAM_EMAIL)}` +
+    `&subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`
+  );
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -196,7 +280,7 @@ function normalizeItem(it: unknown): QuoteRequestItem {
 const emptyItemForm: ItemForm = {
   catalogItemId: null,
   quantity: '',
-  unit: 'UN',
+  unit: 'KG',
   notes: '',
   desiredIncoterm: '',
   destinationPort: '',
@@ -445,22 +529,28 @@ export default function CotacaoDetalhe() {
           '/v1/supplier-contacts',
           { supplierIds: ids.join(',') },
         );
-        const map: Record<number, Array<{ id: number; name: string; email: string; isPrimary: boolean }>> = {};
-        const bySupplier = data?.bySupplier ?? {};
-        for (const [key, list] of Object.entries(bySupplier)) {
-          map[Number(key)] = (Array.isArray(list) ? list : []).map((c) => {
-            const obj = c as Record<string, unknown>;
-            return {
-              id: Number(obj.id),
-              name: String(obj.name ?? ''),
-              email: String(obj.email ?? ''),
-              isPrimary: Boolean(obj.isPrimary),
-            };
-          });
-        }
-        return map;
+        return parseContactsBySupplier(data);
       },
       enabled: showDispatchModal && Boolean(activeSuppliers.data),
+    });
+
+    // Contatos dos fornecedores que ja responderam, usados pelo botao
+    // "Responder" (mailto) na secao Respostas.
+    const responseSupplierIds = useMemo(
+      () => Array.from(new Set((detail.data?.quoteResponses ?? []).map((r) => r.supplierId))),
+      [detail.data],
+    );
+
+    const responseContactsQuery = useQuery({
+      queryKey: ['supplier-contacts-responses', responseSupplierIds.join(',')],
+      queryFn: async () => {
+        const data = await api.get<{ bySupplier?: Record<string, unknown[]> }>(
+          '/v1/supplier-contacts',
+          { supplierIds: responseSupplierIds.join(',') },
+        );
+        return parseContactsBySupplier(data);
+      },
+      enabled: responseSupplierIds.length > 0,
     });
 
     // CC automatico configurado pela empresa (CompanyProfile.dispatchCc).
@@ -989,6 +1079,7 @@ export default function CotacaoDetalhe() {
                 <th>Moeda</th>
                 <th>Incoterm</th>
                 <th>Status</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -1004,6 +1095,15 @@ export default function CotacaoDetalhe() {
                     ) : (
                       <span className="badge badge--muted">Recebida</span>
                     )}
+                  </td>
+                  <td>
+                    <a
+                      className="ghost-button"
+                      href={buildResponseMailto(qr, items, r, responseContactsQuery.data ?? {})}
+                      title="Abre o cliente de e-mail padrão com um rascunho de resposta para o fornecedor"
+                    >
+                      Responder
+                    </a>
                   </td>
                 </tr>
               ))}
@@ -1192,10 +1292,11 @@ export default function CotacaoDetalhe() {
                 <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
                 {dispatchPreview?.preview ? (
                   <iframe
-                    title="preview-email"
-                    className="preview-frame"
-                    srcDoc={dispatchPreview.preview.html}
-                  />
+                                    key={dispatchPreview.preview.html.length}
+                                    title="preview-email"
+                                    className="preview-frame"
+                                    srcDoc={dispatchPreview.preview.html}
+                                  />
                 ) : (
                   <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
                     Nenhum preview disponivel (nenhum destinatario selecionado).

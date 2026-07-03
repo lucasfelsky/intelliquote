@@ -40,7 +40,7 @@ const UNITS = ['KG', 'UN', 'M3', 'L', 'TON', 'BOX'] as const;
 const emptyItemForm: ItemFormState = {
   catalogItemId: null,
   quantity: '',
-  unit: 'UN',
+  unit: 'KG',
   notes: '',
 };
 
