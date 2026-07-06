@@ -562,14 +562,11 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
    controles praticamente colados. Usado em 9 paginas (Cotacoes,
    Fornecedores, Relatorios, etc.), varias delas ja passavam gap/
    alignItems via style inline que nao tinha efeito nenhum sem
-   display:flex no pai. */
-.page-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
+   display:flex no pai.
+   Nota: .page-header em si fica como estava (stack vertical simples,
+   sem virar row) -- title bloco acima, acoes abaixo, cada um full-width.
+   Colocar os dois lado a lado (justify-content:space-between) quebrava
+   feio quando os controles nao cabiam numa linha so. */
 .page-header__actions {
   display: flex;
   flex-wrap: wrap;
