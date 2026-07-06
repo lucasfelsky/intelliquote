@@ -219,7 +219,7 @@ export default function Cotacoes() {
                   <td>
                     <div className="chip-row">
                       {qr.desiredIncoterm.map((t) => (
-                        <span key={t} className="chip" style={{ cursor: 'default' }}>{t}</span>
+                        <span key={t} className="chip chip--static">{t}</span>
                       ))}
                     </div>
                   </td>

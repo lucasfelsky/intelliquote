@@ -177,7 +177,7 @@ export default function Relatorios() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Resumo</h2>
           {(summaryData?.range?.from || summaryData?.range?.to) && (
-            <span className="chip">
+            <span className="chip chip--static">
               {formatDate(summaryData?.range?.from)} – {formatDate(summaryData?.range?.to)}
             </span>
           )}
@@ -225,7 +225,7 @@ export default function Relatorios() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Economia estimada</h2>
           {savingsData && (
-            <span className="chip">{formatInt(savingsData.comparisons)} comparações</span>
+            <span className="chip chip--static">{formatInt(savingsData.comparisons)} comparações</span>
           )}
         </div>
         {savings.isLoading && <p>Carregando economia…</p>}
@@ -291,7 +291,7 @@ export default function Relatorios() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Lead-time médio</h2>
           {leadTimeData && (
-            <span className="chip">{formatInt(leadTimeData.responses)} propostas</span>
+            <span className="chip chip--static">{formatInt(leadTimeData.responses)} propostas</span>
           )}
         </div>
         {leadTime.isLoading && <p>Carregando lead-time…</p>}
@@ -344,7 +344,7 @@ export default function Relatorios() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Top fornecedores</h2>
           {topSuppliersData && (
-            <span className="chip">{formatInt(topSuppliersData.items.length)} ranqueados</span>
+            <span className="chip chip--static">{formatInt(topSuppliersData.items.length)} ranqueados</span>
           )}
         </div>
         {topSuppliers.isLoading && <p>Carregando top fornecedores…</p>}
@@ -397,7 +397,7 @@ export default function Relatorios() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Taxa de adjudicação</h2>
           {awardRateData && (
-            <span className="chip">
+            <span className="chip chip--static">
               {formatInt(awardRateData.winners)} / {formatInt(awardRateData.comparisons)}
             </span>
           )}

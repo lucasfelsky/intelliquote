@@ -177,7 +177,7 @@ export default function Auditoria() {
       <section className="card">
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Eventos</h2>
-          {list.length > 0 && <span className="chip">{list.length} resultados</span>}
+          {list.length > 0 && <span className="chip chip--static">{list.length} resultados</span>}
         </div>
         {logs.isLoading && <p>Carregando eventos…</p>}
         {logs.isError && (

@@ -472,10 +472,10 @@ export default function Comparacoes() {
                   </p>
                 </div>
                 <div className="page-header__actions">
-                  <span className="chip">Preço {formatNumber(rec.priceWeight, 2)}</span>
-                  <span className="chip">Pagto {formatNumber(rec.paymentTermsWeight, 2)}</span>
-                  <span className="chip">Inc {formatNumber(rec.incotermWeight, 2)}</span>
-                  <span className="chip">{rec.results.length} propostas</span>
+                  <span className="chip chip--static">Preço {formatNumber(rec.priceWeight, 2)}</span>
+                  <span className="chip chip--static">Pagto {formatNumber(rec.paymentTermsWeight, 2)}</span>
+                  <span className="chip chip--static">Inc {formatNumber(rec.incotermWeight, 2)}</span>
+                  <span className="chip chip--static">{rec.results.length} propostas</span>
                   {winner
                     ? <span className="badge">{`Vencedora: ${winner.supplier?.name ?? `Fornecedor #${winner.supplierId}`}`}</span>
                     : <span className="badge badge--muted">Sem vencedora</span>}

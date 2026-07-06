@@ -143,7 +143,7 @@ export default function Ajuda() {
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Perguntas frequentes</h2>
           {totalAnswers > 0 && (
-            <span className="chip">{totalAnswers} respostas</span>
+            <span className="chip chip--static">{totalAnswers} respostas</span>
           )}
         </div>
         {filteredFaq.length === 0 ? (

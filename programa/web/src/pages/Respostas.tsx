@@ -519,7 +519,7 @@ export default function Respostas() {
                           </button>
                         )}
                         {!canEditThis && (
-                          <span className="chip" title="Cotação fechada ou sem permissão">
+                          <span className="chip chip--static" title="Cotação fechada ou sem permissão">
                             Leitura
                           </span>
                         )}

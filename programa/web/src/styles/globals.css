@@ -854,6 +854,14 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   background: var(--primary-50);
 }
 
+.chip--static {
+  cursor: default;
+}
+
+.chip--static:hover {
+  background: var(--surface-alt);
+}
+
 .textarea {
   width: 100%;
   border: 1px solid var(--border);

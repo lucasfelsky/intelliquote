@@ -959,7 +959,7 @@ export default function CotacaoDetalhe() {
             <p className="eyebrow">Incoterms aceitáveis</p>
             <div className="chip-row">
               {qr.desiredIncoterm.map((t) => (
-                <span key={t} className="chip" style={{ cursor: 'default' }}>{t}</span>
+                <span key={t} className="chip chip--static">{t}</span>
               ))}
             </div>
           </div>
