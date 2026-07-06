@@ -105,10 +105,11 @@ export function renderReplySections(template: string, vars: QuoteReplyVars): str
 }
 
 export function renderReplyPlainText(vars: QuoteReplyVars): string {
+  const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
   return [
     'Hello,',
     '',
-    `Please find below our reference for Quote #${vars.quoteRequestId} (${vars.requestCode} — ${vars.productName}):`,
+    `Please find below our reference for Quote #${vars.quoteRequestId} (${vars.requestCode}${productSuffix}):`,
     '',
     'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
     ...vars.items.map((item) => renderItemsTextRow(item, vars.currency)),

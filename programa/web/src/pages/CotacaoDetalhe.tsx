@@ -956,14 +956,6 @@ export default function CotacaoDetalhe() {
             <p><strong>{qr.requestCode}</strong></p>
           </div>
           <div>
-            <p className="eyebrow">Produto</p>
-            <p>{qr.productName}</p>
-          </div>
-          <div>
-            <p className="eyebrow">Quantidade</p>
-            <p>{formatNumber(qr.quantity)}</p>
-          </div>
-          <div>
             <p className="eyebrow">Incoterms aceitáveis</p>
             <div className="chip-row">
               {qr.desiredIncoterm.map((t) => (

@@ -274,4 +274,55 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(res.status).toBe(404);
     expect(sendAndLogMock).not.toHaveBeenCalled();
   });
+
+  it('nao deixa "requestCode — " sobrando quando productName esta vazio', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({
+      ...baseQuoteResponse,
+      quoteRequest: { ...baseQuoteResponse.quoteRequest, productName: '' },
+    });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply/preview')
+      .set('Cookie', cookieHeader)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.html).not.toContain('QR-2026-005 — )');
+    expect(res.body.html).not.toContain('QR-2026-005 —)');
+    expect(res.body.text).not.toContain('QR-2026-005 — )');
+  });
+
+  it('adiciona em CC quem for @mencionado na mensagem', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-3' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({ message: '@comex2@sqquimica.com Please issue the PO' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cc).toEqual(
+      expect.arrayContaining(['cc1@sqquimica.com', 'cc2@sqquimica.com', 'comex2@sqquimica.com']),
+    );
+    const call = sendAndLogMock.mock.calls[0][0];
+    const ccEmails = call.cc.map((c) => c.email);
+    expect(ccEmails).toEqual(expect.arrayContaining(['comex2@sqquimica.com']));
+    // texto da mensagem continua exatamente como digitado
+    expect(call.html).toContain('@comex2@sqquimica.com Please issue the PO');
+  });
 });

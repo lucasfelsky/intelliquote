@@ -457,6 +457,33 @@ export class QuoteResponseController {
     return { quoteResponse, primaryContact, companyCc };
   }
 
+  // "@fulano@sqquimica.com" na mensagem da modal de "Responder" adiciona
+  // esse endereco em CC -- e-mail nao tem mention de verdade (nao ha o que
+  // "clicar" pra notificar alguem), entao CC e o jeito que realmente
+  // avisa a pessoa. O texto da mensagem continua exatamente como digitado.
+  private static readonly MENTION_EMAIL_REGEX = /@([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+
+  private static mergeMentionedCc(
+    companyCc: Array<{ email: string; name: string }>,
+    message: string | undefined,
+  ): Array<{ email: string; name: string }> {
+    if (!message) return companyCc;
+    const mentioned = new Set<string>();
+    for (const match of message.matchAll(QuoteResponseController.MENTION_EMAIL_REGEX)) {
+      mentioned.add(match[1].toLowerCase());
+    }
+    if (mentioned.size === 0) return companyCc;
+    const seen = new Set(companyCc.map((c) => c.email.toLowerCase()));
+    const merged = [...companyCc];
+    for (const email of mentioned) {
+      if (!seen.has(email)) {
+        merged.push({ email, name: '' });
+        seen.add(email);
+      }
+    }
+    return merged;
+  }
+
   private static findReplyQuoteResponse(id: number) {
     return prisma.quoteResponse.findFirst({
       where: { id, deletedAt: null },
@@ -529,7 +556,8 @@ export class QuoteResponseController {
 
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
-      const { quoteResponse, primaryContact, companyCc } = context;
+      const { quoteResponse, primaryContact } = context;
+      const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
       const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
 
@@ -569,7 +597,8 @@ export class QuoteResponseController {
 
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
-      const { quoteResponse, primaryContact, companyCc } = context;
+      const { quoteResponse, primaryContact } = context;
+      const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
       const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
 
