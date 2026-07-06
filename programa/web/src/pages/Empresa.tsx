@@ -603,7 +603,7 @@ export default function Empresa() {
                     cursor: 'pointer',
                   }}
                 >
-                  {inactiveUsers.length} perfil{inactiveUsers.length === 1 ? '' : 'is'} inativo
+                  {inactiveUsers.length} perfil{inactiveUsers.length === 1 ? '' : 's'} inativo
                   {inactiveUsers.length === 1 ? '' : 's'} (desmarcado{selectedUserIds.size === 0 ? '' : 's'} automaticamente)
                 </summary>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0 0' }}>
@@ -735,7 +735,7 @@ export default function Empresa() {
           >
             {autoIncludeProfiles
               ? `Modo automático ligado: ${allActiveUserIds.size - excludedProfileIds.size} perfil${
-                  allActiveUserIds.size - excludedProfileIds.size === 1 ? '' : 'is'
+                  allActiveUserIds.size - excludedProfileIds.size === 1 ? '' : 's'
                 } em cópia${
                   excludedProfileIds.size > 0
                     ? ` (${excludedProfileIds.size} excluído${excludedProfileIds.size === 1 ? '' : 's'})`
@@ -746,7 +746,7 @@ export default function Empresa() {
               : `Total: ${normalizeCcList(draft.dispatchCc ?? []).length} endereço${
                   normalizeCcList(draft.dispatchCc ?? []).length === 1 ? '' : 's'
                 } em cópia automática (${selectedUserIds.size} perfil${
-                  selectedUserIds.size === 1 ? '' : 'is'
+                  selectedUserIds.size === 1 ? '' : 's'
                 } + ${externalEmails.length} externo${
                   externalEmails.length === 1 ? '' : 's'
                 }).`}

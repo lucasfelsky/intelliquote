@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  dateRangeQuery,
   getReportAwardRate,
   getReportLeadTime,
   getReportSavings,
@@ -72,7 +71,6 @@ export default function Relatorios() {
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const range: ReportRange = useMemo(() => ({ from, to }), [from, to]);
-  const query = dateRangeQuery(range);
   const queryKey = ['reports', range.from ?? '', range.to ?? ''];
 
   const summary = useQuery({
@@ -427,11 +425,6 @@ export default function Relatorios() {
           </div>
         )}
       </section>
-
-      {/* Pequeno selo de debug pra facilitar troubleshooting dos params */}
-      <p style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
-        Período aplicado: from={query.from ?? '—'} to={query.to ?? '—'}
-      </p>
     </div>
   );
 }

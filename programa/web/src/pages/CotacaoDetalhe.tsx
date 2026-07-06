@@ -1223,7 +1223,7 @@ export default function CotacaoDetalhe() {
             className="modal modal--wide"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>Enviar cotacao para fornecedores</h2>
+            <h2>Enviar cotação para fornecedores</h2>
             <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
               {qr.requestCode} · {qr.productName}
             </p>

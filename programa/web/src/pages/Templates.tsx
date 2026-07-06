@@ -29,8 +29,8 @@ const VARIABLE_CHIPS: Record<string, string[]> = {
 };
 
 const TEMPLATE_LABELS: Record<string, string> = {
-  quote_dispatch: 'Envio de cotacao para fornecedores',
-  quote_reply: 'Resposta ao fornecedor (botao Responder)',
+  quote_dispatch: 'Envio de cotação para fornecedores',
+  quote_reply: 'Resposta ao fornecedor (botão Responder)',
 };
 
 function templateLabel(key: string): string {
@@ -100,9 +100,9 @@ export default function Templates() {
         isActive: current.isActive,
       });
     } else if (preview.data && preview.data.source === 'fallback' && preview.data.html) {
-      // Sem customizacao salva ainda: pre-popula o editor com o template
-      // padrao (renderizado pelo /preview) em vez de deixar em branco, pra
-      // o admin ter um ponto de partida real em vez de comecar do zero.
+      // Sem customização salva ainda: pré-popula o editor com o template
+      // padrão (renderizado pelo /preview) em vez de deixar em branco, pra
+      // o admin ter um ponto de partida real em vez de começar do zero.
       setDraft({
         subject: preview.data.subject,
         htmlBody: preview.data.html,
@@ -128,7 +128,7 @@ export default function Templates() {
   const reset = useMutation({
     mutationFn: () => resetEmailTemplate(selectedKey, locale),
     onSuccess: () => {
-      setFeedback({ kind: 'ok', msg: 'Template restaurado para o padrao.' });
+      setFeedback({ kind: 'ok', msg: 'Template restaurado para o padrão.' });
       qc.invalidateQueries({ queryKey: ['email-templates-all'] });
       qc.invalidateQueries({ queryKey: ['email-templates-preview', selectedKey, locale] });
     },
@@ -149,8 +149,8 @@ export default function Templates() {
         <div>
           <h1>Templates de e-mail</h1>
           <p className="page__subtitle">
-            Selecione abaixo qual template voce deseja editar. Cada template pode ter
-            versoes em varios idiomas.
+            Selecione abaixo qual template você deseja editar. Cada template pode ter
+            versões em vários idiomas.
           </p>
         </div>
       </header>
@@ -194,7 +194,7 @@ export default function Templates() {
               onClick={() => reset.mutate()}
               disabled={!isAdmin || reset.isPending || !current}
             >
-              {reset.isPending ? 'Restaurando…' : 'Restaurar padrao'}
+              {reset.isPending ? 'Restaurando…' : 'Restaurar padrão'}
             </button>
             <button
               type="button"
@@ -210,7 +210,7 @@ export default function Templates() {
 
       {!isAdmin && (
         <p className="banner banner--warning">
-          Somente administradores podem salvar alteracoes. Voce pode visualizar livremente.
+          Somente administradores podem salvar alterações. Você pode visualizar livremente.
         </p>
       )}
 
@@ -225,7 +225,7 @@ export default function Templates() {
 
       {selectedKey && (
         <section className="card">
-          <h2>Informacoes do template</h2>
+          <h2>Informações do template</h2>
           <p className="muted">
             Editando <strong>{templateLabel(selectedKey)}</strong> ({selectedKey}) ·
             idioma <strong>{locale}</strong>
@@ -237,7 +237,7 @@ export default function Templates() {
             </div>
             <div>
               <dt>Origem</dt>
-              <dd>{preview.data?.source === 'database' ? 'Banco de dados' : 'Arquivo padrao'}</dd>
+              <dd>{preview.data?.source === 'database' ? 'Banco de dados' : 'Arquivo padrão'}</dd>
             </div>
             <div>
               <dt>Atualizado em</dt>
@@ -253,8 +253,8 @@ export default function Templates() {
 
       {selectedKey && (
         <section className="card">
-          <h2>Variaveis disponiveis</h2>
-          <p className="muted">Clique em uma variavel para inseri-la no HTML.</p>
+          <h2>Variáveis disponíveis</h2>
+          <p className="muted">Clique em uma variável para inseri-la no HTML.</p>
           <div className="chip-list">
             {(VARIABLE_CHIPS[selectedKey] ?? []).map((chip) => (
               <button
@@ -272,7 +272,7 @@ export default function Templates() {
 
       {draft && selectedKey && (
         <section className="card">
-          <h2>Conteudo</h2>
+          <h2>Conteúdo</h2>
           <label className="field">
             <span>Assunto</span>
             <input
@@ -293,7 +293,7 @@ export default function Templates() {
             />
           </label>
           <label className="field">
-            <span>Versao texto (fallback)</span>
+            <span>Versão texto (fallback)</span>
             <textarea
               className="textarea"
               rows={8}
@@ -326,7 +326,7 @@ export default function Templates() {
               <div className="preview-frame">
                 <iframe
                   title="preview-email"
-                  srcDoc={preview.data.html || '<p>Sem conteudo no template.</p>'}
+                  srcDoc={preview.data.html || '<p>Sem conteúdo no template.</p>'}
                 />
               </div>
             </>

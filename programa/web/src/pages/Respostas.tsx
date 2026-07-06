@@ -493,7 +493,7 @@ export default function Respostas() {
                         : <span className="badge badge--muted">—</span>}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div className="row-actions">
                         {canEditThis && (
                           <button
                             type="button"

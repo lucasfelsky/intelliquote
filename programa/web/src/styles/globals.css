@@ -401,6 +401,20 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 }
 .table tr:hover td { background: var(--surface-alt); }
 
+/* Grupo de acoes (Editar/Reabrir/Apagar etc.) numa celula de tabela.
+   Botoes usam padding menor que .ghost-button pra caber lado a lado sem
+   quebrar linha em colunas estreitas (3 botoes com o padding padrao de
+   8px/14px nao cabiam e ficavam empilhados verticalmente). */
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.row-actions .ghost-button {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
 .empty-state {
   padding: 48px 24px;
   text-align: center;

@@ -231,7 +231,7 @@ export default function Cotacoes() {
                     </span>
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <div className="row-actions">
                       <button
                         type="button"
                         className="ghost-button"
