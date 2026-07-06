@@ -277,6 +277,7 @@ export default function Templates() {
             <span>Assunto</span>
             <input
               type="text"
+              className="input"
               value={draft.subject}
               onChange={(e) => setField('subject', e.target.value)}
               disabled={!isAdmin}

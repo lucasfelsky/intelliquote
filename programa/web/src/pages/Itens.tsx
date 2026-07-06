@@ -374,6 +374,7 @@ export default function Itens() {
               <span>Nome comercial *</span>
               <input
                 type="text"
+                className="input"
                 value={form.commercialName}
                 onChange={(e) => setForm({ ...form, commercialName: e.target.value })}
                 placeholder="Ex.: Poliisobutileno TPO"
@@ -384,6 +385,7 @@ export default function Itens() {
               <span>Nome de mercado / fornecedor *</span>
               <input
                 type="text"
+                className="input"
                 value={form.marketName}
                 onChange={(e) => setForm({ ...form, marketName: e.target.value })}
                 placeholder="Ex.: TPO PIB 3500"
@@ -395,6 +397,7 @@ export default function Itens() {
                 <span>NCM</span>
                 <input
                   type="text"
+                  className="input"
                   value={form.ncm}
                   onChange={(e) => setForm({ ...form, ncm: normalizeNcm(e.target.value) })}
                   placeholder="8 dígitos"
@@ -406,6 +409,7 @@ export default function Itens() {
                 <span>Código DBCorp</span>
                 <input
                   type="text"
+                  className="input"
                   value={form.dbcorpCode}
                   onChange={(e) => setForm({ ...form, dbcorpCode: e.target.value })}
                   placeholder="Ex.: PI-TPO"
@@ -425,6 +429,7 @@ export default function Itens() {
             <label className="field" style={{ marginTop: 12 }}>
               <span>Observações</span>
               <textarea
+                className="textarea"
                 rows={3}
                 value={form.notes}
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
