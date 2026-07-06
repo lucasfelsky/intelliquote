@@ -41,9 +41,10 @@ function renderReplySampleVars(): QuoteReplyVars {
     requestCode: 'QR-20260618-DEMO01',
     productName: 'PHOTOINIATOR',
     supplierName: 'Acme Chemicals',
+    currency: 'USD',
     items: [
-      { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG' },
-      { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG' },
+      { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG', unitPrice: 4.99 },
+      { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG', unitPrice: 4.99 },
     ],
   };
 }
@@ -124,6 +125,10 @@ emailTemplateRoutes.get(
               incoterm: it.desiredIncoterm ?? formatIncoterms(latestQuoteRequestForReply.desiredIncoterm),
               quantity: it.quantity,
               unit: it.unit,
+              // Preview generico do template (nao de uma resposta real) --
+              // sem QuoteResponse.offeredPrice pra usar, mantem o preco de
+              // exemplo pra o admin ver a coluna preenchida.
+              unitPrice: 4.99,
             }));
           }
         }

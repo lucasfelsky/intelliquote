@@ -88,6 +88,8 @@ const baseQuoteResponse = {
   id: 77,
   supplierId: 2,
   supplier: { id: 2, name: 'Acme Chemicals' },
+  offeredPrice: 4.99,
+  currency: 'USD',
   quoteRequest: {
     id: 5,
     requestCode: 'QR-2026-005',
@@ -150,6 +152,14 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     ]);
     expect(call.subject).toBe('Photoiniator - SQ QUIMICA - Acme Chemicals');
     expect(call.html).toContain('PI-TPO');
+    // Preco ofertado pelo fornecedor (QuoteResponse.offeredPrice) tem que
+    // aparecer na tabela em vez do placeholder "-" (bug relatado pelo
+    // usuario: "so ali no email de resposta que o unit price informado
+    // pelo fornecedor nao esta indo na tabela").
+    expect(call.html).toContain('4.99 USD');
+    // Total = unitPrice * quantity (500 KG * 4.99)
+    expect(call.html).toContain('2,495.00 USD');
+    expect(call.text).toContain('4.99 USD');
 
     expect(prismaMock.auditLog.create).toHaveBeenCalledTimes(1);
     const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];

@@ -31,6 +31,11 @@ export interface QuoteReplyItem {
   incoterm: string;
   quantity: number;
   unit: string;
+  // Preco unitario ofertado pelo fornecedor. QuoteResponse guarda um preco
+  // agregado por fornecedor (nao por item), entao hoje o mesmo valor se
+  // repete em todas as linhas da mesma resposta -- ainda assim melhor do
+  // que mostrar "-", que o usuario apontou como informacao perdida.
+  unitPrice: number | null;
 }
 
 export interface QuoteReplyVars {
@@ -39,6 +44,7 @@ export interface QuoteReplyVars {
   requestCode: string;
   productName: string;
   supplierName: string;
+  currency: string;
   items: QuoteReplyItem[];
 }
 
@@ -46,7 +52,12 @@ function formatEnNumber(value: number): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function renderItemsRows(items: QuoteReplyItem[]): string {
+function formatMoney(value: number | null, currency: string): string {
+  if (value === null) return '&#8212;';
+  return `${formatEnNumber(value)} ${escapeHtml(currency)}`;
+}
+
+function renderItemsRows(items: QuoteReplyItem[], currency: string): string {
   if (items.length === 0) {
     return `
       <tr>
@@ -56,16 +67,25 @@ function renderItemsRows(items: QuoteReplyItem[]): string {
   return items
     .map((item, idx) => {
       const bg = idx % 2 === 0 ? '#F8FBFA' : '#ffffff';
+      const total = item.unitPrice === null ? null : item.unitPrice * item.quantity;
+      const emptyStyle = item.unitPrice === null ? 'color:#9aa4ad;font-style:italic;' : 'color:#1F2933;';
       return `
       <tr bgcolor="${bg}" style="background-color:${bg};">
         <td align="left" width="200" style="width:200px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.name)}</td>
         <td align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.incoterm)}</td>
         <td align="right" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${formatEnNumber(item.quantity)} ${escapeHtml(item.unit)}</td>
-        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">&#8212;</td>
-        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">&#8212;</td>
+        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;${emptyStyle}">${formatMoney(item.unitPrice, currency)}</td>
+        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;${emptyStyle}">${formatMoney(total, currency)}</td>
       </tr>`;
     })
     .join('');
+}
+
+function renderItemsTextRow(item: QuoteReplyItem, currency: string): string {
+  const total = item.unitPrice === null ? null : item.unitPrice * item.quantity;
+  const unitPriceText = item.unitPrice === null ? '—' : `${formatEnNumber(item.unitPrice)} ${currency}`;
+  const totalText = total === null ? '—' : `${formatEnNumber(total)} ${currency}`;
+  return `${item.name}\t${item.incoterm}\t${formatEnNumber(item.quantity)} ${item.unit}\t${unitPriceText}\t${totalText}`;
 }
 
 export function renderReplySections(template: string, vars: QuoteReplyVars): string {
@@ -77,7 +97,7 @@ export function renderReplySections(template: string, vars: QuoteReplyVars): str
 
   return out.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
     const trimmed = String(key).trim();
-    if (trimmed === 'itemsRows') return renderItemsRows(vars.items);
+    if (trimmed === 'itemsRows') return renderItemsRows(vars.items, vars.currency);
     const value = (vars as unknown as Record<string, unknown>)[trimmed];
     if (value === undefined || value === null) return '';
     return escapeHtml(String(value));
@@ -91,7 +111,7 @@ export function renderReplyPlainText(vars: QuoteReplyVars): string {
     `Please find below our reference for Quote #${vars.quoteRequestId} (${vars.requestCode} — ${vars.productName}):`,
     '',
     'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
-    ...vars.items.map((item) => `${item.name}\t${item.incoterm}\t${formatEnNumber(item.quantity)} ${item.unit}\t—\t—`),
+    ...vars.items.map((item) => renderItemsTextRow(item, vars.currency)),
     '',
     'Best regards,',
   ].join('\r\n');
@@ -120,7 +140,7 @@ export async function renderReplyFromTemplate(
     const html = renderReplySections(dbTemplate.htmlBody, varsForRender);
     const text = dbTemplate.textBody
       ? renderReplySections(dbTemplate.textBody, varsForRender).replace(/\{\{itemsText\}\}/g, () =>
-          vars.items.map((item) => `${item.name}\t${item.incoterm}\t${formatEnNumber(item.quantity)} ${item.unit}\t—\t—`).join('\n'),
+          vars.items.map((item) => renderItemsTextRow(item, vars.currency)).join('\n'),
         )
       : renderReplyPlainText(varsForRender);
     return { html, text, subject, source: 'database' };

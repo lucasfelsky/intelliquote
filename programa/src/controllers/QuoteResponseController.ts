@@ -482,6 +482,10 @@ export class QuoteResponseController {
     const itemName = quoteRequest.productName || quoteRequest.requestCode;
     const defaultSubject = `${itemName} - SQ QUIMICA - ${supplier.name}`;
     const message = overrides.message?.trim() ?? '';
+    // QuoteResponse guarda um preco agregado por fornecedor (nao por item);
+    // repetimos o mesmo unitPrice em todas as linhas em vez de mostrar "-",
+    // que escondia o preco que o fornecedor de fato ofertou.
+    const unitPrice = Number(quoteResponse.offeredPrice);
 
     const rendered = await renderReplyFromTemplate({
       subject: overrides.subject?.trim() || defaultSubject,
@@ -489,11 +493,13 @@ export class QuoteResponseController {
       requestCode: quoteRequest.requestCode,
       productName: quoteRequest.productName ?? '',
       supplierName: supplier.name,
+      currency: quoteResponse.currency,
       items: quoteRequest.items.map((item) => ({
         name: item.catalogItem?.commercialName ?? item.productName,
         incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
         quantity: item.quantity,
         unit: item.unit,
+        unitPrice: Number.isFinite(unitPrice) ? unitPrice : null,
       })),
     });
 
