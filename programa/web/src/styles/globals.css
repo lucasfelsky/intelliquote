@@ -555,6 +555,27 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .topbar__user-info small { color: var(--ink-soft); font-size: 11px; }
 
 .page { display: flex; flex-direction: column; gap: 18px; }
+
+/* .page-header__actions nao tinha nenhum display/gap definido em lugar
+   nenhum -- o espacamento entre input/select/botao dependia so do
+   whitespace incidental entre as tags no JSX, o que deixava os
+   controles praticamente colados. Usado em 9 paginas (Cotacoes,
+   Fornecedores, Relatorios, etc.), varias delas ja passavam gap/
+   alignItems via style inline que nao tinha efeito nenhum sem
+   display:flex no pai. */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
