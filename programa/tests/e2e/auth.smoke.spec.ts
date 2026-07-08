@@ -38,9 +38,12 @@ test.describe('Auth interno — smoke (sem DB)', () => {
     expect([200, 503]).toContain(res.status())
   })
 
-  // Os 2 testes abaixo sao skipped por padrao porque precisam de DB seedado.
-  // Para rodar local: `npm run prisma:seed` antes de `npm run test:e2e`.
-  test.skip('login + me retorna user do admin (precisa de seed)', async ({ request }) => {
+  // Os testes abaixo precisam de DB seedado. Rodam no config embedded
+  // (`npm run test:e2e:embedded`, que sobe Postgres efemero + seed e seta
+  // E2E_EMBEDDED); no `npm run test:e2e` sem seed, ficam skipped.
+  const seededTest = process.env.E2E_EMBEDDED ? test : test.skip
+
+  seededTest('login + me retorna user do admin (precisa de seed)', async ({ request }) => {
     const login = await request.post('/api/v1/auth/login', {
       data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
     })
@@ -48,13 +51,15 @@ test.describe('Auth interno — smoke (sem DB)', () => {
     const cookies = login.headers()['set-cookie'] || ''
     expect(cookies).toMatch(/intelliquote_access_token|connect\.sid/i)
 
-    const me = await request.get('/api/v1/auth/me', {
-      headers: { Cookie: cookies },
-    })
+    // A APIRequestContext do Playwright mantem o cookie jar entre chamadas;
+    // nao setar Cookie manualmente (o set-cookie cru tem atributos que nao
+    // valem como header de request -> "Invalid character in header").
+    const me = await request.get('/api/v1/auth/me')
     expect(me.status()).toBe(200)
     const meBody = await me.json()
-    expect(meBody.email).toBe(ADMIN_EMAIL)
-    expect(['admin']).toContain(meBody.role)
+    // /api/v1/auth/me responde { user: {...} } (ver AuthController.me).
+    expect(meBody.user.email).toBe(ADMIN_EMAIL)
+    expect(['admin']).toContain(meBody.user.role)
   })
 
   test.skip('RBAC bloqueia acesso a rota admin com role=viewer (precisa de seed)', async () => {
