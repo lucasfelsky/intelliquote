@@ -1,6 +1,5 @@
+import { api, ApiError } from '@/api/client';
 import type { EmailTemplate, EmailTemplateDraft } from '@/services/templates';
-
-const API_PREFIX = '/api/v1/email-templates';
 
 export interface EmailTemplatePreview {
   subject: string;
@@ -39,16 +38,16 @@ function normalize(record: EmailTemplateRecordApi): EmailTemplate {
 
 export async function listEmailTemplates(key?: string): Promise<EmailTemplate[]> {
   const search = key ? `?key=${encodeURIComponent(key)}` : '';
-  const records = await fetchJson<EmailTemplateRecordApi[]>(`${API_PREFIX}/${search}`);
-  return records.map(normalize);
+  const records = await api.get<EmailTemplateRecordApi[]>(`/v1/email-templates${search}`);
+  return Array.isArray(records) ? records.map(normalize) : [];
 }
 
 export async function previewEmailTemplate(
   key: string,
   locale: string,
 ): Promise<EmailTemplatePreview> {
-  return fetchJson<EmailTemplatePreview>(
-    `${API_PREFIX}/preview?key=${encodeURIComponent(key)}&locale=${encodeURIComponent(locale)}`,
+  return api.get<EmailTemplatePreview>(
+    `/v1/email-templates/preview?key=${encodeURIComponent(key)}&locale=${encodeURIComponent(locale)}`,
   );
 }
 
@@ -57,43 +56,22 @@ export async function saveEmailTemplate(
   locale: string,
   draft: EmailTemplateDraft,
 ): Promise<EmailTemplate> {
-  const record = await fetchJson<EmailTemplateRecordApi>(
-    `${API_PREFIX}/${encodeURIComponent(key)}/${encodeURIComponent(locale)}`,
-    {
-      method: 'PUT',
-      body: JSON.stringify(draft),
-    },
+  const record = await api.put<EmailTemplateRecordApi>(
+    `/v1/email-templates/${encodeURIComponent(key)}/${encodeURIComponent(locale)}`,
+    { ...draft },
   );
   return normalize(record);
 }
 
 export async function resetEmailTemplate(key: string, locale: string): Promise<void> {
-  await fetchJson<void>(
-    `${API_PREFIX}/${encodeURIComponent(key)}/${encodeURIComponent(locale)}`,
-    { method: 'DELETE' },
-  );
+  await api.del<void>(`/v1/email-templates/${encodeURIComponent(key)}/${encodeURIComponent(locale)}`);
 }
 
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, {
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    let message = `HTTP ${res.status}`;
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed?.message) message = parsed.message;
-    } catch {
-      if (text) message = text;
-    }
-    throw new Error(message);
+export function messageOf(err: unknown): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: unknown } | null;
+    if (body && typeof body.message === 'string') return body.message;
+    return err.message;
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return err instanceof Error ? err.message : 'Erro desconhecido.';
 }
