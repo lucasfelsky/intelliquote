@@ -7,6 +7,14 @@
 //
 // Usado por playwright.embedded.config.ts. Handles guardados em globalThis
 // (setup e teardown rodam no mesmo processo do runner do Playwright).
+//
+// Quando `E2E_CROSS_APP=1`, tambem sobe o emulador Firebase Auth (so `auth`,
+// sem Firestore/Functions pra manter o run rapido) e seta
+// FIREBASE_AUTH_EMULATOR_HOST/FIREBASE_PROJECT_ID no env que o backend herda.
+// O backend ja' tem `firebaseAdmin` apontado pro emulador via getFirebaseApp()
+// em `middlewares/firebaseAuth.ts` (lendo process.env.FIREBASE_AUTH_EMULATOR_HOST
+// a cada request do firebase-admin). Necessario para o teste cross-app do
+// Phase 3 (Fluxo A — Portal COMEX → IntelliQuote via Firebase ID token).
 
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
@@ -95,6 +103,31 @@ export default async function globalSetup() {
     ADMIN_SEED_NAME: 'Admin E2E',
   }
 
+  // ----- Cross-app: sobe o emulador Firebase Auth (Phase 3, sprint 5.5+). -----
+  // Gated por E2E_CROSS_APP=1 (setado em playwright.cross-app.config.ts). O
+  // emulador Auth roda em 127.0.0.1:9099; setamos FIREBASE_AUTH_EMULATOR_HOST
+  // e FIREBASE_PROJECT_ID no env que sera passado ao backend. O firebase-admin
+  // SDK le process.env.FIREBASE_AUTH_EMULATOR_HOST a cada request, entao o
+  // backend ja' vai usar o emulador no primeiro verifyIdToken().
+  let firebaseEmulator: Awaited<ReturnType<typeof import('./cross-app-helpers.cjs').startFirebaseAuthEmulator>> | null = null
+  if (process.env.E2E_CROSS_APP === '1') {
+    console.log('[e2e setup] subindo emulador Firebase Auth...')
+    const { startFirebaseAuthEmulator } = await import('./cross-app-helpers.cjs')
+    firebaseEmulator = await startFirebaseAuthEmulator({
+      projectId: process.env.FIREBASE_PROJECT_ID ?? 'sq-comex-updates-3d22f',
+    })
+    env.FIREBASE_AUTH_EMULATOR_HOST = `${firebaseEmulator.host}:${firebaseEmulator.port}`
+    env.FIREBASE_PROJECT_ID = firebaseEmulator.projectId
+    console.log(`[e2e setup] emulador Auth pronto em ${firebaseEmulator.baseUrl} (host do backend: ${env.FIREBASE_AUTH_EMULATOR_HOST})`)
+    // Pequeno respiro para o firebase-admin SDK estabilizar o endpoint do
+    // emulador (le a env FIREBASE_AUTH_EMULATOR_HOST a cada request, mas
+    // ha' cache interno do JWKS por alguns ms apos a primeira chamada).
+    // 500ms e' o suficiente na pratica (verificado); 1000ms da margem
+    // contra o CI rodando em hardware mais lento.
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  // --------------------------------------------------------------------------
+
   console.log('[e2e setup] prisma migrate deploy...')
   runOneShot(PRISMA, ['migrate', 'deploy'], env, 'migrate deploy')
 
@@ -109,5 +142,10 @@ export default async function globalSetup() {
   await waitForHealth(`http://localhost:${BACKEND_PORT}/health/ready`)
   console.log('[e2e setup] backend pronto em :' + BACKEND_PORT)
 
-  ;(globalThis as unknown as { __IQ_E2E__?: unknown }).__IQ_E2E__ = { pg, backend, dataDir }
+  ;(globalThis as unknown as { __IQ_E2E__?: unknown }).__IQ_E2E__ = {
+    pg,
+    backend,
+    dataDir,
+    ...(firebaseEmulator ? { firebaseEmulator } : {}),
+  }
 }
