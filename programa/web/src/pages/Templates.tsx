@@ -108,6 +108,7 @@ export default function Templates() {
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
   const [showTextFallback, setShowTextFallback] = useState(false);
   const [htmlBackup, setHtmlBackup] = useState('');
+  const [previewPoppedOut, setPreviewPoppedOut] = useState(false);
 
   useEffect(() => {
     if (!selectedKey && TEMPLATE_CARDS.length > 0) {
@@ -314,104 +315,144 @@ export default function Templates() {
 
           {draft && (
             <section className="card">
-              <div className="template-editor-grid">
-                <div className="template-editor-side">
-                  <label className="field">
-                    <span>Assunto</span>
-                    <input
-                      type="text"
-                      className="input"
-                      value={draft.subject}
-                      onChange={(e) => setField('subject', e.target.value)}
-                      disabled={!isAdmin}
-                      placeholder="Assunto do e-mail"
-                    />
-                  </label>
+              <label className="field">
+                <span>Assunto</span>
+                <input
+                  type="text"
+                  className="input"
+                  value={draft.subject}
+                  onChange={(e) => setField('subject', e.target.value)}
+                  disabled={!isAdmin}
+                  placeholder="Assunto do e-mail"
+                />
+              </label>
 
-                  <div className="template-editor-label">
-                    <h3>Conteúdo do e-mail</h3>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        className="ghost-button ghost-button--sm"
-                        onClick={() => {
-                          if (showTextFallback) {
-                            setHtmlBackup(draft.htmlBody);
-                          } else {
-                            if (htmlBackup) setField('htmlBody', htmlBackup);
-                          }
-                          setShowTextFallback(!showTextFallback);
-                        }}
-                      >
-                        {showTextFallback ? 'Editor visual' : 'Editar texto puro'}
-                      </button>
-                    )}
-                  </div>
-
-                  {showTextFallback ? (
-                    <textarea
-                      className="textarea textarea--code"
-                      rows={20}
-                      value={draft.htmlBody}
-                      onChange={(e) => setField('htmlBody', e.target.value)}
-                      disabled={!isAdmin}
-                      placeholder="HTML do e-mail"
-                    />
-                  ) : (
-                    <JoditEditor
-                      ref={editorRef}
-                      value={draft.htmlBody}
-                      config={{
-                        ...joditConfig,
-                        readonly: !isAdmin,
-                      }}
-                      onChange={(newVal: string) => setField('htmlBody', newVal)}
-                    />
-                  )}
-
-                  <details className="template-text-toggle">
-                    <summary>Versão texto (fallback para clientes que não suportam HTML)</summary>
-                    <textarea
-                      className="textarea"
-                      rows={8}
-                      value={draft.textBody}
-                      onChange={(e) => setField('textBody', e.target.value)}
-                      disabled={!isAdmin}
-                      placeholder="Versão em texto puro do e-mail"
-                      style={{ marginTop: 8 }}
-                    />
-                  </details>
-
-                  <label className="checkbox-field" style={{ marginTop: 12 }}>
-                    <input
-                      type="checkbox"
-                      checked={draft.isActive}
-                      onChange={(e) => setField('isActive', e.target.checked)}
-                      disabled={!isAdmin}
-                    />
-                    <span>Template ativo</span>
-                  </label>
-                </div>
-
-                <div className="template-preview-side">
-                  <h3>Preview ao vivo</h3>
-                  <p className="muted">
-                    Assunto: <strong>{preview.data?.subject || draft.subject || '(vazio)'}</strong>
-                  </p>
-                  {preview.isLoading && <p>Carregando preview…</p>}
-                  {preview.data && (
-                    <div className="preview-frame">
-                      <iframe
-                        title="preview-email"
-                        srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
-                      />
-                    </div>
-                  )}
-                </div>
+              <div className="template-editor-label">
+                <h3>Conteúdo do e-mail</h3>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="ghost-button ghost-button--sm"
+                    onClick={() => {
+                      if (showTextFallback) {
+                        setHtmlBackup(draft.htmlBody);
+                      } else {
+                        if (htmlBackup) setField('htmlBody', htmlBackup);
+                      }
+                      setShowTextFallback(!showTextFallback);
+                    }}
+                  >
+                    {showTextFallback ? 'Editor visual' : 'Editar texto puro'}
+                  </button>
+                )}
               </div>
+
+              {showTextFallback ? (
+                <textarea
+                  className="textarea textarea--code"
+                  rows={20}
+                  value={draft.htmlBody}
+                  onChange={(e) => setField('htmlBody', e.target.value)}
+                  disabled={!isAdmin}
+                  placeholder="HTML do e-mail"
+                />
+              ) : (
+                <JoditEditor
+                  ref={editorRef}
+                  value={draft.htmlBody}
+                  config={{
+                    ...joditConfig,
+                    readonly: !isAdmin,
+                  }}
+                  onChange={(newVal: string) => setField('htmlBody', newVal)}
+                />
+              )}
+
+              <details className="template-text-toggle">
+                <summary>Versão texto (fallback para clientes que não suportam HTML)</summary>
+                <textarea
+                  className="textarea"
+                  rows={8}
+                  value={draft.textBody}
+                  onChange={(e) => setField('textBody', e.target.value)}
+                  disabled={!isAdmin}
+                  placeholder="Versão em texto puro do e-mail"
+                  style={{ marginTop: 8 }}
+                />
+              </details>
+
+              <label className="checkbox-field" style={{ marginTop: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={draft.isActive}
+                  onChange={(e) => setField('isActive', e.target.checked)}
+                  disabled={!isAdmin}
+                />
+                <span>Template ativo</span>
+              </label>
+            </section>
+          )}
+
+          {selectedKey && (
+            <section className="card">
+              <div className="template-preview-header">
+                <div>
+                  <h3>Preview do e-mail</h3>
+                  <p className="muted">
+                    Assunto: <strong>{preview.data?.subject || draft?.subject || '(vazio)'}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--sm"
+                  onClick={() => setPreviewPoppedOut(true)}
+                  title="Abrir preview em tela cheia"
+                >
+                  Expandir
+                </button>
+              </div>
+              {preview.isLoading && <p>Carregando preview…</p>}
+              {preview.data && (
+                <div className="preview-frame">
+                  <iframe
+                    title="preview-email"
+                    srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
+                  />
+                </div>
+              )}
             </section>
           )}
         </>
+      )}
+
+      {previewPoppedOut && (
+        <div className="preview-popout-backdrop" onClick={() => setPreviewPoppedOut(false)}>
+          <div className="preview-popout" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-popout__header">
+              <div>
+                <strong>Preview do e-mail</strong>
+                <span className="muted" style={{ marginLeft: 8 }}>
+                  {preview.data?.subject || draft?.subject || '(vazio)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="ghost-button ghost-button--sm"
+                onClick={() => setPreviewPoppedOut(false)}
+              >
+                Fechar
+              </button>
+            </div>
+            {preview.data && (
+              <div className="preview-popout__body">
+                <iframe
+                  title="preview-email-popout"
+                  srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
