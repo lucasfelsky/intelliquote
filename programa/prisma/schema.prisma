@@ -428,6 +428,7 @@ model SupplierPortalToken {
   createdBy         User                     @relation("SupplierPortalTokenCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   dispatchEvent     DispatchEvent?           @relation(fields: [dispatchEventId], references: [id], onDelete: SetNull)
   response          SupplierPortalResponse?  @relation("SupplierPortalTokenResponse")
+  revisions         SupplierPortalResponseRevision[] @relation("SupplierPortalTokenRevisions")
   logs              SupplierPortalTokenLog[]
 
   @@index([quoteRequestId])
@@ -452,6 +453,10 @@ model SupplierPortalResponse {
   totalPriceCurrency String                       @default("USD")
   validityDays       Int                          @default(30)
   notes              String?
+  // Versao da resposta corrente. Cada revisao do fornecedor incrementa este
+  // contador; as versoes anteriores ficam preservadas (read-only) em
+  // SupplierPortalResponseRevision.
+  version            Int                          @default(1)
   submittedAt        DateTime                     @default(now())
   submitterIp        String?
   submitterUserAgent String?
@@ -466,6 +471,33 @@ model SupplierPortalResponse {
   @@index([supplierId])
   @@index([supplierContactId])
   @@index([deletedAt])
+}
+
+// Historico append-only de versoes anteriores de uma resposta do portal.
+// Sempre que o fornecedor revisa o preco (antes do link expirar), a resposta
+// corrente e' fotografada aqui (com os itens serializados em JSON) e a
+// SupplierPortalResponse "atual" e' sobrescrita com a nova versao. Assim o
+// fornecedor continua enxergando o que ja enviou, sem duplicar a relacao 1:1
+// entre token e resposta corrente.
+model SupplierPortalResponseRevision {
+  id                 Int                 @id @default(autoincrement())
+  portalTokenId      Int
+  version            Int
+  currency           String
+  incoterm           Incoterm
+  paymentTermsDays   Int
+  totalPrice         Decimal             @db.Decimal(14, 2)
+  totalPriceCurrency String
+  validityDays       Int
+  notes              String?
+  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes }]
+  items              Json
+  submittedAt        DateTime
+  supersededAt       DateTime            @default(now())
+  portalToken        SupplierPortalToken @relation("SupplierPortalTokenRevisions", fields: [portalTokenId], references: [id], onDelete: Cascade)
+
+  @@index([portalTokenId])
+  @@index([supersededAt])
 }
 
 model SupplierPortalResponseItem {

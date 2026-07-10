@@ -602,7 +602,7 @@
             ? 'localhost'
             : 'firebase-hosting';
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v53-20260623');
+          document.documentElement.setAttribute('data-portal-version', 'v54-20260710');
         } catch (bootErr) {
           /* swallow: nao e critico */
         }
@@ -649,6 +649,14 @@
           const parts = name.trim().split(/\s+/);
           if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
           return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+
+        // Escapa para uso seguro em texto e em atributos HTML.
+        function esc(value) {
+          return String(value === null || value === undefined ? '' : value).replace(
+            /[&<>"']/g,
+            (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+          );
         }
 
         function renderSupplierCard(data) {
@@ -730,90 +738,156 @@
 
         function renderForm(data, readOnly) {
           const items = data.quoteRequest.items || [];
-          const isPreview = !data.response && !readOnly;
+          const resp = data.response || null;
+          // Modo revisao: ja existe uma resposta enviada e o link continua
+          // valido. O form vem pre-preenchido com a versao atual e o fornecedor
+          // pode reenviar (sobrescreve mantendo o historico).
+          const isRevision = !!resp;
+          const submitLabel = isRevision ? 'Revise price' : 'Submit proposal';
+          const respItemById = {};
+          (resp?.items || []).forEach((it) => {
+            respItemById[it.quoteRequestItemId] = it;
+          });
+          const currency = resp?.currency || data.quoteRequest.currency || 'USD';
+          const selectedIncoterm = resp?.incoterm || null;
           const defaultPaymentTermsDays =
-            typeof data.supplier?.paymentTermsDays === 'number' ? data.supplier.paymentTermsDays : 30;
+            typeof resp?.paymentTermsDays === 'number'
+              ? resp.paymentTermsDays
+              : typeof data.supplier?.paymentTermsDays === 'number'
+                ? data.supplier.paymentTermsDays
+                : 30;
+          const validityDays = typeof resp?.validityDays === 'number' ? resp.validityDays : 30;
+          const incotermOptions =
+            data.quoteRequest.desiredIncoterm && data.quoteRequest.desiredIncoterm.length > 0
+              ? data.quoteRequest.desiredIncoterm
+              : ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'];
           return `
             <form id="portal-form" autocomplete="off">
               <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
-              <p class="portal-lead" style="margin-top: 0;">${(data.quoteRequest.description || '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) || '&nbsp;'}</p>
+              <p class="portal-lead" style="margin-top: 0;">${esc(data.quoteRequest.description || '') || '&nbsp;'}</p>
               <div class="form-grid">
                 <label>Currency
                   <select name="currency" required>
                     ${['USD', 'EUR', 'CNY', 'BRL']
                       .map(
                         (c) =>
-                          `<option value="${c}" ${(data.quoteRequest.currency || 'USD') === c ? 'selected' : ''}>${c}</option>`,
+                          `<option value="${c}" ${currency === c ? 'selected' : ''}>${c}</option>`,
                       )
                       .join('')}
                   </select>
                 </label>
                 <label>Incoterm
                   <select name="incoterm" required>
-                    ${(data.quoteRequest.desiredIncoterm && data.quoteRequest.desiredIncoterm.length > 0
-                        ? data.quoteRequest.desiredIncoterm
-                        : ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'])
+                    ${incotermOptions
                       .map(
                         (i, idx) =>
-                          `<option value="${i}" ${idx === 0 ? 'selected' : ''}>${i}</option>`,
+                          `<option value="${esc(i)}" ${selectedIncoterm ? (i === selectedIncoterm ? 'selected' : '') : idx === 0 ? 'selected' : ''}>${esc(i)}</option>`,
                       )
                       .join('')}
                   </select>
                 </label>
                 <label>Origin port
-                  <input type="text" name="originPort" value="${data.quoteRequest.originPort || 'Shanghai'}" maxlength="120" />
+                  <input type="text" name="originPort" value="${esc(data.quoteRequest.originPort || 'Shanghai')}" maxlength="120" />
                 </label>
                 <label>Payment terms (days)
                   <input type="number" min="0" max="365" name="paymentTermsDays" value="${defaultPaymentTermsDays}" required />
                 </label>
                 <label>Offer validity (days)
-                  <input type="number" min="1" max="365" name="validityDays" value="30" required />
+                  <input type="number" min="1" max="365" name="validityDays" value="${validityDays}" required />
                 </label>
                 <label>Total price
-                  <input type="number" min="0" step="0.01" name="totalPrice" required />
+                  <input type="number" min="0" step="0.01" name="totalPrice" value="${resp ? esc(resp.totalPrice) : ''}" required />
                 </label>
                 <label class="full">Notes
-                  <textarea name="notes" rows="3" placeholder="Optional context for the buyer"></textarea>
+                  <textarea name="notes" rows="3" placeholder="Optional context for the buyer">${esc(resp?.notes || '')}</textarea>
                 </label>
               </div>
 
               <h2 class="section-title">Item pricing</h2>
               <div id="portal-items">
                 ${items
-                  .map(
-                    (it) => `
+                  .map((it) => {
+                    const prev = respItemById[it.id];
+                    const unitVal = prev ? esc(prev.unitPrice) : '';
+                    const qtyVal = prev && prev.quantity != null ? prev.quantity : it.quantity;
+                    const leadVal = prev && prev.leadTimeDays != null ? prev.leadTimeDays : '';
+                    const itemNotes = prev && prev.notes ? esc(prev.notes) : '';
+                    return `
                   <div class="item-row" data-item-id="${it.id}">
-                    <h3>${it.productName}</h3>
+                    <h3>${esc(it.productName)}</h3>
                     <p class="item-meta">
-                      <span class="chip">${it.quantity} ${it.unit || ''}</span>
+                      <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
                       ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
                     </p>
                     <div class="form-grid">
-                      <label>Unit price (${data.quoteRequest.currency || 'USD'} / ${it.unit || 'unit'})
-                        <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" required />
+                      <label>Unit price (${esc(currency)} / ${esc(it.unit || 'unit')})
+                        <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" value="${unitVal}" required />
                       </label>
                       <label>Quantity
-                        <input type="number" min="0" name="quantity" value="${it.quantity}" required />
+                        <input type="number" min="0" name="quantity" value="${qtyVal}" required />
                       </label>
                       <label>Lead time (days)
-                        <input type="number" min="0" name="leadTimeDays" />
+                        <input type="number" min="0" name="leadTimeDays" value="${leadVal}" />
                       </label>
                       <label>Item notes
-                        <input type="text" name="notes" />
+                        <input type="text" name="notes" value="${itemNotes}" />
                       </label>
                     </div>
-                  </div>`,
-                  )
+                  </div>`;
+                  })
                   .join('')}
               </div>
 
               <div class="actions">
                 <button type="button" class="ghost" id="portal-cancel">Clear</button>
-                <button type="submit" class="primary" id="portal-submit" ${isPreview ? '' : 'disabled'}>
-                  ${isPreview ? 'Submit proposal' : 'Already submitted'}
+                <button type="submit" class="primary" id="portal-submit">
+                  ${submitLabel}
                 </button>
               </div>
             </form>`;
+        }
+
+        // Historico de versoes anteriores (somente leitura), so aparece quando
+        // o fornecedor ja revisou pelo menos uma vez.
+        function renderHistory(data) {
+          const history = Array.isArray(data.history) ? data.history : [];
+          if (history.length === 0) return '';
+          const nameByItemId = {};
+          (data.quoteRequest.items || []).forEach((it) => {
+            nameByItemId[it.id] = it.productName;
+          });
+          const rows = history
+            .slice()
+            .reverse()
+            .map((rev) => {
+              const items = Array.isArray(rev.items) ? rev.items : [];
+              const itemLines = items
+                .map(
+                  (it) =>
+                    `<tr><td>${esc(nameByItemId[it.quoteRequestItemId] || ('#' + it.quoteRequestItemId))}</td>` +
+                    `<td class="num">${formatNumber(it.unitPrice, 2)}</td>` +
+                    `<td class="num">${formatNumber(it.quantity, 0)}</td>` +
+                    `<td class="num">${formatNumber(it.totalPrice, 2)}</td></tr>`,
+                )
+                .join('');
+              return `
+                <div class="item-row">
+                  <p class="item-meta" style="justify-content: space-between; width: 100%;">
+                    <span><span class="badge info">v${rev.version}</span> Submitted ${formatDate(rev.submittedAt)}</span>
+                    <strong>${esc(rev.totalPriceCurrency || rev.currency || '')} ${formatNumber(rev.totalPrice, 2)}</strong>
+                  </p>
+                  <table class="items-table" style="margin-bottom: 0;">
+                    <thead><tr><th>Item</th><th style="text-align:right;">Unit</th><th style="text-align:right;">Qty</th><th style="text-align:right;">Total</th></tr></thead>
+                    <tbody>${itemLines}</tbody>
+                  </table>
+                  ${rev.notes ? `<p class="commercial-name" style="margin-top:8px;">Notes: ${esc(rev.notes)}</p>` : ''}
+                </div>`;
+            })
+            .join('');
+          return `
+            <h2 class="section-title">Previous submissions</h2>
+            <p class="portal-lead" style="margin-top: -4px;">These are earlier versions you submitted. Your latest values are pre-filled in the form below.</p>
+            ${rows}`;
         }
 
         function attachFormBehavior(data) {
@@ -916,7 +990,12 @@
               submit.disabled = false;
               return;
             }
-            setStatus('success', 'Proposal submitted successfully. Thank you!');
+            setStatus(
+              'success',
+              json.revised
+                ? `Prices revised successfully${json.version ? ' (v' + json.version + ')' : ''}. Your previous version was saved below. Thank you!`
+                : 'Proposal submitted successfully. Thank you!',
+            );
             await loadPortal();
           } catch (error) {
             setStatus('error', 'Network error while submitting. Please try again.');
@@ -984,13 +1063,14 @@
               content.innerHTML = '<p class="footer-note">If you believe this is a mistake, please contact your buyer.</p>';
               return;
             }
-            const readOnly = data.readOnly === true;
+            // O portal continua editavel enquanto o link nao expira: se ja
+            // houver resposta, entra em modo de revisao (form pre-preenchido).
+            const alreadyResponded = data.alreadyResponded === true && !!data.response;
+            const currentVersion = data.response?.version;
             setStatus(
-              readOnly
-                ? 'warn'
-                : null,
-              readOnly
-                ? '<span class="badge read-only">Submitted</span> This proposal has already been submitted. You can review the data below.'
+              alreadyResponded ? 'info' : null,
+              alreadyResponded
+                ? `<span class="badge info">Submitted${currentVersion ? ' · v' + currentVersion : ''}</span> You already sent a proposal. You can revise your prices until the link expires — update the values below and submit again. Previous versions are kept for your reference.`
                 : null,
             );
             const description = data.quoteRequest.description
@@ -1005,11 +1085,10 @@
               </div>
               ${renderSupplierCard(data)}
               ${renderItemsTable(items)}
-              ${renderForm(data, readOnly)}
+              ${renderHistory(data)}
+              ${renderForm(data, false)}
             `;
-            if (!readOnly) {
-              attachFormBehavior(data);
-            }
+            attachFormBehavior(data);
           } catch (error) {
             // Fallback feliz-path: se algo na renderizacao quebrar (payload
             // inesperado, etc), mostra a mensagem real em vez do "Network
