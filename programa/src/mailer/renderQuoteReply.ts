@@ -107,9 +107,11 @@ export function renderReplySections(template: string, vars: QuoteReplyVars): str
 export function renderReplyPlainText(vars: QuoteReplyVars): string {
   const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
   return [
-    'Hello,',
+    `Dear ${vars.supplierName},`,
     '',
-    `Please find below our reference for Quote #${vars.quoteRequestId} (${vars.requestCode}${productSuffix}):`,
+    `Thank you for your quotation on ${vars.requestCode}${productSuffix}. We are pleased to inform you that your proposal has been selected as the winning offer for this quote.`,
+    '',
+    'Please find the accepted items below:',
     '',
     'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
     ...vars.items.map((item) => renderItemsTextRow(item, vars.currency)),
