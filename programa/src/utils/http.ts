@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { Request } from 'express';
 import { ZodError } from 'zod';
+import { logger } from '../lib/logger';
 
 const INCOTERMS = [
   'EXW',
@@ -121,13 +122,15 @@ export function handleControllerError(error: unknown): {
         : typeof (error.meta as { target?: unknown })?.target === 'string'
           ? ((error.meta as { target: string }).target as string)
           : 'desconhecido';
-      // eslint-disable-next-line no-console
-      console.error('[Prisma P2002]', {
-        model: (error.meta as { modelName?: string })?.modelName,
-        target,
-        code: error.code,
-        message: error.message,
-      });
+      logger.error(
+        {
+          model: (error.meta as { modelName?: string })?.modelName,
+          target,
+          code: error.code,
+          message: error.message,
+        },
+        '[Prisma P2002] unique constraint violation',
+      );
       return {
         status: 409,
         message: `Ja existe um registro com esses dados unicos (${target}).`,
