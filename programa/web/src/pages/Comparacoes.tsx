@@ -10,21 +10,17 @@ import {
   type ComparisonRecord,
   type ComparisonResult,
 } from '@/services/quoteResponses';
+import {
+  previewQuoteResponseReply,
+  replyToQuoteResponse,
+  type QuoteResponseReplyPreview,
+} from '@/services/dispatch';
 
 interface QuoteRequestSummary {
   id: number;
   requestCode: string;
   productName: string;
   status: 'open' | 'closed';
-}
-
-interface QuoteRequestItemDetail {
-  id: number;
-  catalogItemId: number | null;
-  productName: string;
-  customName: string | null;
-  quantity: number;
-  unit: string;
 }
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
@@ -117,30 +113,6 @@ export default function Comparacoes() {
     enabled: Number.isFinite(numericId) && numericId > 0,
   });
 
-  const quoteDetail = useQuery({
-    queryKey: ['quote-request', numericId],
-    queryFn: async () => {
-      const data = await api.get<unknown>(`/v1/quote-requests/${numericId}`);
-      if (typeof data !== 'object' || data === null) return null;
-      const obj = data as Record<string, unknown>;
-      const rawItems = Array.isArray(obj.items) ? obj.items : [];
-      const items: QuoteRequestItemDetail[] = rawItems.map((raw: unknown) => {
-        const item = raw as Record<string, unknown>;
-        const catalog = item.catalogItem as Record<string, unknown> | undefined;
-        return {
-          id: Number(item.id ?? 0),
-          catalogItemId: item.catalogItemId !== null && item.catalogItemId !== undefined ? Number(item.catalogItemId) : null,
-          productName: String(catalog?.marketName ?? item.customName ?? item.productName ?? ''),
-          customName: item.customName !== null && item.customName !== undefined ? String(item.customName) : null,
-          quantity: Number(item.quantity ?? 0),
-          unit: String(item.unit ?? 'UN'),
-        };
-      });
-      return { items };
-    },
-    enabled: Number.isFinite(numericId) && numericId > 0,
-  });
-
   const runMut = useMutation({
     mutationFn: () => {
       const weights = {
@@ -180,42 +152,53 @@ export default function Comparacoes() {
   // Comparar passou a ser repetivel e nao fecha a cotacao: nao exige mais status aberto.
   const canExecute = canCompare;
 
-  // Abre o cliente de e-mail do usuario (mailto) ja preenchido para fechar o
-  // pedido com o fornecedor vencedor. Sem anexo (mailto nao suporta).
-  function buildWinnerMailto(r: ComparisonResult): string | null {
-    const email = r.contact?.email?.trim();
-    if (!email) return null;
-    const code = selectedQuote?.requestCode ?? '';
-    const supplierName = r.supplier?.name ?? `Supplier #${r.supplierId}`;
-    const price = formatNumber(r.offeredPrice);
-    const items = quoteDetail.data?.items ?? [];
+  const [replyTarget, setReplyTarget] = useState<ComparisonResult | null>(null);
+  const [replySubject, setReplySubject] = useState('');
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
+  const [replyModalError, setReplyModalError] = useState<string | null>(null);
 
-    const itemLines = items.length > 0
-      ? items.map((it) => `  - ${it.productName} — ${it.quantity} ${it.unit}`).join('\n')
-      : '';
+  const replyPreviewMutation = useMutation({
+    mutationFn: (vars: { id: number; subject: string; message: string }) =>
+      previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message }),
+    onSuccess: (data) => {
+      setReplyPreviewData(data);
+      setReplyModalError(null);
+    },
+    onError: (err) => setReplyModalError(messageOf(err)),
+  });
 
-    const body = [
-      `Dear ${r.contact?.name || supplierName},`,
-      '',
-      `Thank you for your quotation on ${code}. We are pleased to confirm that your proposal has been selected as the winning offer.`,
-      '',
-      `Offered price: ${price} · Incoterm ${r.offeredIncoterm} · Payment terms: ${r.paymentTermsDays} days.`,
-      ...(itemLines ? ['', 'Items:', itemLines] : []),
-      '',
-      'Best regards,',
-    ].join('\n');
-    const subject = `Purchase order — ${code}`;
-    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  }
-
-  function handleReplyClick() {
-    // (F3b) Ao responder a vencedora, nudge para concluir a cotacao.
-    if (canConclude && selectedQuote?.status === 'open') {
+  const replySendMutation = useMutation({
+    mutationFn: () => {
+      if (!replyTarget?.quoteResponseId) throw new Error('Proposta sem ID.');
+      return replyToQuoteResponse(replyTarget.quoteResponseId, { subject: replySubject, message: replyMessage });
+    },
+    onSuccess: () => {
       setFeedback({
         kind: 'ok',
-        text: 'E-mail aberto no seu cliente. Após enviar, clique em “Concluir cotação” para fechá-la.',
+        text: 'E-mail enviado ao fornecedor. Após o retorno, clique em “Concluir cotação” para fechá-la.',
       });
-    }
+      closeReplyModal();
+    },
+    onError: (err) => setReplyModalError(messageOf(err)),
+  });
+
+  function openReplyModal(r: ComparisonResult) {
+    if (!r.quoteResponseId) return;
+    const code = selectedQuote?.requestCode ?? '';
+    const defaultSubject = `Purchase order — ${code}`;
+    setReplyTarget(r);
+    setReplySubject(defaultSubject);
+    setReplyMessage('');
+    setReplyPreviewData(null);
+    setReplyModalError(null);
+    replyPreviewMutation.mutate({ id: r.quoteResponseId, subject: defaultSubject, message: '' });
+  }
+
+  function closeReplyModal() {
+    setReplyTarget(null);
+    setReplyPreviewData(null);
+    setReplyModalError(null);
   }
 
   function toggleExpanded(id: number) {
@@ -385,30 +368,24 @@ export default function Comparacoes() {
           {r.isWinner ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
               <span className="badge">Vencedora</span>
-              {(() => {
-                const mailto = buildWinnerMailto(r);
-                if (!mailto) {
-                  return (
-                    <span
-                      style={{ fontSize: 11, color: 'var(--ink-soft)' }}
-                      title="Cadastre um contato com e-mail para este fornecedor."
-                    >
-                      Sem e-mail do fornecedor
-                    </span>
-                  );
-                }
-                return (
-                  <a
-                    className="ghost-button"
-                    href={mailto}
-                    onClick={() => handleReplyClick()}
-                    style={{ fontSize: 12, padding: '2px 10px' }}
-                    title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
-                  >
-                    Responder
-                  </a>
-                );
-              })()}
+              {r.quoteResponseId ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => openReplyModal(r)}
+                  style={{ fontSize: 12, padding: '2px 10px' }}
+                  title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
+                >
+                  Responder
+                </button>
+              ) : (
+                <span
+                  style={{ fontSize: 11, color: 'var(--ink-soft)' }}
+                  title="Sem proposta vinculada para responder."
+                >
+                  Sem e-mail do fornecedor
+                </span>
+              )}
             </div>
           ) : (
             <span className="badge badge--muted">—</span>
@@ -642,6 +619,95 @@ export default function Comparacoes() {
           );
         })}
       </section>
+
+      {replyTarget && (
+        <div className="modal-backdrop" onClick={closeReplyModal}>
+          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+            <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+              {selectedQuote?.requestCode ?? ''} · {selectedQuote?.productName ?? ''}
+            </p>
+
+            <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>
+              Assunto
+            </label>
+            <input
+              id="replySubject"
+              className="input"
+              value={replySubject}
+              onChange={(e) => setReplySubject(e.target.value)}
+            />
+
+            <label className="field-label" htmlFor="replyMessage" style={{ marginTop: 12 }}>
+              Mensagem
+            </label>
+            <textarea
+              id="replyMessage"
+              className="textarea"
+              rows={4}
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              placeholder="Opcional. Ex.: confirmando o fechamento do pedido. Aparece no corpo do e-mail."
+            />
+
+            <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={replyPreviewMutation.isPending}
+                onClick={() =>
+                  replyTarget.quoteResponseId &&
+                  replyPreviewMutation.mutate({
+                    id: replyTarget.quoteResponseId,
+                    subject: replySubject,
+                    message: replyMessage,
+                  })
+                }
+              >
+                {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
+              </button>
+            </div>
+
+            <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
+            {replyPreviewData ? (
+              <>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
+                  Para: <strong>{replyPreviewData.to}</strong>
+                  {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                </p>
+                <iframe
+                  key={replyPreviewData.html.length}
+                  title="preview-reply-email"
+                  className="preview-frame"
+                  srcDoc={replyPreviewData.html}
+                />
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
+              </p>
+            )}
+
+            {replyModalError && (
+              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
+            )}
+
+            <div className="modal__actions">
+              <button type="button" className="ghost-button" onClick={closeReplyModal}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={replySendMutation.isPending || !replySubject.trim()}
+                onClick={() => replySendMutation.mutate()}
+              >
+                {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
