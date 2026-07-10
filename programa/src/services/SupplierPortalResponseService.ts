@@ -56,45 +56,91 @@ export class SupplierPortalResponseService {
       }
     }
 
+    const currency = input.payload.currency ?? 'USD';
+    const scalarData = {
+      currency,
+      incoterm: input.payload.incoterm,
+      paymentTermsDays: input.payload.paymentTermsDays,
+      totalPrice: new Prisma.Decimal(input.payload.totalPrice),
+      totalPriceCurrency: input.payload.totalPriceCurrency ?? currency,
+      validityDays: input.payload.validityDays,
+      notes: input.payload.notes ?? null,
+      submitterIp: input.meta?.ip ?? null,
+      submitterUserAgent: input.meta?.userAgent ?? null,
+    };
+    const itemsCreate = input.payload.items.map(
+      (item: SupplierPortalResponseItemInput) => ({
+        quoteRequestItemId: item.quoteRequestItemId,
+        unitPrice: new Prisma.Decimal(item.unitPrice),
+        quantity: item.quantity,
+        totalPrice: new Prisma.Decimal(item.totalPrice),
+        leadTimeDays: item.leadTimeDays ?? null,
+        notes: item.notes ?? null,
+      }),
+    );
+
     return client.$transaction(async (tx) => {
       const existing = await tx.supplierPortalResponse.findUnique({
         where: { portalTokenId: input.tokenId },
-      });
-      if (existing) {
-        throw new HttpError(
-          409,
-          'Esta resposta ja foi enviada. Para altera-la, solicite um novo link ao comprador.',
-        );
-      }
-
-      const response = await tx.supplierPortalResponse.create({
-        data: {
-          portalTokenId: input.tokenId,
-          quoteRequestId: input.quoteRequestId,
-          supplierId: input.supplierId,
-          supplierContactId: input.supplierContactId,
-          currency: input.payload.currency ?? 'USD',
-          incoterm: input.payload.incoterm,
-          paymentTermsDays: input.payload.paymentTermsDays,
-          totalPrice: new Prisma.Decimal(input.payload.totalPrice),
-          totalPriceCurrency: input.payload.totalPriceCurrency ?? input.payload.currency ?? 'USD',
-          validityDays: input.payload.validityDays,
-          notes: input.payload.notes ?? null,
-          submitterIp: input.meta?.ip ?? null,
-          submitterUserAgent: input.meta?.userAgent ?? null,
-          items: {
-            create: input.payload.items.map((item: SupplierPortalResponseItemInput) => ({
-              quoteRequestItemId: item.quoteRequestItemId,
-              unitPrice: new Prisma.Decimal(item.unitPrice),
-              quantity: item.quantity,
-              totalPrice: new Prisma.Decimal(item.totalPrice),
-              leadTimeDays: item.leadTimeDays ?? null,
-              notes: item.notes ?? null,
-            })),
-          },
-        },
         include: { items: true },
       });
+
+      let response;
+      if (existing) {
+        // Revisao: fotografa a versao atual no historico (read-only) e
+        // sobrescreve a resposta corrente com a nova versao. Permitido enquanto
+        // o link nao expirou (a validacao de token ja garante isso na rota).
+        await tx.supplierPortalResponseRevision.create({
+          data: {
+            portalTokenId: input.tokenId,
+            version: existing.version,
+            currency: existing.currency,
+            incoterm: existing.incoterm,
+            paymentTermsDays: existing.paymentTermsDays,
+            totalPrice: existing.totalPrice,
+            totalPriceCurrency: existing.totalPriceCurrency,
+            validityDays: existing.validityDays,
+            notes: existing.notes,
+            submittedAt: existing.submittedAt,
+            items: existing.items.map((it) => ({
+              quoteRequestItemId: it.quoteRequestItemId,
+              unitPrice: it.unitPrice.toString(),
+              quantity: it.quantity,
+              totalPrice: it.totalPrice.toString(),
+              leadTimeDays: it.leadTimeDays,
+              notes: it.notes,
+            })),
+          },
+        });
+
+        await tx.supplierPortalResponseItem.deleteMany({
+          where: { responseId: existing.id },
+        });
+
+        response = await tx.supplierPortalResponse.update({
+          where: { id: existing.id },
+          data: {
+            supplierContactId: input.supplierContactId,
+            ...scalarData,
+            version: existing.version + 1,
+            submittedAt: new Date(),
+            items: { create: itemsCreate },
+          },
+          include: { items: true },
+        });
+      } else {
+        response = await tx.supplierPortalResponse.create({
+          data: {
+            portalTokenId: input.tokenId,
+            quoteRequestId: input.quoteRequestId,
+            supplierId: input.supplierId,
+            supplierContactId: input.supplierContactId,
+            ...scalarData,
+            items: { create: itemsCreate },
+          },
+          include: { items: true },
+        });
+      }
 
       const quoteResponse = await syncQuoteResponseFromPortal(tx, {
         quoteRequestId: input.quoteRequestId,
@@ -111,7 +157,14 @@ export class SupplierPortalResponseService {
         },
       });
 
-      return { portalResponse: response, quoteResponse };
+      return { portalResponse: response, quoteResponse, revised: Boolean(existing) };
+    });
+  }
+
+  static async getHistoryByTokenId(tokenId: number, client: PrismaClient = prisma) {
+    return client.supplierPortalResponseRevision.findMany({
+      where: { portalTokenId: tokenId },
+      orderBy: { version: 'asc' },
     });
   }
 }

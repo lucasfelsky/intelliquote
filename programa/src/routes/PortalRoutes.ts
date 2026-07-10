@@ -100,6 +100,7 @@ async function buildPortalView(tokenId: number) {
   }
 
   const response = await SupplierPortalResponseService.getByTokenId(token.id);
+  const revisions = await SupplierPortalResponseService.getHistoryByTokenId(token.id);
 
   return {
     quoteRequest: {
@@ -145,6 +146,7 @@ async function buildPortalView(tokenId: number) {
     response: response
       ? {
           id: response.id,
+          version: response.version,
           currency: response.currency,
           incoterm: response.incoterm,
           paymentTermsDays: response.paymentTermsDays,
@@ -163,6 +165,20 @@ async function buildPortalView(tokenId: number) {
           })),
         }
       : null,
+    // Versoes anteriores (revisoes) que o fornecedor ja enviou, apenas leitura.
+    history: revisions.map((rev) => ({
+      version: rev.version,
+      currency: rev.currency,
+      incoterm: rev.incoterm,
+      paymentTermsDays: rev.paymentTermsDays,
+      totalPrice: rev.totalPrice.toString(),
+      totalPriceCurrency: rev.totalPriceCurrency,
+      validityDays: rev.validityDays,
+      notes: rev.notes,
+      submittedAt: rev.submittedAt,
+      supersededAt: rev.supersededAt,
+      items: rev.items,
+    })),
   };
 }
 
@@ -191,14 +207,11 @@ portalRoutes.get('/api/portal/:token', portalRateLimiter, async (req, res) => {
       userAgent: meta.userAgent,
     });
 
-    if (validated.alreadyResponded) {
-      // Tokens that already responded are still readable so the supplier can review
-      // what they sent; we don't increment the access counter for them.
-      const view = await buildPortalView(validated.token.id);
-      res.status(200).json({ ...view, readOnly: true });
-      return;
-    }
-
+    // Tokens que ja responderam continuam EDITAVEIS: o fornecedor pode revisar
+    // o preco enquanto o link nao expira (a validacao de token ja barra links
+    // expirados/revogados). Nao incrementamos o contador de acesso nesse caso.
+    // O front usa `alreadyResponded` + `response` (versao atual) + `history`
+    // (versoes anteriores) para montar o modo de revisao.
     const view = await buildPortalView(validated.token.id);
     res.status(200).json({ ...view, readOnly: false });
   } catch (error) {
@@ -245,14 +258,8 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
       userAgent: getRequestMeta(req).userAgent,
     });
 
-    if (validated.alreadyResponded) {
-      res.status(409).json({
-        message:
-          'Esta resposta ja foi enviada. Para altera-la, solicite um novo link ao comprador.',
-      });
-      return;
-    }
-
+    // Reenvio permitido: se ja existe resposta, o submit vira uma revisao
+    // (sobrescreve a atual e guarda a anterior no historico). Nao ha mais 409.
     const parsed = supplierPortalResponseSubmitSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ message: 'Os dados enviados sao invalidos.' });
@@ -282,6 +289,8 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
       submittedAt: response.submittedAt,
       totalPrice: response.totalPrice.toString(),
       currency: response.currency,
+      version: response.version,
+      revised: result.revised,
       quoteResponseId: result.quoteResponse?.id ?? null,
     });
   } catch (error) {

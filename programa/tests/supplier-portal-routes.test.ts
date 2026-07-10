@@ -7,6 +7,13 @@ vi.mock('../src/lib/prisma', async () => {
     supplierPortalResponse: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
+    },
+    supplierPortalResponseItem: {
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    supplierPortalResponseRevision: {
+      create: vi.fn().mockResolvedValue({}),
     },
     supplierPortalToken: {
       update: vi.fn(),
@@ -47,6 +54,9 @@ vi.mock('../src/lib/prisma', async () => {
     supplierPortalToken,
     supplierPortalResponse: {
       findUnique: vi.fn(),
+    },
+    supplierPortalResponseRevision: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
     supplierPortalResponseItem: {},
     supplierPortalTokenLog: {
@@ -92,6 +102,7 @@ const prismaMock = prisma as unknown as {
     create: ReturnType<typeof vi.fn>;
   };
   supplierPortalResponse: { findUnique: ReturnType<typeof vi.fn> };
+  supplierPortalResponseRevision: { findMany: ReturnType<typeof vi.fn> };
   quoteResponse: {
     findFirst: ReturnType<typeof vi.fn>;
     upsert: ReturnType<typeof vi.fn>;
@@ -105,6 +116,13 @@ const prismaMock = prisma as unknown as {
   __tx: {
     supplierPortalResponse: {
       findUnique: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+    };
+    supplierPortalResponseItem: {
+      deleteMany: ReturnType<typeof vi.fn>;
+    };
+    supplierPortalResponseRevision: {
       create: ReturnType<typeof vi.fn>;
     };
     supplierPortalToken: {
@@ -281,10 +299,103 @@ describe('Portal routes (public, magic-link)', () => {
     if (res.status === 201) {
       expect(res.body.id).toBe(99);
       expect(res.body.quoteResponseId).toBe(501);
+      expect(res.body.revised).toBe(false);
       expect(prismaMock.quoteResponse.upsert).toHaveBeenCalled();
     } else {
       // Debug help: when running in non-201, surface the response body.
       console.warn('Portal respond returned', res.status, res.body);
+    }
+  });
+
+  it('revisa a resposta ja enviada em vez de bloquear (mantem historico)', async () => {
+    await authedSession();
+
+    const rawToken = 'tok-revise-1234567890123456789012345678901234567890';
+    const tokenHash = hashToken(rawToken);
+    const expires = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    // Token que JA respondeu (respondedAt setado) -> antes retornava 409.
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce({
+      id: 3,
+      tokenHash,
+      expiresAt: expires,
+      revokedAt: null,
+      respondedAt: new Date(),
+      accessCount: 1,
+      firstSeenAt: new Date(),
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+    });
+    prismaMock.quoteRequestItem.findMany.mockResolvedValue([{ id: 11, productName: 'Acido sulfurico' }]);
+    // Resposta corrente (v1) que sera fotografada no historico e sobrescrita.
+    prismaMock.__tx.supplierPortalResponse.findUnique.mockResolvedValue({
+      id: 77,
+      portalTokenId: 3,
+      version: 1,
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      totalPrice: { toString: () => '500.00' },
+      totalPriceCurrency: 'USD',
+      validityDays: 30,
+      notes: null,
+      submittedAt: new Date(),
+      items: [
+        {
+          quoteRequestItemId: 11,
+          unitPrice: { toString: () => '500.00' },
+          quantity: 1,
+          totalPrice: { toString: () => '500.00' },
+          leadTimeDays: null,
+          notes: null,
+        },
+      ],
+    });
+    prismaMock.__tx.supplierPortalResponse.update.mockResolvedValue({
+      id: 77,
+      version: 2,
+      currency: 'USD',
+      totalPrice: { toString: () => '480.00' },
+      submittedAt: new Date(),
+      items: [
+        {
+          id: 2,
+          quoteRequestItemId: 11,
+          unitPrice: { toString: () => '480.00' },
+          quantity: 1,
+          totalPrice: { toString: () => '480.00' },
+          leadTimeDays: null,
+          notes: null,
+        },
+      ],
+    });
+    prismaMock.__tx.quoteResponse.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.quoteResponse.upsert.mockResolvedValue({ id: 501 });
+    prismaMock.__tx.supplierPortalToken.update.mockResolvedValue({});
+
+    const res = await request(app)
+      .post(`/api/portal/${rawToken}/respond`)
+      .send({
+        currency: 'USD',
+        incoterm: 'FOB',
+        paymentTermsDays: 30,
+        totalPrice: 480,
+        validityDays: 30,
+        exchangeRate: 5.4, // moeda estrangeira exige taxa (senao 400 sem cache PTAX)
+        items: [{ quoteRequestItemId: 11, unitPrice: 480, quantity: 1, totalPrice: 480 }],
+      });
+
+    expect([201, 429]).toContain(res.status); // 429 = rate limiter (10/min por ip+ua)
+    if (res.status === 201) {
+      expect(res.body.revised).toBe(true);
+      expect(res.body.version).toBe(2);
+      expect(prismaMock.__tx.supplierPortalResponseRevision.create).toHaveBeenCalled();
+      expect(prismaMock.__tx.supplierPortalResponseItem.deleteMany).toHaveBeenCalledWith({
+        where: { responseId: 77 },
+      });
+      expect(prismaMock.__tx.supplierPortalResponse.update).toHaveBeenCalled();
+    } else {
+      console.warn('Portal revise returned', res.status, res.body);
     }
   });
 });
