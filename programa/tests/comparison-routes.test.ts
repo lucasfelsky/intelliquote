@@ -117,6 +117,11 @@ describe('Comparison routes', () => {
         offeredIncoterm: 'EXW',
         paymentTermsDays: 10,
         isWinner: false,
+        supplier: {
+          id: 101,
+          name: 'Global Parts Ltd',
+          contacts: [{ id: 9001, name: 'Ana Vendas', email: 'ana@globalparts.example' }],
+        },
       },
       {
         id: 12,
@@ -135,12 +140,16 @@ describe('Comparison routes', () => {
         offeredIncoterm: 'FOB',
         paymentTermsDays: 30,
         isWinner: false,
+        supplier: {
+          id: 102,
+          name: 'Nihon Trading',
+          contacts: [{ id: 9002, name: 'Kenji Sales', email: 'kenji@nihon.example' }],
+        },
       },
     ]);
     prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 2 });
     prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
     prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
-    prismaMock.__tx.quoteRequest.update.mockResolvedValue({ id: 1, status: 'closed' });
 
     const response = await request(app)
       .post('/api/v1/quote-requests/1/compare')
@@ -154,6 +163,16 @@ describe('Comparison routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toHaveLength(2);
     expect(response.body.some((item: { isWinner: boolean }) => item.isWinner)).toBe(true);
+    // F1/F2: cada resultado carrega o nome do fornecedor e o contato principal
+    // (nome/e-mail) para a UI exibir o nome real e montar o mailto de "Responder".
+    for (const item of response.body as Array<{
+      supplierId: number;
+      supplier?: { name: string };
+      contact?: { email: string } | null;
+    }>) {
+      expect(item.supplier?.name).toBeTruthy();
+      expect(item.contact?.email).toMatch(/@/);
+    }
     expect(prismaMock.__tx.quoteComparison.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -174,14 +193,8 @@ describe('Comparison routes', () => {
         }),
       }),
     );
-    expect(prismaMock.__tx.quoteRequest.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          status: 'closed',
-          closedAt: expect.any(Date),
-        }),
-      }),
-    );
+    // A comparacao nao fecha mais a cotacao: concluir e' acao separada (/close).
+    expect(prismaMock.__tx.quoteRequest.update).not.toHaveBeenCalled();
   });
 
   it('retorna o historico auditavel por cotacao', async () => {
@@ -237,7 +250,7 @@ describe('Comparison routes', () => {
     expect(response.body.comparisons[0].results[0].isWinner).toBe(true);
   });
 
-  it('bloqueia nova comparacao quando a cotacao ja esta fechada', async () => {
+  it('permite recomparar cotacao fechada sem reabrir e sem fecha-la de novo', async () => {
     const cookies = await loginAs('gestor');
 
     prismaMock.quoteRequest.findUnique.mockResolvedValue({
@@ -246,15 +259,57 @@ describe('Comparison routes', () => {
       status: 'closed',
       currency: 'USD',
     });
+    prismaMock.quoteResponse.findMany.mockResolvedValue([
+      {
+        id: 11,
+        quoteRequestId: 1,
+        supplierId: 101,
+        offeredPrice: 100,
+        currency: 'BRL',
+        exchangeRate: 1,
+        freightCost: 0,
+        insuranceCost: 0,
+        otherFees: 0,
+        importDuty: 0,
+        ipi: 0,
+        pis: 0,
+        cofins: 0,
+        offeredIncoterm: 'EXW',
+        paymentTermsDays: 10,
+        isWinner: false,
+      },
+      {
+        id: 12,
+        quoteRequestId: 1,
+        supplierId: 102,
+        offeredPrice: 120,
+        currency: 'BRL',
+        exchangeRate: 1,
+        freightCost: 0,
+        insuranceCost: 0,
+        otherFees: 0,
+        importDuty: 0,
+        ipi: 0,
+        pis: 0,
+        cofins: 0,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        isWinner: false,
+      },
+    ]);
+    prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 2 });
+    prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+    prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 1000 });
 
     const response = await request(app)
       .post('/api/v1/quote-requests/1/compare')
       .set('Cookie', cookies)
       .send({});
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('Reabra');
-    expect(prismaMock.quoteResponse.findMany).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(prismaMock.quoteResponse.findMany).toHaveBeenCalled();
+    // Recomparar nao reabre nem fecha a cotacao.
+    expect(prismaMock.__tx.quoteRequest.update).not.toHaveBeenCalled();
   });
 
   it('bloqueia comparacao sem exchangeRate valida para moeda estrangeira', async () => {

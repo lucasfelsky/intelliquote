@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  closeQuoteRequest,
   executeComparison,
   listComparisons,
   messageOf,
@@ -69,6 +70,8 @@ export default function Comparacoes() {
   const { user } = useAuth();
   const role = user?.role;
   const canCompare = role === 'admin' || role === 'comprador' || role === 'gestor';
+  // O endpoint /close aceita apenas admin e gestor (ver QuoteRequestRoutes.ts).
+  const canConclude = role === 'admin' || role === 'gestor';
 
   const [selectedId, setSelectedId] = useState<string>('');
   const [priceWeight, setPriceWeight] = useState(1);
@@ -117,7 +120,7 @@ export default function Comparacoes() {
     onSuccess: async () => {
       setFeedback({
         kind: 'ok',
-        text: 'Comparação executada, vencedora definida e cotação fechada.',
+        text: 'Comparação executada e vencedora definida. A cotação continua aberta — conclua-a quando fechar o pedido.',
       });
       await qc.invalidateQueries({ queryKey: ['comparisons', numericId] });
       await qc.invalidateQueries({ queryKey: ['quote-requests'] });
@@ -128,7 +131,54 @@ export default function Comparacoes() {
     onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
   });
 
-  const canExecute = canCompare && selectedQuote?.status === 'open';
+  const closeMut = useMutation({
+    mutationFn: () => closeQuoteRequest(numericId),
+    onSuccess: async () => {
+      setFeedback({ kind: 'ok', text: 'Cotação concluída (fechada).' });
+      await qc.invalidateQueries({ queryKey: ['comparisons', numericId] });
+      await qc.invalidateQueries({ queryKey: ['quote-requests'] });
+      await qc.invalidateQueries({ queryKey: ['quote-requests', 'all'] });
+      await qc.invalidateQueries({ queryKey: ['quote-requests', 'open-closed'] });
+      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+    },
+    onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
+  });
+
+  // Comparar passou a ser repetivel e nao fecha a cotacao: nao exige mais status aberto.
+  const canExecute = canCompare;
+
+  // Abre o cliente de e-mail do usuario (mailto) ja preenchido para fechar o
+  // pedido com o fornecedor vencedor. Sem anexo (mailto nao suporta).
+  function buildWinnerMailto(r: ComparisonResult): string | null {
+    const email = r.contact?.email?.trim();
+    if (!email) return null;
+    const code = selectedQuote?.requestCode ?? '';
+    const product = selectedQuote?.productName ?? '';
+    const price = formatNumber(r.offeredPrice);
+    const supplierName = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
+    const subject = `Fechamento de pedido — cotação ${code}`;
+    const body = [
+      `Olá ${r.contact?.name || supplierName},`,
+      '',
+      `Confirmamos a escolha da proposta de ${supplierName} para a cotação ${code}${product ? ` (${product})` : ''}.`,
+      `Preço ofertado: ${price} · Incoterm ${r.offeredIncoterm} · Pagamento em ${r.paymentTermsDays} dias.`,
+      '',
+      'Podemos seguir com o fechamento do pedido? Aguardamos o retorno com a documentação necessária.',
+      '',
+      'Atenciosamente,',
+    ].join('\n');
+    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  function handleReplyClick() {
+    // (F3b) Ao responder a vencedora, nudge para concluir a cotacao.
+    if (canConclude && selectedQuote?.status === 'open') {
+      setFeedback({
+        kind: 'ok',
+        text: 'E-mail aberto no seu cliente. Após enviar, clique em “Concluir cotação” para fechá-la.',
+      });
+    }
+  }
 
   function toggleExpanded(id: number) {
     setExpandedHistory((current) => {
@@ -294,9 +344,37 @@ export default function Comparacoes() {
           <strong>{formatNumber(r.totalScore, 2)}</strong>
         </td>
         <td>
-          {r.isWinner
-            ? <span className="badge">Vencedora</span>
-            : <span className="badge badge--muted">—</span>}
+          {r.isWinner ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              <span className="badge">Vencedora</span>
+              {(() => {
+                const mailto = buildWinnerMailto(r);
+                if (!mailto) {
+                  return (
+                    <span
+                      style={{ fontSize: 11, color: 'var(--ink-soft)' }}
+                      title="Cadastre um contato com e-mail para este fornecedor."
+                    >
+                      Sem e-mail do fornecedor
+                    </span>
+                  );
+                }
+                return (
+                  <a
+                    className="ghost-button"
+                    href={mailto}
+                    onClick={() => handleReplyClick()}
+                    style={{ fontSize: 12, padding: '2px 10px' }}
+                    title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
+                  >
+                    Responder
+                  </a>
+                );
+              })()}
+            </div>
+          ) : (
+            <span className="badge badge--muted">—</span>
+          )}
         </td>
       </tr>
     ));
@@ -348,15 +426,13 @@ export default function Comparacoes() {
               type="button"
               className="primary-button"
               onClick={() => runMut.mutate()}
-              disabled={!canExecute || runMut.isPending}
+              disabled={!canExecute || !selectedQuote || runMut.isPending}
               title={
                 !selectedQuote
                   ? 'Selecione uma cotação.'
                   : !canCompare
                     ? 'Seu perfil não tem permissão para executar comparações.'
-                    : selectedQuote.status !== 'open'
-                      ? 'A cotação precisa estar aberta.'
-                      : ''
+                    : ''
               }
             >
               {runMut.isPending ? 'Executando…' : 'Executar comparação'}
@@ -392,11 +468,28 @@ export default function Comparacoes() {
       <section className="card" style={{ marginTop: 16 }}>
         <div className="page-header" style={{ marginBottom: 8 }}>
           <h2>Última comparação</h2>
-          {selectedQuote && (
-            <span className={`badge${selectedQuote.status === 'closed' ? ' badge--muted' : ''}`}>
-              {selectedQuote.status === 'open' ? 'Aberta' : 'Fechada'}
-            </span>
-          )}
+          <div className="page-header__actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {selectedQuote && (
+              <span className={`badge${selectedQuote.status === 'closed' ? ' badge--muted' : ''}`}>
+                {selectedQuote.status === 'open' ? 'Aberta' : 'Fechada'}
+              </span>
+            )}
+            {canConclude && selectedQuote?.status === 'open' && latest && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  if (window.confirm('Concluir esta cotação? Ela será fechada.')) {
+                    closeMut.mutate();
+                  }
+                }}
+                disabled={closeMut.isPending}
+                title="Fecha a cotação (ação separada da comparação)."
+              >
+                {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
+              </button>
+            )}
+          </div>
         </div>
         {!selectedId && (
           <div className="empty-state">
