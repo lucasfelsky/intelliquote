@@ -18,6 +18,15 @@ interface QuoteRequestSummary {
   status: 'open' | 'closed';
 }
 
+interface QuoteRequestItemDetail {
+  id: number;
+  catalogItemId: number | null;
+  productName: string;
+  customName: string | null;
+  quantity: number;
+  unit: string;
+}
+
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
   return value.toLocaleString('pt-BR', {
@@ -108,6 +117,30 @@ export default function Comparacoes() {
     enabled: Number.isFinite(numericId) && numericId > 0,
   });
 
+  const quoteDetail = useQuery({
+    queryKey: ['quote-request', numericId],
+    queryFn: async () => {
+      const data = await api.get<unknown>(`/v1/quote-requests/${numericId}`);
+      if (typeof data !== 'object' || data === null) return null;
+      const obj = data as Record<string, unknown>;
+      const rawItems = Array.isArray(obj.items) ? obj.items : [];
+      const items: QuoteRequestItemDetail[] = rawItems.map((raw: unknown) => {
+        const item = raw as Record<string, unknown>;
+        const catalog = item.catalogItem as Record<string, unknown> | undefined;
+        return {
+          id: Number(item.id ?? 0),
+          catalogItemId: item.catalogItemId !== null && item.catalogItemId !== undefined ? Number(item.catalogItemId) : null,
+          productName: String(catalog?.marketName ?? item.customName ?? item.productName ?? ''),
+          customName: item.customName !== null && item.customName !== undefined ? String(item.customName) : null,
+          quantity: Number(item.quantity ?? 0),
+          unit: String(item.unit ?? 'UN'),
+        };
+      });
+      return { items };
+    },
+    enabled: Number.isFinite(numericId) && numericId > 0,
+  });
+
   const runMut = useMutation({
     mutationFn: () => {
       const weights = {
@@ -153,20 +186,25 @@ export default function Comparacoes() {
     const email = r.contact?.email?.trim();
     if (!email) return null;
     const code = selectedQuote?.requestCode ?? '';
-    const product = selectedQuote?.productName ?? '';
+    const supplierName = r.supplier?.name ?? `Supplier #${r.supplierId}`;
     const price = formatNumber(r.offeredPrice);
-    const supplierName = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
-    const subject = `Fechamento de pedido — cotação ${code}`;
+    const items = quoteDetail.data?.items ?? [];
+
+    const itemLines = items.length > 0
+      ? items.map((it) => `  - ${it.productName} — ${it.quantity} ${it.unit}`).join('\n')
+      : '';
+
     const body = [
-      `Olá ${r.contact?.name || supplierName},`,
+      `Dear ${r.contact?.name || supplierName},`,
       '',
-      `Confirmamos a escolha da proposta de ${supplierName} para a cotação ${code}${product ? ` (${product})` : ''}.`,
-      `Preço ofertado: ${price} · Incoterm ${r.offeredIncoterm} · Pagamento em ${r.paymentTermsDays} dias.`,
+      `Thank you for your quotation on ${code}. We are pleased to confirm that your proposal has been selected as the winning offer.`,
       '',
-      'Podemos seguir com o fechamento do pedido? Aguardamos o retorno com a documentação necessária.',
+      `Offered price: ${price} · Incoterm ${r.offeredIncoterm} · Payment terms: ${r.paymentTermsDays} days.`,
+      ...(itemLines ? ['', 'Items:', itemLines] : []),
       '',
-      'Atenciosamente,',
+      'Best regards,',
     ].join('\n');
+    const subject = `Purchase order — ${code}`;
     return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
