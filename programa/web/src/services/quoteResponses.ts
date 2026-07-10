@@ -78,6 +78,7 @@ export interface ComparisonResult {
   quoteResponseId?: number;
   supplierId: number;
   supplier?: { id: number; name: string };
+  contact?: { id?: number; name: string; email: string } | null;
   offeredPrice: number;
   offeredIncoterm: Incoterm;
   paymentTermsDays: number;
@@ -206,7 +207,18 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
     throw new Error('Resposta inesperada do servidor.');
   }
   const obj = raw as Record<string, unknown>;
-  const supplierRaw = obj.supplier as Record<string, unknown> | undefined;
+  // O endpoint /compare devolve `supplier`/`contact` no nivel topo; o de
+  // historico aninha o fornecedor em `quoteResponse.supplier` (com o contato
+  // principal em `contacts[0]`). Lemos ambos os formatos.
+  const quoteResponseRaw = obj.quoteResponse as Record<string, unknown> | undefined;
+  const supplierRaw =
+    (obj.supplier as Record<string, unknown> | undefined) ??
+    (quoteResponseRaw?.supplier as Record<string, unknown> | undefined);
+  const contactRaw =
+    (obj.contact as Record<string, unknown> | null | undefined) ??
+    (Array.isArray((supplierRaw as { contacts?: unknown })?.contacts)
+      ? ((supplierRaw as { contacts?: Record<string, unknown>[] }).contacts?.[0] ?? null)
+      : null);
   return {
     id: obj.id !== undefined && obj.id !== null ? asNumber(obj.id) : undefined,
     quoteResponseId: obj.quoteResponseId !== undefined && obj.quoteResponseId !== null
@@ -219,6 +231,13 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
           name: String(supplierRaw.name ?? ''),
         }
       : undefined,
+    contact: contactRaw
+      ? {
+          id: contactRaw.id !== undefined && contactRaw.id !== null ? asNumber(contactRaw.id) : undefined,
+          name: String(contactRaw.name ?? ''),
+          email: String(contactRaw.email ?? ''),
+        }
+      : null,
     offeredPrice: asNumber(obj.offeredPrice),
     offeredIncoterm: asIncoterm(obj.offeredIncoterm),
     paymentTermsDays: asNumber(obj.paymentTermsDays),
@@ -308,6 +327,10 @@ export async function executeComparison(
     body,
   );
   return Array.isArray(data) ? data.map(normalizeComparisonResult) : [];
+}
+
+export async function closeQuoteRequest(quoteRequestId: number): Promise<void> {
+  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/close`, {});
 }
 
 export async function listComparisons(quoteRequestId: number): Promise<ComparisonHistoryResponse> {

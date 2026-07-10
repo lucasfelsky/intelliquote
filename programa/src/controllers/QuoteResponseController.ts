@@ -682,16 +682,27 @@ export class QuoteResponseController {
         });
       }
 
-      if (quoteRequest.status === QuoteRequestStatus.closed) {
-        return res.status(400).json({
-          message: 'A cotacao esta fechada. Reabra antes de executar nova comparacao.',
-        });
-      }
-
+      // A comparacao e' repetivel e nao altera o status da cotacao: comparar
+      // apenas calcula scores e marca a vencedora. Concluir a cotacao passou a
+      // ser uma acao explicita (POST /quote-requests/:id/close). Por isso nao ha
+      // mais bloqueio por status aqui.
       const responses = await prisma.quoteResponse.findMany({
         where: { quoteRequestId },
         orderBy: {
           id: 'asc',
+        },
+        include: {
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              contacts: {
+                orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+                take: 1,
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
         },
       });
 
@@ -803,8 +814,9 @@ export class QuoteResponseController {
               closedAt: quoteRequest.closedAt,
             },
             afterData: {
-              status: QuoteRequestStatus.closed,
-              closedAt: new Date().toISOString(),
+              // A comparacao nao altera mais o status: registramos apenas a
+              // vencedora e o id da comparacao. Concluir e' acao separada.
+              status: quoteRequest.status,
               winnerQuoteResponseId: winner?.id ?? null,
               comparisonId: comparisonRecord.id,
             },
@@ -817,17 +829,27 @@ export class QuoteResponseController {
           },
           tx,
         );
-
-        await tx.quoteRequest.update({
-          where: { id: quoteRequestId },
-          data: {
-            status: 'closed',
-            closedAt: new Date(),
-          },
-        });
       });
 
-      return res.status(200).json(comparisonResults);
+      // Enriquece o payload retornado com nome do fornecedor e o contato
+      // principal (nome/e-mail) para a UI exibir o nome real e montar o mailto
+      // de "Responder" na vencedora, sem depender de outra chamada.
+      const supplierById = new Map(
+        responses.map((response) => [response.supplierId, response.supplier]),
+      );
+      const enrichedResults = comparisonResults.map((result) => {
+        const supplier = supplierById.get(result.supplierId);
+        const primaryContact = supplier?.contacts?.[0] ?? null;
+        return {
+          ...result,
+          supplier: supplier ? { id: supplier.id, name: supplier.name } : undefined,
+          contact: primaryContact
+            ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
+            : null,
+        };
+      });
+
+      return res.status(200).json(enrichedResults);
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -875,7 +897,16 @@ export class QuoteResponseController {
             include: {
               quoteResponse: {
                 include: {
-                  supplier: true,
+                  supplier: {
+                    include: {
+                      // contato principal para o botao "Responder" (mailto) da vencedora
+                      contacts: {
+                        orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+                        take: 1,
+                        select: { id: true, name: true, email: true },
+                      },
+                    },
+                  },
                 },
               },
             },
