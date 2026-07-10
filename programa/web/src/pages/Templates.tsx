@@ -1,86 +1,122 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import JoditEditor from 'jodit-react';
 import {
   listEmailTemplates,
   previewEmailTemplate,
   resetEmailTemplate,
   saveEmailTemplate,
+  messageOf,
 } from '@/services/emailTemplates';
-import type { EmailTemplate, EmailTemplateDraft } from '@/services/templates';
+import type { EmailTemplateDraft } from '@/services/templates';
 import { useAuth } from '@/auth/AuthProvider';
 
-const LOCALE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'en', label: 'en (ingles)' },
-  { value: 'pt-BR', label: 'pt-BR' },
-  { value: 'es', label: 'es' },
+const TEMPLATE_CARDS: Array<{
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+}> = [
+  {
+    key: 'quote_dispatch',
+    title: 'Envio de cotação',
+    description: 'E-mail enviado aos fornecedores com o link do portal para responderem.',
+    icon: '✉',
+  },
+  {
+    key: 'quote_reply',
+    title: 'Resposta ao fornecedor',
+    description: 'E-mail enviado ao fornecedor vencedor ao clicar em “Responder”.',
+    icon: '✓',
+  },
 ];
 
-const VARIABLE_CHIPS: Record<string, string[]> = {
+const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = {
   quote_dispatch: [
-    '{{subject}}', '{{requestCode}}', '{{productName}}', '{{quantity}}', '{{unit}}',
-    '{{desiredIncoterm}}', '{{currency}}', '{{deadlineAt}}', '{{expiresAt}}',
-    '{{portalLink}}', '{{companyName}}', '{{tradeName}}', '{{taxId}}',
-    '{{purchasingEmail}}', '{{supplierContactName}}', '{{itemsRows}}', '{{itemsText}}',
+    { token: '{{subject}}', label: 'Assunto' },
+    { token: '{{requestCode}}', label: 'Código' },
+    { token: '{{productName}}', label: 'Produto' },
+    { token: '{{quantity}}', label: 'Quantidade' },
+    { token: '{{unit}}', label: 'Unidade' },
+    { token: '{{desiredIncoterm}}', label: 'Incoterm' },
+    { token: '{{currency}}', label: 'Moeda' },
+    { token: '{{deadlineAt}}', label: 'Prazo' },
+    { token: '{{expiresAt}}', label: 'Expira em' },
+    { token: '{{portalLink}}', label: 'Link do portal' },
+    { token: '{{companyName}}', label: 'Empresa' },
+    { token: '{{supplierContactName}}', label: 'Contato' },
+    { token: '{{itemsRows}}', label: 'Tabela de itens' },
   ],
   quote_reply: [
-    '{{subject}}', '{{quoteRequestId}}', '{{requestCode}}', '{{productName}}',
-    '{{supplierName}}', '{{itemsRows}}', '{{itemsText}}',
+    { token: '{{subject}}', label: 'Assunto' },
+    { token: '{{requestCode}}', label: 'Código' },
+    { token: '{{productName}}', label: 'Produto' },
+    { token: '{{supplierName}}', label: 'Fornecedor' },
+    { token: '{{itemsRows}}', label: 'Tabela de itens' },
   ],
 };
 
-const TEMPLATE_LABELS: Record<string, string> = {
-  quote_dispatch: 'Envio de cotação para fornecedores',
-  quote_reply: 'Resposta ao fornecedor (botão Responder)',
+const LOCALE_LABELS: Record<string, string> = {
+  en: 'Inglês',
+  'pt-BR': 'Português',
+  es: 'Espanhol',
 };
 
-function templateLabel(key: string): string {
-  return TEMPLATE_LABELS[key] ?? key.replace(/_/g, ' ');
-}
-
-function messageOf(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
-}
+const joditConfig = {
+  readonly: false,
+  height: 400,
+  toolbarButtonSize: 'small' as const,
+  buttons: [
+    'bold', 'italic', 'underline', '|',
+    'ul', 'ol', '|',
+    'link', 'table', '|',
+    'align', 'left', 'center', 'right', '|',
+    'font', 'fontsize', 'brush', '|',
+    'undo', 'redo',
+  ],
+  buttonsMD: ['bold', 'italic', 'underline', '|', 'ul', 'ol', '|', 'link', '|', 'undo', 'redo'],
+  buttonsSM: ['bold', 'italic', 'underline', '|', 'ul', 'ol', '|', 'link', '|', 'undo', 'redo'],
+  showWordsCounter: false,
+  showXPathInStatusbar: false,
+  askBeforePasteHTML: false,
+  askBeforePasteFromWord: false,
+  defaultActionOnPaste: 'insert_only_text' as const,
+  placeholder: 'Escreva o conteúdo do e-mail aqui…',
+  theme: 'default',
+};
 
 export default function Templates() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const qc = useQueryClient();
+  const editorRef = useRef(null);
 
   const templatesQuery = useQuery({
     queryKey: ['email-templates-all'],
     queryFn: () => listEmailTemplates(),
   });
 
-  const availableKeys = useMemo(() => {
-    // Une as keys ja salvas no banco com as keys conhecidas (TEMPLATE_LABELS),
-    // pra templates ainda nao customizados (ex.: quote_reply recem-criado)
-    // aparecerem no seletor mesmo sem linha no banco ainda — o primeiro
-    // "Salvar template" cria a linha via upsert.
-    const set = new Set<string>([...Object.keys(TEMPLATE_LABELS)]);
-    (templatesQuery.data ?? []).forEach((t) => set.add(t.key));
-    return Array.from(set).sort();
-  }, [templatesQuery.data]);
-
   const availableLocales = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(['en']);
     (templatesQuery.data ?? []).forEach((t) => set.add(t.locale));
-    const list = Array.from(set).sort();
-    return list.length > 0 ? list : LOCALE_OPTIONS.map((l) => l.value);
+    return Array.from(set).sort();
   }, [templatesQuery.data]);
 
   const [selectedKey, setSelectedKey] = useState<string>('');
   const [locale, setLocale] = useState<string>('en');
   const [draft, setDraft] = useState<EmailTemplateDraft | null>(null);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
+  const [showTextFallback, setShowTextFallback] = useState(false);
+  const [htmlBackup, setHtmlBackup] = useState('');
 
   useEffect(() => {
-    if (!selectedKey && availableKeys.length > 0) {
-      setSelectedKey(availableKeys[0] ?? '');
+    if (!selectedKey && TEMPLATE_CARDS.length > 0) {
+      const first = TEMPLATE_CARDS[0];
+      if (first) setSelectedKey(first.key);
     }
-  }, [availableKeys, selectedKey]);
+  }, [selectedKey]);
 
-  const current = useMemo<EmailTemplate | null>(() => {
+  const current = useMemo(() => {
     if (!selectedKey) return null;
     return templatesQuery.data?.find((t) => t.key === selectedKey && t.locale === locale) ?? null;
   }, [templatesQuery.data, selectedKey, locale]);
@@ -100,9 +136,6 @@ export default function Templates() {
         isActive: current.isActive,
       });
     } else if (preview.data && preview.data.source === 'fallback' && preview.data.html) {
-      // Sem customização salva ainda: pré-popula o editor com o template
-      // padrão (renderizado pelo /preview) em vez de deixar em branco, pra
-      // o admin ter um ponto de partida real em vez de começar do zero.
       setDraft({
         subject: preview.data.subject,
         htmlBody: preview.data.html,
@@ -139,9 +172,24 @@ export default function Templates() {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  function insertChip(chip: string) {
-    setDraft((prev) => (prev ? { ...prev, htmlBody: `${prev.htmlBody}${chip}` } : prev));
+  function insertChip(token: string) {
+    if (!draft) return;
+    if (editorRef.current) {
+      const editor = (editorRef.current as unknown as { selection: { insertHTML: (html: string) => void } }).selection;
+      if (editor?.insertHTML) {
+        editor.insertHTML(token);
+        return;
+      }
+    }
+    setField('htmlBody', `${draft.htmlBody}${token}`);
   }
+
+  const cardInfo = TEMPLATE_CARDS.find((c) => c.key === selectedKey);
+  const variables = VARIABLE_CHIPS[selectedKey] ?? [];
+  const hasCustomization = current !== null;
+  const isModified = draft && preview.data
+    ? draft.htmlBody !== (current?.htmlBody ?? preview.data.html)
+    : false;
 
   return (
     <div className="page page--templates">
@@ -149,64 +197,30 @@ export default function Templates() {
         <div>
           <h1>Templates de e-mail</h1>
           <p className="page__subtitle">
-            Selecione abaixo qual template você deseja editar. Cada template pode ter
-            versões em vários idiomas.
+            Personalize os e-mails enviados pelo sistema. Escolha um template abaixo para editá-lo.
           </p>
         </div>
       </header>
 
-      <section className="card">
-        <div className="template-picker">
-          <label className="field field--inline">
-            <span>Template</span>
-            <select
-              value={selectedKey}
-              onChange={(e) => setSelectedKey(e.target.value)}
-              disabled={templatesQuery.isLoading || availableKeys.length === 0}
-            >
-              {templatesQuery.isLoading && <option value="">Carregando…</option>}
-              {!templatesQuery.isLoading && availableKeys.length === 0 && (
-                <option value="">Nenhum template cadastrado</option>
-              )}
-              {availableKeys.map((k) => (
-                <option key={k} value={k}>
-                  {templateLabel(k)} ({k})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field field--inline">
-            <span>Idioma</span>
-            <select value={locale} onChange={(e) => setLocale(e.target.value)}>
-              {availableLocales.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="template-picker__actions">
+      <div className="template-cards">
+        {TEMPLATE_CARDS.map((card) => {
+          const isActive = selectedKey === card.key;
+          return (
             <button
+              key={card.key}
               type="button"
-                          className="ghost-button"
-              onClick={() => reset.mutate()}
-              disabled={!isAdmin || reset.isPending || !current}
+              className={`template-card${isActive ? ' template-card--active' : ''}`}
+              onClick={() => setSelectedKey(card.key)}
             >
-              {reset.isPending ? 'Restaurando…' : 'Restaurar padrão'}
+              <span className="template-card__icon">{card.icon}</span>
+              <div className="template-card__body">
+                <strong className="template-card__title">{card.title}</strong>
+                <p className="template-card__desc">{card.description}</p>
+              </div>
             </button>
-            <button
-              type="button"
-                          className="primary-button"
-              onClick={() => draft && save.mutate(draft)}
-              disabled={!isAdmin || !draft || save.isPending || !selectedKey}
-            >
-              {save.isPending ? 'Salvando…' : 'Salvar template'}
-            </button>
-          </div>
-        </div>
-      </section>
+          );
+        })}
+      </div>
 
       {!isAdmin && (
         <p className="banner banner--warning">
@@ -223,116 +237,181 @@ export default function Templates() {
         </p>
       )}
 
-      {selectedKey && (
-        <section className="card">
-          <h2>Informações do template</h2>
-          <p className="muted">
-            Editando <strong>{templateLabel(selectedKey)}</strong> ({selectedKey}) ·
-            idioma <strong>{locale}</strong>
-          </p>
-          <dl className="meta-grid">
-            <div>
-              <dt>Identificador</dt>
-              <dd><code>{selectedKey}</code></dd>
-            </div>
-            <div>
-              <dt>Origem</dt>
-              <dd>{preview.data?.source === 'database' ? 'Banco de dados' : 'Arquivo padrão'}</dd>
-            </div>
-            <div>
-              <dt>Atualizado em</dt>
-              <dd>{current ? new Date(current.updatedAt).toLocaleString('pt-BR') : '—'}</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>{preview.data?.isActive ? 'Ativo' : 'Inativo'}</dd>
-            </div>
-          </dl>
-        </section>
-      )}
-
-      {selectedKey && (
-        <section className="card">
-          <h2>Variáveis disponíveis</h2>
-          <p className="muted">Clique em uma variável para inseri-la no HTML.</p>
-          <div className="chip-list">
-            {(VARIABLE_CHIPS[selectedKey] ?? []).map((chip) => (
-              <button
-                type="button"
-                key={chip}
-                className="chip"
-                onClick={() => insertChip(chip)}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {draft && selectedKey && (
-        <section className="card">
-          <h2>Conteúdo</h2>
-          <label className="field">
-            <span>Assunto</span>
-            <input
-              type="text"
-              className="input"
-              value={draft.subject}
-              onChange={(e) => setField('subject', e.target.value)}
-              disabled={!isAdmin}
-            />
-          </label>
-          <label className="field">
-            <span>HTML do e-mail</span>
-            <textarea
-              className="textarea textarea--code"
-              rows={18}
-              value={draft.htmlBody}
-              onChange={(e) => setField('htmlBody', e.target.value)}
-              disabled={!isAdmin}
-            />
-          </label>
-          <label className="field">
-            <span>Versão texto (fallback)</span>
-            <textarea
-              className="textarea"
-              rows={8}
-              value={draft.textBody}
-              onChange={(e) => setField('textBody', e.target.value)}
-              disabled={!isAdmin}
-            />
-          </label>
-          <label className="checkbox-field">
-            <input
-              type="checkbox"
-              checked={draft.isActive}
-              onChange={(e) => setField('isActive', e.target.checked)}
-              disabled={!isAdmin}
-            />
-            <span>Template ativo (usado em todos os envios)</span>
-          </label>
-        </section>
-      )}
-
-      {selectedKey && (
-        <section className="card">
-          <h2>Preview ao vivo</h2>
-          {preview.isLoading && <p>Carregando preview…</p>}
-          {preview.data && (
-            <>
-              <p className="muted">
-                <strong>Assunto gerado:</strong> {preview.data.subject || '(vazio)'}
-              </p>
-              <div className="preview-frame">
-                <iframe
-                  title="preview-email"
-                  srcDoc={preview.data.html || '<p>Sem conteúdo no template.</p>'}
-                />
+      {selectedKey && cardInfo && (
+        <>
+          <section className="card">
+            <div className="template-toolbar">
+              <div className="template-toolbar__left">
+                <label className="field field--inline">
+                  <span>Idioma</span>
+                  <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+                    {availableLocales.map((loc) => (
+                      <option key={loc} value={loc}>
+                        {LOCALE_LABELS[loc] ?? loc}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="template-source-badge">
+                  {hasCustomization ? '✓ Personalizado' : 'Padrão do sistema'}
+                  {isModified && ' · alterações não salvas'}
+                </span>
               </div>
-            </>
+              <div className="template-toolbar__right">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      if (window.confirm('Restaurar este template para o padrão do sistema? As personalizações serão perdidas.')) {
+                        reset.mutate();
+                      }
+                    }}
+                    disabled={reset.isPending || !hasCustomization}
+                    title="Volta para o template original do sistema"
+                  >
+                    {reset.isPending ? 'Restaurando…' : 'Restaurar padrão'}
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => draft && save.mutate(draft)}
+                    disabled={!draft || save.isPending}
+                  >
+                    {save.isPending ? 'Salvando…' : 'Salvar'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {variables.length > 0 && (
+            <section className="card">
+              <div className="template-variables">
+                <div className="template-variables__header">
+                  <h3>Variáveis</h3>
+                  <p className="muted">Clique para inserir no conteúdo do e-mail.</p>
+                </div>
+                <div className="chip-list">
+                  {variables.map((v) => (
+                    <button
+                      type="button"
+                      key={v.token}
+                      className="chip"
+                      onClick={() => insertChip(v.token)}
+                      title={`Inserir ${v.token}`}
+                      disabled={!isAdmin}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
           )}
-        </section>
+
+          {draft && (
+            <section className="card">
+              <div className="template-editor-grid">
+                <div className="template-editor-side">
+                  <label className="field">
+                    <span>Assunto</span>
+                    <input
+                      type="text"
+                      className="input"
+                      value={draft.subject}
+                      onChange={(e) => setField('subject', e.target.value)}
+                      disabled={!isAdmin}
+                      placeholder="Assunto do e-mail"
+                    />
+                  </label>
+
+                  <div className="template-editor-label">
+                    <h3>Conteúdo do e-mail</h3>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        className="ghost-button ghost-button--sm"
+                        onClick={() => {
+                          if (showTextFallback) {
+                            setHtmlBackup(draft.htmlBody);
+                          } else {
+                            if (htmlBackup) setField('htmlBody', htmlBackup);
+                          }
+                          setShowTextFallback(!showTextFallback);
+                        }}
+                      >
+                        {showTextFallback ? 'Editor visual' : 'Editar texto puro'}
+                      </button>
+                    )}
+                  </div>
+
+                  {showTextFallback ? (
+                    <textarea
+                      className="textarea textarea--code"
+                      rows={20}
+                      value={draft.htmlBody}
+                      onChange={(e) => setField('htmlBody', e.target.value)}
+                      disabled={!isAdmin}
+                      placeholder="HTML do e-mail"
+                    />
+                  ) : (
+                    <JoditEditor
+                      ref={editorRef}
+                      value={draft.htmlBody}
+                      config={{
+                        ...joditConfig,
+                        readonly: !isAdmin,
+                      }}
+                      onChange={(newVal: string) => setField('htmlBody', newVal)}
+                    />
+                  )}
+
+                  <details className="template-text-toggle">
+                    <summary>Versão texto (fallback para clientes que não suportam HTML)</summary>
+                    <textarea
+                      className="textarea"
+                      rows={8}
+                      value={draft.textBody}
+                      onChange={(e) => setField('textBody', e.target.value)}
+                      disabled={!isAdmin}
+                      placeholder="Versão em texto puro do e-mail"
+                      style={{ marginTop: 8 }}
+                    />
+                  </details>
+
+                  <label className="checkbox-field" style={{ marginTop: 12 }}>
+                    <input
+                      type="checkbox"
+                      checked={draft.isActive}
+                      onChange={(e) => setField('isActive', e.target.checked)}
+                      disabled={!isAdmin}
+                    />
+                    <span>Template ativo</span>
+                  </label>
+                </div>
+
+                <div className="template-preview-side">
+                  <h3>Preview ao vivo</h3>
+                  <p className="muted">
+                    Assunto: <strong>{preview.data?.subject || draft.subject || '(vazio)'}</strong>
+                  </p>
+                  {preview.isLoading && <p>Carregando preview…</p>}
+                  {preview.data && (
+                    <div className="preview-frame">
+                      <iframe
+                        title="preview-email"
+                        srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
