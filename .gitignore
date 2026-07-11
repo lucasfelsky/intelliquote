@@ -13,15 +13,16 @@ programa/.env.local
 programa/scripts/*.bak
 
 # Frontend SPA
+# ATENCAO: vite.config.ts, tsconfig.json e tsconfig.node.json sao FONTES e
+# devem ficar versionados (ja estiveram ignorados por engano — sem eles um
+# clone limpo/CI typecheca o backend no lugar do web e builda o Vite sem
+# plugin/alias). Ignorar apenas artefatos gerados (.js/.d.ts/tsbuildinfo).
 programa/web/node_modules/
 programa/web/dist/
 programa/web/.env.local
 programa/web/*.tsbuildinfo
 programa/web/vite.config.js
 programa/web/vite.config.d.ts
-/programa/web/vite.config.ts
-/programa/web/tsconfig.json
-/programa/web/tsconfig.node.json
 /programa/web/tsconfig.node.tsbuildinfo
 /programa/web/tsconfig.tsbuildinfo
 
