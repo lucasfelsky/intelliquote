@@ -1,0 +1,39 @@
+{
+  "hosting": {
+    "site": "intelliquote",
+    "public": "programa/web/dist",
+    "ignore": [
+      "firebase.json",
+      "firebase.*.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/**",
+        "run": {
+          "serviceId": "intelliquote-api",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/portal",
+        "run": {
+          "serviceId": "intelliquote-api",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "/portal/**",
+        "run": {
+          "serviceId": "intelliquote-api",
+          "region": "southamerica-east1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
