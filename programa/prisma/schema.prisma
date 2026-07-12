@@ -418,6 +418,9 @@ model SupplierPortalToken {
   lastSeenAt        DateTime?
   accessCount       Int                      @default(0)
   respondedAt       DateTime?
+  // F5: setado quando o lembrete pre-deadline foi disparado para este token
+  // (claim atomico — evita lembrete duplicado entre replicas do Cloud Run).
+  reminderSentAt    DateTime?
   responseId        Int?                     @unique
   createdById       Int
   dispatchEventId   Int?

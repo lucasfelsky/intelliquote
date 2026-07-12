@@ -25,6 +25,10 @@ export interface CreateTokenInput {
   createdById: number;
   dispatchEventId?: number | null;
   ttlDays?: number;
+  // F5: o token de lembrete preserva o deadline ORIGINAL (nao estende o
+  // prazo) e ja nasce com reminderSentAt pra nunca gerar novo lembrete.
+  expiresAt?: Date;
+  reminderSentAt?: Date | null;
   client?: PrismaClient | Prisma.TransactionClient;
 }
 
@@ -64,9 +68,10 @@ export class SupplierPortalService {
         supplierId: input.supplierId,
         supplierContactId: input.supplierContactId,
         tokenHash,
-        expiresAt,
+        expiresAt: input.expiresAt ?? expiresAt,
         createdById: input.createdById,
         dispatchEventId: input.dispatchEventId ?? null,
+        reminderSentAt: input.reminderSentAt ?? null,
       },
     });
 
