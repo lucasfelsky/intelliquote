@@ -14,6 +14,13 @@ import {
   type QuoteReplyVars,
 } from '../mailer/renderQuoteReply';
 import {
+  renderReminderSections,
+  renderReminderPlainText,
+  loadFileTemplate as loadReminderFileTemplate,
+  QUOTE_REMINDER_TEMPLATE_KEY,
+  type QuoteReminderVars,
+} from '../mailer/renderQuoteReminder';
+import {
   renderSections as renderBuyerNoticeSections,
   renderPlainText as renderBuyerNoticePlainText,
   loadFileTemplate as loadBuyerNoticeFileTemplate,
@@ -162,6 +169,50 @@ emailTemplateRoutes.get(
           html: renderReplySections(replyTemplate.htmlBody, replyVars),
           text: renderReplySections(replyTemplate.textBody, replyVars),
           isActive: replyTemplate.isActive,
+          source: 'database',
+          locale,
+        });
+      }
+
+      if (key === QUOTE_REMINDER_TEMPLATE_KEY) {
+        // F5: preview do lembrete pre-deadline (EN, fornecedor).
+        const [reminderTemplate, latestQuoteRequestForReminder] = await Promise.all([
+          EmailTemplateService.get(key, locale),
+          prisma.quoteRequest.findFirst({
+            orderBy: { createdAt: 'desc' },
+            select: { requestCode: true, productName: true },
+          }),
+        ]);
+
+        const reminderSample: QuoteReminderVars = {
+          subject: 'Reminder: quotation for QR-2026-001 closes on 25 Jun 2026',
+          contactName: 'Li Wei',
+          supplierName: 'Shanghai Chem Co.',
+          requestCode: latestQuoteRequestForReminder?.requestCode ?? 'QR-2026-001',
+          productName: latestQuoteRequestForReminder?.productName ?? 'PI-TPO',
+          expiresAt: '25 Jun 2026',
+          portalLink: 'https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&v=1',
+          companyName: 'SQ Quimica',
+        };
+
+        if (!reminderTemplate) {
+          return res.status(200).json({
+            subject: reminderSample.subject,
+            html: renderReminderSections(loadReminderFileTemplate(), reminderSample),
+            text: renderReminderPlainText(reminderSample),
+            isActive: false,
+            source: 'fallback',
+            locale,
+          });
+        }
+
+        const reminderSubject = renderReminderSections(reminderTemplate.subject, reminderSample);
+        const reminderVars = { ...reminderSample, subject: reminderSubject };
+        return res.status(200).json({
+          subject: reminderSubject,
+          html: renderReminderSections(reminderTemplate.htmlBody, reminderVars),
+          text: renderReminderSections(reminderTemplate.textBody, reminderVars),
+          isActive: reminderTemplate.isActive,
           source: 'database',
           locale,
         });
