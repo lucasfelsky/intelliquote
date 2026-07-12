@@ -16,6 +16,10 @@ const TEMPLATE_CARDS: Array<{
   title: string;
   description: string;
   icon: string;
+  // Locale em que o template e' ENVIADO (o renderer usa este locale como
+  // default). Selecionar o card troca o seletor pra ca — editar em outro
+  // locale nao teria efeito no envio.
+  defaultLocale?: string;
 }> = [
   {
     key: 'quote_dispatch',
@@ -28,6 +32,13 @@ const TEMPLATE_CARDS: Array<{
     title: 'Resposta ao fornecedor',
     description: 'E-mail enviado ao fornecedor vencedor ao clicar em “Responder”.',
     icon: '✓',
+  },
+  {
+    key: 'supplier_response_received',
+    title: 'Aviso de resposta recebida',
+    description: 'E-mail interno avisando o comprador quando um fornecedor responde pelo portal.',
+    icon: '✉',
+    defaultLocale: 'pt',
   },
 ];
 
@@ -54,10 +65,24 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{supplierName}}', label: 'Fornecedor' },
     { token: '{{itemsRows}}', label: 'Tabela de itens' },
   ],
+  supplier_response_received: [
+    { token: '{{subject}}', label: 'Assunto' },
+    { token: '{{buyerName}}', label: 'Comprador' },
+    { token: '{{supplierName}}', label: 'Fornecedor' },
+    { token: '{{contactName}}', label: 'Contato' },
+    { token: '{{requestCode}}', label: 'Código' },
+    { token: '{{productName}}', label: 'Produto' },
+    { token: '{{totalPrice}}', label: 'Total ofertado' },
+    { token: '{{currency}}', label: 'Moeda' },
+    { token: '{{itemsCount}}', label: 'Nº de itens' },
+    { token: '{{revisionLabel}}', label: 'Marcador de revisão' },
+    { token: '{{responsesUrl}}', label: 'Link das respostas' },
+  ],
 };
 
 const LOCALE_LABELS: Record<string, string> = {
   en: 'Inglês',
+  pt: 'Português',
   'pt-BR': 'Português',
   es: 'Espanhol',
 };
@@ -98,6 +123,11 @@ export default function Templates() {
 
   const availableLocales = useMemo(() => {
     const set = new Set<string>(['en']);
+    // Locales default dos cards precisam existir no seletor mesmo antes de
+    // qualquer customizacao salva (ex.: supplier_response_received e' 'pt').
+    TEMPLATE_CARDS.forEach((card) => {
+      if (card.defaultLocale) set.add(card.defaultLocale);
+    });
     (templatesQuery.data ?? []).forEach((t) => set.add(t.locale));
     return Array.from(set).sort();
   }, [templatesQuery.data]);
@@ -211,7 +241,7 @@ export default function Templates() {
               key={card.key}
               type="button"
               className={`template-card${isActive ? ' template-card--active' : ''}`}
-              onClick={() => setSelectedKey(card.key)}
+              onClick={() => { setSelectedKey(card.key); setLocale(card.defaultLocale ?? 'en'); }}
             >
               <span className="template-card__icon">{card.icon}</span>
               <div className="template-card__body">

@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import { SupplierPortalService } from '../services/SupplierPortalService';
 import { SupplierPortalResponseService } from '../services/SupplierPortalResponseService';
+import { SupplierResponseNotificationService } from '../services/SupplierResponseNotificationService';
 import { ExchangeRateService } from '../services/ExchangeRateService';
 import { supplierPortalResponseSubmitSchema } from '../validators/supplierPortal';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
@@ -282,6 +283,17 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
       kind: 'SUBMIT',
       ip: meta.ip,
       userAgent: meta.userAgent,
+    });
+
+    // F1: avisa o comprador que disparou a cotação. O serviço nunca lança
+    // (try/catch interno) — falha de SMTP não afeta o 201 do fornecedor.
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse({
+      tokenId: validated.token.id,
+      totalPrice: response.totalPrice.toString(),
+      currency: response.currency,
+      itemsCount: parsed.data.items.length,
+      version: response.version,
+      revised: result.revised,
     });
 
     res.status(201).json({
