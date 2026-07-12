@@ -13,6 +13,14 @@ import {
   REPLY_TEMPLATE_KEY,
   type QuoteReplyVars,
 } from '../mailer/renderQuoteReply';
+import {
+  renderSections as renderBuyerNoticeSections,
+  renderPlainText as renderBuyerNoticePlainText,
+  loadFileTemplate as loadBuyerNoticeFileTemplate,
+  SUPPLIER_RESPONSE_RECEIVED_TEMPLATE_KEY,
+  SUPPLIER_RESPONSE_RECEIVED_DEFAULT_LOCALE,
+  type SupplierResponseReceivedVars,
+} from '../mailer/renderSupplierResponseReceived';
 import { prisma } from '../lib/prisma';
 import { CompanyProfileService } from '../services/CompanyProfileService';
 
@@ -156,6 +164,58 @@ emailTemplateRoutes.get(
           isActive: replyTemplate.isActive,
           source: 'database',
           locale,
+        });
+      }
+
+      if (key === SUPPLIER_RESPONSE_RECEIVED_TEMPLATE_KEY) {
+        // F1 (backlog 2026-07-12): preview do aviso interno ao comprador.
+        // Locale default deste template e' 'pt' (e-mail interno).
+        const effectiveLocale =
+          typeof req.query.locale === 'string'
+            ? locale
+            : SUPPLIER_RESPONSE_RECEIVED_DEFAULT_LOCALE;
+        const [noticeTemplate, latestQuoteRequest] = await Promise.all([
+          EmailTemplateService.get(key, effectiveLocale),
+          prisma.quoteRequest.findFirst({
+            orderBy: { createdAt: 'desc' },
+            select: { requestCode: true, productName: true },
+          }),
+        ]);
+
+        const noticeSample: SupplierResponseReceivedVars = {
+          subject: '[IntelliQuote] Nova resposta de Shanghai Chem Co. na cotação QR-2026-001',
+          buyerName: 'Comprador',
+          supplierName: 'Shanghai Chem Co.',
+          contactName: 'Li Wei',
+          requestCode: latestQuoteRequest?.requestCode ?? 'QR-2026-001',
+          productName: latestQuoteRequest?.productName ?? 'PI-TPO',
+          totalPrice: '12,500.00',
+          currency: 'USD',
+          itemsCount: 3,
+          revisionLabel: '',
+          responsesUrl: 'https://intelliquote.web.app/respostas',
+        };
+
+        if (!noticeTemplate) {
+          return res.status(200).json({
+            subject: noticeSample.subject,
+            html: renderBuyerNoticeSections(loadBuyerNoticeFileTemplate(), noticeSample),
+            text: renderBuyerNoticePlainText(noticeSample),
+            isActive: false,
+            source: 'fallback',
+            locale: effectiveLocale,
+          });
+        }
+
+        const noticeSubject = renderBuyerNoticeSections(noticeTemplate.subject, noticeSample);
+        const noticeVars = { ...noticeSample, subject: noticeSubject };
+        return res.status(200).json({
+          subject: noticeSubject,
+          html: renderBuyerNoticeSections(noticeTemplate.htmlBody, noticeVars),
+          text: renderBuyerNoticeSections(noticeTemplate.textBody, noticeVars),
+          isActive: noticeTemplate.isActive,
+          source: 'database',
+          locale: effectiveLocale,
         });
       }
 

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
+    <!--[if mso]>
+    <style type="text/css">
+      table, td, div, h1, h2, h3, p, a { font-family: Arial, sans-serif !important; }
+      .body-text { font-family: Arial, sans-serif; }
+      .h1 { font-size: 20px; line-height: 26px; font-weight: bold; }
+    </style>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+        <o:AllowPNG />
+      </o:OfficeDocumentSettings>
+    </xml>
+    <![endif]-->
+    <title>{{subject}}</title>
+  </head>
+  <body class="body-text" style="margin:0;padding:0;background-color:#F4F8F7;-webkit-text-size-adjust:100%;">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#F4F8F7;">
+      {{supplierName}} respondeu à cotação {{requestCode}}.
+    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F4F8F7" style="background-color:#F4F8F7;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;">
+            <tr>
+              <td bgcolor="#ffffff" style="background-color:#ffffff;border-radius:14px;padding:28px 32px;border:1px solid #E3ECE9;">
+                <h1 class="h1" style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:20px;line-height:26px;color:#1F2933;">
+                  Nova resposta de fornecedor{{#revisionLabel}} <span style="font-size:13px;color:#0B7A66;font-weight:bold;">({{revisionLabel}})</span>{{/revisionLabel}}
+                </h1>
+                <p style="margin:0 0 18px;font-family:Arial,sans-serif;font-size:14px;line-height:21px;color:#4A5560;">
+                  Olá, {{buyerName}}. O fornecedor <strong style="color:#1F2933;">{{supplierName}}</strong> respondeu à cotação
+                  <strong style="color:#1F2933;">{{requestCode}}</strong>{{#productName}} — {{productName}}{{/productName}} pelo portal.
+                </p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F8FBFA" style="background-color:#F8FBFA;border-radius:10px;border:1px solid #ECF1EF;">
+                  <tr>
+                    <td style="padding:16px 18px;">
+                      <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:13px;color:#4A5560;"><strong style="color:#1F2933;">Contato:</strong> {{contactName}}</p>
+                      <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:13px;color:#4A5560;"><strong style="color:#1F2933;">Total ofertado:</strong> {{totalPrice}} {{currency}}</p>
+                      <p style="margin:0;font-family:Arial,sans-serif;font-size:13px;color:#4A5560;"><strong style="color:#1F2933;">Itens:</strong> {{itemsCount}}</p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:22px;">
+                  <tr>
+                    <td bgcolor="#0B7A66" style="background-color:#0B7A66;border-radius:8px;">
+                      <a href="{{responsesUrl}}" target="_blank" style="display:inline-block;padding:12px 22px;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;color:#ffffff;text-decoration:none;">Ver resposta no IntelliQuote</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:22px 0 0;font-family:Arial,sans-serif;font-size:12px;line-height:18px;color:#9AA4AD;">
+                  Você recebeu este aviso porque disparou a cotação {{requestCode}} pelo IntelliQuote.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
