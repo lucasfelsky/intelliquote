@@ -329,8 +329,13 @@ export async function executeComparison(
   return Array.isArray(data) ? data.map(normalizeComparisonResult) : [];
 }
 
-export async function closeQuoteRequest(quoteRequestId: number): Promise<void> {
-  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/close`, {});
+export async function closeQuoteRequest(
+  quoteRequestId: number,
+  options?: { notifyLosers?: boolean },
+): Promise<void> {
+  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/close`, {
+    notifyLosers: options?.notifyLosers ?? false,
+  });
 }
 
 export async function listComparisons(quoteRequestId: number): Promise<ComparisonHistoryResponse> {

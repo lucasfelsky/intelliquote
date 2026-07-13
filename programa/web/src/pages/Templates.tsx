@@ -40,6 +40,12 @@ const TEMPLATE_CARDS: Array<{
     icon: '⏰',
   },
   {
+    key: 'quote_regret',
+    title: 'Fornecedor não selecionado',
+    description: 'E-mail opcional aos fornecedores não escolhidos, ao concluir a cotação.',
+    icon: '✕',
+  },
+  {
     key: 'supplier_response_received',
     title: 'Aviso de resposta recebida',
     description: 'E-mail interno avisando o comprador quando um fornecedor responde pelo portal.',
@@ -79,6 +85,14 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{productName}}', label: 'Produto' },
     { token: '{{expiresAt}}', label: 'Prazo final' },
     { token: '{{portalLink}}', label: 'Link do portal' },
+    { token: '{{companyName}}', label: 'Empresa' },
+  ],
+  quote_regret: [
+    { token: '{{subject}}', label: 'Assunto' },
+    { token: '{{contactName}}', label: 'Contato' },
+    { token: '{{supplierName}}', label: 'Fornecedor' },
+    { token: '{{requestCode}}', label: 'Código' },
+    { token: '{{productName}}', label: 'Produto' },
     { token: '{{companyName}}', label: 'Empresa' },
   ],
   supplier_response_received: [

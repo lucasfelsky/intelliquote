@@ -137,9 +137,14 @@ export default function Comparacoes() {
   });
 
   const closeMut = useMutation({
-    mutationFn: () => closeQuoteRequest(numericId),
+    mutationFn: (notifyLosers: boolean) => closeQuoteRequest(numericId, { notifyLosers }),
     onSuccess: async () => {
-      setFeedback({ kind: 'ok', text: 'Cotação concluída (fechada).' });
+      setFeedback({
+        kind: 'ok',
+        text: notifyLosers
+          ? 'Cotação concluída. Fornecedores não selecionados foram avisados.'
+          : 'Cotação concluída (fechada).',
+      });
       await qc.invalidateQueries({ queryKey: ['comparisons', numericId] });
       await qc.invalidateQueries({ queryKey: ['quote-requests'] });
       await qc.invalidateQueries({ queryKey: ['quote-requests', 'all'] });
@@ -153,6 +158,8 @@ export default function Comparacoes() {
   const canExecute = canCompare;
 
   const [replyTarget, setReplyTarget] = useState<ComparisonResult | null>(null);
+  // F8: opt-in de avisar os fornecedores nao selecionados ao concluir.
+  const [notifyLosers, setNotifyLosers] = useState(false);
   const [replySubject, setReplySubject] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
@@ -490,19 +497,32 @@ export default function Comparacoes() {
               </span>
             )}
             {canConclude && selectedQuote?.status === 'open' && latest && (
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => {
-                  if (window.confirm('Concluir esta cotação? Ela será fechada.')) {
-                    closeMut.mutate();
-                  }
-                }}
-                disabled={closeMut.isPending}
-                title="Fecha a cotação (ação separada da comparação)."
-              >
-                {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
-              </button>
+              <>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={notifyLosers}
+                    onChange={(e) => setNotifyLosers(e.target.checked)}
+                  />
+                  Avisar não selecionados
+                </label>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    const msg = notifyLosers
+                      ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
+                      : 'Concluir esta cotação? Ela será fechada.';
+                    if (window.confirm(msg)) {
+                      closeMut.mutate(notifyLosers);
+                    }
+                  }}
+                  disabled={closeMut.isPending}
+                  title="Fecha a cotação (ação separada da comparação)."
+                >
+                  {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
+                </button>
+              </>
             )}
           </div>
         </div>

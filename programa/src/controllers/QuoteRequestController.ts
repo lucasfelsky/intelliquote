@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
+import { SupplierRegretNotificationService } from '../services/SupplierRegretNotificationService';
 import {
   quoteRequestCreateSchema,
   quoteRequestUpdateSchema,
@@ -290,7 +291,17 @@ export class QuoteRequestController {
         return closedQuoteRequest;
       });
 
-      return res.status(200).json(updatedQuoteRequest);
+      // F8 (backlog 2026-07-12): opt-in — avisa os fornecedores nao
+      // selecionados. So DEPOIS do commit do fechamento; best-effort (nunca
+      // lanca), entao a resposta reflete o fechamento independentemente do
+      // resultado dos e-mails. `regret` volta no payload pra UI dar feedback.
+      let regret: Awaited<ReturnType<typeof SupplierRegretNotificationService.notifyLosers>> | null =
+        null;
+      if (req.body?.notifyLosers === true) {
+        regret = await SupplierRegretNotificationService.notifyLosers(id);
+      }
+
+      return res.status(200).json({ ...updatedQuoteRequest, regret });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

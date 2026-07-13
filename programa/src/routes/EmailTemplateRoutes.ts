@@ -21,6 +21,13 @@ import {
   type QuoteReminderVars,
 } from '../mailer/renderQuoteReminder';
 import {
+  renderRegretSections,
+  renderRegretPlainText,
+  loadFileTemplate as loadRegretFileTemplate,
+  QUOTE_REGRET_TEMPLATE_KEY,
+  type QuoteRegretVars,
+} from '../mailer/renderQuoteRegret';
+import {
   renderSections as renderBuyerNoticeSections,
   renderPlainText as renderBuyerNoticePlainText,
   loadFileTemplate as loadBuyerNoticeFileTemplate,
@@ -169,6 +176,48 @@ emailTemplateRoutes.get(
           html: renderReplySections(replyTemplate.htmlBody, replyVars),
           text: renderReplySections(replyTemplate.textBody, replyVars),
           isActive: replyTemplate.isActive,
+          source: 'database',
+          locale,
+        });
+      }
+
+      if (key === QUOTE_REGRET_TEMPLATE_KEY) {
+        // F8: preview do aviso de nao-selecionado (EN, fornecedor).
+        const [regretTemplate, latestQuoteRequestForRegret] = await Promise.all([
+          EmailTemplateService.get(key, locale),
+          prisma.quoteRequest.findFirst({
+            orderBy: { createdAt: 'desc' },
+            select: { requestCode: true, productName: true },
+          }),
+        ]);
+
+        const regretSample: QuoteRegretVars = {
+          subject: 'Update on your quotation for QR-2026-001',
+          contactName: 'Li Wei',
+          supplierName: 'Shanghai Chem Co.',
+          requestCode: latestQuoteRequestForRegret?.requestCode ?? 'QR-2026-001',
+          productName: latestQuoteRequestForRegret?.productName ?? 'PI-TPO',
+          companyName: 'SQ Quimica',
+        };
+
+        if (!regretTemplate) {
+          return res.status(200).json({
+            subject: regretSample.subject,
+            html: renderRegretSections(loadRegretFileTemplate(), regretSample),
+            text: renderRegretPlainText(regretSample),
+            isActive: false,
+            source: 'fallback',
+            locale,
+          });
+        }
+
+        const regretSubject = renderRegretSections(regretTemplate.subject, regretSample);
+        const regretVars = { ...regretSample, subject: regretSubject };
+        return res.status(200).json({
+          subject: regretSubject,
+          html: renderRegretSections(regretTemplate.htmlBody, regretVars),
+          text: renderRegretSections(regretTemplate.textBody, regretVars),
+          isActive: regretTemplate.isActive,
           source: 'database',
           locale,
         });
