@@ -35,6 +35,18 @@ reportRoutes.get(
   allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
   ReportController.awardRate,
 );
+reportRoutes.get(
+  '/reports/supplier-engagement',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  ReportController.supplierEngagement,
+);
+reportRoutes.get(
+  '/reports/price-history',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  ReportController.priceHistory,
+);
 
 reportRoutes.get(
   '/help/articles',

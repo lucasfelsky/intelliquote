@@ -94,6 +94,38 @@ export interface ReportAwardRate {
   range: ReportRangeBounds;
 }
 
+// F7 (backlog 2026-07-12): engajamento por fornecedor.
+export interface ReportSupplierEngagementItem {
+  supplierId: number;
+  supplierName: string;
+  tokensSent: number;
+  tokensResponded: number;
+  responseRate: number;
+  avgResponseHours: number | null;
+}
+
+export interface ReportSupplierEngagement {
+  items: ReportSupplierEngagementItem[];
+  range: ReportRangeBounds;
+}
+
+// F7: historico de preco por item de catalogo.
+export interface ReportPriceHistoryPoint {
+  month: string;
+  currency: string;
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
+  bestSupplier: { supplierId: number; supplierName: string; price: number } | null;
+}
+
+export interface ReportPriceHistory {
+  catalogItemId: number;
+  series: ReportPriceHistoryPoint[];
+  range: ReportRangeBounds;
+}
+
 export function dateRangeQuery(range?: ReportRange): {
   from?: string;
   to?: string;
@@ -123,6 +155,22 @@ export async function getReportTopSuppliers(range?: ReportRange): Promise<Report
 
 export async function getReportAwardRate(range?: ReportRange): Promise<ReportAwardRate> {
   return api.get<ReportAwardRate>('/v1/reports/award-rate', dateRangeQuery(range));
+}
+
+export async function getReportSupplierEngagement(
+  range?: ReportRange,
+): Promise<ReportSupplierEngagement> {
+  return api.get<ReportSupplierEngagement>('/v1/reports/supplier-engagement', dateRangeQuery(range));
+}
+
+export async function getReportPriceHistory(
+  catalogItemId: number,
+  range?: ReportRange,
+): Promise<ReportPriceHistory> {
+  return api.get<ReportPriceHistory>('/v1/reports/price-history', {
+    ...dateRangeQuery(range),
+    catalogItemId: String(catalogItemId),
+  });
 }
 
 export { messageOf } from '@/services/quoteResponses';

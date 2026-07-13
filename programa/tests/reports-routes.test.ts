@@ -19,6 +19,8 @@ vi.mock('../src/lib/prisma', () => {
     quoteComparison: { count: vi.fn(), findMany: vi.fn() },
     quoteComparisonResult: { count: vi.fn() },
     supplier: { count: vi.fn() },
+    supplierPortalToken: { findMany: vi.fn() },
+    supplierPortalResponseItem: { findMany: vi.fn() },
   };
 
   return { prisma };
@@ -43,6 +45,8 @@ const prismaMock = prisma as unknown as {
   quoteComparison: { count: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   quoteComparisonResult: { count: ReturnType<typeof vi.fn> };
   supplier: { count: ReturnType<typeof vi.fn> };
+  supplierPortalToken: { findMany: ReturnType<typeof vi.fn> };
+  supplierPortalResponseItem: { findMany: ReturnType<typeof vi.fn> };
 };
 
 describe('Reports and help routes', () => {
@@ -122,6 +126,110 @@ describe('Reports and help routes', () => {
   it('bloqueia relatorios para usuario nao autenticado', async () => {
     const response = await request(app).get('/api/v1/reports/summary');
     expect(response.status).toBe(401);
+  });
+
+  // F7 (backlog 2026-07-12): engajamento de fornecedores.
+  it('supplier-engagement: agrega taxa e tempo medio de resposta por fornecedor', async () => {
+    const cookies = await loginAs('viewer');
+    const base = new Date('2026-07-01T09:00:00Z');
+    prismaMock.supplierPortalToken.findMany.mockResolvedValue([
+      // Fornecedor 1: 2 enviados, 1 respondido em 24h -> rate 50%, avg 24h
+      {
+        supplierId: 1,
+        createdAt: base,
+        respondedAt: new Date(base.getTime() + 24 * 60 * 60 * 1000),
+        supplier: { name: 'Alpha' },
+      },
+      { supplierId: 1, createdAt: base, respondedAt: null, supplier: { name: 'Alpha' } },
+      // Fornecedor 2: 1 enviado, 0 respondido -> rate 0%, avg null
+      { supplierId: 2, createdAt: base, respondedAt: null, supplier: { name: 'Beta' } },
+    ] as never);
+
+    const response = await request(app)
+      .get('/api/v1/reports/supplier-engagement')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const alpha = response.body.items.find((i: { supplierId: number }) => i.supplierId === 1);
+    expect(alpha).toMatchObject({
+      tokensSent: 2,
+      tokensResponded: 1,
+      responseRate: 50,
+      avgResponseHours: 24,
+    });
+    const beta = response.body.items.find((i: { supplierId: number }) => i.supplierId === 2);
+    expect(beta.responseRate).toBe(0);
+    expect(beta.avgResponseHours).toBeNull();
+    // Ordenado por responseRate desc: Alpha antes de Beta.
+    expect(response.body.items[0].supplierId).toBe(1);
+  });
+
+  it('supplier-engagement: sem tokens -> lista vazia', async () => {
+    const cookies = await loginAs('viewer');
+    prismaMock.supplierPortalToken.findMany.mockResolvedValue([] as never);
+
+    const response = await request(app)
+      .get('/api/v1/reports/supplier-engagement')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toEqual([]);
+  });
+
+  // F7: historico de preco por item de catalogo.
+  it('price-history: agrupa unitPrice por mes com min/avg/max e melhor fornecedor', async () => {
+    const cookies = await loginAs('viewer');
+    prismaMock.supplierPortalResponseItem.findMany.mockResolvedValue([
+      {
+        unitPrice: 10,
+        response: {
+          submittedAt: new Date('2026-06-10T00:00:00Z'),
+          currency: 'USD',
+          supplierId: 1,
+          supplier: { name: 'Alpha' },
+        },
+      },
+      {
+        unitPrice: 8,
+        response: {
+          submittedAt: new Date('2026-06-20T00:00:00Z'),
+          currency: 'USD',
+          supplierId: 2,
+          supplier: { name: 'Beta' },
+        },
+      },
+      {
+        unitPrice: 12,
+        response: {
+          submittedAt: new Date('2026-07-05T00:00:00Z'),
+          currency: 'USD',
+          supplierId: 1,
+          supplier: { name: 'Alpha' },
+        },
+      },
+    ] as never);
+
+    const response = await request(app)
+      .get('/api/v1/reports/price-history?catalogItemId=42')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    expect(response.body.catalogItemId).toBe(42);
+    expect(response.body.series).toHaveLength(2);
+    const june = response.body.series[0];
+    expect(june.month).toBe('2026-06');
+    expect(june.min).toBe(8);
+    expect(june.max).toBe(10);
+    expect(june.avg).toBe(9);
+    expect(june.bestSupplier.supplierId).toBe(2); // Beta = menor preco
+  });
+
+  it('price-history: catalogItemId invalido -> 400', async () => {
+    const cookies = await loginAs('viewer');
+    const response = await request(app)
+      .get('/api/v1/reports/price-history')
+      .set('Cookie', cookies);
+    expect(response.status).toBe(400);
   });
 });
 

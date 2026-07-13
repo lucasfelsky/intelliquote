@@ -218,6 +218,148 @@ export class ReportController {
       return res.status(handled.status).json({ message: handled.message });
     }
   }
+
+  // F7 (backlog 2026-07-12): engajamento por fornecedor — quantos tokens de
+  // portal foram enviados, quantos foram respondidos (respondedAt), a taxa e
+  // o tempo medio de resposta (respondedAt - createdAt). Dados que ja existem
+  // em SupplierPortalToken mas nenhum relatorio computava. Filtro por periodo
+  // sobre a EMISSAO do token (createdAt).
+  static async supplierEngagement(req: Request, res: Response): Promise<Response> {
+    try {
+      const range = parseRange(req);
+      const dateFilter = buildDateFilter(range);
+
+      const tokens = await prisma.supplierPortalToken.findMany({
+        where: dateFilter ? { createdAt: dateFilter } : {},
+        select: {
+          supplierId: true,
+          createdAt: true,
+          respondedAt: true,
+          supplier: { select: { name: true } },
+        },
+      });
+
+      const bySupplier = new Map<
+        number,
+        { supplierId: number; supplierName: string; sent: number; responded: number; totalResponseHours: number }
+      >();
+
+      for (const token of tokens) {
+        const entry = bySupplier.get(token.supplierId) ?? {
+          supplierId: token.supplierId,
+          supplierName: token.supplier?.name ?? `Fornecedor #${token.supplierId}`,
+          sent: 0,
+          responded: 0,
+          totalResponseHours: 0,
+        };
+        entry.sent += 1;
+        if (token.respondedAt) {
+          entry.responded += 1;
+          entry.totalResponseHours +=
+            (token.respondedAt.getTime() - token.createdAt.getTime()) / (60 * 60 * 1000);
+        }
+        bySupplier.set(token.supplierId, entry);
+      }
+
+      const items = [...bySupplier.values()]
+        .map((entry) => ({
+          supplierId: entry.supplierId,
+          supplierName: entry.supplierName,
+          tokensSent: entry.sent,
+          tokensResponded: entry.responded,
+          responseRate: entry.sent > 0 ? Number(((entry.responded / entry.sent) * 100).toFixed(1)) : 0,
+          avgResponseHours:
+            entry.responded > 0 ? Number((entry.totalResponseHours / entry.responded).toFixed(1)) : null,
+        }))
+        .sort((a, b) => b.responseRate - a.responseRate || b.tokensSent - a.tokensSent);
+
+      return res.status(200).json({ items, range: serializeRange(range) });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // F7: historico de preco unitario por item de catalogo ao longo do tempo,
+  // agrupado por mes (YYYY-MM). Fonte: SupplierPortalResponseItem (unitPrice
+  // real por item) -> QuoteRequestItem (catalogItemId). Por mes devolve
+  // min/avg/max e o fornecedor do melhor preco (o comprador ve tendencia e
+  // quem tem sido mais competitivo).
+  static async priceHistory(req: Request, res: Response): Promise<Response> {
+    try {
+      const catalogItemId = Number(req.query.catalogItemId);
+      if (!Number.isInteger(catalogItemId) || catalogItemId <= 0) {
+        throw new HttpError(400, 'catalogItemId invalido.');
+      }
+      const range = parseRange(req);
+      const dateFilter = buildDateFilter(range);
+
+      const responseItems = await prisma.supplierPortalResponseItem.findMany({
+        where: {
+          deletedAt: null,
+          quoteRequestItem: { catalogItemId },
+          response: {
+            deletedAt: null,
+            ...(dateFilter ? { submittedAt: dateFilter } : {}),
+          },
+        },
+        select: {
+          unitPrice: true,
+          response: {
+            select: {
+              submittedAt: true,
+              currency: true,
+              supplierId: true,
+              supplier: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      const byMonth = new Map<
+        string,
+        { month: string; prices: number[]; best: { supplierId: number; supplierName: string; price: number } | null; currency: string }
+      >();
+
+      for (const item of responseItems) {
+        const submittedAt = item.response.submittedAt;
+        const month = `${submittedAt.getUTCFullYear()}-${String(submittedAt.getUTCMonth() + 1).padStart(2, '0')}`;
+        const price = Number(item.unitPrice);
+        const entry = byMonth.get(month) ?? {
+          month,
+          prices: [],
+          best: null,
+          currency: item.response.currency,
+        };
+        entry.prices.push(price);
+        if (!entry.best || price < entry.best.price) {
+          entry.best = {
+            supplierId: item.response.supplierId,
+            supplierName: item.response.supplier?.name ?? `Fornecedor #${item.response.supplierId}`,
+            price,
+          };
+        }
+        byMonth.set(month, entry);
+      }
+
+      const series = [...byMonth.values()]
+        .map((entry) => ({
+          month: entry.month,
+          currency: entry.currency,
+          min: Math.min(...entry.prices),
+          max: Math.max(...entry.prices),
+          avg: Number((entry.prices.reduce((sum, p) => sum + p, 0) / entry.prices.length).toFixed(2)),
+          count: entry.prices.length,
+          bestSupplier: entry.best,
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+      return res.status(200).json({ catalogItemId, series, range: serializeRange(range) });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
 }
 
 function parseRange(req: Request): DateRange {
