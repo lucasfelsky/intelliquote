@@ -6,11 +6,13 @@ import {
   getReportSavings,
   getReportSummary,
   getReportTopSuppliers,
+  getReportSupplierEngagement,
   messageOf,
   type ReportRange,
   type ReportSavingsItem,
   type ReportLeadTimeSupplier,
   type ReportTopSupplier,
+  type ReportSupplierEngagementItem,
 } from '@/services/reports';
 
 function todayIso(): string {
@@ -92,6 +94,10 @@ export default function Relatorios() {
   const awardRate = useQuery({
     queryKey: [...queryKey, 'award-rate'],
     queryFn: () => getReportAwardRate(range),
+  });
+  const engagement = useQuery({
+    queryKey: [...queryKey, 'supplier-engagement'],
+    queryFn: () => getReportSupplierEngagement(range),
   });
 
   async function refreshAll() {
@@ -423,6 +429,56 @@ export default function Relatorios() {
               <span className="kpi__value">{formatInt(awardRateData.winners)}</span>
             </div>
           </div>
+        )}
+      </section>
+
+      {/* F7: Card: Engajamento de fornecedores (taxa e tempo de resposta) */}
+      <section className="card">
+        <div className="page-header" style={{ marginBottom: 8 }}>
+          <h2>Engajamento de fornecedores</h2>
+          <span className="chip chip--static">taxa e tempo de resposta ao portal</span>
+        </div>
+        {engagement.isLoading && <p>Carregando engajamento…</p>}
+        {engagement.isError && (
+          <div className="empty-state">
+            <p>{messageOf(engagement.error)}</p>
+          </div>
+        )}
+        {engagement.data && engagement.data.items.length > 0 ? (
+          <div style={{ marginTop: 8, overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fornecedor</th>
+                  <th>Enviados</th>
+                  <th>Respondidos</th>
+                  <th>Taxa de resposta</th>
+                  <th>Tempo médio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {engagement.data.items.map((row: ReportSupplierEngagementItem) => (
+                  <tr key={row.supplierId}>
+                    <td><strong>{row.supplierName}</strong></td>
+                    <td>{formatInt(row.tokensSent)}</td>
+                    <td>{formatInt(row.tokensResponded)}</td>
+                    <td>{formatPercent(row.responseRate)}</td>
+                    <td>
+                      {row.avgResponseHours === null
+                        ? '—'
+                        : row.avgResponseHours < 48
+                          ? `${Math.round(row.avgResponseHours)} h`
+                          : `${(row.avgResponseHours / 24).toFixed(1)} d`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          !engagement.isLoading && !engagement.isError && (
+            <p className="empty-state">Sem envios de portal no período.</p>
+          )
         )}
       </section>
     </div>
