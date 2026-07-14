@@ -80,6 +80,9 @@ export interface ReportTopSupplier {
   totalScore: number;
   winRate: number;
   averageScore: number;
+  // F12: media de avaliacao (1..5) e contagem de reviews do fornecedor.
+  avgRating: number | null;
+  reviewCount: number;
 }
 
 export interface ReportTopSuppliers {

@@ -329,13 +329,26 @@ export async function executeComparison(
   return Array.isArray(data) ? data.map(normalizeComparisonResult) : [];
 }
 
+// F12: avaliacao opcional do fornecedor vencedor enviada ao concluir.
+export interface SupplierReviewInput {
+  supplierId: number;
+  priceRating: number;
+  leadTimeRating: number;
+  qualityRating: number;
+  comment?: string | null;
+}
+
 export async function closeQuoteRequest(
   quoteRequestId: number,
-  options?: { notifyLosers?: boolean },
+  options?: { notifyLosers?: boolean; review?: SupplierReviewInput | null },
 ): Promise<void> {
-  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/close`, {
+  const body: Record<string, unknown> = {
     notifyLosers: options?.notifyLosers ?? false,
-  });
+  };
+  if (options?.review) {
+    body.review = options.review;
+  }
+  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/close`, body);
 }
 
 export async function listComparisons(quoteRequestId: number): Promise<ComparisonHistoryResponse> {
