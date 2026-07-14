@@ -36,6 +36,7 @@ export class SupplierController {
           paymentTermsDays: payload.paymentTermsDays ?? 30,
           createdById: req.user?.id ?? null,
           acceptedIncoterms: payload.acceptedIncoterms as Incoterm[],
+          tags: payload.tags ?? [],
         },
       });
 
@@ -65,7 +66,7 @@ export class SupplierController {
           orderBy,
         });
 
-        return res.status(200).json(suppliers);
+        return res.status(200).json(await withReviewStats(suppliers));
       }
 
       const pagination = parsePagination(req);
@@ -81,7 +82,7 @@ export class SupplierController {
 
       return res
         .status(200)
-        .json(buildPaginatedResponse(suppliers, totalItems, pagination));
+        .json(buildPaginatedResponse(await withReviewStats(suppliers), totalItems, pagination));
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -108,7 +109,8 @@ export class SupplierController {
         });
       }
 
-      return res.status(200).json(supplier);
+      const [withStats] = await withReviewStats([supplier]);
+      return res.status(200).json(withStats);
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -155,6 +157,7 @@ export class SupplierController {
           notes: payload.notes,
           paymentTermsDays: payload.paymentTermsDays,
           acceptedIncoterms: payload.acceptedIncoterms as Incoterm[] | undefined,
+          tags: payload.tags,
         },
       });
 
@@ -241,6 +244,73 @@ export class SupplierController {
       return res.status(handled.status).json({ message: handled.message });
     }
   }
+}
+
+// F12 (backlog 2026-07-12): anexa estatisticas de avaliacao a cada fornecedor
+// (media por dimensao + media geral + contagem), computadas na leitura via
+// groupBy — nao persistidas. `avgRating` e' a media das 3 dimensoes; null
+// quando o fornecedor ainda nao tem review.
+type SupplierWithReviewStats<T> = T & {
+  reviewStats: {
+    count: number;
+    avgPrice: number | null;
+    avgLeadTime: number | null;
+    avgQuality: number | null;
+    avgRating: number | null;
+  };
+};
+
+function round2(value: number): number {
+  return Number(value.toFixed(2));
+}
+
+async function withReviewStats<T extends { id: number }>(
+  suppliers: T[],
+): Promise<SupplierWithReviewStats<T>[]> {
+  const ids = suppliers.map((supplier) => supplier.id);
+
+  const grouped = ids.length
+    ? await prisma.supplierReview.groupBy({
+        by: ['supplierId'],
+        where: { supplierId: { in: ids } },
+        _avg: { priceRating: true, leadTimeRating: true, qualityRating: true },
+        _count: { _all: true },
+      })
+    : [];
+
+  const bySupplier = new Map(grouped.map((entry) => [entry.supplierId, entry]));
+
+  return suppliers.map((supplier) => {
+    const entry = bySupplier.get(supplier.id);
+
+    if (!entry || entry._count._all === 0) {
+      return {
+        ...supplier,
+        reviewStats: {
+          count: 0,
+          avgPrice: null,
+          avgLeadTime: null,
+          avgQuality: null,
+          avgRating: null,
+        },
+      } as SupplierWithReviewStats<T>;
+    }
+
+    const avgPrice = entry._avg.priceRating ?? 0;
+    const avgLeadTime = entry._avg.leadTimeRating ?? 0;
+    const avgQuality = entry._avg.qualityRating ?? 0;
+
+    return {
+      ...supplier,
+      reviewStats: {
+        count: entry._count._all,
+        avgPrice: round2(avgPrice),
+        avgLeadTime: round2(avgLeadTime),
+        avgQuality: round2(avgQuality),
+        avgRating: round2((avgPrice + avgLeadTime + avgQuality) / 3),
+      },
+    } as SupplierWithReviewStats<T>;
+  });
 }
 
 function buildSupplierWhere(req: Request): Prisma.SupplierWhereInput {

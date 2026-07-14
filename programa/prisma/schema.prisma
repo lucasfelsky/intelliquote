@@ -59,6 +59,7 @@ model User {
   emailTemplatesUpdated EmailTemplate[]       @relation("EmailTemplateUpdatedBy")
   createdDispatchEvents DispatchEvent[]       @relation("DispatchEventCreatedBy")
   createdPortalTokens   SupplierPortalToken[] @relation("SupplierPortalTokenCreatedBy")
+  createdSupplierReviews SupplierReview[]     @relation("SupplierReviewCreatedBy")
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -102,10 +103,14 @@ model Supplier {
   paymentTermsDays  Int                      @default(30)
   createdById       Int?
   acceptedIncoterms Incoterm[]
+  // F12 (backlog 2026-07-12): etiquetas livres pra classificar o fornecedor
+  // (ex.: "confiavel", "prazo curto"). Exibidas como chips filtraveis.
+  tags              String[]                 @default([])
   contacts          SupplierContact[]
   quoteResponses    QuoteResponse[]
   portalTokens      SupplierPortalToken[]
   portalResponses   SupplierPortalResponse[]
+  reviews           SupplierReview[]
   createdBy         User?                    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -114,6 +119,29 @@ model Supplier {
   @@index([status])
   @@index([createdById])
   @@index([deletedAt])
+}
+
+// F12 (backlog 2026-07-12): avaliacao do fornecedor vencedor por dimensoes
+// (preco / prazo / qualidade, 1..5) + comentario opcional, capturada ao
+// concluir a cotacao. 1 review por cotacao (quoteRequestId @unique preserva
+// o historico e evita duplicata). A media/contagem sao computadas na leitura
+// (SupplierController + /reports/top-suppliers), nao persistidas.
+model SupplierReview {
+  id             Int          @id @default(autoincrement())
+  supplierId     Int
+  quoteRequestId Int          @unique
+  priceRating    Int
+  leadTimeRating Int
+  qualityRating  Int
+  comment        String?
+  createdById    Int?
+  createdAt      DateTime     @default(now())
+  supplier       Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  createdBy      User?        @relation("SupplierReviewCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([supplierId])
+  @@index([createdById])
 }
 
 model QuoteRequest {
@@ -139,6 +167,7 @@ model QuoteRequest {
   portalTokens    SupplierPortalToken[]
   portalResponses SupplierPortalResponse[]
   dispatchEvents  DispatchEvent[]
+  review          SupplierReview?
   createdBy       User?                    @relation("QuoteRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([createdById])

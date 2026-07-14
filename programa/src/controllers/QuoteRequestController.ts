@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import { SupplierRegretNotificationService } from '../services/SupplierRegretNotificationService';
 import {
+  quoteRequestCloseSchema,
   quoteRequestCreateSchema,
   quoteRequestUpdateSchema,
 } from '../validators/domain';
@@ -267,6 +268,31 @@ export class QuoteRequestController {
         });
       }
 
+      // F8/F12: valida o corpo (notifyLosers opcional + review opcional do
+      // vencedor). Body sem os campos continua valido (fechar sem avisar/avaliar).
+      const parsedBody = quoteRequestCloseSchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
+        return res.status(400).json({
+          message: 'Dados invalidos para concluir a cotacao (verifique a avaliacao do fornecedor).',
+        });
+      }
+      const { notifyLosers, review } = parsedBody.data;
+
+      // F12: a avaliacao so' e' aceita para um fornecedor que respondeu a esta
+      // cotacao (integridade — nao confiar cegamente no supplierId do cliente).
+      if (review) {
+        const respondingSupplier = await prisma.quoteResponse.findFirst({
+          where: { quoteRequestId: id, supplierId: review.supplierId, deletedAt: null },
+          select: { id: true },
+        });
+
+        if (!respondingSupplier) {
+          return res.status(400).json({
+            message: 'So e possivel avaliar um fornecedor que respondeu a esta cotacao.',
+          });
+        }
+      }
+
       const updatedQuoteRequest = await prisma.$transaction(async (tx) => {
         const closedQuoteRequest = await tx.quoteRequest.update({
           where: { id },
@@ -288,6 +314,42 @@ export class QuoteRequestController {
           tx,
         );
 
+        // F12: grava a avaliacao do vencedor (1 por cotacao — upsert por
+        // quoteRequestId cobre o caso de reabrir/reconcluir).
+        if (review) {
+          const savedReview = await tx.supplierReview.upsert({
+            where: { quoteRequestId: id },
+            create: {
+              supplierId: review.supplierId,
+              quoteRequestId: id,
+              priceRating: review.priceRating,
+              leadTimeRating: review.leadTimeRating,
+              qualityRating: review.qualityRating,
+              comment: review.comment ?? null,
+              createdById: req.user?.id ?? null,
+            },
+            update: {
+              supplierId: review.supplierId,
+              priceRating: review.priceRating,
+              leadTimeRating: review.leadTimeRating,
+              qualityRating: review.qualityRating,
+              comment: review.comment ?? null,
+            },
+          });
+
+          await AuditLogService.log(
+            {
+              entityType: 'supplier_review',
+              entityId: savedReview.id,
+              action: 'create',
+              performedById: req.user?.id ?? null,
+              afterData: savedReview,
+              metadata: { quoteRequestId: id, supplierId: review.supplierId },
+            },
+            tx,
+          );
+        }
+
         return closedQuoteRequest;
       });
 
@@ -297,7 +359,7 @@ export class QuoteRequestController {
       // resultado dos e-mails. `regret` volta no payload pra UI dar feedback.
       let regret: Awaited<ReturnType<typeof SupplierRegretNotificationService.notifyLosers>> | null =
         null;
-      if (req.body?.notifyLosers === true) {
+      if (notifyLosers === true) {
         regret = await SupplierRegretNotificationService.notifyLosers(id);
       }
 
