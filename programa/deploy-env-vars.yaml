@@ -11,4 +11,4 @@ COOKIE_SECURE: "true"
 # BACKEND_BUILD_TAG e injetado pelo workflow via sed no momento do deploy
 # (veja .github/workflows/deploy-intelliquote-api.yml), porque --env-vars-file
 # e --update-env-vars sao mutuamente exclusivos.
-BACKEND_BUILD_TAG: placeholder
+BACKEND_BUILD_TAG: "placeholder"
