@@ -101,6 +101,30 @@ const optionalDateField = z.preprocess(
   z.coerce.date().optional(),
 );
 
+// F12 (backlog 2026-07-12): etiquetas livres do fornecedor. Trim, descarta
+// vazias, limita tamanho e dedup (case-insensitive) preservando a 1a grafia.
+const tagsField = z.preprocess(
+  (value) => (value === undefined || value === null || value === '' ? undefined : value),
+  z
+    .array(z.string().trim().min(1).max(40))
+    .max(20)
+    .transform((tags) => {
+      const seen = new Set<string>();
+      const result: string[] = [];
+      for (const tag of tags) {
+        const key = tag.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(tag);
+      }
+      return result;
+    })
+    .optional(),
+);
+
+// F12: nota por dimensao (1..5).
+const ratingField = z.coerce.number().int().min(1).max(5);
+
 export const supplierCreateSchema = z.object({
   name: requiredTrimmedStringField,
   website: nullableTrimmedStringField.optional(),
@@ -109,6 +133,7 @@ export const supplierCreateSchema = z.object({
   country: nullableTrimmedStringField.optional(),
   notes: nullableTrimmedStringField.optional(),
   paymentTermsDays: nonNegativeIntegerField.optional(),
+  tags: tagsField,
 });
 
 export const supplierUpdateSchema = z.object({
@@ -119,6 +144,23 @@ export const supplierUpdateSchema = z.object({
   country: nullableOptionalTrimmedStringField,
   notes: nullableOptionalTrimmedStringField,
   paymentTermsDays: nonNegativeIntegerField.optional(),
+  tags: tagsField,
+});
+
+// F12: avaliacao opcional do fornecedor vencedor, capturada ao concluir a
+// cotacao. O supplierId e' validado no controller (precisa ter respondido a
+// cotacao). comment opcional.
+export const supplierReviewInputSchema = z.object({
+  supplierId: positiveIntegerField,
+  priceRating: ratingField,
+  leadTimeRating: ratingField,
+  qualityRating: ratingField,
+  comment: nullableTrimmedStringField.optional(),
+});
+
+export const quoteRequestCloseSchema = z.object({
+  notifyLosers: z.boolean().optional(),
+  review: supplierReviewInputSchema.optional(),
 });
 
 export const quoteRequestCreateSchema = z.object({

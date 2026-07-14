@@ -158,6 +158,33 @@ export class ReportController {
         },
       });
 
+      // F12 (backlog 2026-07-12): media de avaliacao por fornecedor (media das
+      // 3 dimensoes) juntada ao ranking. Nao filtra por range — reflete todo o
+      // historico de reviews do fornecedor.
+      const supplierIds = Array.from(new Set(responses.map((response) => response.supplierId)));
+      const reviewAggregates = supplierIds.length
+        ? await prisma.supplierReview.groupBy({
+            by: ['supplierId'],
+            where: { supplierId: { in: supplierIds } },
+            _avg: { priceRating: true, leadTimeRating: true, qualityRating: true },
+            _count: { _all: true },
+          })
+        : [];
+      const ratingBySupplier = new Map(
+        reviewAggregates.map((entry) => {
+          const avgPrice = entry._avg.priceRating ?? 0;
+          const avgLeadTime = entry._avg.leadTimeRating ?? 0;
+          const avgQuality = entry._avg.qualityRating ?? 0;
+          return [
+            entry.supplierId,
+            {
+              reviewCount: entry._count._all,
+              avgRating: Number(((avgPrice + avgLeadTime + avgQuality) / 3).toFixed(2)),
+            },
+          ];
+        }),
+      );
+
       const aggregate = new Map<
         number,
         {
@@ -197,6 +224,8 @@ export class ReportController {
           winRate: entry.responses > 0 ? Number(((entry.wins / entry.responses) * 100).toFixed(2)) : 0,
           averageScore:
             entry.responses > 0 ? Number((entry.totalScore / entry.responses).toFixed(2)) : 0,
+          avgRating: ratingBySupplier.get(entry.supplierId)?.avgRating ?? null,
+          reviewCount: ratingBySupplier.get(entry.supplierId)?.reviewCount ?? 0,
         }))
         .sort((a, b) => b.wins - a.wins || b.averageScore - a.averageScore)
         .slice(0, 10);
