@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
+import StarRating from '@/components/StarRating';
 import {
   createSupplierContact,
   deleteSupplierContact,
@@ -12,6 +13,14 @@ import {
   type SupplierContactForm,
 } from '@/services/dispatch';
 
+interface SupplierReviewStats {
+  count: number;
+  avgPrice: number | null;
+  avgLeadTime: number | null;
+  avgQuality: number | null;
+  avgRating: number | null;
+}
+
 interface Supplier {
   id: number;
   name: string;
@@ -21,6 +30,8 @@ interface Supplier {
   notes?: string | null;
   acceptedIncoterms: string[];
   paymentTermsDays?: number | null;
+  tags: string[];
+  reviewStats?: SupplierReviewStats | null;
 }
 
 interface SupplierFormState {
@@ -31,6 +42,7 @@ interface SupplierFormState {
   status: 'active' | 'inactive' | 'blocked';
   acceptedIncoterms: string[];
   paymentTermsDays: number;
+  tags: string[];
 }
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'];
@@ -43,7 +55,21 @@ const emptyForm: SupplierFormState = {
   status: 'active',
   acceptedIncoterms: [],
   paymentTermsDays: 30,
+  tags: [],
 };
+
+function normalizeReviewStats(value: unknown): SupplierReviewStats | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const obj = value as Record<string, unknown>;
+  const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+  return {
+    count: typeof obj.count === 'number' ? obj.count : 0,
+    avgPrice: num(obj.avgPrice),
+    avgLeadTime: num(obj.avgLeadTime),
+    avgQuality: num(obj.avgQuality),
+    avgRating: num(obj.avgRating),
+  };
+}
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
@@ -63,6 +89,8 @@ function normalize(supplier: unknown): Supplier {
     notes: (obj.notes as string | null) ?? null,
     acceptedIncoterms: asStringArray(obj.acceptedIncoterms),
     paymentTermsDays: typeof obj.paymentTermsDays === 'number' ? obj.paymentTermsDays : null,
+    tags: asStringArray(obj.tags),
+    reviewStats: normalizeReviewStats(obj.reviewStats),
   };
 }
 
@@ -73,6 +101,9 @@ export default function Fornecedores() {
   const [form, setForm] = useState<SupplierFormState>(emptyForm);
   const [search, setSearch] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  // F12: input livre de tag no form + filtro por tag na lista.
+  const [tagInput, setTagInput] = useState('');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
 
   const [expandedSupplierId, setExpandedSupplierId] = useState<number | null>(null);
   const [contactForm, setContactForm] = useState<SupplierContactForm>(getEmptyContactForm());
@@ -100,6 +131,18 @@ export default function Fornecedores() {
     () => (list.data ?? []).map((s) => s.id),
     [list.data],
   );
+
+  // F12: universo de tags (pra barra de filtro) + lista filtrada por tag.
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of list.data ?? []) for (const t of s.tags) set.add(t);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [list.data]);
+
+  const displayedSuppliers = useMemo(() => {
+    const data = list.data ?? [];
+    return tagFilter ? data.filter((s) => s.tags.includes(tagFilter)) : data;
+  }, [list.data, tagFilter]);
 
   const contactsBySupplier = useQuery({
     queryKey: ['supplier-contacts-bulk', supplierIds.join(',')],
@@ -134,6 +177,7 @@ export default function Fornecedores() {
         status: payload.status,
         acceptedIncoterms: payload.acceptedIncoterms,
         paymentTermsDays: payload.paymentTermsDays,
+        tags: payload.tags,
       });
       return normalize(created);
     },
@@ -154,6 +198,7 @@ export default function Fornecedores() {
         status: payload.status,
         acceptedIncoterms: payload.acceptedIncoterms,
         paymentTermsDays: payload.paymentTermsDays,
+        tags: payload.tags,
       });
       return normalize(updated);
     },
@@ -232,6 +277,7 @@ export default function Fornecedores() {
       status: supplier.status,
       acceptedIncoterms: supplier.acceptedIncoterms,
       paymentTermsDays: supplier.paymentTermsDays ?? 30,
+      tags: supplier.tags ?? [],
     });
     setFormError(null);
     setShowForm(true);
@@ -254,6 +300,20 @@ export default function Fornecedores() {
           : [...current.acceptedIncoterms, term],
       };
     });
+  }
+
+  // F12: edicao de tags (etiquetas livres). Dedup case-insensitive.
+  function addTag(raw: string) {
+    const tag = raw.trim();
+    if (!tag) return;
+    setForm((current) => {
+      if (current.tags.some((t) => t.toLowerCase() === tag.toLowerCase())) return current;
+      return { ...current, tags: [...current.tags, tag] };
+    });
+  }
+
+  function removeTag(tag: string) {
+    setForm((current) => ({ ...current, tags: current.tags.filter((t) => t !== tag) }));
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -371,7 +431,33 @@ export default function Fornecedores() {
             <p>Use o botão “Novo fornecedor” para começar.</p>
           </div>
         )}
-        {list.data && list.data.length > 0 && (
+        {allTags.length > 0 && (
+          <div className="chip-row" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className={`chip${tagFilter === null ? ' chip--active' : ''}`}
+              onClick={() => setTagFilter(null)}
+            >
+              Todas
+            </button>
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className={`chip${tagFilter === tag ? ' chip--active' : ''}`}
+                onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
+        {list.data && list.data.length > 0 && displayedSuppliers.length === 0 && (
+          <div className="empty-state">
+            <p>Nenhum fornecedor com a etiqueta “{tagFilter}”.</p>
+          </div>
+        )}
+        {displayedSuppliers.length > 0 && (
           <table className="table">
             <thead>
               <tr>
@@ -379,13 +465,14 @@ export default function Fornecedores() {
                 <th>Nome</th>
                 <th>País</th>
                 <th>Incoterms</th>
+                <th>Avaliação</th>
                 <th>Contato principal</th>
                 <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {list.data.map((s) => {
+              {displayedSuppliers.map((s) => {
                 const supplierContacts = contactsForSupplier(s.id);
                 const primary = supplierContacts.find((c) => c.isPrimary);
                 const isExpanded = expandedSupplierId === s.id;
@@ -404,12 +491,35 @@ export default function Fornecedores() {
                           {isExpanded ? '−' : '+'}
                         </button>
                       </td>
-                      <td><strong>{s.name}</strong></td>
+                      <td>
+                        <strong>{s.name}</strong>
+                        {s.tags.length > 0 && (
+                          <div className="chip-row" style={{ marginTop: 4 }}>
+                            {s.tags.map((tag) => (
+                              <span key={tag} className="chip" style={{ fontSize: 11, padding: '1px 6px' }}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td>{s.country ?? '—'}</td>
                               <td>
                                 {s.acceptedIncoterms.length > 0
                                   ? s.acceptedIncoterms.join(', ')
                                   : '—'}
+                              </td>
+                              <td>
+                                {s.reviewStats && s.reviewStats.count > 0 && s.reviewStats.avgRating !== null ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <StarRating value={s.reviewStats.avgRating} readOnly showValue />
+                                    <span style={{ fontSize: 12, color: 'var(--muted, #666)' }}>
+                                      ({s.reviewStats.count})
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--muted, #666)' }}>—</span>
+                                )}
                               </td>
                               <td>
                                 {primary
@@ -460,7 +570,7 @@ export default function Fornecedores() {
                             </tr>
                             {isExpanded && (
                               <tr key={`${s.id}-contacts`}>
-                                <td colSpan={7} style={{ background: 'var(--surface-alt)', padding: 12 }}>
+                                <td colSpan={8} style={{ background: 'var(--surface-alt)', padding: 12 }}>
                                   <div className="page-header" style={{ marginBottom: 8 }}>
                                     <h3 style={{ margin: 0 }}>Contatos</h3>
                                     <button
@@ -730,6 +840,47 @@ export default function Fornecedores() {
                 );
               })}
             </div>
+
+            <label className="field-label" htmlFor="tagInput" style={{ marginTop: 12 }}>
+              Etiquetas
+            </label>
+            <div className="chip-row" style={{ marginBottom: 6 }}>
+              {form.tags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className="chip chip--active"
+                  onClick={() => removeTag(tag)}
+                  title="Remover etiqueta"
+                >
+                  {tag} ✕
+                </button>
+              ))}
+              {form.tags.length === 0 && (
+                <span style={{ fontSize: 13, color: 'var(--muted, #666)' }}>Nenhuma etiqueta.</span>
+              )}
+            </div>
+            <input
+              id="tagInput"
+              className="input"
+              type="text"
+              value={tagInput}
+              placeholder="Digite e Enter (ex.: confiável, prazo curto)"
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                  e.preventDefault();
+                  addTag(tagInput);
+                  setTagInput('');
+                }
+              }}
+              onBlur={() => {
+                if (tagInput.trim()) {
+                  addTag(tagInput);
+                  setTagInput('');
+                }
+              }}
+            />
 
             <label className="field-label" htmlFor="notes" style={{ marginTop: 12 }}>Observações</label>
             <textarea

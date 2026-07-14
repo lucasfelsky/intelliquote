@@ -9,7 +9,9 @@ import {
   messageOf,
   type ComparisonRecord,
   type ComparisonResult,
+  type SupplierReviewInput,
 } from '@/services/quoteResponses';
+import StarRating from '@/components/StarRating';
 import {
   previewQuoteResponseReply,
   replyToQuoteResponse,
@@ -137,7 +139,8 @@ export default function Comparacoes() {
   });
 
   const closeMut = useMutation({
-    mutationFn: (notifyLosers: boolean) => closeQuoteRequest(numericId, { notifyLosers }),
+    mutationFn: (vars: { notifyLosers: boolean; review?: SupplierReviewInput | null }) =>
+      closeQuoteRequest(numericId, { notifyLosers: vars.notifyLosers, review: vars.review }),
     onSuccess: async () => {
       setFeedback({
         kind: 'ok',
@@ -160,6 +163,11 @@ export default function Comparacoes() {
   const [replyTarget, setReplyTarget] = useState<ComparisonResult | null>(null);
   // F8: opt-in de avisar os fornecedores nao selecionados ao concluir.
   const [notifyLosers, setNotifyLosers] = useState(false);
+  // F12: avaliacao opcional do fornecedor vencedor (0 = sem nota).
+  const [priceRating, setPriceRating] = useState(0);
+  const [leadTimeRating, setLeadTimeRating] = useState(0);
+  const [qualityRating, setQualityRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
   const [replySubject, setReplySubject] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
@@ -496,34 +504,83 @@ export default function Comparacoes() {
                 {selectedQuote.status === 'open' ? 'Aberta' : 'Fechada'}
               </span>
             )}
-            {canConclude && selectedQuote?.status === 'open' && latest && (
-              <>
-                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={notifyLosers}
-                    onChange={(e) => setNotifyLosers(e.target.checked)}
-                  />
-                  Avisar não selecionados
-                </label>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => {
-                    const msg = notifyLosers
-                      ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
-                      : 'Concluir esta cotação? Ela será fechada.';
-                    if (window.confirm(msg)) {
-                      closeMut.mutate(notifyLosers);
-                    }
-                  }}
-                  disabled={closeMut.isPending}
-                  title="Fecha a cotação (ação separada da comparação)."
-                >
-                  {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
-                </button>
-              </>
-            )}
+            {canConclude && selectedQuote?.status === 'open' && latest && (() => {
+              const winner = latest.results.find((r) => r.isWinner);
+              const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
+              const ratingStarted = priceRating > 0 || leadTimeRating > 0 || qualityRating > 0;
+              const ratingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+                  {winner && (
+                    <div
+                      className="card"
+                      style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt, #f7f7f7)' }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                        Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--muted, #666)' }}>(opcional)</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                        <span>Preço</span>
+                        <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
+                        <span>Prazo</span>
+                        <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
+                        <span>Qualidade</span>
+                        <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
+                      </div>
+                      <textarea
+                        value={reviewComment}
+                        onChange={(e) => setReviewComment(e.target.value)}
+                        placeholder="Comentário (opcional)"
+                        rows={2}
+                        style={{ width: '100%', marginTop: 8, fontSize: 13 }}
+                      />
+                      {ratingStarted && !ratingComplete && (
+                        <div style={{ fontSize: 12, color: 'var(--danger, #b00)', marginTop: 4 }}>
+                          Dê nota nas três dimensões ou deixe todas em branco.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                      <input
+                        type="checkbox"
+                        checked={notifyLosers}
+                        onChange={(e) => setNotifyLosers(e.target.checked)}
+                      />
+                      Avisar não selecionados
+                    </label>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => {
+                        const review: SupplierReviewInput | null =
+                          winner && ratingComplete
+                            ? {
+                                supplierId: winner.supplierId,
+                                priceRating,
+                                leadTimeRating,
+                                qualityRating,
+                                comment: reviewComment.trim() || null,
+                              }
+                            : null;
+                        const msg = notifyLosers
+                          ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
+                          : 'Concluir esta cotação? Ela será fechada.';
+                        if (window.confirm(msg)) {
+                          closeMut.mutate({ notifyLosers, review });
+                        }
+                      }}
+                      disabled={closeMut.isPending || (ratingStarted && !ratingComplete)}
+                      title="Fecha a cotação (ação separada da comparação)."
+                    >
+                      {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
         {!selectedId && (

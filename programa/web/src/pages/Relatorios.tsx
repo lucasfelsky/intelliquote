@@ -14,6 +14,7 @@ import {
   type ReportTopSupplier,
   type ReportSupplierEngagementItem,
 } from '@/services/reports';
+import StarRating from '@/components/StarRating';
 
 function todayIso(): string {
   const d = new Date();
@@ -368,6 +369,7 @@ export default function Relatorios() {
                   <th>Vitórias</th>
                   <th>Taxa de vitória</th>
                   <th>Score médio</th>
+                  <th>Avaliação</th>
                   <th>Propostas</th>
                 </tr>
               </thead>
@@ -385,6 +387,18 @@ export default function Relatorios() {
                     <td>{formatInt(row.wins)}</td>
                     <td>{formatPercent(row.winRate)}</td>
                     <td>{formatNumberScore(row.averageScore)}</td>
+                    <td>
+                      {row.avgRating !== null && row.reviewCount > 0 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <StarRating value={row.avgRating} readOnly showValue />
+                          <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                            ({row.reviewCount})
+                          </span>
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td>{formatInt(row.responses)}</td>
                   </tr>
                 ))}
