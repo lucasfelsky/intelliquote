@@ -165,7 +165,10 @@ jobs:
             exit 1
           fi
           ENV_VARS_FILE="/tmp/deploy-env-vars.yaml"
-          sed "s|BACKEND_BUILD_TAG: placeholder|BACKEND_BUILD_TAG: ${BUILD_TAG}|" \
+          # Aspas obrigatorias: gcloud --env-vars-file exige valores string.
+          # Sem elas, uma tag numerica (ex: backend-v80 -> 80) e' lida como
+          # int pelo parser YAML e o deploy falha ("must be strings").
+          sed "s|BACKEND_BUILD_TAG: \"placeholder\"|BACKEND_BUILD_TAG: \"${BUILD_TAG}\"|" \
             "${ENV_VARS_FILE_TEMPLATE}" > "${ENV_VARS_FILE}"
           echo "Env vars file:"
           cat "${ENV_VARS_FILE}"
