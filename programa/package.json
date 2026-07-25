@@ -21,7 +21,8 @@
     "prisma:seed": "ts-node-dev --transpile-only prisma/seed.ts",
     "verify:env:local": "node ./scripts/verify-env.js local",
     "verify:env:staging": "node ./scripts/verify-env.js staging",
-    "verify:env:production": "node ./scripts/verify-env.js production"
+    "verify:env:production": "node ./scripts/verify-env.js production",
+    "audit:vault": "node ./scripts/audit-vault.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
