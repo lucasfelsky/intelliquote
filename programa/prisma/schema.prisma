@@ -18,6 +18,7 @@ enum SupplierStatus {
   inactive
   blocked
 }
+
 enum Incoterm {
   EXW
   FCA
@@ -40,28 +41,28 @@ model Role {
 }
 
 model User {
-  id                    Int                   @id @default(autoincrement())
-  name                  String
-  email                 String                @unique
-  passwordHash          String
-  isActive              Boolean               @default(true)
-  roleId                Int
-  role                  Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  sessions              Session[]
-  createdSuppliers      Supplier[]            @relation("SupplierCreatedBy")
-  createdQuoteRequests  QuoteRequest[]        @relation("QuoteRequestCreatedBy")
-  createdQuoteResponses QuoteResponse[]       @relation("QuoteResponseCreatedBy")
-  executedComparisons   QuoteComparison[]     @relation("QuoteComparisonExecutedBy")
-  auditLogs             AuditLog[]            @relation("AuditPerformedBy")
-  uploadedAttachments   Attachment[]          @relation("AttachmentUploadedBy")
-  passwordResetTokens   PasswordResetToken[]
-  companyProfileUpdates CompanyProfile[]      @relation("CompanyProfileUpdatedBy")
-  emailTemplatesUpdated EmailTemplate[]       @relation("EmailTemplateUpdatedBy")
-  createdDispatchEvents DispatchEvent[]       @relation("DispatchEventCreatedBy")
-  createdPortalTokens   SupplierPortalToken[] @relation("SupplierPortalTokenCreatedBy")
-  createdSupplierReviews SupplierReview[]     @relation("SupplierReviewCreatedBy")
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  id                     Int                   @id @default(autoincrement())
+  name                   String
+  email                  String                @unique
+  passwordHash           String
+  isActive               Boolean               @default(true)
+  roleId                 Int
+  role                   Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  sessions               Session[]
+  createdSuppliers       Supplier[]            @relation("SupplierCreatedBy")
+  createdQuoteRequests   QuoteRequest[]        @relation("QuoteRequestCreatedBy")
+  createdQuoteResponses  QuoteResponse[]       @relation("QuoteResponseCreatedBy")
+  executedComparisons    QuoteComparison[]     @relation("QuoteComparisonExecutedBy")
+  auditLogs              AuditLog[]            @relation("AuditPerformedBy")
+  uploadedAttachments    Attachment[]          @relation("AttachmentUploadedBy")
+  passwordResetTokens    PasswordResetToken[]
+  companyProfileUpdates  CompanyProfile[]      @relation("CompanyProfileUpdatedBy")
+  emailTemplatesUpdated  EmailTemplate[]       @relation("EmailTemplateUpdatedBy")
+  createdDispatchEvents  DispatchEvent[]       @relation("DispatchEventCreatedBy")
+  createdPortalTokens    SupplierPortalToken[] @relation("SupplierPortalTokenCreatedBy")
+  createdSupplierReviews SupplierReview[]      @relation("SupplierReviewCreatedBy")
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   @@index([roleId])
 }
@@ -193,6 +194,7 @@ model QuoteRequestItem {
   quoteRequest        QuoteRequest                 @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   catalogItem         CatalogItem?                 @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   portalResponseItems SupplierPortalResponseItem[]
+  quoteResponseItems  QuoteResponseItem[]
 
   @@index([quoteRequestId])
   @@index([catalogItemId])
@@ -223,6 +225,7 @@ model QuoteResponse {
   quoteRequestId    Int
   supplierId        Int
   offeredPrice      Decimal                 @db.Decimal(12, 2)
+  targetPrice       Decimal?                @db.Decimal(12, 2)
   currency          String                  @default("USD")
   exchangeRate      Decimal                 @default(1.0) @db.Decimal(14, 6)
   freightCost       Decimal                 @default(0.0) @db.Decimal(14, 2)
@@ -248,12 +251,32 @@ model QuoteResponse {
   supplier          Supplier                @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   createdBy         User?                   @relation("QuoteResponseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   comparisonResults QuoteComparisonResult[]
+  items             QuoteResponseItem[]
   wonComparisons    QuoteComparison[]       @relation("ComparisonWinner")
 
   @@unique([quoteRequestId, supplierId])
   @@index([quoteRequestId])
   @@index([supplierId])
   @@index([createdById])
+  @@index([deletedAt])
+}
+
+model QuoteResponseItem {
+  id                 Int       @id @default(autoincrement())
+  quoteResponseId    Int
+  quoteRequestItemId Int
+  unitPrice          Decimal   @db.Decimal(14, 2)
+  quantity           Int
+  totalPrice         Decimal   @db.Decimal(14, 2)
+  leadTimeDays       Int?
+  notes              String?
+  deletedAt          DateTime?
+
+  quoteResponse    QuoteResponse    @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
+  quoteRequestItem QuoteRequestItem @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)
+
+  @@index([quoteResponseId])
+  @@index([quoteRequestItemId])
   @@index([deletedAt])
 }
 
@@ -436,30 +459,30 @@ model EmailTemplate {
 }
 
 model SupplierPortalToken {
-  id                Int                      @id @default(autoincrement())
+  id                Int                              @id @default(autoincrement())
   quoteRequestId    Int
   supplierId        Int
   supplierContactId Int
-  tokenHash         String                   @unique
+  tokenHash         String                           @unique
   expiresAt         DateTime
   revokedAt         DateTime?
   firstSeenAt       DateTime?
   lastSeenAt        DateTime?
-  accessCount       Int                      @default(0)
+  accessCount       Int                              @default(0)
   respondedAt       DateTime?
   // F5: setado quando o lembrete pre-deadline foi disparado para este token
   // (claim atomico — evita lembrete duplicado entre replicas do Cloud Run).
   reminderSentAt    DateTime?
-  responseId        Int?                     @unique
+  responseId        Int?                             @unique
   createdById       Int
   dispatchEventId   Int?
-  createdAt         DateTime                 @default(now())
-  quoteRequest      QuoteRequest             @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
-  supplier          Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  supplierContact   SupplierContact          @relation(fields: [supplierContactId], references: [id], onDelete: Cascade)
-  createdBy         User                     @relation("SupplierPortalTokenCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  dispatchEvent     DispatchEvent?           @relation(fields: [dispatchEventId], references: [id], onDelete: SetNull)
-  response          SupplierPortalResponse?  @relation("SupplierPortalTokenResponse")
+  createdAt         DateTime                         @default(now())
+  quoteRequest      QuoteRequest                     @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  supplier          Supplier                         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierContact   SupplierContact                  @relation(fields: [supplierContactId], references: [id], onDelete: Cascade)
+  createdBy         User                             @relation("SupplierPortalTokenCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  dispatchEvent     DispatchEvent?                   @relation(fields: [dispatchEventId], references: [id], onDelete: SetNull)
+  response          SupplierPortalResponse?          @relation("SupplierPortalTokenResponse")
   revisions         SupplierPortalResponseRevision[] @relation("SupplierPortalTokenRevisions")
   logs              SupplierPortalTokenLog[]
 

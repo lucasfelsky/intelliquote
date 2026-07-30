@@ -74,6 +74,9 @@ interface QuoteResponseSummary {
   offeredIncoterm: string;
   freightCost?: number;
   totalLandedCost?: number;
+  paymentTermsDays?: number;
+  targetPrice?: number | null;
+  items?: any[];
   isWinner?: boolean;
 }
 
@@ -627,6 +630,14 @@ export default function CotacaoDetalhe() {
       onError: (err) => setReplyModalError(messageOf(err)),
     });
 
+    const updateTargetPriceMutation = useMutation({
+      mutationFn: (vars: { id: number; targetPrice: number | null }) =>
+        api.put(`/v1/quote-responses/${vars.id}`, { targetPrice: vars.targetPrice }),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['quote-request', id] });
+      },
+    });
+
     function openReplyModal(response: QuoteResponseSummary) {
       const supplierName = response.supplier?.name ?? `Fornecedor #${response.supplierId}`;
       const itemName = qr.productName || qr.requestCode;
@@ -1097,6 +1108,8 @@ export default function CotacaoDetalhe() {
                 <th>Fornecedor</th>
                 <th>Preço</th>
                 <th>Moeda</th>
+                <th>Pagamento</th>
+                <th>Target Price</th>
                 <th>Incoterm</th>
                 <th>Status</th>
                 <th>Ações</th>
@@ -1106,8 +1119,50 @@ export default function CotacaoDetalhe() {
               {responses.map((r) => (
                 <tr key={r.id}>
                   <td><strong>{r.supplier?.name ?? `Fornecedor #${r.supplierId}`}</strong></td>
-                  <td>{formatNumber(r.offeredPrice)}</td>
+                  <td>
+                    {(qr.items && qr.items.length === 1) ? (
+                      <div>
+                        <strong>{formatNumber(r.offeredPrice)}</strong>
+                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                          {(qr.items ?? [])[0]?.catalogItem?.commercialName ?? (qr.items ?? [])[0]?.productName} ({(qr.items ?? [])[0]?.quantity} {(qr.items ?? [])[0]?.unit})
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>{formatNumber(r.offeredPrice)}</strong>
+                        {r.items && r.items.length > 0 ? (
+                          <details>
+                            <summary style={{ fontSize: 11, color: 'var(--primary)', cursor: 'pointer', marginTop: 4 }}>Ver itens</summary>
+                            <ul style={{ fontSize: 11, color: 'var(--ink-soft)', paddingLeft: 16, margin: '4px 0 0 0' }}>
+                              {r.items.map((i: any) => {
+                                const qrItem = (qr.items ?? []).find((qri: any) => qri.id === i.quoteRequestItemId);
+                                return <li key={i.id}>{qrItem?.productName}: {formatNumber(i.unitPrice)} x {i.quantity}</li>
+                              })}
+                            </ul>
+                          </details>
+                        ) : (
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic', marginTop: 4 }}>Sem detalhamento por item</div>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td>{r.currency}</td>
+                  <td>{r.paymentTermsDays ?? 0} dias</td>
+                  <td>
+                    <input
+                      type="number"
+                      className="input"
+                      style={{ width: 80, padding: '4px 8px', fontSize: 12 }}
+                      defaultValue={r.targetPrice ?? ''}
+                      onBlur={(e) => {
+                        const val = e.target.value ? Number(e.target.value) : null;
+                        if (val !== (r.targetPrice ?? null)) {
+                          updateTargetPriceMutation.mutate({ id: r.id, targetPrice: val });
+                        }
+                      }}
+                      placeholder="Alvo"
+                    />
+                  </td>
                   <td>{r.offeredIncoterm}</td>
                   <td>
                     {r.isWinner ? (

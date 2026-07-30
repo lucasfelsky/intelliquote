@@ -46,6 +46,8 @@ interface ResponseFormState {
   cofins: string;
   offeredIncoterm: Incoterm;
   paymentTermsDays: string;
+  targetPrice: string;
+  items: Array<{ quoteRequestItemId: number; unitPrice: string; quantity: number }>;
   notes: string;
 }
 
@@ -66,6 +68,8 @@ const emptyForm: ResponseFormState = {
   cofins: '0',
   offeredIncoterm: 'FOB',
   paymentTermsDays: '30',
+  targetPrice: '',
+  items: [],
   notes: '',
 };
 
@@ -154,6 +158,12 @@ export default function Respostas() {
       const items = Array.isArray(data) ? data : data.items ?? [];
       return items.map(normalizeSupplier);
     },
+  });
+
+  const selectedQuoteRequest = useQuery({
+    queryKey: ['quote-request', form.quoteRequestId],
+    queryFn: () => api.get<any>(`/v1/quote-requests/${form.quoteRequestId}`),
+    enabled: !!form.quoteRequestId,
   });
 
   const createMut = useMutation({
@@ -248,6 +258,8 @@ export default function Respostas() {
       cofins: String(r.cofins ?? 0),
       offeredIncoterm: r.offeredIncoterm ?? 'FOB',
       paymentTermsDays: String(r.paymentTermsDays ?? 0),
+      targetPrice: r.targetPrice !== null && r.targetPrice !== undefined ? String(r.targetPrice) : '',
+      items: r.items ? r.items.map(i => ({ quoteRequestItemId: i.quoteRequestItemId, unitPrice: String(i.unitPrice), quantity: i.quantity })) : [],
       notes: r.notes ?? '',
     });
     setFormError(null);
@@ -312,6 +324,12 @@ export default function Respostas() {
         paymentTermsDays: Number.isFinite(paymentTermsDays) && paymentTermsDays >= 0
           ? paymentTermsDays
           : 0,
+        targetPrice: form.targetPrice.trim() ? numeric(form.targetPrice) : undefined,
+        items: form.items.length > 0 ? form.items.map(i => ({
+          quoteRequestItemId: i.quoteRequestItemId,
+          unitPrice: numeric(i.unitPrice || '0'),
+          quantity: i.quantity,
+        })) : undefined,
         notes: form.notes.trim() ? form.notes.trim() : null,
       };
     } catch (err) {
@@ -620,8 +638,8 @@ export default function Respostas() {
                     ))}
                 </select>
               </div>
-              <div>
-                <label className="field-label" htmlFor="rf-price">Preço oferecido *</label>
+              <div className="form-grid__full">
+                <label className="field-label" htmlFor="rf-price">Preço total oferecido *</label>
                 <input
                   id="rf-price"
                   className="input"
@@ -633,6 +651,59 @@ export default function Respostas() {
                   required
                 />
               </div>
+
+              {selectedQuoteRequest.data?.items && selectedQuoteRequest.data.items.length > 0 && (
+                <div className="form-grid__full">
+                  <h3 style={{ fontSize: 14, marginBottom: 8 }}>Detalhamento por Item (Opcional)</h3>
+                  <table className="table" style={{ fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th>Produto</th>
+                        <th>Qtd</th>
+                        <th>Preço Unitário</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedQuoteRequest.data.items.map((item: any) => {
+                        const formItem = form.items.find(i => i.quoteRequestItemId === item.id) || { quoteRequestItemId: item.id, unitPrice: '', quantity: item.quantity };
+                        const total = formItem.unitPrice ? (Number(formItem.unitPrice) * item.quantity) : 0;
+                        return (
+                          <tr key={item.id}>
+                            <td>{item.catalogItem?.commercialName ?? item.productName}</td>
+                            <td>{item.quantity} {item.unit}</td>
+                            <td>
+                              <input
+                                type="number"
+                                className="input"
+                                style={{ width: 100, padding: '4px 8px' }}
+                                min="0"
+                                step="0.01"
+                                value={formItem.unitPrice}
+                                onChange={(e) => {
+                                  const newItems = form.items.filter(i => i.quoteRequestItemId !== item.id);
+                                  if (e.target.value !== '') {
+                                    newItems.push({ quoteRequestItemId: item.id, unitPrice: e.target.value, quantity: item.quantity });
+                                  }
+                                  // Update total price automatically
+                                  let newTotal = 0;
+                                  selectedQuoteRequest.data.items.forEach((qi: any) => {
+                                    const fi = qi.id === item.id ? { unitPrice: e.target.value } : newItems.find(x => x.quoteRequestItemId === qi.id);
+                                    if (fi?.unitPrice) newTotal += Number(fi.unitPrice) * qi.quantity;
+                                  });
+                                  setForm({ ...form, items: newItems, offeredPrice: newTotal > 0 ? String(newTotal) : form.offeredPrice });
+                                }}
+                              />
+                            </td>
+                            <td>{total > 0 ? total.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <div>
                 <label className="field-label" htmlFor="rf-currency">Moeda *</label>
                 <input
@@ -683,6 +754,18 @@ export default function Respostas() {
                   value={form.paymentTermsDays}
                   onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
                   required
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="rf-targetPrice">Target Price (Opcional)</label>
+                <input
+                  id="rf-targetPrice"
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.targetPrice}
+                  onChange={(e) => setForm({ ...form, targetPrice: e.target.value })}
                 />
               </div>
               <div>

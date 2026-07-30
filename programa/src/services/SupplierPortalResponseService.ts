@@ -241,6 +241,15 @@ async function syncQuoteResponseFromPortal(
     submittedAt,
   } satisfies Partial<Prisma.QuoteResponseUncheckedCreateInput>;
 
+  const itemsToCreate = items.map((item) => ({
+    quoteRequestItemId: item.quoteRequestItemId,
+    unitPrice: item.unitPrice,
+    quantity: item.quantity,
+    totalPrice: item.totalPrice,
+    leadTimeDays: item.leadTimeDays,
+    notes: item.notes,
+  }));
+
   return tx.quoteResponse.upsert({
     where: {
       quoteRequestId_supplierId: {
@@ -252,10 +261,12 @@ async function syncQuoteResponseFromPortal(
       ...data,
       version: 1,
       isWinner: false,
+      items: { create: itemsToCreate },
     },
     update: {
       ...data,
       version: { increment: 1 },
+      items: { deleteMany: {}, create: itemsToCreate },
     },
   });
 }
