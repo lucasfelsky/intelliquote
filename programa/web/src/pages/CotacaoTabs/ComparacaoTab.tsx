@@ -71,6 +71,8 @@ export function ComparacaoTab({
     queryFn: () => listComparisons(quoteRequestId),
   });
 
+  // F8: Executar comparação e definir vencedora.
+  // Comparar passou a ser repetível e não fecha a cotação: não exige mais status aberto.
   const runMut = useMutation({
     mutationFn: () => {
       const weights = {
@@ -92,6 +94,7 @@ export function ComparacaoTab({
     onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
   });
 
+  // F12: Concluir cotação (fechar).
   const closeMut = useMutation({
     mutationFn: (vars: { notifyLosers: boolean; review?: SupplierReviewInput | null }) =>
       closeQuoteRequest(quoteRequestId, { notifyLosers: vars.notifyLosers, review: vars.review }),
