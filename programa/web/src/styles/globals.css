@@ -1409,7 +1409,7 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 
 .data-table th {
   background: var(--surface);
-  color: var(--muted);
+  color: var(--ink-soft);
   font-weight: 500;
   font-size: 13px;
   text-transform: uppercase;
