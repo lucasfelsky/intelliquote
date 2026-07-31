@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import {
   closeQuoteRequest,
@@ -17,13 +16,6 @@ import {
   replyToQuoteResponse,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
-
-interface QuoteRequestSummary {
-  id: number;
-  requestCode: string;
-  productName: string;
-  status: 'open' | 'closed';
-}
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -51,70 +43,36 @@ function formatDateTime(iso: string | null | undefined): string {
     + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function normalizeQuoteRequest(raw: unknown): QuoteRequestSummary {
-  if (typeof raw !== 'object' || raw === null) throw new Error('Resposta inesperada.');
-  const obj = raw as Record<string, unknown>;
-  return {
-    id: Number(obj.id),
-    requestCode: String(obj.requestCode ?? ''),
-    productName: String(obj.productName ?? ''),
-    status: (obj.status as 'open' | 'closed') ?? 'open',
-  };
-}
-
-function unwrapPaginatedList(data: unknown): unknown[] {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') {
-    const obj = data as { data?: unknown; items?: unknown };
-    if (Array.isArray(obj.data)) return obj.data;
-    if (Array.isArray(obj.items)) return obj.items;
-  }
-  return [];
-}
-
-export default function Comparacoes() {
+export function ComparacaoTab({
+  quoteRequestId,
+  quoteRequestStatus,
+  productName,
+  requestCode,
+}: {
+  quoteRequestId: number;
+  quoteRequestStatus: 'open' | 'closed';
+  productName: string | null;
+  requestCode: string;
+}) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const role = user?.role;
   const canCompare = role === 'admin' || role === 'comprador' || role === 'gestor';
-  // O endpoint /close aceita apenas admin e gestor (ver QuoteRequestRoutes.ts).
   const canConclude = role === 'admin' || role === 'gestor';
 
-  const [selectedId, setSelectedId] = useState<string>('');
   const [priceWeight, setPriceWeight] = useState(1);
   const [paymentWeight, setPaymentWeight] = useState(1);
   const [incotermWeight, setIncotermWeight] = useState(1);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
 
-  const quoteRequests = useQuery({
-    queryKey: ['quote-requests', 'all'],
-    queryFn: async () => {
-      const data = await api.get<unknown>('/v1/quote-requests');
-      const items = unwrapPaginatedList(data);
-      return items.map(normalizeQuoteRequest);
-    },
-  });
-
-  useEffect(() => {
-    if (!selectedId && quoteRequests.data && quoteRequests.data.length > 0) {
-      const first = quoteRequests.data[0];
-      if (first) setSelectedId(String(first.id));
-    }
-  }, [quoteRequests.data, selectedId]);
-
-  const numericId = Number(selectedId);
-  const selectedQuote = useMemo(
-    () => (quoteRequests.data ?? []).find((q) => q.id === numericId) ?? null,
-    [quoteRequests.data, numericId],
-  );
-
   const history = useQuery({
-    queryKey: ['comparisons', numericId],
-    queryFn: () => listComparisons(numericId),
-    enabled: Number.isFinite(numericId) && numericId > 0,
+    queryKey: ['comparisons', quoteRequestId],
+    queryFn: () => listComparisons(quoteRequestId),
   });
 
+  // F8: Executar comparação e definir vencedora.
+  // Comparar passou a ser repetível e não fecha a cotação: não exige mais status aberto.
   const runMut = useMutation({
     mutationFn: () => {
       const weights = {
@@ -122,48 +80,39 @@ export default function Comparacoes() {
         paymentTermsWeight: paymentWeight,
         incotermWeight,
       };
-      return executeComparison(numericId, weights);
+      return executeComparison(quoteRequestId, weights);
     },
     onSuccess: async () => {
       setFeedback({
         kind: 'ok',
         text: 'Comparação executada e vencedora definida. A cotação continua aberta — conclua-a quando fechar o pedido.',
       });
-      await qc.invalidateQueries({ queryKey: ['comparisons', numericId] });
-      await qc.invalidateQueries({ queryKey: ['quote-requests'] });
-      await qc.invalidateQueries({ queryKey: ['quote-requests', 'all'] });
-      await qc.invalidateQueries({ queryKey: ['quote-requests', 'open-closed'] });
+      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
     },
     onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
   });
 
+  // F12: Concluir cotação (fechar).
   const closeMut = useMutation({
     mutationFn: (vars: { notifyLosers: boolean; review?: SupplierReviewInput | null }) =>
-      closeQuoteRequest(numericId, { notifyLosers: vars.notifyLosers, review: vars.review }),
-    onSuccess: async () => {
+      closeQuoteRequest(quoteRequestId, { notifyLosers: vars.notifyLosers, review: vars.review }),
+    onSuccess: async (_data, vars) => {
       setFeedback({
         kind: 'ok',
-        text: notifyLosers
+        text: vars.notifyLosers
           ? 'Cotação concluída. Fornecedores não selecionados foram avisados.'
           : 'Cotação concluída (fechada).',
       });
-      await qc.invalidateQueries({ queryKey: ['comparisons', numericId] });
-      await qc.invalidateQueries({ queryKey: ['quote-requests'] });
-      await qc.invalidateQueries({ queryKey: ['quote-requests', 'all'] });
-      await qc.invalidateQueries({ queryKey: ['quote-requests', 'open-closed'] });
-      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
     },
     onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
   });
 
-  // Comparar passou a ser repetivel e nao fecha a cotacao: nao exige mais status aberto.
-  const canExecute = canCompare;
-
   const [replyTarget, setReplyTarget] = useState<ComparisonResult | null>(null);
-  // F8: opt-in de avisar os fornecedores nao selecionados ao concluir.
   const [notifyLosers, setNotifyLosers] = useState(false);
-  // F12: avaliacao opcional do fornecedor vencedor (0 = sem nota).
   const [priceRating, setPriceRating] = useState(0);
   const [leadTimeRating, setLeadTimeRating] = useState(0);
   const [qualityRating, setQualityRating] = useState(0);
@@ -200,8 +149,8 @@ export default function Comparacoes() {
 
   function openReplyModal(r: ComparisonResult) {
     if (!r.quoteResponseId) return;
-    const code = selectedQuote?.requestCode ?? '';
-    const defaultSubject = `Purchase order — ${code}`;
+    const itemName = productName || requestCode;
+    const defaultSubject = `${itemName} - SQ QUIMICA - ${r.supplier?.name}`;
     setReplyTarget(r);
     setReplySubject(defaultSubject);
     setReplyMessage('');
@@ -308,17 +257,10 @@ export default function Comparacoes() {
     }, [sliderId, min, max, step, id]);
 
     return (
-      <div
-        id={sliderId}
-        className="weight-slider"
-      >
+      <div id={sliderId} className="weight-slider">
         <div className="weight-slider__header">
-          <label className="field-label" htmlFor={`${id}-display`}>
-            {label}
-          </label>
-          <span className="weight-slider__value" aria-live="polite">
-            {value.toFixed(2)}
-          </span>
+          <label className="field-label" htmlFor={`${id}-display`}>{label}</label>
+          <span className="weight-slider__value" aria-live="polite">{value.toFixed(2)}</span>
         </div>
         <div
           className="weight-slider__track"
@@ -330,18 +272,10 @@ export default function Comparacoes() {
           tabIndex={0}
         >
           <div className="weight-slider__fill" style={{ width: `${pct}%` }} />
-          <div
-            className="weight-slider__thumb"
-            style={{ left: `calc(${pct}% - 7px)` }}
-          />
+          <div className="weight-slider__thumb" style={{ left: `calc(${pct}% - 7px)` }} />
         </div>
         <div className="weight-slider__scale" aria-hidden="true">
-          <span>0</span>
-          <span>1</span>
-          <span>2</span>
-          <span>3</span>
-          <span>4</span>
-          <span>5</span>
+          <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
         </div>
       </div>
     );
@@ -394,10 +328,7 @@ export default function Comparacoes() {
                   Responder
                 </button>
               ) : (
-                <span
-                  style={{ fontSize: 11, color: 'var(--ink-soft)' }}
-                  title="Sem proposta vinculada para responder."
-                >
+                <span style={{ fontSize: 11, color: 'var(--ink-soft)' }} title="Sem proposta vinculada para responder.">
                   Sem e-mail do fornecedor
                 </span>
               )}
@@ -414,192 +345,130 @@ export default function Comparacoes() {
   const latest = records[0];
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Compras</p>
-          <h1>Comparações</h1>
-          <p>Execute a comparação entre respostas de uma cotação aberta e consulte o histórico auditável.</p>
-        </div>
-      </div>
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {feedback && (
         <p style={{
           color: feedback.kind === 'err' ? 'var(--danger)' : 'var(--primary-700)',
           fontSize: 13,
-          marginBottom: 8,
+          background: feedback.kind === 'err' ? 'var(--danger-light, #fee2e2)' : 'var(--primary-50, #f0fdfa)',
+          padding: '8px 12px',
+          borderRadius: '6px',
         }}>
           {feedback.text}
         </p>
       )}
 
-      <section className="card">
-        <div className="form-grid" style={{ marginBottom: 12 }}>
-          <div>
-            <label className="field-label" htmlFor="comparison-quote">Cotação</label>
-            <select
-              id="comparison-quote"
-              className="select"
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-            >
-              <option value="">Selecione uma cotação…</option>
-              {(quoteRequests.data ?? []).map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.requestCode} · {q.productName} {q.status === 'closed' ? '(fechada)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => runMut.mutate()}
-              disabled={!canExecute || !selectedQuote || runMut.isPending}
-              title={
-                !selectedQuote
-                  ? 'Selecione uma cotação.'
-                  : !canCompare
-                    ? 'Seu perfil não tem permissão para executar comparações.'
-                    : ''
-              }
-            >
-              {runMut.isPending ? 'Executando…' : 'Executar comparação'}
-            </button>
-          </div>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Configuração dos Pesos</h2>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => runMut.mutate()}
+          disabled={!canCompare || runMut.isPending}
+          title={!canCompare ? 'Seu perfil não tem permissão para executar comparações.' : ''}
+        >
+          {runMut.isPending ? 'Executando…' : 'Executar comparação'}
+        </button>
+      </div>
 
-        <div className="form-grid weight-grid">
-          <WeightSlider
-            id="weight-price"
-            label="Peso · Preço"
-            value={priceWeight}
-          />
-          <WeightSlider
-            id="weight-payment"
-            label="Peso · Pagamento"
-            value={paymentWeight}
-          />
-          <WeightSlider
-            id="weight-incoterm"
-            label="Peso · Incoterm"
-            value={incotermWeight}
-          />
-        </div>
+      <div className="form-grid weight-grid">
+        <WeightSlider id="weight-price" label="Peso · Preço" value={priceWeight} />
+        <WeightSlider id="weight-payment" label="Peso · Pagamento" value={paymentWeight} />
+        <WeightSlider id="weight-incoterm" label="Peso · Incoterm" value={incotermWeight} />
+      </div>
 
-        {!canCompare && (
-          <p style={{ color: 'var(--warning)', fontSize: 12, marginTop: 12 }}>
-            Seu perfil não tem permissão para executar comparações.
-          </p>
-        )}
-      </section>
+      {!canCompare && (
+        <p style={{ color: 'var(--warning)', fontSize: 12, marginTop: 12 }}>
+          Seu perfil não tem permissão para executar comparações.
+        </p>
+      )}
 
-      <section className="card" style={{ marginTop: 16 }}>
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Última comparação</h2>
-          <div className="page-header__actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {selectedQuote && (
-              <span className={`badge${selectedQuote.status === 'closed' ? ' badge--muted' : ''}`}>
-                {selectedQuote.status === 'open' ? 'Aberta' : 'Fechada'}
-              </span>
-            )}
-            {canConclude && selectedQuote?.status === 'open' && latest && (() => {
-              const winner = latest.results.find((r) => r.isWinner);
-              const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
-              const ratingStarted = priceRating > 0 || leadTimeRating > 0 || qualityRating > 0;
-              const ratingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Última comparação</h2>
+        
+        {canConclude && quoteRequestStatus === 'open' && latest && (() => {
+          const winner = latest.results.find((r) => r.isWinner);
+          const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
+          const ratingStarted = priceRating > 0 || leadTimeRating > 0 || qualityRating > 0;
+          const ratingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
 
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-                  {winner && (
-                    <div
-                      className="card"
-                      style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt, #f7f7f7)' }}
-                    >
-                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                        Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--muted, #666)' }}>(opcional)</span>
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, alignItems: 'center', fontSize: 13 }}>
-                        <span>Preço</span>
-                        <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
-                        <span>Prazo</span>
-                        <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
-                        <span>Qualidade</span>
-                        <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
-                      </div>
-                      <textarea
-                        value={reviewComment}
-                        onChange={(e) => setReviewComment(e.target.value)}
-                        placeholder="Comentário (opcional)"
-                        rows={2}
-                        style={{ width: '100%', marginTop: 8, fontSize: 13 }}
-                      />
-                      {ratingStarted && !ratingComplete && (
-                        <div style={{ fontSize: 12, color: 'var(--danger, #b00)', marginTop: 4 }}>
-                          Dê nota nas três dimensões ou deixe todas em branco.
-                        </div>
-                      )}
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+              {winner && (
+                <div className="card" style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt, #f7f7f7)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                    Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--muted, #666)' }}>(opcional)</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <span>Preço</span>
+                    <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
+                    <span>Prazo</span>
+                    <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
+                    <span>Qualidade</span>
+                    <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
+                  </div>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Comentário (opcional)"
+                    rows={2}
+                    style={{ width: '100%', marginTop: 8, fontSize: 13 }}
+                  />
+                  {ratingStarted && !ratingComplete && (
+                    <div style={{ fontSize: 12, color: 'var(--danger, #b00)', marginTop: 4 }}>
+                      Dê nota nas três dimensões ou deixe todas em branco.
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-                      <input
-                        type="checkbox"
-                        checked={notifyLosers}
-                        onChange={(e) => setNotifyLosers(e.target.checked)}
-                      />
-                      Avisar não selecionados
-                    </label>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      onClick={() => {
-                        const review: SupplierReviewInput | null =
-                          winner && ratingComplete
-                            ? {
-                                supplierId: winner.supplierId,
-                                priceRating,
-                                leadTimeRating,
-                                qualityRating,
-                                comment: reviewComment.trim() || null,
-                              }
-                            : null;
-                        const msg = notifyLosers
-                          ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
-                          : 'Concluir esta cotação? Ela será fechada.';
-                        if (window.confirm(msg)) {
-                          closeMut.mutate({ notifyLosers, review });
-                        }
-                      }}
-                      disabled={closeMut.isPending || (ratingStarted && !ratingComplete)}
-                      title="Fecha a cotação (ação separada da comparação)."
-                    >
-                      {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
-                    </button>
-                  </div>
                 </div>
-              );
-            })()}
-          </div>
-        </div>
-        {!selectedId && (
-          <div className="empty-state">
-            <p>Selecione uma cotação para visualizar a comparação.</p>
-          </div>
-        )}
-        {selectedId && history.isLoading && <p>Carregando comparações…</p>}
-        {selectedId && history.isError && (
-          <div className="empty-state">
-            <p>Não foi possível carregar o histórico de comparações.</p>
-          </div>
-        )}
-        {selectedId && history.data && !latest && (
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={notifyLosers}
+                    onChange={(e) => setNotifyLosers(e.target.checked)}
+                  />
+                  Avisar não selecionados
+                </label>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    const review: SupplierReviewInput | null = winner && ratingComplete
+                      ? {
+                          supplierId: winner.supplierId,
+                          priceRating,
+                          leadTimeRating,
+                          qualityRating,
+                          comment: reviewComment.trim() || null,
+                        }
+                      : null;
+                    const msg = notifyLosers
+                      ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
+                      : 'Concluir esta cotação? Ela será fechada.';
+                    if (window.confirm(msg)) {
+                      closeMut.mutate({ notifyLosers, review });
+                    }
+                  }}
+                  disabled={closeMut.isPending || (ratingStarted && !ratingComplete)}
+                  title="Fecha a cotação (ação separada da comparação)."
+                >
+                  {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {history.isLoading && <p>Carregando comparações…</p>}
+        {history.isError && <p>Não foi possível carregar o histórico de comparações.</p>}
+        {history.data && !latest && (
           <div className="empty-state">
             <strong>Esta cotação ainda não foi comparada.</strong>
             <p>Use o botão “Executar comparação” para calcular os scores e definir a vencedora.</p>
           </div>
         )}
+
         {latest && (
           <table className="table">
             <thead>
@@ -617,24 +486,18 @@ export default function Comparacoes() {
             <tbody>{renderResultRows(latest.results)}</tbody>
           </table>
         )}
-      </section>
+      </div>
 
-      <section className="card" style={{ marginTop: 16 }}>
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Histórico de comparações</h2>
-        </div>
-        {selectedId && history.isLoading && <p>Carregando histórico…</p>}
-        {selectedId && history.isError && (
-          <div className="empty-state">
-            <p>Não foi possível carregar o histórico desta cotação.</p>
-          </div>
-        )}
-        {selectedId && records.length === 0 && !history.isLoading && !history.isError && (
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Histórico de comparações</h2>
+        
+        {records.length === 0 && !history.isLoading && !history.isError && (
           <div className="empty-state">
             <strong>Sem histórico</strong>
             <p>Quando comparações forem executadas, o histórico aparecerá aqui.</p>
           </div>
         )}
+
         {records.map((rec: ComparisonRecord) => {
           const winner = rec.results.find((r) => r.isWinner);
           const isOpen = expandedHistory.has(rec.id);
@@ -642,11 +505,7 @@ export default function Comparacoes() {
             <article
               key={rec.id}
               className="card"
-              style={{
-                marginBottom: 12,
-                background: 'var(--surface-alt)',
-                borderStyle: 'dashed',
-              }}
+              style={{ marginBottom: 12, background: 'var(--surface-alt)', borderStyle: 'dashed' }}
             >
               <div className="page-header" style={{ marginBottom: 8 }}>
                 <div>
@@ -661,16 +520,14 @@ export default function Comparacoes() {
                   <span className="chip chip--static">Pagto {formatNumber(rec.paymentTermsWeight, 2)}</span>
                   <span className="chip chip--static">Inc {formatNumber(rec.incotermWeight, 2)}</span>
                   <span className="chip chip--static">{rec.results.length} propostas</span>
-                  {winner
-                    ? <span className="badge">{`Vencedora: ${winner.supplier?.name ?? `Fornecedor #${winner.supplierId}`}`}</span>
-                    : <span className="badge badge--muted">Sem vencedora</span>}
+                  {winner ? (
+                    <span className="badge">{`Vencedora: ${winner.supplier?.name ?? `Fornecedor #${winner.supplierId}`}`}</span>
+                  ) : (
+                    <span className="badge badge--muted">Sem vencedora</span>
+                  )}
                 </div>
               </div>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => toggleExpanded(rec.id)}
-              >
+              <button type="button" className="ghost-button" onClick={() => toggleExpanded(rec.id)}>
                 {isOpen ? 'Ocultar detalhes' : 'Ver detalhes'}
               </button>
               {isOpen && (
@@ -695,14 +552,14 @@ export default function Comparacoes() {
             </article>
           );
         })}
-      </section>
+      </div>
 
       {replyTarget && (
         <div className="modal-backdrop" onClick={closeReplyModal}>
           <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
             <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
             <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
-              {selectedQuote?.requestCode ?? ''} · {selectedQuote?.productName ?? ''}
+              {requestCode} · {productName}
             </p>
 
             <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>

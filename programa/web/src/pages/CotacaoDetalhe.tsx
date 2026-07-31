@@ -7,15 +7,15 @@ import {
   generatePortalTokens,
   listPortalTokens,
   previewDispatch,
-  previewQuoteResponseReply,
-  replyToQuoteResponse,
   revokePortalToken,
   sendDispatch,
   type DispatchRecipientPreview,
   type DispatchSendResult,
   type PortalTokenListItem,
-  type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
+import { Tabs, TabList, Tab, TabPanel } from '@/components/Tabs';
+import { RespostasTab } from './CotacaoTabs/RespostasTab';
+import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
 
 type QuoteStatus = 'open' | 'closed';
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
@@ -286,16 +286,9 @@ export default function CotacaoDetalhe() {
   const [showTokensModal, setShowTokensModal] = useState(false);
   const [tokenActionError, setTokenActionError] = useState<string | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
-  const [replyFeedback, setReplyFeedback] = useState<{ responseId: number; kind: 'ok' | 'err'; msg: string } | null>(null);
-  // Modal de "Responder": assunto/mensagem editaveis antes do envio (preco
-  // alvo, fechamento do pedido, etc.) + preview ao vivo.
-  const [replyTarget, setReplyTarget] = useState<QuoteResponseSummary | null>(null);
-  const [replySubject, setReplySubject] = useState('');
-  const [replyMessage, setReplyMessage] = useState('');
-  const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
-  const [replyModalError, setReplyModalError] = useState<string | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('resumo');
 
     const canEdit = user?.role === 'admin' || user?.role === 'comprador';
     const canManageStatus = user?.role === 'admin' || user?.role === 'gestor';
@@ -591,71 +584,7 @@ export default function CotacaoDetalhe() {
       onError: (err) => setTokenActionError(messageOf(err)),
     });
 
-    // Envia a resposta ao fornecedor direto pelo servidor (SMTP), com o
-    // conteudo do e-mail vindo do template "quote_reply" (editavel em
-    // Templates.tsx) e CC = CompanyProfile.dispatchCc. Substitui o antigo
-    // fluxo mailto: + clipboard, que exigia colar a tabela manualmente e
-    // so' conseguia enviar texto puro (limitacao do proprio protocolo
-    // mailto:, RFC 6068).
-    //
-    // Assunto e mensagem sao editaveis na modal antes do envio (ex.: preco
-    // alvo, fechamento do pedido) -- a mensagem entra no e-mail por cima do
-    // template, no lugar do marcador CUSTOM_MESSAGE_SLOT (mesmo mecanismo
-    // do "Enviar cotacao").
-    const replyPreviewMutation = useMutation({
-      mutationFn: (vars: { id: number; subject: string; message: string }) =>
-        previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message }),
-      onSuccess: (data) => {
-        setReplyPreviewData(data);
-        setReplyModalError(null);
-      },
-      onError: (err) => setReplyModalError(messageOf(err)),
-    });
 
-    const replySendMutation = useMutation({
-      mutationFn: () => {
-        if (!replyTarget) throw new Error('Nenhuma resposta selecionada.');
-        return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage });
-      },
-      onSuccess: (result) => {
-        if (replyTarget) {
-          setReplyFeedback({
-            responseId: replyTarget.id,
-            kind: 'ok',
-            msg: `E-mail enviado para ${result.to}${result.cc.length > 0 ? ` (CC: ${result.cc.join(', ')})` : ''}.`,
-          });
-        }
-        closeReplyModal();
-      },
-      onError: (err) => setReplyModalError(messageOf(err)),
-    });
-
-    const updateTargetPriceMutation = useMutation({
-      mutationFn: (vars: { id: number; targetPrice: number | null }) =>
-        api.put(`/v1/quote-responses/${vars.id}`, { targetPrice: vars.targetPrice }),
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ['quote-request', id] });
-      },
-    });
-
-    function openReplyModal(response: QuoteResponseSummary) {
-      const supplierName = response.supplier?.name ?? `Fornecedor #${response.supplierId}`;
-      const itemName = qr.productName || qr.requestCode;
-      const defaultSubject = `${itemName} - SQ QUIMICA - ${supplierName}`;
-      setReplyTarget(response);
-      setReplySubject(defaultSubject);
-      setReplyMessage('');
-      setReplyPreviewData(null);
-      setReplyModalError(null);
-      setReplyFeedback(null);
-      replyPreviewMutation.mutate({ id: response.id, subject: defaultSubject, message: '' });
-    }
-
-    function closeReplyModal() {
-      setReplyTarget(null);
-      setReplyPreviewData(null);
-      setReplyModalError(null);
-    }
 
     const activeTokens: PortalTokenListItem[] = portalTokensQuery.data ?? [];
 
@@ -871,7 +800,6 @@ export default function CotacaoDetalhe() {
 
   const qr = detail.data;
   const items = (qr.items ?? []).map(normalizeItem);
-  const responses = qr.quoteResponses ?? [];
 
   return (
     <div className="page">
@@ -957,320 +885,167 @@ export default function CotacaoDetalhe() {
         <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{actionError}</p>
       )}
 
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Resumo</h2>
-        </div>
-        <div className="form-grid">
-          <div>
-            <p className="eyebrow">Código</p>
-            <p><strong>{qr.requestCode}</strong></p>
-          </div>
-          <div>
-            <p className="eyebrow">Incoterms aceitáveis</p>
-            <div className="chip-row">
-              {qr.desiredIncoterm.map((t) => (
-                <span key={t} className="chip chip--static">{t}</span>
-              ))}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabList aria-label="Abas da cotação">
+          <Tab value="resumo">Resumo</Tab>
+          <Tab value="itens">Itens</Tab>
+          <Tab value="respostas">Respostas</Tab>
+          <Tab value="comparacao">Comparações</Tab>
+        </TabList>
+
+        <TabPanel value="resumo">
+          <section className="card">
+            <div className="page-header" style={{ marginBottom: 8 }}>
+              <h2>Resumo</h2>
             </div>
-          </div>
-          <div>
-                      <p className="eyebrow">Porto de embarque</p>
-                      <p>{qr.originPort ?? '—'}</p>
-          </div>
-          <div>
-                      <p className="eyebrow">Porto de destino</p>
-                      <p>{qr.destinationPort ?? '—'}</p>
-          </div>
-                    <div>
-                      <p className="eyebrow">Moeda</p>
-                      <p>{qr.currency}</p>
-                    </div>
-          <div>
-            <p className="eyebrow">Prazo</p>
-            <p>{formatDate(qr.deadlineAt)}</p>
-          </div>
-          <div className="form-grid__full">
-            <p className="eyebrow">Descrição</p>
-            <p>{qr.description ?? '—'}</p>
-          </div>
-          <div>
-            <p className="eyebrow">Criada em</p>
-            <p>{formatDateTime(qr.createdAt)}</p>
-          </div>
-          <div>
-            <p className="eyebrow">Fechada em</p>
-            <p>{qr.closedAt ? formatDateTime(qr.closedAt) : '—'}</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="card" style={{ marginTop: 16 }}>
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Itens</h2>
-          {canEdit && qr.status === 'open' && (
-            <button type="button" className="primary-button" onClick={openNewItem}>
-              + Adicionar item
-            </button>
-          )}
-        </div>
-        {items.length === 0 ? (
-          <div className="empty-state">
-            <strong>Nenhum item cadastrado</strong>
-            <p>
-              {canEdit && qr.status === 'open'
-                ? 'Use o botão “Adicionar item” para começar.'
-                : 'Esta cotação ainda não possui itens.'}
-            </p>
-          </div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nome comercial</th>
-                <th>Nome de mercado</th>
-                <th>Qtd</th>
-                <th>Unidade</th>
-                          <th>Incoterm</th>
-                          <th>Porto</th>
-                          <th>DG</th>
-                          <th>Notas</th>
-                          {canEdit && qr.status === 'open' && <th>Ações</th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((it) => (
-                          <tr key={it.id}>
-                            <td><strong>{it.catalogItem?.commercialName ?? it.productName}</strong></td>
-                            <td>{it.catalogItem?.marketName ?? '—'}</td>
-                            <td>{formatNumber(it.quantity)}</td>
-                            <td>{it.unit}</td>
-                            <td>{it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm)}</td>
-                            <td>{it.destinationPort ?? qr.destinationPort ?? '—'}</td>
-                            <td>{it.catalogItem?.isDangerousGood ? 'Sim' : '—'}</td>
-                            <td>{it.notes ?? '—'}</td>
-                  {canEdit && qr.status === 'open' && (
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => openEditItem(it)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => {
-                            if (window.confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
-                              removeItem.mutate(it.id);
-                            }
-                          }}
-                          disabled={removeItem.isPending}
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      <section className="card" style={{ marginTop: 16 }}>
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Respostas</h2>
-        </div>
-        {replyFeedback && (
-          <p
-            style={{
-              color: replyFeedback.kind === 'ok' ? 'var(--ok, #1a7f4e)' : 'var(--danger)',
-              fontSize: 13,
-              marginBottom: 12,
-            }}
-          >
-            {replyFeedback.msg}
-          </p>
-        )}
-        {responses.length === 0 ? (
-          <div className="empty-state">
-            <strong>Sem respostas ainda</strong>
-            <p>Quando os fornecedores responderem, elas aparecerão aqui.</p>
-          </div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Fornecedor</th>
-                <th>Preço</th>
-                <th>Moeda</th>
-                <th>Pagamento</th>
-                <th>Target Price</th>
-                <th>Incoterm</th>
-                <th>Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {responses.map((r) => (
-                <tr key={r.id}>
-                  <td><strong>{r.supplier?.name ?? `Fornecedor #${r.supplierId}`}</strong></td>
-                  <td>
-                    {(qr.items && qr.items.length === 1) ? (
-                      <div>
-                        <strong>{formatNumber(r.offeredPrice)}</strong>
-                        <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
-                          {(qr.items ?? [])[0]?.catalogItem?.commercialName ?? (qr.items ?? [])[0]?.productName} ({(qr.items ?? [])[0]?.quantity} {(qr.items ?? [])[0]?.unit})
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <strong>{formatNumber(r.offeredPrice)}</strong>
-                        {r.items && r.items.length > 0 ? (
-                          <details>
-                            <summary style={{ fontSize: 11, color: 'var(--primary)', cursor: 'pointer', marginTop: 4 }}>Ver itens</summary>
-                            <ul style={{ fontSize: 11, color: 'var(--ink-soft)', paddingLeft: 16, margin: '4px 0 0 0' }}>
-                              {r.items.map((i: any) => {
-                                const qrItem = (qr.items ?? []).find((qri: any) => qri.id === i.quoteRequestItemId);
-                                return <li key={i.id}>{qrItem?.productName}: {formatNumber(i.unitPrice)} x {i.quantity}</li>
-                              })}
-                            </ul>
-                          </details>
-                        ) : (
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontStyle: 'italic', marginTop: 4 }}>Sem detalhamento por item</div>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  <td>{r.currency}</td>
-                  <td>{r.paymentTermsDays ?? 0} dias</td>
-                  <td>
-                    <input
-                      type="number"
-                      className="input"
-                      style={{ width: 80, padding: '4px 8px', fontSize: 12 }}
-                      defaultValue={r.targetPrice ?? ''}
-                      onBlur={(e) => {
-                        const val = e.target.value ? Number(e.target.value) : null;
-                        if (val !== (r.targetPrice ?? null)) {
-                          updateTargetPriceMutation.mutate({ id: r.id, targetPrice: val });
-                        }
-                      }}
-                      placeholder="Alvo"
-                    />
-                  </td>
-                  <td>{r.offeredIncoterm}</td>
-                  <td>
-                    {r.isWinner ? (
-                      <span className="badge">Vencedor</span>
-                    ) : (
-                      <span className="badge badge--muted">Recebida</span>
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => openReplyModal(r)}
-                      title="Abre uma modal pra revisar/editar o e-mail (assunto, preco alvo, fechamento do pedido) antes de enviar ao fornecedor"
-                    >
-                      Responder
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      {replyTarget && (
-        <div className="modal-backdrop" onClick={closeReplyModal}>
-          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-            <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
-              {qr.requestCode} · {qr.productName}
-            </p>
-
-            <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>
-              Assunto
-            </label>
-            <input
-              id="replySubject"
-              className="input"
-              value={replySubject}
-              onChange={(e) => setReplySubject(e.target.value)}
-            />
-
-            <label className="field-label" htmlFor="replyMessage" style={{ marginTop: 12 }}>
-              Mensagem
-            </label>
-            <textarea
-              id="replyMessage"
-              className="textarea"
-              rows={4}
-              value={replyMessage}
-              onChange={(e) => setReplyMessage(e.target.value)}
-              placeholder="Opcional. Ex.: nosso preco alvo e US$ X / unidade; ou confirmando o fechamento do pedido. Aparece no corpo do e-mail, acima da assinatura."
-            />
-
-            <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={replyPreviewMutation.isPending}
-                onClick={() =>
-                  replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage })
-                }
-              >
-                {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
-              </button>
+            <div className="form-grid">
+              <div>
+                <p className="eyebrow">Código</p>
+                <p><strong>{qr.requestCode}</strong></p>
+              </div>
+              <div>
+                <p className="eyebrow">Incoterms aceitáveis</p>
+                <div className="chip-row">
+                  {qr.desiredIncoterm.map((t) => (
+                    <span key={t} className="chip chip--static">{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="eyebrow">Porto de embarque</p>
+                <p>{qr.originPort ?? '—'}</p>
+              </div>
+              <div>
+                <p className="eyebrow">Porto de destino</p>
+                <p>{qr.destinationPort ?? '—'}</p>
+              </div>
+              <div>
+                <p className="eyebrow">Moeda</p>
+                <p>{qr.currency}</p>
+              </div>
+              <div>
+                <p className="eyebrow">Prazo</p>
+                <p>{formatDate(qr.deadlineAt)}</p>
+              </div>
+              <div className="form-grid__full">
+                <p className="eyebrow">Descrição</p>
+                <p>{qr.description ?? '—'}</p>
+              </div>
+              <div>
+                <p className="eyebrow">Criada em</p>
+                <p>{formatDateTime(qr.createdAt)}</p>
+              </div>
+              <div>
+                <p className="eyebrow">Fechada em</p>
+                <p>{qr.closedAt ? formatDateTime(qr.closedAt) : '—'}</p>
+              </div>
             </div>
+          </section>
+        </TabPanel>
 
-            <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
-            {replyPreviewData ? (
-              <>
-                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
-                  Para: <strong>{replyPreviewData.to}</strong>
-                  {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+        <TabPanel value="itens">
+          <section className="card">
+            <div className="page-header" style={{ marginBottom: 8 }}>
+              <h2>Itens</h2>
+              {canEdit && qr.status === 'open' && (
+                <button type="button" className="primary-button" onClick={openNewItem}>
+                  + Adicionar item
+                </button>
+              )}
+            </div>
+            {items.length === 0 ? (
+              <div className="empty-state">
+                <strong>Nenhum item cadastrado</strong>
+                <p>
+                  {canEdit && qr.status === 'open'
+                    ? 'Use o botão “Adicionar item” para começar.'
+                    : 'Esta cotação ainda não possui itens.'}
                 </p>
-                <iframe
-                  key={replyPreviewData.html.length}
-                  title="preview-reply-email"
-                  className="preview-frame"
-                  srcDoc={replyPreviewData.html}
-                />
-              </>
+              </div>
             ) : (
-              <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
-              </p>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nome comercial</th>
+                    <th>Nome de mercado</th>
+                    <th>Qtd</th>
+                    <th>Unidade</th>
+                    <th>Incoterm</th>
+                    <th>Porto</th>
+                    <th>DG</th>
+                    <th>Notas</th>
+                    {canEdit && qr.status === 'open' && <th>Ações</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr key={it.id}>
+                      <td><strong>{it.catalogItem?.commercialName ?? it.productName}</strong></td>
+                      <td>{it.catalogItem?.marketName ?? '—'}</td>
+                      <td>{formatNumber(it.quantity)}</td>
+                      <td>{it.unit}</td>
+                      <td>{it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm)}</td>
+                      <td>{it.destinationPort ?? qr.destinationPort ?? '—'}</td>
+                      <td>{it.catalogItem?.isDangerousGood ? 'Sim' : '—'}</td>
+                      <td>{it.notes ?? '—'}</td>
+                      {canEdit && qr.status === 'open' && (
+                        <td>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => openEditItem(it)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => {
+                                if (window.confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
+                                  removeItem.mutate(it.id);
+                                }
+                              }}
+                              disabled={removeItem.isPending}
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
+          </section>
+        </TabPanel>
 
-            {replyModalError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
-            )}
+        <TabPanel value="respostas">
+          <section className="card">
+            <RespostasTab
+              quoteRequestId={qr.id}
+              quoteRequestStatus={qr.status}
+              quoteRequestCurrency={qr.currency}
+              productName={qr.productName}
+              requestCode={qr.requestCode}
+            />
+          </section>
+        </TabPanel>
 
-            <div className="modal__actions">
-              <button type="button" className="ghost-button" onClick={closeReplyModal}>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={replySendMutation.isPending || !replySubject.trim()}
-                onClick={() => replySendMutation.mutate()}
-              >
-                {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        <TabPanel value="comparacao">
+          <section className="card">
+            <ComparacaoTab
+              quoteRequestId={qr.id}
+              quoteRequestStatus={qr.status}
+              productName={qr.productName}
+              requestCode={qr.requestCode}
+            />
+          </section>
+        </TabPanel>
+      </Tabs>
+
 
       {showDispatchModal && (
         <div className="modal-backdrop" onClick={closeDispatchModal}>

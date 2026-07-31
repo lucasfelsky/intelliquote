@@ -209,7 +209,6 @@
     "pages": [
       "Ajuda.tsx",
       "Auditoria.tsx",
-      "Comparacoes.tsx",
       "CotacaoDetalhe.tsx",
       "CotacaoNova.tsx",
       "Cotacoes.tsx",
@@ -221,7 +220,6 @@
       "LoginGate.tsx",
       "PlaceholderPage.tsx",
       "Relatorios.tsx",
-      "Respostas.tsx",
       "Templates.tsx",
       "Usuarios.tsx"
     ],
