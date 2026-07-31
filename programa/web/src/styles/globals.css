@@ -5,11 +5,11 @@
   --ink: #1f1c18;
   --ink-soft: #4a5560;
   --primary: #00ae91;
-  --primary-700: #008f76;
+  --primary-700: #00735c;
   --primary-50: #e3f5f0;
-  --danger: #c85d2c;
-  --warning: #b48a2d;
-  --info: #1e6fb6;
+  --danger: #a4370c;
+  --warning: #7a5a07;
+  --info: #16568c;
   --border: #dce9e5;
   --border-strong: #b7cdc5;
   --radius: 14px;
@@ -705,7 +705,7 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600;
 }
 .dispatch-status--completed { background: #d6f5e6; color: #14633c; }
-.dispatch-status--partial   { background: #fff4dc; color: #8a6a0e; }
+.dispatch-status--partial   { background: #fff4dc; color: var(--warning); }
 .dispatch-status--failed    { background: #fde2d3; color: var(--danger); }
 .dispatch-status--in_progress { background: #def0fb; color: var(--info); }
 
