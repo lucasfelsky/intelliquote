@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import exceljs from 'exceljs';
-
-const prisma = new PrismaClient();
 
 const NCM_REGEX = /^\d{8}$/;
 
@@ -16,7 +14,7 @@ export class CatalogItemImportController {
 
       const buffer = Buffer.from(contentBase64, 'base64');
       const workbook = new exceljs.Workbook();
-      await workbook.xlsx.load(buffer);
+      await workbook.xlsx.load(buffer as any);
 
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {
@@ -32,6 +30,7 @@ export class CatalogItemImportController {
       let rowCount = 0;
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // skip header
+        if (!row.hasValues) return; // skip empty rows
         if (rowCount >= 500) {
           if (rowCount === 500) {
             errorLines.push({ row: rowNumber, reason: 'Limite de 500 linhas excedido' });
@@ -121,7 +120,11 @@ export class CatalogItemImportController {
           });
           successLines.push({ row: i + 2, commercialName: item.commercialName });
         } catch (error: any) {
-          errorLines.push({ row: i + 2, reason: error.message });
+          if (error.code === 'P2002' && error.meta?.target?.includes('marketName')) {
+            errorLines.push({ row: i + 2, reason: 'Já existe um item de catálogo com o Nome de Mercado fornecido.' });
+          } else {
+            errorLines.push({ row: i + 2, reason: error.message });
+          }
         }
       }
 

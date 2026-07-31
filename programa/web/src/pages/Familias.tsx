@@ -119,7 +119,7 @@ export default function Familias() {
           <div className="modal-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
             <button
               type="button"
-              className="secondary-button"
+              className="ghost-button"
               onClick={() => setIsModalOpen(false)}
               disabled={createMutation.isPending}
             >

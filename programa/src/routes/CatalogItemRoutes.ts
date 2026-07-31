@@ -4,20 +4,18 @@ import { CatalogItemImportController } from '../controllers/CatalogItemImportCon
 import { allowRoles, requireAuth } from '../middlewares/auth';
 
 const catalogItemRoutes = Router();
-const importController = new CatalogItemImportController();
-
 catalogItemRoutes.post(
   '/catalog-items/import',
   requireAuth,
   allowRoles(['admin', 'comprador']),
-  importController.preview,
+  CatalogItemImportController.preview,
 );
 
 catalogItemRoutes.post(
   '/catalog-items/import/confirm',
   requireAuth,
   allowRoles(['admin', 'comprador']),
-  importController.confirm,
+  CatalogItemImportController.confirm,
 );
 
 catalogItemRoutes.get(

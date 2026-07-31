@@ -1,21 +1,20 @@
 import { Router } from 'express';
 import { ItemFamilyController } from '../controllers/ItemFamilyController';
-import { requireAuth } from '../middlewares/requireAuth';
-import { allowRoles } from '../middlewares/allowRoles';
+import { allowRoles, requireAuth } from '../middlewares/auth';
 
 const router = Router();
 
 router.get(
-  '/',
+  '/item-families',
   requireAuth,
   ItemFamilyController.listFamilies
 );
 
 router.post(
-  '/',
+  '/item-families',
   requireAuth,
   allowRoles(['admin', 'comprador']),
   ItemFamilyController.createFamily
 );
 
-export default router;
+export { router as itemFamilyRoutes };

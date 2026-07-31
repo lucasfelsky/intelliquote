@@ -259,8 +259,8 @@ export default function Itens() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          <button type="button" className="secondary-button" onClick={openImportModal}>
-            Importar itens
+          <button type="button" className="ghost-button" onClick={openImportModal}>
+            Importar
           </button>
           <button type="button" className="primary-button" onClick={openCreate}>
             + Novo item
@@ -572,8 +572,8 @@ export default function Itens() {
               />
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
               <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
-                <button type="button" className="btn-secondary" onClick={closeImportModal} disabled={importLoading}>Cancelar</button>
-                <button type="button" className="btn-primary" onClick={handlePreviewImport} disabled={!importFile || importLoading}>
+                <button type="button" className="ghost-button" onClick={closeImportModal} disabled={importLoading}>Cancelar</button>
+                <button type="button" className="primary-button" onClick={handlePreviewImport} disabled={!importFile || importLoading}>
                   {importLoading ? 'Processando...' : 'Carregar e Validar'}
                 </button>
               </div>
@@ -600,8 +600,8 @@ export default function Itens() {
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
 
               <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
-                <button type="button" className="btn-secondary" onClick={() => setImportStep('upload')} disabled={importLoading}>Voltar</button>
-                <button type="button" className="btn-primary" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || importLoading}>
+                <button type="button" className="ghost-button" onClick={() => setImportStep('upload')} disabled={importLoading}>Voltar</button>
+                <button type="button" className="primary-button" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || importLoading}>
                   {importLoading ? 'Importando...' : 'Confirmar Importação'}
                 </button>
               </div>
@@ -626,7 +626,7 @@ export default function Itens() {
               )}
 
               <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
-                <button type="button" className="btn-primary" onClick={closeImportModal}>Concluir</button>
+                <button type="button" className="primary-button" onClick={closeImportModal}>Concluir</button>
               </div>
             </div>
           )}
