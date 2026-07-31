@@ -33,12 +33,7 @@ export default function Sidebar({ items, adminItems = [], adminHeader = false }:
               </NavLink>
             </li>
           ))}
-          <li>
-            <NavLink to="/familias" className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}>
-              <span className="sidebar__icon" aria-hidden="true"></span>
-              <span>Famílias</span>
-            </NavLink>
-          </li>
+
         </ul>
         {adminHeader && adminItems.length > 0 && (
           <div className="sidebar__group">

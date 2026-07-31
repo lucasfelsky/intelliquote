@@ -207,11 +207,7 @@ export default function Cotacoes() {
             </thead>
             <tbody>
               {list.data.map((qr) => (
-                <tr
-                  key={qr.id}
-                  onClick={() => navigate(`/cotacoes/${qr.id}`)}
-                  style={{ cursor: 'pointer' }}
-                >
+                <tr key={qr.id}>
                   <td>{qr.id}</td>
                   <td><strong>{qr.requestCode}</strong></td>
                   <td>{qr.productName}</td>
@@ -230,7 +226,7 @@ export default function Cotacoes() {
                       {qr.status === 'open' ? 'Aberta' : 'Fechada'}
                     </span>
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
+                  <td>
                     <div className="row-actions">
                       <button
                         type="button"
