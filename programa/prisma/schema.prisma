@@ -213,11 +213,23 @@ model CatalogItem {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   quoteRequestItems QuoteRequestItem[]
+  familyId          Int?
+  family            ItemFamily?        @relation(fields: [familyId], references: [id], onDelete: SetNull)
 
   @@unique([marketName])
   @@index([marketName])
   @@index([commercialName])
   @@index([isDangerousGood])
+  @@index([familyId])
+}
+
+model ItemFamily {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  items     CatalogItem[]
 }
 
 model QuoteResponse {

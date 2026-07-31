@@ -11,6 +11,7 @@ import Cotacoes from '@/pages/Cotacoes';
 import CotacaoNova from '@/pages/CotacaoNova';
 import CotacaoDetalhe from '@/pages/CotacaoDetalhe';
 import Itens from '@/pages/Itens';
+import Familias from '@/pages/Familias';
 import Respostas from '@/pages/Respostas';
 import Comparacoes from '@/pages/Comparacoes';
 import Relatorios from '@/pages/Relatorios';
@@ -78,6 +79,7 @@ export default function App() {
                                 <Route path="/cotacoes/nova" element={<CotacaoNova />} />
                                 <Route path="/cotacoes/:id" element={<CotacaoDetalhe />} />
                 <Route path="/itens" element={<Itens />} />
+                <Route path="/familias" element={<Familias />} />
                 <Route path="/respostas" element={<Respostas />} />
                 <Route path="/comparacoes" element={<Comparacoes />} />
                 <Route path="/relatorios" element={<Relatorios />} />

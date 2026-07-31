@@ -1393,3 +1393,28 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   gap: 8px;
   margin-top: 14px;
 }
+
+/* Tabela Genérica */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  margin-top: 16px;
+}
+
+.data-table th, .data-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-weight: 500;
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.data-table tbody tr:hover {
+  background: var(--surface);
+}
