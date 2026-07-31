@@ -15,6 +15,17 @@ export const INCOTERMS: Incoterm[] = [
   'CPT', 'CIP', 'DAP', 'DPU', 'DDP',
 ];
 
+export interface QuoteResponseItem {
+  id: number;
+  quoteResponseId: number;
+  quoteRequestItemId: number;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+  leadTimeDays: number | null;
+  notes: string | null;
+}
+
 export interface QuoteResponse {
   id: number;
   quoteRequestId: number;
@@ -39,6 +50,8 @@ export interface QuoteResponse {
   version: number;
   createdAt: string;
   updatedAt: string;
+  targetPrice?: number | null;
+  items?: QuoteResponseItem[];
   source?: 'manual' | 'portal';
   supplier?: {
     id: number;
@@ -71,6 +84,14 @@ export interface QuoteResponsePayload {
   offeredIncoterm: Incoterm;
   paymentTermsDays: number;
   notes?: string | null;
+  targetPrice?: number | null;
+  items?: {
+    quoteRequestItemId: number;
+    unitPrice: number;
+    quantity: number;
+    leadTimeDays?: number | null;
+    notes?: string | null;
+  }[];
 }
 
 export interface ComparisonResult {
@@ -181,6 +202,19 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
     version: asNumber(obj.version ?? 1) || 1,
     createdAt: String(obj.createdAt ?? ''),
     updatedAt: String(obj.updatedAt ?? ''),
+    targetPrice: obj.targetPrice === null || obj.targetPrice === undefined ? null : asNumber(obj.targetPrice),
+    items: Array.isArray(obj.items)
+      ? obj.items.map((i: any) => ({
+          id: asNumber(i.id),
+          quoteResponseId: asNumber(i.quoteResponseId),
+          quoteRequestItemId: asNumber(i.quoteRequestItemId),
+          unitPrice: asNumber(i.unitPrice),
+          quantity: asNumber(i.quantity),
+          totalPrice: asNumber(i.totalPrice),
+          leadTimeDays: i.leadTimeDays === null || i.leadTimeDays === undefined ? null : asNumber(i.leadTimeDays),
+          notes: (i.notes as string | null) ?? null,
+        }))
+      : undefined,
     source,
     supplier: supplierRaw
       ? {

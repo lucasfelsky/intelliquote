@@ -79,9 +79,36 @@ export class QuoteResponseController {
         });
       }
 
+      let finalOfferedPrice = payload.offeredPrice;
+      let itemsToCreate: any[] = [];
+
+      if (payload.items && payload.items.length > 0) {
+        let total = 0;
+        itemsToCreate = payload.items.map((item) => {
+          const totalPrice = item.unitPrice * item.quantity;
+          total += totalPrice;
+          return {
+            quoteRequestItemId: item.quoteRequestItemId,
+            unitPrice: item.unitPrice,
+            quantity: item.quantity,
+            totalPrice,
+            leadTimeDays: item.leadTimeDays ?? null,
+            notes: item.notes ?? null,
+          };
+        });
+        finalOfferedPrice = total;
+      }
+
+      if (finalOfferedPrice === undefined) {
+        return res.status(400).json({
+          message:
+            'E necessario informar o preco agregado (offeredPrice) ou enviar a lista de itens com precos.',
+        });
+      }
+
       const normalizedCurrency = payload.currency ?? relatedQuoteRequest.currency;
       const landedCost = QuoteComparisonService.calculateLandedCost({
-        offeredPrice: payload.offeredPrice,
+        offeredPrice: finalOfferedPrice,
         currency: normalizedCurrency,
         exchangeRate: resolveExchangeRate(payload.exchangeRate, normalizedCurrency),
         freightCost: payload.freightCost ?? 0,
@@ -97,7 +124,8 @@ export class QuoteResponseController {
         data: {
           quoteRequestId: payload.quoteRequestId,
           supplierId: payload.supplierId,
-          offeredPrice: payload.offeredPrice,
+          offeredPrice: finalOfferedPrice,
+          targetPrice: payload.targetPrice ?? null,
           currency: normalizedCurrency,
           exchangeRate: landedCost.exchangeRate,
           freightCost: landedCost.freightCost,
@@ -114,6 +142,9 @@ export class QuoteResponseController {
           notes: payload.notes ?? null,
           submittedAt: payload.submittedAt,
           createdById: req.user?.id ?? null,
+          items: {
+            create: itemsToCreate,
+          },
         },
       });
 
@@ -283,12 +314,36 @@ export class QuoteResponseController {
         });
       }
 
+      let finalOfferedPrice = payload.offeredPrice !== undefined
+        ? payload.offeredPrice
+        : Number(existingQuoteResponse.offeredPrice);
+
+      let itemsToUpdate: any[] | undefined = undefined;
+
+      if (payload.items) {
+        if (payload.items.length > 0) {
+          let total = 0;
+          itemsToUpdate = payload.items.map((item) => {
+            const totalPrice = item.unitPrice * item.quantity;
+            total += totalPrice;
+            return {
+              quoteRequestItemId: item.quoteRequestItemId,
+              unitPrice: item.unitPrice,
+              quantity: item.quantity,
+              totalPrice,
+              leadTimeDays: item.leadTimeDays ?? null,
+              notes: item.notes ?? null,
+            };
+          });
+          finalOfferedPrice = total;
+        } else {
+          itemsToUpdate = [];
+        }
+      }
+
       const nextCurrency = payload.currency ?? existingQuoteResponse.currency;
       const landedCost = QuoteComparisonService.calculateLandedCost({
-        offeredPrice:
-          payload.offeredPrice !== undefined
-            ? payload.offeredPrice
-            : Number(existingQuoteResponse.offeredPrice),
+        offeredPrice: finalOfferedPrice,
         currency: nextCurrency,
         exchangeRate: resolveExchangeRate(
           payload.exchangeRate ?? Number(existingQuoteResponse.exchangeRate),
@@ -327,7 +382,8 @@ export class QuoteResponseController {
       const quoteResponse = await prisma.quoteResponse.update({
         where: { id },
         data: {
-          offeredPrice: payload.offeredPrice,
+          offeredPrice: finalOfferedPrice,
+          targetPrice: payload.targetPrice !== undefined ? payload.targetPrice : undefined,
           currency: nextCurrency,
           exchangeRate: landedCost.exchangeRate,
           freightCost: landedCost.freightCost,
@@ -344,6 +400,7 @@ export class QuoteResponseController {
           notes: payload.notes,
           submittedAt: payload.submittedAt,
           version: shouldIncrementVersion(payload) ? { increment: 1 } : undefined,
+          items: itemsToUpdate !== undefined ? { deleteMany: {}, create: itemsToUpdate } : undefined,
         },
       });
 
@@ -489,6 +546,7 @@ export class QuoteResponseController {
       where: { id, deletedAt: null },
       include: {
         supplier: true,
+        items: true,
         quoteRequest: {
           include: {
             items: { include: { catalogItem: true }, orderBy: { createdAt: 'asc' } },
@@ -521,13 +579,18 @@ export class QuoteResponseController {
       productName: quoteRequest.productName ?? '',
       supplierName: supplier.name,
       currency: quoteResponse.currency,
-      items: quoteRequest.items.map((item) => ({
-        name: item.catalogItem?.commercialName ?? item.productName,
-        incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
-        quantity: item.quantity,
-        unit: item.unit,
-        unitPrice: Number.isFinite(unitPrice) ? unitPrice : null,
-      })),
+      targetPrice: quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined,
+      items: quoteRequest.items.map((item) => {
+        const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
+        const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
+        return {
+          name: item.catalogItem?.commercialName ?? item.productName,
+          incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: actualUnitPrice,
+        };
+      }),
     });
 
     return {

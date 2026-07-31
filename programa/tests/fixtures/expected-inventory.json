@@ -87,6 +87,7 @@
       "QuoteRequest",
       "QuoteRequestItem",
       "QuoteResponse",
+      "QuoteResponseItem",
       "Role",
       "Session",
       "Supplier",
@@ -105,7 +106,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 26
+    "migrations": 27
   },
   "emailTemplates": [
     "quote_dispatch@en",

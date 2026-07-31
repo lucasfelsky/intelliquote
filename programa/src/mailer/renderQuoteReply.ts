@@ -45,6 +45,7 @@ export interface QuoteReplyVars {
   productName: string;
   supplierName: string;
   currency: string;
+  targetPrice?: number;
   items: QuoteReplyItem[];
 }
 
@@ -116,6 +117,7 @@ export function renderReplyPlainText(vars: QuoteReplyVars): string {
     'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
     ...vars.items.map((item) => renderItemsTextRow(item, vars.currency)),
     '',
+    ...(vars.targetPrice !== undefined ? [`Target Price: ${formatMoney(vars.targetPrice, vars.currency).replace('&#8212;', '—')}`, ''] : []),
     'Best regards,',
   ].join('\r\n');
 }
@@ -137,7 +139,8 @@ export async function renderReplyFromTemplate(
 ): Promise<RenderedQuoteReply> {
   const dbTemplate = await EmailTemplateService.get(REPLY_TEMPLATE_KEY, locale);
   const subject = dbTemplate?.subject ? renderReplySections(dbTemplate.subject, vars) : vars.subject;
-  const varsForRender = { ...vars, subject };
+  const targetPriceStr = vars.targetPrice !== undefined ? formatMoney(vars.targetPrice, vars.currency) : undefined;
+  const varsForRender = { ...vars, subject, targetPriceStr };
 
   if (dbTemplate) {
     const html = renderReplySections(dbTemplate.htmlBody, varsForRender);

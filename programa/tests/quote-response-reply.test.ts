@@ -122,6 +122,9 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     vi.clearAllMocks();
   });
 
+  // Teste B - fallback explícito: documentando a cobertura que já existe
+  // O baseQuoteResponse não tem `items` no nível da resposta, logo simula uma
+  // "resposta legada sem QuoteResponseItem".
   it('envia o e-mail para o contato principal do fornecedor com CC da empresa', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
@@ -161,10 +164,72 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(call.html).toContain('2,495.00 USD');
     expect(call.text).toContain('4.99 USD');
 
+    // Teste D - bloco Target Price ausente quando não preenchido
+    expect(call.html).not.toContain('Target Price');
+    
     expect(prismaMock.auditLog.create).toHaveBeenCalledTimes(1);
     const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
     expect(auditArgs.data.action).toBe('reply');
     expect(auditArgs.data.entityType).toBe('quote_response');
+  });
+
+  // Teste A - preço real por item vence o agregado
+  it('preço real por item vence o agregado na tabela do email', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({
+      ...baseQuoteResponse,
+      items: [{ quoteRequestItemId: 11, unitPrice: 3.50, quantity: 500, totalPrice: 1750, leadTimeDays: null, notes: null }]
+    });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-1' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    const call = sendAndLogMock.mock.calls[0][0];
+    
+    // O preço do item real (3.50 USD) deve ser renderizado e o fallback agregado (4.99 USD) não.
+    expect(call.html).toContain('3.50 USD');
+    expect(call.html).not.toContain('4.99 USD');
+    expect(call.html).toContain('1,750.00 USD'); // Total formatado (3.50 * 500 = 1750)
+  });
+
+  // Teste C - bloco Target Price aparece quando preenchido
+  it('adiciona o bloco Target Price no HTML e no texto quando preenchido', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({
+      ...baseQuoteResponse,
+      targetPrice: 4.50
+    });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-1' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    const call = sendAndLogMock.mock.calls[0][0];
+    
+    expect(call.html).toContain('Target Price');
+    expect(call.html).toContain('4.50 USD');
+    expect(call.text).toContain('Target Price: 4.50 USD');
   });
 
   it('retorna 404 quando a proposta nao existe', async () => {

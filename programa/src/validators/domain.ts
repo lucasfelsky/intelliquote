@@ -191,7 +191,8 @@ export const quoteRequestUpdateSchema = z.object({
 export const quoteResponseCreateSchema = z.object({
   quoteRequestId: positiveIntegerField,
   supplierId: positiveIntegerField,
-  offeredPrice: positiveNumberField,
+  offeredPrice: optionalPositiveNumberField,
+  targetPrice: optionalPositiveNumberField,
   currency: optionalCurrencyCodeField,
   exchangeRate: optionalPositiveNumberField,
   freightCost: optionalNonNegativeNumberField,
@@ -206,12 +207,24 @@ export const quoteResponseCreateSchema = z.object({
   leadTimeDays: nullableNonNegativeIntegerField.optional(),
   notes: nullableTrimmedStringField.optional(),
   submittedAt: optionalDateField,
+  items: z
+    .array(
+      z.object({
+        quoteRequestItemId: positiveIntegerField,
+        unitPrice: positiveNumberField,
+        quantity: positiveIntegerField,
+        leadTimeDays: nullableOptionalNonNegativeIntegerField,
+        notes: nullableOptionalTrimmedStringField,
+      })
+    )
+    .optional(),
 });
 
 export const quoteResponseUpdateSchema = z.object({
   quoteRequestId: optionalPositiveIntegerField,
   supplierId: optionalPositiveIntegerField,
   offeredPrice: optionalPositiveNumberField,
+  targetPrice: optionalPositiveNumberField,
   currency: optionalCurrencyCodeField,
   exchangeRate: optionalPositiveNumberField,
   freightCost: optionalNonNegativeNumberField,
@@ -230,6 +243,17 @@ export const quoteResponseUpdateSchema = z.object({
   leadTimeDays: nullableOptionalNonNegativeIntegerField,
   notes: nullableOptionalTrimmedStringField,
   submittedAt: optionalDateField,
+  items: z
+    .array(
+      z.object({
+        quoteRequestItemId: positiveIntegerField,
+        unitPrice: positiveNumberField,
+        quantity: positiveIntegerField,
+        leadTimeDays: nullableOptionalNonNegativeIntegerField,
+        notes: nullableOptionalTrimmedStringField,
+      })
+    )
+    .optional(),
 });
 
 // Usado tanto pra preview quanto pro envio de verdade do botao "Responder"
