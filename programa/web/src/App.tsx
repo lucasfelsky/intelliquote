@@ -12,8 +12,7 @@ import CotacaoNova from '@/pages/CotacaoNova';
 import CotacaoDetalhe from '@/pages/CotacaoDetalhe';
 import Itens from '@/pages/Itens';
 import Familias from '@/pages/Familias';
-import Respostas from '@/pages/Respostas';
-import Comparacoes from '@/pages/Comparacoes';
+
 import Relatorios from '@/pages/Relatorios';
 import Ajuda from '@/pages/Ajuda';
 import Auditoria from '@/pages/Auditoria';
@@ -80,8 +79,8 @@ export default function App() {
                                 <Route path="/cotacoes/:id" element={<CotacaoDetalhe />} />
                 <Route path="/itens" element={<Itens />} />
                 <Route path="/familias" element={<Familias />} />
-                <Route path="/respostas" element={<Respostas />} />
-                <Route path="/comparacoes" element={<Comparacoes />} />
+                <Route path="/respostas" element={<Navigate to="/cotacoes" replace />} />
+                <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/ajuda" element={<Ajuda />} />
                 <Route path="/auditoria" element={<Auditoria />} />
