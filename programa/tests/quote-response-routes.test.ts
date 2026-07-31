@@ -15,6 +15,7 @@ vi.mock('../src/lib/prisma', () => {
       updateMany: vi.fn(),
     },
     quoteResponse: {
+      create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
@@ -22,8 +23,12 @@ vi.mock('../src/lib/prisma', () => {
     supplierPortalToken: {
       findMany: vi.fn().mockResolvedValue([]),
     },
-    supplier: {},
-    quoteRequest: {},
+    supplier: {
+      findUnique: vi.fn(),
+    },
+    quoteRequest: {
+      findUnique: vi.fn(),
+    },
     quoteComparison: {},
   };
 
@@ -45,9 +50,10 @@ const prismaMock = prisma as unknown as {
     updateMany: ReturnType<typeof vi.fn>;
   };
   quoteResponse: {
-    findUnique: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    findMany: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
+      findUnique: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+      findMany: ReturnType<typeof vi.fn>;
   };
   supplierPortalToken: { findMany: ReturnType<typeof vi.fn> };
 };
@@ -115,6 +121,112 @@ describe('Quote response routes', () => {
     expect(response.status).toBe(200);
     expect(Array.isArray(response.body)).toBe(true);
     expect(response.body[0].source).toBe('portal');
+  });
+
+  // Teste E - criação com itens: offeredPrice = soma dos totalPrice
+  it('cria proposta com itens e calcula o offeredPrice como a soma dos totais', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 101 });
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    const response = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5.0,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        items: [
+          { quoteRequestItemId: 11, unitPrice: 2, quantity: 50, totalPrice: 100 },
+          { quoteRequestItemId: 12, unitPrice: 5, quantity: 50, totalPrice: 250 }
+        ]
+      });
+
+    expect(response.status).toBe(201);
+    expect(prismaMock.quoteResponse.create).toHaveBeenCalledTimes(1);
+    const createData = prismaMock.quoteResponse.create.mock.calls[0][0].data;
+    
+    // offeredPrice agregado deve ser a soma (100 + 250 = 350)
+    expect(Number(createData.offeredPrice)).toBe(350);
+    expect(createData.items.create).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ quoteRequestItemId: 11, unitPrice: 2, quantity: 50, totalPrice: 100 }),
+        expect.objectContaining({ quoteRequestItemId: 12, unitPrice: 5, quantity: 50, totalPrice: 250 })
+      ])
+    );
+  });
+
+  // Teste F - targetPrice opcional persiste
+  it('salva o targetPrice quando preenchido no POST e PUT', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 102 });
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    // Teste no CREATE
+    const resCreate = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5.0,
+        offeredPrice: 100,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        targetPrice: 12.50
+      });
+
+    expect(resCreate.status).toBe(201);
+    const createData = prismaMock.quoteResponse.create.mock.calls[0][0].data;
+    expect(Number(createData.targetPrice)).toBe(12.50);
+
+    // Teste sem targetPrice não força valor
+    await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5.0,
+        offeredPrice: 100,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30
+      });
+    const createDataSemTarget = prismaMock.quoteResponse.create.mock.calls[1][0].data;
+    expect(createDataSemTarget.targetPrice).toBeNull();
+  });
+
+  // Teste G - resposta sem itens continua funcionando (compatibilidade retroativa)
+  it('usa o offeredPrice recebido no body caso não haja itens', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 103 });
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    const response = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5.0,
+        offeredPrice: 999.99,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30
+      });
+
+    expect(response.status).toBe(201);
+    const createData = prismaMock.quoteResponse.create.mock.calls[0][0].data;
+    expect(Number(createData.offeredPrice)).toBe(999.99);
+    expect(createData.items).toEqual({ create: [] });
   });
 });
 

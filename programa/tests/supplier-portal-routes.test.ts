@@ -300,7 +300,13 @@ describe('Portal routes (public, magic-link)', () => {
       expect(res.body.id).toBe(99);
       expect(res.body.quoteResponseId).toBe(501);
       expect(res.body.revised).toBe(false);
-      expect(prismaMock.quoteResponse.upsert).toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.upsert).toHaveBeenCalled();
+      const upsertArgs = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+      expect(upsertArgs.create.items.create).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ quoteRequestItemId: 11, quantity: 1, leadTimeDays: null, notes: null })
+        ])
+      );
     } else {
       // Debug help: when running in non-201, surface the response body.
       console.warn('Portal respond returned', res.status, res.body);
@@ -394,6 +400,13 @@ describe('Portal routes (public, magic-link)', () => {
         where: { responseId: 77 },
       });
       expect(prismaMock.__tx.supplierPortalResponse.update).toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.upsert).toHaveBeenCalled();
+      const upsertReviseArgs = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+      expect(upsertReviseArgs.update.items.create).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ quoteRequestItemId: 11, quantity: 1, leadTimeDays: null, notes: null })
+        ])
+      );
     } else {
       console.warn('Portal revise returned', res.status, res.body);
     }
