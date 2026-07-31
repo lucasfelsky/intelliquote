@@ -1,0 +1,644 @@
+import { useEffect, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/auth/AuthProvider';
+import {
+  closeQuoteRequest,
+  executeComparison,
+  listComparisons,
+  messageOf,
+  type ComparisonRecord,
+  type ComparisonResult,
+  type SupplierReviewInput,
+} from '@/services/quoteResponses';
+import StarRating from '@/components/StarRating';
+import {
+  previewQuoteResponseReply,
+  replyToQuoteResponse,
+  type QuoteResponseReplyPreview,
+} from '@/services/dispatch';
+
+function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  });
+}
+
+function formatCurrency(value: number | undefined | null, currency = 'BRL'): string {
+  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+export function ComparacaoTab({
+  quoteRequestId,
+  quoteRequestStatus,
+  productName,
+  requestCode,
+}: {
+  quoteRequestId: number;
+  quoteRequestStatus: 'open' | 'closed';
+  productName: string | null;
+  requestCode: string;
+}) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const role = user?.role;
+  const canCompare = role === 'admin' || role === 'comprador' || role === 'gestor';
+  const canConclude = role === 'admin' || role === 'gestor';
+
+  const [priceWeight, setPriceWeight] = useState(1);
+  const [paymentWeight, setPaymentWeight] = useState(1);
+  const [incotermWeight, setIncotermWeight] = useState(1);
+  const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
+
+  const history = useQuery({
+    queryKey: ['comparisons', quoteRequestId],
+    queryFn: () => listComparisons(quoteRequestId),
+  });
+
+  const runMut = useMutation({
+    mutationFn: () => {
+      const weights = {
+        priceWeight,
+        paymentTermsWeight: paymentWeight,
+        incotermWeight,
+      };
+      return executeComparison(quoteRequestId, weights);
+    },
+    onSuccess: async () => {
+      setFeedback({
+        kind: 'ok',
+        text: 'Comparação executada e vencedora definida. A cotação continua aberta — conclua-a quando fechar o pedido.',
+      });
+      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+    },
+    onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
+  });
+
+  const closeMut = useMutation({
+    mutationFn: (vars: { notifyLosers: boolean; review?: SupplierReviewInput | null }) =>
+      closeQuoteRequest(quoteRequestId, { notifyLosers: vars.notifyLosers, review: vars.review }),
+    onSuccess: async (_data, vars) => {
+      setFeedback({
+        kind: 'ok',
+        text: vars.notifyLosers
+          ? 'Cotação concluída. Fornecedores não selecionados foram avisados.'
+          : 'Cotação concluída (fechada).',
+      });
+      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
+    },
+    onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
+  });
+
+  const [replyTarget, setReplyTarget] = useState<ComparisonResult | null>(null);
+  const [notifyLosers, setNotifyLosers] = useState(false);
+  const [priceRating, setPriceRating] = useState(0);
+  const [leadTimeRating, setLeadTimeRating] = useState(0);
+  const [qualityRating, setQualityRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [replySubject, setReplySubject] = useState('');
+  const [replyMessage, setReplyMessage] = useState('');
+  const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
+  const [replyModalError, setReplyModalError] = useState<string | null>(null);
+
+  const replyPreviewMutation = useMutation({
+    mutationFn: (vars: { id: number; subject: string; message: string }) =>
+      previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message }),
+    onSuccess: (data) => {
+      setReplyPreviewData(data);
+      setReplyModalError(null);
+    },
+    onError: (err) => setReplyModalError(messageOf(err)),
+  });
+
+  const replySendMutation = useMutation({
+    mutationFn: () => {
+      if (!replyTarget?.quoteResponseId) throw new Error('Proposta sem ID.');
+      return replyToQuoteResponse(replyTarget.quoteResponseId, { subject: replySubject, message: replyMessage });
+    },
+    onSuccess: () => {
+      setFeedback({
+        kind: 'ok',
+        text: 'E-mail enviado ao fornecedor. Após o retorno, clique em “Concluir cotação” para fechá-la.',
+      });
+      closeReplyModal();
+    },
+    onError: (err) => setReplyModalError(messageOf(err)),
+  });
+
+  function openReplyModal(r: ComparisonResult) {
+    if (!r.quoteResponseId) return;
+    const itemName = productName || requestCode;
+    const defaultSubject = `${itemName} - SQ QUIMICA - ${r.supplier?.name}`;
+    setReplyTarget(r);
+    setReplySubject(defaultSubject);
+    setReplyMessage('');
+    setReplyPreviewData(null);
+    setReplyModalError(null);
+    replyPreviewMutation.mutate({ id: r.quoteResponseId, subject: defaultSubject, message: '' });
+  }
+
+  function closeReplyModal() {
+    setReplyTarget(null);
+    setReplyPreviewData(null);
+    setReplyModalError(null);
+  }
+
+  function toggleExpanded(id: number) {
+    setExpandedHistory((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const setPriceWeightRef = useRef(setPriceWeight);
+  const setPaymentWeightRef = useRef(setPaymentWeight);
+  const setIncotermWeightRef = useRef(setIncotermWeight);
+
+  useEffect(() => { setPriceWeightRef.current = setPriceWeight; }, [setPriceWeight]);
+  useEffect(() => { setPaymentWeightRef.current = setPaymentWeight; }, [setPaymentWeight]);
+  useEffect(() => { setIncotermWeightRef.current = setIncotermWeight; }, [setIncotermWeight]);
+
+  const setWeightById = (id: 'weight-price' | 'weight-payment' | 'weight-incoterm', next: number) => {
+    if (id === 'weight-price') setPriceWeightRef.current(next);
+    else if (id === 'weight-payment') setPaymentWeightRef.current(next);
+    else setIncotermWeightRef.current(next);
+  };
+
+  function WeightSlider({
+    label,
+    value,
+    id,
+    min = 0,
+    max = 5,
+    step = 0.1,
+  }: {
+    label: string;
+    value: number;
+    id: 'weight-price' | 'weight-payment' | 'weight-incoterm';
+    min?: number;
+    max?: number;
+    step?: number;
+  }) {
+    const sliderId = `ws-${id}`;
+    const clamp = (n: number) => Math.max(min, Math.min(max, n));
+    const pct = (clamp(value) - min) / (max - min) * 100;
+
+    useEffect(() => {
+      const el = document.getElementById(sliderId);
+      if (!el) return;
+      let dragging = false;
+      const updateFromEvent = (clientX: number) => {
+        const rect = el.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const raw = min + ratio * (max - min);
+        const stepped = Math.round(raw / step) * step;
+        const next = Number(clamp(stepped).toFixed(2));
+        if (Number.isFinite(next)) {
+          setWeightById(id, next);
+        }
+      };
+      const onDown = (ev: PointerEvent) => {
+        dragging = true;
+        try { el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
+        updateFromEvent(ev.clientX);
+        ev.preventDefault();
+        ev.stopPropagation();
+      };
+      const onMove = (ev: PointerEvent) => {
+        if (!dragging) return;
+        updateFromEvent(ev.clientX);
+        ev.preventDefault();
+        ev.stopPropagation();
+      };
+      const onUp = (ev: PointerEvent) => {
+        dragging = false;
+        try { el.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      };
+      const onClick = (ev: MouseEvent) => {
+        updateFromEvent(ev.clientX);
+        ev.preventDefault();
+      };
+      el.addEventListener('pointerdown', onDown);
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onUp);
+      el.addEventListener('click', onClick);
+      return () => {
+        el.removeEventListener('pointerdown', onDown);
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+        el.removeEventListener('pointercancel', onUp);
+        el.removeEventListener('click', onClick);
+      };
+    }, [sliderId, min, max, step, id]);
+
+    return (
+      <div id={sliderId} className="weight-slider">
+        <div className="weight-slider__header">
+          <label className="field-label" htmlFor={`${id}-display`}>{label}</label>
+          <span className="weight-slider__value" aria-live="polite">{value.toFixed(2)}</span>
+        </div>
+        <div
+          className="weight-slider__track"
+          role="slider"
+          aria-label={label}
+          aria-valuemin={min}
+          aria-valuemax={max}
+          aria-valuenow={Number(value.toFixed(2))}
+          tabIndex={0}
+        >
+          <div className="weight-slider__fill" style={{ width: `${pct}%` }} />
+          <div className="weight-slider__thumb" style={{ left: `calc(${pct}% - 7px)` }} />
+        </div>
+        <div className="weight-slider__scale" aria-hidden="true">
+          <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+        </div>
+      </div>
+    );
+  }
+
+  function renderResultRows(results: ComparisonResult[]) {
+    if (results.length === 0) {
+      return (
+        <tr>
+          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--ink-soft)' }}>
+            Sem resultados registrados.
+          </td>
+        </tr>
+      );
+    }
+    return results.map((r, idx) => (
+      <tr key={`${r.quoteResponseId ?? r.supplierId}-${idx}`}>
+        <td>{idx + 1}</td>
+        <td>
+          <strong>{r.supplier?.name ?? `Fornecedor #${r.supplierId}`}</strong>
+        </td>
+        <td>{formatNumber(r.offeredPrice)}</td>
+        <td><span className="badge">{r.offeredIncoterm}</span></td>
+        <td>{r.paymentTermsDays} dias</td>
+        <td>
+          <div>{formatCurrency(r.totalLandedCost, 'BRL')}</div>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+            CIF: {formatCurrency(r.cifValue, 'BRL')}
+          </div>
+        </td>
+        <td>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+            Preço {formatNumber(r.priceScore, 2)} · Pagto {formatNumber(r.paymentTermsScore, 2)} ·
+            Inc {formatNumber(r.incotermScore, 2)}
+          </div>
+          <strong>{formatNumber(r.totalScore, 2)}</strong>
+        </td>
+        <td>
+          {r.isWinner ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              <span className="badge">Vencedora</span>
+              {r.quoteResponseId ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => openReplyModal(r)}
+                  style={{ fontSize: 12, padding: '2px 10px' }}
+                  title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
+                >
+                  Responder
+                </button>
+              ) : (
+                <span style={{ fontSize: 11, color: 'var(--ink-soft)' }} title="Sem proposta vinculada para responder.">
+                  Sem e-mail do fornecedor
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="badge badge--muted">—</span>
+          )}
+        </td>
+      </tr>
+    ));
+  }
+
+  const records = history.data?.comparisons ?? [];
+  const latest = records[0];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {feedback && (
+        <p style={{
+          color: feedback.kind === 'err' ? 'var(--danger)' : 'var(--primary-700)',
+          fontSize: 13,
+          background: feedback.kind === 'err' ? 'var(--danger-light, #fee2e2)' : 'var(--primary-50, #f0fdfa)',
+          padding: '8px 12px',
+          borderRadius: '6px',
+        }}>
+          {feedback.text}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Configuração dos Pesos</h2>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => runMut.mutate()}
+          disabled={!canCompare || runMut.isPending}
+          title={!canCompare ? 'Seu perfil não tem permissão para executar comparações.' : ''}
+        >
+          {runMut.isPending ? 'Executando…' : 'Executar comparação'}
+        </button>
+      </div>
+
+      <div className="form-grid weight-grid">
+        <WeightSlider id="weight-price" label="Peso · Preço" value={priceWeight} />
+        <WeightSlider id="weight-payment" label="Peso · Pagamento" value={paymentWeight} />
+        <WeightSlider id="weight-incoterm" label="Peso · Incoterm" value={incotermWeight} />
+      </div>
+
+      {!canCompare && (
+        <p style={{ color: 'var(--warning)', fontSize: 12, marginTop: 12 }}>
+          Seu perfil não tem permissão para executar comparações.
+        </p>
+      )}
+
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Última comparação</h2>
+        
+        {canConclude && quoteRequestStatus === 'open' && latest && (() => {
+          const winner = latest.results.find((r) => r.isWinner);
+          const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
+          const ratingStarted = priceRating > 0 || leadTimeRating > 0 || qualityRating > 0;
+          const ratingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
+              {winner && (
+                <div className="card" style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt, #f7f7f7)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                    Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--muted, #666)' }}>(opcional)</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                    <span>Preço</span>
+                    <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
+                    <span>Prazo</span>
+                    <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
+                    <span>Qualidade</span>
+                    <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
+                  </div>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    placeholder="Comentário (opcional)"
+                    rows={2}
+                    style={{ width: '100%', marginTop: 8, fontSize: 13 }}
+                  />
+                  {ratingStarted && !ratingComplete && (
+                    <div style={{ fontSize: 12, color: 'var(--danger, #b00)', marginTop: 4 }}>
+                      Dê nota nas três dimensões ou deixe todas em branco.
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={notifyLosers}
+                    onChange={(e) => setNotifyLosers(e.target.checked)}
+                  />
+                  Avisar não selecionados
+                </label>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    const review: SupplierReviewInput | null = winner && ratingComplete
+                      ? {
+                          supplierId: winner.supplierId,
+                          priceRating,
+                          leadTimeRating,
+                          qualityRating,
+                          comment: reviewComment.trim() || null,
+                        }
+                      : null;
+                    const msg = notifyLosers
+                      ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
+                      : 'Concluir esta cotação? Ela será fechada.';
+                    if (window.confirm(msg)) {
+                      closeMut.mutate({ notifyLosers, review });
+                    }
+                  }}
+                  disabled={closeMut.isPending || (ratingStarted && !ratingComplete)}
+                  title="Fecha a cotação (ação separada da comparação)."
+                >
+                  {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {history.isLoading && <p>Carregando comparações…</p>}
+        {history.isError && <p>Não foi possível carregar o histórico de comparações.</p>}
+        {history.data && !latest && (
+          <div className="empty-state">
+            <strong>Esta cotação ainda não foi comparada.</strong>
+            <p>Use o botão “Executar comparação” para calcular os scores e definir a vencedora.</p>
+          </div>
+        )}
+
+        {latest && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Fornecedor</th>
+                <th>Preço</th>
+                <th>Incoterm</th>
+                <th>Pagto</th>
+                <th>Landed (BRL)</th>
+                <th>Scores</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>{renderResultRows(latest.results)}</tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Histórico de comparações</h2>
+        
+        {records.length === 0 && !history.isLoading && !history.isError && (
+          <div className="empty-state">
+            <strong>Sem histórico</strong>
+            <p>Quando comparações forem executadas, o histórico aparecerá aqui.</p>
+          </div>
+        )}
+
+        {records.map((rec: ComparisonRecord) => {
+          const winner = rec.results.find((r) => r.isWinner);
+          const isOpen = expandedHistory.has(rec.id);
+          return (
+            <article
+              key={rec.id}
+              className="card"
+              style={{ marginBottom: 12, background: 'var(--surface-alt)', borderStyle: 'dashed' }}
+            >
+              <div className="page-header" style={{ marginBottom: 8 }}>
+                <div>
+                  <p className="eyebrow">Comparação #{rec.id}</p>
+                  <h3>{formatDateTime(rec.createdAt)}</h3>
+                  <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                    Executada por {rec.executedBy?.name ?? 'Sistema'}.
+                  </p>
+                </div>
+                <div className="page-header__actions">
+                  <span className="chip chip--static">Preço {formatNumber(rec.priceWeight, 2)}</span>
+                  <span className="chip chip--static">Pagto {formatNumber(rec.paymentTermsWeight, 2)}</span>
+                  <span className="chip chip--static">Inc {formatNumber(rec.incotermWeight, 2)}</span>
+                  <span className="chip chip--static">{rec.results.length} propostas</span>
+                  {winner ? (
+                    <span className="badge">{`Vencedora: ${winner.supplier?.name ?? `Fornecedor #${winner.supplierId}`}`}</span>
+                  ) : (
+                    <span className="badge badge--muted">Sem vencedora</span>
+                  )}
+                </div>
+              </div>
+              <button type="button" className="ghost-button" onClick={() => toggleExpanded(rec.id)}>
+                {isOpen ? 'Ocultar detalhes' : 'Ver detalhes'}
+              </button>
+              {isOpen && (
+                <div style={{ marginTop: 12 }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Fornecedor</th>
+                        <th>Preço</th>
+                        <th>Incoterm</th>
+                        <th>Pagto</th>
+                        <th>Landed (BRL)</th>
+                        <th>Scores</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>{renderResultRows(rec.results)}</tbody>
+                  </table>
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      {replyTarget && (
+        <div className="modal-backdrop" onClick={closeReplyModal}>
+          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+            <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+              {requestCode} · {productName}
+            </p>
+
+            <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>
+              Assunto
+            </label>
+            <input
+              id="replySubject"
+              className="input"
+              value={replySubject}
+              onChange={(e) => setReplySubject(e.target.value)}
+            />
+
+            <label className="field-label" htmlFor="replyMessage" style={{ marginTop: 12 }}>
+              Mensagem
+            </label>
+            <textarea
+              id="replyMessage"
+              className="textarea"
+              rows={4}
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              placeholder="Opcional. Ex.: confirmando o fechamento do pedido. Aparece no corpo do e-mail."
+            />
+
+            <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={replyPreviewMutation.isPending}
+                onClick={() =>
+                  replyTarget.quoteResponseId &&
+                  replyPreviewMutation.mutate({
+                    id: replyTarget.quoteResponseId,
+                    subject: replySubject,
+                    message: replyMessage,
+                  })
+                }
+              >
+                {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
+              </button>
+            </div>
+
+            <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
+            {replyPreviewData ? (
+              <>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
+                  Para: <strong>{replyPreviewData.to}</strong>
+                  {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                </p>
+                <iframe
+                  key={replyPreviewData.html.length}
+                  title="preview-reply-email"
+                  className="preview-frame"
+                  srcDoc={replyPreviewData.html}
+                />
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
+              </p>
+            )}
+
+            {replyModalError && (
+              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
+            )}
+
+            <div className="modal__actions">
+              <button type="button" className="ghost-button" onClick={closeReplyModal}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={replySendMutation.isPending || !replySubject.trim()}
+                onClick={() => replySendMutation.mutate()}
+              >
+                {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
