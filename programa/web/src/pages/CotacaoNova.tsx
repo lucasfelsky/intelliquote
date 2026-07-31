@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { CatalogItemPicker } from '@/components/CatalogItemPicker';
 
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
 
@@ -15,6 +16,7 @@ interface CatalogItem {
   isDangerousGood: boolean;
   notes: string | null;
   isActive: boolean;
+  family: { id: number; name: string } | null;
 }
 
 interface DraftItem {
@@ -95,6 +97,7 @@ export default function CotacaoNova() {
         isDangerousGood: Boolean(c.isDangerousGood),
         notes: (c.notes as string | null) ?? null,
         isActive: Boolean(c.isActive ?? true),
+        family: c.family ? { id: Number((c.family as any).id), name: String((c.family as any).name) } : null,
       })) as CatalogItem[];
     },
   });
@@ -501,27 +504,12 @@ export default function CotacaoNova() {
             <h2>{editingTempId !== null ? 'Editar item' : 'Adicionar item do catálogo'}</h2>
 
             <label className="field-label" htmlFor="itemCatalog">Item *</label>
-            <select
-              id="itemCatalog"
-              className="select"
-              value={itemForm.catalogItemId ?? ''}
-              onChange={(e) =>
-                setItemForm({
-                  ...itemForm,
-                  catalogItemId: e.target.value ? Number(e.target.value) : null,
-                })
-              }
-              required
+            <CatalogItemPicker
+              items={activeCatalog}
+              selectedId={itemForm.catalogItemId}
+              onSelect={(id) => setItemForm({ ...itemForm, catalogItemId: id })}
               disabled={editingTempId !== null}
-            >
-              <option value="">Selecione…</option>
-              {activeCatalog.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.commercialName} — {c.marketName}
-                  {c.isDangerousGood ? ' (DG)' : ''}
-                </option>
-              ))}
-            </select>
+            />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
               <div>
