@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { api } from '@/api/client';
+import { Modal } from '@/components/Modal';
 
 interface CatalogItem {
   id: number;
@@ -10,6 +11,8 @@ interface CatalogItem {
   isDangerousGood: boolean;
   notes: string | null;
   isActive: boolean;
+  familyId: number | null;
+  family: { id: number; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,6 +23,7 @@ type FormState = {
   ncm: string;
   dbcorpCode: string;
   isDangerousGood: boolean;
+  familyId: number | '';
   notes: string;
 };
 
@@ -29,6 +33,7 @@ const EMPTY_FORM: FormState = {
   ncm: '',
   dbcorpCode: '',
   isDangerousGood: false,
+  familyId: '',
   notes: '',
 };
 
@@ -38,6 +43,7 @@ function normalizeNcm(value: string): string {
 
 export default function Itens() {
   const [items, setItems] = useState<CatalogItem[]>([]);
+  const [families, setFamilies] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -46,6 +52,16 @@ export default function Itens() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+
+  // Import states
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'result'>('upload');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importPreview, setImportPreview] = useState<{ validLines: any[], errorLines: any[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ successLines: any[], errorLines: any[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -70,6 +86,9 @@ export default function Itens() {
 
   useEffect(() => {
     void refresh();
+    api.get<{ data: { id: number; name: string }[] }>('/v1/item-families').then(res => {
+      if (res && res.data) setFamilies(res.data);
+    }).catch(console.error);
   }, [refresh]);
 
   const sortedItems = useMemo(
@@ -99,6 +118,7 @@ export default function Itens() {
       ncm: item.ncm ?? '',
       dbcorpCode: item.dbcorpCode ?? '',
       isDangerousGood: item.isDangerousGood,
+      familyId: item.familyId ?? '',
       notes: item.notes ?? '',
     });
     setFeedback(null);
@@ -126,6 +146,7 @@ export default function Itens() {
         ncm: form.ncm.trim() || null,
         dbcorpCode: form.dbcorpCode.trim() || null,
         isDangerousGood: form.isDangerousGood,
+        familyId: form.familyId !== '' ? Number(form.familyId) : null,
         notes: form.notes.trim() || null,
       };
       if (editing) {
@@ -165,6 +186,67 @@ export default function Itens() {
     }
   }
 
+  function openImportModal() {
+    setIsImportModalOpen(true);
+    setImportStep('upload');
+    setImportFile(null);
+    setImportError('');
+    setImportPreview(null);
+    setImportResult(null);
+  }
+
+  function closeImportModal() {
+    setIsImportModalOpen(false);
+    if (importStep === 'result') {
+      void refresh();
+    }
+  }
+
+  async function handlePreviewImport() {
+    if (!importFile) return;
+    setImportLoading(true);
+    setImportError('');
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = (e.target?.result as string).split(',')[1];
+        if (!base64) throw new Error('Falha ao ler arquivo');
+        try {
+          const res = await api.post<{ data: { validLines: any[], errorLines: any[] } }>('/v1/catalog-items/import', { contentBase64: base64 });
+          setImportPreview(res.data);
+          setImportStep('preview');
+        } catch (apiErr: any) {
+          setImportError(apiErr.message || 'Erro ao processar arquivo.');
+        } finally {
+          setImportLoading(false);
+        }
+      };
+      reader.onerror = () => {
+        setImportError('Erro ao ler arquivo.');
+        setImportLoading(false);
+      };
+      reader.readAsDataURL(importFile);
+    } catch (err: any) {
+      setImportError(err.message || 'Erro desconhecido');
+      setImportLoading(false);
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (!importPreview?.validLines.length) return;
+    setImportLoading(true);
+    setImportError('');
+    try {
+      const res = await api.post<{ data: { successLines: any[], errorLines: any[] } }>('/v1/catalog-items/import/confirm', { items: importPreview.validLines });
+      setImportResult(res.data);
+      setImportStep('result');
+    } catch (apiErr: any) {
+      setImportError(apiErr.message || 'Erro ao confirmar importação.');
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
   return (
     <div className="page itens-page">
       <header className="page-header">
@@ -176,9 +258,14 @@ export default function Itens() {
             interno; o nome de mercado é o que o fornecedor vê no portal.
           </p>
         </div>
-        <button type="button" className="primary-button" onClick={openCreate}>
-          + Novo item
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button type="button" className="secondary-button" onClick={openImportModal}>
+            Importar itens
+          </button>
+          <button type="button" className="primary-button" onClick={openCreate}>
+            + Novo item
+          </button>
+        </div>
       </header>
 
       <section className="itens-filters" aria-label="Filtros do catálogo">
@@ -280,6 +367,11 @@ export default function Itens() {
                       >
                         {item.isActive ? 'Ativo' : 'Inativo'}
                       </span>
+                      {item.family && (
+                        <span className="itens-card__badge" style={{ backgroundColor: '#e2e8f0', color: '#475569' }}>
+                          {item.family.name}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -392,6 +484,19 @@ export default function Itens() {
                 required
               />
             </label>
+            <label className="field">
+              <span>Família</span>
+              <select
+                className="input"
+                value={form.familyId}
+                onChange={(e) => setForm({ ...form, familyId: e.target.value ? Number(e.target.value) : '' })}
+              >
+                <option value="">Sem família</option>
+                {families.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </label>
             <div className="itens-form__row">
               <label className="field">
                 <span>NCM</span>
@@ -449,6 +554,84 @@ export default function Itens() {
           </form>
         </section>
       </div>
+
+      <Modal isOpen={isImportModalOpen} onClose={closeImportModal} title="Importar Itens do Catálogo">
+        <div className="import-modal-content" style={{ minWidth: 500, minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+          {importStep === 'upload' && (
+            <div style={{ flex: 1 }}>
+              <p style={{ marginBottom: 16 }}>
+                Selecione uma planilha (xlsx) com as colunas na seguinte ordem:<br/>
+                <strong>1. Nome Comercial, 2. Nome de Mercado, 3. NCM, 4. Código DB, 5. Família, 6. Carga Perigosa (Sim/Não), 7. Notas</strong>
+              </p>
+              <input
+                type="file"
+                accept=".xlsx"
+                ref={fileInputRef}
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                style={{ display: 'block', marginBottom: 16 }}
+              />
+              {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
+              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+                <button type="button" className="btn-secondary" onClick={closeImportModal} disabled={importLoading}>Cancelar</button>
+                <button type="button" className="btn-primary" onClick={handlePreviewImport} disabled={!importFile || importLoading}>
+                  {importLoading ? 'Processando...' : 'Carregar e Validar'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {importStep === 'preview' && importPreview && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <p style={{ marginBottom: 16 }}>
+                Encontramos <strong>{importPreview.validLines.length}</strong> itens válidos e <strong>{importPreview.errorLines.length}</strong> linhas com erro.
+              </p>
+              
+              {importPreview.errorLines.length > 0 && (
+                <div style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto', backgroundColor: '#fef2f2', padding: 8, borderRadius: 4 }}>
+                  <strong style={{ color: '#991b1b', display: 'block', marginBottom: 8 }}>Linhas com erro (serão ignoradas):</strong>
+                  <ul style={{ color: '#991b1b', fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                    {importPreview.errorLines.map((e, idx) => (
+                      <li key={idx}>Linha {e.row}: {e.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
+
+              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+                <button type="button" className="btn-secondary" onClick={() => setImportStep('upload')} disabled={importLoading}>Voltar</button>
+                <button type="button" className="btn-primary" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || importLoading}>
+                  {importLoading ? 'Importando...' : 'Confirmar Importação'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {importStep === 'result' && importResult && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div className="alert alert--success" style={{ marginBottom: 16 }}>
+                <strong>{importResult.successLines.length}</strong> itens importados com sucesso!
+              </div>
+
+              {importResult.errorLines.length > 0 && (
+                <div style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto', backgroundColor: '#fef2f2', padding: 8, borderRadius: 4 }}>
+                  <strong style={{ color: '#991b1b', display: 'block', marginBottom: 8 }}>Erros ao salvar no banco:</strong>
+                  <ul style={{ color: '#991b1b', fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                    {importResult.errorLines.map((e, idx) => (
+                      <li key={idx}>Linha {e.row}: {e.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+                <button type="button" className="btn-primary" onClick={closeImportModal}>Concluir</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

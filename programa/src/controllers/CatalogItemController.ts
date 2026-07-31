@@ -17,6 +17,7 @@ export class CatalogItemController {
     try {
       const pagination = parsePagination(req);
       const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+      const familyIdStr = typeof req.query.family === 'string' ? req.query.family.trim() : '';
       const onlyDg = req.query.onlyDg === 'true';
       const includeInactive = req.query.includeInactive === 'true';
 
@@ -35,11 +36,15 @@ export class CatalogItemController {
           { dbcorpCode: { contains: search, mode: 'insensitive' } },
         ];
       }
+      if (familyIdStr) {
+        where.familyId = Number(familyIdStr);
+      }
 
       const [total, items] = await Promise.all([
         prisma.catalogItem.count({ where }),
         prisma.catalogItem.findMany({
           where,
+          include: { family: true },
           orderBy: [{ marketName: 'asc' }],
           skip: pagination.skip,
           take: pagination.take,
@@ -60,7 +65,10 @@ export class CatalogItemController {
         return res.status(400).json({ message: 'ID do item invalido.' });
       }
 
-      const item = await prisma.catalogItem.findUnique({ where: { id } });
+      const item = await prisma.catalogItem.findUnique({ 
+        where: { id },
+        include: { family: true }
+      });
       if (!item) {
         return res.status(404).json({ message: 'Item de catalogo nao encontrado.' });
       }
@@ -81,6 +89,7 @@ export class CatalogItemController {
       const dbcorpCode = isNonEmptyString(body.dbcorpCode) ? body.dbcorpCode.trim().toUpperCase() : null;
       const isDangerousGood = body.isDangerousGood === true;
       const notes = isNonEmptyString(body.notes) ? body.notes.trim() : null;
+      const familyId = typeof body.familyId === 'number' ? body.familyId : null;
       const isActive = body.isActive === undefined ? true : body.isActive !== false;
 
       if (!commercialName || !marketName) {
@@ -108,10 +117,12 @@ export class CatalogItemController {
           marketName,
           ncm,
           dbcorpCode,
+          familyId,
           isDangerousGood,
           notes,
           isActive,
         },
+        include: { family: true }
       });
 
       await AuditLogService.log({
@@ -184,11 +195,18 @@ export class CatalogItemController {
       if (body.notes !== undefined) {
         data.notes = isNonEmptyString(body.notes) ? body.notes.trim() : null;
       }
+      if (body.familyId !== undefined) {
+        data.familyId = typeof body.familyId === 'number' ? body.familyId : null;
+      }
       if (body.isActive !== undefined) {
         data.isActive = body.isActive !== false;
       }
 
-      const item = await prisma.catalogItem.update({ where: { id }, data });
+      const item = await prisma.catalogItem.update({ 
+        where: { id }, 
+        data,
+        include: { family: true }
+      });
 
       await AuditLogService.log({
         entityType: 'catalog_item',

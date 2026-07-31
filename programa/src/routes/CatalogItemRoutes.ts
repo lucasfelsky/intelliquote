@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import { CatalogItemController } from '../controllers/CatalogItemController';
+import { CatalogItemImportController } from '../controllers/CatalogItemImportController';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 
 const catalogItemRoutes = Router();
+const importController = new CatalogItemImportController();
+
+catalogItemRoutes.post(
+  '/catalog-items/import',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  importController.preview,
+);
+
+catalogItemRoutes.post(
+  '/catalog-items/import/confirm',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  importController.confirm,
+);
 
 catalogItemRoutes.get(
   '/catalog-items',

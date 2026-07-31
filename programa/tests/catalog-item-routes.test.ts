@@ -27,6 +27,12 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: {
       create: vi.fn(),
     },
+    itemFamily: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    }
   };
 
   return { prisma };
@@ -59,6 +65,12 @@ const prismaMock = prisma as unknown as {
   auditLog: {
     create: ReturnType<typeof vi.fn>;
   };
+  itemFamily: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+  }
 };
 
 describe('CatalogItem routes', () => {
@@ -80,6 +92,7 @@ describe('CatalogItem routes', () => {
           isDangerousGood: true,
           notes: null,
           isActive: true,
+          family: true
         },
       ]);
 
@@ -91,6 +104,7 @@ describe('CatalogItem routes', () => {
       expect(prismaMock.catalogItem.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ isActive: true }),
+          include: { family: true },
         }),
       );
       expect(response.body.data).toHaveLength(1);
@@ -115,6 +129,7 @@ describe('CatalogItem routes', () => {
               { commercialName: { contains: 'ACET', mode: 'insensitive' } },
             ]),
           }),
+          include: { family: true },
         }),
       );
     });
@@ -148,6 +163,7 @@ describe('CatalogItem routes', () => {
         isDangerousGood: false,
         notes: null,
         isActive: true,
+        include: { family: true }
       });
       prismaMock.auditLog.create.mockResolvedValue({ id: 1 });
 

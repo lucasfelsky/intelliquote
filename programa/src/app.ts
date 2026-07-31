@@ -54,6 +54,11 @@ app.use((err: Error & { status?: number }, _req: express.Request, res: express.R
   }
   next(err);
 });
+
+// Aumentar o limite apenas para as rotas de importação (onde enviamos a planilha base64)
+app.use('/api/v1/catalog-items/import', express.json({ limit: '10mb' }));
+
+// Limite global de payload para os demais endpoints (proteção genérica)
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 app.use(portalRoutes);
