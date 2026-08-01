@@ -1418,3 +1418,8 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .data-table tbody tr:hover {
   background: var(--surface);
 }
+
+.tabs-trigger:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.22);
+}

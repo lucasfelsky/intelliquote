@@ -13,7 +13,8 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/cotacoes',  label: 'Cotações',           icon: '✦',             group: 'main' },
   { to: '/itens',     label: 'Itens',              icon: '◇',             group: 'main' },
   { to: '/fornecedores', label: 'Fornecedores',    icon: '⬢',             group: 'main' },
-    { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main' },
+  { to: '/familias',  label: 'Famílias',           icon: '⬡',             group: 'main' },
+  { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main' },
   { to: '/ajuda',     label: 'Ajuda',              icon: '?',             group: 'main' },
 ];
 
