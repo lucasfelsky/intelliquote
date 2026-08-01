@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
@@ -54,6 +55,7 @@ export function ComparacaoTab({
   productName: string | null;
   requestCode: string;
 }) {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { user } = useAuth();
   const role = user?.role;
@@ -433,7 +435,7 @@ export function ComparacaoTab({
                 <button
                   type="button"
                   className="primary-button"
-                  onClick={() => {
+                  onClick={async () => {
                     const review: SupplierReviewInput | null = winner && ratingComplete
                       ? {
                           supplierId: winner.supplierId,
@@ -446,7 +448,7 @@ export function ComparacaoTab({
                     const msg = notifyLosers
                       ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
                       : 'Concluir esta cotação? Ela será fechada.';
-                    if (window.confirm(msg)) {
+                    if (await confirm(msg)) {
                       closeMut.mutate({ notifyLosers, review });
                     }
                   }}

@@ -59,38 +59,42 @@ function RedirectIfAuthed() {
   return <Outlet />;
 }
 
+import { ConfirmProvider } from '@/components/useConfirm';
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<RedirectIfAuthed />}>
-              <Route path="/login" element={<LoginGate />} />
-            </Route>
-            <Route element={<RequireAuth />}>
-              <Route element={<AppShell />}>
-                <Route path="/" element={<Home />} />
-                <Route path="/fornecedores" element={<Fornecedores />} />
-                <Route path="/usuarios" element={<Usuarios />} />
-                <Route path="/empresa" element={<Empresa />} />
-                <Route path="/cotacoes" element={<Cotacoes />} />
-                                <Route path="/cotacoes/nova" element={<CotacaoNova />} />
-                                <Route path="/cotacoes/:id" element={<CotacaoDetalhe />} />
-                <Route path="/itens" element={<Itens />} />
-                <Route path="/familias" element={<Familias />} />
-                <Route path="/respostas" element={<Navigate to="/cotacoes" replace />} />
-                <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
-                <Route path="/relatorios" element={<Relatorios />} />
-                <Route path="/ajuda" element={<Ajuda />} />
-                <Route path="/auditoria" element={<Auditoria />} />
-                <Route path="/templates" element={<Templates />} />
+      <ConfirmProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route element={<RedirectIfAuthed />}>
+                <Route path="/login" element={<LoginGate />} />
               </Route>
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+              <Route element={<RequireAuth />}>
+                <Route element={<AppShell />}>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/fornecedores" element={<Fornecedores />} />
+                  <Route path="/usuarios" element={<Usuarios />} />
+                  <Route path="/empresa" element={<Empresa />} />
+                  <Route path="/cotacoes" element={<Cotacoes />} />
+                                  <Route path="/cotacoes/nova" element={<CotacaoNova />} />
+                                  <Route path="/cotacoes/:id" element={<CotacaoDetalhe />} />
+                  <Route path="/itens" element={<Itens />} />
+                  <Route path="/familias" element={<Familias />} />
+                  <Route path="/respostas" element={<Navigate to="/cotacoes" replace />} />
+                  <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
+                  <Route path="/relatorios" element={<Relatorios />} />
+                  <Route path="/ajuda" element={<Ajuda />} />
+                  <Route path="/auditoria" element={<Auditoria />} />
+                  <Route path="/templates" element={<Templates />} />
+                </Route>
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ConfirmProvider>
     </QueryClientProvider>
   );
 }
