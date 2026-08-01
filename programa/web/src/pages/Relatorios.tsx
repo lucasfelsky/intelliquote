@@ -260,7 +260,7 @@ export default function Relatorios() {
           </div>
         )}
         {savingsData && savingsData.items.length > 0 ? (
-          <div style={{ marginTop: 16, overflowX: 'auto' }}>
+          <div className="table-wrapper" style={{ marginTop: 16 }}>
             <table className="table">
               <thead>
                 <tr>
@@ -319,7 +319,7 @@ export default function Relatorios() {
           </div>
         )}
         {leadTimeData && leadTimeData.bySupplier.length > 0 ? (
-          <div style={{ marginTop: 16, overflowX: 'auto' }}>
+          <div className="table-wrapper" style={{ marginTop: 16 }}>
             <table className="table">
               <thead>
                 <tr>
@@ -361,7 +361,7 @@ export default function Relatorios() {
           </div>
         )}
         {topSuppliersData && topSuppliersData.items.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-wrapper">
             <table className="table">
               <thead>
                 <tr>
@@ -459,7 +459,7 @@ export default function Relatorios() {
           </div>
         )}
         {engagement.data && engagement.data.items.length > 0 ? (
-          <div style={{ marginTop: 8, overflowX: 'auto' }}>
+          <div className="table-wrapper" style={{ marginTop: 8 }}>
             <table className="table">
               <thead>
                 <tr>

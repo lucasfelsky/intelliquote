@@ -381,6 +381,10 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .toast--danger { background: var(--danger); }
 .toast--warning { background: var(--warning); }
 
+.table-wrapper {
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
