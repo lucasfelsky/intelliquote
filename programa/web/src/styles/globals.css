@@ -1418,3 +1418,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .data-table tbody tr:hover {
   background: var(--surface);
 }
+
+.text-sm { font-size: 14px; }
+.text-xs { font-size: 12px; }
