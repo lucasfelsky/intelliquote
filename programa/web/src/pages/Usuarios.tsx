@@ -147,6 +147,10 @@ export default function Usuarios() {
         {list.isError && (
           <div className="empty-state">
             <p>Não foi possível carregar a lista de usuários.</p>
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+              Verifique sua conexão e tente novamente.
+            </p>
+            <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
           </div>
         )}
         {list.data && list.data.length === 0 && !list.isLoading && (

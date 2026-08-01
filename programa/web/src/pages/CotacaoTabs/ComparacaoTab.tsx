@@ -461,7 +461,15 @@ export function ComparacaoTab({
         })()}
 
         {history.isLoading && <p>Carregando comparações…</p>}
-        {history.isError && <p>Não foi possível carregar o histórico de comparações.</p>}
+        {history.isError && (
+          <div className="empty-state">
+            <p>Não foi possível carregar o histórico de comparações.</p>
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+              Verifique sua conexão e tente novamente.
+            </p>
+            <button className="ghost-button" onClick={() => history.refetch()}>Tentar novamente</button>
+          </div>
+        )}
         {history.data && !latest && (
           <div className="empty-state">
             <strong>Esta cotação ainda não foi comparada.</strong>

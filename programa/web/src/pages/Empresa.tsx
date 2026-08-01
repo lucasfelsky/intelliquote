@@ -229,6 +229,10 @@ export default function Empresa() {
         <h1>Empresa</h1>
         <div className="empty-state">
           <p>Não foi possível carregar o perfil da empresa.</p>
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+            Verifique sua conexão e tente novamente.
+          </p>
+          <button className="ghost-button" onClick={() => profile.refetch()}>Tentar novamente</button>
         </div>
       </div>
     );

@@ -787,9 +787,10 @@ export default function CotacaoDetalhe() {
         <h1>Cotação</h1>
         <div className="empty-state">
           <p>Não foi possível carregar a cotação.</p>
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
             Verifique sua conexão e tente novamente.
           </p>
+          <button className="ghost-button" onClick={() => detail.refetch()}>Tentar novamente</button>
         </div>
         <button type="button" className="ghost-button" onClick={() => navigate('/cotacoes')}>
           Voltar para a lista
@@ -964,7 +965,8 @@ export default function CotacaoDetalhe() {
                 </p>
               </div>
             ) : (
-              <table className="table">
+              <div className="table-wrapper">
+                <table className="table">
                 <thead>
                   <tr>
                     <th>Nome comercial</th>
@@ -1017,7 +1019,8 @@ export default function CotacaoDetalhe() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             )}
           </section>
         </TabPanel>
@@ -1282,7 +1285,8 @@ export default function CotacaoDetalhe() {
                   </div>
                 </div>
 
-                <table className="table">
+                <div className="table-wrapper">
+                  <table className="table">
                   <thead>
                     <tr>
                       <th>Contato</th>
@@ -1315,7 +1319,8 @@ export default function CotacaoDetalhe() {
                                         );
                                       })}
                                     </tbody>
-                </table>
+                  </table>
+                </div>
 
                 <div className="modal__actions">
                   <button type="button" className="ghost-button" onClick={closeDispatchModal}>
@@ -1437,7 +1442,8 @@ export default function CotacaoDetalhe() {
                 </div>
               )}
               {activeTokens.length > 0 && (
-                <table className="table">
+                <div className="table-wrapper">
+                  <table className="table">
                   <thead>
                     <tr>
                       <th>Fornecedor</th>
@@ -1504,7 +1510,8 @@ export default function CotacaoDetalhe() {
                       );
                     })}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               )}
             </div>
 

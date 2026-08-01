@@ -26,9 +26,10 @@ export default function PlaceholderPage({ title, eyebrow }: { title: string; eye
         {me.isError && (
           <div className="empty-state">
             <p>Não foi possível validar a sessão atual.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
               Faça login novamente se o problema persistir.
             </p>
+            <button className="ghost-button" onClick={() => me.refetch()}>Tentar novamente</button>
           </div>
         )}
         {me.data && (
