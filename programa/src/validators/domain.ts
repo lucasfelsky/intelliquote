@@ -263,6 +263,7 @@ export const quoteResponseUpdateSchema = z.object({
 export const quoteResponseReplySchema = z.object({
   subject: z.string().trim().max(300).optional(),
   message: z.string().trim().max(4000).optional(),
+  targetPrice: z.number().positive().nullable().optional(),
 });
 
 export const quoteComparisonWeightsSchema = z.object({

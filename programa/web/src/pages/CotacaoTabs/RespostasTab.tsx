@@ -120,6 +120,7 @@ export function RespostasTab({
   const [replyTarget, setReplyTarget] = useState<QuoteResponse | null>(null);
   const [replySubject, setReplySubject] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
+  const [replyTargetPrice, setReplyTargetPrice] = useState('');
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
   const [replyModalError, setReplyModalError] = useState<string | null>(null);
 
@@ -177,8 +178,8 @@ export function RespostasTab({
   });
 
   const replyPreviewMutation = useMutation({
-    mutationFn: (vars: { id: number; subject: string; message: string }) =>
-      previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message }),
+    mutationFn: (vars: { id: number; subject: string; message: string; targetPrice: number | null }) =>
+      previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message, targetPrice: vars.targetPrice }),
     onSuccess: (data) => {
       setReplyPreviewData(data);
       setReplyModalError(null);
@@ -189,7 +190,8 @@ export function RespostasTab({
   const replySendMutation = useMutation({
     mutationFn: () => {
       if (!replyTarget) throw new Error('Nenhuma proposta selecionada.');
-      return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage });
+      const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+      return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
     },
     onSuccess: (result) => {
       setFeedback({
@@ -250,9 +252,11 @@ export function RespostasTab({
     setReplyTarget(r);
     setReplySubject(defaultSubject);
     setReplyMessage('');
+    setReplyTargetPrice(r.targetPrice != null ? String(r.targetPrice) : '');
     setReplyPreviewData(null);
     setReplyModalError(null);
-    replyPreviewMutation.mutate({ id: r.id, subject: defaultSubject, message: '' });
+    const initialTargetPrice = r.targetPrice != null ? Number(r.targetPrice) : null;
+    replyPreviewMutation.mutate({ id: r.id, subject: defaultSubject, message: '', targetPrice: initialTargetPrice });
   }
 
   function closeReplyModal() {
@@ -682,17 +686,34 @@ export function RespostasTab({
               rows={4}
               value={replyMessage}
               onChange={(e) => setReplyMessage(e.target.value)}
-              placeholder="Opcional. Ex.: nosso preco alvo e US$ X / unidade; ou confirmando o fechamento do pedido."
+              placeholder="Opcional. Ex.: confirmando o fechamento do pedido."
             />
+
+            <label className="field-label" htmlFor="replyTargetPrice" style={{ marginTop: 12 }}>
+              Preço-alvo (opcional)
+            </label>
+            <input
+              id="replyTargetPrice"
+              className="input"
+              type="number"
+              step="0.01"
+              min="0"
+              value={replyTargetPrice}
+              onChange={(e) => setReplyTargetPrice(e.target.value)}
+            />
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
+              Preencher adiciona o bloco de pedido de redução de preço no e-mail.
+            </p>
 
             <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
               <button
                 type="button"
                 className="ghost-button"
                 disabled={replyPreviewMutation.isPending}
-                onClick={() =>
-                  replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage })
-                }
+                onClick={() => {
+                  const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+                  replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
+                }}
               >
                 {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
               </button>

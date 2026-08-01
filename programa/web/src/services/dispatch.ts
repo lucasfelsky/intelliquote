@@ -297,6 +297,7 @@ export interface QuoteResponseReplyInput {
   // extra.
   subject?: string;
   message?: string;
+  targetPrice?: number | null;
 }
 
 export interface QuoteResponseReplyResult {
@@ -320,6 +321,7 @@ export async function previewQuoteResponseReply(
   return api.post<QuoteResponseReplyPreview>(`/v1/quote-responses/${quoteResponseId}/reply/preview`, {
     subject: input.subject,
     message: input.message,
+    targetPrice: input.targetPrice,
   });
 }
 
@@ -330,6 +332,7 @@ export async function replyToQuoteResponse(
   return api.post<QuoteResponseReplyResult>(`/v1/quote-responses/${quoteResponseId}/reply`, {
     subject: input.subject,
     message: input.message,
+    targetPrice: input.targetPrice,
   });
 }
 
