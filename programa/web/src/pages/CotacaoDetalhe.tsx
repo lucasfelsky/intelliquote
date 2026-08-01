@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -251,6 +252,7 @@ function messageOf(err: unknown): string {
 }
 
 export default function CotacaoDetalhe() {
+  const confirm = useConfirm();
   const params = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -840,8 +842,8 @@ export default function CotacaoDetalhe() {
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm(`Fechar a cotação ${qr.requestCode}?`)) {
+              onClick={async () => {
+                if (await confirm(`Fechar a cotação ${qr.requestCode}?`)) {
                   closeRequest.mutate();
                 }
               }}
@@ -854,8 +856,8 @@ export default function CotacaoDetalhe() {
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
+              onClick={async () => {
+                if (await confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
                   reopenRequest.mutate();
                 }
               }}
@@ -868,8 +870,8 @@ export default function CotacaoDetalhe() {
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm(`Apagar a cotação ${qr.requestCode}?`)) {
+              onClick={async () => {
+                if (await confirm(`Apagar a cotação ${qr.requestCode}?`)) {
                   deleteQuote.mutate();
                 }
               }}
@@ -1002,8 +1004,8 @@ export default function CotacaoDetalhe() {
                             <button
                               type="button"
                               className="ghost-button"
-                              onClick={() => {
-                                if (window.confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
+                              onClick={async () => {
+                                if (await confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
                                   removeItem.mutate(it.id);
                                 }
                               }}
@@ -1252,8 +1254,8 @@ export default function CotacaoDetalhe() {
                     type="button"
                     className="primary-button"
                     disabled={sendDispatchMutation.isPending || selectedContactIds.length === 0}
-                    onClick={() => {
-                      if (window.confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
+                    onClick={async () => {
+                      if (await confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
                         sendDispatchMutation.mutate();
                       }
                     }}
@@ -1486,9 +1488,9 @@ export default function CotacaoDetalhe() {
                                 type="button"
                                 className="ghost-button"
                                 disabled={revokePortalTokenMutation.isPending}
-                                onClick={() => {
+                                onClick={async () => {
                                   if (
-                                    window.confirm(
+                                    await confirm(
                                       `Revogar o link de ${token.contact.name}? O fornecedor não conseguirá mais responder.`,
                                     )
                                   ) {

@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
@@ -95,6 +96,7 @@ function normalize(supplier: unknown): Supplier {
 }
 
 export default function Fornecedores() {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
@@ -557,8 +559,8 @@ export default function Fornecedores() {
                                   <button
                                     type="button"
                                     className="ghost-button danger-button"
-                                    onClick={() => {
-                                      if (window.confirm(`Remover ${s.name}? Esta ação não pode ser desfeita.`)) {
+                                    onClick={async () => {
+                                      if (await confirm(`Remover ${s.name}? Esta ação não pode ser desfeita.`)) {
                                         remove.mutate(s.id);
                                       }
                                     }}
@@ -630,8 +632,8 @@ export default function Fornecedores() {
                                             <button
                                               type="button"
                                               className="ghost-button"
-                                              onClick={() => {
-                                                if (window.confirm(`Remover ${c.name}?`)) {
+                                              onClick={async () => {
+                                                if (await confirm(`Remover ${c.name}?`)) {
                                                   removeContact.mutate({
                                                     supplierId: s.id,
                                                     contactId: c.id,

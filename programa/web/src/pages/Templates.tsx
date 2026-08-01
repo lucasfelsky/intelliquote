@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import JoditEditor from 'jodit-react';
@@ -141,6 +142,7 @@ const joditConfig = {
 };
 
 export default function Templates() {
+  const confirm = useConfirm();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const qc = useQueryClient();
@@ -323,8 +325,8 @@ export default function Templates() {
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => {
-                      if (window.confirm('Restaurar este template para o padrão do sistema? As personalizações serão perdidas.')) {
+                    onClick={async () => {
+                      if (await confirm('Restaurar este template para o padrão do sistema? As personalizações serão perdidas.')) {
                         reset.mutate();
                       }
                     }}

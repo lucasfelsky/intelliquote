@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -74,6 +75,7 @@ function normalize(qr: unknown): QuoteRequest {
 }
 
 export default function Cotacoes() {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -252,8 +254,8 @@ export default function Cotacoes() {
                         <button
                           type="button"
                           className="ghost-button"
-                          onClick={() => {
-                            if (window.confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
+                          onClick={async () => {
+                            if (await confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
                               reopen.mutate(qr.id);
                             }
                           }}
@@ -266,12 +268,12 @@ export default function Cotacoes() {
                         <button
                           type="button"
                           className="ghost-button danger-button"
-                          onClick={() => {
+                          onClick={async () => {
                             const cascade = qr._count?.quoteResponses ?? 0;
                             const msg = cascade > 0
                               ? `Apagar a cotação ${qr.requestCode}? Todas as ${cascade} resposta(s) e os itens associados também serão removidas. Esta ação não pode ser desfeita.`
                               : `Apagar a cotação ${qr.requestCode}? Esta ação não pode ser desfeita.`;
-                            if (window.confirm(msg)) {
+                            if (await confirm(msg)) {
                               remove.mutate(qr.id);
                             }
                           }}
