@@ -297,6 +297,7 @@ export interface QuoteResponseReplyInput {
   // extra.
   subject?: string;
   message?: string;
+  targetPrice?: number | null;
 }
 
 export interface QuoteResponseReplyResult {

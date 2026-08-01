@@ -561,7 +561,7 @@ export class QuoteResponseController {
   // do template padrao/customizado (`quote_reply`, ver Templates.tsx).
   private static async renderReplyFor(
     quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>,
-    overrides: { subject?: string; message?: string },
+    overrides: { subject?: string; message?: string; targetPrice?: number | null },
   ) {
     const { quoteRequest, supplier } = quoteResponse;
     const itemName = quoteRequest.productName || quoteRequest.requestCode;
@@ -579,7 +579,7 @@ export class QuoteResponseController {
       productName: quoteRequest.productName ?? '',
       supplierName: supplier.name,
       currency: quoteResponse.currency,
-      targetPrice: quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined,
+      targetPrice: overrides.targetPrice !== undefined ? (overrides.targetPrice === null ? undefined : overrides.targetPrice) : (quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined),
       items: quoteRequest.items.map((item) => {
         const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
         const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
@@ -662,6 +662,14 @@ export class QuoteResponseController {
       if (!context) return res;
       const { quoteResponse, primaryContact } = context;
       const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+
+      if (parsedBody.data.targetPrice !== undefined) {
+        await prisma.quoteResponse.update({
+          where: { id },
+          data: { targetPrice: parsedBody.data.targetPrice },
+        });
+        quoteResponse.targetPrice = parsedBody.data.targetPrice as any;
+      }
 
       const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
 

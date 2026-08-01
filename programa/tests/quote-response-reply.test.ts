@@ -390,4 +390,70 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     // texto da mensagem continua exatamente como digitado
     expect(call.html).toContain('@comex2@sqquimica.com Please issue the PO');
   });
+  it('atualiza o targetPrice se enviado na resposta', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    prismaMock.quoteResponse.update = vi.fn().mockResolvedValue({});
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-target' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({ targetPrice: 3.5 });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.quoteResponse.update).toHaveBeenCalledWith({
+      where: { id: 77 },
+      data: { targetPrice: 3.5 },
+    });
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.html).toContain('Target Price');
+  });
+
+  it('não atualiza o targetPrice no preview', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+    prismaMock.quoteResponse.update = vi.fn();
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply/preview')
+      .set('Cookie', cookieHeader)
+      .send({ targetPrice: 3.5 });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
+    expect(res.body.html).toContain('Target Price');
+  });
+
+  it('remove targetPrice se enviado null e não renderiza no email', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({ ...baseQuoteResponse, targetPrice: 4.0 });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    prismaMock.quoteResponse.update = vi.fn().mockResolvedValue({});
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-target-null' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({ targetPrice: null });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.quoteResponse.update).toHaveBeenCalledWith({
+      where: { id: 77 },
+      data: { targetPrice: null },
+    });
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.html).not.toContain('Target Price');
+  });
 });
