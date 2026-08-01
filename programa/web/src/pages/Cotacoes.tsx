@@ -169,7 +169,7 @@ export default function Cotacoes() {
       </div>
 
       {actionError && (
-        <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{actionError}</p>
+        <p style={{ color: 'var(--danger)', marginBottom: 12 }} className="text-sm">{actionError}</p>
       )}
 
       <section className="card">
@@ -177,7 +177,7 @@ export default function Cotacoes() {
         {list.isError && (
           <div className="empty-state">
             <p>Não foi possível carregar as cotações.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+            <p style={{ color: 'var(--ink-soft)', marginBottom: 12 }} className="text-xs">
               Verifique sua conexão e tente novamente.
             </p>
             <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>

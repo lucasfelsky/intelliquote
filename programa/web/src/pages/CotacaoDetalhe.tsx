@@ -789,7 +789,7 @@ export default function CotacaoDetalhe() {
         <h1>Cotação</h1>
         <div className="empty-state">
           <p>Não foi possível carregar a cotação.</p>
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+          <p style={{ color: 'var(--ink-soft)', marginBottom: 12 }} className="text-xs">
             Verifique sua conexão e tente novamente.
           </p>
           <button className="ghost-button" onClick={() => detail.refetch()}>Tentar novamente</button>
@@ -885,7 +885,7 @@ export default function CotacaoDetalhe() {
       </div>
 
       {actionError && (
-        <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{actionError}</p>
+        <p style={{ color: 'var(--danger)', marginBottom: 12 }} className="text-sm">{actionError}</p>
       )}
 
 
@@ -1059,13 +1059,13 @@ export default function CotacaoDetalhe() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2>Enviar cotação para fornecedores</h2>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+            <p style={{ color: 'var(--ink-soft)', marginTop: -8 }} className="text-sm">
               {qr.requestCode} · {qr.productName}
             </p>
 
             {dispatchStep === 'select' && (
               <>
-                <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
                               Selecione o contato principal de cada fornecedor. Os demais contatos
                               cadastrados no mesmo fornecedor serao adicionados automaticamente
                               como copia (CC), para que a equipe comercial inteira visualize o envio.
@@ -1113,7 +1113,7 @@ export default function CotacaoDetalhe() {
                                       <div className="dispatcher-row__title">{supplier.name}</div>
                                       <div className="dispatcher-row__meta">Contatos: {contactNames}</div>
                                     </div>
-                                    <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                                    <span style={{ color: 'var(--ink-soft)' }} className="text-xs">
                                       {siblingCount > 0 ? `Para + ${siblingCount} em CC` : 'Para'}
                                     </span>
                                   </label>
@@ -1146,7 +1146,7 @@ export default function CotacaoDetalhe() {
                             )}
 
                             {dispatchError && (
-                              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>
+                              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
                                 {dispatchError}
                               </p>
                             )}
@@ -1238,13 +1238,13 @@ export default function CotacaoDetalhe() {
                                     srcDoc={dispatchPreview.preview.html}
                                   />
                 ) : (
-                  <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                  <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
                     Nenhum preview disponivel (nenhum destinatario selecionado).
                   </p>
                 )}
 
                 {dispatchError && (
-                  <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>
+                  <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
                     {dispatchError}
                   </p>
                 )}
@@ -1282,7 +1282,7 @@ export default function CotacaoDetalhe() {
                           : 'Falhou'}
                     </span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                  <div style={{ color: 'var(--ink-soft)' }} className="text-sm">
                     {dispatchResult.sentCount} enviado(s) · {dispatchResult.failedCount} falha(s)
                   </div>
                 </div>
@@ -1311,7 +1311,7 @@ export default function CotacaoDetalhe() {
                               {r.status === 'sent' ? 'Enviado' : 'Falhou'}
                             </span>
                           </td>
-                          <td style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                          <td style={{ color: 'var(--ink-soft)' }} className="text-xs">
                                               {r.error ??
                                                 (r.status === 'sent'
                                                   ? `Link magico gerado${r.ccCount ? ` · +${r.ccCount} CC` : ''}`
@@ -1361,7 +1361,7 @@ export default function CotacaoDetalhe() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2>Links do portal</h2>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+            <p style={{ color: 'var(--ink-soft)', marginTop: -8 }} className="text-sm">
               Gere links mágicos para que fornecedores respondam sem precisar de login.
               Cada link é único e expira conforme a validade escolhida.
             </p>
@@ -1413,7 +1413,7 @@ export default function CotacaoDetalhe() {
             </div>
 
             {tokenActionError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>
+              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
                 {tokenActionError}
               </p>
             )}
@@ -1422,8 +1422,8 @@ export default function CotacaoDetalhe() {
                 style={{
                   color: 'var(--primary-700)',
                   marginTop: 12,
-                  fontSize: 13,
                 }}
+                className="text-sm"
               >
                 {generateTokensMutation.data.generatedCount} link(s) novo(s) gerado(s)
                 {generateTokensMutation.data.alreadyActiveCount > 0 &&
@@ -1465,11 +1465,11 @@ export default function CotacaoDetalhe() {
                           <td>
                             {token.contact.name}
                             <br />
-                            <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                            <span style={{ color: 'var(--ink-soft)' }} className="text-xs">
                               {token.contact.email}
                             </span>
                           </td>
-                          <td style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                          <td style={{ color: 'var(--ink-soft)' }} className="text-xs">
                             {formatDateTime(token.expiresAt)}
                           </td>
                           <td>
@@ -1610,8 +1610,8 @@ export default function CotacaoDetalhe() {
             />
 
                         <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--line)', borderRadius: 8 }}>
-                          <legend style={{ padding: '0 6px', fontSize: 12, fontWeight: 600 }}>Incoterm e destino por item</legend>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13 }}>
+                          <legend style={{ padding: '0 6px', fontWeight: 600 }} className="text-xs">Incoterm e destino por item</legend>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
                             <input
                               type="checkbox"
                               checked={itemForm.inheritIncoterm}
@@ -1637,7 +1637,7 @@ export default function CotacaoDetalhe() {
                               </select>
                             </div>
                           )}
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 13 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
                             <input
                               type="checkbox"
                               checked={itemForm.inheritPort}
@@ -1661,7 +1661,7 @@ export default function CotacaoDetalhe() {
                         </fieldset>
 
                         {itemError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{itemError}</p>
+              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{itemError}</p>
             )}
 
             <div className="modal__actions">
@@ -1762,7 +1762,7 @@ export default function CotacaoDetalhe() {
             />
 
             {editError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{editError}</p>
+              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{editError}</p>
             )}
 
             <div className="modal__actions">

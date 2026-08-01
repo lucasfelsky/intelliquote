@@ -1423,6 +1423,9 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   background: var(--surface);
 }
 
+.text-sm { font-size: 14px; }
+.text-xs { font-size: 12px; }
+
 .tabs-trigger:focus-visible {
   outline: 0;
   box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.22);
