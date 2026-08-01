@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
@@ -99,6 +100,7 @@ export function RespostasTab({
   productName: string | null;
   requestCode: string;
 }) {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const { user } = useAuth();
   const role = user?.role;
@@ -436,8 +438,8 @@ export function RespostasTab({
                           <button
                             type="button"
                             className="ghost-button"
-                            onClick={() => {
-                              if (window.confirm('Apagar esta resposta?')) {
+                            onClick={async () => {
+                              if (await confirm('Apagar esta resposta?')) {
                                 removeMut.mutate(r.id);
                               }
                             }}

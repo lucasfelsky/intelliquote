@@ -120,7 +120,11 @@ export default function Home() {
         {topSuppliers.isLoading && <p>Carregando…</p>}
         {topSuppliers.isError && (
           <div className="empty-state">
-            <p>Não foi possível carregar o ranking de fornecedores.</p>
+            <p>Não foi possível carregar o ranking.</p>
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+              Verifique sua conexão e tente novamente.
+            </p>
+            <button className="ghost-button" onClick={() => topSuppliers.refetch()}>Tentar novamente</button>
           </div>
         )}
         {topSuppliers.data && topItems.length > 0 ? (

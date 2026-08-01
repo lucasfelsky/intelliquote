@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
@@ -95,6 +96,7 @@ function normalize(supplier: unknown): Supplier {
 }
 
 export default function Fornecedores() {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
@@ -420,9 +422,10 @@ export default function Fornecedores() {
         {list.isError && (
           <div className="empty-state">
             <p>Não foi possível carregar os fornecedores.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
               Verifique sua conexão e tente novamente.
             </p>
+            <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
           </div>
         )}
         {list.data && list.data.length === 0 && !list.isLoading && (
@@ -458,7 +461,8 @@ export default function Fornecedores() {
           </div>
         )}
         {displayedSuppliers.length > 0 && (
-          <table className="table">
+          <div className="table-wrapper">
+            <table className="table">
             <thead>
               <tr>
                 <th></th>
@@ -557,8 +561,8 @@ export default function Fornecedores() {
                                   <button
                                     type="button"
                                     className="ghost-button danger-button"
-                                    onClick={() => {
-                                      if (window.confirm(`Remover ${s.name}? Esta ação não pode ser desfeita.`)) {
+                                    onClick={async () => {
+                                      if (await confirm(`Remover ${s.name}? Esta ação não pode ser desfeita.`)) {
                                         remove.mutate(s.id);
                                       }
                                     }}
@@ -630,8 +634,8 @@ export default function Fornecedores() {
                                             <button
                                               type="button"
                                               className="ghost-button"
-                                              onClick={() => {
-                                                if (window.confirm(`Remover ${c.name}?`)) {
+                                              onClick={async () => {
+                                                if (await confirm(`Remover ${c.name}?`)) {
                                                   removeContact.mutate({
                                                     supplierId: s.id,
                                                     contactId: c.id,
@@ -655,6 +659,7 @@ export default function Fornecedores() {
                       })}
                     </tbody>
                   </table>
+          </div>
                 )}
       </section>
 

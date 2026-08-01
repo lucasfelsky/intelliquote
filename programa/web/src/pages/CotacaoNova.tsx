@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -53,6 +54,7 @@ function formatNumber(value: number): string {
 let tempIdCounter = 1;
 
 export default function CotacaoNova() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -453,8 +455,8 @@ export default function CotacaoNova() {
                         <button
                           type="button"
                           className="ghost-button"
-                          onClick={() => {
-                            if (window.confirm(`Remover o item ${it.commercialName}?`)) {
+                          onClick={async () => {
+                            if (await confirm(`Remover o item ${it.commercialName}?`)) {
                               setItems((current) => current.filter((x) => x.tempId !== it.tempId));
                             }
                           }}

@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -74,6 +75,7 @@ function normalize(qr: unknown): QuoteRequest {
 }
 
 export default function Cotacoes() {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -175,9 +177,10 @@ export default function Cotacoes() {
         {list.isError && (
           <div className="empty-state">
             <p>Não foi possível carregar as cotações.</p>
-            <p style={{ color: 'var(--ink-soft)' }} className="text-xs">
+            <p style={{ color: 'var(--ink-soft)', marginBottom: 12 }} className="text-xs">
               Verifique sua conexão e tente novamente.
             </p>
+            <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
           </div>
         )}
         {list.data && list.data.length === 0 && !list.isLoading && (
@@ -191,7 +194,8 @@ export default function Cotacoes() {
           </div>
         )}
         {list.data && list.data.length > 0 && (
-          <table className="table">
+          <div className="table-wrapper">
+            <table className="table">
             <thead>
               <tr>
                 <th>#</th>
@@ -207,11 +211,7 @@ export default function Cotacoes() {
             </thead>
             <tbody>
               {list.data.map((qr) => (
-                <tr
-                  key={qr.id}
-                  onClick={() => navigate(`/cotacoes/${qr.id}`)}
-                  style={{ cursor: 'pointer' }}
-                >
+                <tr key={qr.id}>
                   <td>{qr.id}</td>
                   <td><strong>{qr.requestCode}</strong></td>
                   <td>{qr.productName}</td>
@@ -230,7 +230,7 @@ export default function Cotacoes() {
                       {qr.status === 'open' ? 'Aberta' : 'Fechada'}
                     </span>
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
+                  <td>
                     <div className="row-actions">
                       <button
                         type="button"
@@ -252,8 +252,8 @@ export default function Cotacoes() {
                         <button
                           type="button"
                           className="ghost-button"
-                          onClick={() => {
-                            if (window.confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
+                          onClick={async () => {
+                            if (await confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
                               reopen.mutate(qr.id);
                             }
                           }}
@@ -266,12 +266,12 @@ export default function Cotacoes() {
                         <button
                           type="button"
                           className="ghost-button danger-button"
-                          onClick={() => {
+                          onClick={async () => {
                             const cascade = qr._count?.quoteResponses ?? 0;
                             const msg = cascade > 0
                               ? `Apagar a cotação ${qr.requestCode}? Todas as ${cascade} resposta(s) e os itens associados também serão removidas. Esta ação não pode ser desfeita.`
                               : `Apagar a cotação ${qr.requestCode}? Esta ação não pode ser desfeita.`;
-                            if (window.confirm(msg)) {
+                            if (await confirm(msg)) {
                               remove.mutate(qr.id);
                             }
                           }}
@@ -285,7 +285,8 @@ export default function Cotacoes() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         )}
       </section>
     </div>

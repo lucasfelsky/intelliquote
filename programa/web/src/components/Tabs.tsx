@@ -106,7 +106,6 @@ export function Tab({ value, children }: { value: string; children: ReactNode })
         cursor: 'pointer',
         fontSize: '14px',
         fontWeight: isSelected ? 600 : 400,
-        outline: 'none',
         whiteSpace: 'nowrap',
         transition: 'all 0.2s ease',
       }}

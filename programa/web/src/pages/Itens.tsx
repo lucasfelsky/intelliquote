@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { api } from '@/api/client';
 import { Modal } from '@/components/Modal';
@@ -42,6 +43,7 @@ function normalizeNcm(value: string): string {
 }
 
 export default function Itens() {
+  const confirm = useConfirm();
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [families, setFamilies] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,7 +168,7 @@ export default function Itens() {
   }
 
   async function handleSoftDelete(item: CatalogItem) {
-    if (!confirm(`Inativar o item "${item.commercialName}"?`)) return;
+    if (!(await confirm(`Inativar o item "${item.commercialName}"?`))) return;
     try {
       await api.del(`/v1/catalog-items/${item.id}`);
       setFeedback({ kind: 'success', message: 'Item inativado.' });

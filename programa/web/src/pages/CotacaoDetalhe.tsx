@@ -1,3 +1,4 @@
+import { useConfirm } from '@/components/useConfirm';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -251,6 +252,7 @@ function messageOf(err: unknown): string {
 }
 
 export default function CotacaoDetalhe() {
+  const confirm = useConfirm();
   const params = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -787,9 +789,10 @@ export default function CotacaoDetalhe() {
         <h1>Cotação</h1>
         <div className="empty-state">
           <p>Não foi possível carregar a cotação.</p>
-          <p style={{ color: 'var(--ink-soft)' }} className="text-xs">
+          <p style={{ color: 'var(--ink-soft)', marginBottom: 12 }} className="text-xs">
             Verifique sua conexão e tente novamente.
           </p>
+          <button className="ghost-button" onClick={() => detail.refetch()}>Tentar novamente</button>
         </div>
         <button type="button" className="ghost-button" onClick={() => navigate('/cotacoes')}>
           Voltar para a lista
@@ -840,8 +843,8 @@ export default function CotacaoDetalhe() {
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm(`Fechar a cotação ${qr.requestCode}?`)) {
+              onClick={async () => {
+                if (await confirm(`Fechar a cotação ${qr.requestCode}?`)) {
                   closeRequest.mutate();
                 }
               }}
@@ -854,8 +857,8 @@ export default function CotacaoDetalhe() {
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
+              onClick={async () => {
+                if (await confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
                   reopenRequest.mutate();
                 }
               }}
@@ -868,8 +871,8 @@ export default function CotacaoDetalhe() {
             <button
               type="button"
               className="ghost-button"
-              onClick={() => {
-                if (window.confirm(`Apagar a cotação ${qr.requestCode}?`)) {
+              onClick={async () => {
+                if (await confirm(`Apagar a cotação ${qr.requestCode}?`)) {
                   deleteQuote.mutate();
                 }
               }}
@@ -964,7 +967,8 @@ export default function CotacaoDetalhe() {
                 </p>
               </div>
             ) : (
-              <table className="table">
+              <div className="table-wrapper">
+                <table className="table">
                 <thead>
                   <tr>
                     <th>Nome comercial</th>
@@ -1002,8 +1006,8 @@ export default function CotacaoDetalhe() {
                             <button
                               type="button"
                               className="ghost-button"
-                              onClick={() => {
-                                if (window.confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
+                              onClick={async () => {
+                                if (await confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
                                   removeItem.mutate(it.id);
                                 }
                               }}
@@ -1017,7 +1021,8 @@ export default function CotacaoDetalhe() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             )}
           </section>
         </TabPanel>
@@ -1141,7 +1146,7 @@ export default function CotacaoDetalhe() {
                             )}
 
                             {dispatchError && (
-                              <p style={{ color: 'var(--danger)', marginTop: 12, }} className="text-sm">
+                              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
                                 {dispatchError}
                               </p>
                             )}
@@ -1239,7 +1244,7 @@ export default function CotacaoDetalhe() {
                 )}
 
                 {dispatchError && (
-                  <p style={{ color: 'var(--danger)', marginTop: 12, }} className="text-sm">
+                  <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
                     {dispatchError}
                   </p>
                 )}
@@ -1252,8 +1257,8 @@ export default function CotacaoDetalhe() {
                     type="button"
                     className="primary-button"
                     disabled={sendDispatchMutation.isPending || selectedContactIds.length === 0}
-                    onClick={() => {
-                      if (window.confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
+                    onClick={async () => {
+                      if (await confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
                         sendDispatchMutation.mutate();
                       }
                     }}
@@ -1282,7 +1287,8 @@ export default function CotacaoDetalhe() {
                   </div>
                 </div>
 
-                <table className="table">
+                <div className="table-wrapper">
+                  <table className="table">
                   <thead>
                     <tr>
                       <th>Contato</th>
@@ -1315,7 +1321,8 @@ export default function CotacaoDetalhe() {
                                         );
                                       })}
                                     </tbody>
-                </table>
+                  </table>
+                </div>
 
                 <div className="modal__actions">
                   <button type="button" className="ghost-button" onClick={closeDispatchModal}>
@@ -1406,7 +1413,7 @@ export default function CotacaoDetalhe() {
             </div>
 
             {tokenActionError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, }} className="text-sm">
+              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
                 {tokenActionError}
               </p>
             )}
@@ -1415,8 +1422,8 @@ export default function CotacaoDetalhe() {
                 style={{
                   color: 'var(--primary-700)',
                   marginTop: 12,
-                  fontSize: 13,
                 }}
+                className="text-sm"
               >
                 {generateTokensMutation.data.generatedCount} link(s) novo(s) gerado(s)
                 {generateTokensMutation.data.alreadyActiveCount > 0 &&
@@ -1437,7 +1444,8 @@ export default function CotacaoDetalhe() {
                 </div>
               )}
               {activeTokens.length > 0 && (
-                <table className="table">
+                <div className="table-wrapper">
+                  <table className="table">
                   <thead>
                     <tr>
                       <th>Fornecedor</th>
@@ -1486,9 +1494,9 @@ export default function CotacaoDetalhe() {
                                 type="button"
                                 className="ghost-button"
                                 disabled={revokePortalTokenMutation.isPending}
-                                onClick={() => {
+                                onClick={async () => {
                                   if (
-                                    window.confirm(
+                                    await confirm(
                                       `Revogar o link de ${token.contact.name}? O fornecedor não conseguirá mais responder.`,
                                     )
                                   ) {
@@ -1504,7 +1512,8 @@ export default function CotacaoDetalhe() {
                       );
                     })}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               )}
             </div>
 
@@ -1602,7 +1611,7 @@ export default function CotacaoDetalhe() {
 
                         <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--line)', borderRadius: 8 }}>
                           <legend style={{ padding: '0 6px', fontWeight: 600 }} className="text-xs">Incoterm e destino por item</legend>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, }} className="text-sm">
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
                             <input
                               type="checkbox"
                               checked={itemForm.inheritIncoterm}
@@ -1628,7 +1637,7 @@ export default function CotacaoDetalhe() {
                               </select>
                             </div>
                           )}
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, }} className="text-sm">
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
                             <input
                               type="checkbox"
                               checked={itemForm.inheritPort}
@@ -1652,7 +1661,7 @@ export default function CotacaoDetalhe() {
                         </fieldset>
 
                         {itemError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, }} className="text-sm">{itemError}</p>
+              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{itemError}</p>
             )}
 
             <div className="modal__actions">
@@ -1753,7 +1762,7 @@ export default function CotacaoDetalhe() {
             />
 
             {editError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, }} className="text-sm">{editError}</p>
+              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{editError}</p>
             )}
 
             <div className="modal__actions">

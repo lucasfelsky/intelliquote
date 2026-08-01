@@ -381,6 +381,10 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .toast--danger { background: var(--danger); }
 .toast--warning { background: var(--warning); }
 
+.table-wrapper {
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -1421,3 +1425,8 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
+
+.tabs-trigger:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.22);
+}

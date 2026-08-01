@@ -229,6 +229,10 @@ export default function Empresa() {
         <h1>Empresa</h1>
         <div className="empty-state">
           <p>Não foi possível carregar o perfil da empresa.</p>
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+            Verifique sua conexão e tente novamente.
+          </p>
+          <button className="ghost-button" onClick={() => profile.refetch()}>Tentar novamente</button>
         </div>
       </div>
     );
@@ -535,18 +539,18 @@ export default function Empresa() {
               padding: 12,
             }}
           >
-            <legend className="field-label text-sm" style={{ padding: '0 6px', }}>
+            <legend className="field-label text-sm" style={{ padding: '0 6px' }}>
               {autoIncludeProfiles
                 ? `Perfis do sistema (${allActiveUserIds.size - excludedProfileIds.size} de ${allActiveUserIds.size} em cópia)`
                 : `Perfis do sistema (${selectedUserIds.size} selecionado${selectedUserIds.size === 1 ? '' : 's'})`}
             </legend>
             {directory.isLoading && (
-              <p style={{ color: 'var(--text-muted, #6b7785)', }} className="text-sm">
+              <p style={{ color: 'var(--text-muted, #6b7785)' }} className="text-sm">
                 Carregando perfis…
               </p>
             )}
             {!directory.isLoading && activeUsers.length === 0 && (
-              <p style={{ color: 'var(--text-muted, #6b7785)', }} className="text-sm">
+              <p style={{ color: 'var(--text-muted, #6b7785)' }} className="text-sm">
                 Nenhum perfil ativo cadastrado.
               </p>
             )}
@@ -576,7 +580,7 @@ export default function Empresa() {
                       />
                       <label
                         htmlFor={`cc-user-${user.id}`}
-                        style={{ flex: 1, cursor: 'pointer', }}
+                        style={{ flex: 1, cursor: 'pointer' }}
                        className="text-sm">
                         <strong>{user.name}</strong>{' '}
                         <span style={{ color: 'var(--text-muted, #6b7785)' }}>
@@ -631,7 +635,7 @@ export default function Empresa() {
                         />
                         <label
                           htmlFor={`cc-user-${user.id}`}
-                          style={{ flex: 1, cursor: 'pointer', }}
+                          style={{ flex: 1, cursor: 'pointer' }}
                          className="text-sm">
                           {user.name}{' '}
                           <span style={{ color: 'var(--text-muted, #6b7785)' }}>
@@ -655,7 +659,7 @@ export default function Empresa() {
             </label>
             <p
               className="field-hint text-xs"
-              style={{ marginTop: 2, marginBottom: 6, }}
+              style={{ marginTop: 2, marginBottom: 6 }}
             >
               Para destinatários que não têm login no IntelliQuote (ex: financeiro externo,
               auditoria). Limite de 50 endereços somando perfis + externos.
@@ -680,7 +684,7 @@ export default function Empresa() {
               </button>
             </div>
             {ccError && (
-              <p style={{ color: 'var(--danger)', marginTop: 6, }} className="text-sm">{ccError}</p>
+              <p style={{ color: 'var(--danger)', marginTop: 6 }} className="text-sm">{ccError}</p>
             )}
 
             {externalEmails.length > 0 && (
@@ -731,7 +735,7 @@ export default function Empresa() {
 
           <p
             className="field-hint text-xs"
-            style={{ marginTop: 12, }}
+            style={{ marginTop: 12 }}
           >
             {autoIncludeProfiles
               ? `Modo automático ligado: ${allActiveUserIds.size - excludedProfileIds.size} perfil${
@@ -754,7 +758,7 @@ export default function Empresa() {
         </div>
 
         {formError && (
-          <p style={{ color: 'var(--danger)', marginTop: 12, }} className="text-sm">{formError}</p>
+          <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{formError}</p>
         )}
 
         <div className="page-header__actions" style={{ marginTop: 18, justifyContent: 'flex-end' }}>
