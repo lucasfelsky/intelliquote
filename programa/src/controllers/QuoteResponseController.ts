@@ -580,6 +580,7 @@ export class QuoteResponseController {
       supplierName: supplier.name,
       currency: quoteResponse.currency,
       targetPrice: overrides.targetPrice !== undefined ? (overrides.targetPrice === null ? undefined : overrides.targetPrice) : (quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined),
+      isWinner: quoteResponse.isWinner,
       items: quoteRequest.items.map((item) => {
         const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
         const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);

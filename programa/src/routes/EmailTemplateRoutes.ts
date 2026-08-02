@@ -64,6 +64,7 @@ function renderReplySampleVars(): QuoteReplyVars {
     productName: 'PHOTOINIATOR',
     supplierName: 'Acme Chemicals',
     currency: 'USD',
+    isWinner: true,
     items: [
       { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG', unitPrice: 4.99 },
       { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG', unitPrice: 4.99 },
