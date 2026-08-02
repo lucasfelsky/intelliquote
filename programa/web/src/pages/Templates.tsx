@@ -76,6 +76,7 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{requestCode}}', label: 'Código' },
     { token: '{{productName}}', label: 'Produto' },
     { token: '{{supplierName}}', label: 'Fornecedor' },
+    { token: '{{supplierContactName}}', label: 'Contato' },
     { token: '{{introText}}', label: 'Texto de introdução dinâmico' },
     { token: '{{itemsIntroText}}', label: 'Texto de itens dinâmico' },
     { token: '{{itemsRows}}', label: 'Tabela de itens' },

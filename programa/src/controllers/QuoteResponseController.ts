@@ -562,6 +562,7 @@ export class QuoteResponseController {
   private static async renderReplyFor(
     quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>,
     overrides: { subject?: string; message?: string; targetPrice?: number | null },
+    contactName: string,
   ) {
     const { quoteRequest, supplier } = quoteResponse;
     const itemName = quoteRequest.productName || quoteRequest.requestCode;
@@ -578,6 +579,7 @@ export class QuoteResponseController {
       requestCode: quoteRequest.requestCode,
       productName: quoteRequest.productName ?? '',
       supplierName: supplier.name,
+      supplierContactName: contactName,
       currency: quoteResponse.currency,
       targetPrice: overrides.targetPrice !== undefined ? (overrides.targetPrice === null ? undefined : overrides.targetPrice) : (quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined),
       isWinner: quoteResponse.isWinner,
@@ -623,7 +625,7 @@ export class QuoteResponseController {
       const { quoteResponse, primaryContact } = context;
       const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
-      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
+      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data, primaryContact.name);
 
       return res.status(200).json({
         to: primaryContact.email,
@@ -672,7 +674,7 @@ export class QuoteResponseController {
         quoteResponse.targetPrice = parsedBody.data.targetPrice as any;
       }
 
-      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data);
+      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data, primaryContact.name);
 
       const sendResult = await sendAndLog({
         to: { email: primaryContact.email, name: primaryContact.name },
