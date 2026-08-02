@@ -585,7 +585,7 @@ export class QuoteResponseController {
         const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
         const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
         return {
-          name: item.catalogItem?.commercialName ?? item.productName,
+          name: item.catalogItem?.marketName ?? item.productName,
           incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
           quantity: item.quantity,
           unit: item.unit,

@@ -103,7 +103,7 @@ const baseQuoteResponse = {
         quantity: 500,
         unit: 'KG',
         desiredIncoterm: null,
-        catalogItem: { commercialName: 'PI-TPO' },
+        catalogItem: { commercialName: 'PI-TPO-INTERNAL', marketName: 'PI-TPO' },
       },
     ],
   },
@@ -156,6 +156,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     ]);
     expect(call.subject).toBe('Photoiniator - SQ QUIMICA - Acme Chemicals');
     expect(call.html).toContain('PI-TPO');
+    expect(call.html).not.toContain('PI-TPO-INTERNAL');
     // Preco ofertado pelo fornecedor (QuoteResponse.offeredPrice) tem que
     // aparecer na tabela em vez do placeholder "-" (bug relatado pelo
     // usuario: "so ali no email de resposta que o unit price informado
