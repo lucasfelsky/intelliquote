@@ -44,6 +44,7 @@ export interface QuoteReplyVars {
   requestCode: string;
   productName: string;
   supplierName: string;
+  supplierContactName: string;
   currency: string;
   targetPrice?: number;
   isWinner: boolean;
@@ -131,7 +132,7 @@ export function buildReplyItemsIntro(vars: { targetPrice?: number; isWinner: boo
 
 export function renderReplyPlainText(vars: QuoteReplyVars): string {
   return [
-    `Dear ${vars.supplierName},`,
+    `Dear ${vars.supplierContactName},`,
     '',
     buildReplyIntro(vars),
     '',

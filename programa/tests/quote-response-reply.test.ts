@@ -155,6 +155,8 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       { email: 'cc2@sqquimica.com', name: '' },
     ]);
     expect(call.subject).toBe('Photoiniator - SQ QUIMICA - Acme Chemicals');
+    expect(call.html).toContain('Dear John Supplier,');
+    expect(call.html).not.toContain('Dear Acme Chemicals,');
     expect(call.html).toContain('PI-TPO');
     expect(call.html).not.toContain('PI-TPO-INTERNAL');
     // Preco ofertado pelo fornecedor (QuoteResponse.offeredPrice) tem que

@@ -63,6 +63,7 @@ function renderReplySampleVars(): QuoteReplyVars {
     requestCode: 'QR-20260618-DEMO01',
     productName: 'PHOTOINIATOR',
     supplierName: 'Acme Chemicals',
+    supplierContactName: 'Joao Fornecedor',
     currency: 'USD',
     isWinner: true,
     items: [
