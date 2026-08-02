@@ -46,6 +46,7 @@ export interface QuoteReplyVars {
   supplierName: string;
   currency: string;
   targetPrice?: number;
+  isWinner: boolean;
   items: QuoteReplyItem[];
 }
 
@@ -105,14 +106,36 @@ export function renderReplySections(template: string, vars: QuoteReplyVars): str
   });
 }
 
-export function renderReplyPlainText(vars: QuoteReplyVars): string {
+export function buildReplyIntro(vars: { targetPrice?: number; isWinner: boolean; requestCode: string; productName?: string }): string {
   const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
+  const prefix = `Thank you for your quotation on ${vars.requestCode}${productSuffix}.`;
+  
+  if (vars.targetPrice !== undefined && vars.targetPrice !== null) {
+    return `${prefix} We are currently evaluating your proposal and, to move forward, we would like to discuss adjusting the price towards our target below.`;
+  }
+  if (vars.isWinner) {
+    return `${prefix} We are pleased to inform you that your proposal has been selected as the winning offer for this quote.`;
+  }
+  return `${prefix} We are currently reviewing your proposal along with other offers received for this quote.`;
+}
+
+export function buildReplyItemsIntro(vars: { targetPrice?: number; isWinner: boolean }): string {
+  if (vars.targetPrice !== undefined && vars.targetPrice !== null) {
+    return 'Please find the items under discussion below:';
+  }
+  if (vars.isWinner) {
+    return 'Please find the accepted items below:';
+  }
+  return 'Please find your submitted items below:';
+}
+
+export function renderReplyPlainText(vars: QuoteReplyVars): string {
   return [
     `Dear ${vars.supplierName},`,
     '',
-    `Thank you for your quotation on ${vars.requestCode}${productSuffix}. We are pleased to inform you that your proposal has been selected as the winning offer for this quote.`,
+    buildReplyIntro(vars),
     '',
-    'Please find the accepted items below:',
+    buildReplyItemsIntro(vars),
     '',
     'Item\tIncoterm\tQuantity\tUnit Price\tTotal',
     ...vars.items.map((item) => renderItemsTextRow(item, vars.currency)),
@@ -140,7 +163,9 @@ export async function renderReplyFromTemplate(
   const dbTemplate = await EmailTemplateService.get(REPLY_TEMPLATE_KEY, locale);
   const subject = dbTemplate?.subject ? renderReplySections(dbTemplate.subject, vars) : vars.subject;
   const targetPriceStr = vars.targetPrice !== undefined ? formatMoney(vars.targetPrice, vars.currency) : undefined;
-  const varsForRender = { ...vars, subject, targetPriceStr };
+  const introText = buildReplyIntro(vars);
+  const itemsIntroText = buildReplyItemsIntro(vars);
+  const varsForRender = { ...vars, subject, targetPriceStr, introText, itemsIntroText };
 
   if (dbTemplate) {
     const html = renderReplySections(dbTemplate.htmlBody, varsForRender);

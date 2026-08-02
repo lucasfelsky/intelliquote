@@ -90,6 +90,7 @@ const baseQuoteResponse = {
   supplier: { id: 2, name: 'Acme Chemicals' },
   offeredPrice: 4.99,
   currency: 'USD',
+  isWinner: true,
   quoteRequest: {
     id: 5,
     requestCode: 'QR-2026-005',
@@ -163,6 +164,9 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     // Total = unitPrice * quantity (500 KG * 4.99)
     expect(call.html).toContain('2,495.00 USD');
     expect(call.text).toContain('4.99 USD');
+    
+    // itemsIntroText
+    expect(call.html).toContain('Please find the accepted items below:');
 
     // Teste D - bloco Target Price ausente quando não preenchido
     expect(call.html).not.toContain('Target Price');
@@ -230,6 +234,39 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(call.html).toContain('Target Price');
     expect(call.html).toContain('4.50 USD');
     expect(call.text).toContain('Target Price: 4.50 USD');
+
+    // Scenario 1: Target Price overrides winning text
+    expect(call.html).toContain('we would like to discuss adjusting the price towards our target below');
+    expect(call.html).not.toContain('selected as the winning offer');
+    expect(call.html).toContain('Please find the items under discussion below:');
+    expect(call.html).not.toContain('accepted items');
+  });
+
+  it('renderiza texto neutro quando isWinner é false e não há Target Price', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({
+      ...baseQuoteResponse,
+      isWinner: false
+    });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-neutral' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({});
+
+    expect(res.status).toBe(200);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.html).toContain('reviewing your proposal along with other offers received');
+    expect(call.html).not.toContain('selected as the winning offer');
+    expect(call.html).toContain('Please find your submitted items below:');
+    expect(call.html).not.toContain('accepted items');
   });
 
   it('retorna 404 quando a proposta nao existe', async () => {
