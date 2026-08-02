@@ -144,7 +144,7 @@ emailTemplateRoutes.get(
           replySample.productName = latestQuoteRequestForReply.productName ?? replySample.productName;
           if (latestQuoteRequestForReply.items.length > 0) {
             replySample.items = latestQuoteRequestForReply.items.map((it) => ({
-              name: it.catalogItem?.commercialName ?? it.productName,
+              name: it.catalogItem?.marketName ?? it.productName,
               incoterm: it.desiredIncoterm ?? formatIncoterms(latestQuoteRequestForReply.desiredIncoterm),
               quantity: it.quantity,
               unit: it.unit,
