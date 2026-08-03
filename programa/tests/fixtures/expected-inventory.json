@@ -88,6 +88,7 @@
       "QuoteRequestItem",
       "QuoteResponse",
       "QuoteResponseItem",
+      "QuoteResponseTargetPriceHistory",
       "Role",
       "Session",
       "Supplier",
@@ -106,7 +107,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 27
+    "migrations": 28
   },
   "emailTemplates": [
     "quote_dispatch@en",
@@ -150,6 +151,7 @@
     "GET /quote-requests/:quoteRequestId/comparisons",
     "GET /quote-responses",
     "GET /quote-responses/:id",
+    "GET /quote-responses/:id/target-price-history",
     "GET /reports/award-rate",
     "GET /reports/lead-time",
     "GET /reports/price-history",
