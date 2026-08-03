@@ -27,6 +27,7 @@ export interface QuoteComparisonInput extends LandedCostInput {
   supplierId: number;
   offeredIncoterm: Incoterm;
   paymentTermsDays: number;
+  avgQuality?: number;
   isWinner?: boolean;
 }
 
@@ -34,6 +35,7 @@ export interface QuoteComparisonWeights {
   priceWeight: number;
   paymentTermsWeight: number;
   incotermWeight: number;
+  qualityWeight: number;
 }
 
 export interface QuoteComparisonResult
@@ -42,6 +44,7 @@ export interface QuoteComparisonResult
   priceScore: number;
   paymentTermsScore: number;
   incotermScore: number;
+  qualityScore: number;
   totalScore: number;
   isWinner: boolean;
 }
@@ -51,6 +54,7 @@ export class QuoteComparisonService {
     priceWeight: 50,
     paymentTermsWeight: 30,
     incotermWeight: 20,
+    qualityWeight: 0,
   };
 
   private static readonly INCOTERM_SCORES: Record<Incoterm, number> = {
@@ -171,13 +175,16 @@ export class QuoteComparisonService {
       const incotermRiskLevel =
         QuoteComparisonService.INCOTERM_SCORES[response.offeredIncoterm] ?? 1;
       const incotermScore = (incotermRiskLevel / 5) * weights.incotermWeight;
-      const totalScore = priceScore + paymentTermsScore + incotermScore;
+      const qualityScore =
+        (response.avgQuality ? response.avgQuality / 5 : 0) * (weights.qualityWeight ?? 0);
+      const totalScore = priceScore + paymentTermsScore + incotermScore + qualityScore;
 
       return {
         ...response,
         priceScore: Number(priceScore.toFixed(2)),
         paymentTermsScore: Number(paymentTermsScore.toFixed(2)),
         incotermScore: Number(incotermScore.toFixed(2)),
+        qualityScore: Number(qualityScore.toFixed(2)),
         totalScore: Number(totalScore.toFixed(2)),
         isWinner: false,
       };

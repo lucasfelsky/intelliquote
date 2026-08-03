@@ -193,4 +193,59 @@ describe('QuoteComparisonService', () => {
     expect(results[0].totalLandedCost).toBe(results[1].totalLandedCost);
     expect(results.find((result) => result.isWinner)?.id).toBe(3);
   });
+
+  it('usa qualityWeight e qualityScore para decidir o vencedor', () => {
+    const results = QuoteComparisonService.compareResponses(
+      [
+        {
+          id: 1,
+          quoteRequestId: 10,
+          supplierId: 100,
+          offeredPrice: 100,
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 10,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDutyRate: 0,
+          ipiRate: 0,
+          pisRate: 0,
+          cofinsRate: 0,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          avgQuality: 2, // Baixa qualidade
+        },
+        {
+          id: 2,
+          quoteRequestId: 10,
+          supplierId: 200,
+          offeredPrice: 100, // Mesmo preco
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 10,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDutyRate: 0,
+          ipiRate: 0,
+          pisRate: 0,
+          cofinsRate: 0,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          avgQuality: 5, // Alta qualidade
+        },
+      ],
+      {
+        priceWeight: 50,
+        paymentTermsWeight: 0,
+        incotermWeight: 0,
+        qualityWeight: 50,
+      },
+    );
+
+    // O fornecedor com melhor qualidade vence, pois o resto eh igual
+    expect(results.find((result) => result.isWinner)?.id).toBe(2);
+    expect(results[1].qualityScore).toBe(50); // 5/5 * 50 = 50
+    expect(results[0].qualityScore).toBe(20); // 2/5 * 50 = 20
+    expect(results[1].totalScore).toBe(100); // 50 (price) + 50 (quality)
+  });
 });
