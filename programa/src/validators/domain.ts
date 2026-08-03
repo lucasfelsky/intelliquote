@@ -267,9 +267,10 @@ export const quoteResponseReplySchema = z.object({
 });
 
 export const quoteComparisonWeightsSchema = z.object({
-  priceWeight: optionalPositiveNumberField,
-  paymentTermsWeight: optionalPositiveNumberField,
-  incotermWeight: optionalPositiveNumberField,
+  priceWeight: optionalNonNegativeNumberField,
+  paymentTermsWeight: optionalNonNegativeNumberField,
+  incotermWeight: optionalNonNegativeNumberField,
+  qualityWeight: optionalNonNegativeNumberField,
 });
 
 export const userCreateSchema = z.object({

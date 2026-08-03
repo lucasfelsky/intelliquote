@@ -33,6 +33,9 @@ vi.mock('../src/lib/prisma', () => {
       updateMany: vi.fn(),
     },
     supplier: {},
+    supplierReview: {
+      groupBy: vi.fn(),
+    },
     auditLog: {
       create: vi.fn(),
     },
@@ -70,6 +73,9 @@ const prismaMock = prisma as unknown as {
   };
   quoteRequest: {
     findUnique: ReturnType<typeof vi.fn>;
+  };
+  supplierReview: {
+    groupBy: ReturnType<typeof vi.fn>;
   };
   quoteResponse: {
     findMany: ReturnType<typeof vi.fn>;
@@ -164,6 +170,7 @@ describe('Comparison routes', () => {
       id: 1,
       awardApprovalThreshold: null,
     });
+    prismaMock.supplierReview.groupBy.mockResolvedValue([]);
 
     const response = await request(app)
       .post('/api/v1/quote-requests/1/compare')
@@ -172,6 +179,7 @@ describe('Comparison routes', () => {
         priceWeight: 80,
         paymentTermsWeight: 10,
         incotermWeight: 10,
+        qualityWeight: 10,
       });
 
     expect(response.status).toBe(200);
@@ -195,6 +203,7 @@ describe('Comparison routes', () => {
           priceWeight: 80,
           paymentTermsWeight: 10,
           incotermWeight: 10,
+          qualityWeight: 10,
           results: expect.objectContaining({
             create: expect.arrayContaining([
               expect.objectContaining({
@@ -314,6 +323,7 @@ describe('Comparison routes', () => {
     prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 2 });
     prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
     prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 1000 });
+    prismaMock.supplierReview.groupBy.mockResolvedValue([]);
 
     const response = await request(app)
       .post('/api/v1/quote-requests/1/compare')
@@ -373,6 +383,7 @@ describe('Comparison routes', () => {
         isWinner: false,
       },
     ]);
+    prismaMock.supplierReview.groupBy.mockResolvedValue([]);
 
     const response = await request(app)
       .post('/api/v1/quote-requests/1/compare')
@@ -437,11 +448,12 @@ describe('Comparison routes', () => {
       prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
       prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
 
       const response = await request(app)
         .post('/api/v1/quote-requests/1/compare')
         .set('Cookie', cookies)
-        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10 });
+        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 });
 
       expect(response.status).toBe(200);
       expect(response.body.pendingApproval).toBe(true);
@@ -509,11 +521,12 @@ describe('Comparison routes', () => {
       prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
       prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
       prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
 
       const response = await request(app)
         .post('/api/v1/quote-requests/1/compare')
         .set('Cookie', cookies)
-        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10 });
+        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 });
 
       expect(response.status).toBe(200);
       expect(response.body.pendingApproval).toBe(false);

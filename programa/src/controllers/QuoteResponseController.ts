@@ -801,6 +801,16 @@ export class QuoteResponseController {
         });
       }
 
+      const supplierIds = Array.from(new Set(responses.map(r => r.supplierId)));
+      const reviews = await prisma.supplierReview.groupBy({
+        by: ['supplierId'],
+        _avg: { qualityRating: true },
+        where: { supplierId: { in: supplierIds } },
+      });
+      const qualityMap = new Map(
+        reviews.map(r => [r.supplierId, r._avg.qualityRating]),
+      );
+
       const comparisonInputs = responses.map((response) => ({
         id: response.id,
         quoteRequestId: response.quoteRequestId,
@@ -818,6 +828,7 @@ export class QuoteResponseController {
         offeredIncoterm: response.offeredIncoterm,
         paymentTermsDays: response.paymentTermsDays,
         isWinner: response.isWinner,
+        avgQuality: qualityMap.get(response.supplierId) ?? undefined,
       }));
       const comparisonValidationError =
         QuoteComparisonService.validateResponsesForComparison(comparisonInputs);
@@ -865,6 +876,7 @@ export class QuoteResponseController {
             priceWeight: weights.priceWeight,
             paymentTermsWeight: weights.paymentTermsWeight,
             incotermWeight: weights.incotermWeight,
+            qualityWeight: weights.qualityWeight ?? 0,
             winnerQuoteResponseId: winner?.id ?? null,
             approvalStatus: requiresApproval ? 'pending' : 'not_required',
             results: {
@@ -890,6 +902,7 @@ export class QuoteResponseController {
                 priceScore: response.priceScore,
                 paymentTermsScore: response.paymentTermsScore,
                 incotermScore: response.incotermScore,
+                qualityScore: response.qualityScore,
                 totalScore: response.totalScore,
                 isWinner: !requiresApproval && response.isWinner, // isWinner só fica true no registro se a adjudicação não depender de aprovação
               })),
@@ -1153,6 +1166,7 @@ function parseComparisonWeights(payload: unknown): QuoteComparisonWeights | null
     priceWeight: body.priceWeight ?? defaults.priceWeight,
     paymentTermsWeight: body.paymentTermsWeight ?? defaults.paymentTermsWeight,
     incotermWeight: body.incotermWeight ?? defaults.incotermWeight,
+    qualityWeight: body.qualityWeight ?? defaults.qualityWeight,
   };
 }
 

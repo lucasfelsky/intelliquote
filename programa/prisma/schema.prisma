@@ -302,6 +302,7 @@ model QuoteComparison {
   priceWeight           Int
   paymentTermsWeight    Int
   incotermWeight        Int
+  qualityWeight         Int                     @default(0)
   winnerQuoteResponseId Int?
   approvalStatus        String                  @default("not_required")
   approvedById          Int?
@@ -342,6 +343,7 @@ model QuoteComparisonResult {
   priceScore        Float
   paymentTermsScore Float
   incotermScore     Float
+  qualityScore      Float           @default(0)
   totalScore        Float
   isWinner          Boolean         @default(false)
   createdAt         DateTime        @default(now())

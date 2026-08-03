@@ -66,6 +66,7 @@ export function ComparacaoTab({
   const [priceWeight, setPriceWeight] = useState(1);
   const [paymentWeight, setPaymentWeight] = useState(1);
   const [incotermWeight, setIncotermWeight] = useState(1);
+  const [qualityWeight, setQualityWeight] = useState(0);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
 
@@ -82,6 +83,7 @@ export function ComparacaoTab({
         priceWeight,
         paymentTermsWeight: paymentWeight,
         incotermWeight,
+        qualityWeight,
       };
       return executeComparison(quoteRequestId, weights);
     },
@@ -198,15 +200,18 @@ export function ComparacaoTab({
   const setPriceWeightRef = useRef(setPriceWeight);
   const setPaymentWeightRef = useRef(setPaymentWeight);
   const setIncotermWeightRef = useRef(setIncotermWeight);
+  const setQualityWeightRef = useRef(setQualityWeight);
 
   useEffect(() => { setPriceWeightRef.current = setPriceWeight; }, [setPriceWeight]);
   useEffect(() => { setPaymentWeightRef.current = setPaymentWeight; }, [setPaymentWeight]);
   useEffect(() => { setIncotermWeightRef.current = setIncotermWeight; }, [setIncotermWeight]);
+  useEffect(() => { setQualityWeightRef.current = setQualityWeight; }, [setQualityWeight]);
 
-  const setWeightById = (id: 'weight-price' | 'weight-payment' | 'weight-incoterm', next: number) => {
+  const setWeightById = (id: 'weight-price' | 'weight-payment' | 'weight-incoterm' | 'weight-quality', next: number) => {
     if (id === 'weight-price') setPriceWeightRef.current(next);
     else if (id === 'weight-payment') setPaymentWeightRef.current(next);
-    else setIncotermWeightRef.current(next);
+    else if (id === 'weight-incoterm') setIncotermWeightRef.current(next);
+    else setQualityWeightRef.current(next);
   };
 
   function WeightSlider({
@@ -219,7 +224,7 @@ export function ComparacaoTab({
   }: {
     label: string;
     value: number;
-    id: 'weight-price' | 'weight-payment' | 'weight-incoterm';
+    id: 'weight-price' | 'weight-payment' | 'weight-incoterm' | 'weight-quality';
     min?: number;
     max?: number;
     step?: number;
@@ -407,10 +412,13 @@ export function ComparacaoTab({
         </button>
       </div>
 
-      <div className="form-grid weight-grid">
+      <div className="form-grid weight-grid" style={{ position: 'relative' }}>
         <WeightSlider id="weight-price" label="Peso · Preço" value={priceWeight} />
         <WeightSlider id="weight-payment" label="Peso · Pagamento" value={paymentWeight} />
         <WeightSlider id="weight-incoterm" label="Peso · Incoterm" value={incotermWeight} />
+        <div style={{ position: 'relative' }} title="Fornecedores sem avaliações prévias receberão nota 0 neste critério, o que pode penalizá-os.">
+          <WeightSlider id="weight-quality" label="Peso · Qualidade" value={qualityWeight} />
+        </div>
       </div>
 
       {!canCompare && (
