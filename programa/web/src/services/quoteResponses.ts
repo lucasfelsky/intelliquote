@@ -133,6 +133,7 @@ export interface ComparisonRecord {
   incotermWeight: number;
   winnerQuoteResponseId: number | null;
   createdAt: string;
+  approvalStatus?: string;
   results: ComparisonResult[];
 }
 
@@ -324,6 +325,7 @@ export function normalizeComparisonRecord(raw: unknown): ComparisonRecord {
     winnerQuoteResponseId: obj.winnerQuoteResponseId === null || obj.winnerQuoteResponseId === undefined
       ? null
       : asNumber(obj.winnerQuoteResponseId),
+    approvalStatus: String(obj.approvalStatus ?? 'not_required'),
     createdAt: String(obj.createdAt ?? ''),
     results,
   };
@@ -351,16 +353,41 @@ export async function deleteQuoteResponse(id: number): Promise<void> {
   await api.del<void>(`/v1/quote-responses/${id}`);
 }
 
+export interface ExecuteComparisonResult {
+  results: ComparisonResult[];
+  pendingApproval: boolean;
+  winnerQuoteResponseId: number | null;
+  thresholdValue: number | null;
+  comparisonId: number;
+}
+
 export async function executeComparison(
   quoteRequestId: number,
   weights?: ComparisonWeights,
-): Promise<ComparisonResult[]> {
+): Promise<ExecuteComparisonResult> {
   const body = weights ? { ...weights } : {};
-  const data = await api.post<unknown[]>(
+  const data = await api.post<unknown>(
     `/v1/quote-requests/${quoteRequestId}/compare`,
     body,
   );
-  return Array.isArray(data) ? data.map(normalizeComparisonResult) : [];
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Resposta inesperada');
+  }
+  const obj = data as Record<string, unknown>;
+  return {
+    results: Array.isArray(obj.results) ? obj.results.map(normalizeComparisonResult) : [],
+    pendingApproval: Boolean(obj.pendingApproval),
+    winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
+    thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
+    comparisonId: asNumber(obj.comparisonId),
+  };
+}
+
+export async function approveAward(
+  quoteRequestId: number,
+  comparisonId: number,
+): Promise<void> {
+  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/comparisons/${comparisonId}/approve`);
 }
 
 // F12: avaliacao opcional do fornecedor vencedor enviada ao concluir.

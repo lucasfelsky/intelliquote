@@ -29,6 +29,7 @@ interface CompanyProfile {
   // envios de cotacao desta empresa. O backend sempre deduplica
   // case-insensitive e descarta entradas invalidas.
   dispatchCc?: string[] | null;
+  awardApprovalThreshold?: number | null;
 }
 
 function toNullable(value: string): string | null {
@@ -476,6 +477,27 @@ export default function Empresa() {
               placeholder="https://…"
             />
           </div>
+        </div>
+
+        <div className="form-grid__full" style={{ marginTop: 28 }}>
+          <label className="field-label">Gatilho de Aprovação de Adjudicação (R$)</label>
+          <p className="field-hint" style={{ marginBottom: 12 }}>
+            Valores (Landed Cost CIF BRL) acima deste limite exigirão a aprovação de um Gestor ou Administrador.
+            Deixe em branco para não exigir aprovação baseada em valor.
+          </p>
+          <input
+            className="input"
+            type="number"
+            min="0"
+            step="0.01"
+            value={draft.awardApprovalThreshold ?? ''}
+            onChange={(e) => {
+              const val = e.target.value === '' ? null : Number(e.target.value);
+              update('awardApprovalThreshold', val);
+            }}
+            placeholder="Ex.: 50000"
+            style={{ maxWidth: 200 }}
+          />
         </div>
 
         <div className="form-grid__full" style={{ marginTop: 28 }}>

@@ -10,6 +10,7 @@ vi.mock('../src/lib/prisma', () => {
     },
     quoteComparison: {
       create: vi.fn(),
+      update: vi.fn(),
     },
     quoteRequest: {
       update: vi.fn(),
@@ -17,6 +18,10 @@ vi.mock('../src/lib/prisma', () => {
   };
 
   const prisma = {
+    companyProfile: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -28,6 +33,9 @@ vi.mock('../src/lib/prisma', () => {
       updateMany: vi.fn(),
     },
     supplier: {},
+    auditLog: {
+      create: vi.fn(),
+    },
     quoteRequest: {
       findUnique: vi.fn(),
     },
@@ -36,6 +44,8 @@ vi.mock('../src/lib/prisma', () => {
     },
     quoteComparison: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     $transaction: vi.fn(async (callback) => callback(tx)),
     __tx: tx,
@@ -150,6 +160,10 @@ describe('Comparison routes', () => {
     prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 2 });
     prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
     prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
+    prismaMock.companyProfile.findUnique.mockResolvedValue({
+      id: 1,
+      awardApprovalThreshold: null,
+    });
 
     const response = await request(app)
       .post('/api/v1/quote-requests/1/compare')
@@ -161,11 +175,11 @@ describe('Comparison routes', () => {
       });
 
     expect(response.status).toBe(200);
-    expect(response.body).toHaveLength(2);
-    expect(response.body.some((item: { isWinner: boolean }) => item.isWinner)).toBe(true);
+    expect(response.body.results).toHaveLength(2);
+    expect(response.body.results.some((item: { isWinner: boolean }) => item.isWinner)).toBe(true);
     // F1/F2: cada resultado carrega o nome do fornecedor e o contato principal
     // (nome/e-mail) para a UI exibir o nome real e montar o mailto de "Responder".
-    for (const item of response.body as Array<{
+    for (const item of response.body.results as Array<{
       supplierId: number;
       supplier?: { name: string };
       contact?: { email: string } | null;
@@ -368,6 +382,242 @@ describe('Comparison routes', () => {
     expect(response.status).toBe(400);
     expect(response.body.message).toContain('exchangeRate');
     expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
+  });
+
+  describe('Award Approval Gate', () => {
+    it('Comparação acima do threshold: pendingApproval: true, isWinner não setado, QuoteComparison criado com approvalStatus: pending', async () => {
+      const cookies = await loginAs('admin');
+      
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'open',
+      });
+      prismaMock.quoteResponse.findMany.mockResolvedValue([
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100000,
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDuty: 0,
+          ipi: 0,
+          pis: 0,
+          cofins: 0,
+          offeredIncoterm: 'CIF',
+          paymentTermsDays: 30,
+          isWinner: false,
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 120000,
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDuty: 0,
+          ipi: 0,
+          pis: 0,
+          cofins: 0,
+          offeredIncoterm: 'CIF',
+          paymentTermsDays: 30,
+          isWinner: false,
+        },
+      ]);
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: 50000,
+      });
+      prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+      prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare')
+        .set('Cookie', cookies)
+        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.pendingApproval).toBe(true);
+      expect(response.body.thresholdValue).toBe(50000);
+      expect(response.body.results[0].isWinner).toBe(true);
+      
+      expect(prismaMock.__tx.quoteComparison.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            approvalStatus: 'pending',
+          })
+        })
+      );
+    });
+
+    it('Comparação abaixo do threshold (ou sem threshold): comportamento idêntico ao de antes', async () => {
+      const cookies = await loginAs('admin');
+      
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'open',
+      });
+      prismaMock.quoteResponse.findMany.mockResolvedValue([
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 10000,
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDuty: 0,
+          ipi: 0,
+          pis: 0,
+          cofins: 0,
+          offeredIncoterm: 'CIF',
+          paymentTermsDays: 30,
+          isWinner: false,
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 12000,
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDuty: 0,
+          ipi: 0,
+          pis: 0,
+          cofins: 0,
+          offeredIncoterm: 'CIF',
+          paymentTermsDays: 30,
+          isWinner: false,
+        },
+      ]);
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: 50000, // threshold maior que valor
+      });
+      prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+      prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare')
+        .set('Cookie', cookies)
+        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.pendingApproval).toBe(false);
+      expect(response.body.results[0].isWinner).toBe(true);
+      
+      expect(prismaMock.__tx.quoteComparison.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            approvalStatus: 'not_required',
+          })
+        })
+      );
+    });
+
+    it('approve — sucesso: seta isWinner/approvalStatus: approved/approvedById/approvedAt, audit log action: approve_award', async () => {
+      const cookies = await loginAs('admin');
+
+      prismaMock.quoteComparison.findUnique.mockResolvedValue({
+        id: 999,
+        quoteRequestId: 1,
+        approvalStatus: 'pending',
+        winnerQuoteResponseId: 11,
+      });
+      prismaMock.quoteComparison.findFirst.mockResolvedValue({ id: 999 });
+      prismaMock.__tx.quoteComparison.update.mockResolvedValue({});
+      prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.quoteComparison.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 999 },
+          data: expect.objectContaining({
+            approvalStatus: 'approved',
+            approvedById: 1,
+            approvedAt: expect.any(Date),
+          })
+        })
+      );
+      expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 11 },
+          data: { isWinner: true },
+        })
+      );
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'approve_award',
+            entityId: '1',
+          })
+        })
+      );
+    });
+
+    it('approve — 409 se comparisonId não é o mais recente', async () => {
+      const cookies = await loginAs('admin');
+
+      prismaMock.quoteComparison.findUnique.mockResolvedValue({
+        id: 998,
+        quoteRequestId: 1,
+        approvalStatus: 'pending',
+        winnerQuoteResponseId: 11,
+      });
+      prismaMock.quoteComparison.findFirst.mockResolvedValue({ id: 999 });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/998/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toMatch(/não é a comparação mais recente/i);
+    });
+
+    it('approve — 400 se a comparação não está pending', async () => {
+      const cookies = await loginAs('admin');
+
+      prismaMock.quoteComparison.findUnique.mockResolvedValue({
+        id: 999,
+        quoteRequestId: 1,
+        approvalStatus: 'approved',
+        winnerQuoteResponseId: 11,
+      });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toMatch(/não está pendente/i);
+    });
+
+    it('approve — RBAC: comprador recebe 403', async () => {
+      const cookies = await loginAs('comprador');
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(403);
+    });
   });
 });
 

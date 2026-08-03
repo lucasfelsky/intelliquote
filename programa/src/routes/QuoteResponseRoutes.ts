@@ -58,6 +58,12 @@ quoteResponseRoutes.get(
   allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
   QuoteResponseController.getComparisonHistoryByQuoteRequest,
 );
+quoteResponseRoutes.post(
+  '/quote-requests/:quoteRequestId/comparisons/:comparisonId/approve',
+  requireAuth,
+  allowRoles(['admin', 'gestor']),
+  QuoteResponseController.approveAward,
+);
 
 quoteResponseRoutes.get(
   '/quote-responses/:id/target-price-history',
