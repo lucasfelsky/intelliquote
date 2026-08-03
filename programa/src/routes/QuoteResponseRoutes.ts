@@ -59,4 +59,11 @@ quoteResponseRoutes.get(
   QuoteResponseController.getComparisonHistoryByQuoteRequest,
 );
 
+quoteResponseRoutes.get(
+  '/quote-responses/:id/target-price-history',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  QuoteResponseController.getTargetPriceHistory,
+);
+
 export { quoteResponseRoutes };

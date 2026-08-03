@@ -667,6 +667,15 @@ export class QuoteResponseController {
       const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
       if (parsedBody.data.targetPrice !== undefined) {
+        if (parsedBody.data.targetPrice !== null) {
+          await prisma.quoteResponseTargetPriceHistory.create({
+            data: {
+              quoteResponseId: id,
+              targetPrice: parsedBody.data.targetPrice,
+              sentById: req.user?.id ?? null,
+            },
+          });
+        }
         await prisma.quoteResponse.update({
           where: { id },
           data: { targetPrice: parsedBody.data.targetPrice },
@@ -995,6 +1004,26 @@ export class QuoteResponseController {
         quoteRequestId,
         comparisons,
       });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async getTargetPriceHistory(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID da proposta invalido.' });
+      }
+
+      const history = await prisma.quoteResponseTargetPriceHistory.findMany({
+        where: { quoteResponseId: id },
+        orderBy: { sentAt: 'desc' },
+        include: { sentBy: { select: { id: true, name: true } } },
+      });
+
+      return res.status(200).json(history);
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

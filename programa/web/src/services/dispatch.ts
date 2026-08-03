@@ -336,4 +336,17 @@ export async function replyToQuoteResponse(
   });
 }
 
+export interface TargetPriceHistoryItem {
+  id: number;
+  quoteResponseId: number;
+  targetPrice: string;
+  sentById: number | null;
+  sentAt: string;
+  sentBy: { id: number; name: string } | null;
+}
+
+export async function getTargetPriceHistory(quoteResponseId: number): Promise<TargetPriceHistoryItem[]> {
+  return api.get<TargetPriceHistoryItem[]>(`/v1/quote-responses/${quoteResponseId}/target-price-history`);
+}
+
 export { ApiError };

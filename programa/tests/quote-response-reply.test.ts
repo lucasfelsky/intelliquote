@@ -440,6 +440,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       isPrimary: true,
     });
     prismaMock.quoteResponse.update = vi.fn().mockResolvedValue({});
+    prismaMock.quoteResponseTargetPriceHistory = { create: vi.fn().mockResolvedValue({}) } as any;
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-target' });
 
     const res = await request(app)
@@ -452,6 +453,13 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       where: { id: 77 },
       data: { targetPrice: 3.5 },
     });
+    expect(prismaMock.quoteResponseTargetPriceHistory.create).toHaveBeenCalledWith({
+      data: {
+        quoteResponseId: 77,
+        targetPrice: 3.5,
+        sentById: expect.any(Number),
+      },
+    });
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.html).toContain('Target Price');
   });
@@ -460,6 +468,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
     prismaMock.quoteResponse.update = vi.fn();
+    prismaMock.quoteResponseTargetPriceHistory = { create: vi.fn() } as any;
 
     const res = await request(app)
       .post('/api/v1/quote-responses/77/reply/preview')
@@ -468,6 +477,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
 
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
+    expect(prismaMock.quoteResponseTargetPriceHistory.create).not.toHaveBeenCalled();
     expect(res.body.html).toContain('Target Price');
   });
 
@@ -481,6 +491,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       isPrimary: true,
     });
     prismaMock.quoteResponse.update = vi.fn().mockResolvedValue({});
+    prismaMock.quoteResponseTargetPriceHistory = { create: vi.fn() } as any;
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-target-null' });
 
     const res = await request(app)
@@ -493,6 +504,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       where: { id: 77 },
       data: { targetPrice: null },
     });
+    expect(prismaMock.quoteResponseTargetPriceHistory.create).not.toHaveBeenCalled();
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.html).not.toContain('Target Price');
   });
