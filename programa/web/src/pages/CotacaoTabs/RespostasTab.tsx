@@ -720,7 +720,7 @@ export function RespostasTab({
                     <li key={h.id} style={{ marginBottom: 4 }}>
                       {new Date(h.sentAt).toLocaleString('pt-BR', {
                         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                      })} — {formatCurrency(Number(h.targetPrice), quoteRequestCurrency)} (enviado por {h.sentBy?.name ?? 'desconhecido'})
+                      })} — {formatCurrency(Number(h.targetPrice), replyTarget.currency || quoteRequestCurrency)} (enviado por {h.sentBy?.name ?? 'desconhecido'})
                     </li>
                   ))}
                 </ul>
