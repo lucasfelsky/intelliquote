@@ -835,17 +835,27 @@ export class QuoteResponseController {
 
       const winner = comparisonResults.find((response) => response.isWinner) ?? null;
 
-      await prisma.$transaction(async (tx) => {
+      const companyProfile = await CompanyProfileService.get();
+      const threshold = companyProfile.awardApprovalThreshold ? Number(companyProfile.awardApprovalThreshold) : null;
+
+      let requiresApproval = false;
+      if (winner && threshold !== null && winner.totalLandedCost > threshold) {
+        requiresApproval = true;
+      }
+
+      const comparisonRecord = await prisma.$transaction(async (tx) => {
         await tx.quoteResponse.updateMany({
           where: { quoteRequestId },
           data: { isWinner: false },
         });
 
-        for (const response of comparisonResults.filter((item) => item.isWinner)) {
-          await tx.quoteResponse.update({
-            where: { id: response.id },
-            data: { isWinner: true },
-          });
+        if (!requiresApproval) {
+          for (const response of comparisonResults.filter((item) => item.isWinner)) {
+            await tx.quoteResponse.update({
+              where: { id: response.id },
+              data: { isWinner: true },
+            });
+          }
         }
 
         const comparisonRecord = await tx.quoteComparison.create({
@@ -856,6 +866,7 @@ export class QuoteResponseController {
             paymentTermsWeight: weights.paymentTermsWeight,
             incotermWeight: weights.incotermWeight,
             winnerQuoteResponseId: winner?.id ?? null,
+            approvalStatus: requiresApproval ? 'pending' : 'not_required',
             results: {
               create: comparisonResults.map((response) => ({
                 quoteResponseId: response.id,
@@ -880,7 +891,7 @@ export class QuoteResponseController {
                 paymentTermsScore: response.paymentTermsScore,
                 incotermScore: response.incotermScore,
                 totalScore: response.totalScore,
-                isWinner: response.isWinner,
+                isWinner: !requiresApproval && response.isWinner, // isWinner só fica true no registro se a adjudicação não depender de aprovação
               })),
             },
           },
@@ -897,21 +908,23 @@ export class QuoteResponseController {
               closedAt: quoteRequest.closedAt,
             },
             afterData: {
-              // A comparacao nao altera mais o status: registramos apenas a
-              // vencedora e o id da comparacao. Concluir e' acao separada.
               status: quoteRequest.status,
               winnerQuoteResponseId: winner?.id ?? null,
               comparisonId: comparisonRecord.id,
+              approvalStatus: comparisonRecord.approvalStatus,
             },
             metadata: {
               comparisonId: comparisonRecord.id,
               winnerQuoteResponseId: winner?.id ?? null,
               weights,
+              requiresApproval,
+              threshold,
               quoteResponseIds: responses.map((response) => response.id),
             },
           },
           tx,
         );
+        return comparisonRecord;
       });
 
       // Enriquece o payload retornado com nome do fornecedor e o contato
@@ -932,7 +945,13 @@ export class QuoteResponseController {
         };
       });
 
-      return res.status(200).json(enrichedResults);
+      return res.status(200).json({
+        results: enrichedResults,
+        pendingApproval: requiresApproval,
+        winnerQuoteResponseId: requiresApproval ? winner?.id : null,
+        thresholdValue: requiresApproval ? threshold : null,
+        comparisonId: comparisonRecord.id,
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -1024,6 +1043,90 @@ export class QuoteResponseController {
       });
 
       return res.status(200).json(history);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async approveAward(req: Request, res: Response): Promise<Response> {
+    try {
+      const quoteRequestId = parseId(req.params.quoteRequestId);
+      const comparisonId = parseId(req.params.comparisonId);
+
+      if (!quoteRequestId || !comparisonId) {
+        return res.status(400).json({ message: 'IDs inválidos.' });
+      }
+
+      const comparison = await prisma.quoteComparison.findUnique({
+        where: { id: comparisonId },
+      });
+
+      if (!comparison) {
+        return res.status(404).json({ message: 'Comparação não encontrada.' });
+      }
+
+      if (comparison.quoteRequestId !== quoteRequestId) {
+        return res.status(400).json({ message: 'Comparação não pertence a esta cotação.' });
+      }
+
+      if (comparison.approvalStatus !== 'pending') {
+        return res.status(400).json({ message: 'Comparação não está pendente de aprovação.' });
+      }
+
+      if (!comparison.winnerQuoteResponseId) {
+        return res.status(400).json({ message: 'Comparação não possui um vencedor para aprovar.' });
+      }
+
+      // Valida se é a mais recente
+      const latestComparison = await prisma.quoteComparison.findFirst({
+        where: { quoteRequestId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (latestComparison?.id !== comparisonId) {
+        return res.status(409).json({
+          message: 'Esta não é a comparação mais recente. Por favor, reavalie os resultados.',
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.quoteComparison.update({
+          where: { id: comparisonId },
+          data: {
+            approvalStatus: 'approved',
+            approvedById: req.user?.id ?? null,
+            approvedAt: new Date(),
+          },
+        });
+
+        await tx.quoteResponse.update({
+          where: { id: comparison.winnerQuoteResponseId! },
+          data: { isWinner: true },
+        });
+
+        await AuditLogService.log(
+          {
+            entityType: 'quote_request',
+            entityId: quoteRequestId,
+            action: 'approve_award',
+            performedById: req.user?.id ?? null,
+            beforeData: {
+              comparisonId,
+              approvalStatus: 'pending',
+            },
+            afterData: {
+              comparisonId,
+              approvalStatus: 'approved',
+              winnerQuoteResponseId: comparison.winnerQuoteResponseId,
+            },
+            metadata: {},
+          },
+          tx,
+        );
+      });
+
+      return res.status(200).json({ message: 'Aprovação realizada com sucesso.' });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

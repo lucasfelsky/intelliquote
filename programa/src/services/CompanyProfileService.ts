@@ -20,6 +20,7 @@ export interface CompanyProfileInput {
   // cotacao desta empresa. Cada item ja deve estar normalizado
   // (lowercase, trim). Persistido como JSON array de strings.
   dispatchCc?: string[] | null;
+  awardApprovalThreshold?: number | null;
   updatedById?: number | null;
 }
 
@@ -61,6 +62,7 @@ export class CompanyProfileService {
           purchasingPhone: input.purchasingPhone ?? null,
           website: input.website ?? null,
           logoUrl: input.logoUrl ?? null,
+          awardApprovalThreshold: input.awardApprovalThreshold ?? null,
           dispatchCc: dispatchCcJson,
           updatedById: input.updatedById ?? null,
         },
@@ -83,6 +85,7 @@ export class CompanyProfileService {
         purchasingPhone: input.purchasingPhone ?? null,
         website: input.website ?? null,
         logoUrl: input.logoUrl ?? null,
+        awardApprovalThreshold: input.awardApprovalThreshold ?? null,
         dispatchCc: dispatchCcJson,
         updatedById: input.updatedById ?? null,
       },

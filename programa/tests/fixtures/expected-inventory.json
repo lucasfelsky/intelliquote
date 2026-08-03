@@ -107,7 +107,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 28
+    "migrations": 29
   },
   "emailTemplates": [
     "quote_dispatch@en",
@@ -187,6 +187,7 @@
     "POST /quote-requests/:id/portal-tokens",
     "POST /quote-requests/:id/reopen",
     "POST /quote-requests/:quoteRequestId/compare",
+    "POST /quote-requests/:quoteRequestId/comparisons/:comparisonId/approve",
     "POST /quote-requests/:quoteRequestId/items",
     "POST /quote-responses",
     "POST /quote-responses/:id/reply",

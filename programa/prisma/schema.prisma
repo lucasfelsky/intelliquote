@@ -53,6 +53,7 @@ model User {
   createdQuoteRequests   QuoteRequest[]        @relation("QuoteRequestCreatedBy")
   createdQuoteResponses  QuoteResponse[]       @relation("QuoteResponseCreatedBy")
   executedComparisons    QuoteComparison[]     @relation("QuoteComparisonExecutedBy")
+  approvedComparisons    QuoteComparison[]     @relation("QuoteComparisonApprovedBy")
   auditLogs              AuditLog[]            @relation("AuditPerformedBy")
   uploadedAttachments    Attachment[]          @relation("AttachmentUploadedBy")
   passwordResetTokens    PasswordResetToken[]
@@ -302,9 +303,13 @@ model QuoteComparison {
   paymentTermsWeight    Int
   incotermWeight        Int
   winnerQuoteResponseId Int?
+  approvalStatus        String                  @default("not_required")
+  approvedById          Int?
+  approvedAt            DateTime?
   createdAt             DateTime                @default(now())
   quoteRequest          QuoteRequest            @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   executedBy            User?                   @relation("QuoteComparisonExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+  approvedBy            User?                   @relation("QuoteComparisonApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   winnerQuoteResponse   QuoteResponse?          @relation("ComparisonWinner", fields: [winnerQuoteResponseId], references: [id], onDelete: SetNull)
   results               QuoteComparisonResult[]
 
@@ -427,6 +432,7 @@ model CompanyProfile {
   purchasingPhone String?
   website         String?
   logoUrl         String?
+  awardApprovalThreshold Decimal? @db.Decimal(14,2)
   // Lista de e-mails fixos em copia automatica em TODOS os envios de
   // cotacao desta empresa. O DispatchController sempre mescla essa
   // lista com os recipients selecionados no modal (nunca substitui,

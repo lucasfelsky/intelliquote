@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  approveAward,
   closeQuoteRequest,
   executeComparison,
   listComparisons,
@@ -65,7 +66,7 @@ export function ComparacaoTab({
   const [priceWeight, setPriceWeight] = useState(1);
   const [paymentWeight, setPaymentWeight] = useState(1);
   const [incotermWeight, setIncotermWeight] = useState(1);
-  const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
 
   const history = useQuery({
@@ -84,11 +85,29 @@ export function ComparacaoTab({
       };
       return executeComparison(quoteRequestId, weights);
     },
+    onSuccess: async (data) => {
+      if (data.pendingApproval) {
+        setFeedback({
+          kind: 'warn',
+          text: `Comparação executada — adjudicação acima de R$ ${formatNumber(data.thresholdValue!)} requer aprovação de um gestor/admin.`,
+        });
+      } else {
+        setFeedback({
+          kind: 'ok',
+          text: 'Comparação executada e vencedora definida. A cotação continua aberta — conclua-a quando fechar o pedido.',
+        });
+      }
+      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+    },
+    onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
+  });
+
+  const approveMut = useMutation({
+    mutationFn: (comparisonId: number) => approveAward(quoteRequestId, comparisonId),
     onSuccess: async () => {
-      setFeedback({
-        kind: 'ok',
-        text: 'Comparação executada e vencedora definida. A cotação continua aberta — conclua-a quando fechar o pedido.',
-      });
+      setFeedback({ kind: 'ok', text: 'Adjudicação aprovada com sucesso.' });
       await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
@@ -283,7 +302,7 @@ export function ComparacaoTab({
     );
   }
 
-  function renderResultRows(results: ComparisonResult[]) {
+  function renderResultRows(results: ComparisonResult[], comparison?: ComparisonRecord) {
     if (results.length === 0) {
       return (
         <tr>
@@ -333,6 +352,21 @@ export function ComparacaoTab({
                 <span style={{ fontSize: 11, color: 'var(--ink-soft)' }} title="Sem proposta vinculada para responder.">
                   Sem e-mail do fornecedor
                 </span>
+              )}
+            </div>
+          ) : comparison?.approvalStatus === 'pending' && r.quoteResponseId === comparison.winnerQuoteResponseId ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              <span className="badge badge--warn">Aguardando aprovação</span>
+              {(role === 'admin' || role === 'gestor') && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => approveMut.mutate(comparison.id)}
+                  style={{ fontSize: 12, padding: '2px 10px' }}
+                  disabled={approveMut.isPending}
+                >
+                  {approveMut.isPending ? 'Aprovando...' : 'Aprovar adjudicação'}
+                </button>
               )}
             </div>
           ) : (
@@ -493,7 +527,7 @@ export function ComparacaoTab({
                 <th>Status</th>
               </tr>
             </thead>
-            <tbody>{renderResultRows(latest.results)}</tbody>
+            <tbody>{renderResultRows(latest.results, latest)}</tbody>
           </table>
         )}
       </div>
@@ -555,7 +589,7 @@ export function ComparacaoTab({
                         <th>Status</th>
                       </tr>
                     </thead>
-                    <tbody>{renderResultRows(rec.results)}</tbody>
+                    <tbody>{renderResultRows(rec.results, rec)}</tbody>
                   </table>
                 </div>
               )}
