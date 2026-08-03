@@ -17,6 +17,7 @@ import {
 import {
   previewQuoteResponseReply,
   replyToQuoteResponse,
+  getTargetPriceHistory,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
 
@@ -127,6 +128,12 @@ export function RespostasTab({
   const responsesQuery = useQuery({
     queryKey: ['quote-responses'],
     queryFn: () => listQuoteResponses(),
+  });
+
+  const historyQuery = useQuery({
+    queryKey: ['quote-responses', replyTarget?.id, 'target-price-history'],
+    queryFn: () => getTargetPriceHistory(replyTarget!.id),
+    enabled: !!replyTarget,
   });
 
   const suppliers = useQuery({
@@ -704,6 +711,21 @@ export function RespostasTab({
             <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
               Preencher adiciona o bloco de pedido de redução de preço no e-mail.
             </p>
+
+            {historyQuery.data && historyQuery.data.length > 0 && (
+              <div style={{ marginTop: 16, padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 4 }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: 13, color: 'var(--ink)' }}>Histórico de negociação</h4>
+                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 13, color: 'var(--ink-soft)' }}>
+                  {historyQuery.data.map((h) => (
+                    <li key={h.id} style={{ marginBottom: 4 }}>
+                      {new Date(h.sentAt).toLocaleString('pt-BR', {
+                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                      })} — {formatCurrency(Number(h.targetPrice), replyTarget.currency || quoteRequestCurrency)} (enviado por {h.sentBy?.name ?? 'desconhecido'})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
               <button
