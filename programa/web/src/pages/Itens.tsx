@@ -1,6 +1,8 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { useMemo, useState, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { messageOf } from '@/services/quoteResponses';
 import { Modal } from '@/components/Modal';
 
 interface CatalogItem {
@@ -42,56 +44,83 @@ function normalizeNcm(value: string): string {
   return value.replace(/\D/g, '').slice(0, 8);
 }
 
+interface CatalogItemPayload extends Record<string, unknown> {
+  commercialName: string;
+  marketName: string;
+  ncm: string | null;
+  dbcorpCode: string | null;
+  isDangerousGood: boolean;
+  familyId: number | null;
+  notes: string | null;
+}
+
+interface ImportErrorLine {
+  row: number;
+  reason: string;
+}
+
+interface ImportPreview {
+  validLines: Record<string, unknown>[];
+  errorLines: ImportErrorLine[];
+}
+
+interface ImportResult {
+  successLines: Record<string, unknown>[];
+  errorLines: ImportErrorLine[];
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = String(reader.result ?? '').split(',')[1];
+      if (!base64) reject(new Error('Falha ao ler arquivo'));
+      else resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Erro ao ler arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Itens() {
   const confirm = useConfirm();
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [families, setFamilies] = useState<{ id: number; name: string }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   // Import states
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importStep, setImportStep] = useState<'upload' | 'preview' | 'result'>('upload');
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState('');
-  const [importPreview, setImportPreview] = useState<{ validLines: any[], errorLines: any[] } | null>(null);
-  const [importResult, setImportResult] = useState<{ successLines: any[], errorLines: any[] } | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (search.trim()) params.set('search', search.trim());
-      params.set('includeInactive', String(showInactive));
-      params.set('pageSize', '200');
-      const data = await api.get<{ data: CatalogItem[] }>(`/v1/catalog-items?${params.toString()}`);
-      const list =
-        data && typeof data === 'object' && 'data' in data && Array.isArray((data as { data: unknown }).data)
-          ? (data as { data: CatalogItem[] }).data
-          : [];
-      setItems(list);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, showInactive]);
+  const itemsQuery = useQuery({
+    queryKey: ['catalog-items', { search: search.trim(), includeInactive: showInactive }],
+    queryFn: async () => {
+      const data = await api.get<{ data?: CatalogItem[] }>('/v1/catalog-items', {
+        ...(search.trim() ? { search: search.trim() } : {}),
+        includeInactive: showInactive,
+        pageSize: 200,
+      });
+      return Array.isArray(data?.data) ? data.data : [];
+    },
+  });
+  const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
 
-  useEffect(() => {
-    void refresh();
-    api.get<{ data: { id: number; name: string }[] }>('/v1/item-families').then(res => {
-      if (res && res.data) setFamilies(res.data);
-    }).catch(console.error);
-  }, [refresh]);
+  const familiesQuery = useQuery({
+    queryKey: ['item-families'],
+    queryFn: async () => {
+      const res = await api.get<{ data?: { id: number; name: string }[] }>('/v1/item-families');
+      return res?.data ?? [];
+    },
+  });
+  const families = familiesQuery.data ?? [];
 
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => a.commercialName.localeCompare(b.commercialName, 'pt-BR')),
@@ -129,7 +158,24 @@ export default function Itens() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  const save = useMutation({
+    mutationFn: async (vars: { id: number | null; payload: CatalogItemPayload }) =>
+      vars.id === null
+        ? api.post<unknown>('/v1/catalog-items', vars.payload)
+        : api.put<unknown>(`/v1/catalog-items/${vars.id}`, vars.payload),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['catalog-items'] });
+      if (vars.id === null) {
+        setFeedback({ kind: 'success', message: `Item "${vars.payload.commercialName}" criado.` });
+        setForm(EMPTY_FORM);
+      } else {
+        setFeedback({ kind: 'success', message: `Item "${vars.payload.commercialName}" atualizado.` });
+      }
+    },
+    onError: (err) => setFeedback({ kind: 'error', message: messageOf(err) }),
+  });
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.commercialName.trim() || !form.marketName.trim()) {
       setFeedback({ kind: 'error', message: 'Informe o nome comercial e o nome de mercado.' });
@@ -139,53 +185,44 @@ export default function Itens() {
       setFeedback({ kind: 'error', message: 'O NCM deve ter 8 dígitos.' });
       return;
     }
-    setSaving(true);
     setFeedback(null);
-    try {
-      const payload = {
-        commercialName: form.commercialName.trim(),
-        marketName: form.marketName.trim(),
-        ncm: form.ncm.trim() || null,
-        dbcorpCode: form.dbcorpCode.trim() || null,
-        isDangerousGood: form.isDangerousGood,
-        familyId: form.familyId !== '' ? Number(form.familyId) : null,
-        notes: form.notes.trim() || null,
-      };
-      if (editing) {
-        await api.put(`/v1/catalog-items/${editing.id}`, payload);
-        setFeedback({ kind: 'success', message: `Item "${payload.commercialName}" atualizado.` });
-      } else {
-        await api.post('/v1/catalog-items', payload);
-        setFeedback({ kind: 'success', message: `Item "${payload.commercialName}" criado.` });
-        setForm(EMPTY_FORM);
-      }
-      await refresh();
-    } catch (err) {
-      setFeedback({ kind: 'error', message: (err as Error).message });
-    } finally {
-      setSaving(false);
-    }
+    const payload: CatalogItemPayload = {
+      commercialName: form.commercialName.trim(),
+      marketName: form.marketName.trim(),
+      ncm: form.ncm.trim() || null,
+      dbcorpCode: form.dbcorpCode.trim() || null,
+      isDangerousGood: form.isDangerousGood,
+      familyId: form.familyId !== '' ? Number(form.familyId) : null,
+      notes: form.notes.trim() || null,
+    };
+    save.mutate({ id: editing ? editing.id : null, payload });
   }
+
+  const softDelete = useMutation({
+    mutationFn: (item: CatalogItem) => api.del(`/v1/catalog-items/${item.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['catalog-items'] });
+      setFeedback({ kind: 'success', message: 'Item inativado.' });
+    },
+    onError: (err) => setFeedback({ kind: 'error', message: messageOf(err) }),
+  });
+
+  const reactivate = useMutation({
+    mutationFn: (item: CatalogItem) => api.put(`/v1/catalog-items/${item.id}`, { isActive: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['catalog-items'] });
+      setFeedback({ kind: 'success', message: 'Item reativado.' });
+    },
+    onError: (err) => setFeedback({ kind: 'error', message: messageOf(err) }),
+  });
 
   async function handleSoftDelete(item: CatalogItem) {
     if (!(await confirm(`Inativar o item "${item.commercialName}"?`))) return;
-    try {
-      await api.del(`/v1/catalog-items/${item.id}`);
-      setFeedback({ kind: 'success', message: 'Item inativado.' });
-      await refresh();
-    } catch (err) {
-      setFeedback({ kind: 'error', message: (err as Error).message });
-    }
+    softDelete.mutate(item);
   }
 
-  async function handleReactivate(item: CatalogItem) {
-    try {
-      await api.put(`/v1/catalog-items/${item.id}`, { isActive: true });
-      setFeedback({ kind: 'success', message: 'Item reativado.' });
-      await refresh();
-    } catch (err) {
-      setFeedback({ kind: 'error', message: (err as Error).message });
-    }
+  function handleReactivate(item: CatalogItem) {
+    reactivate.mutate(item);
   }
 
   function openImportModal() {
@@ -200,53 +237,48 @@ export default function Itens() {
   function closeImportModal() {
     setIsImportModalOpen(false);
     if (importStep === 'result') {
-      void refresh();
+      qc.invalidateQueries({ queryKey: ['catalog-items'] });
     }
   }
 
-  async function handlePreviewImport() {
-    if (!importFile) return;
-    setImportLoading(true);
-    setImportError('');
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = (e.target?.result as string).split(',')[1];
-        if (!base64) throw new Error('Falha ao ler arquivo');
-        try {
-          const res = await api.post<{ data: { validLines: any[], errorLines: any[] } }>('/v1/catalog-items/import', { contentBase64: base64 });
-          setImportPreview(res.data);
-          setImportStep('preview');
-        } catch (apiErr: any) {
-          setImportError(apiErr.message || 'Erro ao processar arquivo.');
-        } finally {
-          setImportLoading(false);
-        }
-      };
-      reader.onerror = () => {
-        setImportError('Erro ao ler arquivo.');
-        setImportLoading(false);
-      };
-      reader.readAsDataURL(importFile);
-    } catch (err: any) {
-      setImportError(err.message || 'Erro desconhecido');
-      setImportLoading(false);
-    }
-  }
+  const previewImport = useMutation({
+    mutationFn: async (file: File) => {
+      const contentBase64 = await readFileAsBase64(file);
+      const res = await api.post<{ data: ImportPreview }>('/v1/catalog-items/import', { contentBase64 });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setImportPreview(data);
+      setImportStep('preview');
+    },
+    onError: (err) => setImportError(messageOf(err) || 'Erro ao processar arquivo.'),
+  });
 
-  async function handleConfirmImport() {
-    if (!importPreview?.validLines.length) return;
-    setImportLoading(true);
-    setImportError('');
-    try {
-      const res = await api.post<{ data: { successLines: any[], errorLines: any[] } }>('/v1/catalog-items/import/confirm', { items: importPreview.validLines });
-      setImportResult(res.data);
+  const confirmImport = useMutation({
+    mutationFn: async () => {
+      const res = await api.post<{ data: ImportResult }>('/v1/catalog-items/import/confirm', {
+        items: importPreview?.validLines ?? [],
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setImportResult(data);
       setImportStep('result');
-    } catch (apiErr: any) {
-      setImportError(apiErr.message || 'Erro ao confirmar importação.');
-    } finally {
-      setImportLoading(false);
-    }
+      qc.invalidateQueries({ queryKey: ['catalog-items'] });
+    },
+    onError: (err) => setImportError(messageOf(err) || 'Erro ao confirmar importação.'),
+  });
+
+  function handlePreviewImport() {
+    if (!importFile) return;
+    setImportError('');
+    previewImport.mutate(importFile);
+  }
+
+  function handleConfirmImport() {
+    if (!importPreview?.validLines.length) return;
+    setImportError('');
+    confirmImport.mutate();
   }
 
   return (
@@ -332,10 +364,10 @@ export default function Itens() {
             </div>
           </header>
 
-          {loading ? (
+          {itemsQuery.isLoading ? (
             <div className="itens-empty">Carregando…</div>
-          ) : error ? (
-            <div className="itens-empty" style={{ color: 'var(--danger)' }}>{error}</div>
+          ) : itemsQuery.isError ? (
+            <div className="itens-empty" style={{ color: 'var(--danger)' }}>{messageOf(itemsQuery.error)}</div>
           ) : sortedItems.length === 0 ? (
             <div className="itens-empty">
               <strong>Nenhum item encontrado</strong>
@@ -549,8 +581,8 @@ export default function Itens() {
                   Cancelar
                 </button>
               )}
-              <button type="submit" className="primary-button" disabled={saving}>
-                {saving ? 'Salvando…' : editing ? 'Atualizar item' : 'Cadastrar item'}
+              <button type="submit" className="primary-button" disabled={save.isPending}>
+                {save.isPending ? 'Salvando…' : editing ? 'Atualizar item' : 'Cadastrar item'}
               </button>
             </div>
           </form>
@@ -574,9 +606,9 @@ export default function Itens() {
               />
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
               <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
-                <button type="button" className="ghost-button" onClick={closeImportModal} disabled={importLoading}>Cancelar</button>
-                <button type="button" className="primary-button" onClick={handlePreviewImport} disabled={!importFile || importLoading}>
-                  {importLoading ? 'Processando...' : 'Carregar e Validar'}
+                <button type="button" className="ghost-button" onClick={closeImportModal} disabled={previewImport.isPending}>Cancelar</button>
+                <button type="button" className="primary-button" onClick={handlePreviewImport} disabled={!importFile || previewImport.isPending}>
+                  {previewImport.isPending ? 'Processando...' : 'Carregar e Validar'}
                 </button>
               </div>
             </div>
@@ -602,9 +634,9 @@ export default function Itens() {
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
 
               <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
-                <button type="button" className="ghost-button" onClick={() => setImportStep('upload')} disabled={importLoading}>Voltar</button>
-                <button type="button" className="primary-button" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || importLoading}>
-                  {importLoading ? 'Importando...' : 'Confirmar Importação'}
+                <button type="button" className="ghost-button" onClick={() => setImportStep('upload')} disabled={confirmImport.isPending}>Voltar</button>
+                <button type="button" className="primary-button" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || confirmImport.isPending}>
+                  {confirmImport.isPending ? 'Importando...' : 'Confirmar Importação'}
                 </button>
               </div>
             </div>
