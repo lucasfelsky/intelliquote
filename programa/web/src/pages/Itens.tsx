@@ -590,7 +590,7 @@ export default function Itens() {
       </div>
 
       <Modal isOpen={isImportModalOpen} onClose={closeImportModal} title="Importar Itens do Catálogo">
-        <div className="import-modal-content" style={{ minWidth: 500, minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+        <div className="import-modal-content" style={{ minHeight: 300, display: 'flex', flexDirection: 'column' }}>
           {importStep === 'upload' && (
             <div style={{ flex: 1 }}>
               <p style={{ marginBottom: 16 }}>
@@ -602,7 +602,7 @@ export default function Itens() {
                 accept=".xlsx"
                 ref={fileInputRef}
                 onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                style={{ display: 'block', marginBottom: 16 }}
+                className="file-input"
               />
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
               <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
