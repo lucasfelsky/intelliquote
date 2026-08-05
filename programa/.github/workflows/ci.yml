@@ -51,3 +51,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Install web dependencies
+        run: npm ci --prefix web
+
+      - name: Test web
+        run: npm --prefix web run test
