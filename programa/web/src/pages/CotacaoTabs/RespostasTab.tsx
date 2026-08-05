@@ -359,13 +359,7 @@ export function RespostasTab({
       </div>
 
       {feedback && (
-        <p style={{
-          color: feedback.kind === 'err' ? 'var(--danger)' : 'var(--primary-700)',
-          fontSize: 13,
-          background: feedback.kind === 'err' ? 'var(--danger-light, #fee2e2)' : 'var(--primary-50, #f0fdfa)',
-          padding: '8px 12px',
-          borderRadius: '6px',
-        }}>
+        <p className={feedback.kind === 'err' ? 'alert alert--error' : 'alert alert--success'}>
           {feedback.text}
         </p>
       )}
