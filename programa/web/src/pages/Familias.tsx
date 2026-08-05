@@ -20,9 +20,9 @@ export default function Familias() {
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   const familiesQuery = useQuery<ItemFamily[]>({
-    queryKey: ['item-families'],
+    queryKey: ['item-families', { includeInactive: true }],
     queryFn: async () => {
-      const res = await api.get<{ data: ItemFamily[] }>('/v1/item-families');
+      const res = await api.get<{ data: ItemFamily[] }>('/v1/item-families', { includeInactive: true });
       // @ts-ignore
       return res.data;
     },
