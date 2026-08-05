@@ -1609,7 +1609,7 @@ export default function CotacaoDetalhe() {
               onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
             />
 
-                        <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--line)', borderRadius: 8 }}>
+                        <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
                           <legend style={{ padding: '0 6px', fontWeight: 600 }} className="text-xs">Incoterm e destino por item</legend>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
                             <input
