@@ -621,9 +621,9 @@ export default function Itens() {
               </p>
               
               {importPreview.errorLines.length > 0 && (
-                <div style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto', backgroundColor: '#fef2f2', padding: 8, borderRadius: 4 }}>
-                  <strong style={{ color: '#991b1b', display: 'block', marginBottom: 8 }}>Linhas com erro (serão ignoradas):</strong>
-                  <ul style={{ color: '#991b1b', fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                <div className="alert alert--error" style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto' }}>
+                  <strong style={{ display: 'block', marginBottom: 8 }}>Linhas com erro (serão ignoradas):</strong>
+                  <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
                     {importPreview.errorLines.map((e, idx) => (
                       <li key={idx}>Linha {e.row}: {e.reason}</li>
                     ))}
@@ -649,9 +649,9 @@ export default function Itens() {
               </div>
 
               {importResult.errorLines.length > 0 && (
-                <div style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto', backgroundColor: '#fef2f2', padding: 8, borderRadius: 4 }}>
-                  <strong style={{ color: '#991b1b', display: 'block', marginBottom: 8 }}>Erros ao salvar no banco:</strong>
-                  <ul style={{ color: '#991b1b', fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                <div className="alert alert--error" style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto' }}>
+                  <strong style={{ display: 'block', marginBottom: 8 }}>Erros ao salvar no banco:</strong>
+                  <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
                     {importResult.errorLines.map((e, idx) => (
                       <li key={idx}>Linha {e.row}: {e.reason}</li>
                     ))}

@@ -98,7 +98,7 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled }: Cat
             />
           </div>
           
-          <div style={{ maxHeight: 300, overflowY: 'auto', background: '#fff' }}>
+          <div style={{ maxHeight: 300, overflowY: 'auto', background: 'var(--surface)' }}>
             {filteredAndGrouped.length === 0 ? (
               <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>
                 Nenhum item encontrado.
@@ -152,7 +152,7 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled }: Cat
                                 padding: '10px 12px',
                                 border: 'none',
                                 borderBottom: '1px solid var(--border)',
-                                background: isSelected ? 'var(--primary-50)' : '#fff',
+                                background: isSelected ? 'var(--primary-50)' : 'var(--surface)',
                                 cursor: disabled ? 'not-allowed' : 'pointer',
                                 color: isSelected ? 'var(--primary-700)' : 'var(--ink)',
                                 fontSize: 13,
@@ -165,7 +165,7 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled }: Cat
                                     marginLeft: 6, 
                                     fontSize: 11, 
                                     background: 'var(--danger)', 
-                                    color: '#fff', 
+                                    color: 'var(--surface)',
                                     padding: '2px 4px', 
                                     borderRadius: 4 
                                   }}>
