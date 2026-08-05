@@ -513,9 +513,9 @@ export default function Empresa() {
             style={{
               marginTop: 12,
               padding: 12,
-              border: '1px solid var(--border, #e3e8ee)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
-              background: 'var(--surface-muted, #f7fafc)',
+              background: 'var(--surface-alt)',
             }}
           >
             <label
@@ -538,7 +538,7 @@ export default function Empresa() {
                 <span
                   style={{
                     display: 'block',
-                    color: 'var(--text-muted, #6b7785)',
+                    color: 'var(--ink-soft)',
                     fontSize: 12,
                     marginTop: 2,
                   }}
@@ -556,7 +556,7 @@ export default function Empresa() {
             className="cc-users"
             style={{
               marginTop: 12,
-              border: '1px solid var(--border, #e3e8ee)',
+              border: '1px solid var(--border)',
               borderRadius: 8,
               padding: 12,
             }}
@@ -567,12 +567,12 @@ export default function Empresa() {
                 : `Perfis do sistema (${selectedUserIds.size} selecionado${selectedUserIds.size === 1 ? '' : 's'})`}
             </legend>
             {directory.isLoading && (
-              <p style={{ color: 'var(--text-muted, #6b7785)' }} className="text-sm">
+              <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
                 Carregando perfis…
               </p>
             )}
             {!directory.isLoading && activeUsers.length === 0 && (
-              <p style={{ color: 'var(--text-muted, #6b7785)' }} className="text-sm">
+              <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
                 Nenhum perfil ativo cadastrado.
               </p>
             )}
@@ -590,7 +590,7 @@ export default function Empresa() {
                         alignItems: 'center',
                         gap: 10,
                         padding: '6px 4px',
-                        borderBottom: '1px solid var(--border, #eef2f6)',
+                        borderBottom: '1px solid var(--border)',
                       }}
                     >
                       <input
@@ -605,7 +605,7 @@ export default function Empresa() {
                         style={{ flex: 1, cursor: 'pointer' }}
                        className="text-sm">
                         <strong>{user.name}</strong>{' '}
-                        <span style={{ color: 'var(--text-muted, #6b7785)' }}>
+                        <span style={{ color: 'var(--ink-soft)' }}>
                           &lt;{user.email}&gt;
                         </span>
                       </label>
@@ -625,7 +625,7 @@ export default function Empresa() {
                 <summary
                   style={{
                     fontSize: 12,
-                    color: 'var(--text-muted, #6b7785)',
+                    color: 'var(--ink-soft)',
                     cursor: 'pointer',
                   }}
                 >
@@ -660,11 +660,11 @@ export default function Empresa() {
                           style={{ flex: 1, cursor: 'pointer' }}
                          className="text-sm">
                           {user.name}{' '}
-                          <span style={{ color: 'var(--text-muted, #6b7785)' }}>
+                          <span style={{ color: 'var(--ink-soft)' }}>
                             &lt;{user.email}&gt;
                           </span>
                         </label>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted, #6b7785)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
                           {roleLabel(user.role)}
                         </span>
                       </li>
@@ -720,10 +720,10 @@ export default function Empresa() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '8px 12px',
-                      border: '1px solid var(--border, #e3e8ee)',
+                      border: '1px solid var(--border)',
                       borderRadius: 8,
                       marginBottom: 6,
-                      background: 'var(--surface-muted, #f7fafc)',
+                      background: 'var(--surface-alt)',
                       fontSize: 14,
                     }}
                   >
@@ -743,7 +743,7 @@ export default function Empresa() {
             {externalEmails.length === 0 && selectedUserIds.size === 0 && !autoIncludeProfiles && (
               <p
                 style={{
-                  color: 'var(--text-muted, #6b7785)',
+                  color: 'var(--ink-soft)',
                   fontSize: 13,
                   fontStyle: 'italic',
                   marginTop: 12,

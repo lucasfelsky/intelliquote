@@ -433,9 +433,9 @@ export function ComparacaoTab({
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
               {winner && (
-                <div className="card" style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt, #f7f7f7)' }}>
+                <div className="card" style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt)' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                    Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--muted, #666)' }}>(opcional)</span>
+                    Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>(opcional)</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, alignItems: 'center', fontSize: 13 }}>
                     <span>Preço</span>
@@ -453,7 +453,7 @@ export function ComparacaoTab({
                     style={{ width: '100%', marginTop: 8, fontSize: 13 }}
                   />
                   {ratingStarted && !ratingComplete && (
-                    <div style={{ fontSize: 12, color: 'var(--danger, #b00)', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
                       Dê nota nas três dimensões ou deixe todas em branco.
                     </div>
                   )}

@@ -64,7 +64,7 @@ export default function StarRating({
         );
       })}
       {showValue && value > 0 ? (
-        <span style={{ marginLeft: 4, fontSize: 13, color: 'var(--muted, #666)' }}>
+        <span style={{ marginLeft: 4, fontSize: 13, color: 'var(--ink-soft)' }}>
           {value.toFixed(1)}
         </span>
       ) : null}

@@ -73,7 +73,7 @@ export function TabList({ children, 'aria-label': ariaLabel }: { children: React
       style={{
         display: 'flex',
         gap: '24px',
-        borderBottom: '1px solid var(--line, #e2e8f0)',
+        borderBottom: '1px solid var(--border)',
         marginBottom: '16px',
         overflowX: 'auto',
       }}
@@ -100,8 +100,8 @@ export function Tab({ value, children }: { value: string; children: ReactNode })
       style={{
         background: 'none',
         border: 'none',
-        borderBottom: isSelected ? '2px solid var(--primary-700, #005f4f)' : '2px solid transparent',
-        color: isSelected ? 'var(--primary-700, #005f4f)' : 'var(--ink-soft, #64748b)',
+        borderBottom: isSelected ? '2px solid var(--primary-700)' : '2px solid transparent',
+        color: isSelected ? 'var(--primary-700)' : 'var(--ink-soft)',
         padding: '8px 4px',
         cursor: 'pointer',
         fontSize: '14px',
