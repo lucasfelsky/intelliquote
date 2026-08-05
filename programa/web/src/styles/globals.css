@@ -653,6 +653,7 @@ dialog.modal-dialog {
 dialog.modal-dialog::backdrop {
   background: rgba(0, 30, 30, 0.5);
 }
+dialog.modal-dialog--wide { max-width: 760px; }
 .modal-content {
   background: var(--surface);
   border-radius: var(--radius);
