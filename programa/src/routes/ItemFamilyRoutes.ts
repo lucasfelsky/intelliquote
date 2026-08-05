@@ -17,4 +17,11 @@ router.post(
   ItemFamilyController.createFamily
 );
 
+router.put(
+  '/item-families/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ItemFamilyController.updateFamily
+);
+
 export { router as itemFamilyRoutes };

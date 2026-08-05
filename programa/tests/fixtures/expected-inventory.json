@@ -200,6 +200,7 @@
     "PUT /",
     "PUT /:key/:locale",
     "PUT /catalog-items/:id",
+    "PUT /item-families/:id",
     "PUT /quote-request-items/:id",
     "PUT /quote-requests/:id",
     "PUT /quote-responses/:id",
