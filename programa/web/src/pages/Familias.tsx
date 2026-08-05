@@ -165,7 +165,7 @@ export default function Familias() {
         onClose={() => setIsModalOpen(false)}
         title="Nova Família"
       >
-        <form onSubmit={handleSubmit} className="form">
+        <form onSubmit={handleSubmit}>
           <label className="field">
             <span>Nome da Família *</span>
             <input
