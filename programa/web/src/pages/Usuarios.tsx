@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
+import { Modal } from '@/components/Modal';
 
 interface User {
   id: number;
@@ -198,77 +199,69 @@ export default function Usuarios() {
         )}
       </section>
 
-      {showForm && (
-        <div className="modal-backdrop" onClick={closeForm}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleSubmit}
+      <Modal isOpen={showForm} onClose={closeForm} title="Novo usuário">
+        <form onSubmit={handleSubmit}>
+          <label className="field-label" htmlFor="user-name">Nome</label>
+          <input
+            id="user-name"
+            className="input"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+          />
+
+          <label className="field-label" htmlFor="user-email" style={{ marginTop: 12 }}>E-mail</label>
+          <input
+            id="user-email"
+            className="input"
+            type="email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            required
+          />
+
+          <label className="field-label" htmlFor="user-role" style={{ marginTop: 12 }}>Perfil</label>
+          <select
+            id="user-role"
+            className="select"
+            value={form.role}
+            onChange={(e) => setForm({ ...form, role: e.target.value as User['role'] })}
           >
-            <h2>Novo usuário</h2>
+            <option value="admin">Admin</option>
+            <option value="comprador">Comprador</option>
+            <option value="gestor">Gestor</option>
+            <option value="viewer">Viewer</option>
+          </select>
 
-            <label className="field-label" htmlFor="user-name">Nome</label>
-            <input
-              id="user-name"
-              className="input"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-            />
+          <label className="field-label" htmlFor="user-password" style={{ marginTop: 12 }}>Senha inicial</label>
+          <input
+            id="user-password"
+            className="input"
+            type="password"
+            minLength={8}
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            required
+          />
 
-            <label className="field-label" htmlFor="user-email" style={{ marginTop: 12 }}>E-mail</label>
-            <input
-              id="user-email"
-              className="input"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
+          {formError && (
+            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>
+          )}
 
-            <label className="field-label" htmlFor="user-role" style={{ marginTop: 12 }}>Perfil</label>
-            <select
-              id="user-role"
-              className="select"
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value as User['role'] })}
+          <div className="modal__actions">
+            <button type="button" className="ghost-button" onClick={closeForm}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={create.isPending}
             >
-              <option value="admin">Admin</option>
-              <option value="comprador">Comprador</option>
-              <option value="gestor">Gestor</option>
-              <option value="viewer">Viewer</option>
-            </select>
-
-            <label className="field-label" htmlFor="user-password" style={{ marginTop: 12 }}>Senha inicial</label>
-            <input
-              id="user-password"
-              className="input"
-              type="password"
-              minLength={8}
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-
-            {formError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>
-            )}
-
-            <div className="modal__actions">
-              <button type="button" className="ghost-button" onClick={closeForm}>
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={create.isPending}
-              >
-                Cadastrar
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              Cadastrar
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
