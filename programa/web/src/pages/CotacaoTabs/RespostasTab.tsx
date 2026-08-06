@@ -20,6 +20,7 @@ import {
   getTargetPriceHistory,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
+import { Modal } from '@/components/Modal';
 
 interface SupplierSummary {
   id: number;
@@ -347,6 +348,10 @@ export function RespostasTab({
     }
   }
 
+  const replyTargetName = replyTarget
+    ? replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`
+    : '';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -464,207 +469,212 @@ export function RespostasTab({
       )}
 
       {/* MODAL DE NOVA/EDITAR RESPOSTA */}
-      {showModal && (
-        <div className="modal-backdrop" onClick={closeModal}>
-          <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit} style={{ maxWidth: 640 }}>
-            <h2>{editing ? 'Editar resposta' : 'Nova resposta'}</h2>
-            
-            <div className="form-grid">
-              <div className="form-grid__full">
-                <label className="field-label" htmlFor="rf-supplier">Fornecedor *</label>
-                <select
-                  id="rf-supplier"
-                  className="select"
-                  value={form.supplierId}
-                  onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
-                  required
-                  disabled={!!editing}
-                >
-                  <option value="">Selecione…</option>
-                  {(suppliers.data ?? [])
-                    .filter((s) => s.status !== 'blocked')
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}{s.country ? ` (${s.country})` : ''}</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-price">Preço oferecido *</label>
-                <input
-                  id="rf-price"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.offeredPrice}
-                  onChange={(e) => setForm({ ...form, offeredPrice: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-currency">Moeda *</label>
-                <input
-                  id="rf-currency"
-                  className="input"
-                  value={form.currency}
-                  onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
-                  maxLength={3}
-                  required
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-exchange">Câmbio (BRL/{form.currency || 'USD'})</label>
-                <input
-                  id="rf-exchange"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.0001"
-                  value={form.exchangeRate}
-                  onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-incoterm">Incoterm *</label>
-                <select
-                  id="rf-incoterm"
-                  className="select"
-                  value={form.offeredIncoterm}
-                  onChange={(e) => setForm({ ...form, offeredIncoterm: e.target.value as Incoterm })}
-                  required
-                >
-                  {INCOTERMS.map((t) => (
-                    <option key={t} value={t}>{t}</option>
+      <Modal
+        isOpen={showModal}
+        onClose={closeModal}
+        size="wide"
+        title={editing ? 'Editar resposta' : 'Nova resposta'}
+      >
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="form-grid__full">
+              <label className="field-label" htmlFor="rf-supplier">Fornecedor *</label>
+              <select
+                id="rf-supplier"
+                className="select"
+                value={form.supplierId}
+                onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
+                required
+                disabled={!!editing}
+              >
+                <option value="">Selecione…</option>
+                {(suppliers.data ?? [])
+                  .filter((s) => s.status !== 'blocked')
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}{s.country ? ` (${s.country})` : ''}</option>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-payment">Prazo pagamento (dias) *</label>
-                <input
-                  id="rf-payment"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.paymentTermsDays}
-                  onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-freight">Frete</label>
-                <input
-                  id="rf-freight"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.freightCost}
-                  onChange={(e) => setForm({ ...form, freightCost: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-insurance">Seguro</label>
-                <input
-                  id="rf-insurance"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.insuranceCost}
-                  onChange={(e) => setForm({ ...form, insuranceCost: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-other">Outras taxas</label>
-                <input
-                  id="rf-other"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.otherFees}
-                  onChange={(e) => setForm({ ...form, otherFees: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-ii">II (%)</label>
-                <input
-                  id="rf-ii"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.importDuty}
-                  onChange={(e) => setForm({ ...form, importDuty: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-ipi">IPI (%)</label>
-                <input
-                  id="rf-ipi"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.ipi}
-                  onChange={(e) => setForm({ ...form, ipi: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-pis">PIS (%)</label>
-                <input
-                  id="rf-pis"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.pis}
-                  onChange={(e) => setForm({ ...form, pis: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="field-label" htmlFor="rf-cofins">COFINS (%)</label>
-                <input
-                  id="rf-cofins"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.cofins}
-                  onChange={(e) => setForm({ ...form, cofins: e.target.value })}
-                />
-              </div>
-              <div className="form-grid__full">
-                <label className="field-label" htmlFor="rf-notes">Observações</label>
-                <textarea
-                  id="rf-notes"
-                  className="textarea"
-                  rows={3}
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
-              </div>
+              </select>
             </div>
-
-            {formError && <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>}
-
-            <div className="modal__actions">
-              <button type="button" className="ghost-button" onClick={closeModal}>Cancelar</button>
-              <button type="submit" className="primary-button" disabled={submitting || createMut.isPending || updateMut.isPending}>
-                {submitting ? (editing ? 'Salvando…' : 'Cadastrando…') : (editing ? 'Salvar alterações' : 'Cadastrar resposta')}
-              </button>
+            <div>
+              <label className="field-label" htmlFor="rf-price">Preço oferecido *</label>
+              <input
+                id="rf-price"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.offeredPrice}
+                onChange={(e) => setForm({ ...form, offeredPrice: e.target.value })}
+                required
+              />
             </div>
-          </form>
-        </div>
-      )}
+            <div>
+              <label className="field-label" htmlFor="rf-currency">Moeda *</label>
+              <input
+                id="rf-currency"
+                className="input"
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+                maxLength={3}
+                required
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-exchange">Câmbio (BRL/{form.currency || 'USD'})</label>
+              <input
+                id="rf-exchange"
+                className="input"
+                type="number"
+                min="0"
+                step="0.0001"
+                value={form.exchangeRate}
+                onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-incoterm">Incoterm *</label>
+              <select
+                id="rf-incoterm"
+                className="select"
+                value={form.offeredIncoterm}
+                onChange={(e) => setForm({ ...form, offeredIncoterm: e.target.value as Incoterm })}
+                required
+              >
+                {INCOTERMS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-payment">Prazo pagamento (dias) *</label>
+              <input
+                id="rf-payment"
+                className="input"
+                type="number"
+                min="0"
+                step="1"
+                value={form.paymentTermsDays}
+                onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-freight">Frete</label>
+              <input
+                id="rf-freight"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.freightCost}
+                onChange={(e) => setForm({ ...form, freightCost: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-insurance">Seguro</label>
+              <input
+                id="rf-insurance"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.insuranceCost}
+                onChange={(e) => setForm({ ...form, insuranceCost: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-other">Outras taxas</label>
+              <input
+                id="rf-other"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.otherFees}
+                onChange={(e) => setForm({ ...form, otherFees: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-ii">II (%)</label>
+              <input
+                id="rf-ii"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.importDuty}
+                onChange={(e) => setForm({ ...form, importDuty: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-ipi">IPI (%)</label>
+              <input
+                id="rf-ipi"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.ipi}
+                onChange={(e) => setForm({ ...form, ipi: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-pis">PIS (%)</label>
+              <input
+                id="rf-pis"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.pis}
+                onChange={(e) => setForm({ ...form, pis: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="rf-cofins">COFINS (%)</label>
+              <input
+                id="rf-cofins"
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.cofins}
+                onChange={(e) => setForm({ ...form, cofins: e.target.value })}
+              />
+            </div>
+            <div className="form-grid__full">
+              <label className="field-label" htmlFor="rf-notes">Observações</label>
+              <textarea
+                id="rf-notes"
+                className="textarea"
+                rows={3}
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {formError && <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>}
+
+          <div className="modal__actions">
+            <button type="button" className="ghost-button" onClick={closeModal}>Cancelar</button>
+            <button type="submit" className="primary-button" disabled={submitting || createMut.isPending || updateMut.isPending}>
+              {submitting ? (editing ? 'Salvando…' : 'Cadastrando…') : (editing ? 'Salvar alterações' : 'Cadastrar resposta')}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* MODAL DE RESPONDER E-MAIL */}
-      {replyTarget && (
-        <div className="modal-backdrop" onClick={closeReplyModal}>
-          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-            <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+      <Modal
+        isOpen={replyTarget !== null}
+        onClose={closeReplyModal}
+        size="wide"
+        title={replyTarget ? `Responder ${replyTargetName}` : ''}
+      >
+        {replyTarget && (
+          <>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
               {requestCode} · {productName}
             </p>
 
@@ -772,9 +782,9 @@ export function RespostasTab({
                 {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }
