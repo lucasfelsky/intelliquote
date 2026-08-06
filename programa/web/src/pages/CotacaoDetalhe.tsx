@@ -15,6 +15,7 @@ import {
   type PortalTokenListItem,
 } from '@/services/dispatch';
 import { Tabs, TabList, Tab, TabPanel } from '@/components/Tabs';
+import { Modal } from '@/components/Modal';
 import { RespostasTab } from './CotacaoTabs/RespostasTab';
 import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
 
@@ -696,6 +697,12 @@ export default function CotacaoDetalhe() {
       setDispatchError(null);
     }
 
+    function closeTokensModal() {
+      setShowTokensModal(false);
+      setTokenActionError(null);
+      setCopiedTokenId(null);
+    }
+
     function toggleContactSelection(contactId: number) {
       setSelectedContactIds((current) =>
         current.includes(contactId)
@@ -1052,14 +1059,15 @@ export default function CotacaoDetalhe() {
       </Tabs>
 
 
-      {showDispatchModal && (
-        <div className="modal-backdrop" onClick={closeDispatchModal}>
-          <div
-            className="modal modal--wide"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2>Enviar cotação para fornecedores</h2>
-            <p style={{ color: 'var(--ink-soft)', marginTop: -8 }} className="text-sm">
+      <Modal
+        isOpen={showDispatchModal}
+        onClose={closeDispatchModal}
+        size="wide"
+        title="Enviar cotação para fornecedores"
+      >
+        {showDispatchModal && (
+          <>
+            <p style={{ color: 'var(--ink-soft)', marginTop: 0 }} className="text-sm">
               {qr.requestCode} · {qr.productName}
             </p>
 
@@ -1343,25 +1351,14 @@ export default function CotacaoDetalhe() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
-      {showTokensModal && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setShowTokensModal(false);
-            setTokenActionError(null);
-            setCopiedTokenId(null);
-          }}
-        >
-          <div
-            className="modal modal--wide"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2>Links do portal</h2>
-            <p style={{ color: 'var(--ink-soft)', marginTop: -8 }} className="text-sm">
+      <Modal isOpen={showTokensModal} onClose={closeTokensModal} size="wide" title="Links do portal">
+        {showTokensModal && (
+          <>
+            <p style={{ color: 'var(--ink-soft)', marginTop: 0 }} className="text-sm">
               Gere links mágicos para que fornecedores respondam sem precisar de login.
               Cada link é único e expira conforme a validade escolhida.
             </p>
@@ -1385,7 +1382,7 @@ export default function CotacaoDetalhe() {
                   type="number"
                   min={1}
                   max={90}
-                  defaultValue={dispatchExpires}
+                  value={dispatchExpires}
                   onChange={(e) => setDispatchExpires(e.target.value)}
                 />
               </div>
@@ -1518,31 +1515,20 @@ export default function CotacaoDetalhe() {
             </div>
 
             <div className="modal__actions">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => {
-                  setShowTokensModal(false);
-                  setTokenActionError(null);
-                  setCopiedTokenId(null);
-                }}
-              >
+              <button type="button" className="primary-button" onClick={closeTokensModal}>
                 Fechar
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
-      {showItemModal && (
-        <div className="modal-backdrop" onClick={closeItemModal}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleItemSubmit}
-          >
-            <h2>{editingItem ? 'Editar item' : 'Novo item'}</h2>
-
+      <Modal
+        isOpen={showItemModal}
+        onClose={closeItemModal}
+        title={editingItem ? 'Editar item' : 'Novo item'}
+      >
+        <form onSubmit={handleItemSubmit}>
             <label className="field-label" htmlFor="itemCatalog">Item do catálogo *</label>
             <select
               id="itemCatalog"
@@ -1676,19 +1662,12 @@ export default function CotacaoDetalhe() {
                 {editingItem ? 'Salvar alterações' : 'Adicionar'}
               </button>
             </div>
-          </form>
-        </div>
-      )}
+        </form>
+      </Modal>
 
-      {showEditModal && editForm && (
-        <div className="modal-backdrop" onClick={closeEditModal}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleEditSubmit}
-          >
-            <h2>Editar cotação</h2>
-
+      <Modal isOpen={showEditModal} onClose={closeEditModal} title="Editar cotação">
+        {editForm && (
+          <form onSubmit={handleEditSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-grid__full">
                 <label className="field-label">Incoterms aceitáveis *</label>
@@ -1778,8 +1757,8 @@ export default function CotacaoDetalhe() {
               </button>
             </div>
           </form>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
       );
     }
