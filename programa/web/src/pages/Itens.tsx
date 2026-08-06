@@ -114,13 +114,29 @@ export default function Itens() {
   const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
 
   const familiesQuery = useQuery({
-    queryKey: ['item-families'],
+    queryKey: ['item-families', { includeInactive: false }],
     queryFn: async () => {
-      const res = await api.get<{ data?: { id: number; name: string }[] }>('/v1/item-families');
+      const res = await api.get<{ data?: { id: number; name: string }[] }>('/v1/item-families', { includeInactive: false });
       return res?.data ?? [];
     },
   });
   const families = familiesQuery.data ?? [];
+
+  const familyOptions = useMemo(() => {
+    const options: { id: number; name: string; disabled?: boolean }[] = families.map((f) => ({
+      id: f.id,
+      name: f.name,
+    }));
+    const currentFamily = editing?.family;
+    if (currentFamily && !families.some((f) => f.id === currentFamily.id)) {
+      options.push({
+        id: currentFamily.id,
+        name: `${currentFamily.name} (inativa)`,
+        disabled: true,
+      });
+    }
+    return options;
+  }, [families, editing]);
 
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => a.commercialName.localeCompare(b.commercialName, 'pt-BR')),
@@ -526,8 +542,8 @@ export default function Itens() {
                 onChange={(e) => setForm({ ...form, familyId: e.target.value ? Number(e.target.value) : '' })}
               >
                 <option value="">Sem família</option>
-                {families.map(f => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
+                {familyOptions.map(f => (
+                  <option key={f.id} value={f.id} disabled={f.disabled}>{f.name}</option>
                 ))}
               </select>
             </label>

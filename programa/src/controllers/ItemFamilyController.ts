@@ -15,7 +15,13 @@ const updateFamilySchema = z.object({
 export class ItemFamilyController {
   static async listFamilies(req: Request, res: Response) {
     try {
+      const includeInactive = req.query.includeInactive === 'true';
+      const where: Record<string, unknown> = {};
+      if (!includeInactive) {
+        where.isActive = true;
+      }
       const families = await prisma.itemFamily.findMany({
+        where,
         orderBy: { name: 'asc' }
       });
       res.json({ data: families });

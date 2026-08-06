@@ -56,6 +56,50 @@ describe('ItemFamily routes', () => {
     vi.clearAllMocks();
   });
 
+  describe('GET /item-families', () => {
+    it('sem query param retorna somente ativas', async () => {
+      const cookies = await loginAs('comprador');
+      prismaMock.itemFamily.findMany.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get('/api/v1/item-families')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.itemFamily.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { isActive: true } }),
+      );
+    });
+
+    it('com includeInactive=false retorna somente ativas', async () => {
+      const cookies = await loginAs('comprador');
+      prismaMock.itemFamily.findMany.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get('/api/v1/item-families?includeInactive=false')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.itemFamily.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { isActive: true } }),
+      );
+    });
+
+    it('com includeInactive=true retorna ativas e inativas', async () => {
+      const cookies = await loginAs('comprador');
+      prismaMock.itemFamily.findMany.mockResolvedValue([]);
+
+      const response = await request(app)
+        .get('/api/v1/item-families?includeInactive=true')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.itemFamily.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: {} }),
+      );
+    });
+  });
+
   describe('PUT /item-families/:id', () => {
     it('inativa familia como admin', async () => {
       const cookies = await loginAs('admin');
