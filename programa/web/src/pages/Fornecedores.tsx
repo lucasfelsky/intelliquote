@@ -517,12 +517,12 @@ export default function Fornecedores() {
                                 {s.reviewStats && s.reviewStats.count > 0 && s.reviewStats.avgRating !== null ? (
                                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                     <StarRating value={s.reviewStats.avgRating} readOnly showValue />
-                                    <span style={{ fontSize: 12, color: 'var(--muted, #666)' }}>
+                                    <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
                                       ({s.reviewStats.count})
                                     </span>
                                   </span>
                                 ) : (
-                                  <span style={{ color: 'var(--muted, #666)' }}>—</span>
+                                  <span style={{ color: 'var(--ink-soft)' }}>—</span>
                                 )}
                               </td>
                               <td>
@@ -862,7 +862,7 @@ export default function Fornecedores() {
                 </button>
               ))}
               {form.tags.length === 0 && (
-                <span style={{ fontSize: 13, color: 'var(--muted, #666)' }}>Nenhuma etiqueta.</span>
+                <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Nenhuma etiqueta.</span>
               )}
             </div>
             <input
