@@ -495,7 +495,7 @@ export default function Itens() {
             Preencha os dados abaixo. O NCM é validado com 8 dígitos e o nome de mercado
             deve ser único.
           </p>
-          <form onSubmit={handleSubmit} className="form">
+          <form onSubmit={handleSubmit}>
             <label className="field">
               <span>Nome comercial *</span>
               <input
