@@ -178,7 +178,7 @@ export default function Familias() {
             />
           </label>
           {errorMsg && <div className="alert alert--error" style={{ marginBottom: 16 }}>{errorMsg}</div>}
-          <div className="modal-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
+          <div className="modal__actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
             <button
               type="button"
               className="ghost-button"
