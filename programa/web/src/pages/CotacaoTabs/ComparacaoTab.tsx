@@ -18,6 +18,7 @@ import {
   replyToQuoteResponse,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
+import { Modal } from '@/components/Modal';
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -384,6 +385,9 @@ export function ComparacaoTab({
 
   const records = history.data?.comparisons ?? [];
   const latest = records[0];
+  const replyTargetName = replyTarget
+    ? replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`
+    : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -600,11 +604,15 @@ export function ComparacaoTab({
         })}
       </div>
 
-      {replyTarget && (
-        <div className="modal-backdrop" onClick={closeReplyModal}>
-          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-            <h2>Responder {replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`}</h2>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
+      <Modal
+        isOpen={replyTarget !== null}
+        onClose={closeReplyModal}
+        size="wide"
+        title={replyTarget ? `Responder ${replyTargetName}` : ''}
+      >
+        {replyTarget && (
+          <>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
               {requestCode} · {productName}
             </p>
 
@@ -685,9 +693,9 @@ export function ComparacaoTab({
                 {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -56,7 +56,7 @@ function listFiles(relDir, ext) {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
-    .filter((f) => f.endsWith(ext))
+    .filter((f) => f.endsWith(ext) && !f.endsWith(`.test${ext}`))
     .sort();
 }
 
