@@ -616,7 +616,12 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   color: var(--ink-soft);
   cursor: pointer;
 }
-.chip--active { background: var(--primary-50); border-color: var(--primary); color: var(--primary-700); font-weight: 600; }
+.chip--active {
+  background: var(--primary-700);
+  border-color: var(--primary-700);
+  color: #fff;
+  font-weight: 700;
+}
 
 .modal-backdrop {
   position: fixed; inset: 0;
@@ -1114,6 +1119,12 @@ dialog.modal-dialog--wide { max-width: 760px; }
 
 .chip:hover {
   background: var(--primary-50);
+}
+
+.chip.chip--active:hover {
+  background: var(--primary-700);
+  border-color: var(--primary-700);
+  color: #fff;
 }
 
 .chip--static {
