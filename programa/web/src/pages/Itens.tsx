@@ -504,8 +504,8 @@ export default function Itens() {
 
         <section className="card itens-form-card" aria-label="Formulário de item">
           <h2>
+            {editing ? editing.commercialName : 'Cadastrar item'}
             <span className="eyebrow">{editing ? 'Editando' : 'Novo'}</span>
-            {editing ? `Editar ${editing.commercialName}` : 'Cadastrar item'}
           </h2>
           <p className="itens-form__hint">
             Preencha os dados abaixo. O NCM é validado com 8 dígitos e o nome de mercado

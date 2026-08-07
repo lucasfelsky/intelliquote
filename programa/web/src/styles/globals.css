@@ -1451,8 +1451,8 @@ dialog.modal-dialog--wide { max-width: 760px; }
 }
 
 .itens-form-card { position: sticky; top: 16px; }
-.itens-form-card h2 { display: flex; align-items: center; gap: 8px; }
-.itens-form-card h2 .eyebrow { margin-bottom: 0; }
+.itens-form-card h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.itens-form-card h2 .eyebrow { margin-bottom: 0; flex: 0 0 auto; }
 .itens-form__hint {
   font-size: 12px;
   color: var(--ink-soft);
