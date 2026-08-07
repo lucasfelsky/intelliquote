@@ -424,6 +424,24 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   font-size: 13px;
 }
 
+/* Variante opt-in de .row-actions para tabelas onde a quebra de linha e pior que o
+   scroll horizontal (Cotacoes: 3 botoes de ~180px numa tabela de 9 colunas).
+   O wrap padrao de .row-actions faz o algoritmo table-layout:auto calcular a
+   contribuicao min-content do grupo como o MAIOR botao (64px) em vez da SOMA (180px),
+   sub-alocando a coluna e quebrando os botoes a partir de ~1366px de viewport.
+   nowrap forca a soma como minimo.
+   O .table-wrapper (overflow-x: auto) absorve o excesso abaixo de ~1150px. */
+.row-actions--nowrap {
+  flex-wrap: nowrap;
+}
+
+/* Coluna de badge de status centralizada. .table th/.table td alinha tudo a esquerda,
+   o que joga toda a sobra de largura da coluna para o lado direito do badge
+   (medido: 12px esquerda / 28px direita em 1920px). */
+.table .col-status {
+  text-align: center;
+}
+
 .empty-state {
   padding: 48px 24px;
   text-align: center;
