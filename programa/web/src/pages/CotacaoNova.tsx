@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { CatalogItemPicker } from '@/components/CatalogItemPicker';
+import { Modal } from '@/components/Modal';
 
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
 
@@ -496,15 +497,16 @@ export default function CotacaoNova() {
         </div>
       )}
 
-      {showItemModal && (
-        <div className="modal-backdrop" onClick={closeItemModal}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleItemSubmit}
-          >
-            <h2>{editingTempId !== null ? 'Editar item' : 'Adicionar item do catálogo'}</h2>
-
+      <Modal
+        isOpen={showItemModal}
+        onClose={closeItemModal}
+        title={editingTempId !== null ? 'Editar item' : 'Adicionar item do catálogo'}
+      >
+        {/* Guard: CatalogItemPicker tem state interno (search/expanded) que hoje
+            zera ao desmontar. Modal renderiza children sempre, entao mantemos a
+            desmontagem explicita — mesmo padrao do ComparacaoTab (Fase 1). */}
+        {showItemModal && (
+          <form onSubmit={handleItemSubmit}>
             <label className="field-label" htmlFor="itemCatalog">Item *</label>
             <CatalogItemPicker
               items={activeCatalog}
@@ -567,8 +569,8 @@ export default function CotacaoNova() {
               </button>
             </div>
           </form>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

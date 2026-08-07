@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import StarRating from '@/components/StarRating';
+import { Modal } from '@/components/Modal';
 import {
   createSupplierContact,
   deleteSupplierContact,
@@ -395,6 +396,12 @@ export default function Fornecedores() {
       }
     }
 
+  const isContactModalOpen = showContactForm && expandedSupplierId !== null;
+  const contactSupplierName =
+    expandedSupplierId === null
+      ? ''
+      : list.data?.find((s) => s.id === expandedSupplierId)?.name ?? `Fornecedor #${expandedSupplierId}`;
+
   return (
     <div className="page">
       <div className="page-header">
@@ -663,16 +670,17 @@ export default function Fornecedores() {
                 )}
       </section>
 
-      {showContactForm && expandedSupplierId !== null && (
-        <div className="modal-backdrop" onClick={closeContactForm}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleContactSubmit}
-          >
-            <h2>{editingContact ? 'Editar contato' : 'Novo contato'}</h2>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: -8 }}>
-              Fornecedor: <strong>{list.data?.find((s) => s.id === expandedSupplierId)?.name ?? `Fornecedor #${expandedSupplierId}`}</strong>
+      <Modal
+        isOpen={isContactModalOpen}
+        onClose={closeContactForm}
+        title={editingContact ? 'Editar contato' : 'Novo contato'}
+      >
+        {/* Guard: o corpo faz deref de expandedSupplierId; sem isso renderizaria
+            "Fornecedor #null" com o modal fechado. */}
+        {isContactModalOpen && (
+          <form onSubmit={handleContactSubmit}>
+            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
+              Fornecedor: <strong>{contactSupplierName}</strong>
             </p>
 
             <label className="field-label" htmlFor="contactName">Nome *</label>
@@ -745,18 +753,15 @@ export default function Fornecedores() {
               </button>
             </div>
           </form>
-        </div>
-      )}
+        )}
+      </Modal>
 
-      {showForm && (
-        <div className="modal-backdrop" onClick={closeForm}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleSubmit}
-          >
-            <h2>{editing ? 'Editar fornecedor' : 'Novo fornecedor'}</h2>
-
+      <Modal
+        isOpen={showForm}
+        onClose={closeForm}
+        title={editing ? 'Editar fornecedor' : 'Novo fornecedor'}
+      >
+        <form onSubmit={handleSubmit}>
             <label className="field-label" htmlFor="name">Nome *</label>
             <input
               id="name"
@@ -914,9 +919,8 @@ export default function Fornecedores() {
                 {editing ? 'Salvar alterações' : 'Cadastrar'}
               </button>
             </div>
-          </form>
-        </div>
-      )}
+        </form>
+      </Modal>
     </div>
   );
 }
