@@ -195,4 +195,13 @@ describe('Fornecedores', () => {
     fireEvent.click(firstCloseButton);
     expect(dialog.open).toBe(false);
   });
+
+  it('11. coluna de acoes nao quebra: .row-actions tem a variante --nowrap', async () => {
+    const { container, findByText } = renderPage();
+    await findByText('ACME Ltda');
+    const rowActions = container.querySelectorAll('.row-actions');
+    expect(rowActions.length).toBe(1);
+    expect(rowActions[0]?.classList.contains('row-actions--nowrap')).toBe(true);
+    expect(container.querySelector('.row-actions')?.querySelectorAll('button').length).toBe(2);
+  });
 });

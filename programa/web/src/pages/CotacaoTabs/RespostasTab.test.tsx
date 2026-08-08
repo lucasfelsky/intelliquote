@@ -188,4 +188,12 @@ describe('RespostasTab', () => {
     fireEvent.click(within(dialogB).getByLabelText('Fechar'));
     expect(dialogB.open).toBe(false);
   });
+
+  it('11. tabela dentro de .table-wrapper e acoes com --nowrap', async () => {
+    const { container, findByText } = renderTab();
+    await findByText('ACME Ltda');
+    const table = container.querySelector('table.table');
+    expect(table?.parentElement?.classList.contains('table-wrapper')).toBe(true);
+    expect(container.querySelector('.row-actions')?.classList.contains('row-actions--nowrap')).toBe(true);
+  });
 });

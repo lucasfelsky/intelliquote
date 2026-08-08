@@ -557,7 +557,7 @@ export default function Fornecedores() {
                                 </span>
                               </td>
                               <td>
-                                <div className="row-actions">
+                                <div className="row-actions row-actions--nowrap">
                                   <button
                                     type="button"
                                     className="ghost-button"

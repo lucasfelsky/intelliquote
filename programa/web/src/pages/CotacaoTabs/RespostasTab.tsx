@@ -384,6 +384,7 @@ export function RespostasTab({
       )}
 
       {responses.length > 0 && (
+        <div className="table-wrapper">
         <table className="table">
           <thead>
             <tr>
@@ -426,7 +427,7 @@ export function RespostasTab({
                     {r.isWinner ? <span className="badge">Vencedora</span> : <span className="badge badge--muted">Recebida</span>}
                   </td>
                   <td>
-                    <div className="row-actions">
+                    <div className="row-actions row-actions--nowrap">
                       <button
                         type="button"
                         className="ghost-button"
@@ -466,6 +467,7 @@ export function RespostasTab({
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       {/* MODAL DE NOVA/EDITAR RESPOSTA */}
