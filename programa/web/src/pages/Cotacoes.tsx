@@ -205,7 +205,7 @@ export default function Cotacoes() {
                 <th>Incoterm desejado</th>
                 <th>Itens</th>
                 <th>Respostas</th>
-                <th>Status</th>
+                <th className="col-status">Status</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -225,13 +225,13 @@ export default function Cotacoes() {
                   </td>
                   <td>{formatNumber(qr._count?.items)}</td>
                   <td>{formatNumber(qr._count?.quoteResponses)}</td>
-                  <td>
+                  <td className="col-status">
                     <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
                       {qr.status === 'open' ? 'Aberta' : 'Fechada'}
                     </span>
                   </td>
                   <td>
-                    <div className="row-actions">
+                    <div className="row-actions row-actions--nowrap">
                       <button
                         type="button"
                         className="ghost-button"
