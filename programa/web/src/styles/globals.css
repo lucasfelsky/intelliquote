@@ -641,28 +641,9 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   font-weight: 700;
 }
 
-.modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0, 30, 30, 0.5);
-  display: grid; place-items: center;
-  z-index: 200;
-  padding: 16px;
-}
-.modal {
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 24px;
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: var(--shadow);
-}
-.modal h2 { margin-top: 0; }
 .modal__actions {
   display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px;
 }
-.modal--wide { max-width: 760px; }
 
 dialog.modal-dialog {
   border: 0;
