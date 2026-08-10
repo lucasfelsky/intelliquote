@@ -54,7 +54,7 @@ if (-not (Test-Path $ENV_FILE)) {
   exit 1
 }
 
-$BACKEND_BUILD_TAG = "2026-06-19-r45-portal-response-id-link-fix"
+$BACKEND_BUILD_TAG = "2026-08-10-r48-target-price-history-award-gate"
 
 Write-Host ">>> Subindo build + push + deploy do $SERVICE em $REGION" -ForegroundColor Cyan
 
