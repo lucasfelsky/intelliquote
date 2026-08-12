@@ -740,7 +740,7 @@ export default function Fornecedores() {
               </p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeContactForm}>
                 Cancelar
               </button>
@@ -907,7 +907,7 @@ export default function Fornecedores() {
               </p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeForm}>
                 Cancelar
               </button>

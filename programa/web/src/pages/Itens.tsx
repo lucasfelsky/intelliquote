@@ -621,7 +621,7 @@ export default function Itens() {
                 className="file-input"
               />
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
-              <div className="modal__actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
                 <button type="button" className="ghost-button" onClick={closeImportModal} disabled={previewImport.isPending}>Cancelar</button>
                 <button type="button" className="primary-button" onClick={handlePreviewImport} disabled={!importFile || previewImport.isPending}>
                   {previewImport.isPending ? 'Processando...' : 'Carregar e Validar'}
@@ -649,7 +649,7 @@ export default function Itens() {
 
               {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
 
-              <div className="modal__actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
                 <button type="button" className="ghost-button" onClick={() => setImportStep('upload')} disabled={confirmImport.isPending}>Voltar</button>
                 <button type="button" className="primary-button" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || confirmImport.isPending}>
                   {confirmImport.isPending ? 'Importando...' : 'Confirmar Importação'}
@@ -675,7 +675,7 @@ export default function Itens() {
                 </div>
               )}
 
-              <div className="modal__actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
                 <button type="button" className="primary-button" onClick={closeImportModal}>Concluir</button>
               </div>
             </div>
