@@ -392,7 +392,7 @@ export function RespostasTab({
               <th>Preço</th>
               <th>Incoterm</th>
               <th>Pagto · Lead</th>
-              <th>Status</th>
+              <th className="col-status">Status</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -423,7 +423,7 @@ export function RespostasTab({
                       Câmbio: {r.exchangeRate ?? '—'} · Lead: {formatNumber(r.leadTimeDays)} dias
                     </div>
                   </td>
-                  <td>
+                  <td className="col-status">
                     {r.isWinner ? <span className="badge">Vencedora</span> : <span className="badge badge--muted">Recebida</span>}
                   </td>
                   <td>
