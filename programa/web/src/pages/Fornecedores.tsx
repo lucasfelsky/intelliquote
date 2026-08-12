@@ -478,7 +478,7 @@ export default function Fornecedores() {
                 <th>Incoterms</th>
                 <th>Avaliação</th>
                 <th>Contato principal</th>
-                <th>Status</th>
+                <th className="col-status">Status</th>
                 <th></th>
               </tr>
             </thead>
@@ -539,7 +539,7 @@ export default function Fornecedores() {
                                     ? '—'
                                     : '—'}
                               </td>
-                              <td>
+                              <td className="col-status">
                                 <span
                                   className={`badge ${
                                     s.status === 'active'
