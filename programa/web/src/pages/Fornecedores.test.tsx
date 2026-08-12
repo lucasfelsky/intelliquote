@@ -204,4 +204,14 @@ describe('Fornecedores', () => {
     expect(rowActions[0]?.classList.contains('row-actions--nowrap')).toBe(true);
     expect(container.querySelector('.row-actions')?.querySelectorAll('button').length).toBe(2);
   });
+
+  it('12. contato principal: célula tem .cell-truncate, mostra só o nome e o title traz nome+e-mail', async () => {
+    const { container, findByText } = renderPage();
+    await findByText('ACME Ltda');
+    await findByText('Contato Um');
+    const cell = container.querySelector('td.cell-truncate');
+    expect(cell).not.toBeNull();
+    expect(cell?.textContent).toBe('Contato Um');
+    expect(cell?.getAttribute('title')).toBe('Contato Um <c@acme.com>');
+  });
 });
