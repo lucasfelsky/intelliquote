@@ -641,10 +641,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   font-weight: 700;
 }
 
-.modal__actions {
-  display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px;
-}
-
 dialog.modal-dialog {
   border: 0;
   padding: 0;
@@ -689,6 +685,7 @@ dialog.modal-dialog--wide { max-width: 760px; }
   box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.22);
 }
 .modal-body { color: var(--ink); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
 .file-input {
   display: block;

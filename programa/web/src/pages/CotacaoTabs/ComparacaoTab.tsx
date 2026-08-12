@@ -638,7 +638,7 @@ export function ComparacaoTab({
               placeholder="Opcional. Ex.: confirmando o fechamento do pedido. Aparece no corpo do e-mail."
             />
 
-            <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+            <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
               <button
                 type="button"
                 className="ghost-button"
@@ -680,7 +680,7 @@ export function ComparacaoTab({
               <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeReplyModal}>
                 Cancelar
               </button>

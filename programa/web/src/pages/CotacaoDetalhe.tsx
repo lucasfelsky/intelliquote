@@ -1159,7 +1159,7 @@ export default function CotacaoDetalhe() {
                               </p>
                             )}
 
-                            <div className="modal__actions">
+                            <div className="modal-actions">
                               <button type="button" className="ghost-button" onClick={closeDispatchModal}>
                                 Cancelar
                               </button>
@@ -1257,7 +1257,7 @@ export default function CotacaoDetalhe() {
                   </p>
                 )}
 
-                <div className="modal__actions">
+                <div className="modal-actions">
                   <button type="button" className="ghost-button" onClick={() => setDispatchStep('select')}>
                     Voltar
                   </button>
@@ -1332,7 +1332,7 @@ export default function CotacaoDetalhe() {
                   </table>
                 </div>
 
-                <div className="modal__actions">
+                <div className="modal-actions">
                   <button type="button" className="ghost-button" onClick={closeDispatchModal}>
                     Fechar
                   </button>
@@ -1514,7 +1514,7 @@ export default function CotacaoDetalhe() {
               )}
             </div>
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="primary-button" onClick={closeTokensModal}>
                 Fechar
               </button>
@@ -1650,7 +1650,7 @@ export default function CotacaoDetalhe() {
               <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{itemError}</p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeItemModal}>
                 Cancelar
               </button>
@@ -1744,7 +1744,7 @@ export default function CotacaoDetalhe() {
               <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{editError}</p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeEditModal}>
                 Cancelar
               </button>

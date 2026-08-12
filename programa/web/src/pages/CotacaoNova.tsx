@@ -560,7 +560,7 @@ export default function CotacaoNova() {
               <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{itemError}</p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeItemModal}>
                 Cancelar
               </button>

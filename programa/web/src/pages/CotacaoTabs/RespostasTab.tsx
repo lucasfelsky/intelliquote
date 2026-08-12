@@ -658,7 +658,7 @@ export function RespostasTab({
 
           {formError && <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>}
 
-          <div className="modal__actions">
+          <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeModal}>Cancelar</button>
             <button type="submit" className="primary-button" disabled={submitting || createMut.isPending || updateMut.isPending}>
               {submitting ? (editing ? 'Salvando…' : 'Cadastrando…') : (editing ? 'Salvar alterações' : 'Cadastrar resposta')}
@@ -733,7 +733,7 @@ export function RespostasTab({
               </div>
             )}
 
-            <div className="modal__actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+            <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
               <button
                 type="button"
                 className="ghost-button"
@@ -771,7 +771,7 @@ export function RespostasTab({
               <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
             )}
 
-            <div className="modal__actions">
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeReplyModal}>
                 Cancelar
               </button>

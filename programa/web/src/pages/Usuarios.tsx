@@ -248,7 +248,7 @@ export default function Usuarios() {
             <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>
           )}
 
-          <div className="modal__actions">
+          <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeForm}>
               Cancelar
             </button>

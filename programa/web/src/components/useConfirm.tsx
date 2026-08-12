@@ -48,7 +48,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       <Modal isOpen={isOpen} title={options.title || 'Confirmar ação'} onClose={handleCancel}>
         <p>{options.message}</p>
-        <div className="modal__actions">
+        <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={handleCancel}>
             {options.cancelText || 'Cancelar'}
           </button>
