@@ -469,7 +469,7 @@ export default function Fornecedores() {
         )}
         {displayedSuppliers.length > 0 && (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table table--dense">
             <thead>
               <tr>
                 <th></th>
@@ -532,12 +532,11 @@ export default function Fornecedores() {
                                   <span style={{ color: 'var(--ink-soft)' }}>—</span>
                                 )}
                               </td>
-                              <td>
-                                {primary
-                                  ? `${primary.name} <${primary.email}>`
-                                  : supplierContacts.length > 0
-                                    ? '—'
-                                    : '—'}
+                              <td
+                                className="cell-truncate"
+                                title={primary ? `${primary.name} <${primary.email}>` : undefined}
+                              >
+                                {primary ? primary.name : '—'}
                               </td>
                               <td className="col-status">
                                 <span

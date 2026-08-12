@@ -442,6 +442,29 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   text-align: center;
 }
 
+/* Trunca celula de texto longo com "..." + tooltip nativo (title) com o texto completo.
+   Nasce generica (nao amarrada a Fornecedores) pra poder ser reusada em outras tabelas
+   depois de medidas. Motivo: o e-mail do contato principal e um token indivisivel
+   (nao quebra em "@" nem "."), e era o maior contribuinte pro min-content de 925px
+   medido na tabela de Fornecedores (faixa de scroll horizontal ~880-1229px). */
+.table .cell-truncate {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Variante opt-in de densidade (padding menor) para telas de largura media,
+   escopada so na tabela de Fornecedores (classe .table--dense) porque so essa
+   tabela foi medida: min-content 925px, scroll comeca em ~1229px, pior overflow
+   (~348px) em ~881px. Aplicar em ".table" global atingiria 8 outras tabelas
+   nunca medidas. */
+@media (max-width: 1200px) {
+  .table--dense th, .table--dense td {
+    padding: 8px 8px;
+  }
+}
+
 .empty-state {
   padding: 48px 24px;
   text-align: center;
