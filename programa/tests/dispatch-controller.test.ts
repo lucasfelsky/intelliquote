@@ -11,6 +11,10 @@ import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 import { sendAndLog } from '../src/mailer/MailerService';
 import { hashPassword } from '../src/utils/password';
+import {
+  renderDispatchFromTemplate,
+  type QuoteDispatchVars,
+} from '../src/mailer/renderQuoteDispatch';
 
 const sendAndLogMock = sendAndLog as unknown as ReturnType<typeof vi.fn>;
 
@@ -429,5 +433,149 @@ describe('Dispatch controller', () => {
     expect(res.body.recipientCount).toBe(1);
     expect(res.body.preview.subject).toContain('QR-2026-003');
     expect(res.body.preview.subject).toContain('QR-2026-003');
+  });
+
+  it('injeta a mensagem do comprador ANTES da saudacao "Dear" no html enviado', async () => {
+    const cookieHeader = await loginAndGetCookie();
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 1,
+      name: 'Admin',
+      email: 'admin@intelliquote.local',
+      isActive: true,
+      role: { name: 'admin' },
+    });
+    prismaMock.dispatchEvent.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 125, ...data, createdAt: new Date() }),
+    );
+    prismaMock.dispatchEvent.update.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 125, ...data }),
+    );
+
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 9,
+      requestCode: 'QR-2026-005',
+      productName: 'Soda caustica',
+      desiredIncoterm: ['FOB'],
+      currency: 'USD',
+      deadlineAt: null,
+      status: 'open',
+      items: [
+        { id: 31, itemCode: 'C1', productName: 'Soda caustica', quantity: 1, unit: 'UN', targetPrice: null, createdAt: new Date() },
+      ],
+    });
+    prismaMock.supplierContact.findMany.mockImplementation(async (args: { where?: { id?: { in?: number[] } } } = {}) => {
+      const ids = args?.where?.id?.in ?? [];
+      const all = [
+        {
+          id: 13,
+          name: 'Carla',
+          email: 'carla@acme.com',
+          supplierId: 4,
+          isActive: true,
+          supplier: { id: 4, name: 'Acme2' },
+        },
+      ];
+      if (ids.length === 0) return all;
+      return all.filter((c) => ids.includes(c.id));
+    });
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+      id: 44,
+      rawTokenHash: 'h',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000),
+      revokedAt: null,
+      firstSeenAt: null,
+      lastSeenAt: null,
+      accessCount: 0,
+      respondedAt: null,
+      quoteRequestId: 9,
+      supplierId: 4,
+      supplierContactId: 13,
+      dispatchEventId: 125,
+      createdById: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prismaMock.supplierPortalToken.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.supplierPortalToken.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 44, ...data }),
+    );
+    sendAndLogMock.mockResolvedValue({ providerMessageId: 'msg-3', status: 'sent' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookieHeader)
+      .send({
+        recipientContactIds: [13],
+        expiresInDays: 7,
+        message: 'Precisamos da proposta ate sexta-feira.',
+      });
+
+    expect(res.status).toBe(201);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.html).toContain('Additional message from the buyer');
+    expect(call.html.indexOf('Additional message from the buyer')).toBeLessThan(
+      call.html.indexOf('Dear'),
+    );
+  });
+});
+
+// Abordagem A (unit): renderDispatchFromTemplate mockando a fonte de dados da
+// template (prisma.emailTemplate, ja mockado no topo deste arquivo, e a
+// dependencia real de EmailTemplateService.get). Cobre a precedencia do
+// subjectOverride sobre o subject persistido no banco.
+describe('renderDispatchFromTemplate - subject override do modal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const baseVars: QuoteDispatchVars = {
+    subject: 'Fallback Subject',
+    supplierContactName: 'John Doe',
+    requestCode: 'QR-2026-099',
+    productName: 'Acido sulfurico',
+    quantity: 10,
+    unit: 'UN',
+    desiredIncoterm: 'FOB',
+    currency: 'USD',
+    deadlineAt: '01 Jan 2026',
+    expiresAt: '15 Jan 2026',
+    portalLink: 'https://portal.example.com/portal?token=abc',
+    companyName: 'SQ Quimica',
+    purchasingEmail: 'comex@intelliquote.local',
+    items: [],
+  };
+
+  function mockDbTemplate() {
+    prismaMock.emailTemplate.findUnique.mockResolvedValue({
+      id: 1,
+      key: 'quote_dispatch',
+      locale: 'en',
+      subject: 'Sourcing request {{requestCode}} - {{productName}}',
+      htmlBody: '<div>{{subject}}</div>',
+      textBody: '{{subject}}',
+      isActive: true,
+      updatedAt: new Date(),
+      updatedById: null,
+    });
+  }
+
+  it('COM override: assunto do modal vence o subject da template do banco', async () => {
+    mockDbTemplate();
+
+    const result = await renderDispatchFromTemplate(baseVars, 'en', 'Assunto Do Modal 123');
+
+    expect(result.subject).toBe('Assunto Do Modal 123');
+    expect(result.html).toContain('Assunto Do Modal 123');
+    expect(result.html).not.toContain('Sourcing request QR-2026-099 - Acido sulfurico');
+  });
+
+  it('SEM override: mantem o comportamento atual (subject renderizado da template do banco)', async () => {
+    mockDbTemplate();
+
+    const result = await renderDispatchFromTemplate(baseVars, 'en');
+
+    expect(result.subject).toBe('Sourcing request QR-2026-099 - Acido sulfurico');
+    expect(result.html).toContain('Sourcing request QR-2026-099 - Acido sulfurico');
   });
 });

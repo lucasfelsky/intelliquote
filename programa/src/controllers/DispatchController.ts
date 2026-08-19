@@ -311,6 +311,7 @@ export class DispatchController {
                         })),
                       }),
                                 locale,
+                                parsed.data.subject?.trim() || undefined,
                     );
 
           const html = injectCustomMessage(rendered.html, customMessage);
