@@ -718,12 +718,18 @@ function injectCustomMessage(html: string, message: string): string {
     .replace(/>/g, '&gt;')
     .replace(/\n/g, '<br />');
   const block = `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFFCF1;border:1px solid #F0E2A8;border-radius:14px;padding:14px 18px;margin:0 32px 18px 32px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
       <tr>
-        <td style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#8A6A0E;font-weight:600;padding-bottom:6px;">Additional message from the buyer</td>
-      </tr>
-      <tr>
-        <td style="font-size:14px;line-height:1.55;color:#1F2933;">${safe}</td>
+        <td style="padding:18px 32px 0 32px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FFFCF1;border:1px solid #F0E2A8;border-radius:14px;">
+            <tr>
+              <td style="font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:#8A6A0E;font-weight:600;padding:14px 18px 6px 18px;">Additional message from the buyer</td>
+            </tr>
+            <tr>
+              <td style="font-size:14px;line-height:1.55;color:#1F2933;padding:0 18px 14px 18px;">${safe}</td>
+            </tr>
+          </table>
+        </td>
       </tr>
     </table>`;
   return html.replace('<!--CUSTOM_MESSAGE_SLOT-->', block);
