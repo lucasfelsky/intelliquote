@@ -517,6 +517,8 @@ describe('Dispatch controller', () => {
     expect(call.html.indexOf('Additional message from the buyer')).toBeLessThan(
       call.html.indexOf('Dear'),
     );
+    expect(call.html).toContain('padding:18px 32px 0 32px');
+    expect(call.html).not.toContain('margin:0 32px');
   });
 });
 
