@@ -182,9 +182,13 @@ export interface RenderedDispatch {
 export async function renderDispatchFromTemplate(
   vars: QuoteDispatchVars,
   locale: string = DISPATCH_DEFAULT_LOCALE,
+  subjectOverride?: string,
 ): Promise<RenderedDispatch> {
   const dbTemplate = await EmailTemplateService.get(DISPATCH_TEMPLATE_KEY, locale);
-  const subject = dbTemplate?.subject
+  const override = subjectOverride?.trim();
+  const subject = override
+    ? override
+    : dbTemplate?.subject
     ? renderSections(dbTemplate.subject, vars)
     : vars.subject;
   const varsForRender = { ...vars, subject };
