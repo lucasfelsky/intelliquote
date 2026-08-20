@@ -392,6 +392,18 @@ export async function approveAward(
   await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/comparisons/${comparisonId}/approve`);
 }
 
+export interface SetManualWinnerPayload {
+  quoteResponseId: number;
+  reason?: string | null;
+}
+
+export async function setManualWinner(
+  quoteRequestId: number,
+  payload: SetManualWinnerPayload,
+): Promise<void> {
+  await api.post<unknown>(`/v1/quote-requests/${quoteRequestId}/winner`, { ...payload });
+}
+
 // F12: avaliacao opcional do fornecedor vencedor enviada ao concluir.
 export interface SupplierReviewInput {
   supplierId: number;

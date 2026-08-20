@@ -189,6 +189,7 @@
     "POST /quote-requests/:quoteRequestId/compare",
     "POST /quote-requests/:quoteRequestId/comparisons/:comparisonId/approve",
     "POST /quote-requests/:quoteRequestId/items",
+    "POST /quote-requests/:quoteRequestId/winner",
     "POST /quote-responses",
     "POST /quote-responses/:id/reply",
     "POST /quote-responses/:id/reply/preview",

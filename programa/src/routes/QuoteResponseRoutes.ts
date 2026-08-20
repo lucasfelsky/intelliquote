@@ -64,6 +64,12 @@ quoteResponseRoutes.post(
   allowRoles(['admin', 'gestor']),
   QuoteResponseController.approveAward,
 );
+quoteResponseRoutes.post(
+  '/quote-requests/:quoteRequestId/winner',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor']),
+  QuoteResponseController.setManualWinner,
+);
 
 quoteResponseRoutes.get(
   '/quote-responses/:id/target-price-history',

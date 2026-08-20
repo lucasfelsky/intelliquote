@@ -8,6 +8,7 @@ import {
   executeComparison,
   listComparisons,
   messageOf,
+  setManualWinner,
   type ComparisonRecord,
   type ComparisonResult,
   type SupplierReviewInput,
@@ -117,6 +118,37 @@ export function ComparacaoTab({
     },
     onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
   });
+
+  // Vencedor manual (override): permite escolher uma proposta diferente da
+  // calculada pela comparação, exigindo motivo quando ela diverge.
+  const [winnerTarget, setWinnerTarget] = useState<ComparisonResult | null>(null);
+  const [winnerReason, setWinnerReason] = useState('');
+  const [winnerModalError, setWinnerModalError] = useState<string | null>(null);
+
+  const setWinnerMut = useMutation({
+    mutationFn: (vars: { quoteResponseId: number; reason: string | null }) =>
+      setManualWinner(quoteRequestId, { quoteResponseId: vars.quoteResponseId, reason: vars.reason }),
+    onSuccess: async () => {
+      setFeedback({ kind: 'ok', text: 'Vencedora definida manualmente.' });
+      closeWinnerModal();
+      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+    },
+    onError: (err) => setWinnerModalError(messageOf(err)),
+  });
+
+  function openWinnerModal(r: ComparisonResult) {
+    setWinnerTarget(r);
+    setWinnerReason('');
+    setWinnerModalError(null);
+  }
+
+  function closeWinnerModal() {
+    setWinnerTarget(null);
+    setWinnerReason('');
+    setWinnerModalError(null);
+  }
 
   // F12: Concluir cotação (fechar).
   const closeMut = useMutation({
@@ -376,7 +408,19 @@ export function ComparacaoTab({
               )}
             </div>
           ) : (
-            <span className="badge badge--muted">—</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+              <span className="badge badge--muted">—</span>
+              {canCompare && r.quoteResponseId && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => openWinnerModal(r)}
+                  style={{ fontSize: 12, padding: '2px 10px' }}
+                >
+                  Definir como vencedora
+                </button>
+              )}
+            </div>
           )}
         </td>
       </tr>
@@ -387,6 +431,9 @@ export function ComparacaoTab({
   const latest = records[0];
   const replyTargetName = replyTarget
     ? replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`
+    : '';
+  const winnerTargetName = winnerTarget
+    ? winnerTarget.supplier?.name ?? `Fornecedor #${winnerTarget.supplierId}`
     : '';
 
   return (
@@ -696,6 +743,54 @@ export function ComparacaoTab({
           </>
         )}
       </Modal>
+
+      {winnerTarget && (
+        <Modal
+          isOpen
+          onClose={closeWinnerModal}
+          title={`Definir ${winnerTargetName} como vencedora`}
+        >
+          <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
+            {requestCode} · {productName}
+          </p>
+
+          <label className="field-label" htmlFor="winnerReason" style={{ marginTop: 12 }}>
+            Motivo
+          </label>
+          <textarea
+            id="winnerReason"
+            className="textarea"
+            rows={4}
+            value={winnerReason}
+            onChange={(e) => setWinnerReason(e.target.value)}
+            placeholder="Obrigatório se esta proposta divergir da vencedora calculada pela comparação."
+          />
+
+          {winnerModalError && (
+            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{winnerModalError}</p>
+          )}
+
+          <div className="modal-actions">
+            <button type="button" className="ghost-button" onClick={closeWinnerModal}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={setWinnerMut.isPending || !winnerTarget.quoteResponseId}
+              onClick={() =>
+                winnerTarget.quoteResponseId &&
+                setWinnerMut.mutate({
+                  quoteResponseId: winnerTarget.quoteResponseId,
+                  reason: winnerReason.trim() || null,
+                })
+              }
+            >
+              {setWinnerMut.isPending ? 'Salvando…' : 'Definir como vencedora'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
