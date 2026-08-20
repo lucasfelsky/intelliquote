@@ -277,6 +277,24 @@ export const quoteResponseReplySchema = z.object({
     .optional(),
 });
 
+// Usado pelo botao "Enviar Ordem de Compra" (POST
+// /quote-responses/:id/purchase-order) na tela de Comparacao. Anexo = upload
+// de PDF em base64 (so'-envio, sem storage durave -- espelha o padrao do
+// attachmentCreateSchema). `forwarderInfo` e' o contato do despachante,
+// digitado na hora no modal.
+export const quotePurchaseOrderSchema = z.object({
+  subject: z.string().trim().max(300).optional(),
+  message: z.string().trim().max(4000).optional(),
+  forwarderInfo: z.string().trim().max(2000).optional(),
+  fileName: z.string().trim().min(1, 'Informe o nome do arquivo.'),
+  contentBase64: z.string().min(1, 'Envie o conteudo do PDF em base64.'),
+  fileType: z.literal(
+    'application/pdf',
+    'Apenas arquivos PDF sao aceitos para a Ordem de Compra.',
+  ),
+  fileSize: z.coerce.number().int().nonnegative(),
+});
+
 export const quoteComparisonWeightsSchema = z.object({
   priceWeight: optionalNonNegativeNumberField,
   paymentTermsWeight: optionalNonNegativeNumberField,

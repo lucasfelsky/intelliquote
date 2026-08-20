@@ -107,10 +107,11 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 31
+    "migrations": 32
   },
   "emailTemplates": [
     "quote_dispatch@en",
+    "quote_po@en",
     "quote_regret@en",
     "quote_reminder@en",
     "quote_reply@en",
@@ -191,6 +192,7 @@
     "POST /quote-requests/:quoteRequestId/items",
     "POST /quote-requests/:quoteRequestId/winner",
     "POST /quote-responses",
+    "POST /quote-responses/:id/purchase-order",
     "POST /quote-responses/:id/reply",
     "POST /quote-responses/:id/reply/preview",
     "POST /supplier-contacts",

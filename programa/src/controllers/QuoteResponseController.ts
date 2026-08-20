@@ -13,9 +13,15 @@ import {
   injectReplyCustomMessage,
   withReplyCustomMessageText,
 } from '../mailer/renderQuoteReply';
+import {
+  renderPoFromTemplate,
+  injectPoCustomMessage,
+  withPoCustomMessageText,
+} from '../mailer/renderQuotePo';
 import { formatIncoterms } from '../utils/incoterm';
 import {
   quoteComparisonWeightsSchema,
+  quotePurchaseOrderSchema,
   quoteResponseCreateSchema,
   quoteResponseReplySchema,
   quoteResponseUpdateSchema,
@@ -767,6 +773,131 @@ export class QuoteResponseController {
       if (sendResult.status === 'failed') {
         return res.status(502).json({
           message: sendResult.error || 'Falha ao enviar o e-mail de resposta.',
+        });
+      }
+
+      return res.status(200).json({
+        status: sendResult.status,
+        to: primaryContact.email,
+        cc: companyCc.map((c) => c.email),
+      });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Limite do PDF anexado (base64 em JSON) -- ver override de body-parser em
+  // app.ts (10mb) e a TRAP do limite global de 1mb.
+  private static readonly PO_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+  private static decodePoAttachment(content: string): Buffer {
+    const normalized = content.includes(',') ? content.split(',').pop() ?? '' : content;
+    try {
+      return Buffer.from(normalized, 'base64');
+    } catch (_error) {
+      throw new HttpError(400, 'Conteudo base64 do PDF invalido.');
+    }
+  }
+
+  // Envia (de verdade, via SMTP) o e-mail de "Ordem de Compra" ao contato
+  // principal do fornecedor VENCEDOR, com o PDF (upload do usuario, so'-
+  // envio) anexado. Botao na tela de Comparacao, so' habilitado quando
+  // `quoteResponse.isWinner === true`.
+  static async sendPurchaseOrder(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID da proposta invalido.' });
+      }
+
+      const parsedBody = quotePurchaseOrderSchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
+        return res.status(400).json({
+          message: parsedBody.error.issues[0]?.message ?? 'Dados invalidos.',
+        });
+      }
+
+      const context = await QuoteResponseController.loadReplyContext(id, res);
+      if (!context) return res;
+      const { quoteResponse, primaryContact, companyCc } = context;
+
+      if (quoteResponse.isWinner !== true) {
+        return res.status(400).json({
+          message: 'Apenas o fornecedor vencedor pode receber a Ordem de Compra.',
+        });
+      }
+
+      if (parsedBody.data.fileSize > QuoteResponseController.PO_MAX_FILE_SIZE_BYTES) {
+        return res.status(400).json({ message: 'O PDF excede o limite de 10MB.' });
+      }
+
+      const buffer = QuoteResponseController.decodePoAttachment(parsedBody.data.contentBase64);
+      if (buffer.length === 0) {
+        return res.status(400).json({ message: 'Conteudo do PDF vazio.' });
+      }
+      if (buffer.length > QuoteResponseController.PO_MAX_FILE_SIZE_BYTES) {
+        return res.status(400).json({ message: 'O PDF excede o limite de 10MB.' });
+      }
+
+      const { quoteRequest } = quoteResponse;
+      const defaultSubject = `Purchase Order - ${quoteRequest.requestCode}`;
+      const message = parsedBody.data.message?.trim() ?? '';
+
+      const rendered = await renderPoFromTemplate({
+        subject: parsedBody.data.subject?.trim() || defaultSubject,
+        requestCode: quoteRequest.requestCode,
+        supplierContactName: primaryContact.name,
+        forwarderInfo: parsedBody.data.forwarderInfo?.trim() ?? '',
+      });
+
+      const html = injectPoCustomMessage(rendered.html, message);
+      const text = withPoCustomMessageText(rendered.text, message);
+
+      const sendResult = await sendAndLog({
+        to: { email: primaryContact.email, name: primaryContact.name },
+        cc: companyCc,
+        subject: rendered.subject,
+        html,
+        text,
+        templateId: 'quote-po',
+        templateVars: {
+          quoteRequestId: quoteRequest.id,
+          quoteResponseId: quoteResponse.id,
+          supplierId: quoteResponse.supplier.id,
+          supplierContactId: primaryContact.id,
+          forwarderInfo: parsedBody.data.forwarderInfo ?? null,
+          hasCustomMessage: Boolean(message),
+        },
+        relatedEntityType: 'quote_response',
+        relatedEntityId: String(id),
+        attachments: [
+          {
+            filename: parsedBody.data.fileName,
+            content: buffer,
+            contentType: 'application/pdf',
+          },
+        ],
+      });
+
+      await AuditLogService.log({
+        entityType: 'quote_response',
+        entityId: id,
+        action: 'purchase_order',
+        performedById: req.user?.id ?? null,
+        metadata: {
+          to: primaryContact.email,
+          cc: companyCc.map((c) => c.email),
+          status: sendResult.status,
+          subject: rendered.subject,
+          fileName: parsedBody.data.fileName,
+          fileSize: buffer.length,
+        },
+      });
+
+      if (sendResult.status === 'failed') {
+        return res.status(502).json({
+          message: sendResult.error || 'Falha ao enviar a Ordem de Compra.',
         });
       }
 

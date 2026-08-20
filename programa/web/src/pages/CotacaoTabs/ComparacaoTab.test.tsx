@@ -18,10 +18,11 @@ vi.mock('@/services/quoteResponses', () => ({
 vi.mock('@/services/dispatch', () => ({
   previewQuoteResponseReply: vi.fn(),
   replyToQuoteResponse: vi.fn(),
+  sendPurchaseOrder: vi.fn(),
 }));
 
 import { listComparisons, setManualWinner } from '@/services/quoteResponses';
-import { previewQuoteResponseReply } from '@/services/dispatch';
+import { previewQuoteResponseReply, sendPurchaseOrder } from '@/services/dispatch';
 
 const winner = {
   supplierId: 7,
@@ -109,6 +110,8 @@ describe('ComparacaoTab', () => {
       html: '<p>oi</p>',
       text: 'oi',
     });
+    vi.mocked(sendPurchaseOrder).mockReset();
+    vi.mocked(sendPurchaseOrder).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
   });
 
   it('1. replyTarget === null não quebra: exatamente 1 dialog fechado, sem throw', async () => {
@@ -184,5 +187,61 @@ describe('ComparacaoTab', () => {
       quoteResponseId: 43,
       reason: 'Melhor prazo de entrega',
     });
+  });
+
+  it('7. abre o modal "Enviar Ordem de Compra" com título dinâmico e assunto default', async () => {
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    const dialogs = container.querySelectorAll('dialog');
+    const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+    expect(dialog.open).toBe(true);
+    const heading = dialog.querySelector('.modal-header h2');
+    expect(heading?.textContent).toBe('Enviar Ordem de Compra — ACME Ltda');
+    const subjectInput = within(dialog).getByLabelText('Assunto') as HTMLInputElement;
+    expect(subjectInput.value).toBe('Purchase Order - Produto X');
+  });
+
+  it('8. envia a Ordem de Compra com o PDF selecionado e o forwarderInfo digitado', async () => {
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    const dialogs = container.querySelectorAll('dialog');
+    const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+    const dialogScope = within(dialog);
+
+    const file = new File(['%PDF-1.4 fake'], 'po.pdf', { type: 'application/pdf' });
+    const fileInput = dialogScope.getByLabelText('PDF da Ordem de Compra') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await dialogScope.findByText(/Selecionado: po\.pdf/);
+
+    fireEvent.change(dialogScope.getByLabelText('Contato do despachante (forwarder)'), {
+      target: { value: 'Global Forwarders Ltda.\nmaria@globalforwarders.com' },
+    });
+
+    fireEvent.click(dialogScope.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+
+    await waitFor(() => expect(sendPurchaseOrder).toHaveBeenCalledTimes(1));
+    const call = vi.mocked(sendPurchaseOrder).mock.calls[0];
+    if (!call) throw new Error('sendPurchaseOrder nao foi chamado.');
+    const [quoteResponseId, payload] = call;
+    expect(quoteResponseId).toBe(42);
+    expect(payload.forwarderInfo).toBe('Global Forwarders Ltda.\nmaria@globalforwarders.com');
+    expect(payload.fileName).toBe('po.pdf');
+    expect(payload.fileType).toBe('application/pdf');
+    expect(payload.fileSize).toBe(file.size);
+    expect(payload.contentBase64).toContain('base64,');
+  });
+
+  it('9. botão de envio fica desabilitado sem PDF ou sem forwarderInfo', async () => {
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    const dialogs = container.querySelectorAll('dialog');
+    const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+    const dialogScope = within(dialog);
+
+    const sendButton = dialogScope.getByRole('button', { name: 'Enviar Ordem de Compra' }) as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(true);
   });
 });

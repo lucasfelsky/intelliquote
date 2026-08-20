@@ -354,4 +354,38 @@ export async function getTargetPriceHistory(quoteResponseId: number): Promise<Ta
   return api.get<TargetPriceHistoryItem[]>(`/v1/quote-responses/${quoteResponseId}/target-price-history`);
 }
 
+// Botao "Enviar Ordem de Compra" na Comparacao -- so' habilitado sobre a
+// proposta vencedora (r.isWinner). Anexo = upload de PDF em base64 (so'-
+// envio, sem storage duravel -- ver PLAN.md do PR4).
+export interface QuotePurchaseOrderInput {
+  subject?: string;
+  message?: string;
+  forwarderInfo?: string;
+  fileName: string;
+  contentBase64: string;
+  fileType: 'application/pdf';
+  fileSize: number;
+}
+
+export interface QuotePurchaseOrderResult {
+  status: 'sent' | 'failed';
+  to: string;
+  cc: string[];
+}
+
+export async function sendPurchaseOrder(
+  quoteResponseId: number,
+  input: QuotePurchaseOrderInput,
+): Promise<QuotePurchaseOrderResult> {
+  return api.post<QuotePurchaseOrderResult>(`/v1/quote-responses/${quoteResponseId}/purchase-order`, {
+    subject: input.subject,
+    message: input.message,
+    forwarderInfo: input.forwarderInfo,
+    fileName: input.fileName,
+    contentBase64: input.contentBase64,
+    fileType: input.fileType,
+    fileSize: input.fileSize,
+  });
+}
+
 export { ApiError };
