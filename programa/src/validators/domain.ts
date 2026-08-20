@@ -264,6 +264,17 @@ export const quoteResponseReplySchema = z.object({
   subject: z.string().trim().max(300).optional(),
   message: z.string().trim().max(4000).optional(),
   targetPrice: z.number().positive().nullable().optional(),
+  // Target price POR ITEM (modal "Responder" em cotacoes multi-item). O
+  // caminho de 1 item continua usando so' `targetPrice` acima (zero
+  // regressao); este campo so' e' usado quando `items.length > 1`.
+  itemTargets: z
+    .array(
+      z.object({
+        quoteResponseItemId: positiveIntegerField,
+        targetPrice: z.number().positive().nullable(),
+      })
+    )
+    .optional(),
 });
 
 export const quoteComparisonWeightsSchema = z.object({

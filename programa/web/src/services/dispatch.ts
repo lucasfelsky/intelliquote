@@ -298,6 +298,9 @@ export interface QuoteResponseReplyInput {
   subject?: string;
   message?: string;
   targetPrice?: number | null;
+  // Target price POR ITEM (cotacoes multi-item) -- caminho independente do
+  // `targetPrice` agregado acima, usado so' quando `items.length > 1`.
+  itemTargets?: { quoteResponseItemId: number; targetPrice: number | null }[];
 }
 
 export interface QuoteResponseReplyResult {
@@ -322,6 +325,7 @@ export async function previewQuoteResponseReply(
     subject: input.subject,
     message: input.message,
     targetPrice: input.targetPrice,
+    itemTargets: input.itemTargets,
   });
 }
 
@@ -333,6 +337,7 @@ export async function replyToQuoteResponse(
     subject: input.subject,
     message: input.message,
     targetPrice: input.targetPrice,
+    itemTargets: input.itemTargets,
   });
 }
 

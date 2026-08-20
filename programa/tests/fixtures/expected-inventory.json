@@ -107,7 +107,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 30
+    "migrations": 31
   },
   "emailTemplates": [
     "quote_dispatch@en",

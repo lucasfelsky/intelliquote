@@ -28,6 +28,9 @@ vi.mock('../src/lib/prisma', () => {
     quoteResponse: {
       findFirst: vi.fn(),
     },
+    quoteResponseItem: {
+      updateMany: vi.fn(),
+    },
     supplierContact: {
       findFirst: vi.fn(),
     },
@@ -49,6 +52,7 @@ const prismaMock = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   session: { create: ReturnType<typeof vi.fn> };
   quoteResponse: { findFirst: ReturnType<typeof vi.fn> };
+  quoteResponseItem: { updateMany: ReturnType<typeof vi.fn> };
   supplierContact: { findFirst: ReturnType<typeof vi.fn> };
   companyProfile: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   emailTemplate: { findUnique: ReturnType<typeof vi.fn> };
@@ -107,6 +111,47 @@ const baseQuoteResponse = {
       },
     ],
   },
+};
+
+// Cotacao multi-item (2 QuoteResponseItem) -- usada nos testes de target
+// price POR ITEM. `id`s de QuoteResponseItem (201/202) sao os
+// `quoteResponseItemId` esperados no payload `itemTargets`.
+const multiItemQuoteResponse = {
+  id: 88,
+  supplierId: 2,
+  supplier: { id: 2, name: 'Acme Chemicals' },
+  offeredPrice: 4.99,
+  currency: 'USD',
+  isWinner: false,
+  targetPrice: null,
+  quoteRequest: {
+    id: 6,
+    requestCode: 'QR-2026-006',
+    productName: 'Multi Item Blend',
+    desiredIncoterm: ['CIF'],
+    items: [
+      {
+        id: 21,
+        productName: 'PI-TPO',
+        quantity: 500,
+        unit: 'KG',
+        desiredIncoterm: null,
+        catalogItem: { commercialName: 'PI-TPO-INTERNAL', marketName: 'PI-TPO' },
+      },
+      {
+        id: 22,
+        productName: 'Resin X',
+        quantity: 200,
+        unit: 'KG',
+        desiredIncoterm: null,
+        catalogItem: null,
+      },
+    ],
+  },
+  items: [
+    { id: 201, quoteRequestItemId: 21, unitPrice: 3.5, quantity: 500, totalPrice: 1750, leadTimeDays: null, notes: null, targetPrice: null },
+    { id: 202, quoteRequestItemId: 22, unitPrice: 2.0, quantity: 200, totalPrice: 400, leadTimeDays: null, notes: null, targetPrice: null },
+  ],
 };
 
 describe('POST /api/v1/quote-responses/:id/reply', () => {
@@ -507,5 +552,92 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(prismaMock.quoteResponseTargetPriceHistory.create).not.toHaveBeenCalled();
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.html).not.toContain('Target Price');
+  });
+
+  // Target price POR ITEM (multi-item)
+  it('grava QuoteResponseItem.targetPrice via updateMany quando vem itemTargets, e o email mostra Target por item', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(multiItemQuoteResponse);
+    prismaMock.quoteResponse.update = vi.fn();
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    prismaMock.quoteResponseItem.updateMany.mockResolvedValue({ count: 1 });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-item-target' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/88/reply')
+      .set('Cookie', cookieHeader)
+      .send({
+        itemTargets: [
+          { quoteResponseItemId: 201, targetPrice: 3.2 },
+          { quoteResponseItemId: 202, targetPrice: 1.8 },
+        ],
+      });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.quoteResponseItem.updateMany).toHaveBeenCalledTimes(2);
+    expect(prismaMock.quoteResponseItem.updateMany).toHaveBeenCalledWith({
+      where: { id: 201, quoteResponseId: 88, deletedAt: null },
+      data: { targetPrice: 3.2 },
+    });
+    expect(prismaMock.quoteResponseItem.updateMany).toHaveBeenCalledWith({
+      where: { id: 202, quoteResponseId: 88, deletedAt: null },
+      data: { targetPrice: 1.8 },
+    });
+    // Multi-item NAO grava o bloco agregado (decisao de produto: usa so' os
+    // targets por item).
+    expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
+
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.html).toContain('Target: 3.20 USD');
+    expect(call.html).toContain('Target: 1.80 USD');
+  });
+
+  it('preview com itemTargets NAO persiste (updateMany nao e chamado)', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(multiItemQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/88/reply/preview')
+      .set('Cookie', cookieHeader)
+      .send({
+        itemTargets: [{ quoteResponseItemId: 201, targetPrice: 3.2 }],
+      });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.quoteResponseItem.updateMany).not.toHaveBeenCalled();
+    expect(res.body.html).toContain('Target: 3.20 USD');
+  });
+
+  it('caminho de 1 item / targetPrice agregado continua funcionando quando nao vem itemTargets', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-legacy' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/reply')
+      .set('Cookie', cookieHeader)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.quoteResponseItem.updateMany).not.toHaveBeenCalled();
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.html).not.toContain('Target:');
   });
 });

@@ -285,6 +285,7 @@ model QuoteResponseItem {
   totalPrice         Decimal   @db.Decimal(14, 2)
   leadTimeDays       Int?
   notes              String?
+  targetPrice        Decimal?  @db.Decimal(12, 2)
   deletedAt          DateTime?
 
   quoteResponse    QuoteResponse    @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)

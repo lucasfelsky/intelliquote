@@ -25,6 +25,7 @@ export interface QuoteResponseItem {
   leadTimeDays: number | null;
   notes: string | null;
   productName?: string | null;
+  targetPrice?: number | null;
 }
 
 export interface QuoteResponse {
@@ -216,6 +217,7 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
           leadTimeDays: i.leadTimeDays === null || i.leadTimeDays === undefined ? null : asNumber(i.leadTimeDays),
           notes: (i.notes as string | null) ?? null,
           productName: i.quoteRequestItem?.productName ?? null,
+          targetPrice: i.targetPrice === null || i.targetPrice === undefined ? null : asNumber(i.targetPrice),
         }))
       : undefined,
     source,
