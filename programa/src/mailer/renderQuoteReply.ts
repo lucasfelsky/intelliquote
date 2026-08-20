@@ -36,6 +36,11 @@ export interface QuoteReplyItem {
   // repete em todas as linhas da mesma resposta -- ainda assim melhor do
   // que mostrar "-", que o usuario apontou como informacao perdida.
   unitPrice: number | null;
+  // Preco-alvo POR ITEM (negociacao multi-item). Opcional -- sem isso,
+  // `renderReplySampleVars` (preview de Templates.tsx) continua funcionando
+  // sem quebrar o tsc. Renderizado como sub-linha na celula de Unit Price,
+  // sem coluna nova.
+  targetPrice?: number | null;
 }
 
 export interface QuoteReplyVars {
@@ -49,6 +54,9 @@ export interface QuoteReplyVars {
   targetPrice?: number;
   isWinner: boolean;
   items: QuoteReplyItem[];
+  // true quando ha' pelo menos um target por item (mesmo sem `targetPrice`
+  // agregado) -- dispara a mesma wording de negociacao das intros.
+  hasItemTargets?: boolean;
 }
 
 function formatEnNumber(value: number): string {
@@ -72,12 +80,18 @@ function renderItemsRows(items: QuoteReplyItem[], currency: string): string {
       const bg = idx % 2 === 0 ? '#F8FBFA' : '#ffffff';
       const total = item.unitPrice === null ? null : item.unitPrice * item.quantity;
       const emptyStyle = item.unitPrice === null ? 'color:#9aa4ad;font-style:italic;' : 'color:#1F2933;';
+      // Target-price POR ITEM: sub-linha dentro da propria celula de Unit
+      // Price, mantendo as 5 colunas atuais (sem coluna nova -- ver decisao
+      // 4 do plano, template do banco nao precisa de placeholder novo).
+      const itemTargetHtml = item.targetPrice != null
+        ? `<br /><span style="font-size:11px;color:#4A5560;">Target: ${formatMoney(item.targetPrice, currency)}</span>`
+        : '';
       return `
       <tr bgcolor="${bg}" style="background-color:${bg};">
         <td align="left" width="200" style="width:200px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.name)}</td>
         <td align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.incoterm)}</td>
         <td align="right" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${formatEnNumber(item.quantity)} ${escapeHtml(item.unit)}</td>
-        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;${emptyStyle}">${formatMoney(item.unitPrice, currency)}</td>
+        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;${emptyStyle}">${formatMoney(item.unitPrice, currency)}${itemTargetHtml}</td>
         <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;${emptyStyle}">${formatMoney(total, currency)}</td>
       </tr>`;
     })
@@ -88,7 +102,10 @@ function renderItemsTextRow(item: QuoteReplyItem, currency: string): string {
   const total = item.unitPrice === null ? null : item.unitPrice * item.quantity;
   const unitPriceText = item.unitPrice === null ? '—' : `${formatEnNumber(item.unitPrice)} ${currency}`;
   const totalText = total === null ? '—' : `${formatEnNumber(total)} ${currency}`;
-  return `${item.name}\t${item.incoterm}\t${formatEnNumber(item.quantity)} ${item.unit}\t${unitPriceText}\t${totalText}`;
+  const targetSuffix = item.targetPrice != null
+    ? ` (Target: ${formatEnNumber(item.targetPrice)} ${currency})`
+    : '';
+  return `${item.name}\t${item.incoterm}\t${formatEnNumber(item.quantity)} ${item.unit}\t${unitPriceText}${targetSuffix}\t${totalText}`;
 }
 
 export function renderReplySections(template: string, vars: QuoteReplyVars): string {
@@ -107,11 +124,11 @@ export function renderReplySections(template: string, vars: QuoteReplyVars): str
   });
 }
 
-export function buildReplyIntro(vars: { targetPrice?: number; isWinner: boolean; requestCode: string; productName?: string }): string {
+export function buildReplyIntro(vars: { targetPrice?: number; hasItemTargets?: boolean; isWinner: boolean; requestCode: string; productName?: string }): string {
   const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
   const prefix = `Thank you for your quotation on ${vars.requestCode}${productSuffix}.`;
-  
-  if (vars.targetPrice !== undefined && vars.targetPrice !== null) {
+
+  if ((vars.targetPrice !== undefined && vars.targetPrice !== null) || vars.hasItemTargets) {
     return `${prefix} We are currently evaluating your proposal and, to move forward, we would like to discuss adjusting the price towards our target below.`;
   }
   if (vars.isWinner) {
@@ -120,8 +137,8 @@ export function buildReplyIntro(vars: { targetPrice?: number; isWinner: boolean;
   return `${prefix} We are currently reviewing your proposal along with other offers received for this quote.`;
 }
 
-export function buildReplyItemsIntro(vars: { targetPrice?: number; isWinner: boolean }): string {
-  if (vars.targetPrice !== undefined && vars.targetPrice !== null) {
+export function buildReplyItemsIntro(vars: { targetPrice?: number; hasItemTargets?: boolean; isWinner: boolean }): string {
+  if ((vars.targetPrice !== undefined && vars.targetPrice !== null) || vars.hasItemTargets) {
     return 'Please find the items under discussion below:';
   }
   if (vars.isWinner) {

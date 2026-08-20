@@ -566,7 +566,12 @@ export class QuoteResponseController {
   // do template padrao/customizado (`quote_reply`, ver Templates.tsx).
   private static async renderReplyFor(
     quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>,
-    overrides: { subject?: string; message?: string; targetPrice?: number | null },
+    overrides: {
+      subject?: string;
+      message?: string;
+      targetPrice?: number | null;
+      itemTargets?: { quoteResponseItemId: number; targetPrice: number | null }[];
+    },
     contactName: string,
   ) {
     const { quoteRequest, supplier } = quoteResponse;
@@ -578,6 +583,33 @@ export class QuoteResponseController {
     // que escondia o preco que o fornecedor de fato ofertou.
     const unitPrice = Number(quoteResponse.offeredPrice);
 
+    // Target price POR ITEM: override (digitado na hora, ainda nao
+    // persistido) tem prioridade sobre o valor ja gravado em
+    // QuoteResponseItem.targetPrice.
+    const itemTargetOverrides = new Map<number, number | null>();
+    for (const t of overrides.itemTargets ?? []) {
+      itemTargetOverrides.set(t.quoteResponseItemId, t.targetPrice);
+    }
+
+    let hasItemTargets = false;
+    const items = quoteRequest.items.map((item) => {
+      const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
+      const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
+      const overrideTarget = responseItem ? itemTargetOverrides.get(responseItem.id) : undefined;
+      const itemTargetPrice = overrideTarget !== undefined
+        ? overrideTarget
+        : (responseItem?.targetPrice != null ? Number(responseItem.targetPrice) : null);
+      if (itemTargetPrice !== null) hasItemTargets = true;
+      return {
+        name: item.catalogItem?.marketName ?? item.productName,
+        incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: actualUnitPrice,
+        targetPrice: itemTargetPrice,
+      };
+    });
+
     const rendered = await renderReplyFromTemplate({
       subject: overrides.subject?.trim() || defaultSubject,
       quoteRequestId: quoteRequest.id,
@@ -587,18 +619,9 @@ export class QuoteResponseController {
       supplierContactName: contactName,
       currency: quoteResponse.currency,
       targetPrice: overrides.targetPrice !== undefined ? (overrides.targetPrice === null ? undefined : overrides.targetPrice) : (quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined),
+      hasItemTargets,
       isWinner: quoteResponse.isWinner,
-      items: quoteRequest.items.map((item) => {
-        const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
-        const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
-        return {
-          name: item.catalogItem?.marketName ?? item.productName,
-          incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
-          quantity: item.quantity,
-          unit: item.unit,
-          unitPrice: actualUnitPrice,
-        };
-      }),
+      items,
     });
 
     return {
@@ -686,6 +709,25 @@ export class QuoteResponseController {
           data: { targetPrice: parsedBody.data.targetPrice },
         });
         quoteResponse.targetPrice = parsedBody.data.targetPrice as any;
+      }
+
+      // Target price POR ITEM (cotacoes multi-item) -- caminho independente
+      // do bloco agregado acima; nao grava QuoteResponse.targetPrice/
+      // historico agregado (decisao de produto: multi-item usa SO' os
+      // targets por item).
+      if (parsedBody.data.itemTargets && parsedBody.data.itemTargets.length > 0) {
+        for (const itemTarget of parsedBody.data.itemTargets) {
+          await prisma.quoteResponseItem.updateMany({
+            where: { id: itemTarget.quoteResponseItemId, quoteResponseId: id, deletedAt: null },
+            data: { targetPrice: itemTarget.targetPrice },
+          });
+        }
+        quoteResponse.items = quoteResponse.items?.map((responseItem) => {
+          const match = parsedBody.data.itemTargets!.find(
+            (t) => t.quoteResponseItemId === responseItem.id,
+          );
+          return match ? { ...responseItem, targetPrice: match.targetPrice as any } : responseItem;
+        });
       }
 
       const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data, primaryContact.name);

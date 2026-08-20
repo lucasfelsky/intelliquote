@@ -26,7 +26,7 @@ vi.mock('@/services/dispatch', () => ({
 
 import { api } from '@/api/client';
 import { listQuoteResponses, createQuoteResponse } from '@/services/quoteResponses';
-import { previewQuoteResponseReply, getTargetPriceHistory } from '@/services/dispatch';
+import { previewQuoteResponseReply, replyToQuoteResponse, getTargetPriceHistory } from '@/services/dispatch';
 
 const response = {
   id: 42, quoteRequestId: 99, supplierId: 7,
@@ -39,6 +39,25 @@ const response = {
   createdAt: '2026-01-01T12:00:00.000Z', updatedAt: '2026-01-01T12:00:00.000Z',
   targetPrice: 90, source: 'manual' as const,
   supplier: { id: 7, name: 'ACME Ltda', country: 'BR', status: 'active' as const },
+};
+
+// Resposta multi-item (2 QuoteResponseItem) -- usada nos testes de target
+// price POR ITEM da modal "Responder".
+const multiItemResponse = {
+  ...response,
+  id: 43,
+  items: [
+    {
+      id: 501, quoteResponseId: 43, quoteRequestItemId: 5,
+      unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+      notes: null, productName: 'Resina Epóxi', targetPrice: null,
+    },
+    {
+      id: 502, quoteResponseId: 43, quoteRequestItemId: 6,
+      unitPrice: 20, quantity: 2, totalPrice: 40, leadTimeDays: 10,
+      notes: null, productName: 'Catalisador Y', targetPrice: null,
+    },
+  ],
 };
 
 function renderTab() {
@@ -67,6 +86,7 @@ describe('RespostasTab', () => {
     vi.mocked(listQuoteResponses).mockReset();
     vi.mocked(createQuoteResponse).mockReset();
     vi.mocked(previewQuoteResponseReply).mockReset();
+    vi.mocked(replyToQuoteResponse).mockReset();
     vi.mocked(getTargetPriceHistory).mockReset();
     vi.mocked(api.get).mockReset();
 
@@ -216,5 +236,57 @@ describe('RespostasTab', () => {
     const table = container.querySelector('table.table');
     expect(table?.parentElement?.classList.contains('table-wrapper')).toBe(true);
     expect(container.querySelector('.row-actions')?.classList.contains('row-actions--nowrap')).toBe(true);
+  });
+
+  it('12. modal Responder com resposta multi-item usa campo por item (nao o campo unico) e dispara preview com itemTargets', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([multiItemResponse]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Responder' }));
+    const [, dialogB] = getDialogs(container);
+    expect(dialogB.open).toBe(true);
+
+    // Campo unico nao existe; um input por item existe.
+    expect(dialogB.querySelector('#replyTargetPrice')).toBeNull();
+    expect(dialogB.querySelector('#replyItemTarget-501')).not.toBeNull();
+    expect(dialogB.querySelector('#replyItemTarget-502')).not.toBeNull();
+    expect(within(dialogB).getByText('Resina Epóxi')).toBeTruthy();
+    expect(within(dialogB).getByText('Catalisador Y')).toBeTruthy();
+
+    await waitFor(() =>
+      expect(previewQuoteResponseReply).toHaveBeenCalledWith(43, {
+        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        message: '',
+        itemTargets: [
+          { quoteResponseItemId: 501, targetPrice: null },
+          { quoteResponseItemId: 502, targetPrice: null },
+        ],
+      })
+    );
+  });
+
+  it('13. Enviar e-mail em resposta multi-item manda itemTargets preenchidos (nao targetPrice agregado)', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([multiItemResponse]);
+    vi.mocked(replyToQuoteResponse).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Responder' }));
+    const [, dialogB] = getDialogs(container);
+
+    fireEvent.change(within(dialogB).getByLabelText('Resina Epóxi'), { target: { value: '8.5' } });
+    fireEvent.change(within(dialogB).getByLabelText('Catalisador Y'), { target: { value: '18' } });
+
+    fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+
+    await waitFor(() =>
+      expect(replyToQuoteResponse).toHaveBeenCalledWith(43, {
+        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        message: '',
+        itemTargets: [
+          { quoteResponseItemId: 501, targetPrice: 8.5 },
+          { quoteResponseItemId: 502, targetPrice: 18 },
+        ],
+      })
+    );
   });
 });

@@ -121,6 +121,9 @@ export function RespostasTab({
   const [replySubject, setReplySubject] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
   const [replyTargetPrice, setReplyTargetPrice] = useState('');
+  // Target price POR ITEM (cotacoes multi-item) -- so' usado quando
+  // `replyTarget.items.length > 1`; chave = QuoteResponseItem.id.
+  const [replyItemTargets, setReplyItemTargets] = useState<Record<number, string>>({});
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
   const [replyModalError, setReplyModalError] = useState<string | null>(null);
 
@@ -175,8 +178,19 @@ export function RespostasTab({
   });
 
   const replyPreviewMutation = useMutation({
-    mutationFn: (vars: { id: number; subject: string; message: string; targetPrice: number | null }) =>
-      previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message, targetPrice: vars.targetPrice }),
+    mutationFn: (vars: {
+      id: number;
+      subject: string;
+      message: string;
+      targetPrice?: number | null;
+      itemTargets?: { quoteResponseItemId: number; targetPrice: number | null }[];
+    }) =>
+      previewQuoteResponseReply(vars.id, {
+        subject: vars.subject,
+        message: vars.message,
+        targetPrice: vars.targetPrice,
+        itemTargets: vars.itemTargets,
+      }),
     onSuccess: (data) => {
       setReplyPreviewData(data);
       setReplyModalError(null);
@@ -184,9 +198,32 @@ export function RespostasTab({
     onError: (err) => setReplyModalError(messageOf(err)),
   });
 
+  // Multi-item (2+ QuoteResponseItem) troca o campo unico agregado por um
+  // por item; caminho de 0/1 item continua no `targetPrice` agregado.
+  function isMultiItemReply(r: QuoteResponse | null): boolean {
+    return (r?.items?.length ?? 0) > 1;
+  }
+
+  function buildItemTargetsPayload(
+    r: QuoteResponse,
+    values: Record<number, string>,
+  ): { quoteResponseItemId: number; targetPrice: number | null }[] {
+    return (r.items ?? []).map((item) => ({
+      quoteResponseItemId: item.id,
+      targetPrice: values[item.id]?.trim() ? Number(values[item.id]) : null,
+    }));
+  }
+
   const replySendMutation = useMutation({
     mutationFn: () => {
       if (!replyTarget) throw new Error('Nenhuma proposta selecionada.');
+      if (isMultiItemReply(replyTarget)) {
+        return replyToQuoteResponse(replyTarget.id, {
+          subject: replySubject,
+          message: replyMessage,
+          itemTargets: buildItemTargetsPayload(replyTarget, replyItemTargets),
+        });
+      }
       const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
       return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
     },
@@ -224,15 +261,34 @@ export function RespostasTab({
     setReplyTarget(r);
     setReplySubject(defaultSubject);
     setReplyMessage('');
-    setReplyTargetPrice(r.targetPrice != null ? String(r.targetPrice) : '');
     setReplyPreviewData(null);
     setReplyModalError(null);
+
+    if (isMultiItemReply(r)) {
+      const initialValues: Record<number, string> = {};
+      (r.items ?? []).forEach((item) => {
+        initialValues[item.id] = item.targetPrice != null ? String(item.targetPrice) : '';
+      });
+      setReplyItemTargets(initialValues);
+      setReplyTargetPrice('');
+      replyPreviewMutation.mutate({
+        id: r.id,
+        subject: defaultSubject,
+        message: '',
+        itemTargets: buildItemTargetsPayload(r, initialValues),
+      });
+      return;
+    }
+
+    setReplyItemTargets({});
+    setReplyTargetPrice(r.targetPrice != null ? String(r.targetPrice) : '');
     const initialTargetPrice = r.targetPrice != null ? Number(r.targetPrice) : null;
     replyPreviewMutation.mutate({ id: r.id, subject: defaultSubject, message: '', targetPrice: initialTargetPrice });
   }
 
   function closeReplyModal() {
     setReplyTarget(null);
+    setReplyItemTargets({});
     setReplyPreviewData(null);
     setReplyModalError(null);
   }
@@ -648,21 +704,52 @@ export function RespostasTab({
               placeholder="Opcional. Ex.: confirmando o fechamento do pedido."
             />
 
-            <label className="field-label" htmlFor="replyTargetPrice" style={{ marginTop: 12 }}>
-              Preço-alvo (opcional)
-            </label>
-            <input
-              id="replyTargetPrice"
-              className="input"
-              type="number"
-              step="0.01"
-              min="0"
-              value={replyTargetPrice}
-              onChange={(e) => setReplyTargetPrice(e.target.value)}
-            />
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
-              Preencher adiciona o bloco de pedido de redução de preço no e-mail.
-            </p>
+            {isMultiItemReply(replyTarget) ? (
+              <>
+                <label className="field-label" style={{ marginTop: 12 }}>
+                  Preço-alvo por item (opcional)
+                </label>
+                {(replyTarget.items ?? []).map((item) => (
+                  <div key={item.id} style={{ marginTop: 8 }}>
+                    <label className="field-label" htmlFor={`replyItemTarget-${item.id}`}>
+                      {item.productName || productName || requestCode}
+                    </label>
+                    <input
+                      id={`replyItemTarget-${item.id}`}
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={replyItemTargets[item.id] ?? ''}
+                      onChange={(e) =>
+                        setReplyItemTargets((prev) => ({ ...prev, [item.id]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ))}
+                <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
+                  Preencher adiciona o pedido de redução de preço por item no e-mail.
+                </p>
+              </>
+            ) : (
+              <>
+                <label className="field-label" htmlFor="replyTargetPrice" style={{ marginTop: 12 }}>
+                  Preço-alvo (opcional)
+                </label>
+                <input
+                  id="replyTargetPrice"
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={replyTargetPrice}
+                  onChange={(e) => setReplyTargetPrice(e.target.value)}
+                />
+                <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
+                  Preencher adiciona o bloco de pedido de redução de preço no e-mail.
+                </p>
+              </>
+            )}
 
             {historyQuery.data && historyQuery.data.length > 0 && (
               <div style={{ marginTop: 16, padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 4 }}>
@@ -685,6 +772,15 @@ export function RespostasTab({
                 className="ghost-button"
                 disabled={replyPreviewMutation.isPending}
                 onClick={() => {
+                  if (isMultiItemReply(replyTarget)) {
+                    replyPreviewMutation.mutate({
+                      id: replyTarget.id,
+                      subject: replySubject,
+                      message: replyMessage,
+                      itemTargets: buildItemTargetsPayload(replyTarget, replyItemTargets),
+                    });
+                    return;
+                  }
                   const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
                   replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
                 }}
