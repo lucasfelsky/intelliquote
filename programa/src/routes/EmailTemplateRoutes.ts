@@ -14,6 +14,13 @@ import {
   type QuoteReplyVars,
 } from '../mailer/renderQuoteReply';
 import {
+  renderPoSections,
+  renderPoPlainText,
+  loadFileTemplate as loadPoFileTemplate,
+  PO_TEMPLATE_KEY,
+  type QuotePoVars,
+} from '../mailer/renderQuotePo';
+import {
   renderReminderSections,
   renderReminderPlainText,
   loadFileTemplate as loadReminderFileTemplate,
@@ -70,6 +77,15 @@ function renderReplySampleVars(): QuoteReplyVars {
       { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG', unitPrice: 4.99 },
       { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG', unitPrice: 4.99 },
     ],
+  };
+}
+
+function renderPoSampleVars(): QuotePoVars {
+  return {
+    subject: 'Purchase Order - QR-20260618-DEMO01',
+    requestCode: 'QR-20260618-DEMO01',
+    supplierContactName: 'Joao Fornecedor',
+    forwarderInfo: 'Global Forwarders Ltda.\nAttn: Maria Santos\nmaria@globalforwarders.com\n+55 47 99999-1234',
   };
 }
 
@@ -178,6 +194,45 @@ emailTemplateRoutes.get(
           html: renderReplySections(replyTemplate.htmlBody, replyVars),
           text: renderReplySections(replyTemplate.textBody, replyVars),
           isActive: replyTemplate.isActive,
+          source: 'database',
+          locale,
+        });
+      }
+
+      if (key === PO_TEMPLATE_KEY) {
+        // PR4: preview da Ordem de Compra (EN, fornecedor vencedor).
+        const [poTemplate, latestQuoteRequestForPo] = await Promise.all([
+          EmailTemplateService.get(key, locale),
+          prisma.quoteRequest.findFirst({
+            orderBy: { createdAt: 'desc' },
+            select: { requestCode: true },
+          }),
+        ]);
+
+        const poSample = renderPoSampleVars();
+        if (latestQuoteRequestForPo) {
+          poSample.requestCode = latestQuoteRequestForPo.requestCode;
+          poSample.subject = `Purchase Order - ${latestQuoteRequestForPo.requestCode}`;
+        }
+
+        if (!poTemplate) {
+          return res.status(200).json({
+            subject: poSample.subject,
+            html: renderPoSections(loadPoFileTemplate(), poSample),
+            text: renderPoPlainText(poSample),
+            isActive: false,
+            source: 'fallback',
+            locale,
+          });
+        }
+
+        const poSubject = renderPoSections(poTemplate.subject, poSample);
+        const poVars = { ...poSample, subject: poSubject };
+        return res.status(200).json({
+          subject: poSubject,
+          html: renderPoSections(poTemplate.htmlBody, poVars),
+          text: renderPoSections(poTemplate.textBody, poVars),
+          isActive: poTemplate.isActive,
           source: 'database',
           locale,
         });

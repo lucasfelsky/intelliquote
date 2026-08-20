@@ -35,6 +35,12 @@ const TEMPLATE_CARDS: Array<{
     icon: '✓',
   },
   {
+    key: 'quote_po',
+    title: 'Ordem de compra',
+    description: 'E-mail enviado ao fornecedor vencedor ao clicar em “Enviar Ordem de Compra”, com o PDF anexado.',
+    icon: '📦',
+  },
+  {
     key: 'quote_reminder',
     title: 'Lembrete de cotação pendente',
     description: 'E-mail automático ao fornecedor que não respondeu, perto do prazo (com link novo).',
@@ -80,6 +86,12 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{introText}}', label: 'Texto de introdução dinâmico' },
     { token: '{{itemsIntroText}}', label: 'Texto de itens dinâmico' },
     { token: '{{itemsRows}}', label: 'Tabela de itens' },
+  ],
+  quote_po: [
+    { token: '{{subject}}', label: 'Assunto' },
+    { token: '{{requestCode}}', label: 'Código' },
+    { token: '{{supplierContactName}}', label: 'Contato' },
+    { token: '{{forwarderInfo}}', label: 'Contato do despachante' },
   ],
   quote_reminder: [
     { token: '{{subject}}', label: 'Assunto' },

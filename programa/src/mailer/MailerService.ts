@@ -34,6 +34,10 @@ export interface SendAndLogInput {
   templateVars: Record<string, unknown>;
   relatedEntityType?: string;
   relatedEntityId?: string;
+  // Anexo so'-envio (ex.: PDF da Ordem de Compra). NAO persistido em disco;
+  // NAO entra no mailLog/AuditLog (so' fileName/fileSize, ver metadata do
+  // caller) -- efemero no processo do Cloud Run.
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
 }
 
 export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult> {
@@ -45,6 +49,7 @@ export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult
     subject: input.subject,
     html: input.html,
     text: input.text,
+    attachments: input.attachments,
   };
 
   const initialLog = await prisma.mailLog.create({
