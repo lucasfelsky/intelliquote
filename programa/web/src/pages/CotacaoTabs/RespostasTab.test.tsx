@@ -14,7 +14,6 @@ vi.mock('@/api/client', () => ({
 vi.mock('@/services/quoteResponses', () => ({
   listQuoteResponses: vi.fn(),
   createQuoteResponse: vi.fn(),
-  updateQuoteResponse: vi.fn(),
   deleteQuoteResponse: vi.fn(),
   INCOTERMS: ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'],
   messageOf: (e: unknown) => String(e),
@@ -57,10 +56,10 @@ function renderTab() {
   );
 }
 
-function getDialogs(container: HTMLElement): [HTMLDialogElement, HTMLDialogElement] {
+function getDialogs(container: HTMLElement): [HTMLDialogElement, HTMLDialogElement, HTMLDialogElement] {
   const dialogs = Array.from(container.querySelectorAll('dialog')) as HTMLDialogElement[];
-  if (dialogs.length !== 2) throw new Error(`esperado 2 dialogs, achei ${dialogs.length}`);
-  return [dialogs[0]!, dialogs[1]!]; // ordem do JSX: [0] = formulário, [1] = responder
+  if (dialogs.length !== 3) throw new Error(`esperado 3 dialogs, achei ${dialogs.length}`);
+  return [dialogs[0]!, dialogs[1]!, dialogs[2]!]; // ordem do JSX: [0] = formulário, [1] = responder, [2] = itens
 }
 
 describe('RespostasTab', () => {
@@ -83,13 +82,14 @@ describe('RespostasTab', () => {
     });
   });
 
-  it('1. ambos fechados no load', async () => {
+  it('1. todos fechados no load', async () => {
     const { container, findByText } = renderTab();
     await findByText('ACME Ltda');
-    expect(container.querySelectorAll('dialog').length).toBe(2);
-    const [dialogA, dialogB] = getDialogs(container);
+    expect(container.querySelectorAll('dialog').length).toBe(3);
+    const [dialogA, dialogB, dialogC] = getDialogs(container);
     expect(dialogA.open).toBe(false);
     expect(dialogB.open).toBe(false);
+    expect(dialogC.open).toBe(false);
   });
 
   it('2. "+ Nova resposta" abre o modal A', async () => {
@@ -102,15 +102,36 @@ describe('RespostasTab', () => {
     expect(heading?.textContent).toBe('Nova resposta');
   });
 
-  it('3. "Editar" abre o modal A com título dinâmico e mantém o guard de edição', async () => {
+  it('3. clicar no nome do fornecedor abre o pop-up de itens com fallback (resposta manual sem items)', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: 'Editar' }));
-    const [dialogA] = getDialogs(container);
-    const heading = dialogA.querySelector('.modal-header h2');
-    expect(heading?.textContent).toBe('Editar resposta');
-    const supplierSelect = dialogA.querySelector('#rf-supplier') as HTMLSelectElement | null;
-    expect(supplierSelect?.disabled).toBe(true);
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(dialogC.open).toBe(true);
+    const heading = dialogC.querySelector('.modal-header h2');
+    expect(heading?.textContent).toBe('Itens — ACME Ltda');
+    const rows = within(dialogC).getAllByRole('row');
+    // 1 linha de cabeçalho + 1 linha de fallback (resposta sem QuoteResponseItem)
+    expect(rows.length).toBe(2);
+    expect(within(dialogC).getByText('Produto X')).toBeTruthy();
+    expect(within(dialogC).getAllByText('100,00 USD').length).toBe(2);
+  });
+
+  it('3b. pop-up de itens usa response.items quando presentes', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{
+      ...response,
+      items: [{
+        id: 1, quoteResponseId: 42, quoteRequestItemId: 5,
+        unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+        notes: null, productName: 'Resina Epóxi',
+      }],
+    }]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).getByText('Resina Epóxi')).toBeTruthy();
+    expect(within(dialogC).getByText('40,00 USD')).toBeTruthy();
   });
 
   it('4. modal A é wide', async () => {

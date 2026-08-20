@@ -173,6 +173,10 @@ export class QuoteResponseController {
         include: {
           supplier: true,
           quoteRequest: true,
+          items: {
+            where: { deletedAt: null },
+            include: { quoteRequestItem: { select: { productName: true } } },
+          },
         },
         orderBy: {
           createdAt: 'desc',
