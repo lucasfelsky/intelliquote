@@ -273,6 +273,17 @@ export const quoteComparisonWeightsSchema = z.object({
   qualityWeight: optionalNonNegativeNumberField,
 });
 
+// A obrigatoriedade condicional de `reason` (exigido quando o vencedor manual
+// difere do vencedor calculado) e' aplicada no controller, nao aqui.
+export const quoteWinnerOverrideSchema = z.object({
+  quoteResponseId: positiveIntegerField,
+  reason: z.preprocess(
+    (value) =>
+      value === undefined ? undefined : value === null || value === '' ? null : value,
+    z.string().trim().max(2000).nullable().optional(),
+  ),
+});
+
 export const userCreateSchema = z.object({
   name: requiredTrimmedStringField,
   email: lowercasedEmailField,

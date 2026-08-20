@@ -19,6 +19,7 @@ import {
   quoteResponseCreateSchema,
   quoteResponseReplySchema,
   quoteResponseUpdateSchema,
+  quoteWinnerOverrideSchema,
 } from '../validators/domain';
 import {
   handleControllerError,
@@ -1140,6 +1141,121 @@ export class QuoteResponseController {
       });
 
       return res.status(200).json({ message: 'Aprovação realizada com sucesso.' });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async setManualWinner(req: Request, res: Response): Promise<Response> {
+    try {
+      const quoteRequestId = parseId(req.params.quoteRequestId);
+
+      if (!quoteRequestId) {
+        return res.status(400).json({ message: 'ID da cotação inválido.' });
+      }
+
+      const parsed = quoteWinnerOverrideSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: 'Dados inválidos.',
+          errors: parsed.error.flatten(),
+        });
+      }
+
+      const { quoteResponseId, reason } = parsed.data;
+
+      const quoteRequest = await prisma.quoteRequest.findUnique({
+        where: { id: quoteRequestId },
+      });
+
+      if (!quoteRequest) {
+        return res.status(404).json({ message: 'Cotação não encontrada.' });
+      }
+
+      const chosenResponse = await prisma.quoteResponse.findFirst({
+        where: { id: quoteResponseId, quoteRequestId, deletedAt: null },
+      });
+
+      if (!chosenResponse) {
+        return res.status(404).json({
+          message: 'Proposta não encontrada para esta cotação.',
+        });
+      }
+
+      const latestComparison = await prisma.quoteComparison.findFirst({
+        where: { quoteRequestId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const previousWinnerId = latestComparison?.winnerQuoteResponseId ?? null;
+      const trimmedReason = reason?.trim() ?? null;
+
+      if (
+        latestComparison?.winnerQuoteResponseId &&
+        quoteResponseId !== previousWinnerId &&
+        !trimmedReason
+      ) {
+        return res.status(400).json({
+          message: 'Informe o motivo para escolher um vencedor diferente do calculado.',
+        });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.quoteResponse.updateMany({
+          where: { quoteRequestId },
+          data: { isWinner: false },
+        });
+
+        await tx.quoteResponse.update({
+          where: { id: quoteResponseId },
+          data: { isWinner: true },
+        });
+
+        if (latestComparison) {
+          await tx.quoteComparisonResult.updateMany({
+            where: { comparisonId: latestComparison.id },
+            data: { isWinner: false },
+          });
+
+          await tx.quoteComparisonResult.updateMany({
+            where: { comparisonId: latestComparison.id, quoteResponseId },
+            data: { isWinner: true },
+          });
+
+          await tx.quoteComparison.update({
+            where: { id: latestComparison.id },
+            data: {
+              winnerQuoteResponseId: quoteResponseId,
+              approvalStatus: 'not_required',
+            },
+          });
+        }
+
+        await AuditLogService.log(
+          {
+            entityType: 'quote_request',
+            entityId: quoteRequestId,
+            action: 'manual_winner',
+            performedById: req.user?.id ?? null,
+            beforeData: { winnerQuoteResponseId: previousWinnerId },
+            afterData: { winnerQuoteResponseId: quoteResponseId },
+            metadata: {
+              reason: trimmedReason,
+              previousWinnerQuoteResponseId: previousWinnerId,
+              newWinnerQuoteResponseId: quoteResponseId,
+              comparisonId: latestComparison?.id ?? null,
+            },
+          },
+          tx,
+        );
+      });
+
+      return res.status(200).json({
+        winnerQuoteResponseId: quoteResponseId,
+        comparisonId: latestComparison?.id ?? null,
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

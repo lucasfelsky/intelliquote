@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ComparacaoTab } from './ComparacaoTab';
 
@@ -12,6 +12,7 @@ vi.mock('@/services/quoteResponses', () => ({
   executeComparison: vi.fn(),
   approveAward: vi.fn(),
   closeQuoteRequest: vi.fn(),
+  setManualWinner: vi.fn(),
   messageOf: (e: unknown) => String(e),
 }));
 vi.mock('@/services/dispatch', () => ({
@@ -19,7 +20,7 @@ vi.mock('@/services/dispatch', () => ({
   replyToQuoteResponse: vi.fn(),
 }));
 
-import { listComparisons } from '@/services/quoteResponses';
+import { listComparisons, setManualWinner } from '@/services/quoteResponses';
 import { previewQuoteResponseReply } from '@/services/dispatch';
 
 const winner = {
@@ -50,6 +51,14 @@ const winner = {
   totalScore: 100,
 };
 
+const loser = {
+  ...winner,
+  supplierId: 8,
+  quoteResponseId: 43,
+  supplier: { id: 8, name: 'Beta Corp' },
+  isWinner: false,
+};
+
 const record = {
   id: 1,
   quoteRequestId: 99,
@@ -63,6 +72,8 @@ const record = {
   approvalStatus: 'approved',
   results: [winner],
 };
+
+const recordWithLoser = { ...record, results: [winner, loser] };
 
 function renderTab() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -88,6 +99,8 @@ describe('ComparacaoTab', () => {
   beforeEach(() => {
     vi.mocked(listComparisons).mockReset();
     vi.mocked(previewQuoteResponseReply).mockReset();
+    vi.mocked(setManualWinner).mockReset();
+    vi.mocked(setManualWinner).mockResolvedValue(undefined);
     vi.mocked(listComparisons).mockResolvedValue({ quoteRequestId: 99, comparisons: [record] });
     vi.mocked(previewQuoteResponseReply).mockResolvedValue({
       to: 'x@acme.com',
@@ -148,6 +161,28 @@ describe('ComparacaoTab', () => {
     expect(previewQuoteResponseReply).toHaveBeenCalledWith(42, {
       subject: 'Produto X - SQ QUIMICA - ACME Ltda',
       message: '',
+    });
+  });
+
+  it('6. vencedor manual: botão "Definir como vencedora" abre modal e chama setManualWinner com o motivo', async () => {
+    vi.mocked(listComparisons).mockResolvedValue({ quoteRequestId: 99, comparisons: [recordWithLoser] });
+    const { container, findByText, getByRole, getByLabelText } = renderTab();
+    await findByText('Beta Corp');
+
+    fireEvent.click(getByRole('button', { name: 'Definir como vencedora' }));
+    const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    expect(dialog.open).toBe(true);
+    const heading = dialog.querySelector('.modal-header h2');
+    expect(heading?.textContent).toBe('Definir Beta Corp como vencedora');
+
+    const dialogScope = within(dialog);
+    fireEvent.change(getByLabelText('Motivo'), { target: { value: 'Melhor prazo de entrega' } });
+    fireEvent.click(dialogScope.getByRole('button', { name: 'Definir como vencedora' }));
+
+    await waitFor(() => expect(setManualWinner).toHaveBeenCalledTimes(1));
+    expect(setManualWinner).toHaveBeenCalledWith(99, {
+      quoteResponseId: 43,
+      reason: 'Melhor prazo de entrega',
     });
   });
 });
