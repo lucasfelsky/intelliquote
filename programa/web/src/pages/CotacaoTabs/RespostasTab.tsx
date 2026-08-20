@@ -9,7 +9,6 @@ import {
   INCOTERMS,
   listQuoteResponses,
   messageOf,
-  updateQuoteResponse,
   type Incoterm,
   type QuoteResponse,
   type QuoteResponsePayload,
@@ -113,7 +112,6 @@ export function RespostasTab({
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<QuoteResponse | null>(null);
   const [form, setForm] = useState<ResponseFormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -125,6 +123,9 @@ export function RespostasTab({
   const [replyTargetPrice, setReplyTargetPrice] = useState('');
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
   const [replyModalError, setReplyModalError] = useState<string | null>(null);
+
+  // Modal de itens (pop-up ao clicar no fornecedor)
+  const [itemsTarget, setItemsTarget] = useState<QuoteResponse | null>(null);
 
   const responsesQuery = useQuery({
     queryKey: ['quote-responses'],
@@ -154,18 +155,6 @@ export function RespostasTab({
     mutationFn: (payload: QuoteResponsePayload) => createQuoteResponse(payload),
     onSuccess: async () => {
       setFeedback({ kind: 'ok', text: 'Proposta cadastrada com sucesso.' });
-      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
-      closeModal();
-    },
-    onError: (err) => setFormError(messageOf(err)),
-    onSettled: () => setSubmitting(false),
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: QuoteResponsePayload }) =>
-      updateQuoteResponse(id, payload),
-    onSuccess: async () => {
-      setFeedback({ kind: 'ok', text: 'Proposta atualizada com sucesso.' });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
       closeModal();
     },
@@ -212,7 +201,6 @@ export function RespostasTab({
   });
 
   function openNew() {
-    setEditing(null);
     setForm({
       ...emptyForm,
       quoteRequestId: String(quoteRequestId),
@@ -223,32 +211,8 @@ export function RespostasTab({
     setShowModal(true);
   }
 
-  function openEdit(r: QuoteResponse) {
-    setEditing(r);
-    setForm({
-      quoteRequestId: String(r.quoteRequestId),
-      supplierId: String(r.supplierId),
-      offeredPrice: String(r.offeredPrice ?? ''),
-      currency: r.currency ?? 'USD',
-      exchangeRate: r.exchangeRate !== null && r.exchangeRate !== undefined ? String(r.exchangeRate) : '',
-      freightCost: String(r.freightCost ?? 0),
-      insuranceCost: String(r.insuranceCost ?? 0),
-      otherFees: String(r.otherFees ?? 0),
-      importDuty: String(r.importDuty ?? 0),
-      ipi: String(r.ipi ?? 0),
-      pis: String(r.pis ?? 0),
-      cofins: String(r.cofins ?? 0),
-      offeredIncoterm: r.offeredIncoterm ?? 'FOB',
-      paymentTermsDays: String(r.paymentTermsDays ?? 0),
-      notes: r.notes ?? '',
-    });
-    setFormError(null);
-    setShowModal(true);
-  }
-
   function closeModal() {
     setShowModal(false);
-    setEditing(null);
     setForm(emptyForm);
     setFormError(null);
   }
@@ -341,11 +305,7 @@ export function RespostasTab({
     const payload = buildPayload();
     if (!payload) return;
     setSubmitting(true);
-    if (editing) {
-      updateMut.mutate({ id: editing.id, payload });
-    } else {
-      createMut.mutate(payload);
-    }
+    createMut.mutate(payload);
   }
 
   const replyTargetName = replyTarget
@@ -389,43 +349,40 @@ export function RespostasTab({
           <thead>
             <tr>
               <th>Fornecedor</th>
-              <th>Preço</th>
               <th>Incoterm</th>
-              <th>Pagto · Lead</th>
-              <th className="col-status">Status</th>
+              <th>Condições de pagamento</th>
+              <th>Lead time</th>
               <th>Ações</th>
             </tr>
           </thead>
           <tbody>
             {responses.map((r) => {
-              const currency = r.currency || quoteRequestCurrency;
               return (
                 <tr key={r.id}>
                   <td>
-                    <strong>{r.supplier?.name ?? `Fornecedor #${r.supplierId}`}</strong>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setItemsTarget(r)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary-700)', fontWeight: 600, textDecoration: 'underline' }}
+                    >
+                      {r.supplier?.name ?? `Fornecedor #${r.supplierId}`}
+                    </button>
                     {r.supplier?.country && <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{r.supplier.country}</div>}
+                    {r.isWinner && (
+                      <div>
+                        <span className="badge badge--muted">Vencedora</span>
+                      </div>
+                    )}
                     {r.source === 'portal' && (
                       <span className="badge" style={{ marginTop: 4, background: 'rgba(0, 174, 145, 0.15)', color: 'var(--primary-700)' }}>
                         via portal
                       </span>
                     )}
                   </td>
-                  <td>
-                    <div>{formatCurrency(r.offeredPrice, currency)}</div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                      Landed: {formatCurrency(r.totalLandedCost, 'BRL')}
-                    </div>
-                  </td>
                   <td><span className="badge">{r.offeredIncoterm}</span></td>
-                  <td>
-                    <div>{formatNumber(r.paymentTermsDays)} dias</div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                      Câmbio: {r.exchangeRate ?? '—'} · Lead: {formatNumber(r.leadTimeDays)} dias
-                    </div>
-                  </td>
-                  <td className="col-status">
-                    {r.isWinner ? <span className="badge">Vencedora</span> : <span className="badge badge--muted">Recebida</span>}
-                  </td>
+                  <td>{formatNumber(r.paymentTermsDays)} dias</td>
+                  <td>{r.leadTimeDays != null ? `${formatNumber(r.leadTimeDays)} dias` : '—'}</td>
                   <td>
                     <div className="row-actions row-actions--nowrap">
                       <button
@@ -437,28 +394,18 @@ export function RespostasTab({
                         Responder
                       </button>
                       {canEditThis && (
-                        <>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={() => openEdit(r)}
-                            disabled={updateMut.isPending}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost-button"
-                            onClick={async () => {
-                              if (await confirm('Apagar esta resposta?')) {
-                                removeMut.mutate(r.id);
-                              }
-                            }}
-                            disabled={removeMut.isPending}
-                          >
-                            Apagar
-                          </button>
-                        </>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={async () => {
+                            if (await confirm('Apagar esta resposta?')) {
+                              removeMut.mutate(r.id);
+                            }
+                          }}
+                          disabled={removeMut.isPending}
+                        >
+                          Apagar
+                        </button>
                       )}
                     </div>
                   </td>
@@ -470,12 +417,12 @@ export function RespostasTab({
         </div>
       )}
 
-      {/* MODAL DE NOVA/EDITAR RESPOSTA */}
+      {/* MODAL DE NOVA RESPOSTA */}
       <Modal
         isOpen={showModal}
         onClose={closeModal}
         size="wide"
-        title={editing ? 'Editar resposta' : 'Nova resposta'}
+        title="Nova resposta"
       >
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
@@ -487,7 +434,6 @@ export function RespostasTab({
                 value={form.supplierId}
                 onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
                 required
-                disabled={!!editing}
               >
                 <option value="">Selecione…</option>
                 {(suppliers.data ?? [])
@@ -660,8 +606,8 @@ export function RespostasTab({
 
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeModal}>Cancelar</button>
-            <button type="submit" className="primary-button" disabled={submitting || createMut.isPending || updateMut.isPending}>
-              {submitting ? (editing ? 'Salvando…' : 'Cadastrando…') : (editing ? 'Salvar alterações' : 'Cadastrar resposta')}
+            <button type="submit" className="primary-button" disabled={submitting || createMut.isPending}>
+              {submitting ? 'Cadastrando…' : 'Cadastrar resposta'}
             </button>
           </div>
         </form>
@@ -786,6 +732,61 @@ export function RespostasTab({
             </div>
           </>
         )}
+      </Modal>
+
+      {/* MODAL DE ITENS DA RESPOSTA */}
+      <Modal
+        isOpen={itemsTarget !== null}
+        onClose={() => setItemsTarget(null)}
+        size="wide"
+        title={itemsTarget ? `Itens — ${itemsTarget.supplier?.name ?? `Fornecedor #${itemsTarget.supplierId}`}` : ''}
+      >
+        {itemsTarget && (() => {
+          const currency = itemsTarget.currency || quoteRequestCurrency;
+          const rows = itemsTarget.items && itemsTarget.items.length > 0
+            ? itemsTarget.items.map((item) => ({
+                key: String(item.id),
+                productName: item.productName || productName || requestCode,
+                quantity: formatNumber(item.quantity),
+                unitPrice: formatCurrency(item.unitPrice, currency),
+                totalPrice: formatCurrency(item.totalPrice, currency),
+                leadTimeDays: item.leadTimeDays != null ? formatNumber(item.leadTimeDays) : '—',
+              }))
+            : [{
+                key: 'fallback',
+                productName: productName || requestCode,
+                quantity: '—',
+                unitPrice: formatCurrency(itemsTarget.offeredPrice, currency),
+                totalPrice: formatCurrency(itemsTarget.offeredPrice, currency),
+                leadTimeDays: itemsTarget.leadTimeDays != null ? formatNumber(itemsTarget.leadTimeDays) : '—',
+              }];
+          return (
+            <div className="table-wrapper">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Qtd</th>
+                    <th>Preço unit.</th>
+                    <th>Total</th>
+                    <th>Lead time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.key}>
+                      <td>{row.productName}</td>
+                      <td>{row.quantity}</td>
+                      <td>{row.unitPrice}</td>
+                      <td>{row.totalPrice}</td>
+                      <td>{row.leadTimeDays}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
