@@ -86,6 +86,7 @@ function renderPoSampleVars(): QuotePoVars {
     requestCode: 'QR-20260618-DEMO01',
     supplierContactName: 'Joao Fornecedor',
     forwarderInfo: 'Global Forwarders Ltda.\nAttn: Maria Santos\nmaria@globalforwarders.com\n+55 47 99999-1234',
+    destinationPort: 'NAVEGANTES, BRAZIL',
   };
 }
 
