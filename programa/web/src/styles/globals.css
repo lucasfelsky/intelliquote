@@ -1834,6 +1834,27 @@ dialog.modal-dialog--wide { max-width: 760px; }
 .cmp-empty__text strong { font-size: 16px; color: var(--ink); }
 .cmp-empty__text span { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
 
+.cmp-conclude-bar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+
+.cmp-review { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.cmp-review__hint { font-size: 13px; font-weight: 600; color: var(--ink); }
+.cmp-review__grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.cmp-review__comment { width: 100%; font-size: 13px; }
+.cmp-review__warn { font-size: 12px; color: var(--danger); }
+.cmp-review__notify {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  margin-top: 14px;
+}
+
 @media (max-width: 860px) {
   .cmp-rankgrid { grid-template-columns: 1fr; gap: 8px; }
   .cmp-rankgrid--head { display: none; }

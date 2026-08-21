@@ -27,6 +27,7 @@ import {
   executeComparison,
   previewComparison,
   setManualWinner,
+  closeQuoteRequest,
 } from '@/services/quoteResponses';
 import { previewQuoteResponseReply, sendPurchaseOrder } from '@/services/dispatch';
 
@@ -109,6 +110,22 @@ function renderTab() {
   );
 }
 
+// Mesmo setup, mas com a cotação "open" -- é o estado em que o botão
+// "Concluir cotação" e o gatilho pós-PO do modal de avaliação existem.
+function renderOpenTab() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <ComparacaoTab
+        quoteRequestId={99}
+        quoteRequestStatus="open"
+        productName="Produto X"
+        requestCode="RFQ-001"
+      />
+    </QueryClientProvider>
+  );
+}
+
 function getDialog(container: HTMLElement): HTMLDialogElement {
   const dialog = container.querySelector('dialog');
   if (!dialog) throw new Error('dialog não encontrado no container');
@@ -141,14 +158,18 @@ describe('ComparacaoTab', () => {
     });
     vi.mocked(sendPurchaseOrder).mockReset();
     vi.mocked(sendPurchaseOrder).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+    vi.mocked(closeQuoteRequest).mockReset();
+    vi.mocked(closeQuoteRequest).mockResolvedValue(undefined);
   });
 
-  it('1. replyTarget === null não quebra: exatamente 1 dialog fechado, sem throw', async () => {
+  it('1. replyTarget === null não quebra: dialogs (resposta + avaliação) fechados, sem throw', async () => {
     const { container, findByText } = renderTab();
     await findByText('ACME Ltda');
-    expect(container.querySelectorAll('dialog').length).toBe(1);
-    const dialog = getDialog(container);
-    expect(dialog.open).toBe(false);
+    // reply + review (avaliação) ficam sempre montados (mesmo fechados); PO e
+    // "definir vencedora" só montam quando acionados.
+    const dialogs = container.querySelectorAll('dialog');
+    expect(dialogs.length).toBe(2);
+    dialogs.forEach((dialog) => expect((dialog as HTMLDialogElement).open).toBe(false));
   });
 
   it('2. abre com título dinâmico e wide ao clicar em "Responder"', async () => {
@@ -182,12 +203,12 @@ describe('ComparacaoTab', () => {
   });
 
   it('4. fecha pelo botão × do componente compartilhado', async () => {
-    const { container, findByText, getByRole, getByLabelText } = renderTab();
+    const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Responder' }));
     await waitFor(() => expect(getDialog(container).open).toBe(true));
     const dialog = getDialog(container);
-    fireEvent.click(getByLabelText('Fechar'));
+    fireEvent.click(within(dialog).getByLabelText('Fechar'));
     expect(dialog.open).toBe(false);
   });
 
@@ -232,9 +253,10 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
-    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+    // reply(0) + PO(1) + avaliação(2, sempre montado mas fechado aqui)
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
     const dialogs = container.querySelectorAll('dialog');
-    const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+    const dialog = dialogs[1] as HTMLDialogElement;
     expect(dialog.open).toBe(true);
     const heading = dialog.querySelector('.modal-header h2');
     expect(heading?.textContent).toBe('Enviar Ordem de Compra — ACME Ltda');
@@ -246,9 +268,9 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
-    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
     const dialogs = container.querySelectorAll('dialog');
-    const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+    const dialog = dialogs[1] as HTMLDialogElement;
     const dialogScope = within(dialog);
 
     const file = new File(['%PDF-1.4 fake'], 'po.pdf', { type: 'application/pdf' });
@@ -278,9 +300,9 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
-    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
     const dialogs = container.querySelectorAll('dialog');
-    const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+    const dialog = dialogs[1] as HTMLDialogElement;
     const dialogScope = within(dialog);
 
     const sendButton = dialogScope.getByRole('button', { name: 'Enviar Ordem de Compra' }) as HTMLButtonElement;
@@ -364,12 +386,92 @@ describe('ComparacaoTab', () => {
       // executeComparison NAO é chamado no by-pass: não há comparação a persistir.
       expect(executeComparison).not.toHaveBeenCalled();
 
-      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
       const dialogs = container.querySelectorAll('dialog');
-      const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+      const dialog = dialogs[1] as HTMLDialogElement;
       expect(dialog.open).toBe(true);
       const heading = dialog.querySelector('.modal-header h2');
       expect(heading?.textContent).toBe('Enviar Ordem de Compra — ACME Ltda');
+    });
+  });
+
+  describe('Avaliação em modal pós-PO / botão "Concluir cotação" (item #2)', () => {
+    it('15. após enviar a Ordem de Compra pelo card vencedor, o modal de avaliação abre automaticamente', async () => {
+      const { container, findByText, getByRole } = renderOpenTab();
+      await findByText('ACME Ltda');
+
+      fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+      const poDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      const poScope = within(poDialog);
+
+      const file = new File(['%PDF-1.4 fake'], 'po.pdf', { type: 'application/pdf' });
+      fireEvent.change(poScope.getByLabelText('PDF da Ordem de Compra'), { target: { files: [file] } });
+      await poScope.findByText(/Selecionado: po\.pdf/);
+      fireEvent.change(poScope.getByLabelText('Contato do despachante (forwarder)'), {
+        target: { value: 'Forwarder Ltda' },
+      });
+      fireEvent.click(poScope.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+
+      await waitFor(() => expect(sendPurchaseOrder).toHaveBeenCalledTimes(1));
+
+      // PO fecha (poTarget volta a null, desmonta) e o modal de avaliação abre sozinho.
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+      const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      await waitFor(() => expect(reviewDialog.open).toBe(true));
+      const heading = reviewDialog.querySelector('.modal-header h2');
+      expect(heading?.textContent).toBe('Avaliar ACME Ltda');
+    });
+
+    it('16. botão "Concluir cotação" (fora do modal) abre o mesmo modal de avaliação', async () => {
+      const { container, findByText, getByRole } = renderOpenTab();
+      await findByText('ACME Ltda');
+
+      // Com o dialog de avaliação fechado, o botão dentro dele fica fora da
+      // árvore de acessibilidade (dialog sem `open` = hidden) -- só o botão
+      // avulso do cmp-body é alcançável aqui.
+      fireEvent.click(getByRole('button', { name: 'Concluir cotação' }));
+
+      const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      await waitFor(() => expect(reviewDialog.open).toBe(true));
+      const heading = reviewDialog.querySelector('.modal-header h2');
+      expect(heading?.textContent).toBe('Avaliar ACME Ltda');
+      // Com o dialog aberto, o botão de confirmação interno também some na árvore --
+      // agora existem 2 elementos acessíveis com este nome (avulso + dentro do modal).
+      expect(within(reviewDialog).getByRole('button', { name: 'Concluir cotação' })).toBeTruthy();
+    });
+
+    it('17. concluir no modal envia a avaliação completa + notifyLosers e fecha a cotação', async () => {
+      const { container, findByText, getByRole } = renderOpenTab();
+      await findByText('ACME Ltda');
+
+      fireEvent.click(getByRole('button', { name: 'Concluir cotação' }));
+      const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      await waitFor(() => expect(reviewDialog.open).toBe(true));
+      const scope = within(reviewDialog);
+
+      fireEvent.click(within(scope.getByRole('radiogroup', { name: /^Preço/ })).getByRole('radio', { name: '4 de 5' }));
+      fireEvent.click(within(scope.getByRole('radiogroup', { name: /^Prazo/ })).getByRole('radio', { name: '5 de 5' }));
+      fireEvent.click(within(scope.getByRole('radiogroup', { name: /^Qualidade/ })).getByRole('radio', { name: '3 de 5' }));
+      fireEvent.change(scope.getByPlaceholderText('Comentário (opcional)'), {
+        target: { value: 'Bom fornecedor' },
+      });
+      fireEvent.click(scope.getByLabelText('Avisar não selecionados'));
+
+      fireEvent.click(scope.getByRole('button', { name: 'Concluir cotação' }));
+
+      await waitFor(() => expect(closeQuoteRequest).toHaveBeenCalledTimes(1));
+      expect(closeQuoteRequest).toHaveBeenCalledWith(99, {
+        notifyLosers: true,
+        review: {
+          supplierId: 7,
+          priceRating: 4,
+          leadTimeRating: 5,
+          qualityRating: 3,
+          comment: 'Bom fornecedor',
+        },
+      });
+      await waitFor(() => expect(reviewDialog.open).toBe(false));
     });
   });
 });

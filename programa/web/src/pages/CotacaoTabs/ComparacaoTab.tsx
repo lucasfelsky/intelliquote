@@ -3,14 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import {
-  approveAward,
   closeQuoteRequest,
   executeComparison,
-  listComparisons,
   messageOf,
   previewComparison,
   setManualWinner,
-  type ComparisonRecord,
   type ComparisonResult,
   type ComparisonWeights,
   type SupplierReviewInput,
@@ -45,14 +42,6 @@ function formatCurrency(value: number | undefined | null, currency = 'BRL'): str
 // Espelha o limite do backend (app.ts / QuoteResponseController) -- valida
 // no cliente antes de gastar o upload/base64 num arquivo que sera rejeitado.
 const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-
-function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
 
 // Toggles de critério: padrão só Preço; regra mín 1 / máx 2 selecionados. Cada
 // selecionado entra com peso 1, os demais com peso 0 (os 4 sempre são enviados).
@@ -175,12 +164,6 @@ export function ComparacaoTab({
 
   const [criteria, setCriteria] = useState<Criterion[]>(['price']);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
-  const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
-
-  const history = useQuery({
-    queryKey: ['comparisons', quoteRequestId],
-    queryFn: () => listComparisons(quoteRequestId),
-  });
 
   const weights = computeWeights(criteria);
   const [debouncedWeights, setDebouncedWeights] = useState<ComparisonWeights>(weights);
@@ -236,7 +219,7 @@ export function ComparacaoTab({
       if (data.pendingApproval) {
         setFeedback({
           kind: 'warn',
-          text: `Comparação registrada — adjudicação acima de R$ ${formatNumber(data.thresholdValue!)} requer aprovação de um gestor/admin antes de prosseguir. Aprove no histórico de comparações abaixo.`,
+          text: `Comparação registrada — adjudicação acima de R$ ${formatNumber(data.thresholdValue!)} requer aprovação de um gestor/admin antes de prosseguir.`,
         });
         return false;
       }
@@ -246,17 +229,6 @@ export function ComparacaoTab({
       return false;
     }
   }
-
-  const approveMut = useMutation({
-    mutationFn: (comparisonId: number) => approveAward(quoteRequestId, comparisonId),
-    onSuccess: async () => {
-      setFeedback({ kind: 'ok', text: 'Adjudicação aprovada com sucesso.' });
-      await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
-      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
-      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
-    },
-    onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
-  });
 
   // Vencedor manual (override): permite escolher uma proposta diferente da
   // calculada pela comparação, exigindo motivo quando ela diverge.
@@ -300,6 +272,7 @@ export function ComparacaoTab({
           ? 'Cotação concluída. Fornecedores não selecionados foram avisados.'
           : 'Cotação concluída (fechada).',
       });
+      closeReviewModal();
       await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
     },
@@ -312,6 +285,8 @@ export function ComparacaoTab({
   const [leadTimeRating, setLeadTimeRating] = useState(0);
   const [qualityRating, setQualityRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<ComparisonResult | null>(null);
   const [replySubject, setReplySubject] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
@@ -387,6 +362,10 @@ export function ComparacaoTab({
     },
     onSuccess: () => {
       setFeedback({ kind: 'ok', text: 'Ordem de Compra enviada ao fornecedor.' });
+      if (poTarget) {
+        setReviewTarget(poTarget);
+        setReviewOpen(true);
+      }
       closePoModal();
     },
     onError: (err) => setPoModalError(messageOf(err)),
@@ -439,13 +418,35 @@ export function ComparacaoTab({
     reader.readAsDataURL(file);
   }
 
-  function toggleExpanded(id: number) {
-    setExpandedHistory((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function closeReviewModal() {
+    setReviewOpen(false);
+    setReviewTarget(null);
+    setPriceRating(0);
+    setLeadTimeRating(0);
+    setQualityRating(0);
+    setReviewComment('');
+    setNotifyLosers(false);
+  }
+
+  async function handleConcludeReview() {
+    const ratingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
+    const review: SupplierReviewInput | null = reviewTarget && ratingComplete
+      ? {
+          supplierId: reviewTarget.supplierId,
+          priceRating,
+          leadTimeRating,
+          qualityRating,
+          comment: reviewComment.trim() || null,
+        }
+      : null;
+    const msg = notifyLosers
+      ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
+      : 'Concluir esta cotação? Ela será fechada.';
+    if (await confirm(msg)) {
+      const ok = await persistBeforeAction();
+      if (!ok) return;
+      closeMut.mutate({ notifyLosers, review });
+    }
   }
 
   // Botão só reage ao gate na tabela do preview (ao vivo, não persistido);
@@ -468,112 +469,7 @@ export function ComparacaoTab({
     openPoModal(r);
   }
 
-  function renderResultRows(
-    results: ComparisonResult[],
-    comparison?: ComparisonRecord,
-    options?: { gated?: boolean },
-  ) {
-    if (results.length === 0) {
-      return (
-        <tr>
-          <td colSpan={8} style={{ textAlign: 'center', color: 'var(--ink-soft)' }}>
-            Sem resultados registrados.
-          </td>
-        </tr>
-      );
-    }
-    return results.map((r, idx) => (
-      <tr key={`${r.quoteResponseId ?? r.supplierId}-${idx}`}>
-        <td>{idx + 1}</td>
-        <td>
-          <strong>{r.supplier?.name ?? `Fornecedor #${r.supplierId}`}</strong>
-        </td>
-        <td>{formatNumber(r.offeredPrice)}</td>
-        <td><span className="badge">{r.offeredIncoterm}</span></td>
-        <td>{r.paymentTermsDays} dias</td>
-        <td>
-          <div>{formatCurrency(r.totalLandedCost, 'BRL')}</div>
-          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-            CIF: {formatCurrency(r.cifValue, 'BRL')}
-          </div>
-        </td>
-        <td>
-          <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-            Preço {formatNumber(r.priceScore, 2)} · Pagto {formatNumber(r.paymentTermsScore, 2)} ·
-            Inc {formatNumber(r.incotermScore, 2)} · Qual {formatNumber(r.qualityScore, 2)}
-          </div>
-          <strong>{formatNumber(r.totalScore, 2)}</strong>
-        </td>
-        <td>
-          {r.isWinner ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-              <span className="badge">Vencedora</span>
-              {r.quoteResponseId ? (
-                <>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => handleRowReply(r, Boolean(options?.gated))}
-                    style={{ fontSize: 12, padding: '2px 10px' }}
-                    title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
-                  >
-                    Responder
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => handleRowSendPo(r, Boolean(options?.gated))}
-                    style={{ fontSize: 12, padding: '2px 10px' }}
-                    title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
-                  >
-                    Enviar Ordem de Compra
-                  </button>
-                </>
-              ) : (
-                <span style={{ fontSize: 11, color: 'var(--ink-soft)' }} title="Sem proposta vinculada para responder.">
-                  Sem e-mail do fornecedor
-                </span>
-              )}
-            </div>
-          ) : comparison?.approvalStatus === 'pending' && r.quoteResponseId === comparison.winnerQuoteResponseId ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-              <span className="badge badge--warn">Aguardando aprovação</span>
-              {(role === 'admin' || role === 'gestor') && (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => approveMut.mutate(comparison.id)}
-                  style={{ fontSize: 12, padding: '2px 10px' }}
-                  disabled={approveMut.isPending}
-                >
-                  {approveMut.isPending ? 'Aprovando...' : 'Aprovar adjudicação'}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-              <span className="badge badge--muted">—</span>
-              {canCompare && r.quoteResponseId && (
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => openWinnerModal(r)}
-                  style={{ fontSize: 12, padding: '2px 10px' }}
-                >
-                  Definir como vencedora
-                </button>
-              )}
-            </div>
-          )}
-        </td>
-      </tr>
-    ));
-  }
-
-  // Linhas-card do ranking do PREVIEW (ao vivo, gated=true sempre). Reproduz
-  // EXATAMENTE a lógica de ações de `renderResultRows` para o preview (que não
-  // recebe `comparison`, então o ramo "Aguardando aprovação" nunca entra aqui).
-  // `renderResultRows` continua intocada e serve só o Histórico (tabela).
+  // Linhas-card do ranking do PREVIEW (ao vivo, gated=true sempre).
   function renderRankingCards(results: ComparisonResult[]) {
     return results.map((r, idx) => {
       const name = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
@@ -658,14 +554,17 @@ export function ComparacaoTab({
     });
   }
 
-  const records = history.data?.comparisons ?? [];
-  const latest = records[0];
   const replyTargetName = replyTarget
     ? replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`
     : '';
   const winnerTargetName = winnerTarget
     ? winnerTarget.supplier?.name ?? `Fornecedor #${winnerTarget.supplierId}`
     : '';
+  const reviewTargetName = reviewTarget
+    ? reviewTarget.supplier?.name ?? `Fornecedor #${reviewTarget.supplierId}`
+    : '';
+  const reviewRatingStarted = priceRating > 0 || leadTimeRating > 0 || qualityRating > 0;
+  const reviewRatingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
 
   // Tabela principal renderiza o PREVIEW (calculado ao vivo, não persistido),
   // não o histórico. isWinner é derivado do winnerQuoteResponseId + pendingApproval
@@ -753,81 +652,21 @@ export function ComparacaoTab({
         </div>
 
         <div className="cmp-body">
-        {canConclude && quoteRequestStatus === 'open' && latest && (() => {
-          const winner = latest.results.find((r) => r.isWinner);
-          const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
-          const ratingStarted = priceRating > 0 || leadTimeRating > 0 || qualityRating > 0;
-          const ratingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
-
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start', marginBottom: 16 }}>
-              {winner && (
-                <div className="card" style={{ padding: 12, width: '100%', maxWidth: 360, background: 'var(--surface-alt)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                    Avaliar {winnerName} <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>(opcional)</span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6, alignItems: 'center', fontSize: 13 }}>
-                    <span>Preço</span>
-                    <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
-                    <span>Prazo</span>
-                    <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
-                    <span>Qualidade</span>
-                    <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
-                  </div>
-                  <textarea
-                    value={reviewComment}
-                    onChange={(e) => setReviewComment(e.target.value)}
-                    placeholder="Comentário (opcional)"
-                    rows={2}
-                    style={{ width: '100%', marginTop: 8, fontSize: 13 }}
-                  />
-                  {ratingStarted && !ratingComplete && (
-                    <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 4 }}>
-                      Dê nota nas três dimensões ou deixe todas em branco.
-                    </div>
-                  )}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-                  <input
-                    type="checkbox"
-                    checked={notifyLosers}
-                    onChange={(e) => setNotifyLosers(e.target.checked)}
-                  />
-                  Avisar não selecionados
-                </label>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={async () => {
-                    const review: SupplierReviewInput | null = winner && ratingComplete
-                      ? {
-                          supplierId: winner.supplierId,
-                          priceRating,
-                          leadTimeRating,
-                          qualityRating,
-                          comment: reviewComment.trim() || null,
-                        }
-                      : null;
-                    const msg = notifyLosers
-                      ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
-                      : 'Concluir esta cotação? Ela será fechada.';
-                    if (await confirm(msg)) {
-                      const ok = await persistBeforeAction();
-                      if (!ok) return;
-                      closeMut.mutate({ notifyLosers, review });
-                    }
-                  }}
-                  disabled={closeMut.isPending || (ratingStarted && !ratingComplete)}
-                  title="Fecha a cotação (ação separada da comparação)."
-                >
-                  {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
-                </button>
-              </div>
-            </div>
-          );
-        })()}
+        {canConclude && quoteRequestStatus === 'open' && (
+          <div className="cmp-conclude-bar">
+            <button
+              type="button"
+              className="cmp-btn cmp-btn--ghost"
+              onClick={() => {
+                setReviewTarget(rankedResults.find((r) => r.isWinner) ?? null);
+                setReviewOpen(true);
+              }}
+              title="Avalia a vencedora (opcional) e fecha a cotação."
+            >
+              Concluir cotação
+            </button>
+          </div>
+        )}
 
         {previewQuery.isLoading && <p>Calculando comparação…</p>}
         {previewQuery.isError && (
@@ -935,72 +774,6 @@ export function ComparacaoTab({
           </>
         )}
         </div>
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Histórico de comparações</h2>
-        
-        {records.length === 0 && !history.isLoading && !history.isError && (
-          <div className="empty-state">
-            <strong>Sem histórico</strong>
-            <p>Quando comparações forem executadas, o histórico aparecerá aqui.</p>
-          </div>
-        )}
-
-        {records.map((rec: ComparisonRecord) => {
-          const winner = rec.results.find((r) => r.isWinner);
-          const isOpen = expandedHistory.has(rec.id);
-          return (
-            <article
-              key={rec.id}
-              className="card"
-              style={{ marginBottom: 12, background: 'var(--surface-alt)', borderStyle: 'dashed' }}
-            >
-              <div className="page-header" style={{ marginBottom: 8 }}>
-                <div>
-                  <p className="eyebrow">Comparação #{rec.id}</p>
-                  <h3>{formatDateTime(rec.createdAt)}</h3>
-                  <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                    Executada por {rec.executedBy?.name ?? 'Sistema'}.
-                  </p>
-                </div>
-                <div className="page-header__actions">
-                  <span className="chip chip--static">Preço {formatNumber(rec.priceWeight, 2)}</span>
-                  <span className="chip chip--static">Pagto {formatNumber(rec.paymentTermsWeight, 2)}</span>
-                  <span className="chip chip--static">Inc {formatNumber(rec.incotermWeight, 2)}</span>
-                  <span className="chip chip--static">{rec.results.length} propostas</span>
-                  {winner ? (
-                    <span className="badge">{`Vencedora: ${winner.supplier?.name ?? `Fornecedor #${winner.supplierId}`}`}</span>
-                  ) : (
-                    <span className="badge badge--muted">Sem vencedora</span>
-                  )}
-                </div>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => toggleExpanded(rec.id)}>
-                {isOpen ? 'Ocultar detalhes' : 'Ver detalhes'}
-              </button>
-              {isOpen && (
-                <div style={{ marginTop: 12 }}>
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Fornecedor</th>
-                        <th>Preço</th>
-                        <th>Incoterm</th>
-                        <th>Pagto</th>
-                        <th>Landed (BRL)</th>
-                        <th>Scores</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>{renderResultRows(rec.results, rec)}</tbody>
-                  </table>
-                </div>
-              )}
-            </article>
-          );
-        })}
       </div>
 
       <Modal
@@ -1228,6 +1001,66 @@ export function ComparacaoTab({
           </div>
         </Modal>
       )}
+
+      <Modal
+        isOpen={reviewOpen}
+        onClose={closeReviewModal}
+        title={reviewTarget ? `Avaliar ${reviewTargetName}` : 'Concluir cotação'}
+      >
+        <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
+          {requestCode} · {productName}
+        </p>
+
+        {reviewTarget && (
+          <div className="cmp-review">
+            <div className="cmp-review__hint">Avaliação (opcional)</div>
+            <div className="cmp-review__grid">
+              <span>Preço</span>
+              <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
+              <span>Prazo</span>
+              <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
+              <span>Qualidade</span>
+              <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
+            </div>
+            <textarea
+              className="textarea cmp-review__comment"
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              placeholder="Comentário (opcional)"
+              rows={2}
+            />
+            {reviewRatingStarted && !reviewRatingComplete && (
+              <div className="cmp-review__warn">
+                Dê nota nas três dimensões ou deixe todas em branco.
+              </div>
+            )}
+          </div>
+        )}
+
+        <label className="cmp-review__notify">
+          <input
+            type="checkbox"
+            checked={notifyLosers}
+            onChange={(e) => setNotifyLosers(e.target.checked)}
+          />
+          Avisar não selecionados
+        </label>
+
+        <div className="modal-actions">
+          <button type="button" className="ghost-button" onClick={closeReviewModal}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={handleConcludeReview}
+            disabled={closeMut.isPending || (reviewRatingStarted && !reviewRatingComplete)}
+            title="Fecha a cotação (ação separada da comparação)."
+          >
+            {closeMut.isPending ? 'Concluindo…' : 'Concluir cotação'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -262,9 +262,10 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
       : null);
   return {
     id: obj.id !== undefined && obj.id !== null ? asNumber(obj.id) : undefined,
-    quoteResponseId: obj.quoteResponseId !== undefined && obj.quoteResponseId !== null
-      ? asNumber(obj.quoteResponseId)
-      : undefined,
+    quoteResponseId: (() => {
+      const fallback = obj.quoteResponseId ?? obj.id;
+      return fallback !== undefined && fallback !== null ? asNumber(fallback) : undefined;
+    })(),
     supplierId: asNumber(obj.supplierId),
     supplier: supplierRaw
       ? {
