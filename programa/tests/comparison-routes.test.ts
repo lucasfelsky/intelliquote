@@ -632,6 +632,175 @@ describe('Comparison routes', () => {
       expect(response.status).toBe(403);
     });
   });
+
+  // Preview: mesmo calculo do /compare, mas nunca persiste nada -- usado pelo
+  // recalculo ao vivo dos toggles no front (sem $transaction, sem mutar
+  // isWinner, sem criar QuoteComparison/AuditLog).
+  describe('Preview comparison (sem persistir)', () => {
+    it('com 2 propostas retorna ranking + winner e NAO persiste nada', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'USD',
+      });
+      prismaMock.quoteResponse.findMany.mockResolvedValue([
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 40,
+          insuranceCost: 10,
+          otherFees: 20,
+          importDuty: 14,
+          ipi: 5,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          isWinner: false,
+          supplier: {
+            id: 101,
+            name: 'Global Parts Ltd',
+            contacts: [{ id: 9001, name: 'Ana Vendas', email: 'ana@globalparts.example' }],
+          },
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 120,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 10,
+          importDuty: 10,
+          ipi: 4,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'FOB',
+          paymentTermsDays: 30,
+          isWinner: false,
+          supplier: {
+            id: 102,
+            name: 'Nihon Trading',
+            contacts: [{ id: 9002, name: 'Kenji Sales', email: 'kenji@nihon.example' }],
+          },
+        },
+      ]);
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: null,
+      });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.responseCount).toBe(2);
+      expect(response.body.results).toHaveLength(2);
+      expect(response.body.results.some((item: { isWinner: boolean }) => item.isWinner)).toBe(true);
+      expect(response.body.winnerQuoteResponseId).toBeTruthy();
+      for (const item of response.body.results as Array<{
+        supplier?: { name: string };
+        contact?: { email: string } | null;
+      }>) {
+        expect(item.supplier?.name).toBeTruthy();
+        expect(item.contact?.email).toMatch(/@/);
+      }
+
+      // Nada foi persistido: nem transacao, nem update de isWinner, nem
+      // criacao de QuoteComparison/AuditLog.
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.update).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
+      expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('com 1 proposta retorna responseCount 1 (sem gate de minimo 2)', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'BRL',
+      });
+      prismaMock.quoteResponse.findMany.mockResolvedValue([
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100,
+          currency: 'BRL',
+          exchangeRate: 1,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 0,
+          importDuty: 0,
+          ipi: 0,
+          pis: 0,
+          cofins: 0,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          isWinner: false,
+          supplier: {
+            id: 101,
+            name: 'Global Parts Ltd',
+            contacts: [{ id: 9001, name: 'Ana Vendas', email: 'ana@globalparts.example' }],
+          },
+        },
+      ]);
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: null,
+      });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body.responseCount).toBe(1);
+      expect(response.body.results).toHaveLength(1);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
+    });
+
+    it('sem nenhuma proposta retorna responseCount 0 e results vazio', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'BRL',
+      });
+      prismaMock.quoteResponse.findMany.mockResolvedValue([]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body.responseCount).toBe(0);
+      expect(response.body.results).toEqual([]);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+  });
 });
 
 async function loginAs(role: 'admin' | 'comprador' | 'gestor' | 'viewer') {

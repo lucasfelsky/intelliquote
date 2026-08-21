@@ -58,6 +58,12 @@ quoteResponseRoutes.post(
   allowRoles(['admin', 'comprador', 'gestor']),
   QuoteResponseController.compareByQuoteRequest,
 );
+quoteResponseRoutes.post(
+  '/quote-requests/:quoteRequestId/compare/preview',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  QuoteResponseController.previewComparison,
+);
 quoteResponseRoutes.get(
   '/quote-requests/:quoteRequestId/comparisons',
   requireAuth,

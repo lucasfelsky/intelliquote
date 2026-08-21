@@ -1154,6 +1154,153 @@ export class QuoteResponseController {
     }
   }
 
+  static async previewComparison(
+    req: Request,
+    res: Response,
+  ): Promise<Response> {
+    try {
+      const quoteRequestId = parseId(req.params.quoteRequestId);
+      const weights = parseComparisonWeights(req.body);
+
+      if (!quoteRequestId) {
+        return res.status(400).json({
+          message: 'ID da cotacao invalido.',
+        });
+      }
+
+      if (!weights) {
+        return res.status(400).json({
+          message:
+            'Os pesos da comparacao sao invalidos. Use valores positivos para preco, pagamento e incoterm.',
+        });
+      }
+
+      const quoteRequest = await prisma.quoteRequest.findUnique({
+        where: { id: quoteRequestId },
+      });
+
+      if (!quoteRequest) {
+        return res.status(404).json({
+          message: 'Cotacao nao encontrada.',
+        });
+      }
+
+      // Preview: apenas calcula, nunca persiste (sem $transaction, sem mutar
+      // isWinner, sem criar QuoteComparison/AuditLog). Usado pra recalculo ao
+      // vivo enquanto o usuario ajusta os toggles de peso.
+      const responses = await prisma.quoteResponse.findMany({
+        where: { quoteRequestId },
+        orderBy: {
+          id: 'asc',
+        },
+        include: {
+          supplier: {
+            select: {
+              id: true,
+              name: true,
+              contacts: {
+                orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+                take: 1,
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+        },
+      });
+
+      const responseCount = responses.length;
+
+      if (responseCount === 0) {
+        return res.status(200).json({
+          results: [],
+          winnerQuoteResponseId: null,
+          pendingApproval: false,
+          thresholdValue: null,
+          responseCount,
+        });
+      }
+
+      const supplierIds = Array.from(new Set(responses.map(r => r.supplierId)));
+      const reviews = await prisma.supplierReview.groupBy({
+        by: ['supplierId'],
+        _avg: { qualityRating: true },
+        where: { supplierId: { in: supplierIds } },
+      });
+      const qualityMap = new Map(
+        reviews.map(r => [r.supplierId, r._avg.qualityRating]),
+      );
+
+      const comparisonInputs = responses.map((response) => ({
+        id: response.id,
+        quoteRequestId: response.quoteRequestId,
+        supplierId: response.supplierId,
+        offeredPrice: Number(response.offeredPrice),
+        currency: response.currency,
+        exchangeRate: Number(response.exchangeRate),
+        freightCost: Number(response.freightCost),
+        insuranceCost: Number(response.insuranceCost),
+        otherFees: Number(response.otherFees),
+        importDutyRate: Number(response.importDuty),
+        ipiRate: Number(response.ipi),
+        pisRate: Number(response.pis),
+        cofinsRate: Number(response.cofins),
+        offeredIncoterm: response.offeredIncoterm,
+        paymentTermsDays: response.paymentTermsDays,
+        isWinner: response.isWinner,
+        avgQuality: qualityMap.get(response.supplierId) ?? undefined,
+      }));
+      const comparisonValidationError =
+        QuoteComparisonService.validateResponsesForComparison(comparisonInputs);
+
+      if (comparisonValidationError) {
+        return res.status(400).json({
+          message: comparisonValidationError,
+        });
+      }
+
+      const comparisonResults = QuoteComparisonService.compareResponses(
+        comparisonInputs,
+        weights,
+      );
+
+      const winner = comparisonResults.find((response) => response.isWinner) ?? null;
+
+      const companyProfile = await CompanyProfileService.get();
+      const threshold = companyProfile.awardApprovalThreshold ? Number(companyProfile.awardApprovalThreshold) : null;
+
+      let requiresApproval = false;
+      if (winner && threshold !== null && winner.totalLandedCost > threshold) {
+        requiresApproval = true;
+      }
+
+      const supplierById = new Map(
+        responses.map((response) => [response.supplierId, response.supplier]),
+      );
+      const enrichedResults = comparisonResults.map((result) => {
+        const supplier = supplierById.get(result.supplierId);
+        const primaryContact = supplier?.contacts?.[0] ?? null;
+        return {
+          ...result,
+          supplier: supplier ? { id: supplier.id, name: supplier.name } : undefined,
+          contact: primaryContact
+            ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
+            : null,
+        };
+      });
+
+      return res.status(200).json({
+        results: enrichedResults,
+        winnerQuoteResponseId: winner?.id ?? null,
+        pendingApproval: requiresApproval,
+        thresholdValue: requiresApproval ? threshold : null,
+        responseCount,
+      });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
   static async getComparisonHistoryByQuoteRequest(
     req: Request,
     res: Response,

@@ -188,6 +188,7 @@
     "POST /quote-requests/:id/portal-tokens",
     "POST /quote-requests/:id/reopen",
     "POST /quote-requests/:quoteRequestId/compare",
+    "POST /quote-requests/:quoteRequestId/compare/preview",
     "POST /quote-requests/:quoteRequestId/comparisons/:comparisonId/approve",
     "POST /quote-requests/:quoteRequestId/items",
     "POST /quote-requests/:quoteRequestId/winner",
