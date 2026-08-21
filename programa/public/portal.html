@@ -899,7 +899,7 @@
           // resolver de QuoteResponse previas.
           const updateTotal = () => {
             let sum = 0;
-            document.querySelectorAll('.item-row').forEach((row) => {
+            form.querySelectorAll('.item-row').forEach((row) => {
               const unit = Number(row.querySelector('input[name="unitPrice"]').value || 0);
               const qty = Number(row.querySelector('input[name="quantity"]').value || 0);
               const itemTotal = unit * qty;
@@ -907,7 +907,7 @@
             });
             totalInput.value = sum ? sum.toFixed(2) : '';
           };
-          document.querySelectorAll('.item-row input').forEach((el) => {
+          form.querySelectorAll('.item-row input').forEach((el) => {
             el.addEventListener('input', updateTotal);
           });
           document.getElementById('portal-cancel').addEventListener('click', () => {
@@ -916,14 +916,20 @@
           });
           form.addEventListener('submit', async (event) => {
             event.preventDefault();
-            await submitResponse(form, data);
+            try {
+              await submitResponse(form, data);
+            } catch (error) {
+              setStatus('error', 'Unexpected error while submitting. Please try again.');
+              const submit = document.getElementById('portal-submit');
+              if (submit) submit.disabled = false;
+            }
           });
           updateTotal();
         }
 
-        function collectItems() {
+        function collectItems(form) {
           const items = [];
-          document.querySelectorAll('.item-row').forEach((row) => {
+          form.querySelectorAll('.item-row').forEach((row) => {
             const quoteRequestItemId = Number(row.getAttribute('data-item-id'));
             const unitPrice = Number(row.querySelector('input[name="unitPrice"]').value);
             const quantity = Number(row.querySelector('input[name="quantity"]').value);
@@ -959,7 +965,7 @@
             validityDays: Number(form.elements.namedItem('validityDays').value),
             notes: form.elements.namedItem('notes').value || null,
             exchangeRate: currency === 'BRL' ? null : exchangeRate,
-            items: collectItems(),
+            items: collectItems(form),
           };
           const apiBase = (() => {
             // Quando o portal.html e servido pelo Cloud Run direto
