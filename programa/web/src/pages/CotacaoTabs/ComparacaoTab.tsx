@@ -77,6 +77,84 @@ function computeWeights(criteria: Criterion[]): ComparisonWeights {
 // Debounce ~350ms pro recálculo automático da comparação ao vivo.
 const PREVIEW_DEBOUNCE_MS = 350;
 
+// --- Restyle visual (só apresentação) das linhas-card do preview/by-pass ---
+
+// Iniciais do avatar do card by-pass: 1ª letra das 2 primeiras palavras, ou as
+// 2 primeiras letras quando o nome é uma única palavra.
+function initialsOf(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase();
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+// Percentual da mini-bar de score (totalScore já é limitado a 0-100 pelo backend).
+function scorePercent(total: number): number {
+  if (typeof total !== 'number' || Number.isNaN(total)) return 0;
+  return Math.min(100, Math.max(0, total));
+}
+
+function CheckIcon() {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  );
+}
+
+function DocIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+function EnvelopeIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h16v16H4z" />
+      <polyline points="22,6 12,13 2,6" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function ChartIcon() {
+  return (
+    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <rect x="7" y="12" width="3" height="6" rx="1" />
+      <rect x="12" y="8" width="3" height="10" rx="1" />
+      <rect x="17" y="14" width="3" height="4" rx="1" />
+    </svg>
+  );
+}
+
 export function ComparacaoTab({
   quoteRequestId,
   quoteRequestStatus,
@@ -492,6 +570,94 @@ export function ComparacaoTab({
     ));
   }
 
+  // Linhas-card do ranking do PREVIEW (ao vivo, gated=true sempre). Reproduz
+  // EXATAMENTE a lógica de ações de `renderResultRows` para o preview (que não
+  // recebe `comparison`, então o ramo "Aguardando aprovação" nunca entra aqui).
+  // `renderResultRows` continua intocada e serve só o Histórico (tabela).
+  function renderRankingCards(results: ComparisonResult[]) {
+    return results.map((r, idx) => {
+      const name = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
+      const contactBits = [r.contact?.name, r.contact?.email].filter(Boolean) as string[];
+      const contactLine = contactBits.length ? contactBits.join(' · ') : null;
+      const percent = scorePercent(r.totalScore);
+      return (
+        <div
+          key={`${r.quoteResponseId ?? r.supplierId}-${idx}`}
+          className={r.isWinner ? 'cmp-row cmp-rankgrid cmp-row--winner' : 'cmp-row cmp-rankgrid'}
+        >
+          <div className={r.isWinner ? 'cmp-rank cmp-rank--winner' : 'cmp-rank'}>{idx + 1}</div>
+          <div className="cmp-row__supplier">
+            <div className="cmp-row__name-line">
+              <span className="cmp-row__name">{name}</span>
+              {r.isWinner && (
+                <span className="cmp-winner-badge">
+                  <TrophyIcon />
+                  Vencedora
+                </span>
+              )}
+            </div>
+            {contactLine && <span className="cmp-row__contact">{contactLine}</span>}
+          </div>
+          <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>
+          <div>
+            <span className="cmp-incoterm-pill">{r.offeredIncoterm}</span>
+          </div>
+          <div className="cmp-row__payment">{r.paymentTermsDays} dias</div>
+          <div className="cmp-row__landed">{formatCurrency(r.totalLandedCost, 'BRL')}</div>
+          <div className="cmp-scorebar">
+            <div className="cmp-scorebar__row">
+              <span>Score</span>
+              <strong>{formatNumber(r.totalScore, 1)}</strong>
+            </div>
+            <div className="cmp-scorebar__track">
+              <div className="cmp-scorebar__fill" style={{ width: `${percent}%` }} />
+            </div>
+          </div>
+          <div className={r.isWinner ? 'cmp-row__actions cmp-row__actions--stacked' : 'cmp-row__actions'}>
+            {r.quoteResponseId ? (
+              r.isWinner ? (
+                <>
+                  <button
+                    type="button"
+                    className="cmp-btn cmp-btn--primary"
+                    onClick={() => handleRowSendPo(r, true)}
+                    title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
+                  >
+                    <DocIcon />
+                    Enviar Ordem de Compra
+                  </button>
+                  <button
+                    type="button"
+                    className="cmp-btn cmp-btn--ghost"
+                    onClick={() => handleRowReply(r, true)}
+                    title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
+                  >
+                    <EnvelopeIcon />
+                    Responder
+                  </button>
+                </>
+              ) : (
+                canCompare && (
+                  <button
+                    type="button"
+                    className="cmp-btn cmp-btn--link"
+                    onClick={() => openWinnerModal(r)}
+                  >
+                    Definir como vencedora
+                  </button>
+                )
+              )
+            ) : (
+              <span className="cmp-row__no-email" title="Sem proposta vinculada para responder.">
+                Sem e-mail do fornecedor
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    });
+  }
+
   const records = history.data?.comparisons ?? [];
   const latest = records[0];
   const replyTargetName = replyTarget
@@ -541,35 +707,52 @@ export function ComparacaoTab({
         </p>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Critérios de comparação</h2>
-      </div>
+      <div className="cmp-card">
+        <div className="cmp-head">
+          <div className="cmp-head__info">
+            <span className="cmp-eyebrow">SQ Química · Comparação</span>
+            <h2 className="cmp-title">Comparação de fornecedores</h2>
+            <div className="cmp-head__meta">
+              <span className="cmp-pill">{requestCode}</span>
+              {productName && <span className="cmp-head__product">{productName}</span>}
+            </div>
+          </div>
+          <div className="cmp-live">
+            <span className="cmp-live__dot" aria-hidden="true" />
+            {responseCount} respostas · ao vivo
+          </div>
+        </div>
 
-      <div className="form-grid" role="group" aria-label="Critérios de comparação" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {CRITERIA.map((c) => {
-          const isSelected = criteria.includes(c.id);
-          return (
-            <button
-              key={c.id}
-              type="button"
-              role="switch"
-              aria-checked={isSelected}
-              className={isSelected ? 'chip chip--active' : 'chip'}
-              onClick={() => toggleCriterion(c.id)}
-              title={c.id === 'quality' ? 'Fornecedores sem avaliações prévias recebem nota 0 neste critério.' : undefined}
-            >
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
-      <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 8 }}>
-        Selecione de 1 a 2 critérios. A comparação recalcula automaticamente.
-      </p>
+        <div className="cmp-criteria">
+          <div className="cmp-criteria__head">
+            <span className="cmp-criteria__label">Critérios de comparação</span>
+            <span className="cmp-criteria__hint">Escolha até 2 — o ranking recalcula sozinho</span>
+          </div>
+          <div className="cmp-criteria__toggles" role="group" aria-label="Critérios de comparação">
+            {CRITERIA.map((c) => {
+              const isSelected = criteria.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  role="switch"
+                  aria-checked={isSelected}
+                  className={isSelected ? 'cmp-toggle cmp-toggle--active' : 'cmp-toggle'}
+                  onClick={() => toggleCriterion(c.id)}
+                  title={c.id === 'quality' ? 'Fornecedores sem avaliações prévias recebem nota 0 neste critério.' : undefined}
+                >
+                  {isSelected && <CheckIcon />}
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="cmp-criteria__note">
+            Selecione de 1 a 2 critérios. A comparação recalcula automaticamente.
+          </p>
+        </div>
 
-      <div style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Comparação atual</h2>
-
+        <div className="cmp-body">
         {canConclude && quoteRequestStatus === 'open' && latest && (() => {
           const winner = latest.results.find((r) => r.isWinner);
           const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
@@ -658,27 +841,78 @@ export function ComparacaoTab({
         )}
 
         {previewQuery.data && responseCount === 0 && (
-          <div className="empty-state">
-            <strong>Nenhuma proposta recebida ainda.</strong>
-            <p>A comparação aparece aqui assim que houver ao menos uma resposta de fornecedor.</p>
+          <div className="cmp-empty">
+            <div className="cmp-empty__icon">
+              <ChartIcon />
+            </div>
+            <div className="cmp-empty__text">
+              <strong>Nenhuma resposta ainda</strong>
+              <span>
+                Assim que os fornecedores responderem pelo portal, o ranking aparece aqui e recalcula
+                sozinho conforme os critérios.
+              </span>
+            </div>
           </div>
         )}
 
-        {previewQuery.data && responseCount === 1 && (
-          <div className="card" style={{ padding: 16 }}>
-            <p style={{ marginTop: 0 }}>
-              <strong>Apenas um fornecedor respondeu — sem comparação.</strong>
-            </p>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => handleBypassSendPo()}
-              disabled={bypassPending}
-            >
-              {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
-            </button>
-          </div>
-        )}
+        {previewQuery.data && responseCount === 1 && (() => {
+          const only = previewResults[0];
+          const bypassName = only?.supplier?.name ?? (only ? `Fornecedor #${only.supplierId}` : '—');
+          const bypassContactBits = only
+            ? ([only.contact?.name, only.contact?.email].filter(Boolean) as string[])
+            : [];
+          const bypassContactLine = bypassContactBits.length ? bypassContactBits.join(' · ') : null;
+          return (
+            <div className="cmp-bypass">
+              <div className="cmp-bypass-alert">
+                <div className="cmp-bypass-alert__icon">
+                  <AlertIcon />
+                </div>
+                <div className="cmp-bypass-alert__text">
+                  <strong>Apenas um fornecedor respondeu — sem comparação.</strong>
+                  <span>
+                    Não há como comparar sem uma segunda proposta. Você pode seguir com este
+                    fornecedor enviando a Ordem de Compra diretamente.
+                  </span>
+                </div>
+              </div>
+
+              {only && (
+                <div className="cmp-bypass-supplier">
+                  <div className="cmp-bypass-supplier__info">
+                    <div className="cmp-bypass-supplier__avatar">{initialsOf(bypassName)}</div>
+                    <div className="cmp-bypass-supplier__name">
+                      <strong>{bypassName}</strong>
+                      {bypassContactLine && <span>{bypassContactLine}</span>}
+                    </div>
+                  </div>
+                  <div className="cmp-bypass-supplier__stats">
+                    <div className="cmp-bypass-supplier__stat">
+                      <span>Preço</span>
+                      <strong>{formatNumber(only.offeredPrice)}</strong>
+                    </div>
+                    <div className="cmp-bypass-supplier__stat">
+                      <span>Landed</span>
+                      <strong>{formatCurrency(only.totalLandedCost, 'BRL')}</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="cmp-bypass-actions">
+                <button
+                  type="button"
+                  className="cmp-btn cmp-btn--primary"
+                  onClick={() => handleBypassSendPo()}
+                  disabled={bypassPending}
+                >
+                  <DocIcon />
+                  {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {previewQuery.data && responseCount >= 2 && (
           <>
@@ -687,23 +921,20 @@ export function ComparacaoTab({
                 A vencedora calculada tem landed cost acima de R$ {formatNumber(previewQuery.data?.thresholdValue ?? null)} e exigirá aprovação de um gestor/admin ao prosseguir com uma ação.
               </p>
             )}
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Fornecedor</th>
-                  <th>Preço</th>
-                  <th>Incoterm</th>
-                  <th>Pagto</th>
-                  <th>Landed (BRL)</th>
-                  <th>Scores</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>{renderResultRows(rankedResults, undefined, { gated: true })}</tbody>
-            </table>
+            <div className="cmp-rankgrid cmp-rankgrid--head">
+              <div>#</div>
+              <div>Fornecedor</div>
+              <div>Preço</div>
+              <div>Incoterm</div>
+              <div>Pagamento</div>
+              <div>Landed (BRL)</div>
+              <div>Score</div>
+              <div></div>
+            </div>
+            <div className="cmp-rows">{renderRankingCards(rankedResults)}</div>
           </>
         )}
+        </div>
       </div>
 
       <div style={{ marginTop: 24 }}>
