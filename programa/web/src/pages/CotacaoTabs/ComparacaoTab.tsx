@@ -8,9 +8,11 @@ import {
   executeComparison,
   listComparisons,
   messageOf,
+  previewComparison,
   setManualWinner,
   type ComparisonRecord,
   type ComparisonResult,
+  type ComparisonWeights,
   type SupplierReviewInput,
 } from '@/services/quoteResponses';
 import StarRating from '@/components/StarRating';
@@ -52,6 +54,29 @@ function formatDateTime(iso: string | null | undefined): string {
     + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Toggles de critério: padrão só Preço; regra mín 1 / máx 2 selecionados. Cada
+// selecionado entra com peso 1, os demais com peso 0 (os 4 sempre são enviados).
+type Criterion = 'price' | 'payment' | 'incoterm' | 'quality';
+
+const CRITERIA: { id: Criterion; label: string }[] = [
+  { id: 'price', label: 'Preço' },
+  { id: 'payment', label: 'Condição de pagamento' },
+  { id: 'incoterm', label: 'Incoterm' },
+  { id: 'quality', label: 'Qualidade' },
+];
+
+function computeWeights(criteria: Criterion[]): ComparisonWeights {
+  return {
+    priceWeight: criteria.includes('price') ? 1 : 0,
+    paymentTermsWeight: criteria.includes('payment') ? 1 : 0,
+    incotermWeight: criteria.includes('incoterm') ? 1 : 0,
+    qualityWeight: criteria.includes('quality') ? 1 : 0,
+  };
+}
+
+// Debounce ~350ms pro recálculo automático da comparação ao vivo.
+const PREVIEW_DEBOUNCE_MS = 350;
+
 export function ComparacaoTab({
   quoteRequestId,
   quoteRequestStatus,
@@ -70,10 +95,7 @@ export function ComparacaoTab({
   const canCompare = role === 'admin' || role === 'comprador' || role === 'gestor';
   const canConclude = role === 'admin' || role === 'gestor';
 
-  const [priceWeight, setPriceWeight] = useState(1);
-  const [paymentWeight, setPaymentWeight] = useState(1);
-  const [incotermWeight, setIncotermWeight] = useState(1);
-  const [qualityWeight, setQualityWeight] = useState(0);
+  const [criteria, setCriteria] = useState<Criterion[]>(['price']);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<Set<number>>(new Set());
 
@@ -82,36 +104,70 @@ export function ComparacaoTab({
     queryFn: () => listComparisons(quoteRequestId),
   });
 
-  // F8: Executar comparação e definir vencedora.
-  // Comparar passou a ser repetível e não fecha a cotação: não exige mais status aberto.
-  const runMut = useMutation({
-    mutationFn: () => {
-      const weights = {
-        priceWeight,
-        paymentTermsWeight: paymentWeight,
-        incotermWeight,
-        qualityWeight,
-      };
-      return executeComparison(quoteRequestId, weights);
-    },
-    onSuccess: async (data) => {
-      if (data.pendingApproval) {
-        setFeedback({
-          kind: 'warn',
-          text: `Comparação executada — adjudicação acima de R$ ${formatNumber(data.thresholdValue!)} requer aprovação de um gestor/admin.`,
-        });
-      } else {
-        setFeedback({
-          kind: 'ok',
-          text: 'Comparação executada e vencedora definida. A cotação continua aberta — conclua-a quando fechar o pedido.',
-        });
+  const weights = computeWeights(criteria);
+  const [debouncedWeights, setDebouncedWeights] = useState<ComparisonWeights>(weights);
+
+  // Recalculo automatico ao vivo: a primeira busca acontece no mount (o
+  // estado inicial já reflete os pesos default); mudanças de toggle depois
+  // do mount entram no debounce de ~350ms antes de disparar o preview de novo.
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setDebouncedWeights(computeWeights(criteria));
+    }, PREVIEW_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [criteria]);
+
+  const previewQuery = useQuery({
+    queryKey: ['comparison-preview', quoteRequestId, debouncedWeights],
+    queryFn: () => previewComparison(quoteRequestId, debouncedWeights),
+    staleTime: 30_000,
+  });
+
+  function toggleCriterion(id: Criterion) {
+    setCriteria((current) => {
+      const isSelected = current.includes(id);
+      if (isSelected) {
+        if (current.length <= 1) {
+          setFeedback({ kind: 'warn', text: 'Selecione ao menos 1 critério.' });
+          return current;
+        }
+        return current.filter((c) => c !== id);
       }
+      if (current.length >= 2) {
+        setFeedback({ kind: 'warn', text: 'Selecione no máximo 2 critérios.' });
+        return current;
+      }
+      return [...current, id];
+    });
+  }
+
+  // Executa e persiste a comparação com os pesos atuais (cria QuoteComparison
+  // de fato). Chamado só na ação (Enviar PO / Responder / Concluir) -- o
+  // recálculo ao vivo usa somente o preview, que não persiste nada.
+  async function persistBeforeAction(): Promise<boolean> {
+    try {
+      const data = await executeComparison(quoteRequestId, weights);
       await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
-    },
-    onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
-  });
+      if (data.pendingApproval) {
+        setFeedback({
+          kind: 'warn',
+          text: `Comparação registrada — adjudicação acima de R$ ${formatNumber(data.thresholdValue!)} requer aprovação de um gestor/admin antes de prosseguir. Aprove no histórico de comparações abaixo.`,
+        });
+        return false;
+      }
+      return true;
+    } catch (err) {
+      setFeedback({ kind: 'err', text: messageOf(err) });
+      return false;
+    }
+  }
 
   const approveMut = useMutation({
     mutationFn: (comparisonId: number) => approveAward(quoteRequestId, comparisonId),
@@ -314,117 +370,31 @@ export function ComparacaoTab({
     });
   }
 
-  const setPriceWeightRef = useRef(setPriceWeight);
-  const setPaymentWeightRef = useRef(setPaymentWeight);
-  const setIncotermWeightRef = useRef(setIncotermWeight);
-  const setQualityWeightRef = useRef(setQualityWeight);
-
-  useEffect(() => { setPriceWeightRef.current = setPriceWeight; }, [setPriceWeight]);
-  useEffect(() => { setPaymentWeightRef.current = setPaymentWeight; }, [setPaymentWeight]);
-  useEffect(() => { setIncotermWeightRef.current = setIncotermWeight; }, [setIncotermWeight]);
-  useEffect(() => { setQualityWeightRef.current = setQualityWeight; }, [setQualityWeight]);
-
-  const setWeightById = (id: 'weight-price' | 'weight-payment' | 'weight-incoterm' | 'weight-quality', next: number) => {
-    if (id === 'weight-price') setPriceWeightRef.current(next);
-    else if (id === 'weight-payment') setPaymentWeightRef.current(next);
-    else if (id === 'weight-incoterm') setIncotermWeightRef.current(next);
-    else setQualityWeightRef.current(next);
-  };
-
-  function WeightSlider({
-    label,
-    value,
-    id,
-    min = 0,
-    max = 5,
-    step = 0.1,
-  }: {
-    label: string;
-    value: number;
-    id: 'weight-price' | 'weight-payment' | 'weight-incoterm' | 'weight-quality';
-    min?: number;
-    max?: number;
-    step?: number;
-  }) {
-    const sliderId = `ws-${id}`;
-    const clamp = (n: number) => Math.max(min, Math.min(max, n));
-    const pct = (clamp(value) - min) / (max - min) * 100;
-
-    useEffect(() => {
-      const el = document.getElementById(sliderId);
-      if (!el) return;
-      let dragging = false;
-      const updateFromEvent = (clientX: number) => {
-        const rect = el.getBoundingClientRect();
-        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        const raw = min + ratio * (max - min);
-        const stepped = Math.round(raw / step) * step;
-        const next = Number(clamp(stepped).toFixed(2));
-        if (Number.isFinite(next)) {
-          setWeightById(id, next);
-        }
-      };
-      const onDown = (ev: PointerEvent) => {
-        dragging = true;
-        try { el.setPointerCapture(ev.pointerId); } catch { /* ignore */ }
-        updateFromEvent(ev.clientX);
-        ev.preventDefault();
-        ev.stopPropagation();
-      };
-      const onMove = (ev: PointerEvent) => {
-        if (!dragging) return;
-        updateFromEvent(ev.clientX);
-        ev.preventDefault();
-        ev.stopPropagation();
-      };
-      const onUp = (ev: PointerEvent) => {
-        dragging = false;
-        try { el.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
-      };
-      const onClick = (ev: MouseEvent) => {
-        updateFromEvent(ev.clientX);
-        ev.preventDefault();
-      };
-      el.addEventListener('pointerdown', onDown);
-      el.addEventListener('pointermove', onMove);
-      el.addEventListener('pointerup', onUp);
-      el.addEventListener('pointercancel', onUp);
-      el.addEventListener('click', onClick);
-      return () => {
-        el.removeEventListener('pointerdown', onDown);
-        el.removeEventListener('pointermove', onMove);
-        el.removeEventListener('pointerup', onUp);
-        el.removeEventListener('pointercancel', onUp);
-        el.removeEventListener('click', onClick);
-      };
-    }, [sliderId, min, max, step, id]);
-
-    return (
-      <div id={sliderId} className="weight-slider">
-        <div className="weight-slider__header">
-          <label className="field-label" htmlFor={`${id}-display`}>{label}</label>
-          <span className="weight-slider__value" aria-live="polite">{value.toFixed(2)}</span>
-        </div>
-        <div
-          className="weight-slider__track"
-          role="slider"
-          aria-label={label}
-          aria-valuemin={min}
-          aria-valuemax={max}
-          aria-valuenow={Number(value.toFixed(2))}
-          tabIndex={0}
-        >
-          <div className="weight-slider__fill" style={{ width: `${pct}%` }} />
-          <div className="weight-slider__thumb" style={{ left: `calc(${pct}% - 7px)` }} />
-        </div>
-        <div className="weight-slider__scale" aria-hidden="true">
-          <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
-        </div>
-      </div>
-    );
+  // Botão só reage ao gate na tabela do preview (ao vivo, não persistido);
+  // no histórico (comparações já persistidas) o clique abre o modal direto.
+  async function handleRowReply(r: ComparisonResult, gated: boolean) {
+    if (!r.quoteResponseId) return;
+    if (gated) {
+      const ok = await persistBeforeAction();
+      if (!ok) return;
+    }
+    openReplyModal(r);
   }
 
-  function renderResultRows(results: ComparisonResult[], comparison?: ComparisonRecord) {
+  async function handleRowSendPo(r: ComparisonResult, gated: boolean) {
+    if (!r.quoteResponseId) return;
+    if (gated) {
+      const ok = await persistBeforeAction();
+      if (!ok) return;
+    }
+    openPoModal(r);
+  }
+
+  function renderResultRows(
+    results: ComparisonResult[],
+    comparison?: ComparisonRecord,
+    options?: { gated?: boolean },
+  ) {
     if (results.length === 0) {
       return (
         <tr>
@@ -452,7 +422,7 @@ export function ComparacaoTab({
         <td>
           <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
             Preço {formatNumber(r.priceScore, 2)} · Pagto {formatNumber(r.paymentTermsScore, 2)} ·
-            Inc {formatNumber(r.incotermScore, 2)}
+            Inc {formatNumber(r.incotermScore, 2)} · Qual {formatNumber(r.qualityScore, 2)}
           </div>
           <strong>{formatNumber(r.totalScore, 2)}</strong>
         </td>
@@ -465,7 +435,7 @@ export function ComparacaoTab({
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => openReplyModal(r)}
+                    onClick={() => handleRowReply(r, Boolean(options?.gated))}
                     style={{ fontSize: 12, padding: '2px 10px' }}
                     title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
                   >
@@ -474,7 +444,7 @@ export function ComparacaoTab({
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => openPoModal(r)}
+                    onClick={() => handleRowSendPo(r, Boolean(options?.gated))}
                     style={{ fontSize: 12, padding: '2px 10px' }}
                     title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
                   >
@@ -531,6 +501,38 @@ export function ComparacaoTab({
     ? winnerTarget.supplier?.name ?? `Fornecedor #${winnerTarget.supplierId}`
     : '';
 
+  // Tabela principal renderiza o PREVIEW (calculado ao vivo, não persistido),
+  // não o histórico. isWinner é derivado do winnerQuoteResponseId + pendingApproval
+  // -- enquanto a adjudicação depender de aprovação, nenhuma linha marca "Vencedora".
+  const previewResults = previewQuery.data?.results ?? [];
+  const responseCount = previewQuery.data?.responseCount ?? 0;
+  const previewPendingApproval = previewQuery.data?.pendingApproval ?? false;
+  const previewWinnerId = previewQuery.data?.winnerQuoteResponseId ?? null;
+  const rankedResults = previewResults.map((r) => ({
+    ...r,
+    isWinner: !previewPendingApproval && r.quoteResponseId === previewWinnerId,
+  }));
+
+  const [bypassPending, setBypassPending] = useState(false);
+
+  // By-pass de 1 fornecedor: sem comparação, marca vencedor manualmente e
+  // abre direto o modal de Ordem de Compra (sem motivo, sem persistir comparação).
+  async function handleBypassSendPo() {
+    const only = previewResults[0];
+    if (!only?.quoteResponseId) return;
+    setBypassPending(true);
+    try {
+      await setManualWinner(quoteRequestId, { quoteResponseId: only.quoteResponseId });
+      await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
+      await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+      openPoModal(only);
+    } catch (err) {
+      setFeedback({ kind: 'err', text: messageOf(err) });
+    } finally {
+      setBypassPending(false);
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       {feedback && (
@@ -540,36 +542,34 @@ export function ComparacaoTab({
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 12 }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Configuração dos Pesos</h2>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => runMut.mutate()}
-          disabled={!canCompare || runMut.isPending}
-          title={!canCompare ? 'Seu perfil não tem permissão para executar comparações.' : ''}
-        >
-          {runMut.isPending ? 'Executando…' : 'Executar comparação'}
-        </button>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Critérios de comparação</h2>
       </div>
 
-      <div className="form-grid weight-grid" style={{ position: 'relative' }}>
-        <WeightSlider id="weight-price" label="Peso · Preço" value={priceWeight} />
-        <WeightSlider id="weight-payment" label="Peso · Pagamento" value={paymentWeight} />
-        <WeightSlider id="weight-incoterm" label="Peso · Incoterm" value={incotermWeight} />
-        <div style={{ position: 'relative' }} title="Fornecedores sem avaliações prévias receberão nota 0 neste critério, o que pode penalizá-os.">
-          <WeightSlider id="weight-quality" label="Peso · Qualidade" value={qualityWeight} />
-        </div>
+      <div className="form-grid" role="group" aria-label="Critérios de comparação" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {CRITERIA.map((c) => {
+          const isSelected = criteria.includes(c.id);
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="switch"
+              aria-checked={isSelected}
+              className={isSelected ? 'chip chip--active' : 'chip'}
+              onClick={() => toggleCriterion(c.id)}
+              title={c.id === 'quality' ? 'Fornecedores sem avaliações prévias recebem nota 0 neste critério.' : undefined}
+            >
+              {c.label}
+            </button>
+          );
+        })}
       </div>
-
-      {!canCompare && (
-        <p style={{ color: 'var(--warning)', fontSize: 12, marginTop: 12 }}>
-          Seu perfil não tem permissão para executar comparações.
-        </p>
-      )}
+      <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 8 }}>
+        Selecione de 1 a 2 critérios. A comparação recalcula automaticamente.
+      </p>
 
       <div style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Última comparação</h2>
-        
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', marginBottom: 16 }}>Comparação atual</h2>
+
         {canConclude && quoteRequestStatus === 'open' && latest && (() => {
           const winner = latest.results.find((r) => r.isWinner);
           const winnerName = winner?.supplier?.name ?? `Fornecedor #${winner?.supplierId ?? ''}`;
@@ -631,6 +631,8 @@ export function ComparacaoTab({
                       ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
                       : 'Concluir esta cotação? Ela será fechada.';
                     if (await confirm(msg)) {
+                      const ok = await persistBeforeAction();
+                      if (!ok) return;
                       closeMut.mutate({ notifyLosers, review });
                     }
                   }}
@@ -644,39 +646,63 @@ export function ComparacaoTab({
           );
         })()}
 
-        {history.isLoading && <p>Carregando comparações…</p>}
-        {history.isError && (
+        {previewQuery.isLoading && <p>Calculando comparação…</p>}
+        {previewQuery.isError && (
           <div className="empty-state">
-            <p>Não foi possível carregar o histórico de comparações.</p>
+            <p>Não foi possível calcular a comparação.</p>
             <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
               Verifique sua conexão e tente novamente.
             </p>
-            <button className="ghost-button" onClick={() => history.refetch()}>Tentar novamente</button>
-          </div>
-        )}
-        {history.data && !latest && (
-          <div className="empty-state">
-            <strong>Esta cotação ainda não foi comparada.</strong>
-            <p>Use o botão “Executar comparação” para calcular os scores e definir a vencedora.</p>
+            <button className="ghost-button" onClick={() => previewQuery.refetch()}>Tentar novamente</button>
           </div>
         )}
 
-        {latest && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Fornecedor</th>
-                <th>Preço</th>
-                <th>Incoterm</th>
-                <th>Pagto</th>
-                <th>Landed (BRL)</th>
-                <th>Scores</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>{renderResultRows(latest.results, latest)}</tbody>
-          </table>
+        {previewQuery.data && responseCount === 0 && (
+          <div className="empty-state">
+            <strong>Nenhuma proposta recebida ainda.</strong>
+            <p>A comparação aparece aqui assim que houver ao menos uma resposta de fornecedor.</p>
+          </div>
+        )}
+
+        {previewQuery.data && responseCount === 1 && (
+          <div className="card" style={{ padding: 16 }}>
+            <p style={{ marginTop: 0 }}>
+              <strong>Apenas um fornecedor respondeu — sem comparação.</strong>
+            </p>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => handleBypassSendPo()}
+              disabled={bypassPending}
+            >
+              {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
+            </button>
+          </div>
+        )}
+
+        {previewQuery.data && responseCount >= 2 && (
+          <>
+            {previewPendingApproval && (
+              <p className="alert alert--warning" style={{ marginBottom: 12 }}>
+                A vencedora calculada tem landed cost acima de R$ {formatNumber(previewQuery.data?.thresholdValue ?? null)} e exigirá aprovação de um gestor/admin ao prosseguir com uma ação.
+              </p>
+            )}
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Fornecedor</th>
+                  <th>Preço</th>
+                  <th>Incoterm</th>
+                  <th>Pagto</th>
+                  <th>Landed (BRL)</th>
+                  <th>Scores</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>{renderResultRows(rankedResults, undefined, { gated: true })}</tbody>
+            </table>
+          </>
         )}
       </div>
 

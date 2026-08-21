@@ -121,6 +121,7 @@ export interface ComparisonResult {
   priceScore: number;
   paymentTermsScore: number;
   incotermScore: number;
+  qualityScore: number;
   totalScore: number;
   isWinner: boolean;
 }
@@ -148,6 +149,7 @@ export interface ComparisonWeights {
   priceWeight: number;
   paymentTermsWeight: number;
   incotermWeight: number;
+  qualityWeight: number;
 }
 
 function asNumber(value: unknown): number {
@@ -298,6 +300,7 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
     priceScore: asNumber(obj.priceScore),
     paymentTermsScore: asNumber(obj.paymentTermsScore),
     incotermScore: asNumber(obj.incotermScore),
+    qualityScore: asNumber(obj.qualityScore),
     totalScore: asNumber(obj.totalScore),
     isWinner: Boolean(obj.isWinner),
   };
@@ -384,6 +387,36 @@ export async function executeComparison(
     winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     comparisonId: asNumber(obj.comparisonId),
+  };
+}
+
+export interface PreviewComparisonResult {
+  results: ComparisonResult[];
+  winnerQuoteResponseId: number | null;
+  pendingApproval: boolean;
+  thresholdValue: number | null;
+  responseCount: number;
+}
+
+export async function previewComparison(
+  quoteRequestId: number,
+  weights?: ComparisonWeights,
+): Promise<PreviewComparisonResult> {
+  const body = weights ? { ...weights } : {};
+  const data = await api.post<unknown>(
+    `/v1/quote-requests/${quoteRequestId}/compare/preview`,
+    body,
+  );
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('Resposta inesperada');
+  }
+  const obj = data as Record<string, unknown>;
+  return {
+    results: Array.isArray(obj.results) ? obj.results.map(normalizeComparisonResult) : [],
+    winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
+    pendingApproval: Boolean(obj.pendingApproval),
+    thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
+    responseCount: asNumber(obj.responseCount),
   };
 }
 

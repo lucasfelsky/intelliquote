@@ -10,6 +10,7 @@ vi.mock('@/components/useConfirm', () => ({ useConfirm: () => async () => true }
 vi.mock('@/services/quoteResponses', () => ({
   listComparisons: vi.fn(),
   executeComparison: vi.fn(),
+  previewComparison: vi.fn(),
   approveAward: vi.fn(),
   closeQuoteRequest: vi.fn(),
   setManualWinner: vi.fn(),
@@ -21,7 +22,12 @@ vi.mock('@/services/dispatch', () => ({
   sendPurchaseOrder: vi.fn(),
 }));
 
-import { listComparisons, setManualWinner } from '@/services/quoteResponses';
+import {
+  listComparisons,
+  executeComparison,
+  previewComparison,
+  setManualWinner,
+} from '@/services/quoteResponses';
 import { previewQuoteResponseReply, sendPurchaseOrder } from '@/services/dispatch';
 
 const winner = {
@@ -49,6 +55,7 @@ const winner = {
   priceScore: 50,
   paymentTermsScore: 30,
   incotermScore: 20,
+  qualityScore: 0,
   totalScore: 100,
 };
 
@@ -76,6 +83,18 @@ const record = {
 
 const recordWithLoser = { ...record, results: [winner, loser] };
 
+// Preview padrão dos testes 1-9 (que já existiam antes dos toggles): ranking
+// com a mesma vencedora, responseCount 2 pra cair no ramo normal da tabela
+// (o histórico legado só tinha 1 resultado, mas a contagem de respostas do
+// preview é um dado independente do backend).
+const defaultPreview = {
+  results: [winner],
+  winnerQuoteResponseId: 42,
+  pendingApproval: false,
+  thresholdValue: null,
+  responseCount: 2,
+};
+
 function renderTab() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -99,10 +118,20 @@ function getDialog(container: HTMLElement): HTMLDialogElement {
 describe('ComparacaoTab', () => {
   beforeEach(() => {
     vi.mocked(listComparisons).mockReset();
+    vi.mocked(previewComparison).mockReset();
+    vi.mocked(executeComparison).mockReset();
     vi.mocked(previewQuoteResponseReply).mockReset();
     vi.mocked(setManualWinner).mockReset();
     vi.mocked(setManualWinner).mockResolvedValue(undefined);
     vi.mocked(listComparisons).mockResolvedValue({ quoteRequestId: 99, comparisons: [record] });
+    vi.mocked(previewComparison).mockResolvedValue(defaultPreview);
+    vi.mocked(executeComparison).mockResolvedValue({
+      results: [],
+      pendingApproval: false,
+      winnerQuoteResponseId: null,
+      thresholdValue: null,
+      comparisonId: 1,
+    });
     vi.mocked(previewQuoteResponseReply).mockResolvedValue({
       to: 'x@acme.com',
       cc: [],
@@ -126,14 +155,19 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Responder' }));
+    await waitFor(() => expect(getDialog(container).open).toBe(true));
     const dialog = getDialog(container);
-    expect(dialog.open).toBe(true);
     const heading = dialog.querySelector('.modal-header h2');
     expect(heading?.textContent).toBe('Responder ACME Ltda');
     expect(dialog.className).toContain('modal-dialog--wide');
   });
 
   it('3. fallback do nome quando supplier é undefined', async () => {
+    const previewNoSupplier = {
+      ...defaultPreview,
+      results: [{ ...winner, supplier: undefined }],
+    };
+    vi.mocked(previewComparison).mockResolvedValue(previewNoSupplier);
     vi.mocked(listComparisons).mockResolvedValue({
       quoteRequestId: 99,
       comparisons: [{ ...record, results: [{ ...winner, supplier: undefined }] }],
@@ -141,6 +175,7 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('Fornecedor #7');
     fireEvent.click(getByRole('button', { name: 'Responder' }));
+    await waitFor(() => expect(getDialog(container).open).toBe(true));
     const dialog = getDialog(container);
     const heading = dialog.querySelector('.modal-header h2');
     expect(heading?.textContent).toBe('Responder Fornecedor #7');
@@ -150,8 +185,8 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole, getByLabelText } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Responder' }));
+    await waitFor(() => expect(getDialog(container).open).toBe(true));
     const dialog = getDialog(container);
-    expect(dialog.open).toBe(true);
     fireEvent.click(getByLabelText('Fechar'));
     expect(dialog.open).toBe(false);
   });
@@ -168,6 +203,10 @@ describe('ComparacaoTab', () => {
   });
 
   it('6. vencedor manual: botão "Definir como vencedora" abre modal e chama setManualWinner com o motivo', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...defaultPreview,
+      results: [winner, loser],
+    });
     vi.mocked(listComparisons).mockResolvedValue({ quoteRequestId: 99, comparisons: [recordWithLoser] });
     const { container, findByText, getByRole, getByLabelText } = renderTab();
     await findByText('Beta Corp');
@@ -193,6 +232,7 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
     const dialogs = container.querySelectorAll('dialog');
     const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
     expect(dialog.open).toBe(true);
@@ -206,6 +246,7 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
     const dialogs = container.querySelectorAll('dialog');
     const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
     const dialogScope = within(dialog);
@@ -237,11 +278,98 @@ describe('ComparacaoTab', () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
     const dialogs = container.querySelectorAll('dialog');
     const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
     const dialogScope = within(dialog);
 
     const sendButton = dialogScope.getByRole('button', { name: 'Enviar Ordem de Compra' }) as HTMLButtonElement;
     expect(sendButton.disabled).toBe(true);
+  });
+
+  describe('Toggles de critério (mín 1 / máx 2) e recálculo ao vivo', () => {
+    it('10. padrão só "Preço" selecionado; bloqueia desmarcar o único critério ativo', async () => {
+      const { findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      const priceToggle = getByRole('switch', { name: 'Preço' });
+      expect(priceToggle.getAttribute('aria-checked')).toBe('true');
+
+      fireEvent.click(priceToggle);
+      await findByText('Selecione ao menos 1 critério.');
+      expect(priceToggle.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('11. bloqueia selecionar um 3º critério (máx 2)', async () => {
+      const { findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+
+      fireEvent.click(getByRole('switch', { name: 'Condição de pagamento' }));
+      fireEvent.click(getByRole('switch', { name: 'Incoterm' }));
+
+      await findByText('Selecione no máximo 2 critérios.');
+      expect(getByRole('switch', { name: 'Preço' }).getAttribute('aria-checked')).toBe('true');
+      expect(getByRole('switch', { name: 'Condição de pagamento' }).getAttribute('aria-checked')).toBe('true');
+      expect(getByRole('switch', { name: 'Incoterm' }).getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('12. mudar um toggle dispara previewComparison com os pesos atualizados', async () => {
+      const { findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      vi.mocked(previewComparison).mockClear();
+
+      fireEvent.click(getByRole('switch', { name: 'Qualidade' }));
+
+      await waitFor(
+        () =>
+          expect(previewComparison).toHaveBeenCalledWith(99, {
+            priceWeight: 1,
+            paymentTermsWeight: 0,
+            incotermWeight: 0,
+            qualityWeight: 1,
+          }),
+        { timeout: 2000 },
+      );
+    });
+  });
+
+  describe('By-pass de 1 fornecedor (sem comparação)', () => {
+    it('13. responseCount === 1 mostra card by-pass e some com a tabela de ranking', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [winner],
+        winnerQuoteResponseId: null,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 1,
+      });
+      const { findByText, queryByRole } = renderTab();
+      await findByText('Apenas um fornecedor respondeu — sem comparação.');
+      expect(queryByRole('button', { name: 'Responder' })).toBeNull();
+    });
+
+    it('14. botão do card by-pass chama setManualWinner (sem motivo) e abre a Ordem de Compra', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [winner],
+        winnerQuoteResponseId: null,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 1,
+      });
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('Apenas um fornecedor respondeu — sem comparação.');
+
+      fireEvent.click(getByRole('button', { name: 'Enviar Ordem de Compra' }));
+
+      await waitFor(() => expect(setManualWinner).toHaveBeenCalledTimes(1));
+      expect(setManualWinner).toHaveBeenCalledWith(99, { quoteResponseId: 42 });
+      // executeComparison NAO é chamado no by-pass: não há comparação a persistir.
+      expect(executeComparison).not.toHaveBeenCalled();
+
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+      const dialogs = container.querySelectorAll('dialog');
+      const dialog = dialogs[dialogs.length - 1] as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+      const heading = dialog.querySelector('.modal-header h2');
+      expect(heading?.textContent).toBe('Enviar Ordem de Compra — ACME Ltda');
+    });
   });
 });
