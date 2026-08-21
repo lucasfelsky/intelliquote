@@ -843,12 +843,17 @@ export class QuoteResponseController {
       const { quoteRequest } = quoteResponse;
       const defaultSubject = `Purchase Order - ${quoteRequest.requestCode}`;
       const message = parsedBody.data.message?.trim() ?? '';
+      const destinationPort =
+        quoteRequest.destinationPort?.trim() ||
+        quoteRequest.items?.[0]?.destinationPort?.trim() ||
+        'as agreed';
 
       const rendered = await renderPoFromTemplate({
         subject: parsedBody.data.subject?.trim() || defaultSubject,
         requestCode: quoteRequest.requestCode,
         supplierContactName: primaryContact.name,
         forwarderInfo: parsedBody.data.forwarderInfo?.trim() ?? '',
+        destinationPort,
       });
 
       const html = injectPoCustomMessage(rendered.html, message);

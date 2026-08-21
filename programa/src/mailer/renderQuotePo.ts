@@ -37,6 +37,10 @@ export interface QuotePoVars {
   // e' {{forwarderInfoText}} (sem br) -- mesmo padrao itemsRows/itemsText do
   // quote_reply.
   forwarderInfo: string;
+  // Porto de destino resolvido a nivel da COTACAO (quoteRequest.destinationPort
+  // -> primeiro item com destinationPort -> 'as agreed'). Renderizado via
+  // {{destinationPort}} generico (escapeHtml) no HTML.
+  destinationPort: string;
 }
 
 function renderForwarderInfoHtml(value: string): string {
@@ -98,8 +102,7 @@ export function renderPoPlainText(vars: QuotePoVars): string {
     '- Manufacturing date and Expiring/Validity date',
     '- All data must be digital (handwritten will no longer be accepted).',
     '',
-    'Port of Destination: NAVEGANTES, BRAZIL.',
-    '*FCL: ITAPOA, BRAZIL.',
+    `Port of Destination: ${vars.destinationPort || 'as agreed'}`,
     '',
     "Here below is the forwarder's contact info:",
     vars.forwarderInfo || '',

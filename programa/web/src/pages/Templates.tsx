@@ -92,6 +92,7 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{requestCode}}', label: 'Código' },
     { token: '{{supplierContactName}}', label: 'Contato' },
     { token: '{{forwarderInfo}}', label: 'Contato do despachante' },
+    { token: '{{destinationPort}}', label: 'Porto de destino' },
   ],
   quote_reminder: [
     { token: '{{subject}}', label: 'Assunto' },
