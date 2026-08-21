@@ -1281,6 +1281,7 @@ export class QuoteResponseController {
         const primaryContact = supplier?.contacts?.[0] ?? null;
         return {
           ...result,
+          quoteResponseId: result.id,
           supplier: supplier ? { id: supplier.id, name: supplier.name } : undefined,
           contact: primaryContact
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }

@@ -710,12 +710,20 @@ describe('Comparison routes', () => {
       expect(response.body.results).toHaveLength(2);
       expect(response.body.results.some((item: { isWinner: boolean }) => item.isWinner)).toBe(true);
       expect(response.body.winnerQuoteResponseId).toBeTruthy();
+      const mockedResponseIds = [11, 12];
       for (const item of response.body.results as Array<{
+        quoteResponseId: number;
+        isWinner: boolean;
         supplier?: { name: string };
         contact?: { email: string } | null;
       }>) {
+        expect(item.quoteResponseId).toBeTruthy();
+        expect(mockedResponseIds).toContain(item.quoteResponseId);
         expect(item.supplier?.name).toBeTruthy();
         expect(item.contact?.email).toMatch(/@/);
+        if (item.isWinner) {
+          expect(item.quoteResponseId).toBe(response.body.winnerQuoteResponseId);
+        }
       }
 
       // Nada foi persistido: nem transacao, nem update de isWinner, nem
