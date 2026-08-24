@@ -23,6 +23,11 @@ interface SupplierReviewStats {
   avgRating: number | null;
 }
 
+interface ItemFamilyOption {
+  id: number;
+  name: string;
+}
+
 interface Supplier {
   id: number;
   name: string;
@@ -34,6 +39,7 @@ interface Supplier {
   paymentTermsDays?: number | null;
   tags: string[];
   reviewStats?: SupplierReviewStats | null;
+  families: ItemFamilyOption[];
 }
 
 interface SupplierFormState {
@@ -45,6 +51,7 @@ interface SupplierFormState {
   acceptedIncoterms: string[];
   paymentTermsDays: number;
   tags: string[];
+  familyIds: number[];
 }
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'];
@@ -58,6 +65,7 @@ const emptyForm: SupplierFormState = {
   acceptedIncoterms: [],
   paymentTermsDays: 30,
   tags: [],
+  familyIds: [],
 };
 
 function normalizeReviewStats(value: unknown): SupplierReviewStats | null {
@@ -77,6 +85,14 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 }
 
+function asFamilyArray(value: unknown): ItemFamilyOption[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
+    .map((v) => ({ id: Number(v.id), name: String(v.name ?? '') }))
+    .filter((f) => Number.isFinite(f.id));
+}
+
 function normalize(supplier: unknown): Supplier {
   if (typeof supplier !== 'object' || supplier === null) {
     throw new Error('Resposta inesperada do servidor.');
@@ -93,6 +109,7 @@ function normalize(supplier: unknown): Supplier {
     paymentTermsDays: typeof obj.paymentTermsDays === 'number' ? obj.paymentTermsDays : null,
     tags: asStringArray(obj.tags),
     reviewStats: normalizeReviewStats(obj.reviewStats),
+    families: asFamilyArray(obj.families),
   };
 }
 
@@ -134,6 +151,26 @@ export default function Fornecedores() {
     () => (list.data ?? []).map((s) => s.id),
     [list.data],
   );
+
+  // Familias ATIVAS disponiveis pro bloco de chips do form.
+  const familiesQuery = useQuery({
+    queryKey: ['item-families'],
+    queryFn: async () => {
+      const data = await api.get<{ data?: unknown[] }>('/api/v1/item-families');
+      return asFamilyArray(data?.data ?? []);
+    },
+  });
+
+  // Guarda contra perda silenciosa: a lista de chips do form e' a UNIAO das
+  // familias ATIVAS + as JA VINCULADAS ao fornecedor em edicao (mesmo se
+  // inativas), senao um re-save sem ve-las no form as desvincularia (o
+  // update usa `set`). Ao cadastrar um fornecedor novo, so entram as ativas.
+  const familyOptions = useMemo(() => {
+    const options = new Map<number, ItemFamilyOption>();
+    for (const f of familiesQuery.data ?? []) options.set(f.id, f);
+    for (const f of editing?.families ?? []) if (!options.has(f.id)) options.set(f.id, f);
+    return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [familiesQuery.data, editing]);
 
   // F12: universo de tags (pra barra de filtro) + lista filtrada por tag.
   const allTags = useMemo(() => {
@@ -181,6 +218,7 @@ export default function Fornecedores() {
         acceptedIncoterms: payload.acceptedIncoterms,
         paymentTermsDays: payload.paymentTermsDays,
         tags: payload.tags,
+        familyIds: payload.familyIds,
       });
       return normalize(created);
     },
@@ -202,6 +240,7 @@ export default function Fornecedores() {
         acceptedIncoterms: payload.acceptedIncoterms,
         paymentTermsDays: payload.paymentTermsDays,
         tags: payload.tags,
+        familyIds: payload.familyIds,
       });
       return normalize(updated);
     },
@@ -281,6 +320,7 @@ export default function Fornecedores() {
       acceptedIncoterms: supplier.acceptedIncoterms,
       paymentTermsDays: supplier.paymentTermsDays ?? 30,
       tags: supplier.tags ?? [],
+      familyIds: (supplier.families ?? []).map((f) => f.id),
     });
     setFormError(null);
     setShowForm(true);
@@ -301,6 +341,18 @@ export default function Fornecedores() {
         acceptedIncoterms: has
           ? current.acceptedIncoterms.filter((t) => t !== term)
           : [...current.acceptedIncoterms, term],
+      };
+    });
+  }
+
+  function toggleFamily(id: number) {
+    setForm((current) => {
+      const has = current.familyIds.includes(id);
+      return {
+        ...current,
+        familyIds: has
+          ? current.familyIds.filter((f) => f !== id)
+          : [...current.familyIds, id],
       };
     });
   }
@@ -848,6 +900,33 @@ export default function Fornecedores() {
                   </button>
                 );
               })}
+            </div>
+
+            <label className="field-label" style={{ marginTop: 12 }}>
+              Famílias que este fornecedor cota
+            </label>
+            <p className="muted" style={{ fontSize: 12, marginTop: 4, marginBottom: 6 }}>
+              Usado para pré-selecionar os fornecedores certos ao enviar uma cotação.
+            </p>
+            <div className="chip-row">
+              {familyOptions.map((family) => {
+                const active = form.familyIds.includes(family.id);
+                return (
+                  <button
+                    key={family.id}
+                    type="button"
+                    className={`chip${active ? ' chip--active' : ''}`}
+                    onClick={() => toggleFamily(family.id)}
+                  >
+                    {family.name}
+                  </button>
+                );
+              })}
+              {familyOptions.length === 0 && (
+                <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                  Nenhuma família cadastrada.
+                </span>
+              )}
             </div>
 
             <label className="field-label" htmlFor="tagInput" style={{ marginTop: 12 }}>
