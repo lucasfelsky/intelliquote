@@ -8,9 +8,14 @@ const createFamilySchema = z.object({
   name: z.string().trim().min(1, 'O nome da família é obrigatório.'),
 });
 
-const updateFamilySchema = z.object({
-  isActive: z.boolean(),
-});
+const updateFamilySchema = z
+  .object({
+    name: z.string().trim().min(1, 'O nome da família é obrigatório.').optional(),
+    isActive: z.boolean().optional(),
+  })
+  .refine((v) => v.name !== undefined || v.isActive !== undefined, {
+    message: 'Informe ao menos um campo para atualizar.',
+  });
 
 export class ItemFamilyController {
   static async listFamilies(req: Request, res: Response) {
@@ -71,9 +76,23 @@ export class ItemFamilyController {
         return res.status(404).json({ message: 'Familia nao encontrada.' });
       }
 
+      if (parsed.name !== undefined) {
+        const clash = await prisma.itemFamily.findFirst({
+          where: { name: { equals: parsed.name, mode: 'insensitive' }, id: { not: id } },
+        });
+
+        if (clash) {
+          return res.status(400).json({ message: 'Família já existe com esse nome.' });
+        }
+      }
+
+      const data: { name?: string; isActive?: boolean } = {};
+      if (parsed.name !== undefined) data.name = parsed.name;
+      if (parsed.isActive !== undefined) data.isActive = parsed.isActive;
+
       const family = await prisma.itemFamily.update({
         where: { id },
-        data: { isActive: parsed.isActive },
+        data,
       });
 
       await AuditLogService.log({

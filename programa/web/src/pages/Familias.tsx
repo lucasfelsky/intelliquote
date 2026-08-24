@@ -18,6 +18,9 @@ export default function Familias() {
   const [newFamilyName, setNewFamilyName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [editing, setEditing] = useState<ItemFamily | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editError, setEditError] = useState('');
 
   const familiesQuery = useQuery<ItemFamily[]>({
     queryKey: ['item-families', { includeInactive: true }],
@@ -59,6 +62,29 @@ export default function Familias() {
     },
     onError: (err) => setFeedback({ kind: 'error', message: messageOf(err) }),
   });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      api.put(`/v1/item-families/${id}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['item-families'] });
+      setEditing(null);
+      setEditName('');
+      setEditError('');
+      setFeedback({ kind: 'success', message: 'Família atualizada.' });
+    },
+    onError: (err) => setEditError(messageOf(err)),
+  });
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      setEditError('O nome é obrigatório');
+      return;
+    }
+    if (!editing) return;
+    renameMutation.mutate({ id: editing.id, name: editName.trim() });
+  };
 
   async function handleToggleActive(family: ItemFamily) {
     if (family.isActive) {
@@ -145,6 +171,17 @@ export default function Familias() {
                         <button
                           type="button"
                           className="ghost-button"
+                          onClick={() => {
+                            setEditing(f);
+                            setEditName(f.name);
+                            setEditError('');
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
                           onClick={() => handleToggleActive(f)}
                           disabled={toggleActive.isPending}
                         >
@@ -193,6 +230,44 @@ export default function Familias() {
               disabled={createMutation.isPending}
             >
               {createMutation.isPending ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={editing !== null}
+        onClose={() => setEditing(null)}
+        title="Editar Família"
+      >
+        <form onSubmit={handleEditSubmit}>
+          <label className="field">
+            <span>Nome da Família *</span>
+            <input
+              type="text"
+              className="input"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              placeholder="Ex: Embalagens"
+              autoFocus
+            />
+          </label>
+          {editError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{editError}</div>}
+          <div className="modal-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setEditing(null)}
+              disabled={renameMutation.isPending}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={renameMutation.isPending}
+            >
+              {renameMutation.isPending ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </form>

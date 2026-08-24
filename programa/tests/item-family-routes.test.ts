@@ -20,6 +20,7 @@ vi.mock('../src/lib/prisma', () => {
     itemFamily: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
   };
@@ -47,6 +48,7 @@ const prismaMock = prisma as unknown as {
   itemFamily: {
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
 };
@@ -183,6 +185,67 @@ describe('ItemFamily routes', () => {
         .put('/api/v1/item-families/1')
         .set('Cookie', cookies)
         .send({ isActive: 'sim' });
+
+      expect(response.status).toBe(400);
+      expect(prismaMock.itemFamily.update).not.toHaveBeenCalled();
+    });
+
+    it('renomeia familia com sucesso', async () => {
+      const cookies = await loginAs('admin');
+      prismaMock.itemFamily.findUnique.mockResolvedValue({
+        id: 1,
+        name: 'Embalagens',
+        isActive: true,
+      });
+      prismaMock.itemFamily.findFirst.mockResolvedValue(null);
+      prismaMock.itemFamily.update.mockResolvedValue({
+        id: 1,
+        name: 'Novo Nome',
+        isActive: true,
+      });
+      prismaMock.auditLog.create.mockResolvedValue({ id: 1 });
+
+      const response = await request(app)
+        .put('/api/v1/item-families/1')
+        .set('Cookie', cookies)
+        .send({ name: 'Novo Nome' });
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.itemFamily.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 1 }, data: { name: 'Novo Nome' } }),
+      );
+    });
+
+    it('retorna 400 quando o novo nome colide (case-insensitive) com outra familia', async () => {
+      const cookies = await loginAs('admin');
+      prismaMock.itemFamily.findUnique.mockResolvedValue({
+        id: 1,
+        name: 'Caixas',
+        isActive: true,
+      });
+      prismaMock.itemFamily.findFirst.mockResolvedValue({
+        id: 2,
+        name: 'Embalagens',
+        isActive: true,
+      });
+
+      const response = await request(app)
+        .put('/api/v1/item-families/1')
+        .set('Cookie', cookies)
+        .send({ name: 'embalagens' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Família já existe com esse nome.');
+      expect(prismaMock.itemFamily.update).not.toHaveBeenCalled();
+    });
+
+    it('retorna 400 quando o body nao tem name nem isActive', async () => {
+      const cookies = await loginAs('admin');
+
+      const response = await request(app)
+        .put('/api/v1/item-families/1')
+        .set('Cookie', cookies)
+        .send({});
 
       expect(response.status).toBe(400);
       expect(prismaMock.itemFamily.update).not.toHaveBeenCalled();
