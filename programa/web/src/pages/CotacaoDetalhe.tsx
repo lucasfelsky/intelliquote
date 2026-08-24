@@ -47,6 +47,7 @@ interface CatalogItemLite {
   commercialName: string;
   marketName: string;
   isDangerousGood: boolean;
+  familyId: number | null;
 }
 
 interface QuoteRequestItem {
@@ -225,6 +226,7 @@ function normalizeItem(it: unknown): QuoteRequestItem {
           commercialName: String(catalog.commercialName ?? ''),
           marketName: String(catalog.marketName ?? ''),
           isDangerousGood: Boolean(catalog.isDangerousGood),
+          familyId: typeof catalog.familyId === 'number' ? catalog.familyId : null,
         }
       : null,
     createdAt: String(obj.createdAt ?? ''),
@@ -271,6 +273,8 @@ export default function CotacaoDetalhe() {
 
     const [showDispatchModal, setShowDispatchModal] = useState(false);
     const [selectedContactIds, setSelectedContactIds] = useState<number[]>([]);
+    const [activeFolderId, setActiveFolderId] = useState<number | 'all' | 'none'>('all');
+    const [supplierSearch, setSupplierSearch] = useState('');
     const [dispatchSubject, setDispatchSubject] = useState('');
     const [dispatchMessage, setDispatchMessage] = useState('');
     const [dispatchExpires, setDispatchExpires] = useState('7');
@@ -444,12 +448,32 @@ export default function CotacaoDetalhe() {
             : data?.items ?? [];
         return raw.map((s) => {
           const obj = s as Record<string, unknown>;
+          const familiesRaw = Array.isArray(obj.families) ? obj.families : [];
           return {
             id: Number(obj.id),
             name: String(obj.name ?? ''),
             status: String(obj.status ?? 'active'),
+            families: familiesRaw.map((f) => {
+              const fo = f as Record<string, unknown>;
+              return { id: Number(fo.id), name: String(fo.name ?? '') };
+            }),
           };
         });
+      },
+      enabled: showDispatchModal,
+    });
+
+    const itemFamiliesQuery = useQuery({
+      queryKey: ['item-families-dispatch'],
+      queryFn: async () => {
+        const data = await api.get<{ data?: unknown[] }>('/v1/item-families');
+        const raw = Array.isArray(data?.data) ? data.data : [];
+        const map = new Map<number, string>();
+        for (const f of raw) {
+          const fo = f as Record<string, unknown>;
+          map.set(Number(fo.id), String(fo.name ?? ''));
+        }
+        return map;
       },
       enabled: showDispatchModal,
     });
@@ -527,6 +551,80 @@ export default function CotacaoDetalhe() {
       }, 0);
       return total;
     }, [selectedContactIds, supplierContacts.data]);
+
+    // Master-detail do passo "select": pastas = familias, coluna direita =
+    // fornecedores da pasta ativa. quoteFamilyIds vem dos itens da cotacao
+    // (catalogItem.familyId); otherFolders sao familias presentes em algum
+    // fornecedor ativo mas fora da cotacao.
+    const quoteFamilyIds = useMemo(() => {
+      const ids = new Set<number>();
+      for (const it of detail.data?.items ?? []) {
+        const familyId = it.catalogItem?.familyId;
+        if (typeof familyId === 'number') ids.add(familyId);
+      }
+      return Array.from(ids);
+    }, [detail.data]);
+
+    const quoteFolders = useMemo(() => {
+      const namesMap = itemFamiliesQuery.data;
+      return quoteFamilyIds
+        .map((fid) => ({ id: fid, name: namesMap?.get(fid) ?? `Família #${fid}` }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }, [quoteFamilyIds, itemFamiliesQuery.data]);
+
+    const otherFolders = useMemo(() => {
+      const quoteSet = new Set(quoteFamilyIds);
+      const names = new Map<number, string>();
+      for (const s of activeSuppliers.data ?? []) {
+        for (const f of s.families) {
+          if (!quoteSet.has(f.id)) names.set(f.id, f.name);
+        }
+      }
+      return Array.from(names.entries())
+        .map(([fid, name]) => ({ id: fid, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }, [activeSuppliers.data, quoteFamilyIds]);
+
+    const folderCounts = useMemo(() => {
+      const suppliers = activeSuppliers.data ?? [];
+      const counts = new Map<number | 'all' | 'none', number>();
+      counts.set('all', suppliers.length);
+      let noneCount = 0;
+      for (const s of suppliers) {
+        if (s.families.length === 0) noneCount += 1;
+        for (const f of s.families) {
+          counts.set(f.id, (counts.get(f.id) ?? 0) + 1);
+        }
+      }
+      counts.set('none', noneCount);
+      return counts;
+    }, [activeSuppliers.data]);
+
+    const hasSupplierWithoutFamily = (folderCounts.get('none') ?? 0) > 0;
+
+    const visibleSuppliers = useMemo(() => {
+      const suppliers = activeSuppliers.data ?? [];
+      const search = supplierSearch.trim().toLowerCase();
+      return suppliers.filter((s) => {
+        if (activeFolderId === 'none') {
+          if (s.families.length !== 0) return false;
+        } else if (activeFolderId !== 'all') {
+          if (!s.families.some((f) => f.id === activeFolderId)) return false;
+        }
+        if (search && !s.name.toLowerCase().includes(search)) return false;
+        return true;
+      });
+    }, [activeSuppliers.data, activeFolderId, supplierSearch]);
+
+    const activeFolderLabel = useMemo(() => {
+      if (activeFolderId === 'all') return 'Todos';
+      if (activeFolderId === 'none') return 'Sem família';
+      return (
+        quoteFolders.find((f) => f.id === activeFolderId)?.name ??
+        otherFolders.find((f) => f.id === activeFolderId)?.name ??
+        `Família #${activeFolderId}`
+      );
+    }, [activeFolderId, quoteFolders, otherFolders]);
 
     const previewDispatchMutation = useMutation({
       mutationFn: () =>
@@ -683,6 +781,8 @@ export default function CotacaoDetalhe() {
     function openDispatchModal() {
       setDispatchStep('select');
       setSelectedContactIds([]);
+      setActiveFolderId('all');
+      setSupplierSearch('');
       setDispatchSubject('');
       setDispatchMessage('');
       setDispatchExpires('7');
@@ -709,6 +809,21 @@ export default function CotacaoDetalhe() {
           ? current.filter((id) => id !== contactId)
           : [...current, contactId],
       );
+    }
+
+    function selectAllVisibleSuppliers() {
+      const idsToAdd: number[] = [];
+      for (const supplier of visibleSuppliers) {
+        const contacts = supplierContacts.data?.[supplier.id] ?? [];
+        if (contacts.length === 0) continue;
+        const primary = contacts.find((c) => c.isPrimary) ?? contacts[0];
+        if (primary && !selectedContactIds.includes(primary.id)) {
+          idsToAdd.push(primary.id);
+        }
+      }
+      if (idsToAdd.length > 0) {
+        setSelectedContactIds((current) => [...current, ...idsToAdd]);
+      }
     }
 
   function handleItemSubmit(e: React.FormEvent) {
@@ -1074,106 +1189,192 @@ export default function CotacaoDetalhe() {
             {dispatchStep === 'select' && (
               <>
                 <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
-                              Selecione o contato principal de cada fornecedor. Os demais contatos
-                              cadastrados no mesmo fornecedor serao adicionados automaticamente
-                              como copia (CC), para que a equipe comercial inteira visualize o envio.
-                            </p>
-                            {activeSuppliers.isLoading && <p>Carregando fornecedores…</p>}
-                            {!activeSuppliers.isLoading && (activeSuppliers.data ?? []).length === 0 && (
-                              <div className="empty-state">
-                                <strong>Nenhum fornecedor ativo</strong>
-                                <p>Cadastre fornecedores ativos com contatos antes de enviar.</p>
-                              </div>
-                            )}
-                            <div className="dispatcher-list">
-                              {(activeSuppliers.data ?? []).map((supplier) => {
-                                const contacts = supplierContacts.data?.[supplier.id] ?? [];
-                                if (contacts.length === 0) {
-                                  return (
-                                    <div key={supplier.id} className="dispatcher-row">
-                                      <span />
-                                      <div>
-                                        <div className="dispatcher-row__title">{supplier.name}</div>
-                                        <div className="dispatcher-row__meta">Sem contatos cadastrados</div>
-                                      </div>
-                                      <span />
-                                    </div>
-                                  );
-                                }
-                                const primary =
-                                  contacts.find((c) => c.isPrimary) ?? contacts[0];
-                                const siblingCount = Math.max(0, contacts.length - 1);
-                                const checked = Boolean(primary && selectedContactIds.includes(primary.id));
-                                const contactNames = contacts
-                                  .map((c) => (c.isPrimary ? `${c.name} (principal)` : c.name))
-                                  .join(', ');
-                                return (
-                                  <label
-                                    key={supplier.id}
-                                    className={`dispatcher-row${checked ? ' dispatcher-row--selected' : ''}`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => primary && toggleContactSelection(primary.id)}
-                                    />
-                                    <div>
-                                      <div className="dispatcher-row__title">{supplier.name}</div>
-                                      <div className="dispatcher-row__meta">Contatos: {contactNames}</div>
-                                    </div>
-                                    <span style={{ color: 'var(--ink-soft)' }} className="text-xs">
-                                      {siblingCount > 0 ? `Para + ${siblingCount} em CC` : 'Para'}
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
+                  Escolha uma pasta (família) e selecione os fornecedores. O contato principal
+                  vai como &quot;Para&quot;; os demais do mesmo fornecedor entram em cópia.
+                </p>
+                {activeSuppliers.isLoading && <p>Carregando fornecedores…</p>}
+                {!activeSuppliers.isLoading && (activeSuppliers.data ?? []).length === 0 && (
+                  <div className="empty-state">
+                    <strong>Nenhum fornecedor ativo</strong>
+                    <p>Cadastre fornecedores ativos com contatos antes de enviar.</p>
+                  </div>
+                )}
+                {!activeSuppliers.isLoading && (activeSuppliers.data ?? []).length > 0 && (
+                  <div className="dispatcher-master-detail">
+                    <div className="dispatcher-folders">
+                      <span className="dispatcher-folders__label">Pastas</span>
+                      <button
+                        type="button"
+                        className={`folder${activeFolderId === 'all' ? ' folder--on' : ''}`}
+                        onClick={() => setActiveFolderId('all')}
+                      >
+                        Todos
+                        <span className="fcount">{folderCounts.get('all') ?? 0}</span>
+                      </button>
 
-                            {selectedContactIds.length > 0 && (
-                              <div className="recipient-summary">
-                                <span className="recipient-summary__pill">
-                                  {selectedContactIds.length} destinatario(s) selecionado(s)
-                                </span>
-                                {companyCcList.length > 0 && (
-                                  <span
-                                    className="recipient-summary__pill recipient-summary__pill--cc"
-                                    title={`Copia automatica configurada pela empresa (${companyCcList.length}): ${companyCcList.join(', ')}`}
-                                  >
-                                    +{companyCcList.length} CC empresa
-                                  </span>
-                                )}
-                                {siblingCcCount > 0 && (
-                                  <span
-                                    className="recipient-summary__pill recipient-summary__pill--cc"
-                                    title="Contatos secundarios do mesmo fornecedor"
-                                  >
-                                    +{siblingCcCount} CC fornecedores
-                                  </span>
-                                )}
-                              </div>
-                            )}
+                      {quoteFolders.length > 0 && (
+                        <>
+                          <span className="dispatcher-folders__group dispatcher-folders__group--quote">
+                            Famílias desta cotação
+                          </span>
+                          {quoteFolders.map((folder) => (
+                            <button
+                              key={folder.id}
+                              type="button"
+                              className={`folder${activeFolderId === folder.id ? ' folder--on' : ''}`}
+                              onClick={() => setActiveFolderId(folder.id)}
+                            >
+                              {folder.name}
+                              <span className="fcount">{folderCounts.get(folder.id) ?? 0}</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
 
-                            {dispatchError && (
-                              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
-                                {dispatchError}
-                              </p>
-                            )}
+                      {otherFolders.length > 0 && (
+                        <>
+                          <span className="dispatcher-folders__group">Outras famílias</span>
+                          {otherFolders.map((folder) => (
+                            <button
+                              key={folder.id}
+                              type="button"
+                              className={`folder${activeFolderId === folder.id ? ' folder--on' : ''}`}
+                              onClick={() => setActiveFolderId(folder.id)}
+                            >
+                              {folder.name}
+                              <span className="fcount">{folderCounts.get(folder.id) ?? 0}</span>
+                            </button>
+                          ))}
+                        </>
+                      )}
 
-                            <div className="modal-actions">
-                              <button type="button" className="ghost-button" onClick={closeDispatchModal}>
-                                Cancelar
-                              </button>
-                              <button
-                                type="button"
-                                className="primary-button"
-                                disabled={selectedContactIds.length === 0 || previewDispatchMutation.isPending}
-                                onClick={() => previewDispatchMutation.mutate()}
+                      {hasSupplierWithoutFamily && (
+                        <button
+                          type="button"
+                          className={`folder${activeFolderId === 'none' ? ' folder--on' : ''}`}
+                          onClick={() => setActiveFolderId('none')}
+                        >
+                          Sem família
+                          <span className="fcount">{folderCounts.get('none') ?? 0}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="dispatcher-suppliers">
+                      <input
+                        className="input"
+                        placeholder="Buscar fornecedor por nome…"
+                        value={supplierSearch}
+                        onChange={(e) => setSupplierSearch(e.target.value)}
+                        aria-label="Buscar fornecedor por nome"
+                      />
+
+                      <div className="dispatcher-suppliers__header">
+                        <strong>Fornecedores · {activeFolderLabel}</strong>
+                        <button type="button" className="ghost-button" onClick={selectAllVisibleSuppliers}>
+                          Selecionar todos
+                        </button>
+                      </div>
+
+                      {visibleSuppliers.length === 0 ? (
+                        <div className="empty-state">
+                          <strong>Nenhum fornecedor nesta pasta</strong>
+                          <p>Ajuste a busca ou escolha outra pasta.</p>
+                        </div>
+                      ) : (
+                        <div className="dispatcher-list">
+                          {visibleSuppliers.map((supplier) => {
+                            const contacts = supplierContacts.data?.[supplier.id] ?? [];
+                            if (contacts.length === 0) {
+                              return (
+                                <div key={supplier.id} className="dispatcher-row">
+                                  <span />
+                                  <div>
+                                    <div className="dispatcher-row__title">{supplier.name}</div>
+                                    <div className="dispatcher-row__meta">Sem contatos cadastrados</div>
+                                  </div>
+                                  <span />
+                                </div>
+                              );
+                            }
+                            const primary =
+                              contacts.find((c) => c.isPrimary) ?? contacts[0];
+                            const siblingCount = Math.max(0, contacts.length - 1);
+                            const checked = Boolean(primary && selectedContactIds.includes(primary.id));
+                            const contactNames = contacts
+                              .map((c) => (c.isPrimary ? `${c.name} (principal)` : c.name))
+                              .join(', ');
+                            return (
+                              <label
+                                key={supplier.id}
+                                className={`dispatcher-row${checked ? ' dispatcher-row--selected' : ''}`}
                               >
-                                {previewDispatchMutation.isPending ? 'Gerando preview…' : 'Continuar'}
-                              </button>
-                            </div>
-                          </>
-                        )}
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => primary && toggleContactSelection(primary.id)}
+                                />
+                                <div>
+                                  <div className="dispatcher-row__title">{supplier.name}</div>
+                                  <div className="dispatcher-row__meta">Contatos: {contactNames}</div>
+                                </div>
+                                <span style={{ color: 'var(--ink-soft)' }} className="text-xs">
+                                  {siblingCount > 0 ? `Para + ${siblingCount} em CC` : 'Para'}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedContactIds.length > 0 && (
+                  <div className="recipient-summary">
+                    <span className="recipient-summary__pill">
+                      {selectedContactIds.length} destinatario(s) selecionado(s)
+                    </span>
+                    {companyCcList.length > 0 && (
+                      <span
+                        className="recipient-summary__pill recipient-summary__pill--cc"
+                        title={`Copia automatica configurada pela empresa (${companyCcList.length}): ${companyCcList.join(', ')}`}
+                      >
+                        +{companyCcList.length} CC empresa
+                      </span>
+                    )}
+                    {siblingCcCount > 0 && (
+                      <span
+                        className="recipient-summary__pill recipient-summary__pill--cc"
+                        title="Contatos secundarios do mesmo fornecedor"
+                      >
+                        +{siblingCcCount} CC fornecedores
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {dispatchError && (
+                  <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
+                    {dispatchError}
+                  </p>
+                )}
+
+                <div className="modal-actions">
+                  <button type="button" className="ghost-button" onClick={closeDispatchModal}>
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={selectedContactIds.length === 0 || previewDispatchMutation.isPending}
+                    onClick={() => previewDispatchMutation.mutate()}
+                  >
+                    {previewDispatchMutation.isPending ? 'Gerando preview…' : 'Continuar'}
+                  </button>
+                </div>
+              </>
+            )}
 
             {dispatchStep === 'preview' && (
               <>

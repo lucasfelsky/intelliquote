@@ -72,6 +72,7 @@ const quoteFixture = {
         commercialName: 'Produto X',
         marketName: 'PX',
         isDangerousGood: false,
+        familyId: 1,
       },
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
@@ -83,12 +84,24 @@ const quoteFixture = {
 const getImpl = async (path: string): Promise<unknown> => {
   if (path.startsWith('/v1/quote-requests/')) return quoteFixture;
   if (path === '/api/v1/company-profile') return { dispatchCc: [] };
-  if (path === '/v1/suppliers') return [{ id: 5, name: 'ACME Ltda', status: 'active' }];
+  if (path === '/v1/suppliers') {
+    return [
+      {
+        id: 5,
+        name: 'ACME Ltda',
+        status: 'active',
+        families: [{ id: 1, name: 'Monômero' }],
+      },
+    ];
+  }
   if (path === '/v1/supplier-contacts') {
     return { bySupplier: { '5': [{ id: 10, name: 'Contato', email: 'c@acme.com', isPrimary: true }] } };
   }
   if (path === '/v1/catalog-items') {
     return [{ id: 3, commercialName: 'Produto X', marketName: 'PX', isDangerousGood: false, isActive: true }];
+  }
+  if (path === '/v1/item-families') {
+    return { data: [{ id: 1, name: 'Monômero', isActive: true }] };
   }
   return [];
 };

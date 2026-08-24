@@ -771,6 +771,87 @@ dialog.modal-dialog--wide { max-width: 760px; }
 .contact-row__meta { color: var(--ink-soft); font-size: 12px; }
 .contact-row__actions { display: flex; gap: 6px; }
 
+.dispatcher-master-detail {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  gap: 0;
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.dispatcher-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-muted, #fbfdfc);
+  overflow-y: auto;
+}
+
+.dispatcher-folders__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 2px 6px 6px;
+}
+
+.dispatcher-folders__group {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  padding: 10px 6px 4px;
+}
+
+.dispatcher-folders__group--quote { color: var(--primary-700); }
+
+.folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  color: var(--ink);
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+.folder:hover { background: rgba(0, 0, 0, 0.04); }
+.folder--on { background: var(--primary-700); color: #fff; }
+.fcount {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: rgba(0, 0, 0, 0.06);
+}
+.folder--on .fcount { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+.dispatcher-suppliers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.dispatcher-suppliers__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .dispatcher-list {
   display: flex; flex-direction: column; gap: 10px;
   max-height: 280px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
