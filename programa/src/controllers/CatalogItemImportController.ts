@@ -64,13 +64,13 @@ export class CatalogItemImportController {
         }
 
         let familyId: number | null = null;
+        let familyToCreate = false;
         if (familyName) {
           const match = familyMap.get(familyName.toLowerCase());
           if (match) {
             familyId = match;
           } else {
-            errorLines.push({ row: rowNumber, reason: `Família "${familyName}" não encontrada` });
-            return;
+            familyToCreate = true;
           }
         }
 
@@ -82,6 +82,8 @@ export class CatalogItemImportController {
           ncm,
           dbcorpCode,
           familyId,
+          familyName: familyName || null,
+          familyToCreate,
           isDangerousGood,
           notes,
         });
@@ -102,10 +104,34 @@ export class CatalogItemImportController {
 
       const successLines: any[] = [];
       const errorLines: any[] = [];
+      const familyCache = new Map<string, number>();
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         try {
+          let familyId: number | null = null;
+          const familyName = typeof item.familyName === 'string' ? item.familyName.trim() : '';
+          if (familyName) {
+            const cacheKey = familyName.toLowerCase();
+            const cached = familyCache.get(cacheKey);
+            if (cached) {
+              familyId = cached;
+            } else {
+              const existing = await prisma.itemFamily.findFirst({
+                where: { name: { equals: familyName, mode: 'insensitive' } }
+              });
+              if (existing) {
+                familyId = existing.id;
+              } else {
+                const created = await prisma.itemFamily.create({
+                  data: { name: familyName }
+                });
+                familyId = created.id;
+              }
+              familyCache.set(cacheKey, familyId);
+            }
+          }
+
           await prisma.catalogItem.create({
             data: {
               commercialName: item.commercialName,
@@ -113,7 +139,7 @@ export class CatalogItemImportController {
               ncm: item.ncm,
               dbcorpCode: item.dbcorpCode,
               isDangerousGood: item.isDangerousGood,
-              familyId: item.familyId,
+              familyId,
               notes: item.notes,
               isActive: true,
             }

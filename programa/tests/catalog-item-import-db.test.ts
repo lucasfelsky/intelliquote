@@ -53,6 +53,9 @@ describe('CatalogItemImportController (DB)', () => {
     if (testFamilyId) {
       await prisma.itemFamily.delete({ where: { id: testFamilyId } });
     }
+    await prisma.itemFamily.deleteMany({
+      where: { name: { startsWith: `Família ${runId}` } }
+    });
     if (adminId) {
       await prisma.session.deleteMany({ where: { userId: adminId } });
       await prisma.user.delete({ where: { id: adminId } });
@@ -85,16 +88,22 @@ describe('CatalogItemImportController (DB)', () => {
       .send({ contentBase64: base64 });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.validLines.length).toBe(1);
+    expect(res.body.data.validLines.length).toBe(2);
     expect(res.body.data.validLines[0].commercialName).toBe('Import C1');
     expect(res.body.data.validLines[0].familyId).toBe(testFamilyId);
+    expect(res.body.data.validLines[0].familyToCreate).toBe(false);
     expect(res.body.data.validLines[0].dbcorpCode).toBe('DB1'); // normalized to upper case
-    
-    expect(res.body.data.errorLines.length).toBe(3);
+
+    // Row 5: family not found -> no longer rejected, marked for creation on confirm
+    expect(res.body.data.validLines[1].commercialName).toBe('Import C4');
+    expect(res.body.data.validLines[1].familyId).toBe(null);
+    expect(res.body.data.validLines[1].familyName).toBe('Família Inexistente 999');
+    expect(res.body.data.validLines[1].familyToCreate).toBe(true);
+
+    expect(res.body.data.errorLines.length).toBe(2);
     expect(res.body.data.errorLines[0].row).toBe(3); // missing marketName
     expect(res.body.data.errorLines[1].row).toBe(4); // invalid NCM format
     expect(res.body.data.errorLines[1].reason).toMatch(/NCM deve ter 8/);
-    expect(res.body.data.errorLines[2].row).toBe(5); // family not found
   });
 
   testDbSkip('POST /api/v1/catalog-items/import/confirm - success and duplicates', async () => {
@@ -113,5 +122,83 @@ describe('CatalogItemImportController (DB)', () => {
     expect(res.body.data.successLines[0].commercialName).toBe('Import Confirm 1');
     expect(res.body.data.errorLines.length).toBe(1);
     expect(res.body.data.errorLines[0].reason).toMatch(/Já existe um item de catálogo com o Nome de Mercado fornecido/i);
+  });
+
+  testDbSkip('POST /api/v1/catalog-items/import/confirm - cria familia nova e vincula', async () => {
+    const newFamilyName = `Família ${runId} Nova`;
+    const items = [
+      { commercialName: 'Import Nova Familia', marketName: `Market Import ${runId} NovaFamilia`, ncm: '33333333', isDangerousGood: false, familyName: newFamilyName },
+    ];
+
+    const res = await request(app)
+      .post('/api/v1/catalog-items/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({ items });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.successLines.length).toBe(1);
+
+    const created = await prisma.itemFamily.findFirst({
+      where: { name: { equals: newFamilyName, mode: 'insensitive' } }
+    });
+    expect(created).not.toBeNull();
+    expect(created?.isActive).toBe(true);
+
+    const catalogItem = await prisma.catalogItem.findFirst({
+      where: { marketName: `Market Import ${runId} NovaFamilia` }
+    });
+    expect(catalogItem?.familyId).toBe(created?.id);
+  });
+
+  testDbSkip('POST /api/v1/catalog-items/import/confirm - familia existente com case diferente vincula sem duplicar', async () => {
+    const items = [
+      { commercialName: 'Import Case Insensitive', marketName: `Market Import ${runId} CaseInsensitive`, ncm: '44444444', isDangerousGood: false, familyName: `FAMÍLIA IMPORTAÇÃO ${runId}`.toUpperCase() },
+    ];
+
+    const res = await request(app)
+      .post('/api/v1/catalog-items/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({ items });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.successLines.length).toBe(1);
+
+    const catalogItem = await prisma.catalogItem.findFirst({
+      where: { marketName: `Market Import ${runId} CaseInsensitive` }
+    });
+    expect(catalogItem?.familyId).toBe(testFamilyId);
+
+    const matches = await prisma.itemFamily.findMany({
+      where: { name: { equals: `Família Importação ${runId}`, mode: 'insensitive' } }
+    });
+    expect(matches.length).toBe(1);
+  });
+
+  testDbSkip('POST /api/v1/catalog-items/import/confirm - dedup de familia repetida na mesma planilha', async () => {
+    const dupFamilyName = `Família ${runId} Dup`;
+    const items = [
+      { commercialName: 'Import Dup 1', marketName: `Market Import ${runId} Dup1`, ncm: '55555555', isDangerousGood: false, familyName: dupFamilyName },
+      { commercialName: 'Import Dup 2', marketName: `Market Import ${runId} Dup2`, ncm: '66666666', isDangerousGood: false, familyName: dupFamilyName },
+    ];
+
+    const res = await request(app)
+      .post('/api/v1/catalog-items/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({ items });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.successLines.length).toBe(2);
+
+    const matches = await prisma.itemFamily.findMany({
+      where: { name: { equals: dupFamilyName, mode: 'insensitive' } }
+    });
+    expect(matches.length).toBe(1);
+
+    const catalogItems = await prisma.catalogItem.findMany({
+      where: { marketName: { in: [`Market Import ${runId} Dup1`, `Market Import ${runId} Dup2`] } }
+    });
+    expect(catalogItems.length).toBe(2);
+    expect(catalogItems[0].familyId).toBe(matches[0].id);
+    expect(catalogItems[1].familyId).toBe(matches[0].id);
   });
 });
