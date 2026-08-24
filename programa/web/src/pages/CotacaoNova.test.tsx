@@ -27,6 +27,17 @@ const catalogItems = [
     isActive: true,
     family: { id: 1, name: 'Químicos' },
   },
+  {
+    id: 2,
+    commercialName: 'Fibra de Vidro',
+    marketName: 'FDV',
+    ncm: null,
+    dbcorpCode: null,
+    isDangerousGood: false,
+    notes: null,
+    isActive: true,
+    family: { id: 2, name: 'Materiais' },
+  },
 ];
 
 function renderPage() {
@@ -81,8 +92,7 @@ describe('CotacaoNova', () => {
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
 
-    fireEvent.click(getByRole('button', { name: /Químicos/ }));
-    fireEvent.click(getByRole('button', { name: 'Soda Cáustica — NaOH' }));
+    fireEvent.click(getByRole('button', { name: 'Soda Cáustica' }));
     fireEvent.change(getByLabelText('Quantidade *'), { target: { value: '10' } });
     fireEvent.click(getByRole('button', { name: 'Adicionar' }));
 
@@ -91,13 +101,13 @@ describe('CotacaoNova', () => {
     expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Editar item');
   });
 
-  it('4. tamanho default: className contém modal-dialog e não modal-dialog--wide', async () => {
+  it('4. tamanho wide: className contém modal-dialog--wide', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
     const dialog = getDialog(container);
     expect(dialog.className).toContain('modal-dialog');
-    expect(dialog.className).not.toContain('modal-dialog--wide');
+    expect(dialog.className).toContain('modal-dialog--wide');
   });
 
   it('5. sem título duplicado: escopado ao dialog (a página já tem <h2>Itens do catálogo</h2>)', async () => {
@@ -124,6 +134,28 @@ describe('CotacaoNova', () => {
 
     const reopenedSearchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
     expect(reopenedSearchInput.value).toBe('');
+  });
+
+  it('A. busca por família: "químicos" encontra "Soda Cáustica" (família Químicos)', async () => {
+    const { container, getByRole, getByPlaceholderText } = renderPage();
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+
+    const dialog = getDialog(container);
+    const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'químicos' } });
+
+    expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Fibra de Vidro' })).toBeNull();
+  });
+
+  it('B. resultados exibem só o nome comercial: "NaOH" (marketName) não aparece no dialog', async () => {
+    const { container, getByRole } = renderPage();
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+
+    const dialog = getDialog(container);
+    expect(within(dialog).queryByText(/NaOH/)).toBeNull();
   });
 
   it('7. botão × fecha o modal', async () => {
