@@ -12,6 +12,15 @@ import {
   parsePagination,
 } from '../utils/http';
 
+// Fornecedor <-> ItemFamily (m2m implicito): shape enxuto reutilizado em
+// create/update/getAll/getById para nao perder `families` no JSON de resposta.
+const supplierFamiliesInclude = {
+  families: {
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' as const },
+  },
+} satisfies Prisma.SupplierInclude;
+
 export class SupplierController {
   static async create(req: Request, res: Response): Promise<Response> {
     try {
@@ -37,7 +46,11 @@ export class SupplierController {
           createdById: req.user?.id ?? null,
           acceptedIncoterms: payload.acceptedIncoterms as Incoterm[],
           tags: payload.tags ?? [],
+          ...(payload.familyIds !== undefined
+            ? { families: { connect: payload.familyIds.map((id) => ({ id })) } }
+            : {}),
         },
+        include: supplierFamiliesInclude,
       });
 
       await AuditLogService.log({
@@ -64,6 +77,7 @@ export class SupplierController {
         const suppliers = await prisma.supplier.findMany({
           where,
           orderBy,
+          include: supplierFamiliesInclude,
         });
 
         return res.status(200).json(await withReviewStats(suppliers));
@@ -76,6 +90,7 @@ export class SupplierController {
           orderBy,
           skip: pagination.skip,
           take: pagination.take,
+          include: supplierFamiliesInclude,
         }),
         prisma.supplier.count({ where }),
       ]);
@@ -101,6 +116,7 @@ export class SupplierController {
 
       const supplier = await prisma.supplier.findFirst({
         where: { id, deletedAt: null },
+        include: supplierFamiliesInclude,
       });
 
       if (!supplier) {
@@ -158,7 +174,11 @@ export class SupplierController {
           paymentTermsDays: payload.paymentTermsDays,
           acceptedIncoterms: payload.acceptedIncoterms as Incoterm[] | undefined,
           tags: payload.tags,
+          ...(payload.familyIds !== undefined
+            ? { families: { set: payload.familyIds.map((id) => ({ id })) } }
+            : {}),
         },
+        include: supplierFamiliesInclude,
       });
 
       await AuditLogService.log({

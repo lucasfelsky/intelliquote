@@ -125,6 +125,13 @@ const tagsField = z.preprocess(
 // F12: nota por dimensao (1..5).
 const ratingField = z.coerce.number().int().min(1).max(5);
 
+// Fornecedor <-> ItemFamily (m2m implicito): ids das familias vinculadas ao
+// fornecedor. Opcional; quando ausente, o controller nao toca em `families`.
+const familyIdsField = z.preprocess(
+  (value) => (value === undefined || value === null || value === '' ? undefined : value),
+  z.array(positiveIntegerField).optional(),
+);
+
 export const supplierCreateSchema = z.object({
   name: requiredTrimmedStringField,
   website: nullableTrimmedStringField.optional(),
@@ -134,6 +141,7 @@ export const supplierCreateSchema = z.object({
   notes: nullableTrimmedStringField.optional(),
   paymentTermsDays: nonNegativeIntegerField.optional(),
   tags: tagsField,
+  familyIds: familyIdsField,
 });
 
 export const supplierUpdateSchema = z.object({
@@ -145,6 +153,7 @@ export const supplierUpdateSchema = z.object({
   notes: nullableOptionalTrimmedStringField,
   paymentTermsDays: nonNegativeIntegerField.optional(),
   tags: tagsField,
+  familyIds: familyIdsField,
 });
 
 // F12: avaliacao opcional do fornecedor vencedor, capturada ao concluir a

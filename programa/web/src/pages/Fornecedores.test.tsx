@@ -19,6 +19,11 @@ vi.mock('@/services/dispatch', async (importOriginal) => ({
 import { api } from '@/api/client';
 import { listSupplierContacts } from '@/services/dispatch';
 
+const families = [
+  { id: 1, name: 'Silano', isActive: true },
+  { id: 2, name: 'Resina', isActive: true },
+];
+
 const suppliers = [
   {
     id: 10,
@@ -31,6 +36,7 @@ const suppliers = [
     paymentTermsDays: 30,
     tags: ['confiável'],
     reviewStats: null,
+    families: [{ id: 1, name: 'Silano' }],
   },
 ];
 
@@ -87,6 +93,9 @@ describe('Fornecedores', () => {
       if (url === '/api/v1/suppliers') return Promise.resolve(suppliers);
       if (url === '/api/v1/supplier-contacts') {
         return Promise.resolve({ bySupplier: { 10: contacts } });
+      }
+      if (url === '/api/v1/item-families') {
+        return Promise.resolve({ data: families });
       }
       return Promise.resolve([]);
     });
@@ -213,5 +222,55 @@ describe('Fornecedores', () => {
     expect(cell).not.toBeNull();
     expect(cell?.textContent).toBe('Contato Um');
     expect(cell?.getAttribute('title')).toBe('Contato Um <c@acme.com>');
+  });
+
+  it('13. familias — "Editar" pré-marca os chips vinculados e "Novo fornecedor" abre sem nenhum marcado', async () => {
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+
+    fireEvent.click(getByRole('button', { name: 'Editar' }));
+    let dialog = dialogAt(container, 1);
+    await waitFor(() => {
+      expect(within(dialog).getByText('Silano').className).toContain('chip--active');
+    });
+    expect(within(dialog).getByText('Resina').className).not.toContain('chip--active');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+
+    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    dialog = dialogAt(container, 1);
+    await waitFor(() => {
+      expect(within(dialog).getByText('Silano')).toBeTruthy();
+    });
+    expect(within(dialog).getByText('Silano').className).not.toContain('chip--active');
+    expect(within(dialog).getByText('Resina').className).not.toContain('chip--active');
+  });
+
+  it('14. familias — clicar num chip inclui o id em familyIds no payload de create', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      id: 30,
+      name: 'Fornecedor Chip',
+      acceptedIncoterms: ['FOB'],
+      tags: [],
+      families: [{ id: 2, name: 'Resina' }],
+    });
+
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    const dialog = dialogAt(container, 1);
+    await waitFor(() => {
+      expect(within(dialog).getByText('Resina')).toBeTruthy();
+    });
+
+    fireEvent.change(dialog.querySelector('#name') as HTMLInputElement, {
+      target: { value: 'Fornecedor Chip' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'FOB' }));
+    fireEvent.click(within(dialog).getByText('Resina'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cadastrar' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const payload = vi.mocked(api.post).mock.calls[0]?.[1] as { familyIds?: number[] };
+    expect(payload.familyIds).toEqual([2]);
   });
 });
