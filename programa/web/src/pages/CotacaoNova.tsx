@@ -501,73 +501,73 @@ export default function CotacaoNova() {
         isOpen={showItemModal}
         onClose={closeItemModal}
         title={editingTempId !== null ? 'Editar item' : 'Adicionar item do catálogo'}
+        size="wide"
       >
         {/* Guard: CatalogItemPicker tem state interno (search/expanded) que hoje
             zera ao desmontar. Modal renderiza children sempre, entao mantemos a
             desmontagem explicita — mesmo padrao do ComparacaoTab (Fase 1). */}
         {showItemModal && (
           <form onSubmit={handleItemSubmit}>
-            <label className="field-label" htmlFor="itemCatalog">Item *</label>
             <CatalogItemPicker
               items={activeCatalog}
               selectedId={itemForm.catalogItemId}
               onSelect={(id) => setItemForm({ ...itemForm, catalogItemId: id })}
               disabled={editingTempId !== null}
-            />
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-              <div>
-                <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
-                <input
-                  id="itemQuantity"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={itemForm.quantity}
-                  onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
-                  required
-                />
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
+                  <input
+                    id="itemQuantity"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={itemForm.quantity}
+                    onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="itemUnit">Unidade *</label>
+                  <select
+                    id="itemUnit"
+                    className="select"
+                    value={itemForm.unit}
+                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                    required
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="field-label" htmlFor="itemUnit">Unidade *</label>
-                <select
-                  id="itemUnit"
-                  className="select"
-                  value={itemForm.unit}
-                  onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-                  required
-                >
-                  {UNITS.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
+
+              <label className="field-label" htmlFor="itemNotes" style={{ marginTop: 12 }}>
+                Notas
+              </label>
+              <textarea
+                id="itemNotes"
+                className="textarea"
+                rows={3}
+                value={itemForm.notes}
+                onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
+              />
+
+              {itemError && (
+                <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{itemError}</p>
+              )}
+
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={closeItemModal}>
+                  Cancelar
+                </button>
+                <button type="submit" className="primary-button">
+                  {editingTempId !== null ? 'Salvar alterações' : 'Adicionar'}
+                </button>
               </div>
-            </div>
-
-            <label className="field-label" htmlFor="itemNotes" style={{ marginTop: 12 }}>
-              Notas
-            </label>
-            <textarea
-              id="itemNotes"
-              className="textarea"
-              rows={3}
-              value={itemForm.notes}
-              onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
-            />
-
-            {itemError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{itemError}</p>
-            )}
-
-            <div className="modal-actions">
-              <button type="button" className="ghost-button" onClick={closeItemModal}>
-                Cancelar
-              </button>
-              <button type="submit" className="primary-button">
-                {editingTempId !== null ? 'Salvar alterações' : 'Adicionar'}
-              </button>
-            </div>
+            </CatalogItemPicker>
           </form>
         )}
       </Modal>
