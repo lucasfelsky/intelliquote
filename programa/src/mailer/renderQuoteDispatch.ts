@@ -116,6 +116,28 @@ function renderItemsRows(items: QuoteDispatchItem[]): string {
     .join('');
 }
 
+export function renderItemsTable(items: QuoteDispatchItem[]): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,sans-serif;font-size:13px;">
+        <colgroup>
+          <col style="width:182px;" />
+          <col style="width:80px;" />
+          <col style="width:80px;" />
+          <col style="width:100px;" />
+          <col style="width:120px;" />
+        </colgroup>
+        <thead>
+          <tr bgcolor="#F8FBFA" style="background-color:#F8FBFA;">
+            <th align="left" width="182" style="width:182px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">PRODUCT</th>
+            <th align="right" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">QTY</th>
+            <th align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">INCOTERM</th>
+            <th align="left" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">ORIGIN</th>
+            <th align="left" width="120" style="width:120px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">DESTINATION</th>
+          </tr>
+        </thead>
+        <tbody>${renderItemsRows(items)}</tbody>
+      </table>`;
+}
+
 export function renderSections(template: string, vars: QuoteDispatchVars): string {
   const out = template.replace(/\{\{#([^}]+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, body) => {
     const value = (vars as unknown as Record<string, unknown>)[key];
@@ -126,6 +148,7 @@ export function renderSections(template: string, vars: QuoteDispatchVars): strin
 
   return out.replace(/\{\{([^}]+)\}\}/g, (_, key) => {
     const trimmed = String(key).trim();
+    if (trimmed === 'itemsTable') return renderItemsTable(vars.items);
     if (trimmed === 'itemsRows') return renderItemsRows(vars.items);
     const value = (vars as unknown as Record<string, unknown>)[trimmed];
     if (value === undefined || value === null) return '';
