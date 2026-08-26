@@ -1599,6 +1599,24 @@ dialog.modal-dialog--wide { max-width: 760px; }
   margin-top: 14px;
 }
 
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.pagination__info {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
 

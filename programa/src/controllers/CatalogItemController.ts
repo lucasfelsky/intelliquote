@@ -45,7 +45,7 @@ export class CatalogItemController {
         prisma.catalogItem.findMany({
           where,
           include: { family: true },
-          orderBy: [{ marketName: 'asc' }],
+          orderBy: [{ commercialName: 'asc' }],
           skip: pagination.skip,
           take: pagination.take,
         }),
