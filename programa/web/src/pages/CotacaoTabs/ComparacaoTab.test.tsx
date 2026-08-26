@@ -475,6 +475,30 @@ describe('ComparacaoTab', () => {
       });
       await waitFor(() => expect(reviewDialog.open).toBe(false));
     });
+
+    it('17b. concluir com uma só resposta fecha direto (sem exigir 2ª proposta) e não chama executeComparison', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [winner],
+        winnerQuoteResponseId: null,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 1,
+      });
+      const { container, findByText, getByRole } = renderOpenTab();
+      await findByText('Apenas um fornecedor respondeu — sem comparação.');
+
+      fireEvent.click(getByRole('button', { name: 'Concluir cotação' }));
+      const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      await waitFor(() => expect(reviewDialog.open).toBe(true));
+      const scope = within(reviewDialog);
+
+      fireEvent.click(scope.getByRole('button', { name: 'Concluir cotação' }));
+
+      await waitFor(() => expect(closeQuoteRequest).toHaveBeenCalledTimes(1));
+      expect(closeQuoteRequest).toHaveBeenCalledWith(99, { notifyLosers: false, review: null });
+      expect(executeComparison).not.toHaveBeenCalled();
+      await waitFor(() => expect(reviewDialog.open).toBe(false));
+    });
   });
 
   describe('Coluna Lead time (item 3 — substitui Landed (BRL))', () => {

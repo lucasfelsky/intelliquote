@@ -435,6 +435,20 @@ export function ComparacaoTab({
           comment: reviewComment.trim() || null,
         }
       : null;
+    if (responseCount < 2) {
+      // Sem 2ª proposta não há comparação a persistir -- persistBeforeAction
+      // sempre falharia no gate de "pelo menos duas propostas" do backend.
+      const ok = await confirm({
+        title: 'Concluir com uma só resposta?',
+        message:
+          'Esta cotação teve apenas uma resposta, então não há comparação. Tem certeza que deseja concluí-la?',
+        confirmText: 'Concluir mesmo assim',
+        cancelText: 'Voltar',
+      });
+      if (!ok) return;
+      closeMut.mutate({ notifyLosers, review });
+      return;
+    }
     const msg = notifyLosers
       ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
       : 'Concluir esta cotação? Ela será fechada.';
