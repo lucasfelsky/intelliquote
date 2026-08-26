@@ -1718,7 +1718,8 @@ dialog.modal-dialog--wide { max-width: 760px; }
 
 .cmp-rankgrid {
   display: grid;
-  grid-template-columns: 44px minmax(150px, 1.5fr) 104px 84px 96px 118px 140px 200px;
+  grid-template-columns:
+    44px minmax(140px, 1.4fr) 92px 76px 84px 96px minmax(110px, 1fr) minmax(150px, 1.4fr);
   align-items: center;
   gap: 14px;
 }
@@ -1743,6 +1744,14 @@ dialog.modal-dialog--wide { max-width: 760px; }
   border-color: #a9dfce;
   border-left: 4px solid var(--primary);
   padding-left: 20px;
+  animation: cmp-winner-pulse 0.6s ease;
+}
+
+/* Realce sutil ao virar vencedora (glow + leve scale), roda uma vez. */
+@keyframes cmp-winner-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 122, 87, 0.35); transform: scale(1); }
+  40% { box-shadow: 0 0 0 6px rgba(0, 122, 87, 0.12); transform: scale(1.008); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 122, 87, 0); transform: scale(1); }
 }
 
 .cmp-rank {
@@ -1777,10 +1786,10 @@ dialog.modal-dialog--wide { max-width: 760px; }
   font-weight: 700;
 }
 
-.cmp-row__price { font-weight: 700; font-size: 14px; }
-.cmp-row__payment { font-size: 13px; }
-.cmp-row__landed { font-weight: 700; font-size: 14px; }
-.cmp-row--winner .cmp-row__landed { font-weight: 800; }
+.cmp-row__price { font-weight: 700; font-size: 14px; min-width: 0; }
+.cmp-row__payment { font-size: 13px; min-width: 0; }
+.cmp-row__leadtime { font-weight: 700; font-size: 14px; min-width: 0; }
+.cmp-row--winner .cmp-row__leadtime { font-weight: 800; }
 
 .cmp-incoterm-pill {
   display: inline-flex;
@@ -1800,7 +1809,7 @@ dialog.modal-dialog--wide { max-width: 760px; }
 .cmp-row--winner .cmp-scorebar__track { background: #cdeadf; }
 .cmp-row--winner .cmp-scorebar__fill { background: var(--primary); }
 
-.cmp-row__actions { display: flex; justify-content: flex-end; }
+.cmp-row__actions { display: flex; justify-content: flex-end; min-width: 0; }
 .cmp-row__actions--stacked { flex-direction: column; gap: 8px; align-items: stretch; }
 .cmp-row__no-email { font-size: 11px; color: var(--ink-soft); }
 
@@ -1819,6 +1828,7 @@ dialog.modal-dialog--wide { max-width: 760px; }
   white-space: normal;
   line-height: 1.15;
   text-align: center;
+  max-width: 100%;
 }
 .cmp-btn--primary { background: var(--primary-700); color: #fff; }
 .cmp-btn--primary:hover { background: #00563f; }
@@ -1941,4 +1951,18 @@ dialog.modal-dialog--wide { max-width: 760px; }
   .cmp-rankgrid--head { display: none; }
   .cmp-row { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
   .cmp-row__actions { justify-content: flex-start; }
+}
+
+/* Desliga as animações de reordenação (FLIP via transform inline, injetado
+   pelo ComparacaoTab.tsx) e o realce de vencedora quando o usuário pede
+   menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .cmp-row {
+    transition: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
+  .cmp-row--winner {
+    animation: none !important;
+  }
 }

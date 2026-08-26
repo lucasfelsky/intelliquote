@@ -1,5 +1,5 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import {
@@ -29,14 +29,10 @@ function formatNumber(value: number | undefined | null, fractionDigits = 2): str
   });
 }
 
-function formatCurrency(value: number | undefined | null, currency = 'BRL'): string {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
-  return value.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+// Lead time exibido = maior leadTimeDays entre os itens da proposta (quando
+// o pedido inteiro chega). Sem dado -> "—".
+function formatLeadTime(days: number | undefined | null): string {
+  return typeof days === 'number' && days > 0 ? `${days} dias` : '—';
 }
 
 // Espelha o limite do backend (app.ts / QuoteResponseController) -- valida
@@ -476,9 +472,14 @@ export function ComparacaoTab({
       const contactBits = [r.contact?.name, r.contact?.email].filter(Boolean) as string[];
       const contactLine = contactBits.length ? contactBits.join(' · ') : null;
       const percent = scorePercent(r.totalScore);
+      const rowKey = String(r.quoteResponseId ?? r.supplierId);
       return (
         <div
-          key={`${r.quoteResponseId ?? r.supplierId}-${idx}`}
+          key={rowKey}
+          ref={(el) => {
+            if (el) rowRefs.current.set(rowKey, el);
+            else rowRefs.current.delete(rowKey);
+          }}
           className={r.isWinner ? 'cmp-row cmp-rankgrid cmp-row--winner' : 'cmp-row cmp-rankgrid'}
         >
           <div className={r.isWinner ? 'cmp-rank cmp-rank--winner' : 'cmp-rank'}>{idx + 1}</div>
@@ -499,7 +500,7 @@ export function ComparacaoTab({
             <span className="cmp-incoterm-pill">{r.offeredIncoterm}</span>
           </div>
           <div className="cmp-row__payment">{r.paymentTermsDays} dias</div>
-          <div className="cmp-row__landed">{formatCurrency(r.totalLandedCost, 'BRL')}</div>
+          <div className="cmp-row__leadtime">{formatLeadTime(r.leadTimeDays)}</div>
           <div className="cmp-scorebar">
             <div className="cmp-scorebar__row">
               <span>Score</span>
@@ -577,6 +578,40 @@ export function ComparacaoTab({
     ...r,
     isWinner: !previewPendingApproval && r.quoteResponseId === previewWinnerId,
   }));
+
+  // Animação de reordenação (FLIP leve, CSS puro, sem lib): guarda a posição
+  // (getBoundingClientRect) de cada linha por key estável e, quando a ordem
+  // muda, aplica um transform inicial que anima até 0 via transition.
+  // Desligado sob prefers-reduced-motion.
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  const rankOrderKey = rankedResults.map((r) => r.quoteResponseId ?? r.supplierId).join('|');
+  useLayoutEffect(() => {
+    const prevRects = prevRectsRef.current;
+    const nextRects = new Map<string, DOMRect>();
+    rowRefs.current.forEach((el, key) => nextRects.set(key, el.getBoundingClientRect()));
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!prefersReducedMotion) {
+      nextRects.forEach((rect, key) => {
+        const prev = prevRects.get(key);
+        const el = rowRefs.current.get(key);
+        if (prev && el) {
+          const deltaY = prev.top - rect.top;
+          if (deltaY !== 0) {
+            el.style.transition = 'none';
+            el.style.transform = `translateY(${deltaY}px)`;
+            requestAnimationFrame(() => {
+              el.style.transition = 'transform 320ms ease';
+              el.style.transform = '';
+            });
+          }
+        }
+      });
+    }
+    prevRectsRef.current = nextRects;
+  }, [rankOrderKey]);
 
   const [bypassPending, setBypassPending] = useState(false);
 
@@ -731,8 +766,8 @@ export function ComparacaoTab({
                       <strong>{formatNumber(only.offeredPrice)}</strong>
                     </div>
                     <div className="cmp-bypass-supplier__stat">
-                      <span>Landed</span>
-                      <strong>{formatCurrency(only.totalLandedCost, 'BRL')}</strong>
+                      <span>Lead time</span>
+                      <strong>{formatLeadTime(only.leadTimeDays)}</strong>
                     </div>
                   </div>
                 </div>
@@ -766,7 +801,7 @@ export function ComparacaoTab({
               <div>Preço</div>
               <div>Incoterm</div>
               <div>Pagamento</div>
-              <div>Landed (BRL)</div>
+              <div>Lead time</div>
               <div>Score</div>
               <div></div>
             </div>

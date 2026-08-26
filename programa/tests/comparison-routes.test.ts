@@ -664,6 +664,7 @@ describe('Comparison routes', () => {
           offeredIncoterm: 'EXW',
           paymentTermsDays: 10,
           isWinner: false,
+          items: [{ leadTimeDays: 12 }, { leadTimeDays: 18 }, { leadTimeDays: null }],
           supplier: {
             id: 101,
             name: 'Global Parts Ltd',
@@ -687,6 +688,7 @@ describe('Comparison routes', () => {
           offeredIncoterm: 'FOB',
           paymentTermsDays: 30,
           isWinner: false,
+          items: [{ leadTimeDays: 25 }],
           supplier: {
             id: 102,
             name: 'Nihon Trading',
@@ -726,6 +728,15 @@ describe('Comparison routes', () => {
         }
       }
 
+      // leadTimeDays = MAIOR leadTimeDays entre os itens da resposta (nulls ignorados).
+      const resultById = new Map(
+        (response.body.results as Array<{ quoteResponseId: number; leadTimeDays: number | null }>).map(
+          (item) => [item.quoteResponseId, item.leadTimeDays],
+        ),
+      );
+      expect(resultById.get(11)).toBe(18);
+      expect(resultById.get(12)).toBe(25);
+
       // Nada foi persistido: nem transacao, nem update de isWinner, nem
       // criacao de QuoteComparison/AuditLog.
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
@@ -733,6 +744,90 @@ describe('Comparison routes', () => {
       expect(prismaMock.__tx.quoteResponse.update).not.toHaveBeenCalled();
       expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
       expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('leadTimeDays cai no valor de topo da QuoteResponse sem itens com lead time, e null sem nenhum dado', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'USD',
+      });
+      prismaMock.quoteResponse.findMany.mockResolvedValue([
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 40,
+          insuranceCost: 10,
+          otherFees: 20,
+          importDuty: 14,
+          ipi: 5,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          isWinner: false,
+          leadTimeDays: 40,
+          items: [{ leadTimeDays: null }],
+          supplier: {
+            id: 101,
+            name: 'Global Parts Ltd',
+            contacts: [{ id: 9001, name: 'Ana Vendas', email: 'ana@globalparts.example' }],
+          },
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 120,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 10,
+          importDuty: 10,
+          ipi: 4,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'FOB',
+          paymentTermsDays: 30,
+          isWinner: false,
+          leadTimeDays: null,
+          items: [],
+          supplier: {
+            id: 102,
+            name: 'Nihon Trading',
+            contacts: [{ id: 9002, name: 'Kenji Sales', email: 'kenji@nihon.example' }],
+          },
+        },
+      ]);
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: null,
+      });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send({ priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 });
+
+      expect(response.status).toBe(200);
+      const resultById = new Map(
+        (response.body.results as Array<{ quoteResponseId: number; leadTimeDays: number | null }>).map(
+          (item) => [item.quoteResponseId, item.leadTimeDays],
+        ),
+      );
+      // id 11: items sem lead time -> cai no leadTimeDays de topo (40).
+      expect(resultById.get(11)).toBe(40);
+      // id 12: nem itens nem leadTimeDays de topo -> null.
+      expect(resultById.get(12)).toBeNull();
     });
 
     it('com 1 proposta retorna responseCount 1 (sem gate de minimo 2)', async () => {
