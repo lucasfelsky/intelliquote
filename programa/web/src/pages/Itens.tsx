@@ -1,9 +1,10 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useMemo, useState, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { messageOf } from '@/services/quoteResponses';
 import { Modal } from '@/components/Modal';
+import { Pagination } from '@/components/Pagination';
 
 interface CatalogItem {
   id: number;
@@ -42,6 +43,15 @@ const EMPTY_FORM: FormState = {
 
 function normalizeNcm(value: string): string {
   return value.replace(/\D/g, '').slice(0, 8);
+}
+
+const PAGE_SIZE = 50;
+
+interface CatalogItemsPagination {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
 }
 
 interface CatalogItemPayload extends Record<string, unknown> {
@@ -88,6 +98,7 @@ export default function Itens() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [page, setPage] = useState(1);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
@@ -101,17 +112,32 @@ export default function Itens() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const itemsQuery = useQuery({
-    queryKey: ['catalog-items', { search: search.trim(), includeInactive: showInactive }],
+    queryKey: ['catalog-items', { search: search.trim(), includeInactive: showInactive, page }],
     queryFn: async () => {
-      const data = await api.get<{ data?: CatalogItem[] }>('/v1/catalog-items', {
-        ...(search.trim() ? { search: search.trim() } : {}),
-        includeInactive: showInactive,
-        pageSize: 200,
-      });
-      return Array.isArray(data?.data) ? data.data : [];
+      const data = await api.get<{ data?: CatalogItem[]; pagination?: CatalogItemsPagination }>(
+        '/v1/catalog-items',
+        {
+          ...(search.trim() ? { search: search.trim() } : {}),
+          includeInactive: showInactive,
+          page,
+          pageSize: PAGE_SIZE,
+        },
+      );
+      return {
+        items: Array.isArray(data?.data) ? data.data : [],
+        pagination: data?.pagination ?? null,
+      };
     },
+    placeholderData: keepPreviousData,
   });
-  const items = useMemo(() => itemsQuery.data ?? [], [itemsQuery.data]);
+  const items = useMemo(() => itemsQuery.data?.items ?? [], [itemsQuery.data]);
+  const pagination = itemsQuery.data?.pagination ?? null;
+  const totalPages = pagination?.totalPages ?? 1;
+  const totalItems = pagination?.totalItems ?? items.length;
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, showInactive]);
 
   const familiesQuery = useQuery({
     queryKey: ['item-families', { includeInactive: false }],
@@ -137,19 +163,6 @@ export default function Itens() {
     }
     return options;
   }, [families, editing]);
-
-  const sortedItems = useMemo(
-    () => [...items].sort((a, b) => a.commercialName.localeCompare(b.commercialName, 'pt-BR')),
-    [items],
-  );
-
-  const stats = useMemo(() => {
-    const total = items.length;
-    const active = items.filter((i) => i.isActive).length;
-    const inactive = total - active;
-    const dg = items.filter((i) => i.isDangerousGood).length;
-    return { total, active, inactive, dg };
-  }, [items]);
 
   function openCreate() {
     setEditing(null);
@@ -330,11 +343,7 @@ export default function Itens() {
           />
         </div>
         <div className="itens-filters__stats" aria-live="polite">
-          <span><strong>{stats.total}</strong> no total</span>
-          <span>•</span>
-          <span><strong>{stats.active}</strong> ativos</span>
-          <span>•</span>
-          <span><strong>{stats.dg}</strong> DG</span>
+          <span><strong>{totalItems}</strong> {totalItems === 1 ? 'item' : 'itens'} no total</span>
         </div>
         <label className={`itens-filters__toggle${showInactive ? ' itens-filters__toggle--active' : ''}`}>
           <input
@@ -352,25 +361,6 @@ export default function Itens() {
         </div>
       )}
 
-      <section className="itens-summary" aria-label="Resumo do catálogo">
-        <div className="itens-summary__cell itens-summary__cell--accent">
-          <span>Itens ativos</span>
-          <strong>{stats.active}</strong>
-        </div>
-        <div className="itens-summary__cell">
-          <span>Itens inativos</span>
-          <strong>{stats.inactive}</strong>
-        </div>
-        <div className="itens-summary__cell">
-          <span>Marcados como DG</span>
-          <strong>{stats.dg}</strong>
-        </div>
-        <div className="itens-summary__cell">
-          <span>Total cadastrado</span>
-          <strong>{stats.total}</strong>
-        </div>
-      </section>
-
       <div className="itens-page__split">
         <section className="card" aria-label="Lista de itens do catálogo">
           <header className="page-header" style={{ marginBottom: 12 }}>
@@ -384,7 +374,7 @@ export default function Itens() {
             <div className="itens-empty">Carregando…</div>
           ) : itemsQuery.isError ? (
             <div className="itens-empty" style={{ color: 'var(--danger)' }}>{messageOf(itemsQuery.error)}</div>
-          ) : sortedItems.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="itens-empty">
               <strong>Nenhum item encontrado</strong>
               <p>
@@ -395,7 +385,7 @@ export default function Itens() {
             </div>
           ) : (
             <div className="itens-grid">
-              {sortedItems.map((item) => (
+              {items.map((item) => (
                 <button
                   type="button"
                   key={item.id}
@@ -499,6 +489,16 @@ export default function Itens() {
                 </button>
               ))}
             </div>
+          )}
+
+          {!itemsQuery.isLoading && !itemsQuery.isError && items.length > 0 && totalPages > 1 && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            />
           )}
         </section>
 
