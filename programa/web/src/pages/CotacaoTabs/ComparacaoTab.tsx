@@ -647,13 +647,27 @@ export function ComparacaoTab({
             <span className="cmp-eyebrow">SQ Química · Comparação</span>
             <h2 className="cmp-title">Comparação de fornecedores</h2>
             <div className="cmp-head__meta">
-              <span className="cmp-pill">{requestCode}</span>
               {productName && <span className="cmp-head__product">{productName}</span>}
             </div>
           </div>
-          <div className="cmp-live">
-            <span className="cmp-live__dot" aria-hidden="true" />
-            {responseCount} respostas · ao vivo
+          <div className="cmp-head__aside">
+            <div className="cmp-live">
+              <span className="cmp-live__dot" aria-hidden="true" />
+              {responseCount} respostas · ao vivo
+            </div>
+            {canConclude && quoteRequestStatus === 'open' && (
+              <button
+                type="button"
+                className="cmp-btn cmp-btn--ghost"
+                onClick={() => {
+                  setReviewTarget(rankedResults.find((r) => r.isWinner) ?? null);
+                  setReviewOpen(true);
+                }}
+                title="Avalia a vencedora (opcional) e fecha a cotação."
+              >
+                Concluir cotação
+              </button>
+            )}
           </div>
         </div>
 
@@ -687,22 +701,6 @@ export function ComparacaoTab({
         </div>
 
         <div className="cmp-body">
-        {canConclude && quoteRequestStatus === 'open' && (
-          <div className="cmp-conclude-bar">
-            <button
-              type="button"
-              className="cmp-btn cmp-btn--ghost"
-              onClick={() => {
-                setReviewTarget(rankedResults.find((r) => r.isWinner) ?? null);
-                setReviewOpen(true);
-              }}
-              title="Avalia a vencedora (opcional) e fecha a cotação."
-            >
-              Concluir cotação
-            </button>
-          </div>
-        )}
-
         {previewQuery.isLoading && <p>Calculando comparação…</p>}
         {previewQuery.isError && (
           <div className="empty-state">
