@@ -124,6 +124,7 @@ export interface ComparisonResult {
   qualityScore: number;
   totalScore: number;
   isWinner: boolean;
+  leadTimeDays: number | null;
 }
 
 export interface ComparisonRecord {
@@ -304,6 +305,9 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
     qualityScore: asNumber(obj.qualityScore),
     totalScore: asNumber(obj.totalScore),
     isWinner: Boolean(obj.isWinner),
+    leadTimeDays: obj.leadTimeDays === null || obj.leadTimeDays === undefined
+      ? null
+      : asNumber(obj.leadTimeDays),
   };
 }
 

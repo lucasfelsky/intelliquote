@@ -58,6 +58,7 @@ const winner = {
   incotermScore: 20,
   qualityScore: 0,
   totalScore: 100,
+  leadTimeDays: 21,
 };
 
 const loser = {
@@ -66,6 +67,7 @@ const loser = {
   quoteResponseId: 43,
   supplier: { id: 8, name: 'Beta Corp' },
   isWinner: false,
+  leadTimeDays: 35,
 };
 
 const record = {
@@ -472,6 +474,40 @@ describe('ComparacaoTab', () => {
         },
       });
       await waitFor(() => expect(reviewDialog.open).toBe(false));
+    });
+  });
+
+  describe('Coluna Lead time (item 3 — substitui Landed (BRL))', () => {
+    it('18. cabeçalho mostra "Lead time" e não mostra mais "Landed (BRL)"', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, loser],
+      });
+      const { findByText, queryByText } = renderTab();
+      await findByText('Lead time');
+      expect(queryByText('Landed (BRL)')).toBeNull();
+    });
+
+    it('19. exibe o maior lead time formatado ("X dias") por linha', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, loser],
+      });
+      const { findByText } = renderTab();
+      await findByText('ACME Ltda');
+      await findByText('21 dias');
+      await findByText('35 dias');
+    });
+
+    it('20. sem lead time (null) exibe "—"', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [{ ...winner, leadTimeDays: null }, loser],
+      });
+      const { findByText, findAllByText } = renderTab();
+      await findByText('ACME Ltda');
+      const dashes = await findAllByText('—');
+      expect(dashes.length).toBeGreaterThan(0);
     });
   });
 });

@@ -969,6 +969,10 @@ export class QuoteResponseController {
               },
             },
           },
+          items: {
+            where: { deletedAt: null },
+            select: { leadTimeDays: true },
+          },
         },
       });
 
@@ -1129,15 +1133,25 @@ export class QuoteResponseController {
       const supplierById = new Map(
         responses.map((response) => [response.supplierId, response.supplier]),
       );
+      // Mapa por response.id (nao supplierId) porque comparisonResults nao
+      // carrega items; usar id garante 1:1 mesmo se um fornecedor tiver mais
+      // de uma proposta.
+      const responseById = new Map(responses.map((response) => [response.id, response]));
       const enrichedResults = comparisonResults.map((result) => {
         const supplier = supplierById.get(result.supplierId);
         const primaryContact = supplier?.contacts?.[0] ?? null;
+        const sourceResponse = responseById.get(result.id);
+        const leadTimeDays = deriveMaxLeadTimeDays(
+          sourceResponse?.items,
+          sourceResponse?.leadTimeDays ?? null,
+        );
         return {
           ...result,
           supplier: supplier ? { id: supplier.id, name: supplier.name } : undefined,
           contact: primaryContact
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
             : null,
+          leadTimeDays,
         };
       });
 
@@ -1204,6 +1218,10 @@ export class QuoteResponseController {
                 select: { id: true, name: true, email: true },
               },
             },
+          },
+          items: {
+            where: { deletedAt: null },
+            select: { leadTimeDays: true },
           },
         },
       });
@@ -1276,9 +1294,18 @@ export class QuoteResponseController {
       const supplierById = new Map(
         responses.map((response) => [response.supplierId, response.supplier]),
       );
+      // Mapa por response.id (nao supplierId) porque comparisonResults nao
+      // carrega items; usar id garante 1:1 mesmo se um fornecedor tiver mais
+      // de uma proposta.
+      const responseById = new Map(responses.map((response) => [response.id, response]));
       const enrichedResults = comparisonResults.map((result) => {
         const supplier = supplierById.get(result.supplierId);
         const primaryContact = supplier?.contacts?.[0] ?? null;
+        const sourceResponse = responseById.get(result.id);
+        const leadTimeDays = deriveMaxLeadTimeDays(
+          sourceResponse?.items,
+          sourceResponse?.leadTimeDays ?? null,
+        );
         return {
           ...result,
           quoteResponseId: result.id,
@@ -1286,6 +1313,7 @@ export class QuoteResponseController {
           contact: primaryContact
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
             : null,
+          leadTimeDays,
         };
       });
 
@@ -1614,6 +1642,24 @@ function parseComparisonWeights(payload: unknown): QuoteComparisonWeights | null
     incotermWeight: body.incotermWeight ?? defaults.incotermWeight,
     qualityWeight: body.qualityWeight ?? defaults.qualityWeight,
   };
+}
+
+// Lead time exibido na comparacao = MAIOR leadTimeDays entre os itens da
+// proposta (e' quando o pedido inteiro chega). Sem itens com lead time,
+// cai no leadTimeDays de topo da QuoteResponse; sem nenhum dado, null.
+function deriveMaxLeadTimeDays(
+  items: Array<{ leadTimeDays: number | null }> | undefined,
+  responseLeadTimeDays: number | null,
+): number | null {
+  const itemValues = (items ?? [])
+    .map((item) => item.leadTimeDays)
+    .filter((value): value is number => typeof value === 'number');
+
+  if (itemValues.length > 0) {
+    return Math.max(...itemValues);
+  }
+
+  return responseLeadTimeDays ?? null;
 }
 
 function shouldIncrementVersion(payload: Record<string, unknown>): boolean {
