@@ -12,27 +12,26 @@ interface CatalogItemPickerProps {
   items: PickerCatalogItem[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  search: string;
+  onSearchChange: (value: string) => void;
+  selectedItem?: PickerCatalogItem | null;
   disabled?: boolean;
   children?: React.ReactNode;
 }
 
-export function CatalogItemPicker({ items, selectedId, onSelect, disabled, children }: CatalogItemPickerProps) {
-  const [search, setSearch] = useState('');
-
-  const filteredAndGrouped = useMemo(() => {
-    const term = search.toLowerCase().trim();
-
-    // 1. Filtrar por nome comercial OU nome da família
-    const filtered = items.filter((item) => {
-      if (!term) return true;
-      return (
-        item.commercialName.toLowerCase().includes(term) ||
-        (item.family?.name.toLowerCase().includes(term) ?? false)
-      );
-    });
-
-    // 2. Agrupar via reduce
-    const grouped = filtered.reduce<Record<string, PickerCatalogItem[]>>((acc, item) => {
+export function CatalogItemPicker({
+  items,
+  selectedId,
+  onSelect,
+  search,
+  onSearchChange,
+  selectedItem: selectedItemProp,
+  disabled,
+  children,
+}: CatalogItemPickerProps) {
+  const grouped = useMemo(() => {
+    // Agrupar via reduce (busca por termo é feita no servidor)
+    const groups = items.reduce<Record<string, PickerCatalogItem[]>>((acc, item) => {
       const groupName = item.family?.name || 'Sem família';
       if (!acc[groupName]) {
         acc[groupName] = [];
@@ -42,7 +41,7 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled, child
     }, {});
 
     // Retorna ordenado: chaves em ordem alfabetica (com "Sem família" no final)
-    const sortedKeys = Object.keys(grouped).sort((a, b) => {
+    const sortedKeys = Object.keys(groups).sort((a, b) => {
       if (a === 'Sem família') return 1;
       if (b === 'Sem família') return -1;
       return a.localeCompare(b);
@@ -50,11 +49,32 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled, child
 
     return sortedKeys.map(key => ({
       family: key,
-      items: grouped[key] as PickerCatalogItem[]
+      items: groups[key] as PickerCatalogItem[]
     }));
-  }, [items, search]);
+  }, [items]);
 
-  const selectedItem = items.find(i => i.id === selectedId);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const effectiveExpanded = useMemo(() => {
+    if (search.trim()) {
+      return new Set(grouped.map((group) => group.family));
+    }
+    return expanded;
+  }, [search, grouped, expanded]);
+
+  const toggleFamily = (familyName: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(familyName)) {
+        next.delete(familyName);
+      } else {
+        next.add(familyName);
+      }
+      return next;
+    });
+  };
+
+  const selectedItem = selectedItemProp ?? items.find(i => i.id === selectedId);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -82,7 +102,7 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled, child
                 style={{ width: '100%' }}
                 placeholder="Buscar item do catálogo..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => onSearchChange(e.target.value)}
               />
             </div>
 
@@ -132,23 +152,46 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled, child
           overflowY: 'auto',
           padding: 8,
         }}>
-          {filteredAndGrouped.length === 0 ? (
+          {grouped.length === 0 ? (
             <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>
               Nenhum item encontrado.
             </div>
           ) : (
-            filteredAndGrouped.map((group) => (
+            grouped.map((group) => {
+              const isOpen = effectiveExpanded.has(group.family);
+              return (
               <div key={group.family} style={{ marginBottom: 8 }}>
-                <div style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 0.5,
-                  textTransform: 'uppercase',
-                  color: 'var(--primary)',
-                  padding: '6px 8px',
-                }}>
-                  {group.family}
-                </div>
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() => toggleFamily(group.family)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                    textTransform: 'uppercase',
+                    color: 'var(--primary)',
+                    padding: '6px 8px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span>
+                    <span aria-hidden="true" style={{ display: 'inline-block', width: 12 }}>
+                      {isOpen ? '▾' : '▸'}
+                    </span>
+                    {group.family}
+                  </span>
+                  <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>
+                    {group.items.length}
+                  </span>
+                </button>
+                {isOpen && (
                 <div>
                   {group.items.map((item) => {
                     const isSelected = item.id === selectedId;
@@ -190,8 +233,10 @@ export function CatalogItemPicker({ items, selectedId, onSelect, disabled, child
                     );
                   })}
                 </div>
+                )}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
