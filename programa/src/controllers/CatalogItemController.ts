@@ -34,6 +34,7 @@ export class CatalogItemController {
           { marketName: { contains: search, mode: 'insensitive' } },
           { ncm: { contains: search } },
           { dbcorpCode: { contains: search, mode: 'insensitive' } },
+          { family: { name: { contains: search, mode: 'insensitive' } } },
         ];
       }
       if (familyIdStr) {

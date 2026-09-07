@@ -1,7 +1,7 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { CatalogItemPicker } from '@/components/CatalogItemPicker';
@@ -77,15 +77,29 @@ export default function CotacaoNova() {
   const [itemForm, setItemForm] = useState<ItemFormState>(emptyItemForm);
   const [itemError, setItemError] = useState<string | null>(null);
   const [editingTempId, setEditingTempId] = useState<number | null>(null);
+  const [itemSearch, setItemSearch] = useState('');
+  const [debouncedItemSearch, setDebouncedItemSearch] = useState('');
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
+
+  // Debounce ~300ms pra busca server-side do catálogo, mesmo padrão do ComparacaoTab.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedItemSearch(itemSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [itemSearch]);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
 
   const catalogQuery = useQuery({
-    queryKey: ['catalog-items-active'],
+    queryKey: ['catalog-items-active', debouncedItemSearch],
     queryFn: async () => {
-      const data = await api.get<unknown>('/v1/catalog-items', { pageSize: '200' });
+      const data = await api.get<unknown>('/v1/catalog-items', {
+        ...(debouncedItemSearch ? { search: debouncedItemSearch } : {}),
+        pageSize: '100',
+      });
       const list = Array.isArray(data)
         ? data
         : Array.isArray((data as { data?: unknown[] })?.data)
@@ -103,6 +117,7 @@ export default function CotacaoNova() {
         family: c.family ? { id: Number((c.family as any).id), name: String((c.family as any).name) } : null,
       })) as CatalogItem[];
     },
+    placeholderData: keepPreviousData,
   });
 
   const activeCatalog = useMemo(
@@ -152,6 +167,8 @@ export default function CotacaoNova() {
     setEditingTempId(null);
     setItemForm(emptyItemForm);
     setItemError(null);
+    setItemSearch('');
+    setSelectedCatalogItem(null);
     setShowItemModal(true);
   }
 
@@ -164,6 +181,18 @@ export default function CotacaoNova() {
       notes: item.notes,
     });
     setItemError(null);
+    setItemSearch('');
+    setSelectedCatalogItem({
+      id: item.catalogItemId,
+      commercialName: item.commercialName,
+      marketName: item.marketName,
+      ncm: null,
+      dbcorpCode: null,
+      isDangerousGood: isDangerousFlag(activeCatalog, item.catalogItemId),
+      notes: null,
+      isActive: true,
+      family: null,
+    });
     setShowItemModal(true);
   }
 
@@ -172,6 +201,7 @@ export default function CotacaoNova() {
     setEditingTempId(null);
     setItemForm(emptyItemForm);
     setItemError(null);
+    setItemSearch('');
   }
 
   const handleItemSubmit = useCallback((e: React.FormEvent) => {
@@ -190,7 +220,9 @@ export default function CotacaoNova() {
       setItemError('Quantidade deve ser maior que zero.');
       return;
     }
-    const catalogItem = activeCatalog.find((c) => c.id === itemForm.catalogItemId);
+    const catalogItem =
+      (selectedCatalogItem && selectedCatalogItem.id === itemForm.catalogItemId ? selectedCatalogItem : null) ??
+      activeCatalog.find((c) => c.id === itemForm.catalogItemId);
     if (!catalogItem) {
       setItemError('Item do catálogo não encontrado.');
       return;
@@ -210,7 +242,7 @@ export default function CotacaoNova() {
       setItems((current) => [...current, draft]);
     }
     closeItemModal();
-  }, [activeCatalog, editingTempId, itemForm]);
+  }, [activeCatalog, editingTempId, itemForm, selectedCatalogItem]);
 
   function toggleDesiredIncoterm(term: Incoterm) {
     setDesiredIncoterm((current) =>
@@ -511,7 +543,13 @@ export default function CotacaoNova() {
             <CatalogItemPicker
               items={activeCatalog}
               selectedId={itemForm.catalogItemId}
-              onSelect={(id) => setItemForm({ ...itemForm, catalogItemId: id })}
+              onSelect={(id) => {
+                setItemForm({ ...itemForm, catalogItemId: id });
+                setSelectedCatalogItem(activeCatalog.find((c) => c.id === id) ?? selectedCatalogItem);
+              }}
+              search={itemSearch}
+              onSearchChange={setItemSearch}
+              selectedItem={selectedCatalogItem}
               disabled={editingTempId !== null}
             >
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

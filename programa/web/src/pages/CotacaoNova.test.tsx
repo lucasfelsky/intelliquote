@@ -92,6 +92,8 @@ describe('CotacaoNova', () => {
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
 
+    // Família fechada por padrão (accordion): expandir antes de selecionar o item.
+    fireEvent.click(getByRole('button', { name: /Químicos/ }));
     fireEvent.click(getByRole('button', { name: 'Soda Cáustica' }));
     fireEvent.change(getByLabelText('Quantidade *'), { target: { value: '10' } });
     fireEvent.click(getByRole('button', { name: 'Adicionar' }));
@@ -136,7 +138,7 @@ describe('CotacaoNova', () => {
     expect(reopenedSearchInput.value).toBe('');
   });
 
-  it('A. busca por família: "químicos" encontra "Soda Cáustica" (família Químicos)', async () => {
+  it('A. busca por família: digitar "químicos" refaz a query server-side com o termo', async () => {
     const { container, getByRole, getByPlaceholderText } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
@@ -145,8 +147,18 @@ describe('CotacaoNova', () => {
     const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'químicos' } });
 
+    // Busca é server-side (debounced): o backend agora casa por família também
+    // (CatalogItemController.list, OR com family.name). O mock devolve a mesma
+    // lista independente do param — o que este teste verifica é que o termo
+    // digitado chega até a query, não o filtro (que agora é do servidor).
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith(
+        '/v1/catalog-items',
+        expect.objectContaining({ search: 'químicos' }),
+      );
+    });
+
     expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
-    expect(within(dialog).queryByRole('button', { name: 'Fibra de Vidro' })).toBeNull();
   });
 
   it('B. resultados exibem só o nome comercial: "NaOH" (marketName) não aparece no dialog', async () => {
@@ -156,6 +168,32 @@ describe('CotacaoNova', () => {
 
     const dialog = getDialog(container);
     expect(within(dialog).queryByText(/NaOH/)).toBeNull();
+  });
+
+  it('C. accordion de famílias: fechado por padrão, abre ao clicar no cabeçalho, e busca auto-expande', async () => {
+    const { container, getByRole, getByPlaceholderText } = renderPage();
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+
+    const dialog = getDialog(container);
+
+    // Sem busca: famílias fechadas, item não visível.
+    expect(within(dialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
+
+    // Clicar no cabeçalho da família expande e revela o item.
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+
+    // Recolher de novo (toggle).
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    expect(within(dialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
+
+    // Com busca digitada, a família auto-expande mesmo sem clicar no cabeçalho.
+    const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
+    fireEvent.change(searchInput, { target: { value: 'soda' } });
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
   });
 
   it('7. botão × fecha o modal', async () => {
