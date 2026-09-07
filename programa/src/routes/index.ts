@@ -5,6 +5,7 @@ import { authRoutes } from './AuthRoutes';
 import { catalogItemRoutes } from './CatalogItemRoutes';
 import { itemFamilyRoutes } from './ItemFamilyRoutes';
 import { companyProfileRoutes } from './CompanyProfileRoutes';
+import { demoRoutes } from './DemoRoutes';
 import { emailTemplateRoutes } from './EmailTemplateRoutes';
 import { portalIntegrationsRoutes } from './PortalIntegrationsRoutes';
 import { quoteRequestRoutes } from './QuoteRequestRoutes';
@@ -18,6 +19,7 @@ import { userRoutes } from './UserRoutes';
 const router = Router();
 
 router.use(portalIntegrationsRoutes);
+router.use(demoRoutes);
 router.use('/api/v1', authRoutes);
 router.use('/api/v1', auditRoutes);
 router.use('/api/v1', reportRoutes);

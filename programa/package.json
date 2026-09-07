@@ -19,6 +19,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "ts-node-dev --transpile-only prisma/seed.ts",
+    "prisma:seed-demo": "ts-node-dev --transpile-only prisma/seed-demo.ts",
     "verify:env:local": "node ./scripts/verify-env.js local",
     "verify:env:staging": "node ./scripts/verify-env.js staging",
     "verify:env:production": "node ./scripts/verify-env.js production",

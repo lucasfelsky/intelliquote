@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { mailerEnv } from '../config/env';
+import { demoEnv, mailerEnv } from '../config/env';
 import { ConsoleMailer } from './ConsoleMailer';
 import { SmtpMailer } from './SmtpMailer';
 import type { Mailer, MailMessage, MailSendResult } from './Mailer';
@@ -9,6 +9,15 @@ let singleton: Mailer | null = null;
 
 export function getMailer(): Mailer {
   if (singleton) return singleton;
+  // Cinto-e-suspensorio: na instancia demo o e-mail NUNCA sai de verdade,
+  // independente de MAILER_PROVIDER (que pode continuar setado para smtp
+  // na mesma imagem/config base).
+  if (demoEnv.enabled) {
+    // eslint-disable-next-line no-console
+    console.warn('DEMO_MODE: mailer forçado para console');
+    singleton = new ConsoleMailer();
+    return singleton;
+  }
   switch (mailerEnv.provider) {
     case 'console':
       singleton = new ConsoleMailer();

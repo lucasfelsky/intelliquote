@@ -191,3 +191,14 @@ export const reminderEnv = {
   enabled: parseBooleanOptional(parsedMailerEnv.REMINDER_ENABLED) ?? true,
   windowHours: parsePositiveInteger(parsedMailerEnv.REMINDER_WINDOW_HOURS, 48),
 } as const;
+
+// Area de teste (demo): mesma imagem/codigo, instancia separada apontando
+// para o schema `demo` do Postgres. DEMO_MODE=true trava o mailer (ver
+// MailerService.getMailer) e libera o endpoint de reset (DemoController).
+// Bloco a parte (nao integra o schema Zod acima) porque essas variaveis so
+// existem na instancia demo; producao nunca as define (enabled fica false).
+export const demoEnv = {
+  enabled: process.env.DEMO_MODE === 'true',
+  resetToken: process.env.DEMO_RESET_TOKEN ?? null,
+  userPassword: process.env.DEMO_USER_PASSWORD ?? null,
+} as const;
