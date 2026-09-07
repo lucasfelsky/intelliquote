@@ -15,30 +15,69 @@ vi.mock('@/api/client', () => ({
 
 import { api } from '@/api/client';
 
-const catalogItems = [
-  {
-    id: 1,
-    commercialName: 'Soda Cáustica',
-    marketName: 'NaOH',
-    ncm: null,
-    dbcorpCode: null,
-    isDangerousGood: false,
-    notes: null,
-    isActive: true,
-    family: { id: 1, name: 'Químicos' },
-  },
-  {
-    id: 2,
-    commercialName: 'Fibra de Vidro',
-    marketName: 'FDV',
-    ncm: null,
-    dbcorpCode: null,
-    isDangerousGood: false,
-    notes: null,
-    isActive: true,
-    family: { id: 2, name: 'Materiais' },
-  },
+const families = [
+  { id: 1, name: 'Químicos' },
+  { id: 2, name: 'Materiais' },
 ];
+
+const familyItemsById: Record<number, unknown[]> = {
+  1: [
+    {
+      id: 1,
+      commercialName: 'Soda Cáustica',
+      marketName: 'NaOH',
+      isDangerousGood: false,
+      family: { id: 1, name: 'Químicos' },
+    },
+  ],
+  2: [
+    {
+      id: 2,
+      commercialName: 'Fibra de Vidro',
+      marketName: 'FDV',
+      isDangerousGood: false,
+      family: { id: 2, name: 'Materiais' },
+    },
+  ],
+};
+
+const allItemsFlat = Object.values(familyItemsById).flat() as Array<{
+  id: number;
+  commercialName: string;
+  marketName: string;
+  isDangerousGood: boolean;
+  family: { id: number; name: string };
+}>;
+
+function mockApiGet(url: string, params?: Record<string, unknown>): Promise<unknown> {
+  if (url === '/v1/item-families') {
+    return Promise.resolve({ data: families });
+  }
+  if (url === '/v1/catalog-items') {
+    if (params && typeof params.search === 'string' && params.search) {
+      const term = params.search.toLowerCase();
+      const filtered = allItemsFlat.filter(
+        (it) =>
+          it.commercialName.toLowerCase().includes(term) ||
+          it.marketName.toLowerCase().includes(term) ||
+          it.family.name.toLowerCase().includes(term),
+      );
+      return Promise.resolve({
+        data: filtered,
+        pagination: { page: 1, pageSize: 100, totalItems: filtered.length, totalPages: 1 },
+      });
+    }
+    if (params && params.family !== undefined) {
+      const famId = Number(params.family);
+      const items = familyItemsById[famId] ?? [];
+      return Promise.resolve({
+        data: items,
+        pagination: { page: 1, pageSize: 100, totalItems: items.length, totalPages: 1 },
+      });
+    }
+  }
+  return Promise.resolve({ data: [] });
+}
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -67,7 +106,7 @@ describe('CotacaoNova', () => {
   beforeEach(() => {
     vi.mocked(api.get).mockReset();
     vi.mocked(api.post).mockReset();
-    vi.mocked(api.get).mockResolvedValue(catalogItems);
+    vi.mocked(api.get).mockImplementation(mockApiGet as any);
   });
 
   it('1. fechado no load (step 1): existe exatamente 1 dialog e dialog.open é false', async () => {
@@ -87,20 +126,31 @@ describe('CotacaoNova', () => {
     expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Adicionar item do catálogo');
   });
 
-  it('3. título dinâmico de edição: "Editar item" ao clicar em Editar na linha do item', async () => {
+  it('3. título dinâmico de edição: selecionar via família expandida e depois clicar em Editar mostra "Editar item"', async () => {
     const { container, getByRole, getByLabelText } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
 
-    // Família fechada por padrão (accordion): expandir antes de selecionar o item.
-    fireEvent.click(getByRole('button', { name: /Químicos/ }));
-    fireEvent.click(getByRole('button', { name: 'Soda Cáustica' }));
+    const dialog = getDialog(container);
+    // Famílias carregam lazy (só quando o modal abre): esperar aparecerem.
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: /Químicos/ })).toBeTruthy();
+    });
+    // Pasta fechada por padrão: item ainda não está no DOM.
+    expect(within(dialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Soda Cáustica' }));
     fireEvent.change(getByLabelText('Quantidade *'), { target: { value: '10' } });
     fireEvent.click(getByRole('button', { name: 'Adicionar' }));
 
     fireEvent.click(getByRole('button', { name: 'Editar' }));
-    const dialog = getDialog(container);
-    expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Editar item');
+    const reopenedDialog = getDialog(container);
+    expect(reopenedDialog.querySelector('.modal-header h2')?.textContent).toBe('Editar item');
   });
 
   it('4. tamanho wide: className contém modal-dialog--wide', async () => {
@@ -121,24 +171,39 @@ describe('CotacaoNova', () => {
     expect(dialog.querySelector('.modal-body h2')).toBeNull();
   });
 
-  it('6. guard de desmontagem: busca do picker zera ao reabrir após Cancelar', async () => {
+  it('6. reabrir zera: busca vazia e pastas fechadas de novo após Cancelar', async () => {
     const { container, getByRole, getByPlaceholderText } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+
+    const dialog = getDialog(container);
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: /Químicos/ })).toBeTruthy();
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
 
     const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'soda' } });
     expect(searchInput.value).toBe('soda');
 
-    const dialog = getDialog(container);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
 
     const reopenedSearchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
     expect(reopenedSearchInput.value).toBe('');
+
+    const reopenedDialog = getDialog(container);
+    await waitFor(() => {
+      expect(within(reopenedDialog).getByRole('button', { name: /Químicos/ })).toBeTruthy();
+    });
+    // Pasta fechada de novo: o item não reaparece sem um novo clique.
+    expect(within(reopenedDialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
   });
 
-  it('A. busca por família: digitar "químicos" refaz a query server-side com o termo', async () => {
+  it('A. busca por família: digitar "químicos" dispara a query global com search e mostra resultados agrupados', async () => {
     const { container, getByRole, getByPlaceholderText } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
@@ -147,10 +212,6 @@ describe('CotacaoNova', () => {
     const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'químicos' } });
 
-    // Busca é server-side (debounced): o backend agora casa por família também
-    // (CatalogItemController.list, OR com family.name). O mock devolve a mesma
-    // lista independente do param — o que este teste verifica é que o termo
-    // digitado chega até a query, não o filtro (que agora é do servidor).
     await waitFor(() => {
       expect(api.get).toHaveBeenCalledWith(
         '/v1/catalog-items',
@@ -158,7 +219,9 @@ describe('CotacaoNova', () => {
       );
     });
 
-    expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
   });
 
   it('B. resultados exibem só o nome comercial: "NaOH" (marketName) não aparece no dialog', async () => {
@@ -167,33 +230,53 @@ describe('CotacaoNova', () => {
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
 
     const dialog = getDialog(container);
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: /Químicos/ })).toBeTruthy();
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
     expect(within(dialog).queryByText(/NaOH/)).toBeNull();
   });
 
-  it('C. accordion de famílias: fechado por padrão, abre ao clicar no cabeçalho, e busca auto-expande', async () => {
-    const { container, getByRole, getByPlaceholderText } = renderPage();
+  it('C. modo navegar: todas as famílias aparecem como pastas fechadas; expandir dispara a query 1x (recolher/reexpandir usa cache)', async () => {
+    const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
 
     const dialog = getDialog(container);
-
-    // Sem busca: famílias fechadas, item não visível.
+    // As duas famílias aparecem como pastas mesmo sem busca (endpoint sem paginação).
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: /Químicos/ })).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: /Materiais/ })).toBeTruthy();
+    });
+    // Itens ocultos até expandir a pasta.
     expect(within(dialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Fibra de Vidro' })).toBeNull();
 
-    // Clicar no cabeçalho da família expande e revela o item.
+    const callsBeforeExpand = vi.mocked(api.get).mock.calls.length;
     fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
-    expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
-
-    // Recolher de novo (toggle).
-    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
-    expect(within(dialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
-
-    // Com busca digitada, a família auto-expande mesmo sem clicar no cabeçalho.
-    const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
-    fireEvent.change(searchInput, { target: { value: 'soda' } });
     await waitFor(() => {
       expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
     });
+    expect(vi.mocked(api.get).mock.calls.length).toBeGreaterThan(callsBeforeExpand);
+    expect(api.get).toHaveBeenCalledWith(
+      '/v1/catalog-items',
+      expect.objectContaining({ family: '1' }),
+    );
+
+    // Recolher: item some da tela.
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    expect(within(dialog).queryByRole('button', { name: 'Soda Cáustica' })).toBeNull();
+
+    // Reexpandir: reaparece sem novo fetch (staleTime do TanStack).
+    const callsBeforeReexpand = vi.mocked(api.get).mock.calls.length;
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
+    expect(vi.mocked(api.get).mock.calls.length).toBe(callsBeforeReexpand);
   });
 
   it('7. botão × fecha o modal', async () => {

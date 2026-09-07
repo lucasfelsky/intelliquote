@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 export interface PickerCatalogItem {
   id: number;
@@ -8,10 +8,26 @@ export interface PickerCatalogItem {
   family: { id: number; name: string } | null;
 }
 
-interface CatalogItemPickerProps {
+export interface PickerFamilySummary {
+  id: number;
+  name: string;
+}
+
+export interface PickerFamilyItemsEntry {
   items: PickerCatalogItem[];
+  isLoading: boolean;
+  total: number;
+}
+
+interface CatalogItemPickerProps {
+  families: PickerFamilySummary[];
+  familyItems: Map<number, PickerFamilyItemsEntry>;
+  expanded: Set<number>;
+  onToggleFamily: (id: number) => void;
+  isSearching: boolean;
+  searchItems: PickerCatalogItem[];
   selectedId: number | null;
-  onSelect: (id: number) => void;
+  onSelect: (item: PickerCatalogItem) => void;
   search: string;
   onSearchChange: (value: string) => void;
   selectedItem?: PickerCatalogItem | null;
@@ -19,8 +35,77 @@ interface CatalogItemPickerProps {
   children?: React.ReactNode;
 }
 
+const headerButtonStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  width: '100%',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: 0.5,
+  textTransform: 'uppercase',
+  color: 'var(--primary)',
+  padding: '6px 8px',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+};
+
+function ItemButton({
+  item,
+  isSelected,
+  disabled,
+  onSelect,
+}: {
+  item: PickerCatalogItem;
+  isSelected: boolean;
+  disabled?: boolean;
+  onSelect: (item: PickerCatalogItem) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onSelect(item)}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: '10px 8px',
+        border: 'none',
+        borderRadius: 6,
+        background: isSelected ? 'var(--primary-50)' : 'var(--surface)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        color: isSelected ? 'var(--primary-700)' : 'var(--ink)',
+        fontSize: 13,
+      }}
+    >
+      <span style={{ fontWeight: isSelected ? 600 : 400 }}>
+        {item.commercialName}
+        {item.isDangerousGood && (
+          <span style={{
+            marginLeft: 6,
+            fontSize: 11,
+            background: 'var(--danger)',
+            color: 'var(--surface)',
+            padding: '2px 4px',
+            borderRadius: 4,
+          }}>
+            DG
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 export function CatalogItemPicker({
-  items,
+  families,
+  familyItems,
+  expanded,
+  onToggleFamily,
+  isSearching,
+  searchItems,
   selectedId,
   onSelect,
   search,
@@ -29,9 +114,9 @@ export function CatalogItemPicker({
   disabled,
   children,
 }: CatalogItemPickerProps) {
-  const grouped = useMemo(() => {
-    // Agrupar via reduce (busca por termo é feita no servidor)
-    const groups = items.reduce<Record<string, PickerCatalogItem[]>>((acc, item) => {
+  // MODO BUSCA: agrupar os resultados globais por família, sempre expandidos.
+  const searchGroups = useMemo(() => {
+    const groups = searchItems.reduce<Record<string, PickerCatalogItem[]>>((acc, item) => {
       const groupName = item.family?.name || 'Sem família';
       if (!acc[groupName]) {
         acc[groupName] = [];
@@ -40,41 +125,19 @@ export function CatalogItemPicker({
       return acc;
     }, {});
 
-    // Retorna ordenado: chaves em ordem alfabetica (com "Sem família" no final)
     const sortedKeys = Object.keys(groups).sort((a, b) => {
       if (a === 'Sem família') return 1;
       if (b === 'Sem família') return -1;
       return a.localeCompare(b);
     });
 
-    return sortedKeys.map(key => ({
+    return sortedKeys.map((key) => ({
       family: key,
-      items: groups[key] as PickerCatalogItem[]
+      items: groups[key] as PickerCatalogItem[],
     }));
-  }, [items]);
+  }, [searchItems]);
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const effectiveExpanded = useMemo(() => {
-    if (search.trim()) {
-      return new Set(grouped.map((group) => group.family));
-    }
-    return expanded;
-  }, [search, grouped, expanded]);
-
-  const toggleFamily = (familyName: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(familyName)) {
-        next.delete(familyName);
-      } else {
-        next.add(familyName);
-      }
-      return next;
-    });
-  };
-
-  const selectedItem = selectedItemProp ?? items.find(i => i.id === selectedId);
+  const selectedItem = selectedItemProp ?? null;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
@@ -142,7 +205,7 @@ export function CatalogItemPicker({
         {children}
       </div>
 
-      {/* DIREITA: resultados agrupados por família */}
+      {/* DIREITA: modo busca (resultados agrupados, auto-expandidos) ou modo navegar (pastas lazy) */}
       {!disabled && (
         <div style={{
           border: '1px solid var(--border)',
@@ -152,89 +215,92 @@ export function CatalogItemPicker({
           overflowY: 'auto',
           padding: 8,
         }}>
-          {grouped.length === 0 ? (
+          {isSearching ? (
+            searchGroups.length === 0 ? (
+              <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>
+                Nenhum item encontrado.
+              </div>
+            ) : (
+              searchGroups.map((group) => (
+                <div key={group.family} style={{ marginBottom: 8 }}>
+                  <button type="button" aria-expanded="true" style={headerButtonStyle}>
+                    <span>
+                      <span aria-hidden="true" style={{ display: 'inline-block', width: 12 }}>▾</span>
+                      {group.family}
+                    </span>
+                    <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>{group.items.length}</span>
+                  </button>
+                  <div>
+                    {group.items.map((item) => (
+                      <ItemButton
+                        key={item.id}
+                        item={item}
+                        isSelected={item.id === selectedId}
+                        disabled={disabled}
+                        onSelect={onSelect}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )
+          ) : families.length === 0 ? (
             <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>
-              Nenhum item encontrado.
+              Nenhuma família cadastrada.
             </div>
           ) : (
-            grouped.map((group) => {
-              const isOpen = effectiveExpanded.has(group.family);
+            families.map((family) => {
+              const isOpen = expanded.has(family.id);
+              const entry = familyItems.get(family.id);
               return (
-              <div key={group.family} style={{ marginBottom: 8 }}>
-                <button
-                  type="button"
-                  aria-expanded={isOpen}
-                  onClick={() => toggleFamily(group.family)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    letterSpacing: 0.5,
-                    textTransform: 'uppercase',
-                    color: 'var(--primary)',
-                    padding: '6px 8px',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span>
-                    <span aria-hidden="true" style={{ display: 'inline-block', width: 12 }}>
-                      {isOpen ? '▾' : '▸'}
+                <div key={family.id} style={{ marginBottom: 8 }}>
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => onToggleFamily(family.id)}
+                    style={headerButtonStyle}
+                  >
+                    <span>
+                      <span aria-hidden="true" style={{ display: 'inline-block', width: 12 }}>
+                        {isOpen ? '▾' : '▸'}
+                      </span>
+                      {family.name}
                     </span>
-                    {group.family}
-                  </span>
-                  <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>
-                    {group.items.length}
-                  </span>
-                </button>
-                {isOpen && (
-                <div>
-                  {group.items.map((item) => {
-                    const isSelected = item.id === selectedId;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onSelect(item.id)}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '10px 8px',
-                          border: 'none',
-                          borderRadius: 6,
-                          background: isSelected ? 'var(--primary-50)' : 'var(--surface)',
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          color: isSelected ? 'var(--primary-700)' : 'var(--ink)',
-                          fontSize: 13,
-                        }}
-                      >
-                        <span style={{ fontWeight: isSelected ? 600 : 400 }}>
-                          {item.commercialName}
-                          {item.isDangerousGood && (
-                            <span style={{
-                              marginLeft: 6,
-                              fontSize: 11,
-                              background: 'var(--danger)',
-                              color: 'var(--surface)',
-                              padding: '2px 4px',
-                              borderRadius: 4,
-                            }}>
-                              DG
-                            </span>
+                    <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>
+                      {entry && !entry.isLoading ? entry.total : ''}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div>
+                      {!entry || entry.isLoading ? (
+                        <div style={{ padding: '8px 8px', color: 'var(--ink-soft)', fontSize: 13 }}>
+                          Carregando…
+                        </div>
+                      ) : entry.items.length === 0 ? (
+                        <div style={{ padding: '8px 8px', color: 'var(--ink-soft)', fontSize: 13 }}>
+                          Nenhum item nesta família.
+                        </div>
+                      ) : (
+                        <>
+                          {entry.items.map((item) => (
+                            <ItemButton
+                              key={item.id}
+                              item={item}
+                              isSelected={item.id === selectedId}
+                              disabled={disabled}
+                              onSelect={onSelect}
+                            />
+                          ))}
+                          {entry.total > entry.items.length && (
+                            <div style={{ padding: '6px 8px', color: 'var(--ink-soft)', fontSize: 12 }}>
+                              +{entry.total - entry.items.length} — refine pela busca
+                            </div>
                           )}
-                        </span>
-                      </button>
-                    );
-                  })}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-                )}
-              </div>
               );
             })
           )}

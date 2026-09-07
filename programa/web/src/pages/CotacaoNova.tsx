@@ -1,24 +1,23 @@
 import { useConfirm } from '@/components/useConfirm';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
-import { CatalogItemPicker } from '@/components/CatalogItemPicker';
+import { CatalogItemPicker, type PickerCatalogItem } from '@/components/CatalogItemPicker';
 import { Modal } from '@/components/Modal';
 
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
 
-interface CatalogItem {
+interface ItemFamilySummary {
   id: number;
-  commercialName: string;
-  marketName: string;
-  ncm: string | null;
-  dbcorpCode: string | null;
-  isDangerousGood: boolean;
-  notes: string | null;
-  isActive: boolean;
-  family: { id: number; name: string } | null;
+  name: string;
+}
+
+interface FamilyItemsEntry {
+  items: PickerCatalogItem[];
+  isLoading: boolean;
+  total: number;
 }
 
 interface DraftItem {
@@ -26,6 +25,7 @@ interface DraftItem {
   catalogItemId: number;
   commercialName: string;
   marketName: string;
+  isDangerousGood: boolean;
   quantity: number;
   unit: string;
   notes: string;
@@ -54,6 +54,35 @@ function formatNumber(value: number): string {
 
 let tempIdCounter = 1;
 
+function parseCatalogItemRecord(c: Record<string, unknown>): PickerCatalogItem {
+  return {
+    id: Number(c.id),
+    commercialName: String(c.commercialName ?? ''),
+    marketName: String(c.marketName ?? ''),
+    isDangerousGood: Boolean(c.isDangerousGood),
+    family: c.family
+      ? { id: Number((c.family as Record<string, unknown>).id), name: String((c.family as Record<string, unknown>).name) }
+      : null,
+  };
+}
+
+function parseCatalogItemList(data: unknown): PickerCatalogItem[] {
+  const list = Array.isArray((data as { data?: unknown[] })?.data)
+    ? (data as { data: unknown[] }).data
+    : Array.isArray(data)
+      ? data
+      : [];
+  return (list as Array<Record<string, unknown>>).map(parseCatalogItemRecord);
+}
+
+function parsePaginatedCatalogItems(data: unknown): { items: PickerCatalogItem[]; totalItems: number } {
+  const items = parseCatalogItemList(data);
+  const totalItems = Number(
+    (data as { pagination?: { totalItems?: number } })?.pagination?.totalItems ?? items.length,
+  );
+  return { items, totalItems };
+}
+
 export default function CotacaoNova() {
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -79,7 +108,8 @@ export default function CotacaoNova() {
   const [editingTempId, setEditingTempId] = useState<number | null>(null);
   const [itemSearch, setItemSearch] = useState('');
   const [debouncedItemSearch, setDebouncedItemSearch] = useState('');
-  const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<PickerCatalogItem | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   // Debounce ~300ms pra busca server-side do catálogo, mesmo padrão do ComparacaoTab.
   useEffect(() => {
@@ -93,37 +123,69 @@ export default function CotacaoNova() {
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
 
-  const catalogQuery = useQuery({
-    queryKey: ['catalog-items-active', debouncedItemSearch],
+  const isSearching = debouncedItemSearch.trim().length > 0;
+
+  // MODO NAVEGAR: todas as famílias ativas viram pastas (fechadas por padrão).
+  const familiesQuery = useQuery({
+    queryKey: ['item-families'],
+    queryFn: async () => {
+      const data = await api.get<unknown>('/v1/item-families');
+      const list = Array.isArray((data as { data?: unknown[] })?.data)
+        ? (data as { data: unknown[] }).data
+        : [];
+      return (list as Array<Record<string, unknown>>).map((f) => ({
+        id: Number(f.id),
+        name: String(f.name ?? ''),
+      })) as ItemFamilySummary[];
+    },
+    enabled: showItemModal,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // MODO BUSCA: busca global server-side (casa nome/ncm/dbcorpCode/família).
+  const searchQuery = useQuery({
+    queryKey: ['catalog-items-search', debouncedItemSearch],
     queryFn: async () => {
       const data = await api.get<unknown>('/v1/catalog-items', {
-        ...(debouncedItemSearch ? { search: debouncedItemSearch } : {}),
+        search: debouncedItemSearch,
         pageSize: '100',
       });
-      const list = Array.isArray(data)
-        ? data
-        : Array.isArray((data as { data?: unknown[] })?.data)
-          ? (data as { data: unknown[] }).data
-          : (data as { items?: unknown[] })?.items ?? [];
-      return (list as Array<Record<string, unknown>>).map((c) => ({
-        id: Number(c.id),
-        commercialName: String(c.commercialName ?? ''),
-        marketName: String(c.marketName ?? ''),
-        ncm: (c.ncm as string | null) ?? null,
-        dbcorpCode: (c.dbcorpCode as string | null) ?? null,
-        isDangerousGood: Boolean(c.isDangerousGood),
-        notes: (c.notes as string | null) ?? null,
-        isActive: Boolean(c.isActive ?? true),
-        family: c.family ? { id: Number((c.family as any).id), name: String((c.family as any).name) } : null,
-      })) as CatalogItem[];
+      return parseCatalogItemList(data);
     },
+    enabled: showItemModal && isSearching,
     placeholderData: keepPreviousData,
   });
 
-  const activeCatalog = useMemo(
-    () => (catalogQuery.data ?? []).filter((c) => c.isActive),
-    [catalogQuery.data],
-  );
+  // Lazy por família: uma query por id expandido, só em MODO NAVEGAR.
+  const familyIds = useMemo(() => Array.from(expanded), [expanded]);
+  const familyItemQueries = useQueries({
+    queries: familyIds.map((id) => ({
+      queryKey: ['catalog-items-family', id],
+      queryFn: async () => {
+        const data = await api.get<unknown>('/v1/catalog-items', {
+          family: String(id),
+          pageSize: '100',
+        });
+        return parsePaginatedCatalogItems(data);
+      },
+      enabled: showItemModal && !isSearching,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+
+  const familyItems = useMemo(() => {
+    const map = new Map<number, FamilyItemsEntry>();
+    familyIds.forEach((id, idx) => {
+      const q = familyItemQueries[idx];
+      if (!q) return;
+      map.set(id, {
+        items: q.data?.items ?? [],
+        isLoading: q.isLoading,
+        total: q.data?.totalItems ?? 0,
+      });
+    });
+    return map;
+  }, [familyIds, familyItemQueries]);
 
   const createQuote = useMutation({
     mutationFn: async () => {
@@ -169,6 +231,7 @@ export default function CotacaoNova() {
     setItemError(null);
     setItemSearch('');
     setSelectedCatalogItem(null);
+    setExpanded(new Set());
     setShowItemModal(true);
   }
 
@@ -186,13 +249,10 @@ export default function CotacaoNova() {
       id: item.catalogItemId,
       commercialName: item.commercialName,
       marketName: item.marketName,
-      ncm: null,
-      dbcorpCode: null,
-      isDangerousGood: isDangerousFlag(activeCatalog, item.catalogItemId),
-      notes: null,
-      isActive: true,
+      isDangerousGood: item.isDangerousGood,
       family: null,
     });
+    setExpanded(new Set());
     setShowItemModal(true);
   }
 
@@ -202,6 +262,7 @@ export default function CotacaoNova() {
     setItemForm(emptyItemForm);
     setItemError(null);
     setItemSearch('');
+    setExpanded(new Set());
   }
 
   const handleItemSubmit = useCallback((e: React.FormEvent) => {
@@ -221,8 +282,7 @@ export default function CotacaoNova() {
       return;
     }
     const catalogItem =
-      (selectedCatalogItem && selectedCatalogItem.id === itemForm.catalogItemId ? selectedCatalogItem : null) ??
-      activeCatalog.find((c) => c.id === itemForm.catalogItemId);
+      selectedCatalogItem && selectedCatalogItem.id === itemForm.catalogItemId ? selectedCatalogItem : null;
     if (!catalogItem) {
       setItemError('Item do catálogo não encontrado.');
       return;
@@ -232,6 +292,7 @@ export default function CotacaoNova() {
       catalogItemId: catalogItem.id,
       commercialName: catalogItem.commercialName,
       marketName: catalogItem.marketName,
+      isDangerousGood: catalogItem.isDangerousGood,
       quantity: qty,
       unit: itemForm.unit,
       notes: itemForm.notes.trim(),
@@ -242,7 +303,7 @@ export default function CotacaoNova() {
       setItems((current) => [...current, draft]);
     }
     closeItemModal();
-  }, [activeCatalog, editingTempId, itemForm, selectedCatalogItem]);
+  }, [editingTempId, itemForm, selectedCatalogItem]);
 
   function toggleDesiredIncoterm(term: Incoterm) {
     setDesiredIncoterm((current) =>
@@ -430,24 +491,12 @@ export default function CotacaoNova() {
               type="button"
               className="primary-button"
               onClick={openNewItem}
-              disabled={catalogQuery.isLoading}
             >
               + Adicionar item
             </button>
           </div>
 
-          {catalogQuery.isLoading ? (
-            <p>Carregando catálogo…</p>
-          ) : catalogQuery.isError ? (
-            <p className="alert alert--error">Não foi possível carregar o catálogo.</p>
-          ) : activeCatalog.length === 0 ? (
-            <div className="empty-state">
-              <strong>Nenhum item no catálogo</strong>
-              <p>
-                Cadastre itens na aba <a href="/itens">Itens</a> antes de montar uma cotação.
-              </p>
-            </div>
-          ) : items.length === 0 ? (
+          {items.length === 0 ? (
             <div className="empty-state">
               <strong>Nenhum item adicionado</strong>
               <p>
@@ -474,7 +523,7 @@ export default function CotacaoNova() {
                     <td>{it.marketName}</td>
                     <td>{formatNumber(it.quantity)}</td>
                     <td>{it.unit}</td>
-                    <td>{isDangerousFlag(activeCatalog, it.catalogItemId) ? 'Sim' : '—'}</td>
+                    <td>{it.isDangerousGood ? 'Sim' : '—'}</td>
                     <td>{it.notes || '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
@@ -535,17 +584,33 @@ export default function CotacaoNova() {
         title={editingTempId !== null ? 'Editar item' : 'Adicionar item do catálogo'}
         size="wide"
       >
-        {/* Guard: CatalogItemPicker tem state interno (search/expanded) que hoje
-            zera ao desmontar. Modal renderiza children sempre, entao mantemos a
-            desmontagem explicita — mesmo padrao do ComparacaoTab (Fase 1). */}
+        {/* Guard: search/expanded são liftados pro CotacaoNova e zeram em
+            open/edit/close explicitamente. Modal renderiza children sempre,
+            entao mantemos a desmontagem explicita — mesmo padrao do
+            ComparacaoTab (Fase 1). */}
         {showItemModal && (
           <form onSubmit={handleItemSubmit}>
             <CatalogItemPicker
-              items={activeCatalog}
+              families={familiesQuery.data ?? []}
+              familyItems={familyItems}
+              expanded={expanded}
+              onToggleFamily={(id) => {
+                setExpanded((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) {
+                    next.delete(id);
+                  } else {
+                    next.add(id);
+                  }
+                  return next;
+                });
+              }}
+              isSearching={isSearching}
+              searchItems={searchQuery.data ?? []}
               selectedId={itemForm.catalogItemId}
-              onSelect={(id) => {
-                setItemForm({ ...itemForm, catalogItemId: id });
-                setSelectedCatalogItem(activeCatalog.find((c) => c.id === id) ?? selectedCatalogItem);
+              onSelect={(item) => {
+                setItemForm({ ...itemForm, catalogItemId: item.id });
+                setSelectedCatalogItem(item);
               }}
               search={itemSearch}
               onSearchChange={setItemSearch}
@@ -611,10 +676,6 @@ export default function CotacaoNova() {
       </Modal>
     </div>
   );
-}
-
-function isDangerousFlag(items: CatalogItem[], id: number): boolean {
-  return items.some((c) => c.id === id && c.isDangerousGood);
 }
 
 function messageOf(err: unknown): string {
