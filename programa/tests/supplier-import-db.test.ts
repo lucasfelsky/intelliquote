@@ -166,9 +166,14 @@ describe('SupplierImportController (DB)', () => {
       .send({ contentBase64 });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.validLines.length).toBe(1);
-    expect(res.body.data.validLines[0].name).toBe(supplierName('Valido'));
-    expect(res.body.data.validLines[0].familyIds).toEqual([familyId]);
+    // Linha 6 ("Duplicado", 1a ocorrencia) e valida por si so (Decisao 4 do
+    // PLAN.md: a 1a ocorrencia fica "reservada" e so as posteriores sao
+    // rejeitadas) - so a linha 7 (2a ocorrencia) vira erro. validLines tem
+    // portanto 2 entradas: linha 6 (Duplicado) e linha 9 (Valido).
+    expect(res.body.data.validLines.length).toBe(2);
+    expect(res.body.data.validLines[0].name).toBe(supplierName('Duplicado'));
+    expect(res.body.data.validLines[1].name).toBe(supplierName('Valido'));
+    expect(res.body.data.validLines[1].familyIds).toEqual([familyId]);
 
     expect(res.body.data.errorLines.length).toBe(6);
     const reasons = res.body.data.errorLines.map((e: { reason: string }) => e.reason).join(' | ');
