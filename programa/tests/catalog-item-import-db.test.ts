@@ -106,6 +106,16 @@ describe('CatalogItemImportController (DB)', () => {
     expect(res.body.data.errorLines[1].reason).toMatch(/NCM deve ter 8/);
   });
 
+  testDbSkip('POST /api/v1/catalog-items/import - arquivo corrompido responde 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/catalog-items/import')
+      .set('Cookie', adminCookies)
+      .send({ contentBase64: Buffer.from('isto nao e um xlsx').toString('base64') });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Arquivo inválido/);
+  });
+
   testDbSkip('POST /api/v1/catalog-items/import/confirm - success and duplicates', async () => {
     const items = [
       { commercialName: 'Import Confirm 1', marketName: `Market Import ${runId} Confirm 1`, ncm: '11111111', isDangerousGood: false },
