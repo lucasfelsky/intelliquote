@@ -84,6 +84,9 @@ export default function SupplierImportModal({ onClose }: SupplierImportModalProp
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleClose() {
+    // Enquanto o confirm roda, o servidor segue criando fornecedores: fechar
+    // perderia o resultado e induziria a reimportar achando que cancelou.
+    if (confirmImport.isPending) return;
     if (step === 'result') {
       qc.invalidateQueries({ queryKey: ['suppliers'] });
       qc.invalidateQueries({ queryKey: ['supplier-contacts-bulk'] });

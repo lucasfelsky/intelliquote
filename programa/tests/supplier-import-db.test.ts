@@ -207,6 +207,16 @@ describe('SupplierImportController (DB)', () => {
     expect(res.body.message).toMatch(/Cabeçalho da planilha não corresponde ao modelo/);
   });
 
+  testDbSkip('POST /api/v1/suppliers/import - arquivo corrompido responde 400', async () => {
+    const res = await request(app)
+      .post('/api/v1/suppliers/import')
+      .set('Cookie', adminCookies)
+      .send({ contentBase64: Buffer.from('isto nao e um xlsx').toString('base64') });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Arquivo inválido/);
+  });
+
   testDbSkip('POST /api/v1/suppliers/import/confirm - cria fornecedor active + contato principal + familias + auditoria', async () => {
     const name = supplierName('Confirm Sucesso');
     const rows = [

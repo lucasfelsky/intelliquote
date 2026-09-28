@@ -44,7 +44,13 @@ export class SupplierImportController {
 
       const buffer = Buffer.from(parsedBody.data.contentBase64, 'base64');
       const workbook = new exceljs.Workbook();
-      await workbook.xlsx.load(buffer as any);
+      try {
+        await workbook.xlsx.load(buffer as any);
+      } catch {
+        return res.status(400).json({
+          message: 'Arquivo inválido. Envie uma planilha .xlsx gerada a partir do modelo.',
+        });
+      }
 
       const worksheet = workbook.worksheets[0];
       if (!worksheet) {

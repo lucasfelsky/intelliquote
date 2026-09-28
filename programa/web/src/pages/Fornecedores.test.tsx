@@ -404,6 +404,51 @@ describe('Fornecedores — importação de planilha', () => {
     await within(dialog).findByText('fornecedores importados com sucesso.', { exact: false });
   });
 
+  it('e. não fecha pelo "Fechar" enquanto o confirm está em andamento', async () => {
+    let resolveConfirm: (value: unknown) => void = () => {};
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/v1/suppliers/import') {
+        return Promise.resolve({
+          data: {
+            validLines: [{ row: 2, name: 'Fornecedor Novo', familyNames: [], familyIds: [] }],
+            errorLines: [],
+          },
+        });
+      }
+      if (url === '/v1/suppliers/import/confirm') {
+        return new Promise((resolve) => {
+          resolveConfirm = resolve;
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Importar planilha' }));
+    await waitFor(() => expect(getDialogs(container).length).toBe(3));
+    const dialog = dialogAt(container, 2);
+
+    const file = new File(['conteudo'], 'fornecedores.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Carregar e validar' }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Confirmar importação' }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/v1/suppliers/import/confirm', expect.anything()),
+    );
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
+    expect(getDialogs(container).length).toBe(3);
+
+    resolveConfirm({
+      data: { successLines: [{ row: 2, supplierId: 99, name: 'Fornecedor Novo' }], errorLines: [] },
+    });
+    await within(dialog).findByText('fornecedores importados com sucesso.', { exact: false });
+  });
+
   it('d. "Baixar modelo" chama o template com createObjectURL/revokeObjectURL', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
