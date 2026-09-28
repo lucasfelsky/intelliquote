@@ -56,7 +56,7 @@ export class QuoteRequestController {
             include: { catalogItem: true },
             orderBy: { createdAt: 'asc' },
           },
-          quoteResponses: true,
+          quoteResponses: { where: { deletedAt: null } },
         },
       });
 
@@ -80,13 +80,13 @@ export class QuoteRequestController {
       const where = buildQuoteRequestWhere(req);
       const include = {
         _count: {
-          select: { items: true, quoteResponses: true },
+          select: { items: true, quoteResponses: { where: { deletedAt: null } } },
         },
         items: {
           include: { catalogItem: true },
           orderBy: { createdAt: 'asc' as const },
         },
-        quoteResponses: true,
+        quoteResponses: { where: { deletedAt: null } },
       };
       const orderBy = { createdAt: 'desc' } as const;
 
@@ -139,6 +139,7 @@ export class QuoteRequestController {
             orderBy: { createdAt: 'asc' },
           },
           quoteResponses: {
+            where: { deletedAt: null },
             include: {
               supplier: true,
             },
@@ -222,7 +223,7 @@ export class QuoteRequestController {
             include: { catalogItem: true },
             orderBy: { createdAt: 'asc' as const },
           },
-          quoteResponses: true,
+          quoteResponses: { where: { deletedAt: null } },
         },
       });
 

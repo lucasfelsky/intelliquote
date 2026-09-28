@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import {
+  approveAward,
   closeQuoteRequest,
   executeComparison,
   messageOf,
@@ -213,9 +214,21 @@ export function ComparacaoTab({
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
       if (data.pendingApproval) {
+        if (canConclude) {
+          const approved = await confirm({
+            title: 'Aprovar adjudicação',
+            message: `A alçada de R$ ${formatNumber(data.thresholdValue!)} exige aprovação (limite excedido ou câmbio indisponível). Aprovar a proposta recomendada e continuar?`,
+            confirmText: 'Aprovar e continuar',
+          });
+          if (!approved) return false;
+          await approveAward(quoteRequestId, data.comparisonId);
+          await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
+          await qc.invalidateQueries({ queryKey: ['quote-responses'] });
+          return true;
+        }
         setFeedback({
           kind: 'warn',
-          text: `Comparação registrada — adjudicação acima de R$ ${formatNumber(data.thresholdValue!)} requer aprovação de um gestor/admin antes de prosseguir.`,
+          text: `Comparação registrada — a alçada de R$ ${formatNumber(data.thresholdValue!)} exige aprovação de gestor/admin (limite excedido ou câmbio indisponível).`,
         });
         return false;
       }
@@ -503,7 +516,7 @@ export function ComparacaoTab({
               {r.isWinner && (
                 <span className="cmp-winner-badge">
                   <TrophyIcon />
-                  Vencedora
+                  {previewPendingApproval ? 'Recomendada · requer aprovação' : 'Vencedora'}
                 </span>
               )}
             </div>
@@ -582,16 +595,19 @@ export function ComparacaoTab({
   const reviewRatingComplete = priceRating > 0 && leadTimeRating > 0 && qualityRating > 0;
 
   // Tabela principal renderiza o PREVIEW (calculado ao vivo, não persistido),
-  // não o histórico. isWinner é derivado do winnerQuoteResponseId + pendingApproval
-  // -- enquanto a adjudicação depender de aprovação, nenhuma linha marca "Vencedora".
+  // não o histórico. A recomendada mantém suas ações, mas persistBeforeAction
+  // exige aprovação explícita de gestor/admin antes de abrir PO/resposta.
   const previewResults = previewQuery.data?.results ?? [];
+  const rankingCurrency = previewResults[0]?.currency ?? '';
+  const rankingCurrencyLabel = rankingCurrency === 'USD' ? 'US$' : rankingCurrency === 'BRL' ? 'R$' : rankingCurrency;
+  const basketLabel = `Total dos itens${rankingCurrencyLabel ? ` (${rankingCurrencyLabel})` : ''}`;
   const responseCount = previewQuery.data?.responseCount ?? 0;
   const previewPendingApproval = previewQuery.data?.pendingApproval ?? false;
   const previewWinnerId = previewQuery.data?.winnerQuoteResponseId ?? null;
   const rankedResults = previewResults.map((r) => ({
     ...r,
-    isWinner: !previewPendingApproval && r.quoteResponseId === previewWinnerId,
-  }));
+    isWinner: r.quoteResponseId === previewWinnerId,
+  })).sort((a, b) => Number(b.isWinner) - Number(a.isWinner) || b.totalScore - a.totalScore || a.offeredPrice - b.offeredPrice);
 
   // Animação de reordenação (FLIP leve, CSS puro, sem lib): guarda a posição
   // (getBoundingClientRect) de cada linha por key estável e, quando a ordem
@@ -711,6 +727,7 @@ export function ComparacaoTab({
           </div>
           <p className="cmp-criteria__note">
             Selecione de 1 a 2 critérios. A comparação recalcula automaticamente.
+            {' '}Preço considera todos os itens e quantidades na moeda da proposta, sem conversão cambial, frete adicional ou impostos estimados.
           </p>
         </div>
 
@@ -720,7 +737,7 @@ export function ComparacaoTab({
           <div className="empty-state">
             <p>Não foi possível calcular a comparação.</p>
             <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
-              Verifique sua conexão e tente novamente.
+              {messageOf(previewQuery.error)}
             </p>
             <button className="ghost-button" onClick={() => previewQuery.refetch()}>Tentar novamente</button>
           </div>
@@ -774,7 +791,7 @@ export function ComparacaoTab({
                   </div>
                   <div className="cmp-bypass-supplier__stats">
                     <div className="cmp-bypass-supplier__stat">
-                      <span>Preço</span>
+                      <span>{basketLabel}</span>
                       <strong>{formatNumber(only.offeredPrice)}</strong>
                     </div>
                     <div className="cmp-bypass-supplier__stat">
@@ -804,13 +821,13 @@ export function ComparacaoTab({
           <>
             {previewPendingApproval && (
               <p className="alert alert--warning" style={{ marginBottom: 12 }}>
-                A vencedora calculada tem landed cost acima de R$ {formatNumber(previewQuery.data?.thresholdValue ?? null)} e exigirá aprovação de um gestor/admin ao prosseguir com uma ação.
+                A adjudicação exige aprovação de gestor/admin pela alçada de R$ {formatNumber(previewQuery.data?.thresholdValue ?? null)} ou pela ausência de câmbio para verificar esse limite. Essa verificação é separada do ranking dos itens.
               </p>
             )}
             <div className="cmp-rankgrid cmp-rankgrid--head">
               <div>#</div>
               <div>Fornecedor</div>
-              <div>Preço</div>
+              <div>{basketLabel}</div>
               <div>Incoterm</div>
               <div>Pagamento</div>
               <div>Lead time</div>

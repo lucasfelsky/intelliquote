@@ -85,7 +85,7 @@ export class CompanyProfileService {
         purchasingPhone: input.purchasingPhone ?? null,
         website: input.website ?? null,
         logoUrl: input.logoUrl ?? null,
-        awardApprovalThreshold: input.awardApprovalThreshold ?? null,
+        awardApprovalThreshold: input.awardApprovalThreshold,
         dispatchCc: dispatchCcJson,
         updatedById: input.updatedById ?? null,
       },

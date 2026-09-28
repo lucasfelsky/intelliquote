@@ -2,6 +2,39 @@ import { describe, expect, it } from 'vitest';
 import { QuoteComparisonService } from '../src/services/QuoteComparisonService';
 
 describe('QuoteComparisonService', () => {
+  const usdProposal = {
+    id: 1, quoteRequestId: 10, supplierId: 100, offeredPrice: 100,
+    currency: 'USD', exchangeRate: 5, freightCost: 0, insuranceCost: 0,
+    otherFees: 0, importDutyRate: 0, ipiRate: 0, pisRate: 0, cofinsRate: 0,
+    offeredIncoterm: 'FOB' as const, paymentTermsDays: 30,
+  };
+
+  it('usa o total dos itens em USD mesmo quando cambio, frete e impostos inverteriam o vencedor', () => {
+    const results = QuoteComparisonService.compareResponses([
+      { ...usdProposal, exchangeRate: 9, freightCost: 1000, importDutyRate: 50 },
+      { ...usdProposal, id: 2, offeredPrice: 120, exchangeRate: 2 },
+    ], { priceWeight: 100, paymentTermsWeight: 0, incotermWeight: 0, qualityWeight: 0 });
+    expect(results[0].isWinner).toBe(true);
+    expect(results[0].priceScore).toBe(100);
+    expect(results[1].priceScore).toBe(83.33);
+    expect(results[0].totalLandedCost).toBeGreaterThan(results[1].totalLandedCost);
+  });
+
+  it('bloqueia moedas diferentes em vez de comparar numeros sem a mesma unidade', () => {
+    expect(() => QuoteComparisonService.compareResponses([
+      usdProposal, { ...usdProposal, id: 2, currency: 'BRL' },
+    ])).toThrow('mesma moeda');
+  });
+
+  it('permite ranking sem cambio, mas exige aprovacao se houver alcada em BRL', () => {
+    const withoutRate = { ...usdProposal, exchangeRate: 0 };
+    expect(QuoteComparisonService.compareResponses([withoutRate])[0].priceScore).toBe(50);
+    expect(QuoteComparisonService.requiresAwardApproval(withoutRate, 1000)).toBe(true);
+    expect(QuoteComparisonService.requiresAwardApproval(withoutRate, null)).toBe(false);
+    expect(QuoteComparisonService.requiresAwardApproval(usdProposal, 400)).toBe(true);
+    expect(QuoteComparisonService.requiresAwardApproval(usdProposal, 600)).toBe(false);
+  });
+
   it('usa os pesos padrao e escolhe a melhor proposta', () => {
     const results = QuoteComparisonService.compareResponses([
       {

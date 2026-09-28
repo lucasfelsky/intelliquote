@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
 
 interface DirectoryUser {
   id: number;
@@ -74,6 +75,8 @@ function roleLabel(role: string): string {
 }
 
 export default function Empresa() {
+  const { user } = useAuth();
+  const canChangeApproval = user?.role === 'admin' || user?.role === 'gestor';
   const qc = useQueryClient();
   const [draft, setDraft] = useState<CompanyProfile | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -491,6 +494,7 @@ export default function Empresa() {
             min="0"
             step="0.01"
             value={draft.awardApprovalThreshold ?? ''}
+            disabled={!canChangeApproval}
             onChange={(e) => {
               const val = e.target.value === '' ? null : Number(e.target.value);
               update('awardApprovalThreshold', val);
