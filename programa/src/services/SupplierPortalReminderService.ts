@@ -120,7 +120,7 @@ export class SupplierPortalReminderService {
         });
 
         // 3. Envia.
-        await sendAndLog({
+        const delivery = await sendAndLog({
           to: { email: token.supplierContact.email, name: token.supplierContact.name },
           subject: rendered.subject,
           html: rendered.html,
@@ -136,8 +136,12 @@ export class SupplierPortalReminderService {
           relatedEntityId: String(token.id),
         });
 
-        // 4. So agora revoga o original — link antigo morre apos o novo
-        //    chegar na caixa do fornecedor.
+        if (delivery.status !== 'sent') {
+          throw new Error('O transporte de e-mail nao confirmou o envio do lembrete.');
+        }
+
+        // 4. O transporte aceitou o envio; isso nao garante entrega na caixa.
+        // Falhas retornadas (sem excecao SMTP) preservam o link original.
         await prisma.supplierPortalToken.update({
           where: { id: token.id },
           data: { revokedAt: new Date() },

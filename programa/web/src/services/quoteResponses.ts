@@ -97,6 +97,7 @@ export interface QuoteResponsePayload {
 }
 
 export interface ComparisonResult {
+  currency?: string;
   id?: number;
   quoteResponseId?: number;
   supplierId: number;
@@ -290,6 +291,7 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
     freightCost: asNumber(obj.freightCost),
     insuranceCost: asNumber(obj.insuranceCost),
     otherFees: asNumber(obj.otherFees),
+    currency: typeof obj.currency === 'string' ? obj.currency.trim().toUpperCase() : undefined,
     importDutyRate: asNumber(obj.importDutyRate),
     ipiRate: asNumber(obj.ipiRate),
     pisRate: asNumber(obj.pisRate),

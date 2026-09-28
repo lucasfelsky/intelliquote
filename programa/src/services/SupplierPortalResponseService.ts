@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../utils/http';
+import { sumQuoteItems } from '../utils/quoteBasket';
 import { QuoteComparisonService } from './QuoteComparisonService';
 import { ExchangeRateService } from './ExchangeRateService';
 import type {
@@ -31,10 +32,13 @@ export class SupplierPortalResponseService {
   }) {
     const client = prisma;
     const totalItems = input.payload.items.length;
-    const computedTotal = input.payload.items.reduce(
-      (sum, item) => sum + Number(item.totalPrice),
-      0,
-    );
+    const computedTotal = sumQuoteItems(input.payload.items);
+    for (const item of input.payload.items) {
+      const expectedTotal = new Prisma.Decimal(item.unitPrice).times(item.quantity);
+      if (expectedTotal.minus(item.totalPrice).abs().gt(0.01)) {
+        throw new HttpError(400, 'O total do item nao corresponde ao preco unitario multiplicado pela quantidade.');
+      }
+    }
     if (Math.abs(computedTotal - Number(input.payload.totalPrice)) > 0.01) {
       throw new HttpError(
         400,
@@ -43,7 +47,7 @@ export class SupplierPortalResponseService {
     }
 
     const quoteRequestItems = await client.quoteRequestItem.findMany({
-      where: { quoteRequestId: input.quoteRequestId },
+      where: { quoteRequestId: input.quoteRequestId, deletedAt: null },
       select: { id: true, productName: true, catalogItem: { select: { marketName: true } } },
     });
     const itemIdSet = new Set(quoteRequestItems.map((item) => item.id));
@@ -57,6 +61,9 @@ export class SupplierPortalResponseService {
     }
 
     const currency = input.payload.currency ?? 'USD';
+    if (input.payload.totalPriceCurrency && input.payload.totalPriceCurrency !== currency) {
+      throw new HttpError(400, 'A moeda do total deve ser a mesma dos precos da proposta.');
+    }
     const scalarData = {
       currency,
       incoterm: input.payload.incoterm,
@@ -150,7 +157,12 @@ export class SupplierPortalResponseService {
       });
 
       await tx.supplierPortalToken.update({
-        where: { id: input.tokenId },
+        where: {
+          id: input.tokenId,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+          quoteRequest: { deletedAt: null, status: { not: 'closed' } },
+        },
         data: {
           respondedAt: new Date(),
           responseId: response.id,
@@ -181,10 +193,7 @@ async function syncQuoteResponseFromPortal(
   const items = [...input.portalResponse.items].sort(
     (a, b) => a.quoteRequestItemId - b.quoteRequestItemId,
   );
-  const firstItem = items[0];
-  const offeredPrice = firstItem
-    ? Number(firstItem.unitPrice)
-    : Number(input.portalResponse.totalPrice);
+  const offeredPrice = sumQuoteItems(items);
   const currency = (input.portalResponse.currency ?? 'USD').toUpperCase();
   const providedRate = input.providedExchangeRate ?? null;
   const exchangeRate =
@@ -265,8 +274,13 @@ async function syncQuoteResponseFromPortal(
     },
     update: {
       ...data,
+      deletedAt: null,
+      isWinner: false,
       version: { increment: 1 },
-      items: { deleteMany: {}, create: itemsToCreate },
+      items: {
+        updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } },
+        create: itemsToCreate,
+      },
     },
   });
 }
@@ -277,7 +291,7 @@ async function resolveExchangeRate(
   currency: string,
 ): Promise<number> {
   const existing = await tx.quoteResponse.findFirst({
-    where: { quoteRequestId, currency: { equals: currency, mode: 'insensitive' } },
+    where: { quoteRequestId, deletedAt: null, currency: { equals: currency, mode: 'insensitive' } },
     orderBy: { updatedAt: 'desc' },
     select: { exchangeRate: true },
   });
@@ -285,15 +299,7 @@ async function resolveExchangeRate(
   if (candidate > 0) {
     return candidate;
   }
-  const fallback = await tx.quoteResponse.findFirst({
-    where: { quoteRequestId },
-    orderBy: { updatedAt: 'desc' },
-    select: { exchangeRate: true },
-  });
-  const fallbackValue = fallback ? Number(fallback.exchangeRate) : 0;
-  if (fallbackValue > 0) {
-    return fallbackValue;
-  }
+  // Uma taxa de outra moeda nao pode servir de fallback (ex.: USD para EUR).
   // Tenta usar o cache local de PTAX (BCB). So considera o valor atual
   // (mesma data ou anterior) para nao misturar taxas de dias muito antigos.
   const cached = await ExchangeRateService.getRateToBrl(currency, tx as PrismaClient);

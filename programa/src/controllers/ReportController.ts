@@ -91,6 +91,7 @@ export class ReportController {
       const range = parseRange(req);
       const responses = await prisma.quoteResponse.findMany({
         where: {
+          ...buildResponseWhere(range),
           leadTimeDays: { not: null },
           submittedAt: buildDateFilter(range),
         },
@@ -411,17 +412,23 @@ function buildDateFilter(range: DateRange): Prisma.DateTimeFilter | undefined {
 
 function buildRequestWhere(range: DateRange): Prisma.QuoteRequestWhereInput {
   const filter = buildDateFilter(range);
-  return filter ? { createdAt: filter } : {};
+  return { deletedAt: null, ...(filter ? { createdAt: filter } : {}) };
 }
 
 function buildResponseWhere(range: DateRange): Prisma.QuoteResponseWhereInput {
   const filter = buildDateFilter(range);
-  return filter ? { submittedAt: filter } : {};
+  return { deletedAt: null, quoteRequest: { deletedAt: null }, ...(filter ? { submittedAt: filter } : {}) };
 }
 
 function buildComparisonWhere(range: DateRange): Prisma.QuoteComparisonWhereInput {
   const filter = buildDateFilter(range);
-  return filter ? { createdAt: filter } : {};
+  // Indicadores ativos nao incluem comparacoes afetadas por exclusao; o endpoint
+  // de historico continua preservando todos os snapshots originais.
+  return {
+    quoteRequest: { deletedAt: null },
+    results: { none: { quoteResponse: { is: { deletedAt: { not: null } } } } },
+    ...(filter ? { createdAt: filter } : {}),
+  };
 }
 
 function serializeRange(range: DateRange) {
@@ -433,11 +440,10 @@ function serializeRange(range: DateRange) {
 
 async function computeAwardRate(range: DateRange) {
   const whereComparison = buildComparisonWhere(range);
-  const whereResult: Prisma.QuoteComparisonResultWhereInput = { isWinner: true };
-  const dateFilter = buildDateFilter(range);
-  if (dateFilter) {
-    whereResult.comparison = { is: { createdAt: dateFilter } };
-  }
+  const whereResult: Prisma.QuoteComparisonResultWhereInput = {
+    isWinner: true,
+    comparison: { is: whereComparison },
+  };
 
   const [totalComparisons, winners] = await Promise.all([
     prisma.quoteComparison.count({ where: whereComparison }),

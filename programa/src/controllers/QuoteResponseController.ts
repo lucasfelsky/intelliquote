@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { Incoterm, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
+import { Incoterm, Prisma, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
+import { priceForComparison } from '../utils/quoteBasket';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
@@ -127,38 +128,54 @@ export class QuoteResponseController {
         cofinsRate: payload.cofins ?? 0,
       });
 
-      const quoteResponse = await prisma.quoteResponse.create({
-        data: {
-          quoteRequestId: payload.quoteRequestId,
-          supplierId: payload.supplierId,
-          offeredPrice: finalOfferedPrice,
-          targetPrice: payload.targetPrice ?? null,
-          currency: normalizedCurrency,
-          exchangeRate: landedCost.exchangeRate,
-          freightCost: landedCost.freightCost,
-          insuranceCost: landedCost.insuranceCost,
-          otherFees: landedCost.otherFees,
-          importDuty: landedCost.importDutyRate,
-          ipi: landedCost.ipiRate,
-          pis: landedCost.pisRate,
-          cofins: landedCost.cofinsRate,
-          totalLandedCost: landedCost.totalLandedCost,
-          offeredIncoterm: payload.offeredIncoterm as Incoterm,
-          paymentTermsDays: payload.paymentTermsDays,
-          leadTimeDays: payload.leadTimeDays ?? null,
-          notes: payload.notes ?? null,
-          submittedAt: payload.submittedAt,
-          createdById: req.user?.id ?? null,
-          items: {
-            create: itemsToCreate,
-          },
-        },
+      const existing = await prisma.quoteResponse.findUnique({
+        where: { quoteRequestId_supplierId: { quoteRequestId: payload.quoteRequestId, supplierId: payload.supplierId } },
+        include: { items: true },
       });
+      if (existing && !existing.deletedAt) {
+        throw new HttpError(409, 'Ja existe uma proposta ativa deste fornecedor nesta cotacao. Edite a proposta existente.');
+      }
+      const data: Prisma.QuoteResponseUncheckedCreateInput = {
+        quoteRequestId: payload.quoteRequestId,
+        supplierId: payload.supplierId,
+        offeredPrice: finalOfferedPrice,
+        targetPrice: payload.targetPrice ?? null,
+        currency: normalizedCurrency,
+        exchangeRate: landedCost.exchangeRate,
+        freightCost: landedCost.freightCost,
+        insuranceCost: landedCost.insuranceCost,
+        otherFees: landedCost.otherFees,
+        importDuty: landedCost.importDutyRate,
+        ipi: landedCost.ipiRate,
+        pis: landedCost.pisRate,
+        cofins: landedCost.cofinsRate,
+        totalLandedCost: landedCost.totalLandedCost,
+        offeredIncoterm: payload.offeredIncoterm as Incoterm,
+        paymentTermsDays: payload.paymentTermsDays,
+        leadTimeDays: payload.leadTimeDays ?? null,
+        notes: payload.notes ?? null,
+        submittedAt: payload.submittedAt,
+        createdById: req.user?.id ?? null,
+        items: {
+          create: itemsToCreate,
+        },
+      };
+      // Reenvio explicito apos exclusao inicia outra versao do mesmo vinculo.
+      // Itens antigos e snapshots continuam disponiveis para auditoria.
+      const quoteResponse = existing
+        ? await prisma.quoteResponse.update({
+            where: { id: existing.id, deletedAt: { not: null } },
+            data: { ...data, deletedAt: null, isWinner: false, version: { increment: 1 },
+              items: { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToCreate },
+            },
+          })
+        : await prisma.quoteResponse.create({ data });
 
       await AuditLogService.log({
         entityType: 'quote_response',
         entityId: quoteResponse.id,
-        action: 'create',
+        action: existing ? 'restore' : 'create',
+        beforeData: existing ?? undefined,
         performedById: req.user?.id ?? null,
         afterData: quoteResponse,
         metadata: {
@@ -177,6 +194,7 @@ export class QuoteResponseController {
   static async getAll(_req: Request, res: Response): Promise<Response> {
     try {
       const quoteResponses = await prisma.quoteResponse.findMany({
+        where: { deletedAt: null, quoteRequest: { deletedAt: null } },
         include: {
           supplier: true,
           quoteRequest: true,
@@ -223,7 +241,7 @@ export class QuoteResponseController {
       }
 
       const quoteResponse = await prisma.quoteResponse.findUnique({
-        where: { id },
+        where: { id, deletedAt: null },
         include: {
           supplier: true,
           quoteRequest: true,
@@ -271,7 +289,7 @@ export class QuoteResponseController {
       const payload = parsedBody.data;
 
       const existingQuoteResponse = await prisma.quoteResponse.findUnique({
-        where: { id },
+        where: { id, deletedAt: null },
         include: {
           quoteRequest: true,
           supplier: true,
@@ -391,7 +409,7 @@ export class QuoteResponseController {
       });
 
       const quoteResponse = await prisma.quoteResponse.update({
-        where: { id },
+        where: { id, deletedAt: null },
         data: {
           offeredPrice: finalOfferedPrice,
           targetPrice: payload.targetPrice !== undefined ? payload.targetPrice : undefined,
@@ -411,7 +429,7 @@ export class QuoteResponseController {
           notes: payload.notes,
           submittedAt: payload.submittedAt,
           version: shouldIncrementVersion(payload) ? { increment: 1 } : undefined,
-          items: itemsToUpdate !== undefined ? { deleteMany: {}, create: itemsToUpdate } : undefined,
+          items: itemsToUpdate !== undefined ? { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToUpdate } : undefined,
         },
       });
 
@@ -446,7 +464,7 @@ export class QuoteResponseController {
       }
 
       const existingQuoteResponse = await prisma.quoteResponse.findUnique({
-        where: { id },
+        where: { id, deletedAt: null },
         include: {
           quoteRequest: true,
         },
@@ -464,21 +482,37 @@ export class QuoteResponseController {
         });
       }
 
-      await prisma.quoteResponse.delete({
-        where: { id },
-      });
-
-      await AuditLogService.log({
-        entityType: 'quote_response',
-        entityId: existingQuoteResponse.id,
-        action: 'delete',
-        performedById: req.user?.id ?? null,
-        beforeData: existingQuoteResponse,
-        afterData: null,
-        metadata: {
-          quoteRequestId: existingQuoteResponse.quoteRequestId,
-          supplierId: existingQuoteResponse.supplierId,
-        },
+      const deletedAt = new Date();
+      await prisma.$transaction(async (tx) => {
+        await tx.quoteResponse.update({
+          where: { id, deletedAt: null, quoteRequest: { status: { not: 'closed' }, deletedAt: null } },
+          data: {
+            deletedAt,
+            isWinner: false,
+            items: { updateMany: { where: { deletedAt: null }, data: { deletedAt } } },
+          },
+        });
+        // Os links existentes nao podem reativar uma proposta removida.
+        await tx.supplierPortalToken.updateMany({
+          where: {
+            quoteRequestId: existingQuoteResponse.quoteRequestId,
+            supplierId: existingQuoteResponse.supplierId,
+            revokedAt: null,
+          },
+          data: { revokedAt: deletedAt },
+        });
+        await AuditLogService.log({
+          entityType: 'quote_response',
+          entityId: existingQuoteResponse.id,
+          action: 'delete',
+          performedById: req.user?.id ?? null,
+          beforeData: existingQuoteResponse,
+          afterData: { deletedAt, isWinner: false },
+          metadata: {
+            quoteRequestId: existingQuoteResponse.quoteRequestId,
+            supplierId: existingQuoteResponse.supplierId,
+          },
+        }, tx);
       });
 
       return res.status(204).send();
@@ -557,10 +591,10 @@ export class QuoteResponseController {
       where: { id, deletedAt: null },
       include: {
         supplier: true,
-        items: true,
+        items: { where: { deletedAt: null } },
         quoteRequest: {
           include: {
-            items: { include: { catalogItem: true }, orderBy: { createdAt: 'asc' } },
+            items: { where: { deletedAt: null }, include: { catalogItem: true }, orderBy: { createdAt: 'asc' } },
           },
         },
       },
@@ -711,7 +745,7 @@ export class QuoteResponseController {
           });
         }
         await prisma.quoteResponse.update({
-          where: { id },
+          where: { id, deletedAt: null },
           data: { targetPrice: parsedBody.data.targetPrice },
         });
         quoteResponse.targetPrice = parsedBody.data.targetPrice as any;
@@ -939,7 +973,8 @@ export class QuoteResponseController {
       }
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id: quoteRequestId },
+        where: { id: quoteRequestId, deletedAt: null },
+        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
       });
 
       if (!quoteRequest) {
@@ -953,7 +988,7 @@ export class QuoteResponseController {
       // ser uma acao explicita (POST /quote-requests/:id/close). Por isso nao ha
       // mais bloqueio por status aqui.
       const responses = await prisma.quoteResponse.findMany({
-        where: { quoteRequestId },
+        where: { quoteRequestId, deletedAt: null },
         orderBy: {
           id: 'asc',
         },
@@ -971,7 +1006,7 @@ export class QuoteResponseController {
           },
           items: {
             where: { deletedAt: null },
-            select: { leadTimeDays: true },
+            select: { leadTimeDays: true, quoteRequestItemId: true, unitPrice: true, quantity: true },
           },
         },
       });
@@ -1002,7 +1037,7 @@ export class QuoteResponseController {
         id: response.id,
         quoteRequestId: response.quoteRequestId,
         supplierId: response.supplierId,
-        offeredPrice: Number(response.offeredPrice),
+        offeredPrice: priceForComparison(quoteRequest.items ?? [], response),
         currency: response.currency,
         exchangeRate: Number(response.exchangeRate),
         freightCost: Number(response.freightCost),
@@ -1037,13 +1072,13 @@ export class QuoteResponseController {
       const threshold = companyProfile.awardApprovalThreshold ? Number(companyProfile.awardApprovalThreshold) : null;
 
       let requiresApproval = false;
-      if (winner && threshold !== null && winner.totalLandedCost > threshold) {
+      if (winner && QuoteComparisonService.requiresAwardApproval(winner, threshold)) {
         requiresApproval = true;
       }
 
       const comparisonRecord = await prisma.$transaction(async (tx) => {
         await tx.quoteResponse.updateMany({
-          where: { quoteRequestId },
+          where: { quoteRequestId, deletedAt: null },
           data: { isWinner: false },
         });
 
@@ -1190,7 +1225,8 @@ export class QuoteResponseController {
       }
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id: quoteRequestId },
+        where: { id: quoteRequestId, deletedAt: null },
+        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
       });
 
       if (!quoteRequest) {
@@ -1203,7 +1239,7 @@ export class QuoteResponseController {
       // isWinner, sem criar QuoteComparison/AuditLog). Usado pra recalculo ao
       // vivo enquanto o usuario ajusta os toggles de peso.
       const responses = await prisma.quoteResponse.findMany({
-        where: { quoteRequestId },
+        where: { quoteRequestId, deletedAt: null },
         orderBy: {
           id: 'asc',
         },
@@ -1221,7 +1257,7 @@ export class QuoteResponseController {
           },
           items: {
             where: { deletedAt: null },
-            select: { leadTimeDays: true },
+            select: { leadTimeDays: true, quoteRequestItemId: true, unitPrice: true, quantity: true },
           },
         },
       });
@@ -1252,7 +1288,7 @@ export class QuoteResponseController {
         id: response.id,
         quoteRequestId: response.quoteRequestId,
         supplierId: response.supplierId,
-        offeredPrice: Number(response.offeredPrice),
+        offeredPrice: priceForComparison(quoteRequest.items ?? [], response),
         currency: response.currency,
         exchangeRate: Number(response.exchangeRate),
         freightCost: Number(response.freightCost),
@@ -1287,7 +1323,7 @@ export class QuoteResponseController {
       const threshold = companyProfile.awardApprovalThreshold ? Number(companyProfile.awardApprovalThreshold) : null;
 
       let requiresApproval = false;
-      if (winner && threshold !== null && winner.totalLandedCost > threshold) {
+      if (winner && QuoteComparisonService.requiresAwardApproval(winner, threshold)) {
         requiresApproval = true;
       }
 
@@ -1344,7 +1380,7 @@ export class QuoteResponseController {
       }
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id: quoteRequestId },
+        where: { id: quoteRequestId, deletedAt: null },
       });
 
       if (!quoteRequest) {
@@ -1463,6 +1499,11 @@ export class QuoteResponseController {
       }
 
       await prisma.$transaction(async (tx) => {
+        // Uma proposta removida nao pode voltar a vencer por uma aprovacao antiga.
+        await tx.quoteResponse.updateMany({
+          where: { quoteRequestId, deletedAt: null },
+          data: { isWinner: false },
+        });
         await tx.quoteComparison.update({
           where: { id: comparisonId },
           data: {
@@ -1473,7 +1514,15 @@ export class QuoteResponseController {
         });
 
         await tx.quoteResponse.update({
-          where: { id: comparison.winnerQuoteResponseId! },
+          where: { id: comparison.winnerQuoteResponseId!, deletedAt: null, quoteRequest: { id: quoteRequestId, deletedAt: null } },
+          data: { isWinner: true },
+        });
+        await tx.quoteComparisonResult.updateMany({
+          where: { comparisonId },
+          data: { isWinner: false },
+        });
+        await tx.quoteComparisonResult.updateMany({
+          where: { comparisonId, quoteResponseId: comparison.winnerQuoteResponseId },
           data: { isWinner: true },
         });
 
@@ -1525,7 +1574,8 @@ export class QuoteResponseController {
       const { quoteResponseId, reason } = parsed.data;
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
-        where: { id: quoteRequestId },
+        where: { id: quoteRequestId, deletedAt: null },
+        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
       });
 
       if (!quoteRequest) {
@@ -1534,12 +1584,26 @@ export class QuoteResponseController {
 
       const chosenResponse = await prisma.quoteResponse.findFirst({
         where: { id: quoteResponseId, quoteRequestId, deletedAt: null },
+        include: { items: { where: { deletedAt: null } } },
       });
 
       if (!chosenResponse) {
         return res.status(404).json({
           message: 'Proposta não encontrada para esta cotação.',
         });
+      }
+
+      const profile = await CompanyProfileService.get();
+      const threshold = profile.awardApprovalThreshold == null ? null : Number(profile.awardApprovalThreshold);
+      const exceedsThreshold = QuoteComparisonService.requiresAwardApproval({
+        offeredPrice: priceForComparison(quoteRequest.items ?? [], chosenResponse),
+        currency: chosenResponse.currency, exchangeRate: Number(chosenResponse.exchangeRate),
+        freightCost: Number(chosenResponse.freightCost), insuranceCost: Number(chosenResponse.insuranceCost),
+        otherFees: Number(chosenResponse.otherFees), importDutyRate: Number(chosenResponse.importDuty),
+        ipiRate: Number(chosenResponse.ipi), pisRate: Number(chosenResponse.pis), cofinsRate: Number(chosenResponse.cofins),
+      }, threshold);
+      if (exceedsThreshold && !['admin', 'gestor'].includes(req.user?.role ?? '')) {
+        throw new HttpError(403, 'O valor exige aprovacao de um gestor/admin, inclusive na escolha manual.');
       }
 
       const latestComparison = await prisma.quoteComparison.findFirst({
@@ -1562,12 +1626,12 @@ export class QuoteResponseController {
 
       await prisma.$transaction(async (tx) => {
         await tx.quoteResponse.updateMany({
-          where: { quoteRequestId },
+          where: { quoteRequestId, deletedAt: null },
           data: { isWinner: false },
         });
 
         await tx.quoteResponse.update({
-          where: { id: quoteResponseId },
+          where: { id: quoteResponseId, deletedAt: null },
           data: { isWinner: true },
         });
 
@@ -1586,7 +1650,9 @@ export class QuoteResponseController {
             where: { id: latestComparison.id },
             data: {
               winnerQuoteResponseId: quoteResponseId,
-              approvalStatus: 'not_required',
+              approvalStatus: exceedsThreshold ? 'approved' : 'not_required',
+              approvedById: exceedsThreshold ? req.user?.id : null,
+              approvedAt: exceedsThreshold ? new Date() : null,
             },
           });
         }
@@ -1601,6 +1667,8 @@ export class QuoteResponseController {
             afterData: { winnerQuoteResponseId: quoteResponseId },
             metadata: {
               reason: trimmedReason,
+              approvalRequired: exceedsThreshold,
+              threshold,
               previousWinnerQuoteResponseId: previousWinnerId,
               newWinnerQuoteResponseId: quoteResponseId,
               comparisonId: latestComparison?.id ?? null,

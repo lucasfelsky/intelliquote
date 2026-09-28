@@ -495,7 +495,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
 
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponse.update).toHaveBeenCalledWith({
-      where: { id: 77 },
+      where: { id: 77, deletedAt: null },
       data: { targetPrice: 3.5 },
     });
     expect(prismaMock.quoteResponseTargetPriceHistory.create).toHaveBeenCalledWith({
@@ -546,7 +546,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
 
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponse.update).toHaveBeenCalledWith({
-      where: { id: 77 },
+      where: { id: 77, deletedAt: null },
       data: { targetPrice: null },
     });
     expect(prismaMock.quoteResponseTargetPriceHistory.create).not.toHaveBeenCalled();

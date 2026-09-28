@@ -270,7 +270,7 @@ describe('Portal routes (public, magic-link)', () => {
         {
           id: 1,
           quoteRequestItemId: 11,
-          unitPrice: { toString: () => '500.00' },
+          unitPrice: '500.00',
           quantity: 1,
           totalPrice: { toString: () => '500.00' },
           leadTimeDays: null,
@@ -349,7 +349,7 @@ describe('Portal routes (public, magic-link)', () => {
       items: [
         {
           quoteRequestItemId: 11,
-          unitPrice: { toString: () => '500.00' },
+          unitPrice: '500.00',
           quantity: 1,
           totalPrice: { toString: () => '500.00' },
           leadTimeDays: null,
@@ -367,7 +367,7 @@ describe('Portal routes (public, magic-link)', () => {
         {
           id: 2,
           quoteRequestItemId: 11,
-          unitPrice: { toString: () => '480.00' },
+          unitPrice: '480.00',
           quantity: 1,
           totalPrice: { toString: () => '480.00' },
           leadTimeDays: null,

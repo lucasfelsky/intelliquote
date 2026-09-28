@@ -3,10 +3,11 @@ import { render, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ComparacaoTab } from './ComparacaoTab';
 
+const controls = vi.hoisted(() => ({ role: 'admin', confirm: vi.fn() }));
 vi.mock('@/auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: 'admin' } }),
+  useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: controls.role } }),
 }));
-vi.mock('@/components/useConfirm', () => ({ useConfirm: () => async () => true }));
+vi.mock('@/components/useConfirm', () => ({ useConfirm: () => controls.confirm }));
 vi.mock('@/services/quoteResponses', () => ({
   listComparisons: vi.fn(),
   executeComparison: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('@/services/dispatch', () => ({
 }));
 
 import {
+  approveAward,
   listComparisons,
   executeComparison,
   previewComparison,
@@ -38,6 +40,7 @@ const winner = {
   contact: { name: 'Contato', email: 'x@acme.com' },
   isWinner: true,
   offeredPrice: 100,
+  currency: 'USD',
   offeredIncoterm: 'FOB' as const,
   paymentTermsDays: 30,
   exchangeRate: 5,
@@ -135,7 +138,16 @@ function getDialog(container: HTMLElement): HTMLDialogElement {
 }
 
 describe('ComparacaoTab', () => {
+  it('exibe total dos itens em USD em vez do landed cost em BRL', async () => {
+    const { container } = renderTab();
+    await waitFor(() => expect(container.textContent).toContain('Total dos itens (US$)'));
+    expect(container.querySelector('.cmp-row__price')?.textContent).toBe('100,00');
+    expect(container.textContent).not.toContain('Custo total (R$)');
+  });
   beforeEach(() => {
+    controls.role = 'admin';
+    controls.confirm.mockReset().mockResolvedValue(true);
+    vi.mocked(approveAward).mockReset().mockResolvedValue(undefined);
     vi.mocked(listComparisons).mockReset();
     vi.mocked(previewComparison).mockReset();
     vi.mocked(executeComparison).mockReset();
@@ -162,6 +174,36 @@ describe('ComparacaoTab', () => {
     vi.mocked(sendPurchaseOrder).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
     vi.mocked(closeQuoteRequest).mockReset();
     vi.mocked(closeQuoteRequest).mockResolvedValue(undefined);
+  });
+
+  it('gestor/admin aprova explicitamente antes de abrir a ordem de compra', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({ ...defaultPreview, pendingApproval: true, thresholdValue: 50 });
+    vi.mocked(executeComparison).mockResolvedValue({ results: [winner], pendingApproval: true,
+      winnerQuoteResponseId: 42, thresholdValue: 50, comparisonId: 19 });
+    const view = renderOpenTab();
+    await view.findByText('Recomendada · requer aprovação');
+    fireEvent.click(view.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(approveAward).toHaveBeenCalledWith(99, 19));
+    expect(controls.confirm).toHaveBeenCalledWith(expect.objectContaining({ confirmText: 'Aprovar e continuar' }));
+    await view.findByText('PDF da Ordem de Compra');
+  });
+
+  it.each(['cancelada', 'comprador', 'falha'])('nao abre a ordem de compra quando a aprovacao e %s', async (caseName) => {
+    controls.role = caseName === 'comprador' ? 'comprador' : 'admin';
+    controls.confirm.mockResolvedValue(caseName !== 'cancelada');
+    if (caseName === 'falha') vi.mocked(approveAward).mockRejectedValue(new Error('Aprovação indisponível'));
+    vi.mocked(previewComparison).mockResolvedValue({ ...defaultPreview, pendingApproval: true, thresholdValue: 50 });
+    vi.mocked(executeComparison).mockResolvedValue({ results: [winner], pendingApproval: true,
+      winnerQuoteResponseId: 42, thresholdValue: 50, comparisonId: 19 });
+    const view = renderOpenTab();
+    await view.findByText('ACME Ltda');
+    fireEvent.click(view.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(executeComparison).toHaveBeenCalled());
+    if (caseName === 'comprador') await view.findByText(/Comparação registrada — a alçada/);
+    else if (caseName === 'falha') await view.findByText(/Aprovação indisponível/);
+    else await waitFor(() => expect(controls.confirm).toHaveBeenCalled());
+    if (caseName !== 'falha') expect(approveAward).not.toHaveBeenCalled();
+    expect(view.queryByText('PDF da Ordem de Compra')).toBeNull();
   });
 
   it('1. replyTarget === null não quebra: dialogs (resposta + avaliação) fechados, sem throw', async () => {

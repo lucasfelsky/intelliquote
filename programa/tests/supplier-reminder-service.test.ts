@@ -81,9 +81,20 @@ beforeEach(() => {
     rawToken: 'fresh-raw-token-1234567890',
   });
   updateMock.mockResolvedValue({});
+  sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'smtp-1' });
 });
 
 describe('SupplierPortalReminderService.runReminderSweep', () => {
+  it.each(['failed', 'queued'])('preserva o link original quando o transporte retorna %s sem lançar erro', async (status) => {
+    findManyMock.mockResolvedValue([dueToken()]);
+    updateManyMock.mockResolvedValue({ count: 1 });
+    sendAndLogMock.mockResolvedValue({ status, providerMessageId: '', error: 'SMTP rejeitou o envio' });
+
+    expect(await SupplierPortalReminderService.runReminderSweep(NOW, 48))
+      .toEqual({ due: 1, sent: 0, skipped: 0, failed: 1 });
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
   it('happy path: claim -> token novo com MESMO deadline -> email -> revoga original', async () => {
     findManyMock.mockResolvedValue([dueToken()]);
     updateManyMock.mockResolvedValue({ count: 1 });

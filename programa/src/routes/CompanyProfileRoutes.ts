@@ -29,6 +29,7 @@ const companyProfileUpdateSchema = z.object({
   purchasingPhone: z.string().trim().nullable().optional(),
   website: z.string().trim().nullable().optional(),
   logoUrl: z.string().trim().nullable().optional(),
+  awardApprovalThreshold: z.number().positive().nullable().optional(),
   // Lista de e-mails que recebem copia automatica em todos os envios
   // de cotacao desta empresa (CC fixo do escritorio de compras, por
   // exemplo). Aceitamos ate 50 entradas para evitar abuso.
@@ -114,6 +115,9 @@ companyProfileRoutes.put(
             }
       const updated = await CompanyProfileService.update({
         ...parsed.data,
+        // Outros perfis podem editar os dados da empresa, mas nao o controle de aprovacao.
+        awardApprovalThreshold: ['admin', 'gestor'].includes(req.user?.role ?? '')
+          ? parsed.data.awardApprovalThreshold : undefined,
         dispatchCc: finalCc,
         updatedById: req.user?.id ?? null,
       });

@@ -86,26 +86,27 @@ export class QuoteComparisonService {
       return 'A comparacao so pode usar propostas da mesma cotacao.';
     }
 
-    const missingExchangeRate = responses.find(
-      (response) =>
-        response.currency.trim().toUpperCase() !== 'BRL' && response.exchangeRate <= 0,
-    );
-
-    if (missingExchangeRate) {
-      return 'Todas as propostas em moeda estrangeira exigem exchangeRate valido para comparar landed cost em BRL.';
+    const currencies = new Set(responses.map(response => response.currency.trim().toUpperCase()));
+    if (currencies.size > 1 || [...currencies].some(currency => !/^[A-Z]{3}$/.test(currency))) {
+      return 'Informe todas as propostas na mesma moeda para comparar os valores dos itens, sem conversao cambial.';
     }
 
     return null;
   }
 
+  // A alçada continua em BRL. Ausência de câmbio nunca libera a adjudicação.
+  static requiresAwardApproval(input: LandedCostInput, threshold: number | null): boolean {
+    if (threshold === null) return false;
+    if (input.currency.trim().toUpperCase() !== 'BRL' &&
+        (!Number.isFinite(input.exchangeRate) || input.exchangeRate <= 0)) return true;
+    return QuoteComparisonService.calculateLandedCost(input).totalLandedCost > threshold;
+  }
+
   static calculateLandedCost(input: LandedCostInput): LandedCostSnapshot {
     const normalizedCurrency = input.currency.trim().toUpperCase();
     const exchangeRate =
-      normalizedCurrency === 'BRL'
-        ? input.exchangeRate > 0
-          ? input.exchangeRate
-          : 1
-        : input.exchangeRate;
+      normalizedCurrency === 'BRL' ? 1 :
+        Number.isFinite(input.exchangeRate) && input.exchangeRate > 0 ? input.exchangeRate : 0;
     const freightCost = QuoteComparisonService.toNonNegativeNumber(input.freightCost);
     const insuranceCost = QuoteComparisonService.toNonNegativeNumber(
       input.insuranceCost,
@@ -152,12 +153,17 @@ export class QuoteComparisonService {
       return [];
     }
 
+    const validationError = QuoteComparisonService.validateResponsesForComparison(responses);
+    if (validationError) throw new Error(validationError);
+
     const landedCostResults = responses.map((response) => ({
       ...response,
       ...QuoteComparisonService.calculateLandedCost(response),
     }));
-    const lowestLandedCost = Math.min(
-      ...landedCostResults.map((response) => response.totalLandedCost),
+    // O snapshot fiscal permanece para alçada/histórico. O ranking usa apenas
+    // a cesta na moeda original, sem depender de estimativas tributárias por NCM.
+    const lowestBasketPrice = Math.min(
+      ...landedCostResults.map((response) => response.offeredPrice),
     );
     const highestPaymentTerm = Math.max(
       ...landedCostResults.map((response) => response.paymentTermsDays),
@@ -165,9 +171,9 @@ export class QuoteComparisonService {
 
     const rankedResponses = landedCostResults.map((response) => {
       const priceScore =
-        response.totalLandedCost === 0
+        response.offeredPrice === 0
           ? 0
-          : (lowestLandedCost / response.totalLandedCost) * weights.priceWeight;
+          : (lowestBasketPrice / response.offeredPrice) * weights.priceWeight;
       const paymentTermsScore =
         highestPaymentTerm === 0
           ? 0
@@ -197,15 +203,15 @@ export class QuoteComparisonService {
     // Critério de desempate determinístico entre propostas com o score máximo.
     // Antes o vencedor era o de menor índice (first-occurrence), o que dependia da
     // ordem de retorno do banco e não era determinístico. Cascata agora:
-    //   1. menor totalLandedCost (custo real menor vence o empate do score)
+    //   1. menor offeredPrice (total dos itens na mesma moeda, sem estimativas fiscais)
     //   2. maior paymentTermsDays (mais dias para pagar é melhor)
     //   3. maior nível de Incoterm (DDP=5 > EXW=1; repassa mais responsabilidade ao fornecedor)
     //   4. menor id (estabilidade final, ordem de cadastro)
     const winnerId = rankedResponses
       .filter((response) => response.totalScore === highestScore)
       .reduce((best, current) => {
-        if (current.totalLandedCost !== best.totalLandedCost) {
-          return current.totalLandedCost < best.totalLandedCost ? current : best;
+        if (current.offeredPrice !== best.offeredPrice) {
+          return current.offeredPrice < best.offeredPrice ? current : best;
         }
         if (current.paymentTermsDays !== best.paymentTermsDays) {
           return current.paymentTermsDays > best.paymentTermsDays ? current : best;

@@ -4,6 +4,7 @@ import { hashPassword } from '../src/utils/password';
 
 vi.mock('../src/lib/prisma', () => {
   const tx = {
+    quoteComparisonResult: { updateMany: vi.fn() },
     quoteResponse: {
       updateMany: vi.fn(),
       update: vi.fn(),
@@ -336,7 +337,7 @@ describe('Comparison routes', () => {
     expect(prismaMock.__tx.quoteRequest.update).not.toHaveBeenCalled();
   });
 
-  it('bloqueia comparacao sem exchangeRate valida para moeda estrangeira', async () => {
+  it('compara propostas em USD sem exigir cambio para o ranking', async () => {
     const cookies = await loginAs('gestor');
 
     prismaMock.quoteRequest.findUnique.mockResolvedValue({
@@ -390,9 +391,8 @@ describe('Comparison routes', () => {
       .set('Cookie', cookies)
       .send({});
 
-    expect(response.status).toBe(400);
-    expect(response.body.message).toContain('exchangeRate');
-    expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(prismaMock.__tx.quoteComparison.create).toHaveBeenCalled();
   });
 
   describe('Award Approval Gate', () => {
@@ -571,7 +571,7 @@ describe('Comparison routes', () => {
       );
       expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 11 },
+          where: { id: 11, deletedAt: null, quoteRequest: { id: 1, deletedAt: null } },
           data: { isWinner: true },
         })
       );
@@ -645,6 +645,7 @@ describe('Comparison routes', () => {
         requestCode: 'QR-20260325-DEMO01',
         status: 'open',
         currency: 'USD',
+        items: [1, 2, 3].map(id => ({ id, quantity: 1 })),
       });
       prismaMock.quoteResponse.findMany.mockResolvedValue([
         {
@@ -664,7 +665,7 @@ describe('Comparison routes', () => {
           offeredIncoterm: 'EXW',
           paymentTermsDays: 10,
           isWinner: false,
-          items: [{ leadTimeDays: 12 }, { leadTimeDays: 18 }, { leadTimeDays: null }],
+          items: [12, 18, null].map((leadTimeDays, i) => ({ quoteRequestItemId: i + 1, quantity: 1, unitPrice: [20, 30, 50][i], leadTimeDays })),
           supplier: {
             id: 101,
             name: 'Global Parts Ltd',
@@ -688,7 +689,7 @@ describe('Comparison routes', () => {
           offeredIncoterm: 'FOB',
           paymentTermsDays: 30,
           isWinner: false,
-          items: [{ leadTimeDays: 25 }],
+          items: [25, null, null].map((leadTimeDays, i) => ({ quoteRequestItemId: i + 1, quantity: 1, unitPrice: 40, leadTimeDays })),
           supplier: {
             id: 102,
             name: 'Nihon Trading',
@@ -774,7 +775,7 @@ describe('Comparison routes', () => {
           paymentTermsDays: 10,
           isWinner: false,
           leadTimeDays: 40,
-          items: [{ leadTimeDays: null }],
+          items: [],
           supplier: {
             id: 101,
             name: 'Global Parts Ltd',

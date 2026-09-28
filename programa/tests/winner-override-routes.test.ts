@@ -20,6 +20,7 @@ vi.mock('../src/lib/prisma', () => {
   };
 
   const prisma = {
+    companyProfile: { findUnique: vi.fn().mockResolvedValue({ id: 1, awardApprovalThreshold: null }) },
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -130,12 +131,12 @@ describe('Winner override routes', () => {
     expect(response.status).toBe(200);
     expect(response.body.winnerQuoteResponseId).toBe(11);
     expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith({
-      where: { id: 11 },
+      where: { id: 11, deletedAt: null },
       data: { isWinner: true },
     });
     expect(prismaMock.__tx.quoteComparison.update).toHaveBeenCalledWith({
       where: { id: 999 },
-      data: { winnerQuoteResponseId: 11, approvalStatus: 'not_required' },
+      data: { winnerQuoteResponseId: 11, approvalStatus: 'not_required', approvedById: null, approvedAt: null },
     });
   });
 
@@ -186,12 +187,12 @@ describe('Winner override routes', () => {
 
     expect(response.status).toBe(200);
     expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith({
-      where: { id: 12 },
+      where: { id: 12, deletedAt: null },
       data: { isWinner: true },
     });
     expect(prismaMock.__tx.quoteComparison.update).toHaveBeenCalledWith({
       where: { id: 999 },
-      data: { winnerQuoteResponseId: 12, approvalStatus: 'not_required' },
+      data: { winnerQuoteResponseId: 12, approvalStatus: 'not_required', approvedById: null, approvedAt: null },
     });
     expect(prismaMock.__tx.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -240,7 +241,7 @@ describe('Winner override routes', () => {
 
     expect(response.status).toBe(200);
     expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith({
-      where: { id: 21 },
+      where: { id: 21, deletedAt: null },
       data: { isWinner: true },
     });
     expect(prismaMock.__tx.quoteComparisonResult.updateMany).not.toHaveBeenCalled();
