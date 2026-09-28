@@ -156,6 +156,44 @@ export const supplierUpdateSchema = z.object({
   familyIds: familyIdsField,
 });
 
+// Importação em massa de fornecedores via planilha (.xlsx). O parser puro
+// (`src/utils/supplierImport.ts`) monta o candidato linha a linha e valida
+// aqui antes de aceitar; a mensagem de erro do Zod vira 1 dos `reasons`.
+export const supplierImportRowSchema = z.object({
+  name: requiredTrimmedStringField,
+  country: nullableTrimmedStringField,
+  website: nullableTrimmedStringField,
+  acceptedIncoterms: z.array(incotermField).min(1),
+  paymentTermsDays: nonNegativeIntegerField,
+  familyIds: z.array(positiveIntegerField).default([]),
+  tags: tagsField,
+  notes: nullableTrimmedStringField,
+  contact: z
+    .object({
+      name: requiredTrimmedStringField,
+      email: lowercasedEmailField,
+      phone: nullableTrimmedStringField,
+      position: nullableTrimmedStringField,
+    })
+    .nullable(),
+});
+
+export const supplierImportPreviewSchema = z.object({
+  contentBase64: z.string().min(1),
+});
+
+export const supplierImportConfirmSchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        row: positiveIntegerField,
+        data: supplierImportRowSchema,
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
 // F12: avaliacao opcional do fornecedor vencedor, capturada ao concluir a
 // cotacao. O supplierId e' validado no controller (precisa ter respondido a
 // cotacao). comment opcional.
