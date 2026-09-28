@@ -207,7 +207,7 @@ jobs:
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
           echo "Service URL: ${URL}"
 
-      - name: Smoke test (health + catalogo)
+      - name: Smoke test (health + catalogo + buildTag no ar)
         if: success()
         shell: bash
         run: |
@@ -226,5 +226,23 @@ jobs:
           echo
           if [ "$HTTP2" = "404" ]; then
             echo "::error::Endpoint /api/v1/catalog-items nao registrado (HTTP 404)."
+            exit 1
+          fi
+          # A revisao nova pode subir Ready mas com 0% de trafego (ex.: trafego
+          # fixado numa revisao antiga por deploy manual) e o `gcloud run deploy`
+          # ainda imprime "serving 100 percent" do nome da revisao antiga. So o
+          # buildTag servido de verdade prova que o codigo desta tag esta no ar.
+          EXPECTED_TAG="${{ steps.tags.outputs.backend_build_tag }}"
+          SERVED_TAG=""
+          for attempt in 1 2 3 4 5 6; do
+            SERVED_TAG=$(curl -s "${URL}/health" | jq -r '.buildTag // empty' || true)
+            echo "Tentativa ${attempt}: buildTag servido=\"${SERVED_TAG}\" esperado=\"${EXPECTED_TAG}\""
+            if [ "$SERVED_TAG" = "$EXPECTED_TAG" ]; then
+              break
+            fi
+            sleep 10
+          done
+          if [ "$SERVED_TAG" != "$EXPECTED_TAG" ]; then
+            echo "::error::Producao serve buildTag \"${SERVED_TAG}\", esperado \"${EXPECTED_TAG}\". A revisao nova provavelmente ficou sem trafego (trafego fixado em revisao antiga). Cloud Run > ${GCP_CLOUD_RUN_SERVICE} > Gerenciar trafego > 100% na revisao mais recente."
             exit 1
           fi
