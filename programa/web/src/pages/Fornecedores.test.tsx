@@ -274,3 +274,194 @@ describe('Fornecedores', () => {
     expect(payload.familyIds).toEqual([2]);
   });
 });
+
+describe('Fornecedores — importação de planilha', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.put).mockReset();
+    vi.mocked(api.del).mockReset();
+    vi.mocked(listSupplierContacts).mockReset();
+    vi.mocked(listSupplierContacts).mockResolvedValue(contacts);
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v1/suppliers') return Promise.resolve(suppliers);
+      if (url === '/api/v1/supplier-contacts') {
+        return Promise.resolve({ bySupplier: { 10: contacts } });
+      }
+      if (url === '/api/v1/item-families') {
+        return Promise.resolve({ data: families });
+      }
+      if (url === '/v1/suppliers/import/template') {
+        return Promise.resolve({
+          data: { fileName: 'modelo-importacao-fornecedores.xlsx', contentBase64: 'AAAA' },
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    if (typeof URL.createObjectURL !== 'function') {
+      (URL as unknown as { createObjectURL: (blob: Blob) => string }).createObjectURL = vi.fn(
+        () => 'blob:mock',
+      );
+    } else {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+    }
+    if (typeof URL.revokeObjectURL !== 'function') {
+      (URL as unknown as { revokeObjectURL: (url: string) => void }).revokeObjectURL = vi.fn();
+    } else {
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    }
+  });
+
+  it('a. "Importar planilha" abre dialog com título "Importar fornecedores"', async () => {
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Importar planilha' }));
+    await waitFor(() => expect(getDialogs(container).length).toBe(3));
+    const dialog = dialogAt(container, 2);
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Importar fornecedores');
+  });
+
+  it('b. selecionar .xlsx e "Carregar e validar" chama preview e mostra a contagem + "Linha 3"', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        validLines: [{ row: 2, name: 'Fornecedor Novo', familyNames: [] }],
+        errorLines: [{ row: 3, name: 'Fornecedor Ruim', reason: 'Nome é obrigatório' }],
+      },
+    });
+
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Importar planilha' }));
+    await waitFor(() => expect(getDialogs(container).length).toBe(3));
+    const dialog = dialogAt(container, 2);
+
+    const file = new File(['conteudo'], 'fornecedores.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Carregar e validar' }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/v1/suppliers/import', {
+        contentBase64: expect.any(String),
+      }),
+    );
+    await waitFor(() => {
+      expect(dialog.textContent).toContain('Linha 3');
+      expect(dialog.textContent).toContain('Fornecedor Ruim');
+      expect(dialog.textContent).toContain('Nome é obrigatório');
+    });
+  });
+
+  it('c. "Confirmar importação" chama confirm sem familyNames e mostra o resultado', async () => {
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/v1/suppliers/import') {
+        return Promise.resolve({
+          data: {
+            validLines: [
+              { row: 2, name: 'Fornecedor Novo', familyNames: ['Silano'], familyIds: [1] },
+            ],
+            errorLines: [],
+          },
+        });
+      }
+      if (url === '/v1/suppliers/import/confirm') {
+        return Promise.resolve({
+          data: {
+            successLines: [{ row: 2, supplierId: 99, name: 'Fornecedor Novo' }],
+            errorLines: [],
+          },
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Importar planilha' }));
+    await waitFor(() => expect(getDialogs(container).length).toBe(3));
+    const dialog = dialogAt(container, 2);
+
+    const file = new File(['conteudo'], 'fornecedores.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Carregar e validar' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/suppliers/import', expect.anything()));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Confirmar importação' }));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/v1/suppliers/import/confirm', {
+        rows: [{ row: 2, data: { name: 'Fornecedor Novo', familyIds: [1] } }],
+      }),
+    );
+    await within(dialog).findByText('fornecedores importados com sucesso.', { exact: false });
+  });
+
+  it('e. não fecha pelo "Fechar" enquanto o confirm está em andamento', async () => {
+    let resolveConfirm: (value: unknown) => void = () => {};
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/v1/suppliers/import') {
+        return Promise.resolve({
+          data: {
+            validLines: [{ row: 2, name: 'Fornecedor Novo', familyNames: [], familyIds: [] }],
+            errorLines: [],
+          },
+        });
+      }
+      if (url === '/v1/suppliers/import/confirm') {
+        return new Promise((resolve) => {
+          resolveConfirm = resolve;
+        });
+      }
+      return Promise.resolve({ data: {} });
+    });
+
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Importar planilha' }));
+    await waitFor(() => expect(getDialogs(container).length).toBe(3));
+    const dialog = dialogAt(container, 2);
+
+    const file = new File(['conteudo'], 'fornecedores.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Carregar e validar' }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Confirmar importação' }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith('/v1/suppliers/import/confirm', expect.anything()),
+    );
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }));
+    expect(getDialogs(container).length).toBe(3);
+
+    resolveConfirm({
+      data: { successLines: [{ row: 2, supplierId: 99, name: 'Fornecedor Novo' }], errorLines: [] },
+    });
+    await within(dialog).findByText('fornecedores importados com sucesso.', { exact: false });
+  });
+
+  it('d. "Baixar modelo" chama o template com createObjectURL/revokeObjectURL', async () => {
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Importar planilha' }));
+    await waitFor(() => expect(getDialogs(container).length).toBe(3));
+    const dialog = dialogAt(container, 2);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Baixar modelo' }));
+
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith('/v1/suppliers/import/template'),
+    );
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalled());
+  });
+});

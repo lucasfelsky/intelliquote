@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import StarRating from '@/components/StarRating';
 import { Modal } from '@/components/Modal';
+import SupplierImportModal from '@/components/SupplierImportModal';
 import {
   createSupplierContact,
   deleteSupplierContact,
@@ -117,6 +118,7 @@ export default function Fornecedores() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [form, setForm] = useState<SupplierFormState>(emptyForm);
   const [search, setSearch] = useState('');
@@ -470,6 +472,9 @@ export default function Fornecedores() {
             onChange={(e) => setSearch(e.target.value)}
             style={{ maxWidth: 280 }}
           />
+          <button type="button" className="ghost-button" onClick={() => setIsImportOpen(true)}>
+            Importar planilha
+          </button>
           <button type="button" className="primary-button" onClick={openNew}>
             + Novo fornecedor
           </button>
@@ -999,6 +1004,8 @@ export default function Fornecedores() {
             </div>
         </form>
       </Modal>
+
+      {isImportOpen && <SupplierImportModal onClose={() => setIsImportOpen(false)} />}
     </div>
   );
 }

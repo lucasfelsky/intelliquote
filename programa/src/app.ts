@@ -57,6 +57,7 @@ app.use((err: Error & { status?: number }, _req: express.Request, res: express.R
 
 // Aumentar o limite apenas para as rotas de importação (onde enviamos a planilha base64)
 app.use('/api/v1/catalog-items/import', express.json({ limit: '10mb' }));
+app.use('/api/v1/suppliers/import', express.json({ limit: '10mb' }));
 
 // Idem para /quote-responses: o botão "Enviar Ordem de Compra" envia um PDF
 // em base64 no corpo (POST /:id/purchase-order). Sem este override, o

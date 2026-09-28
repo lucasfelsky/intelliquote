@@ -17,6 +17,7 @@
       "ReportController.ts",
       "SupplierContactController.ts",
       "SupplierController.ts",
+      "SupplierImportController.ts",
       "UserController.ts"
     ],
     "services": [
@@ -164,6 +165,7 @@
     "GET /suppliers",
     "GET /suppliers/:id",
     "GET /suppliers/:supplierId/contacts",
+    "GET /suppliers/import/template",
     "GET /users",
     "GET /users-directory",
     "GET /users/:id",
@@ -199,6 +201,8 @@
     "POST /supplier-contacts",
     "POST /suppliers",
     "POST /suppliers/:supplierId/contacts",
+    "POST /suppliers/import",
+    "POST /suppliers/import/confirm",
     "POST /users",
     "POST /users/:id/reset-password",
     "PUT /",
