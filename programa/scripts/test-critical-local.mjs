@@ -37,7 +37,8 @@ try {
   await pg.start();
   await pg.createDatabase('iq_critical_test');
   await run('node_modules/prisma/build/index.js', ['migrate', 'deploy']);
-  await run('node_modules/vitest/vitest.mjs', ['run', 'tests/critical-fixes-db.test.ts', '--maxWorkers=1']);
+  const testFiles = process.argv.slice(2);
+  await run('node_modules/vitest/vitest.mjs', ['run', ...(testFiles.length > 0 ? testFiles : ['tests/critical-fixes-db.test.ts']), '--maxWorkers=1']);
 } finally {
   const stopping = pg.stop();
   if (process.platform === 'win32') {

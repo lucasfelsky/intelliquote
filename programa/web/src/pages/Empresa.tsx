@@ -77,6 +77,7 @@ function roleLabel(role: string): string {
 export default function Empresa() {
   const { user } = useAuth();
   const canChangeApproval = user?.role === 'admin' || user?.role === 'gestor';
+  const canEditProfile = ['admin', 'comprador', 'gestor'].includes(user?.role ?? '');
   const qc = useQueryClient();
   const [draft, setDraft] = useState<CompanyProfile | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -327,7 +328,7 @@ export default function Empresa() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!draft) return;
+    if (!draft || !canEditProfile) return;
     if (!draft.companyName?.trim()) {
       setFormError('Informe a razão social.');
       return;
@@ -372,6 +373,15 @@ export default function Empresa() {
       </div>
 
       <form className="card" onSubmit={handleSubmit}>
+        {!canEditProfile && (
+          <p className="text-sm" style={{ color: 'var(--ink-soft)', marginBottom: 12 }}>
+            Somente leitura - seu perfil não pode editar os dados da empresa.
+          </p>
+        )}
+        <fieldset
+          disabled={!canEditProfile}
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+        >
         <div className="form-grid">
           <div>
             <label className="field-label">Razão social *</label>
@@ -796,6 +806,7 @@ export default function Empresa() {
             {save.isPending ? 'Salvando…' : 'Salvar perfil'}
           </button>
         </div>
+        </fieldset>
       </form>
     </div>
   );

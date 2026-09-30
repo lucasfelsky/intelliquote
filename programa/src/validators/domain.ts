@@ -459,6 +459,10 @@ export const helpArticleListQuerySchema = z.object({
   search: z.string().trim().min(2).max(80).optional(),
 });
 
+export const portalTokenRegenerateSchema = z.object({
+  expiresInDays: z.number().int().min(1).max(60).optional(),
+});
+
 export {
   supplierPortalResponseItemSchema,
   supplierPortalResponseSubmitSchema,

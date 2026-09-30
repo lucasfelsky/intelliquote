@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { CompanyProfileService, normalizeDispatchCc, readDispatchCc } from '../services/CompanyProfileService';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 import { handleControllerError, HttpError } from '../utils/http';
+import { prisma } from '../lib/prisma';
+import { AuditLogService } from '../services/AuditLogService';
 
 const companyProfileRoutes = Router();
 
@@ -64,7 +66,7 @@ companyProfileRoutes.get(
 companyProfileRoutes.put(
   '/',
   requireAuth,
-  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  allowRoles(['admin', 'comprador', 'gestor']),
   async (req, res) => {
     try {
       // Aceitamos duas representacoes:
@@ -113,13 +115,35 @@ companyProfileRoutes.put(
             } else {
               finalCc = normalizeDispatchCc(parsed.data.dispatchCc ?? []);
             }
-      const updated = await CompanyProfileService.update({
-        ...parsed.data,
-        // Outros perfis podem editar os dados da empresa, mas nao o controle de aprovacao.
-        awardApprovalThreshold: ['admin', 'gestor'].includes(req.user?.role ?? '')
-          ? parsed.data.awardApprovalThreshold : undefined,
-        dispatchCc: finalCc,
-        updatedById: req.user?.id ?? null,
+      const canEditThreshold = ['admin', 'gestor'].includes(req.user?.role ?? '');
+      const thresholdIgnored =
+        !canEditThreshold && parsed.data.awardApprovalThreshold !== undefined;
+      const updated = await prisma.$transaction(async (tx) => {
+        const before = await tx.companyProfile.findUnique({ where: { id: 1 } });
+        const result = await CompanyProfileService.update(
+          {
+            ...parsed.data,
+            // Outros perfis podem editar os dados da empresa, mas nao o controle de aprovacao.
+            awardApprovalThreshold: canEditThreshold
+              ? parsed.data.awardApprovalThreshold : undefined,
+            dispatchCc: finalCc,
+            updatedById: req.user?.id ?? null,
+          },
+          tx,
+        );
+        await AuditLogService.log(
+          {
+            entityType: 'company_profile',
+            entityId: 1,
+            action: 'update',
+            performedById: req.user?.id ?? null,
+            beforeData: before ? { ...before, dispatchCc: readDispatchCc(before) } : null,
+            afterData: { ...result, dispatchCc: readDispatchCc(result) },
+            metadata: { thresholdIgnored },
+          },
+          tx,
+        );
+        return result;
       });
       // Hidrata dispatchCc para array de strings antes de devolver.
       const { dispatchCc, ...rest } = updated;

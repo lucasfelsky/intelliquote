@@ -220,7 +220,6 @@ export interface PortalTokenListItem {
   id: number;
   supplier: { id: number; name: string };
   contact: { id: number; name: string; email: string };
-  token: string;
   expiresAt: string;
   revokedAt: string | null;
   firstSeenAt: string | null;
@@ -236,7 +235,8 @@ export interface PortalTokenGenerateResult {
     supplierName: string;
     contactName: string;
     contactEmail: string;
-    token: PortalTokenListItem;
+    // O POST de geração devolve o raw token (uma única vez) em `token`.
+    token: PortalTokenListItem & { token: string };
   }>;
   alreadyActiveCount: number;
   generatedCount: number;
@@ -264,7 +264,6 @@ export async function listPortalTokens(
         name: String(contact?.name ?? ''),
         email: String(contact?.email ?? ''),
       },
-      token: String(obj.token ?? ''),
       expiresAt: String(obj.expiresAt ?? ''),
       revokedAt: (obj.revokedAt as string | null) ?? null,
       firstSeenAt: (obj.firstSeenAt as string | null) ?? null,
@@ -284,6 +283,24 @@ export async function generatePortalTokens(
   return api.post<PortalTokenGenerateResult>(
     `/v1/quote-requests/${quoteRequestId}/portal-tokens`,
     { supplierContactIds, expiresInDays },
+  );
+}
+
+export interface RegeneratePortalTokenResult {
+  id: number;
+  portalUrl: string;
+  expiresAt: string;
+  supplier: { id: number; name: string } | null;
+  contact: { id: number; name: string; email: string } | null;
+}
+
+export async function regeneratePortalToken(
+  tokenId: number,
+  expiresInDays?: number,
+): Promise<RegeneratePortalTokenResult> {
+  return api.post<RegeneratePortalTokenResult>(
+    `/v1/portal-tokens/${tokenId}/regenerate`,
+    expiresInDays ? { expiresInDays } : {},
   );
 }
 

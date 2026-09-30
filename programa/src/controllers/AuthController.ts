@@ -68,7 +68,10 @@ export class AuthController {
 
   static async logout(req: Request, res: Response): Promise<Response> {
     try {
-      await AuthService.logout(req.cookies?.[REFRESH_TOKEN_COOKIE_NAME]);
+      const fromCookie = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
+      const fromBody =
+        typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : undefined;
+      await AuthService.logout(fromCookie ?? fromBody);
       clearAuthCookies(res);
       return res.status(204).send();
     } catch (error) {

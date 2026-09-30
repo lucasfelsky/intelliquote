@@ -73,6 +73,13 @@ quoteRequestRoutes.post(
   DispatchController.revokeToken,
 );
 
+quoteRequestRoutes.post(
+  '/portal-tokens/:id/regenerate',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  DispatchController.regeneratePortalToken,
+);
+
 quoteRequestRoutes.get(
   '/quote-requests/:id/portal-tokens',
   requireAuth,
