@@ -1,6 +1,7 @@
 // Helpers e tipos para o endpoint de Auditoria.
-// O backend devolve snapshots opcionais (before/after) que podem vir como
-// string JSON ou objeto já parseado — o consumidor deve tratar os dois casos.
+// O backend devolve snapshots opcionais em beforeData/afterData (string JSON
+// ou objeto já parseado — o consumidor deve tratar os dois casos). Aqui eles
+// são mapeados para before/after, que é o que a tela de Auditoria lê.
 
 import { api } from '@/api/client';
 
@@ -27,6 +28,12 @@ export interface AuditLog {
   performedBy?: AuditLogActor | null;
 }
 
+interface AuditLogApiRow extends Omit<AuditLog, 'before' | 'after'> {
+  beforeData?: unknown;
+  afterData?: unknown;
+  metadata?: unknown;
+}
+
 export interface AuditLogFilters {
   entityType?: string | null;
   entityId?: string | null;
@@ -46,8 +53,13 @@ export async function listAuditLogs(filters: AuditLogFilters = {}): Promise<Audi
   if (filters.limit !== null && filters.limit !== undefined) {
     query.limit = filters.limit;
   }
-  const data = await api.get<AuditLog[]>('/v1/audit', query);
-  return Array.isArray(data) ? data : [];
+  const data = await api.get<AuditLogApiRow[]>('/v1/audit', query);
+  if (!Array.isArray(data)) return [];
+  return data.map((row) => ({
+    ...row,
+    before: row.beforeData ?? null,
+    after: row.afterData ?? null,
+  }));
 }
 
 export { messageOf } from '@/services/quoteResponses';

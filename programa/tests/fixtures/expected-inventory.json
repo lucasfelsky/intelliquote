@@ -182,6 +182,7 @@
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
     "POST /item-families",
+    "POST /portal-tokens/:id/regenerate",
     "POST /portal-tokens/:id/revoke",
     "POST /quote-requests",
     "POST /quote-requests/:id/close",

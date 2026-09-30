@@ -7,6 +7,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import {
   generatePortalTokens,
   listPortalTokens,
+  regeneratePortalToken,
   previewDispatch,
   revokePortalToken,
   sendDispatch,
@@ -689,19 +690,30 @@ export default function CotacaoDetalhe() {
 
     const activeTokens: PortalTokenListItem[] = portalTokensQuery.data ?? [];
 
-    function buildPortalUrl(token: string): string {
-      const base = (
-        (import.meta.env.VITE_PORTAL_URL as string | undefined) ??
-        'https://intelliquote.portal-comex.com'
-      ).replace(/\/$/, '');
-      // Cache-buster idêntico ao backend (DispatchController.buildPortalLink)
-      // para que o navegador sempre carregue a versão mais recente do
-      // portal.html ao colar o link.
-      return `${base}/portal?token=${encodeURIComponent(token)}&v=${Date.now()}`;
-    }
+    const regenerateTokenMutation = useMutation({
+      mutationFn: (tokenId: number) => regeneratePortalToken(tokenId),
+      onError: (err) => setTokenActionError(messageOf(err)),
+    });
 
-    async function copyTokenToClipboard(token: PortalTokenListItem) {
-      const url = buildPortalUrl(token.token);
+    // O raw token só existe no momento da geração (o banco guarda apenas o
+    // hash). Por isso o botão gera um link novo, revogando o anterior.
+    async function regenerateAndCopy(token: PortalTokenListItem) {
+      if (
+        !(await confirm(
+          `Gerar novo link para ${token.contact.name}? O link anterior deixa de funcionar imediatamente.`,
+        ))
+      ) {
+        return;
+      }
+      setTokenActionError(null);
+      let created: { id: number; portalUrl: string };
+      try {
+        created = await regenerateTokenMutation.mutateAsync(token.id);
+      } catch {
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ['portal-tokens', id] });
+      const url = created.portalUrl;
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(url);
@@ -715,9 +727,9 @@ export default function CotacaoDetalhe() {
           document.execCommand('copy');
           document.body.removeChild(textarea);
         }
-        setCopiedTokenId(token.id);
+        setCopiedTokenId(created.id);
         window.setTimeout(() => {
-          setCopiedTokenId((current) => (current === token.id ? null : current));
+          setCopiedTokenId((current) => (current === created.id ? null : current));
         }, 2000);
       } catch (err) {
         setTokenActionError(
@@ -1681,13 +1693,16 @@ export default function CotacaoDetalhe() {
                           </td>
                           <td>
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => copyTokenToClipboard(token)}
-                              >
-                                {copiedTokenId === token.id ? 'Copiado!' : 'Copiar link'}
-                              </button>
+                              {canDispatch && !token.respondedAt && (
+                                <button
+                                  type="button"
+                                  className="ghost-button"
+                                  disabled={regenerateTokenMutation.isPending}
+                                  onClick={() => regenerateAndCopy(token)}
+                                >
+                                  {copiedTokenId === token.id ? 'Link novo copiado!' : 'Gerar novo link'}
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="ghost-button"

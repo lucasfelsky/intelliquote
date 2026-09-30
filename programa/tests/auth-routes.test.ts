@@ -111,6 +111,44 @@ describe('Auth routes', () => {
     expect(prismaMock.session.updateMany).toHaveBeenCalledTimes(1);
   });
 
+  it('logout aceita o refresh token no body (sem cookie) e revoga a sessao', async () => {
+    const passwordHash = await hashPassword('ChangeMe123!');
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 1,
+      name: 'Administrador IntelliQuote',
+      email: 'admin@intelliquote.local',
+      passwordHash,
+      isActive: true,
+      role: { name: 'admin' },
+    });
+    prismaMock.session.create.mockResolvedValue({ id: 'session-1' });
+    prismaMock.session.updateMany.mockResolvedValue({ count: 1 });
+
+    const loginResponse = await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'admin@intelliquote.local', password: 'ChangeMe123!' });
+    const refreshToken = extractCookieValue(
+      loginResponse.headers['set-cookie'],
+      'intelliquote_refresh_token',
+    );
+    const sessionId = prismaMock.session.create.mock.calls[0][0].data.id;
+
+    const logoutResponse = await request(app)
+      .post('/api/v1/auth/logout')
+      .send({ refreshToken });
+
+    expect(logoutResponse.status).toBe(204);
+    expect(prismaMock.session.updateMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.session.updateMany.mock.calls[0][0].where).toMatchObject({ id: sessionId });
+  });
+
+  it('logout sem cookie e sem body responde 204 e nao toca em sessao', async () => {
+    const logoutResponse = await request(app).post('/api/v1/auth/logout');
+
+    expect(logoutResponse.status).toBe(204);
+    expect(prismaMock.session.updateMany).not.toHaveBeenCalled();
+  });
+
   it('retorna 401 para login com credenciais invalidas', async () => {
     const passwordHash = await hashPassword('OutraSenha123!');
 

@@ -95,6 +95,62 @@ export class SupplierPortalService {
     return result.count;
   }
 
+  /**
+   * Revoga o token informado (e qualquer outro ativo do mesmo contato/cotacao)
+   * e cria um novo, tudo na mesma transacao. O raw token so existe no retorno.
+   * 404 se token/cotacao nao existem; 409 se o token ja foi respondido
+   * (o novo token nao carrega a resposta e geraria proposta duplicada).
+   */
+  static async regenerateToken(input: {
+    tokenId: number;
+    createdById: number;
+    ttlDays?: number;
+    client?: Prisma.TransactionClient;
+  }): Promise<{
+    previous: SupplierPortalToken;
+    created: SupplierPortalToken;
+    rawToken: string;
+    revokedCount: number;
+  }> {
+    const run = async (tx: Prisma.TransactionClient) => {
+      const previous = await tx.supplierPortalToken.findUnique({ where: { id: input.tokenId } });
+      if (!previous) {
+        throw new HttpError(404, 'Token nao encontrado.');
+      }
+      const quoteRequest = await tx.quoteRequest.findFirst({
+        where: { id: previous.quoteRequestId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!quoteRequest) {
+        throw new HttpError(404, 'Cotacao nao encontrada.');
+      }
+      if (previous.respondedAt) {
+        throw new HttpError(
+          409,
+          'Este fornecedor ja respondeu por este link. Nao e possivel gerar novo link.',
+        );
+      }
+      const revokedCount = await this.revokeTokensForContact({
+        quoteRequestId: previous.quoteRequestId,
+        supplierContactId: previous.supplierContactId,
+        client: tx,
+      });
+      const createdWithRaw = (await this.createToken({
+        quoteRequestId: previous.quoteRequestId,
+        supplierId: previous.supplierId,
+        supplierContactId: previous.supplierContactId,
+        createdById: input.createdById,
+        ttlDays: input.ttlDays,
+        dispatchEventId: previous.dispatchEventId,
+        client: tx,
+      })) as SupplierPortalToken & { rawToken: string };
+      const { rawToken, ...created } = createdWithRaw;
+      return { previous, created: created as SupplierPortalToken, rawToken, revokedCount };
+    };
+    if (input.client) return run(input.client);
+    return defaultPrisma.$transaction(run);
+  }
+
   static async validate(input: ValidateTokenInput): Promise<ValidatedToken> {
     const client = getClient(input.client);
     const tokenHash = hashToken(input.rawToken);

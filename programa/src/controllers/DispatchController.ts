@@ -8,6 +8,7 @@ import {
   requireCompanyProfileFields,
 } from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
+import { portalTokenRegenerateSchema } from '../validators/domain';
 import {
   dispatchCreateSchema,
 } from '../validators/supplierPortal';
@@ -550,7 +551,6 @@ export class DispatchController {
             name: t.supplierContact.name,
             email: t.supplierContact.email,
           },
-          token: t.tokenHash,
           expiresAt: t.expiresAt,
           revokedAt: t.revokedAt,
           firstSeenAt: t.firstSeenAt,
@@ -560,6 +560,74 @@ export class DispatchController {
           createdAt: t.createdAt,
         })),
       );
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async regeneratePortalToken(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID do token invalido.' });
+      }
+      const { expiresInDays } = portalTokenRegenerateSchema.parse(req.body ?? {});
+      const ttlDays = expiresInDays ?? 14;
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ message: 'Sessao expirada. Faca login novamente.' });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const regenerated = await SupplierPortalService.regenerateToken({
+          tokenId: id,
+          createdById: userId,
+          ttlDays,
+          client: tx,
+        });
+        const { previous, created } = regenerated;
+        await AuditLogService.log(
+          {
+            entityType: 'supplier_portal_token',
+            entityId: previous.id,
+            action: 'revoke',
+            performedById: userId,
+            metadata: { reason: 'regenerate', replacedById: created.id },
+          },
+          tx,
+        );
+        await AuditLogService.log(
+          {
+            entityType: 'supplier_portal_token',
+            entityId: created.id,
+            action: 'generate',
+            performedById: userId,
+            metadata: {
+              quoteRequestId: created.quoteRequestId,
+              replacesTokenId: previous.id,
+              ttlDays,
+            },
+          },
+          tx,
+        );
+        const [supplier, contact] = await Promise.all([
+          tx.supplier.findUnique({ where: { id: created.supplierId }, select: { id: true, name: true } }),
+          tx.supplierContact.findUnique({
+            where: { id: created.supplierContactId },
+            select: { id: true, name: true, email: true },
+          }),
+        ]);
+        return { ...regenerated, supplier, contact };
+      });
+
+      return res.status(201).json({
+        id: result.created.id,
+        portalUrl: buildPortalLink(result.rawToken),
+        expiresAt: result.created.expiresAt,
+        supplier: result.supplier,
+        contact: result.contact,
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

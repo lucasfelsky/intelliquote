@@ -120,6 +120,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [exchange]);
 
   const logout = useCallback(async () => {
+    // Ler o refresh ANTES do signOut: o onAuthStateChanged(null) limpa o tokenStore.
+    const refreshToken = tokenStore.getRefresh();
+    if (refreshToken) {
+      // Best-effort: falha de rede nao impede o logout local.
+      try { await api.post('/api/v1/auth/logout', { refreshToken }); } catch { /* ignore */ }
+    }
     try { await fbSignOut(auth); } catch { /* ignore */ }
     tokenStore.clear();
     setUser(null);

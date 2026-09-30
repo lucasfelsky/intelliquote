@@ -23,6 +23,7 @@ vi.mock('@/services/dispatch', async (importOriginal) => {
     listPortalTokens: vi.fn(),
     generatePortalTokens: vi.fn(),
     revokePortalToken: vi.fn(),
+    regeneratePortalToken: vi.fn(),
   };
 });
 
@@ -32,6 +33,7 @@ import {
   sendDispatch,
   listPortalTokens,
   revokePortalToken,
+  regeneratePortalToken,
   type DispatchPreviewResult,
   type DispatchSendResult,
   type PortalTokenListItem,
@@ -137,7 +139,6 @@ const tokenFixture: PortalTokenListItem = {
   id: 99,
   supplier: { id: 5, name: 'ACME Ltda' },
   contact: { id: 10, name: 'Contato', email: 'c@acme.com' },
-  token: 'abc123',
   expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
   revokedAt: null,
   firstSeenAt: null,
@@ -192,6 +193,7 @@ describe('CotacaoDetalhe', () => {
     vi.mocked(sendDispatch).mockReset();
     vi.mocked(listPortalTokens).mockReset();
     vi.mocked(revokePortalToken).mockReset();
+    vi.mocked(regeneratePortalToken).mockReset();
 
     vi.mocked(previewDispatch).mockResolvedValue(previewFixture);
     vi.mocked(sendDispatch).mockResolvedValue(sendFixture);
@@ -357,6 +359,36 @@ describe('CotacaoDetalhe', () => {
     await waitFor(() => expect(revokePortalToken).toHaveBeenCalledWith(99));
     expect(dispatchDialog.open).toBe(true);
     expect(tokensDialog.open).toBe(true);
+  });
+
+  it('11b. "Gerar novo link": confirma, chama regeneratePortalToken e copia o portalUrl', async () => {
+    vi.mocked(listPortalTokens).mockResolvedValue([tokenFixture]);
+    vi.mocked(regeneratePortalToken).mockResolvedValue({
+      id: 100,
+      portalUrl: 'https://portal.test/portal?token=novo&v=1',
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      supplier: { id: 5, name: 'ACME Ltda' },
+      contact: { id: 10, name: 'Contato', email: 'c@acme.com' },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('button', { name: 'Links do portal' }));
+    const tokensDialog = dialogByTitle(container, 'Links do portal');
+    await waitFor(() => within(tokensDialog).getByRole('button', { name: 'Gerar novo link' }));
+    expect(within(tokensDialog).queryByRole('button', { name: 'Copiar link' })).toBeNull();
+
+    fireEvent.click(within(tokensDialog).getByRole('button', { name: 'Gerar novo link' }));
+    const confirmDialog = dialogByTitle(container, 'Confirmar ação');
+    await waitFor(() => expect(confirmDialog.open).toBe(true));
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(regeneratePortalToken).toHaveBeenCalledWith(99));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith('https://portal.test/portal?token=novo&v=1'),
+    );
   });
 
   it('12. #tokensExpires controlado: reflete alteração feita em #dispatchExpires sem remontar', async () => {

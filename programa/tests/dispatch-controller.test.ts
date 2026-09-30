@@ -26,6 +26,18 @@ vi.mock('../src/lib/prisma', () => {
     },
     supplierPortalToken: {
       update: vi.fn(),
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+      create: vi.fn(),
+    },
+    quoteRequest: {
+      findFirst: vi.fn(),
+    },
+    supplier: {
+      findUnique: vi.fn(),
+    },
+    supplierContact: {
+      findUnique: vi.fn(),
     },
     dispatchEvent: {
       create: vi.fn(),
@@ -579,5 +591,156 @@ describe('renderDispatchFromTemplate - subject override do modal', () => {
 
     expect(result.subject).toBe('Sourcing request QR-2026-099 - Acido sulfurico');
     expect(result.html).toContain('Sourcing request QR-2026-099 - Acido sulfurico');
+  });
+});
+
+describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
+  const tx = (prisma as unknown as { __tx: any }).__tx;
+
+  async function loginAs(role: string): Promise<string> {
+    const passwordHash = await hashPassword('ChangeMe123!');
+    const user = {
+      id: 1,
+      name: 'U',
+      email: 'u@intelliquote.local',
+      passwordHash,
+      isActive: true,
+      role: { name: role },
+    };
+    prismaMock.user.findUnique.mockResolvedValue(user);
+    prismaMock.user.findFirst.mockResolvedValue(user);
+    prismaMock.session.create.mockImplementation(({ data }) => Promise.resolve({ id: data.id }));
+    const res = await request(app).post('/api/v1/auth/login').send({
+      email: 'u@intelliquote.local',
+      password: 'ChangeMe123!',
+    });
+    if (res.status !== 200) throw new Error('login failed: ' + res.status);
+    const cookies = (res.headers['set-cookie'] as string[] | undefined) ?? [];
+    return cookies.map((c) => c.split(';')[0]).join('; ');
+  }
+
+  const previousToken = {
+    id: 99,
+    quoteRequestId: 1,
+    supplierId: 5,
+    supplierContactId: 10,
+    tokenHash: 'hash-secreto-do-fixture',
+    expiresAt: new Date(Date.now() + 86_400_000),
+    revokedAt: null,
+    respondedAt: null,
+    dispatchEventId: 7,
+    createdById: 1,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    tx.supplierPortalToken.findUnique.mockResolvedValue(previousToken);
+    tx.quoteRequest.findFirst.mockResolvedValue({ id: 1 });
+    tx.supplierPortalToken.updateMany.mockResolvedValue({ count: 1 });
+    tx.supplierPortalToken.create.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+      Promise.resolve({
+        id: 100,
+        ...data,
+        revokedAt: null,
+        respondedAt: null,
+        accessCount: 0,
+      }),
+    );
+    tx.supplier.findUnique.mockResolvedValue({ id: 5, name: 'ACME Ltda' });
+    tx.supplierContact.findUnique.mockResolvedValue({ id: 10, name: 'Contato', email: 'c@acme.com' });
+    tx.auditLog.create.mockResolvedValue({});
+  });
+
+  it('GET portal-tokens nao expoe tokenHash nem campo token', async () => {
+    const cookie = await loginAs('admin');
+    prismaMock.supplierPortalToken.findMany = vi.fn().mockResolvedValue([
+      {
+        ...previousToken,
+        supplier: { name: 'ACME Ltda' },
+        supplierContact: { name: 'Contato', email: 'c@acme.com' },
+        response: null,
+        firstSeenAt: null,
+        lastSeenAt: null,
+        accessCount: 0,
+        createdAt: new Date(),
+      },
+    ]);
+
+    const res = await request(app).get('/api/v1/quote-requests/1/portal-tokens').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(Object.keys(res.body[0])).not.toContain('token');
+    expect(JSON.stringify(res.body)).not.toContain('hash-secreto-do-fixture');
+  });
+
+  it('POST regenerate revoga o anterior, cria novo, devolve portalUrl e audita 2x sem segredos', async () => {
+    const cookie = await loginAs('comprador');
+
+    const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe(100);
+    expect(res.body.portalUrl).toContain('/portal?token=');
+    expect(res.body.supplier).toEqual({ id: 5, name: 'ACME Ltda' });
+    expect(tx.supplierPortalToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ quoteRequestId: 1, supplierContactId: 10, revokedAt: null }),
+        data: { revokedAt: expect.any(Date) },
+      }),
+    );
+    expect(tx.supplierPortalToken.create).toHaveBeenCalledTimes(1);
+    expect(tx.supplierPortalToken.create.mock.calls[0][0].data).toMatchObject({
+      quoteRequestId: 1,
+      supplierContactId: 10,
+      dispatchEventId: 7,
+    });
+    const actions = tx.auditLog.create.mock.calls.map((c: any[]) => c[0].data.action);
+    expect(actions).toEqual(['revoke', 'generate']);
+    const rawToken = new URL(res.body.portalUrl).searchParams.get('token') as string;
+    const auditDump = JSON.stringify(tx.auditLog.create.mock.calls);
+    expect(auditDump).not.toContain(rawToken);
+    expect(auditDump).not.toContain('hash-secreto-do-fixture');
+    expect(auditDump).not.toContain('tokenHash');
+  });
+
+  it('POST regenerate com token ja respondido retorna 409 sem criar token', async () => {
+    const cookie = await loginAs('admin');
+    tx.supplierPortalToken.findUnique.mockResolvedValue({ ...previousToken, respondedAt: new Date() });
+
+    const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
+
+    expect(res.status).toBe(409);
+    expect(tx.supplierPortalToken.create).not.toHaveBeenCalled();
+    expect(tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('POST regenerate com token inexistente retorna 404', async () => {
+    const cookie = await loginAs('admin');
+    tx.supplierPortalToken.findUnique.mockResolvedValue(null);
+
+    const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
+
+    expect(res.status).toBe(404);
+  });
+
+  it('POST regenerate com expiresInDays invalido retorna 400', async () => {
+    const cookie = await loginAs('admin');
+
+    const res = await request(app)
+      .post('/api/v1/portal-tokens/99/regenerate')
+      .set('Cookie', cookie)
+      .send({ expiresInDays: 90 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it.each(['viewer', 'gestor'])('POST regenerate retorna 403 para %s', async (role) => {
+    const cookie = await loginAs(role);
+
+    const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
+
+    expect(res.status).toBe(403);
+    expect(tx.supplierPortalToken.create).not.toHaveBeenCalled();
   });
 });
