@@ -9,6 +9,10 @@
 // Em seguida, mapeia o `uid` do Firebase para um `User` interno
 // (auto-provisionando na primeira vez, com base no role vindo do Firestore).
 //
+// Credencial: em producao (Cloud Run) o Firebase Admin usa ADC (Application Default
+// Credentials) da service account de runtime; nenhum JSON de SA e injetado.
+// `GOOGLE_SERVICE_ACCOUNT_JSON` e opcional, apenas para desenvolvimento local.
+//
 // A variavel de ambiente `FIREBASE_PROJECT_ID` e obrigatoria em producao.
 // Opcionalmente, defina `FIREBASE_AUTH_EMULATOR_HOST` para usar o emulador
 // (util durante desenvolvimento local).
@@ -29,6 +33,7 @@ import { isUserRole, DEFAULT_INTERNAL_ROLE } from '../constants/roles';
 
 let firebaseApp: App | null = null;
 
+// Producao = ADC (sem GOOGLE_SERVICE_ACCOUNT_JSON). O JSON opcional serve so para dev local.
 export function getFirebaseApp(): App {
   if (firebaseApp) return firebaseApp;
 

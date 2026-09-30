@@ -1,15 +1,9 @@
 # Provisionamento de recursos GCP para o IntelliQuote
 # Tudo o que precisa ser criado UMA UNICA VEZ antes do primeiro deploy.
 # Rodar com: powershell -ExecutionPolicy Bypass -File .\setup-gcp.ps1
-#
-# Parametros opcionais:
-#   -FirebaseSaPath <caminho>  -> caminho do JSON do Firebase Service Account
-#                                  (default: ~/Downloads/sq-comex-updates-3d22f-firebase-adminsdk-*.json)
 
 [CmdletBinding()]
-param(
-  [string]$FirebaseSaPath = (Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "sq-comex-updates-3d22f-firebase-adminsdk-*.json" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName)
-)
+param()
 
 $ErrorActionPreference = "Continue"
 
@@ -133,15 +127,6 @@ function Ensure-Secret($name, $value) {
   if ($LASTEXITCODE -ne 0) { Write-Host "    ERRO ao atualizar secret $name" -ForegroundColor Red; return $false }
   Ok "$name atualizado."
   return $true
-}
-
-# Firebase Service Account
-if ($FirebaseSaPath -and (Test-Path $FirebaseSaPath)) {
-  Ensure-Secret "FIREBASE_SERVICE_ACCOUNT_JSON" (Get-Content -Raw -Path $FirebaseSaPath) | Out-Null
-} else {
-  Warn "Firebase SA JSON nao encontrado (FirebaseSaPath='$FirebaseSaPath')."
-  Warn "Baixe em Firebase Console -> Project Settings -> Service Accounts -> Generate new private key"
-  Warn "Depois rode com: -FirebaseSaPath 'C:\caminho\para\arquivo.json'"
 }
 
 # Conexao com o Cloud SQL via IP publico (host publico resolvido por DNS)

@@ -17,7 +17,7 @@
 # Nenhum segredo de aplicacao fica no GitHub: os valores sao lidos direto do
 # GCP Secret Manager via `--set-secrets` (mesmo modelo do deploy manual via
 # `deploy-cloudrun.ps1`). Os secrets precisam existir no projeto com estes nomes
-# exatos: DATABASE_URL, DIRECT_URL, FIREBASE_SERVICE_ACCOUNT_JSON, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER.
+# exatos: DATABASE_URL, DIRECT_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER.
 #
 # Pre-requisitos no GCP:
 #   - Cloud Run API habilitada
@@ -182,7 +182,7 @@ jobs:
           SECRET_REFS="${SECRET_REFS},DIRECT_URL=DIRECT_URL:latest"
           SECRET_REFS="${SECRET_REFS},JWT_ACCESS_SECRET=JWT_ACCESS_SECRET:latest"
           SECRET_REFS="${SECRET_REFS},JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest"
-          SECRET_REFS="${SECRET_REFS},FIREBASE_SERVICE_ACCOUNT_JSON=FIREBASE_SERVICE_ACCOUNT_JSON:latest"
+          # Firebase Admin usa ADC da SA de runtime do Cloud Run; nenhum secret de SA e injetado.
 
           echo "Deploying ${IMAGE} to ${SERVICE} (${REGION})"
           gcloud run deploy "${SERVICE}" \
