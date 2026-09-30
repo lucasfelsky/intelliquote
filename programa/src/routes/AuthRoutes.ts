@@ -16,11 +16,21 @@ const authRateLimit = rateLimit({
     message: 'Muitas tentativas. Tente novamente mais tarde.',
   },
 });
+// Balde proprio para logout: nao consome o limite do login (NAT compartilhado).
+const logoutRateLimit = rateLimit({
+  windowMs: authEnv.authRateLimitWindowMs,
+  max: authEnv.authLogoutRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: 'Muitas tentativas. Tente novamente mais tarde.',
+  },
+});
 
 authRoutes.post('/auth/login', authRateLimit, AuthController.login);
 authRoutes.post('/auth/refresh', authRateLimit, AuthController.refresh);
 authRoutes.post('/auth/firebase', authRateLimit, FirebaseAuthController.exchange);
-authRoutes.post('/auth/logout', AuthController.logout);
+authRoutes.post('/auth/logout', logoutRateLimit, AuthController.logout);
 authRoutes.get('/auth/me', requireAuth, AuthController.me);
 authRoutes.post('/auth/forgot-password', authRateLimit, PasswordRecoveryController.request);
 authRoutes.post('/auth/reset-password', authRateLimit, PasswordRecoveryController.reset);
