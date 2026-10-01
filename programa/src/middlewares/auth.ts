@@ -13,19 +13,36 @@ export async function requireAuth(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const token = getAccessToken(req);
-
-    if (!token) {
-      throw new HttpError(401, 'Token de acesso ausente.');
-    }
-
-    const payload = verifyAccessToken(token);
-    req.user = await AuthService.getAuthenticatedUserById(Number(payload.sub));
+    await authenticate(req);
     next();
   } catch (error) {
     const handled = handleControllerError(error);
     res.status(handled.status).json({ message: handled.message });
   }
+}
+
+// Mesma verificacao do requireAuth, para montar ANTES de um express.json grande:
+// sem login, o corpo nao e bufferizado nem parseado. Na falha o corpo e drenado
+// (descartado, memoria O(1)) antes do 401; responder sem ler o corpo faz o
+// cliente receber ECONNRESET em vez do 401. O requireAuth do router roda de novo.
+export async function requireAuthBeforeBody(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await authenticate(req);
+  } catch (error) {
+    const handled = handleControllerError(error);
+    discardBody(req, () => {
+      if (!res.headersSent) {
+        res.status(handled.status).json({ message: handled.message });
+      }
+    });
+    return;
+  }
+
+  next();
 }
 
 export function allowRoles(roles: UserRole[]) {
@@ -45,6 +62,38 @@ export function allowRoles(roles: UserRole[]) {
       res.status(handled.status).json({ message: handled.message });
     }
   };
+}
+
+async function authenticate(req: Request): Promise<void> {
+  const token = getAccessToken(req);
+
+  if (!token) {
+    throw new HttpError(401, 'Token de acesso ausente.');
+  }
+
+  const payload = verifyAccessToken(token);
+  req.user = await AuthService.getAuthenticatedUserById(Number(payload.sub));
+}
+
+function discardBody(req: Request, done: () => void): void {
+  if (req.readableEnded) {
+    done();
+    return;
+  }
+
+  let called = false;
+  const finish = (): void => {
+    if (called) {
+      return;
+    }
+    called = true;
+    done();
+  };
+
+  req.once('end', finish);
+  req.once('error', finish);
+  req.once('close', finish);
+  req.resume();
 }
 
 function getAccessToken(req: Request): string | null {

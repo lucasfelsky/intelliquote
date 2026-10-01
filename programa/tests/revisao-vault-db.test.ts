@@ -15,6 +15,8 @@ describe.skipIf(!run)('Correcoes da revisao da vault em Postgres isolado', () =>
   let app: any;
   const cookies: Record<string, string[]> = {};
   const refreshTokens: Record<string, string> = {};
+  const userIds: Record<string, number> = {};
+  const createdRoleIds: number[] = [];
   let supplier: any;
 
   beforeAll(async () => {
@@ -25,15 +27,19 @@ describe.skipIf(!run)('Correcoes da revisao da vault em Postgres isolado', () =>
     ({ prisma } = await import('../src/lib/prisma'));
     ({ app } = await import('../src/app'));
     for (const name of ['admin', 'comprador', 'viewer']) {
-      const role = await prisma.role.create({ data: { name } });
+      // Os arquivos de teste de banco compartilham o mesmo Postgres em sequencia.
+      const existing = await prisma.role.findUnique({ where: { name } });
+      const role = await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
+      if (!existing) createdRoleIds.push(role.id);
       const user = await prisma.user.create({
         data: {
           name,
-          email: `${name}@local.test`,
+          email: `${name}.vault1@local.test`,
           passwordHash: await hashPassword('Test12345!'),
           roleId: role.id,
         },
       });
+      userIds[name] = user.id;
       const login = await request(app)
         .post('/api/v1/auth/login')
         .send({ email: user.email, password: 'Test12345!' });
@@ -56,6 +62,15 @@ describe.skipIf(!run)('Correcoes da revisao da vault em Postgres isolado', () =>
     });
   });
   afterAll(async () => {
+    if (prisma) {
+      // Desfaz usuarios/roles criados aqui: outros arquivos de banco fazem
+      // role.create nos mesmos nomes e a ordem de execucao nao e garantida.
+      const ids = Object.values(userIds);
+      await prisma.supplierPortalToken.deleteMany({ where: { createdById: { in: ids } } });
+      await prisma.session.deleteMany({ where: { userId: { in: ids } } });
+      await prisma.user.deleteMany({ where: { id: { in: ids } } });
+      await prisma.role.deleteMany({ where: { id: { in: createdRoleIds }, users: { none: {} } } });
+    }
     await prisma?.$disconnect();
   });
 
@@ -135,7 +150,7 @@ describe.skipIf(!run)('Correcoes da revisao da vault em Postgres isolado', () =>
   it('logout com refresh no body invalida a sessao: refresh seguinte retorna 401', async () => {
     const login = await request(app)
       .post('/api/v1/auth/login')
-      .send({ email: 'comprador@local.test', password: 'Test12345!' });
+      .send({ email: 'comprador.vault1@local.test', password: 'Test12345!' });
     expect(login.status).toBe(200);
     const refreshToken = cookieValue(login.headers['set-cookie'], 'intelliquote_refresh_token');
 

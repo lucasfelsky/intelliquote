@@ -12,6 +12,7 @@ import { router } from './routes';
 import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
 import { exchangeRateRoutes } from './routes/ExchangeRateRoutes';
+import { requireAuthBeforeBody } from './middlewares/auth';
 import { traceIdMiddleware } from './middlewares/traceId';
 
 const app = express();
@@ -59,22 +60,33 @@ app.use((err: Error & { status?: number }, _req: express.Request, res: express.R
   next(err);
 });
 
+// A autenticacao antecipada precisa dos cookies (nao le o corpo).
+app.use(cookieParser());
+
+// Nos prefixos com parser grande, sem login responde 401 antes de bufferizar/parsear
+// o corpo; o corpo e drenado para o cliente receber o 401 (nao ECONNRESET), como o
+// body-parser faz no 413. O requireAuth das rotas continua valendo.
 // Aumentar o limite apenas para as rotas de importação (onde enviamos a planilha base64)
-app.use('/api/v1/catalog-items/import', express.json({ limit: '10mb' }));
-app.use('/api/v1/suppliers/import', express.json({ limit: '10mb' }));
+app.use('/api/v1/catalog-items/import', requireAuthBeforeBody, express.json({ limit: '10mb' }));
+app.use('/api/v1/suppliers/import', requireAuthBeforeBody, express.json({ limit: '10mb' }));
 
 // Idem para /quote-responses: o botão "Enviar Ordem de Compra" envia um PDF
 // em base64 no corpo (POST /:id/purchase-order). Sem este override, o
 // parser global de 1mb abaixo rejeita (413) qualquer PDF acima de ~740KB
 // ANTES de chegar ao controller. O corpo do reply (mesmo prefixo) é minúsculo,
 // sem efeito colateral prático em aumentar o limite aqui também.
-app.use('/api/v1/quote-responses', express.json({ limit: '10mb' }));
+// Rota interna autenticada (o portal do fornecedor usa /api/portal/:token, nao este prefixo).
+app.use('/api/v1/quote-responses', requireAuthBeforeBody, express.json({ limit: '10mb' }));
 
 // /attachments recebe o arquivo em base64 no JSON (limite de negocio: 5MB).
 // Com o parser global de 1mb, qualquer anexo acima de ~740KB seria rejeitado
 // com 413 em HTML antes de chegar ao controller. Limite derivado do maximo de
 // negocio + overhead do base64; o 413 vira JSON com mensagem amigavel.
-app.use('/api/v1/attachments', express.json({ limit: ATTACHMENT_JSON_BODY_LIMIT_BYTES }));
+app.use(
+  '/api/v1/attachments',
+  requireAuthBeforeBody,
+  express.json({ limit: ATTACHMENT_JSON_BODY_LIMIT_BYTES }),
+);
 app.use(
   '/api/v1/attachments',
   (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -88,7 +100,6 @@ app.use(
 
 // Limite global de payload para os demais endpoints (proteção genérica)
 app.use(express.json({ limit: '1mb' }));
-app.use(cookieParser());
 app.use(portalRoutes);
 app.use(exchangeRateRoutes);
 app.use(router);

@@ -9,6 +9,9 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
   let cookies: string[];
   let buyerCookies: string[];
   let adminId: number;
+  let initialThreshold: unknown;
+  const userIds: number[] = [];
+  const createdRoleIds: number[] = [];
   let quote: any;
   let suppliers: any[];
   let proposals: any[];
@@ -27,15 +30,20 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     ({ prisma } = await import('../src/lib/prisma'));
     ({ app } = await import('../src/app'));
     for (const name of ['admin', 'comprador']) {
-      const role = await prisma.role.create({ data: { name } });
-      const user = await prisma.user.create({ data: { name, email: `${name}@local.test`,
+      // Os arquivos de teste de banco compartilham o mesmo Postgres em sequencia.
+      const existing = await prisma.role.findUnique({ where: { name } });
+      const role = await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
+      if (!existing) createdRoleIds.push(role.id);
+      const user = await prisma.user.create({ data: { name, email: `${name}.critical@local.test`,
         passwordHash: await hashPassword('Test12345!'), roleId: role.id } });
+      userIds.push(user.id);
       const login = await request(app).post('/api/v1/auth/login').send({ email: user.email, password: 'Test12345!' });
       expect(login.status).toBe(200);
       if (name === 'admin') { cookies = login.headers['set-cookie']; adminId = user.id; }
       else buyerCookies = login.headers['set-cookie'];
     }
     await prisma.companyProfile.upsert({ where: { id: 1 }, update: {}, create: { id: 1, companyName: 'Empresa teste' } });
+    initialThreshold = (await prisma.companyProfile.findUnique({ where: { id: 1 } })).awardApprovalThreshold;
     suppliers = await Promise.all(['A', 'B'].map(name => prisma.supplier.create({ data: {
       name, acceptedIncoterms: ['FOB'], contacts: { create: { name, email: `${name}@local.test`, isPrimary: true } },
     }, include: { contacts: true } })));
@@ -54,7 +62,18 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
       proposals.push(response.body);
     }
   });
-  afterAll(async () => { await prisma?.$disconnect(); });
+  afterAll(async () => {
+    if (prisma) {
+      // Desfaz usuarios/roles criados aqui: outros arquivos de banco fazem
+      // role.create nos mesmos nomes e a ordem de execucao nao e garantida.
+      await prisma.companyProfile.update({ where: { id: 1 }, data: { awardApprovalThreshold: initialThreshold } });
+      await prisma.supplierPortalToken.deleteMany({ where: { createdById: { in: userIds } } });
+      await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+      await prisma.role.deleteMany({ where: { id: { in: createdRoleIds }, users: { none: {} } } });
+    }
+    await prisma?.$disconnect();
+  });
 
   it('corrige o vencedor de propostas antigas no preview e na persistencia', async () => {
     for (const [i, proposal] of proposals.entries()) await prisma.quoteResponse.update({
