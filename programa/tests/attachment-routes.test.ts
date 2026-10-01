@@ -1,5 +1,7 @@
+import fs from 'fs';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ATTACHMENT_JSON_BODY_LIMIT_BYTES } from '../src/constants/attachments';
 import { hashPassword } from '../src/utils/password';
 
 vi.mock('../src/lib/prisma', () => {
@@ -54,8 +56,14 @@ const prismaMock = prisma as unknown as {
 };
 
 describe('Attachment routes', () => {
+  // Evita gravar em uploads/ (nao esta no .gitignore) durante os testes.
+  const mkdirSpy = vi.spyOn(fs.promises, 'mkdir');
+  const writeFileSpy = vi.spyOn(fs.promises, 'writeFile');
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mkdirSpy.mockResolvedValue(undefined);
+    writeFileSpy.mockResolvedValue(undefined);
   });
 
   it('lista anexos para viewer', async () => {
@@ -105,6 +113,78 @@ describe('Attachment routes', () => {
       });
 
     expect(response.status).toBe(400);
+    expect(prismaMock.attachment.create).not.toHaveBeenCalled();
+  });
+
+  it('aceita anexo de 4.5MB para comprador (acima do antigo teto de 1MB do body)', async () => {
+    const cookies = await loginAs('comprador');
+    const buffer = Buffer.alloc(4.5 * 1024 * 1024, 1);
+    prismaMock.attachment.create.mockResolvedValue({
+      id: 'att-1',
+      fileName: 'grande.pdf',
+      fileType: 'application/pdf',
+      fileSize: buffer.length,
+      entityType: 'quote_request',
+      entityId: '1',
+    });
+
+    const response = await request(app)
+      .post('/api/v1/attachments')
+      .set('Cookie', cookies)
+      .send({
+        fileName: 'grande.pdf',
+        contentBase64: buffer.toString('base64'),
+        fileType: 'application/pdf',
+        fileSize: buffer.length,
+        entityType: 'quote_request',
+        entityId: '1',
+      });
+
+    expect(response.status).toBe(201);
+    expect(writeFileSpy).toHaveBeenCalledTimes(1);
+    expect(prismaMock.attachment.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejeita arquivo acima de 5MB com 400 e mensagem', async () => {
+    const cookies = await loginAs('comprador');
+    const buffer = Buffer.alloc(5 * 1024 * 1024 + 1, 1);
+
+    const response = await request(app)
+      .post('/api/v1/attachments')
+      .set('Cookie', cookies)
+      .send({
+        fileName: 'enorme.pdf',
+        contentBase64: buffer.toString('base64'),
+        fileType: 'application/pdf',
+        fileSize: buffer.length,
+        entityType: 'quote_request',
+        entityId: '1',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('5MB');
+    expect(prismaMock.attachment.create).not.toHaveBeenCalled();
+    expect(writeFileSpy).not.toHaveBeenCalled();
+  });
+
+  it('corpo acima do limite da rota devolve 413 JSON', async () => {
+    const cookies = await loginAs('comprador');
+
+    const response = await request(app)
+      .post('/api/v1/attachments')
+      .set('Cookie', cookies)
+      .send({
+        fileName: 'gigante.pdf',
+        contentBase64: 'A'.repeat(ATTACHMENT_JSON_BODY_LIMIT_BYTES + 1),
+        fileType: 'application/pdf',
+        fileSize: 1,
+        entityType: 'quote_request',
+        entityId: '1',
+      });
+
+    expect(response.status).toBe(413);
+    expect(response.type).toBe('application/json');
+    expect(response.body.message).toContain('5MB');
     expect(prismaMock.attachment.create).not.toHaveBeenCalled();
   });
 });

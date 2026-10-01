@@ -76,7 +76,7 @@ quoteRequestRoutes.post(
 quoteRequestRoutes.post(
   '/portal-tokens/:id/regenerate',
   requireAuth,
-  allowRoles(['admin', 'comprador']),
+  allowRoles(['admin', 'comprador', 'gestor']),
   DispatchController.regeneratePortalToken,
 );
 

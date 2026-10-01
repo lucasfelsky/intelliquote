@@ -10,7 +10,6 @@ const authEnvSchema = z.object({
   CORS_ORIGINS: z.string().optional(),
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_AUTH_EMULATOR_HOST: z.string().optional(),
-  FIREBASE_ROLE_CLAIM: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   AUTH_RATE_LIMIT_WINDOW_MS: z.string().optional(),
   AUTH_RATE_LIMIT_MAX: z.string().optional(),
@@ -94,7 +93,6 @@ export const authEnv = {
   cookieSecure: parseBoolean(parsedEnv.COOKIE_SECURE, isProduction),
   corsOrigins: parseCorsOrigins(parsedEnv.CORS_ORIGINS),
   firebaseProjectId: parsedEnv.FIREBASE_PROJECT_ID ?? 'sq-comex-updates-3d22f',
-  firebaseRoleClaim: parsedEnv.FIREBASE_ROLE_CLAIM ?? 'role',
   hasGoogleServiceAccountJson: Boolean(parsedEnv.GOOGLE_SERVICE_ACCOUNT_JSON),
   authRateLimitWindowMs: parsePositiveNumber(
     parsedEnv.AUTH_RATE_LIMIT_WINDOW_MS,

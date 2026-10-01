@@ -14,8 +14,11 @@ import {
   parseId,
 } from '../utils/http';
 import { attachmentUploadsDir } from '../routes/AttachmentRoutes';
+import {
+  ATTACHMENT_MAX_FILE_BYTES,
+  ATTACHMENT_TOO_LARGE_MESSAGE,
+} from '../constants/attachments';
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 
 interface UploadPayload {
   fileName: string;
@@ -79,16 +82,16 @@ export class AttachmentController {
       const payload = parsed.data as UploadPayload;
       ensureEntityAccessible(payload.entityType, payload.entityId);
 
-      if (payload.fileSize > MAX_FILE_SIZE_BYTES) {
-        throw new HttpError(400, 'O arquivo excede o limite de 5MB por anexo.');
+      if (payload.fileSize > ATTACHMENT_MAX_FILE_BYTES) {
+        throw new HttpError(400, ATTACHMENT_TOO_LARGE_MESSAGE);
       }
 
       const buffer = decodeBase64(payload.contentBase64);
       if (buffer.length === 0) {
         throw new HttpError(400, 'Conteudo do anexo vazio.');
       }
-      if (buffer.length > MAX_FILE_SIZE_BYTES) {
-        throw new HttpError(400, 'O arquivo excede o limite de 5MB por anexo.');
+      if (buffer.length > ATTACHMENT_MAX_FILE_BYTES) {
+        throw new HttpError(400, ATTACHMENT_TOO_LARGE_MESSAGE);
       }
 
       await fs.mkdir(attachmentUploadsDir, { recursive: true });

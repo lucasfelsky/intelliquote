@@ -17,9 +17,8 @@
 // Opcionalmente, defina `FIREBASE_AUTH_EMULATOR_HOST` para usar o emulador
 // (util durante desenvolvimento local).
 //
-// Opcional: `FIREBASE_ROLE_CLAIM` (default "role") indica qual custom claim
-// carregar como role interna. Se ausente, mantemos o usuario com a role
-// padrao "viewer" (e o admin pode promove-lo depois).
+// A role interna vem do custom claim `role` do Firebase (nome fixo). Ausente ou
+// desconhecida -> `DEFAULT_INTERNAL_ROLE` (`comprador`).
 
 import type { NextFunction, Request, Response } from 'express';
 import { cert, getApp, initializeApp, type App } from 'firebase-admin/app';

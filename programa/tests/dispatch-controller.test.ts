@@ -735,8 +735,20 @@ describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
     expect(res.status).toBe(400);
   });
 
-  it.each(['viewer', 'gestor'])('POST regenerate retorna 403 para %s', async (role) => {
-    const cookie = await loginAs(role);
+  it('POST regenerate permite gestor (201) e audita revoke+generate', async () => {
+    const cookie = await loginAs('gestor');
+
+    const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe(100);
+    expect(tx.supplierPortalToken.create).toHaveBeenCalledTimes(1);
+    const actions = tx.auditLog.create.mock.calls.map((c: any[]) => c[0].data.action);
+    expect(actions).toEqual(['revoke', 'generate']);
+  });
+
+  it('POST regenerate retorna 403 para viewer', async () => {
+    const cookie = await loginAs('viewer');
 
     const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
 

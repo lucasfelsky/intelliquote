@@ -4,6 +4,10 @@ import express from 'express';
 import helmet from 'helmet';
 import path from 'path';
 import { authEnv } from './config/env';
+import {
+  ATTACHMENT_JSON_BODY_LIMIT_BYTES,
+  ATTACHMENT_TOO_LARGE_MESSAGE,
+} from './constants/attachments';
 import { router } from './routes';
 import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
@@ -65,6 +69,22 @@ app.use('/api/v1/suppliers/import', express.json({ limit: '10mb' }));
 // ANTES de chegar ao controller. O corpo do reply (mesmo prefixo) é minúsculo,
 // sem efeito colateral prático em aumentar o limite aqui também.
 app.use('/api/v1/quote-responses', express.json({ limit: '10mb' }));
+
+// /attachments recebe o arquivo em base64 no JSON (limite de negocio: 5MB).
+// Com o parser global de 1mb, qualquer anexo acima de ~740KB seria rejeitado
+// com 413 em HTML antes de chegar ao controller. Limite derivado do maximo de
+// negocio + overhead do base64; o 413 vira JSON com mensagem amigavel.
+app.use('/api/v1/attachments', express.json({ limit: ATTACHMENT_JSON_BODY_LIMIT_BYTES }));
+app.use(
+  '/api/v1/attachments',
+  (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      res.status(413).json({ message: ATTACHMENT_TOO_LARGE_MESSAGE });
+      return;
+    }
+    next(err);
+  },
+);
 
 // Limite global de payload para os demais endpoints (proteção genérica)
 app.use(express.json({ limit: '1mb' }));
