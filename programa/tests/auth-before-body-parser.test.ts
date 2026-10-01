@@ -160,3 +160,116 @@ async function loginAs(role: 'admin' | 'comprador' | 'gestor' | 'viewer') {
 
   return loginResponse.headers['set-cookie'];
 }
+
+// Review do #92: o descarte do corpo sem login tem teto de bytes e de tempo.
+describe('requireAuthBeforeBody - descarte limitado', () => {
+  async function startServer(options: { maxBytes: number; timeoutMs: number }) {
+    const { default: expressLib } = await import('express');
+    const { createRequireAuthBeforeBody } = await import('../src/middlewares/auth');
+    const testApp = expressLib();
+    testApp.use('/x', createRequireAuthBeforeBody(options), (_req, res) => {
+      res.status(204).end();
+    });
+    const http = await import('http');
+    const server = http.createServer(testApp);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const address = server.address() as { port: number };
+    return { server, port: address.port, http };
+  }
+
+  function send(
+    http: typeof import('http'),
+    port: number,
+    { headers, chunks, end }: { headers: Record<string, string | number>; chunks: string[]; end: boolean },
+  ) {
+    return new Promise<{ status: number; connection: string | undefined; body: string; ms: number }>(
+      (resolve, reject) => {
+        const started = Date.now();
+        const req = http.request(
+          { host: '127.0.0.1', port, path: '/x', method: 'POST', headers },
+          (res) => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (c) => (body += c));
+            res.on('end', () =>
+              resolve({
+                status: res.statusCode ?? 0,
+                connection: res.headers.connection,
+                body,
+                ms: Date.now() - started,
+              }),
+            );
+          },
+        );
+        req.on('error', reject);
+        for (const chunk of chunks) req.write(chunk);
+        if (end) req.end();
+      },
+    );
+  }
+
+  it('corpo declarado acima do teto: 401 na hora com Connection: close', async () => {
+    const { server, port, http } = await startServer({ maxBytes: 1024, timeoutMs: 5_000 });
+    try {
+      const result = await send(http, port, {
+        headers: { 'content-type': 'application/json', 'content-length': 50 * 1024 * 1024 },
+        chunks: ['{"a":"'],
+        end: false,
+      });
+      expect(result.status).toBe(401);
+      expect(result.connection).toBe('close');
+      expect(JSON.parse(result.body)).toEqual({ message: 'Token de acesso ausente.' });
+      expect(result.ms).toBeLessThan(2_000);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('corpo lento que nao termina: 401 apos o prazo e conexao encerrada', async () => {
+    const { server, port, http } = await startServer({ maxBytes: 1024 * 1024, timeoutMs: 200 });
+    try {
+      const result = await send(http, port, {
+        headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+        chunks: ['{"a":"'],
+        end: false,
+      });
+      expect(result.status).toBe(401);
+      expect(result.connection).toBe('close');
+      expect(result.ms).toBeGreaterThanOrEqual(150);
+      expect(result.ms).toBeLessThan(3_000);
+    } finally {
+      server.close();
+    }
+  });
+
+  it('corpo chunked que passa do teto: 401 e conexao encerrada', async () => {
+    const { server, port, http } = await startServer({ maxBytes: 1024, timeoutMs: 5_000 });
+    try {
+      const result = await send(http, port, {
+        headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+        chunks: ['{"a":"' + 'A'.repeat(4096)],
+        end: false,
+      });
+      expect(result.status).toBe(401);
+      expect(result.connection).toBe('close');
+    } finally {
+      server.close();
+    }
+  });
+
+  it('corpo pequeno e completo: 401 normal, sem forcar o fechamento', async () => {
+    const { server, port, http } = await startServer({ maxBytes: 1024, timeoutMs: 5_000 });
+    try {
+      const body = '{"a":"b"}';
+      const result = await send(http, port, {
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) },
+        chunks: [body],
+        end: true,
+      });
+      expect(result.status).toBe(401);
+      expect(result.connection).not.toBe('close');
+    } finally {
+      server.close();
+    }
+  });
+});
