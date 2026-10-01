@@ -161,7 +161,7 @@ export class SupplierPortalService {
 
     if (!token) {
       await this.logAccess({
-        tokenId: 0,
+        tokenId: null,
         kind: 'INVALID',
         ip: input.ip,
         userAgent: input.userAgent,
@@ -221,7 +221,7 @@ export class SupplierPortalService {
   }
 
   static async logAccess(input: {
-    tokenId: number;
+    tokenId: number | null;
     kind: 'VIEW' | 'SUBMIT' | 'INVALID';
     ip?: string | null;
     userAgent?: string | null;

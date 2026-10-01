@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_TOKEN_TTL_DAYS,
   SupplierPortalService,
@@ -25,18 +25,26 @@ describe('Supplier portal token service', () => {
   });
 
   describe('validate mocks', () => {
-    it('lanca HttpError 404 quando o token nao existe', async () => {
+    it('lanca HttpError 404 quando o token nao existe e registra INVALID com tokenId null', async () => {
+      const createLog = vi.fn().mockResolvedValue({});
       const fakeClient = {
         supplierPortalToken: {
           findUnique: async () => null,
         },
         supplierPortalTokenLog: {
-          create: async () => ({}),
+          create: createLog,
         },
       };
       await expect(
         SupplierPortalService.validate({ rawToken: 'invalido', client: fakeClient as never }),
       ).rejects.toMatchObject({ status: 404 });
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tokenId: null,
+          kind: 'INVALID',
+          meta: { reason: 'not_found' },
+        }),
+      });
     });
 
     it('lanca HttpError 404 quando o token esta revogado', async () => {

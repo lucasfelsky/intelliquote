@@ -600,13 +600,13 @@ model SupplierPortalResponseItem {
 
 model SupplierPortalTokenLog {
   id         Int                 @id @default(autoincrement())
-  tokenId    Int
+  tokenId    Int?
   kind       String
   ip         String?
   userAgent  String?
   meta       Json?
   occurredAt DateTime            @default(now())
-  token      SupplierPortalToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  token      SupplierPortalToken? @relation(fields: [tokenId], references: [id], onDelete: Cascade)
 
   @@index([tokenId])
   @@index([occurredAt])

@@ -5,8 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfirmProvider } from '@/components/useConfirm';
 import CotacaoDetalhe from './CotacaoDetalhe';
 
+const authState = vi.hoisted(() => ({ role: 'admin' }));
+
 vi.mock('@/auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: 'admin' } }),
+  useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: authState.role } }),
 }));
 
 vi.mock('@/api/client', () => ({
@@ -183,6 +185,7 @@ async function openDispatchToPreview(container: HTMLElement, getByRole: ReturnTy
 
 describe('CotacaoDetalhe', () => {
   beforeEach(() => {
+    authState.role = 'admin';
     vi.mocked(api.get).mockReset();
     vi.mocked(api.post).mockReset();
     vi.mocked(api.put).mockReset();
@@ -410,5 +413,28 @@ describe('CotacaoDetalhe', () => {
     fireEvent.change(dispatchExpiresInput, { target: { value: '30' } });
 
     expect(tokensExpiresInput.value).toBe('30');
+  });
+
+  it('13. gestor: abre "Links do portal", vê "Gerar novo link" e não vê "Gerar para todos os fornecedores"', async () => {
+    authState.role = 'gestor';
+    vi.mocked(listPortalTokens).mockResolvedValue([tokenFixture]);
+
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('button', { name: 'Links do portal' }));
+    const tokensDialog = dialogByTitle(container, 'Links do portal');
+    await waitFor(() => within(tokensDialog).getByRole('button', { name: 'Gerar novo link' }));
+
+    expect(within(tokensDialog).queryByRole('button', { name: 'Gerar para todos os fornecedores' })).toBeNull();
+    expect(within(tokensDialog).queryByLabelText('Validade (dias)')).toBeNull();
+  });
+
+  it('14. viewer: botão "Links do portal" ausente', async () => {
+    authState.role = 'viewer';
+
+    const { findByRole, queryByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+
+    expect(queryByRole('button', { name: 'Links do portal' })).toBeNull();
   });
 });

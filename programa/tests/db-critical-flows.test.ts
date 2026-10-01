@@ -168,7 +168,8 @@ describeDb('Critical flows on real database', () => {
       .send({});
 
     expect(compareResponse.status).toBe(200);
-    expect(compareResponse.body).toHaveLength(2);
+    // A API devolve { results, pendingApproval, winnerQuoteResponseId, ... } (nao mais o array cru).
+    expect(compareResponse.body.results).toHaveLength(2);
 
     const persistedComparison = await prisma.quoteComparison.findFirst({
       where: {

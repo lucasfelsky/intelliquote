@@ -302,6 +302,7 @@ export default function CotacaoDetalhe() {
     const canManageStatus = user?.role === 'admin' || user?.role === 'gestor';
     const canDelete = user?.role === 'admin';
     const canDispatch = canEdit;
+    const canManagePortalLinks = canEdit || user?.role === 'gestor';
 
   const detail = useQuery({
     queryKey: ['quote-request', id],
@@ -959,7 +960,7 @@ export default function CotacaoDetalhe() {
               Enviar cotacao
             </button>
           )}
-          {canEdit && (
+          {canManagePortalLinks && (
             <button
               type="button"
               className="ghost-button"
@@ -1576,51 +1577,53 @@ export default function CotacaoDetalhe() {
               Cada link é único e expira conforme a validade escolhida.
             </p>
 
-            <div
-              style={{
-                display: 'flex',
-                gap: 12,
-                alignItems: 'flex-end',
-                marginTop: 16,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ flex: '1 1 220px' }}>
-                <label className="field-label" htmlFor="tokensExpires">
-                  Validade (dias)
-                </label>
-                <input
-                  id="tokensExpires"
-                  className="input"
-                  type="number"
-                  min={1}
-                  max={90}
-                  value={dispatchExpires}
-                  onChange={(e) => setDispatchExpires(e.target.value)}
-                />
-              </div>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={generateTokensMutation.isPending}
-                onClick={() => {
-                  // Gera tokens para TODOS os fornecedores com pelo menos um
-                  // contato ativo. E mais simples para o admin e
-                  // aproveita a deduplicacao (contatos que ja tem token
-                  // ativo sao ignorados pelo backend).
-                  const ids = (activeSuppliers.data ?? []).flatMap(
-                    (s) => supplierContacts.data?.[s.id]?.map((c) => c.id) ?? [],
-                  );
-                  if (ids.length === 0) return;
-                  generateTokensMutation.mutate({
-                    contactIds: ids,
-                    expiresInDays: Number(dispatchExpires) || 14,
-                  });
+            {canDispatch && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  alignItems: 'flex-end',
+                  marginTop: 16,
+                  flexWrap: 'wrap',
                 }}
               >
-                {generateTokensMutation.isPending ? 'Gerando…' : 'Gerar para todos os fornecedores'}
-              </button>
-            </div>
+                <div style={{ flex: '1 1 220px' }}>
+                  <label className="field-label" htmlFor="tokensExpires">
+                    Validade (dias)
+                  </label>
+                  <input
+                    id="tokensExpires"
+                    className="input"
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={dispatchExpires}
+                    onChange={(e) => setDispatchExpires(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={generateTokensMutation.isPending}
+                  onClick={() => {
+                    // Gera tokens para TODOS os fornecedores com pelo menos um
+                    // contato ativo. E mais simples para o admin e
+                    // aproveita a deduplicacao (contatos que ja tem token
+                    // ativo sao ignorados pelo backend).
+                    const ids = (activeSuppliers.data ?? []).flatMap(
+                      (s) => supplierContacts.data?.[s.id]?.map((c) => c.id) ?? [],
+                    );
+                    if (ids.length === 0) return;
+                    generateTokensMutation.mutate({
+                      contactIds: ids,
+                      expiresInDays: Number(dispatchExpires) || 14,
+                    });
+                  }}
+                >
+                  {generateTokensMutation.isPending ? 'Gerando…' : 'Gerar para todos os fornecedores'}
+                </button>
+              </div>
+            )}
 
             {tokenActionError && (
               <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
@@ -1693,7 +1696,7 @@ export default function CotacaoDetalhe() {
                           </td>
                           <td>
                             <div style={{ display: 'flex', gap: 6 }}>
-                              {canDispatch && !token.respondedAt && (
+                              {canManagePortalLinks && !token.respondedAt && (
                                 <button
                                   type="button"
                                   className="ghost-button"
