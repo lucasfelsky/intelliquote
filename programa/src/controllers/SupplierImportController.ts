@@ -192,15 +192,16 @@ export class SupplierImportController {
               tx,
             );
 
-            if (data.contact) {
+            // isPrimary e decisao do servidor: o 1o contato da planilha e o principal.
+            for (const [index, c] of data.contacts.entries()) {
               const contact = await tx.supplierContact.create({
                 data: {
                   supplierId: created.id,
-                  name: data.contact.name,
-                  email: data.contact.email,
-                  phone: data.contact.phone ?? null,
-                  position: data.contact.position ?? null,
-                  isPrimary: true,
+                  name: c.name,
+                  email: c.email,
+                  phone: c.phone ?? null,
+                  position: c.position ?? null,
+                  isPrimary: index === 0,
                 },
               });
 

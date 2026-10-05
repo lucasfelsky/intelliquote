@@ -231,12 +231,14 @@ describe('SupplierImportController (DB)', () => {
           familyIds: [familyId],
           tags: ['confiavel'],
           notes: null,
-          contact: {
-            name: 'Fulano',
-            email: 'fulano.confirm@exemplo.com',
-            phone: null,
-            position: null,
-          },
+          contacts: [
+            {
+              name: 'Fulano',
+              email: 'fulano.confirm@exemplo.com',
+              phone: null,
+              position: null,
+            },
+          ],
         },
       },
     ];
@@ -271,6 +273,95 @@ describe('SupplierImportController (DB)', () => {
     expect(contactAuditLogs.length).toBeGreaterThan(0);
   });
 
+  testDbSkip('POST /api/v1/suppliers/import/confirm - 3 contatos: so o 1o e principal + auditoria por contato', async () => {
+    const name = supplierName('Confirm Multi Contato');
+    const emails = [
+      `ana.${runId}@exemplo.com`,
+      `beto.${runId}@exemplo.com`,
+      `carla.${runId}@exemplo.com`,
+    ];
+    const rows = [
+      {
+        row: 2,
+        data: {
+          name,
+          country: 'CN',
+          website: null,
+          acceptedIncoterms: ['FOB'],
+          paymentTermsDays: 30,
+          familyIds: [],
+          tags: [],
+          notes: null,
+          contacts: [
+            { name: 'Ana', email: emails[0], phone: '111', position: 'Compras' },
+            { name: 'Beto', email: emails[1], phone: null, position: null },
+            { name: 'Carla', email: emails[2], phone: '333', position: 'Diretora' },
+          ],
+        },
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/v1/suppliers/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({ rows });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.successLines.length).toBe(1);
+    expect(res.body.data.errorLines.length).toBe(0);
+
+    const created = await prisma.supplier.findFirst({
+      where: { name },
+      include: { contacts: true },
+    });
+    expect(created).not.toBeNull();
+    expect(created?.contacts.length).toBe(3);
+
+    const primaries = created!.contacts.filter((c) => c.isPrimary);
+    expect(primaries.length).toBe(1);
+    expect(primaries[0]?.email).toBe(emails[0]);
+
+    const contactAuditLogs = await prisma.auditLog.findMany({
+      where: {
+        entityType: 'supplier_contact',
+        entityId: { in: created!.contacts.map((c) => String(c.id)) },
+      },
+    });
+    expect(contactAuditLogs.length).toBe(3);
+  });
+
+  testDbSkip('POST /api/v1/suppliers/import/confirm - body legado com "contact" responde 400', async () => {
+    const rows = [
+      {
+        row: 2,
+        data: {
+          name: supplierName('Confirm Legado'),
+          country: null,
+          website: null,
+          acceptedIncoterms: ['FOB'],
+          paymentTermsDays: 30,
+          familyIds: [],
+          tags: [],
+          notes: null,
+          contact: {
+            name: 'Fulano',
+            email: 'fulano.legado@exemplo.com',
+            phone: null,
+            position: null,
+          },
+        },
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/v1/suppliers/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({ rows });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Envie ao menos uma linha válida/);
+  });
+
   testDbSkip('POST /api/v1/suppliers/import/confirm - race: fornecedor criado entre preview e confirm nao sobrescreve', async () => {
     const name = supplierName('Race');
 
@@ -291,7 +382,7 @@ describe('SupplierImportController (DB)', () => {
           familyIds: [],
           tags: [],
           notes: null,
-          contact: null,
+          contacts: [],
         },
       },
     ];

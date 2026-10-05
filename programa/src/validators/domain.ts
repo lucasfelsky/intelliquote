@@ -168,14 +168,16 @@ export const supplierImportRowSchema = z.object({
   familyIds: z.array(positiveIntegerField).default([]),
   tags: tagsField,
   notes: nullableTrimmedStringField,
-  contact: z
-    .object({
-      name: requiredTrimmedStringField,
-      email: lowercasedEmailField,
-      phone: nullableTrimmedStringField,
-      position: nullableTrimmedStringField,
-    })
-    .nullable(),
+  contacts: z
+    .array(
+      z.object({
+        name: requiredTrimmedStringField,
+        email: lowercasedEmailField,
+        phone: nullableTrimmedStringField,
+        position: nullableTrimmedStringField,
+      }),
+    )
+    .max(20),
 });
 
 export const supplierImportPreviewSchema = z.object({
