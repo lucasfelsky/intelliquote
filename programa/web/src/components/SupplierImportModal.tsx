@@ -20,7 +20,7 @@ interface SupplierImportRow {
   familyNames: string[];
   tags: string[];
   notes: string | null;
-  contact: SupplierImportContact | null;
+  contacts: SupplierImportContact[];
 }
 
 interface ImportErrorLine {
