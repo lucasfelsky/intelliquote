@@ -698,6 +698,24 @@ export default function CotacaoDetalhe() {
       retry: false,
     });
 
+    // Preview desatualizado: campos atuais != debounced (debounce pendente) ou
+    // requisicao da key atual em andamento. Se o refresh da key atual der erro, libera
+    // o envio (o aviso de erro ja informa que o preview pode estar desatualizado).
+    const currentPreviewInputs = normalizeDispatchPreviewInputs(
+      dispatchSubject,
+      dispatchMessage,
+      dispatchExpires,
+    );
+    const previewInputsPending =
+      dispatchPreviewInputs !== null &&
+      (currentPreviewInputs.subject !== dispatchPreviewInputs.subject ||
+        currentPreviewInputs.message !== dispatchPreviewInputs.message ||
+        currentPreviewInputs.expiresInDays !== dispatchPreviewInputs.expiresInDays);
+    const previewStale =
+      previewInputsPending ||
+      (!dispatchPreviewQuery.isError &&
+        (dispatchPreviewQuery.isFetching || dispatchPreviewQuery.isPlaceholderData));
+
     // `dispatchPreview` continua sendo o ultimo preview bom: se o refresh falhar,
     // o iframe mantem o ultimo HTML valido.
     useEffect(() => {
@@ -1519,7 +1537,7 @@ export default function CotacaoDetalhe() {
 
                 <h3 style={{ marginTop: 16, marginBottom: 6 }}>
                   Preview do e-mail
-                  {dispatchPreviewQuery.isFetching && (
+                  {previewStale && (
                     <span
                       className="text-sm"
                       style={{ color: 'var(--ink-soft)', marginLeft: 8, fontWeight: 400 }}
@@ -1559,7 +1577,9 @@ export default function CotacaoDetalhe() {
                   <button
                     type="button"
                     className="primary-button"
-                    disabled={sendDispatchMutation.isPending || selectedContactIds.length === 0}
+                    disabled={
+                      sendDispatchMutation.isPending || selectedContactIds.length === 0 || previewStale
+                    }
                     onClick={async () => {
                       if (await confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
                         sendDispatchMutation.mutate();

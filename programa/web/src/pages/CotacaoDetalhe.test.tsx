@@ -404,6 +404,72 @@ describe('CotacaoDetalhe', () => {
         }),
       );
     });
+
+    it('9f. sem editar: "Enviar agora" habilitado e sem indicador de atualizacao', async () => {
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      const sendButton = within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement;
+      expect(sendButton.disabled).toBe(false);
+      expect(dialog.textContent).not.toContain('Atualizando preview');
+    });
+
+    it('9g. editar desabilita "Enviar agora" no debounce e na requisicao; habilita quando o preview novo chega', async () => {
+      let resolveNew: (value: DispatchPreviewResult) => void = () => undefined;
+      const newPromise = new Promise<DispatchPreviewResult>((resolve) => {
+        resolveNew = resolve;
+      });
+      vi.mocked(previewDispatch)
+        .mockResolvedValueOnce(previewWith('<p>antigo</p>'))
+        .mockReturnValueOnce(newPromise);
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      const sendButton = () =>
+        within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement;
+      expect(sendButton().disabled).toBe(false);
+
+      fireEvent.change(within(dialog).getByLabelText('Mensagem adicional para o fornecedor'), {
+        target: { value: 'Nova msg' },
+      });
+      // Debounce pendente: nenhuma requisicao nova ainda, mas ja desabilitado + indicador.
+      expect(previewDispatch).toHaveBeenCalledTimes(1);
+      expect(sendButton().disabled).toBe(true);
+      expect(dialog.textContent).toContain('Atualizando preview');
+
+      // Requisicao da key atual em andamento.
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      expect(sendButton().disabled).toBe(true);
+      expect(dialog.textContent).toContain('Atualizando preview');
+
+      resolveNew(previewWith('<p>novo</p>'));
+      await waitFor(() => expect(sendButton().disabled).toBe(false));
+      expect(frameOf(dialog).getAttribute('srcdoc')).toContain('novo');
+      expect(dialog.textContent).not.toContain('Atualizando preview');
+    });
+
+    it('9h. refresh com erro libera "Enviar agora" e remove o indicador', async () => {
+      vi.mocked(previewDispatch)
+        .mockResolvedValueOnce(previewWith('<p>ultimo-bom</p>'))
+        .mockRejectedValue(new Error('falhou'));
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+
+      fireEvent.change(within(dialog).getByLabelText('Mensagem adicional para o fornecedor'), {
+        target: { value: 'Nova msg' },
+      });
+      expect(
+        (within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      await waitFor(() => expect(dialog.textContent).toContain('Não foi possível atualizar o preview'), {
+        timeout: 2000,
+      });
+      expect(
+        (within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+      expect(dialog.textContent).not.toContain('Atualizando preview');
+    });
   });
 
   it('10. EMPILHAMENTO Dispatch + Tokens: os dois dialogs abertos ao mesmo tempo', async () => {
