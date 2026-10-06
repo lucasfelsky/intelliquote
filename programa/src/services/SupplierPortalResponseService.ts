@@ -36,13 +36,13 @@ export class SupplierPortalResponseService {
     for (const item of input.payload.items) {
       const expectedTotal = new Prisma.Decimal(item.unitPrice).times(item.quantity);
       if (expectedTotal.minus(item.totalPrice).abs().gt(0.01)) {
-        throw new HttpError(400, 'O total do item nao corresponde ao preco unitario multiplicado pela quantidade.');
+        throw new HttpError(400, 'The item total does not match the unit price times the quantity.');
       }
     }
     if (Math.abs(computedTotal - Number(input.payload.totalPrice)) > 0.01) {
       throw new HttpError(
         400,
-        'O total informado nao corresponde a soma dos itens.',
+        'The proposal total does not match the sum of the items.',
       );
     }
 
@@ -55,7 +55,7 @@ export class SupplierPortalResponseService {
       if (!itemIdSet.has(item.quoteRequestItemId)) {
         throw new HttpError(
           400,
-          `Item invalido na resposta (id=${item.quoteRequestItemId}).`,
+          `Invalid item in the proposal (id=${item.quoteRequestItemId}). Please reload the page.`,
         );
       }
     }
@@ -73,7 +73,7 @@ export class SupplierPortalResponseService {
 
     const currency = input.payload.currency ?? 'USD';
     if (input.payload.totalPriceCurrency && input.payload.totalPriceCurrency !== currency) {
-      throw new HttpError(400, 'A moeda do total deve ser a mesma dos precos da proposta.');
+      throw new HttpError(400, 'The total currency must match the proposal currency.');
     }
     const scalarData = {
       currency,
@@ -233,7 +233,7 @@ async function syncQuoteResponseFromPortal(
   if (currency !== 'BRL' && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
     throw new HttpError(
       400,
-      'Informe a taxa de cambio (exchangeRate) ao enviar respostas em moeda estrangeira.',
+      'Exchange rate unavailable for this currency. Please contact the buyer.',
     );
   }
 
@@ -323,20 +323,21 @@ function normalizeIncotermPrices(
 ): (NormalizedIncotermPrice[] | null)[] {
   if (quoteIncoterms.length === 0) {
     if (items.some((item) => item.incotermPrices !== undefined)) {
-      throw new HttpError(400, 'Cotacao sem incoterms definidos.');
+      throw new HttpError(400, 'This quote has no incoterms. Please send a single price per item.');
     }
     return items.map(() => null);
   }
   const allowed = new Set(quoteIncoterms);
   if (!allowed.has(mainIncoterm)) {
-    throw new HttpError(400, `Incoterm ${mainIncoterm} nao faz parte da cotacao.`);
+    throw new HttpError(400, `Incoterm ${mainIncoterm} is not part of this quote. If a field is missing, reload the page.`);
   }
   return items.map((item) => {
     if (!item.incotermPrices) {
       if (quoteIncoterms.length >= 2) {
         throw new HttpError(
           400,
-          `Informe o preco para todos os incoterms da cotacao: ${quoteIncoterms.join(', ')}.`,
+          `This page was updated. Please reload it (Ctrl+F5) to quote a price for each incoterm: ${quoteIncoterms.join(', ')}.`,
+          'PORTAL_OUTDATED',
         );
       }
       return [{ incoterm: quoteIncoterms[0], unitPrice: Number(item.unitPrice) }];
@@ -344,24 +345,24 @@ function normalizeIncotermPrices(
     const seen = new Set<string>();
     for (const entry of item.incotermPrices) {
       if (!allowed.has(entry.incoterm)) {
-        throw new HttpError(400, `Incoterm ${entry.incoterm} nao faz parte da cotacao.`);
+        throw new HttpError(400, `Incoterm ${entry.incoterm} is not part of this quote. If a field is missing, reload the page.`);
       }
       if (seen.has(entry.incoterm)) {
-        throw new HttpError(400, 'Informe um unico preco por incoterm.');
+        throw new HttpError(400, 'Provide a single price per incoterm.');
       }
       seen.add(entry.incoterm);
     }
     if (seen.size !== allowed.size) {
       throw new HttpError(
         400,
-        `Informe o preco para todos os incoterms da cotacao: ${quoteIncoterms.join(', ')}.`,
+        `Provide a price for every incoterm of this quote: ${quoteIncoterms.join(', ')}. If a field is missing, reload the page.`,
       );
     }
     const main = item.incotermPrices.find((entry) => entry.incoterm === mainIncoterm);
     if (!main || Math.abs(Number(main.unitPrice) - Number(item.unitPrice)) > 0.0001) {
       throw new HttpError(
         400,
-        'O preco do incoterm principal deve ser igual ao preco unitario do item.',
+        'The main incoterm price must match the item unit price.',
       );
     }
     return item.incotermPrices.map((entry) => ({
@@ -394,7 +395,7 @@ async function resolveExchangeRate(
   }
   throw new HttpError(
     400,
-    'Informe a taxa de cambio (exchangeRate) ao enviar respostas em moeda estrangeira.',
+    'Exchange rate unavailable for this currency. Please contact the buyer.',
   );
 }
 

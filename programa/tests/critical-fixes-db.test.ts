@@ -239,6 +239,6 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
       payload: { currency: 'EUR', incoterm: 'FOB', paymentTermsDays: 30, totalPrice: 110, validityDays: 30,
         items: payload(suppliers[0].id).items.map((i: any) => ({ ...i, totalPrice: i.unitPrice * i.quantity })),
       },
-    })).rejects.toThrow('exchangeRate');
+    })).rejects.toThrow('Exchange rate');
   });
 });

@@ -19,7 +19,7 @@ import {
   injectPoCustomMessage,
   withPoCustomMessageText,
 } from '../mailer/renderQuotePo';
-import { formatIncoterms } from '../utils/incoterm';
+import { formatIncoterms, mergeManualIncotermPrices } from '../utils/incoterm';
 import {
   quoteComparisonWeightsSchema,
   quotePurchaseOrderSchema,
@@ -351,6 +351,20 @@ export class QuoteResponseController {
 
       if (payload.items) {
         if (payload.items.length > 0) {
+          // Moeda alterada: precos por incoterm anteriores estao na moeda antiga e nao ha
+          // conversao segura -> a proposta volta a ser de preco unico (DbNull).
+          const currencyChanged =
+            payload.currency !== undefined &&
+            payload.currency !== existingQuoteResponse.currency;
+          const previousItems = currencyChanged
+            ? []
+            : await prisma.quoteResponseItem.findMany({
+                where: { quoteResponseId: id, deletedAt: null },
+                select: { quoteRequestItemId: true, incotermPrices: true },
+              });
+          const previousMap = new Map(
+            previousItems.map((prev) => [prev.quoteRequestItemId, prev.incotermPrices]),
+          );
           let total = 0;
           itemsToUpdate = payload.items.map((item) => {
             const totalPrice = item.unitPrice * item.quantity;
@@ -362,6 +376,14 @@ export class QuoteResponseController {
               totalPrice,
               leadTimeDays: item.leadTimeDays ?? null,
               notes: item.notes ?? null,
+              incotermPrices: previousMap.has(item.quoteRequestItemId)
+                ? mergeManualIncotermPrices(
+                    previousMap.get(item.quoteRequestItemId),
+                    nextIncoterm,
+                    item.unitPrice,
+                    item.quantity,
+                  )
+                : Prisma.DbNull,
             };
           });
           finalOfferedPrice = total;

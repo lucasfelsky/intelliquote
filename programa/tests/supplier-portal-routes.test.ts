@@ -520,6 +520,9 @@ describe('Portal - preco por incoterm e descricao', () => {
       ],
     });
     expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/not part of this quote/);
+    expect(res.body.message).toMatch(/If a field is missing, reload the page\.$/);
+    expect(res.body.code).toBeUndefined();
     expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
   });
 
@@ -532,12 +535,16 @@ describe('Portal - preco por incoterm e descricao', () => {
       ],
     });
     expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/single price per incoterm/);
   });
 
   it('rejeita quando falta o preco de um incoterm da cotacao', async () => {
     const token = mockRespondEnv(['FOB', 'CIF']);
     const res = await respond(token, { incotermPrices: [{ incoterm: 'FOB', unitPrice: 10 }] });
     expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/every incoterm/);
+    expect(res.body.message).toMatch(/If a field is missing, reload the page\.$/);
+    expect(res.body.code).toBeUndefined();
   });
 
   it('rejeita incoterm principal fora da cotacao', async () => {
@@ -550,6 +557,8 @@ describe('Portal - preco por incoterm e descricao', () => {
       ],
     });
     expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/not part of this quote/);
+    expect(res.body.message).toMatch(/If a field is missing, reload the page\.$/);
   });
 
   it('rejeita quando o preco do incoterm principal difere do unitPrice', async () => {
@@ -561,12 +570,23 @@ describe('Portal - preco por incoterm e descricao', () => {
       ],
     });
     expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/main incoterm price/);
   });
 
   it('exige incotermPrices em todos os itens quando a cotacao tem 2+ incoterms', async () => {
     const token = mockRespondEnv(['FOB', 'CIF']);
     const res = await respond(token);
     expect(res.status).toBe(400);
+    expect(res.body.code).toBe('PORTAL_OUTDATED');
+    expect(res.body.message).toContain('reload');
+    expect(res.body.message).toContain('FOB, CIF');
+  });
+
+  it('GET /portal responde HTML com Cache-Control no-cache', async () => {
+    const res = await request(app).get('/portal');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.headers['cache-control']).toContain('no-cache');
   });
 
   it('normaliza payload legado quando a cotacao tem 1 incoterm (N=1)', async () => {

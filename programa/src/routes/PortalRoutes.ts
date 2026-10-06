@@ -310,7 +310,9 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
     });
   } catch (error) {
     if (error instanceof HttpError) {
-      res.status(error.status).json({ message: error.message });
+      res
+        .status(error.status)
+        .json({ message: error.message, ...(error.code ? { code: error.code } : {}) });
       return;
     }
     const handled = handleControllerError(error);

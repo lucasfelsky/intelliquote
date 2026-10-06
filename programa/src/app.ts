@@ -142,6 +142,9 @@ app.get('/', (_req, res) => {
 // consome `/api/portal/:token`. A pagina em si continua sendo HTML
 // estatico (sem dependencia do bundle React) ate migrarmos.
 app.get('/portal', (_req, res) => {
+  // Forca revalidacao (ETag/304 continuam validos) para o fornecedor nao ficar
+  // preso a uma versao antiga do portal.html em cache.
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(publicPath, 'portal.html'));
 });
 
