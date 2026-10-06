@@ -351,10 +351,17 @@ export class QuoteResponseController {
 
       if (payload.items) {
         if (payload.items.length > 0) {
-          const previousItems = await prisma.quoteResponseItem.findMany({
-            where: { quoteResponseId: id, deletedAt: null },
-            select: { quoteRequestItemId: true, incotermPrices: true },
-          });
+          // Moeda alterada: precos por incoterm anteriores estao na moeda antiga e nao ha
+          // conversao segura -> a proposta volta a ser de preco unico (DbNull).
+          const currencyChanged =
+            payload.currency !== undefined &&
+            payload.currency !== existingQuoteResponse.currency;
+          const previousItems = currencyChanged
+            ? []
+            : await prisma.quoteResponseItem.findMany({
+                where: { quoteResponseId: id, deletedAt: null },
+                select: { quoteRequestItemId: true, incotermPrices: true },
+              });
           const previousMap = new Map(
             previousItems.map((prev) => [prev.quoteRequestItemId, prev.incotermPrices]),
           );

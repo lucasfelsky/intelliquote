@@ -38,6 +38,7 @@ vi.mock('../src/lib/prisma', () => {
   return { prisma };
 });
 
+import { Prisma } from '@prisma/client';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 
@@ -339,6 +340,33 @@ describe('Quote response routes', () => {
     it('nao inventa incotermPrices para item sem historico', async () => {
       const data = await putItems([{ quoteRequestItemId: 12, unitPrice: 10, quantity: 10 }]);
       expect(Array.isArray(data.items.create[0].incotermPrices)).toBe(false);
+    });
+
+    it('grava DbNull em todos os itens quando a currency muda (USD -> BRL)', async () => {
+      const data = await putItems(
+        [
+          { quoteRequestItemId: 11, unitPrice: 10, quantity: 10 },
+          { quoteRequestItemId: 12, unitPrice: 5, quantity: 2 },
+        ],
+        { currency: 'BRL' },
+      );
+      expect(data.items.create).toHaveLength(2);
+      for (const created of data.items.create) {
+        expect(created.incotermPrices).toBe(Prisma.DbNull);
+      }
+      expect(data.currency).toBe('BRL');
+    });
+
+    it('preserva incotermPrices quando a currency enviada e igual a atual', async () => {
+      const data = await putItems([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }], {
+        currency: 'USD',
+      });
+      expect(data.items.create[0].incotermPrices).toEqual(previousPrices);
+    });
+
+    it('preserva incotermPrices quando o PUT nao envia currency', async () => {
+      const data = await putItems([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
+      expect(data.items.create[0].incotermPrices).toEqual(previousPrices);
     });
 
     it('PUT sem items nao consulta itens anteriores nem recria itens', async () => {
