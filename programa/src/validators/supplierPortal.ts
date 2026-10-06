@@ -113,6 +113,7 @@ export const dispatchCreateSchema = z.object({
     .max(60)
     .optional()
     .default(14),
+  comexCcFirstOnly: z.boolean().optional().default(false),
 });
 
 // Preview reaproveita os limites do create (subject/message/locale/expiresInDays).

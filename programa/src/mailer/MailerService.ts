@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { mailerEnv } from '../config/env';
+import { logger } from '../lib/logger';
 import { ConsoleMailer } from './ConsoleMailer';
 import { SmtpMailer } from './SmtpMailer';
 import type { Mailer, MailMessage, MailSendResult } from './Mailer';
@@ -75,20 +76,35 @@ export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult
 
   const result = await mailer.send(msg);
 
-  await prisma.mailLog.update({
-    where: { id: initialLog.id },
-    data: {
-      status:
-        result.status === 'failed'
-          ? 'failed'
-          : result.status === 'queued'
-            ? 'queued'
-            : 'sent',
-      providerMessageId: result.providerMessageId || null,
-      sentAt: result.status === 'sent' ? new Date() : null,
-      errorMessage: result.error ?? null,
-    },
-  });
+  // O envio ja aconteceu: uma falha so' ao atualizar o mailLog nao pode virar
+  // excecao (o chamador trataria como falha de envio e, p.ex., repassaria a
+  // copia COMEX ao proximo destinatario, duplicando-a). Loga e segue.
+  try {
+    await prisma.mailLog.update({
+      where: { id: initialLog.id },
+      data: {
+        status:
+          result.status === 'failed'
+            ? 'failed'
+            : result.status === 'queued'
+              ? 'queued'
+              : 'sent',
+        providerMessageId: result.providerMessageId || null,
+        sentAt: result.status === 'sent' ? new Date() : null,
+        errorMessage: result.error ?? null,
+      },
+    });
+  } catch (error) {
+    logger.error(
+      {
+        mailLogId: initialLog.id,
+        templateId: input.templateId,
+        sendStatus: result.status,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      'Falha ao atualizar mailLog apos o envio; resultado do provedor preservado.',
+    );
+  }
 
   return result;
 }

@@ -9,7 +9,7 @@ vi.mock('../src/mailer/MailerService', () => ({
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
-import { sendAndLog } from '../src/mailer/MailerService';
+import { getComexCcList, sendAndLog } from '../src/mailer/MailerService';
 import { hashPassword } from '../src/utils/password';
 import {
   renderDispatchFromTemplate,
@@ -656,6 +656,259 @@ describe('Dispatch controller', () => {
     );
     expect(call.html).toContain('padding:18px 32px 0 32px');
     expect(call.html).not.toContain('margin:0 32px');
+  });
+});
+
+describe('comexCcFirstOnly - equipe COMEX so no primeiro e-mail', () => {
+  const COMEX = 'comex@intelliquote.local';
+  const FIXO = 'fixo@empresa.com';
+  const auditLogMock = (prisma as unknown as { auditLog: { create: ReturnType<typeof vi.fn> } })
+    .auditLog;
+
+  const baseProfile = {
+    id: 1,
+    companyName: 'SQ Quimica',
+    purchasingEmail: 'comex@intelliquote.local',
+    purchasingPhone: null,
+    tradeName: null,
+    taxId: null,
+    addressLine1: null,
+    addressLine2: null,
+    city: null,
+    state: null,
+    postalCode: null,
+    country: null,
+    logoUrl: null,
+    signatureName: null,
+    signatureTitle: null,
+    signatureImageUrl: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const contacts = [
+    { id: 10, name: 'Um', email: 'um@a.com', supplierId: 2, isActive: true, supplier: { id: 2, name: 'A' } },
+    { id: 11, name: 'Irmao A', email: 'irmao-a@a.com', supplierId: 2, isActive: true, supplier: { id: 2, name: 'A' } },
+    { id: 20, name: 'Dois', email: 'dois@b.com', supplierId: 3, isActive: true, supplier: { id: 3, name: 'B' } },
+    { id: 30, name: 'Tres', email: 'tres@c.com', supplierId: 4, isActive: true, supplier: { id: 4, name: 'C' } },
+    { id: 31, name: 'Irmao C', email: 'irmao-c@c.com', supplierId: 4, isActive: true, supplier: { id: 4, name: 'C' } },
+  ];
+
+  let cachedCookie = '';
+
+  async function setup(withFixo = true): Promise<string> {
+    const passwordHash = await hashPassword('ChangeMe123!');
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 1,
+      name: 'Admin',
+      email: 'admin@intelliquote.local',
+      passwordHash,
+      isActive: true,
+      role: { name: 'admin' },
+    });
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 1,
+      name: 'Admin',
+      email: 'admin@intelliquote.local',
+      isActive: true,
+      role: { name: 'admin' },
+    });
+    prismaMock.session.create.mockImplementation(({ data }) => Promise.resolve({ id: data.id }));
+    // Um unico login para o describe inteiro (rate limit do /auth/login).
+    if (!cachedCookie) {
+      const authRes = await request(app).post('/api/v1/auth/login').send({
+        email: 'admin@intelliquote.local',
+        password: 'ChangeMe123!',
+      });
+      if (authRes.status !== 200) {
+        throw new Error(`login failed: ${authRes.status}`);
+      }
+      const cookies = (authRes.headers['set-cookie'] as string[] | undefined) ?? [];
+      cachedCookie = cookies.map((c) => c.split(';')[0]).join('; ');
+    }
+    const cookieHeader = cachedCookie;
+
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 9,
+      requestCode: 'QR-2026-009',
+      productName: 'Produto',
+      desiredIncoterm: ['FOB'],
+      currency: 'USD',
+      deadlineAt: null,
+      status: 'open',
+      items: [
+        { id: 91, itemCode: 'Z1', productName: 'Produto', quantity: 1, unit: 'UN', targetPrice: null, createdAt: new Date() },
+      ],
+    });
+    prismaMock.supplierContact.findMany.mockImplementation(
+      async (args: { where?: { id?: { in?: number[]; notIn?: number[] } } } = {}) => {
+        const inFilter = args?.where?.id?.in;
+        const notInFilter = args?.where?.id?.notIn;
+        if (inFilter) return contacts.filter((c) => inFilter.includes(c.id));
+        if (notInFilter) return contacts.filter((c) => !notInFilter.includes(c.id));
+        return contacts;
+      },
+    );
+    prismaMock.supplierPortalToken.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 50, ...data }),
+    );
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+      id: 50,
+      rawTokenHash: 'h',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000),
+      revokedAt: null,
+    });
+    prismaMock.supplierPortalToken.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.dispatchEvent.create.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 125, ...data, createdAt: new Date() }),
+    );
+    prismaMock.dispatchEvent.update.mockImplementation(({ data }) =>
+      Promise.resolve({ id: 125, ...data }),
+    );
+    const companyProfileFind = (
+      prisma as unknown as { companyProfile: { findUnique: ReturnType<typeof vi.fn> } }
+    ).companyProfile.findUnique;
+    companyProfileFind.mockResolvedValueOnce(
+      withFixo ? { ...baseProfile, dispatchCc: JSON.stringify([FIXO]) } : { ...baseProfile },
+    );
+    sendAndLogMock.mockResolvedValue({ providerMessageId: 'msg', status: 'sent' });
+    return cookieHeader;
+  }
+
+  const ccOf = (callIndex: number): string[] =>
+    ((sendAndLogMock.mock.calls[callIndex][0].cc ?? []) as Array<{ email: string }>).map(
+      (c) => c.email,
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('a) ligado: so o 1o e-mail enviado leva COMEX + CC fixo; siblings em todos; auditoria registra', async () => {
+    const cookie = await setup();
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], expiresInDays: 7, comexCcFirstOnly: true });
+
+    expect(res.status).toBe(201);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(3);
+    expect(ccOf(0)).toEqual(expect.arrayContaining([COMEX, FIXO, 'irmao-a@a.com']));
+    expect(ccOf(1)).not.toContain(COMEX);
+    expect(ccOf(1)).not.toContain(FIXO);
+    expect(ccOf(2)).not.toContain(COMEX);
+    expect(ccOf(2)).not.toContain(FIXO);
+    expect(ccOf(2)).toContain('irmao-c@c.com');
+    expect(res.body.results.map((r: { comexCc: boolean }) => r.comexCc)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+
+    const dispatchAudit = auditLogMock.create.mock.calls
+      .map((c: Array<{ data: { action: string; metadata: Record<string, unknown> } }>) => c[0].data)
+      .find((d: { action: string }) => d.action === 'dispatch');
+    expect(dispatchAudit).toBeDefined();
+    expect(dispatchAudit.metadata).toMatchObject({
+      comexCcFirstOnly: true,
+      comexCcContactId: 10,
+    });
+  });
+
+  it('b) 1o envio falha (status failed): a copia passa para o proximo', async () => {
+    const cookie = await setup();
+    sendAndLogMock.mockResolvedValueOnce({ status: 'failed', error: 'x' });
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], comexCcFirstOnly: true });
+
+    expect(res.status).toBe(201);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(3);
+    expect(ccOf(1)).toEqual(expect.arrayContaining([COMEX, FIXO]));
+    expect(ccOf(2)).not.toContain(COMEX);
+    expect(ccOf(2)).not.toContain(FIXO);
+    expect(res.body.results[0].comexCc).toBe(false);
+    expect(res.body.results[1].comexCc).toBe(true);
+    expect(res.body.results[2].comexCc).toBe(false);
+  });
+
+  it("b3) 1o envio 'queued' (provedor aceitou): conta como enviado e a copia NAO passa para o proximo", async () => {
+    const cookie = await setup();
+    sendAndLogMock.mockResolvedValueOnce({ providerMessageId: 'q', status: 'queued' });
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], comexCcFirstOnly: true });
+
+    expect(res.status).toBe(201);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(3);
+    expect(ccOf(0)).toEqual(expect.arrayContaining([COMEX, FIXO]));
+    expect(ccOf(1)).not.toContain(COMEX);
+    expect(ccOf(1)).not.toContain(FIXO);
+    expect(ccOf(2)).not.toContain(COMEX);
+    expect(res.body.sentCount).toBe(3);
+    expect(res.body.failedCount).toBe(0);
+    expect(res.body.results.map((r: { comexCc: boolean }) => r.comexCc)).toEqual([true, false, false]);
+  });
+
+  it('b2) 1o envio falha por excecao: a copia passa para o proximo', async () => {
+    const cookie = await setup();
+    sendAndLogMock.mockRejectedValueOnce(new Error('smtp'));
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], comexCcFirstOnly: true });
+
+    expect(res.status).toBe(201);
+    expect(ccOf(1)).toEqual(expect.arrayContaining([COMEX, FIXO]));
+    expect(ccOf(2)).not.toContain(COMEX);
+    expect(res.body.results[0].comexCc).toBe(false);
+    expect(res.body.results[1].comexCc).toBe(true);
+  });
+
+  it.each([
+    ['false explicito', { comexCcFirstOnly: false }],
+    ['campo ausente', {}],
+  ])('c) %s: todos os e-mails levam COMEX + CC fixo', async (_label, extra) => {
+    const cookie = await setup();
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], ...extra });
+
+    expect(res.status).toBe(201);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(3);
+    for (let i = 0; i < 3; i += 1) {
+      expect(ccOf(i)).toEqual(expect.arrayContaining([COMEX, FIXO]));
+    }
+    expect(res.body.results.every((r: { comexCc: boolean }) => r.comexCc === true)).toBe(true);
+  });
+
+  it('d) lista COMEX vazia: segue normal, siblings em cc e nenhum comexCc', async () => {
+    const cookie = await setup(false);
+    vi.mocked(getComexCcList).mockReturnValueOnce([]);
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], comexCcFirstOnly: true });
+
+    expect(res.status).toBe(201);
+    expect(res.body.sentCount).toBe(3);
+    expect(ccOf(0)).toContain('irmao-a@a.com');
+    expect(ccOf(2)).toContain('irmao-c@c.com');
+    expect(res.body.results.some((r: { comexCc: boolean }) => r.comexCc === true)).toBe(false);
+    const dispatchAudit = auditLogMock.create.mock.calls
+      .map((c: Array<{ data: { action: string; metadata: Record<string, unknown> } }>) => c[0].data)
+      .find((d: { action: string }) => d.action === 'dispatch');
+    expect(dispatchAudit.metadata).toMatchObject({
+      comexCcFirstOnly: true,
+      comexCcContactId: null,
+    });
   });
 });
 

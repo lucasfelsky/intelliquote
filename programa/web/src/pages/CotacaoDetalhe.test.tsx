@@ -306,6 +306,79 @@ describe('CotacaoDetalhe', () => {
     expect(subjectInput.value).toBe('Assunto teste');
   });
 
+  describe('chave "Equipe COMEX em cópia só no primeiro e-mail"', () => {
+    const CHECKBOX_NAME = 'Equipe COMEX em cópia só no primeiro e-mail';
+
+    async function confirmSend(container: HTMLElement, dialog: HTMLDialogElement) {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Enviar agora' }));
+      const confirmDialog = dialogByTitle(container, 'Confirmar ação');
+      await waitFor(() => expect(confirmDialog.open).toBe(true));
+      fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Confirmar' }));
+    }
+
+    it('a) checkbox aparece ligada ao chegar no preview', async () => {
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      const checkbox = within(dialog).getByRole('checkbox', { name: CHECKBOX_NAME }) as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it('b) enviar manda comexCcFirstOnly: true e o passo "sent" indica a linha com cópia COMEX', async () => {
+      vi.mocked(sendDispatch).mockResolvedValueOnce({
+        ...sendFixture,
+        results: [{ supplierContactId: 10, status: 'sent', dispatchEventId: 1, comexCc: true }],
+      });
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      await confirmSend(container, dialog);
+      await waitFor(() =>
+        expect(sendDispatch).toHaveBeenCalledWith(
+          1,
+          [10],
+          expect.objectContaining({ comexCcFirstOnly: true }),
+        ),
+      );
+      await waitFor(() => expect(dialog.textContent).toContain('cópia COMEX'));
+    });
+
+    it('c) desmarcar e enviar manda comexCcFirstOnly: false', async () => {
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      fireEvent.click(within(dialog).getByRole('checkbox', { name: CHECKBOX_NAME }));
+      expect(
+        (within(dialog).getByRole('checkbox', { name: CHECKBOX_NAME }) as HTMLInputElement).checked,
+      ).toBe(false);
+      await confirmSend(container, dialog);
+      await waitFor(() =>
+        expect(sendDispatch).toHaveBeenCalledWith(
+          1,
+          [10],
+          expect.objectContaining({ comexCcFirstOnly: false }),
+        ),
+      );
+    });
+
+    it('d) desmarcar, fechar e reabrir: volta ligada', async () => {
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      fireEvent.click(within(dialog).getByRole('checkbox', { name: CHECKBOX_NAME }));
+      expect(
+        (within(dialog).getByRole('checkbox', { name: CHECKBOX_NAME }) as HTMLInputElement).checked,
+      ).toBe(false);
+      fireEvent.click(within(dialog).getByLabelText('Fechar'));
+      expect(dialog.open).toBe(false);
+
+      const reopened = await openDispatchToPreview(container, getByRole);
+      expect(
+        (within(reopened).getByRole('checkbox', { name: CHECKBOX_NAME }) as HTMLInputElement).checked,
+      ).toBe(true);
+    });
+  });
+
   describe('preview ao vivo no passo preview', () => {
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -401,6 +474,7 @@ describe('CotacaoDetalhe', () => {
           subject: 'Assunto teste',
           message: 'Nova msg',
           expiresInDays: 7,
+          comexCcFirstOnly: true,
         }),
       );
     });
@@ -487,6 +561,7 @@ describe('CotacaoDetalhe', () => {
         subject: 'Assunto teste',
         message: '',
         expiresInDays: 7,
+        comexCcFirstOnly: true,
       }),
     );
 

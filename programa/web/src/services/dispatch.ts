@@ -151,6 +151,7 @@ export interface DispatchTokenResult {
   tokenId?: number;
   dispatchEventId: number;
   ccCount?: number;
+  comexCc?: boolean;
 }
 
 export interface DispatchSendResult {
@@ -165,7 +166,12 @@ export interface DispatchSendResult {
 export async function sendDispatch(
   quoteRequestId: number,
   recipientContactIds: number[],
-  options: { subject?: string; message?: string; expiresInDays?: number } = {},
+  options: {
+    subject?: string;
+    message?: string;
+    expiresInDays?: number;
+    comexCcFirstOnly?: boolean;
+  } = {},
 ): Promise<DispatchSendResult> {
   return api.post<DispatchSendResult>(
     `/v1/quote-requests/${quoteRequestId}/dispatch`,
@@ -174,6 +180,7 @@ export async function sendDispatch(
       subject: options.subject?.trim() || undefined,
       message: options.message?.trim() || undefined,
       expiresInDays: options.expiresInDays ?? 7,
+      comexCcFirstOnly: options.comexCcFirstOnly,
     },
   );
 }
