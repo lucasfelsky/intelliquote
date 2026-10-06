@@ -288,6 +288,8 @@ model QuoteResponseItem {
   leadTimeDays       Int?
   notes              String?
   targetPrice        Decimal?  @db.Decimal(12, 2)
+  // [{ incoterm, unitPrice, totalPrice }]; NULL = proposta legada de preco unico
+  incotermPrices     Json?
   deletedAt          DateTime?
 
   quoteResponse    QuoteResponse    @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
@@ -589,6 +591,8 @@ model SupplierPortalResponseItem {
   totalPrice         Decimal                @db.Decimal(14, 2)
   leadTimeDays       Int?
   notes              String?
+  // [{ incoterm, unitPrice, totalPrice }]; NULL = proposta legada de preco unico
+  incotermPrices     Json?
   deletedAt          DateTime?
   response           SupplierPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   quoteRequestItem   QuoteRequestItem       @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)

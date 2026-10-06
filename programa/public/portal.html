@@ -341,6 +341,20 @@
               margin-bottom: 6px;
             }
             .portal-lead { font-size: 13px; color: var(--portal-ink-soft); }
+            .portal-description-callout {
+              margin-top: 12px;
+              padding: 12px 16px;
+              border-left: 4px solid var(--portal-primary);
+              background: var(--portal-warn-bg);
+              border-radius: var(--portal-radius-sm);
+              color: var(--portal-ink);
+            }
+            .portal-description-callout p { margin: 0; }
+            .portal-description-callout p + p {
+              margin-top: 4px;
+              font-size: 14px;
+              white-space: pre-line;
+            }
       .dg-badge {
         background: var(--portal-warn-bg);
         color: var(--portal-warn-fg);
@@ -761,10 +775,11 @@
             data.quoteRequest.desiredIncoterm && data.quoteRequest.desiredIncoterm.length > 0
               ? data.quoteRequest.desiredIncoterm
               : ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'];
+          const quoteIncoterms = Array.from(new Set(data.quoteRequest.desiredIncoterm || []));
+          const hasQuoteIncoterms = quoteIncoterms.length > 0;
           return `
             <form id="portal-form" autocomplete="off">
               <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
-              <p class="portal-lead" style="margin-top: 0;">${esc(data.quoteRequest.description || '') || '&nbsp;'}</p>
               <div class="form-grid">
                 <label>Currency
                   <select name="currency" required>
@@ -776,7 +791,7 @@
                       .join('')}
                   </select>
                 </label>
-                <label>Incoterm
+                <label>${hasQuoteIncoterms ? 'Main incoterm (used for total and comparison)' : 'Incoterm'}
                   <select name="incoterm" required>
                     ${incotermOptions
                       .map(
@@ -820,9 +835,25 @@
                       ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
                     </p>
                     <div class="form-grid">
-                      <label>Unit price (${esc(currency)} / ${esc(it.unit || 'unit')})
+                      ${
+                        hasQuoteIncoterms
+                          ? quoteIncoterms
+                              .map((inc) => {
+                                const found = (prev?.incotermPrices || []).find((p) => p.incoterm === inc);
+                                const val = found
+                                  ? esc(found.unitPrice)
+                                  : prev && !prev.incotermPrices && inc === selectedIncoterm
+                                    ? unitVal
+                                    : '';
+                                return `<label>Unit price ${esc(inc)} (${esc(currency)} / ${esc(it.unit || 'unit')})
+                        <input type="number" name="incotermPrice" data-incoterm="${esc(inc)}" min="0.0001" step="0.0001" value="${val}" required />
+                      </label>`;
+                              })
+                              .join('')
+                          : `<label>Unit price (${esc(currency)} / ${esc(it.unit || 'unit')})
                         <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" value="${unitVal}" required />
-                      </label>
+                      </label>`
+                      }
                       <label>Quantity
                         <input type="number" min="0" name="quantity" value="${qtyVal}" required />
                       </label>
@@ -857,7 +888,9 @@
           const updateTotal = () => {
             let sum = 0;
             form.querySelectorAll('.item-row').forEach((row) => {
-              const unit = Number(row.querySelector('input[name="unitPrice"]').value || 0);
+              const unit = row.querySelector('input[name="incotermPrice"]')
+                ? mainUnitPrice(form, row)
+                : Number(row.querySelector('input[name="unitPrice"]').value || 0);
               const qty = Number(row.querySelector('input[name="quantity"]').value || 0);
               const itemTotal = unit * qty;
               sum += Number.isFinite(itemTotal) ? itemTotal : 0;
@@ -867,6 +900,8 @@
           form.querySelectorAll('.item-row input').forEach((el) => {
             el.addEventListener('input', updateTotal);
           });
+          const incotermSelect = form.elements.namedItem('incoterm');
+          if (incotermSelect) incotermSelect.addEventListener('change', updateTotal);
           document.getElementById('portal-cancel').addEventListener('click', () => {
             form.reset();
             updateTotal();
@@ -884,23 +919,45 @@
           updateTotal();
         }
 
+        // Preco unitario do incoterm principal (select "incoterm") na linha do item.
+        function mainUnitPrice(form, row) {
+          const main = form.elements.namedItem('incoterm').value;
+          const inputs = row.querySelectorAll('input[name="incotermPrice"]');
+          for (const el of inputs) {
+            if (el.getAttribute('data-incoterm') === main) return Number(el.value || 0);
+          }
+          return 0;
+        }
+
         function collectItems(form) {
           const items = [];
           form.querySelectorAll('.item-row').forEach((row) => {
             const quoteRequestItemId = Number(row.getAttribute('data-item-id'));
-            const unitPrice = Number(row.querySelector('input[name="unitPrice"]').value);
+            const incotermInputs = row.querySelectorAll('input[name="incotermPrice"]');
+            const incotermPrices = [];
+            incotermInputs.forEach((el) => {
+              incotermPrices.push({
+                incoterm: el.getAttribute('data-incoterm'),
+                unitPrice: Number(el.value),
+              });
+            });
+            const unitPrice = incotermInputs.length
+              ? mainUnitPrice(form, row)
+              : Number(row.querySelector('input[name="unitPrice"]').value);
             const quantity = Number(row.querySelector('input[name="quantity"]').value);
             const totalPrice = unitPrice * quantity;
             const leadTimeDaysRaw = row.querySelector('input[name="leadTimeDays"]').value;
             const notesRaw = row.querySelector('input[name="notes"]').value;
-            items.push({
+            const item = {
               quoteRequestItemId,
               unitPrice,
               quantity,
               totalPrice,
               leadTimeDays: leadTimeDaysRaw === '' ? null : Number(leadTimeDaysRaw),
               notes: notesRaw ? notesRaw : null,
-            });
+            };
+            if (incotermPrices.length) item.incotermPrices = incotermPrices;
+            items.push(item);
           });
           return items;
         }
@@ -1036,8 +1093,9 @@
                 ? `<span class="badge info">Submitted${currentVersion ? ' · v' + currentVersion : ''}</span> You already sent a proposal. You can revise your prices until the link expires — update the values below and submit again.`
                 : null,
             );
-            const description = data.quoteRequest.description
-              ? `<p class="portal-lead">${data.quoteRequest.description.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</p>`
+            const descriptionText = String(data.quoteRequest.description || '').trim();
+            const description = descriptionText
+              ? `<div class="portal-description-callout"><p class="eyebrow">Buyer notes</p><p>${esc(descriptionText)}</p></div>`
               : '';
             const items = data.quoteRequest.items || [];
             content.innerHTML = `

@@ -61,6 +61,15 @@ export const supplierPortalResponseItemSchema = z.object({
   totalPrice: positiveNumberField,
   leadTimeDays: optionalNonNegativeIntegerField,
   notes: optionalTrimmedStringField,
+  incotermPrices: z
+    .array(
+      z.object({
+        incoterm: z.nativeEnum(Incoterm),
+        unitPrice: positiveNumberField.max(999999999999.99),
+      }),
+    )
+    .min(1)
+    .optional(),
 });
 
 export const supplierPortalResponseSubmitSchema = z.object({

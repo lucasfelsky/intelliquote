@@ -60,6 +60,17 @@ export class SupplierPortalResponseService {
       }
     }
 
+    const quoteRequest = await client.quoteRequest.findUnique({
+      where: { id: input.quoteRequestId },
+      select: { desiredIncoterm: true },
+    });
+    const quoteIncoterms: string[] = [...new Set<string>(quoteRequest?.desiredIncoterm ?? [])];
+    const normalizedIncotermPrices = normalizeIncotermPrices(
+      quoteIncoterms,
+      input.payload.incoterm,
+      input.payload.items,
+    );
+
     const currency = input.payload.currency ?? 'USD';
     if (input.payload.totalPriceCurrency && input.payload.totalPriceCurrency !== currency) {
       throw new HttpError(400, 'A moeda do total deve ser a mesma dos precos da proposta.');
@@ -76,14 +87,26 @@ export class SupplierPortalResponseService {
       submitterUserAgent: input.meta?.userAgent ?? null,
     };
     const itemsCreate = input.payload.items.map(
-      (item: SupplierPortalResponseItemInput) => ({
-        quoteRequestItemId: item.quoteRequestItemId,
-        unitPrice: new Prisma.Decimal(item.unitPrice),
-        quantity: item.quantity,
-        totalPrice: new Prisma.Decimal(item.totalPrice),
-        leadTimeDays: item.leadTimeDays ?? null,
-        notes: item.notes ?? null,
-      }),
+      (item: SupplierPortalResponseItemInput, index: number) => {
+        const prices = normalizedIncotermPrices[index];
+        return {
+          quoteRequestItemId: item.quoteRequestItemId,
+          unitPrice: new Prisma.Decimal(item.unitPrice),
+          quantity: item.quantity,
+          totalPrice: new Prisma.Decimal(item.totalPrice),
+          leadTimeDays: item.leadTimeDays ?? null,
+          notes: item.notes ?? null,
+          incotermPrices: prices
+            ? prices.map((p) => ({
+                incoterm: p.incoterm,
+                unitPrice: new Prisma.Decimal(p.unitPrice).toFixed(2),
+                totalPrice: new Prisma.Decimal(p.unitPrice)
+                  .times(item.quantity)
+                  .toFixed(2),
+              }))
+            : Prisma.DbNull,
+        };
+      },
     );
 
     return client.$transaction(async (tx) => {
@@ -116,6 +139,7 @@ export class SupplierPortalResponseService {
               totalPrice: it.totalPrice.toString(),
               leadTimeDays: it.leadTimeDays,
               notes: it.notes,
+              incotermPrices: it.incotermPrices ?? null,
             })),
           },
         });
@@ -257,6 +281,7 @@ async function syncQuoteResponseFromPortal(
     totalPrice: item.totalPrice,
     leadTimeDays: item.leadTimeDays,
     notes: item.notes,
+    incotermPrices: (item.incotermPrices as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
   }));
 
   return tx.quoteResponse.upsert({
@@ -282,6 +307,67 @@ async function syncQuoteResponseFromPortal(
         create: itemsToCreate,
       },
     },
+  });
+}
+
+type NormalizedIncotermPrice = { incoterm: string; unitPrice: number };
+
+/**
+ * Valida e normaliza os precos por incoterm de cada item.
+ * Retorna, por item, a lista normalizada ou null (cotacao sem incoterms / legado).
+ */
+function normalizeIncotermPrices(
+  quoteIncoterms: string[],
+  mainIncoterm: string,
+  items: SupplierPortalResponseItemInput[],
+): (NormalizedIncotermPrice[] | null)[] {
+  if (quoteIncoterms.length === 0) {
+    if (items.some((item) => item.incotermPrices !== undefined)) {
+      throw new HttpError(400, 'Cotacao sem incoterms definidos.');
+    }
+    return items.map(() => null);
+  }
+  const allowed = new Set(quoteIncoterms);
+  if (!allowed.has(mainIncoterm)) {
+    throw new HttpError(400, `Incoterm ${mainIncoterm} nao faz parte da cotacao.`);
+  }
+  return items.map((item) => {
+    if (!item.incotermPrices) {
+      if (quoteIncoterms.length >= 2) {
+        throw new HttpError(
+          400,
+          `Informe o preco para todos os incoterms da cotacao: ${quoteIncoterms.join(', ')}.`,
+        );
+      }
+      return [{ incoterm: quoteIncoterms[0], unitPrice: Number(item.unitPrice) }];
+    }
+    const seen = new Set<string>();
+    for (const entry of item.incotermPrices) {
+      if (!allowed.has(entry.incoterm)) {
+        throw new HttpError(400, `Incoterm ${entry.incoterm} nao faz parte da cotacao.`);
+      }
+      if (seen.has(entry.incoterm)) {
+        throw new HttpError(400, 'Informe um unico preco por incoterm.');
+      }
+      seen.add(entry.incoterm);
+    }
+    if (seen.size !== allowed.size) {
+      throw new HttpError(
+        400,
+        `Informe o preco para todos os incoterms da cotacao: ${quoteIncoterms.join(', ')}.`,
+      );
+    }
+    const main = item.incotermPrices.find((entry) => entry.incoterm === mainIncoterm);
+    if (!main || Math.abs(Number(main.unitPrice) - Number(item.unitPrice)) > 0.0001) {
+      throw new HttpError(
+        400,
+        'O preco do incoterm principal deve ser igual ao preco unitario do item.',
+      );
+    }
+    return item.incotermPrices.map((entry) => ({
+      incoterm: entry.incoterm as string,
+      unitPrice: Number(entry.unitPrice),
+    }));
   });
 }
 

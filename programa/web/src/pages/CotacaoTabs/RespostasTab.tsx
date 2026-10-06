@@ -847,6 +847,12 @@ export function RespostasTab({
                 unitPrice: formatCurrency(item.unitPrice, currency),
                 totalPrice: formatCurrency(item.totalPrice, currency),
                 leadTimeDays: item.leadTimeDays != null ? formatNumber(item.leadTimeDays) : '—',
+                incotermPrices:
+                  item.incotermPrices && item.incotermPrices.length >= 2
+                    ? item.incotermPrices
+                        .map((p) => `${p.incoterm}: ${formatCurrency(Number(p.unitPrice), currency)}`)
+                        .join(' · ')
+                    : '—',
               }))
             : [{
                 key: 'fallback',
@@ -855,7 +861,11 @@ export function RespostasTab({
                 unitPrice: formatCurrency(itemsTarget.offeredPrice, currency),
                 totalPrice: formatCurrency(itemsTarget.offeredPrice, currency),
                 leadTimeDays: itemsTarget.leadTimeDays != null ? formatNumber(itemsTarget.leadTimeDays) : '—',
+                incotermPrices: '—',
               }];
+          const showIncotermPrices = (itemsTarget.items ?? []).some(
+            (item) => (item.incotermPrices?.length ?? 0) >= 2,
+          );
           return (
             <div className="table-wrapper">
               <table className="table">
@@ -866,6 +876,7 @@ export function RespostasTab({
                     <th>Preço unit.</th>
                     <th>Total</th>
                     <th>Lead time</th>
+                    {showIncotermPrices && <th>Preços por incoterm</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -876,6 +887,7 @@ export function RespostasTab({
                       <td>{row.unitPrice}</td>
                       <td>{row.totalPrice}</td>
                       <td>{row.leadTimeDays}</td>
+                      {showIncotermPrices && <td>{row.incotermPrices}</td>}
                     </tr>
                   ))}
                 </tbody>
