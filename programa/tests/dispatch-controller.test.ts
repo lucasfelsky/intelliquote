@@ -447,6 +447,131 @@ describe('Dispatch controller', () => {
     expect(res.body.preview.subject).toContain('QR-2026-003');
   });
 
+  describe('preview acompanha assunto/mensagem/validade do modal', () => {
+    const formatEnGb = (d: Date) =>
+      new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+
+    function mockPreviewData(overrides: Record<string, unknown> = {}) {
+      prismaMock.quoteRequest.findFirst.mockResolvedValue({
+        id: 7,
+        requestCode: 'QR-2026-003',
+        productName: 'X',
+        desiredIncoterm: ['CIF'],
+        currency: 'USD',
+        deadlineAt: null,
+        status: 'open',
+        items: [
+          { id: 31, itemCode: 'C1', productName: 'X', quantity: 1, unit: 'UN', targetPrice: null, createdAt: new Date() },
+        ],
+        ...overrides,
+      });
+      prismaMock.supplierContact.findMany.mockResolvedValue([
+        { id: 1, name: 'A', email: 'a@a.com', supplierId: 1, isActive: true, supplier: { id: 1, name: 'S1' } },
+      ]);
+    }
+
+    async function postPreview(cookieHeader: string, body: Record<string, unknown>) {
+      return request(app)
+        .post('/api/v1/quote-requests/7/dispatch/preview')
+        .set('Cookie', cookieHeader)
+        .send(body);
+    }
+
+    it('aplica assunto custom e injeta a mensagem (html escapado + prefixo no texto)', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData();
+      const res = await postPreview(cookieHeader, {
+        recipientContactIds: [1],
+        subject: 'Assunto custom',
+        message: 'Linha 1\n<b>x</b>',
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.preview.subject).toBe('Assunto custom');
+      expect(res.body.preview.html).toContain('Additional message from the buyer');
+      expect(res.body.preview.html).toContain('&lt;b&gt;x&lt;/b&gt;');
+      expect(res.body.preview.text.startsWith('Linha 1\n<b>x</b>\n\n')).toBe(true);
+    });
+
+    it('subject vazio cai no assunto padrao com o requestCode', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData();
+      const res = await postPreview(cookieHeader, { recipientContactIds: [1], subject: '' });
+      expect(res.status).toBe(200);
+      expect(res.body.preview.subject).toContain('QR-2026-003');
+    });
+
+    it('valida os mesmos limites do create (expiresInDays > 60 e subject so com espacos => 400)', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData();
+      const tooLong = await postPreview(cookieHeader, { recipientContactIds: [1], expiresInDays: 61 });
+      expect(tooLong.status).toBe(400);
+      expect(tooLong.body.field).toBe('expiresInDays');
+      const blank = await postPreview(cookieHeader, { recipientContactIds: [1], subject: '   ' });
+      expect(blank.status).toBe(400);
+      expect(blank.body.field).toBe('subject');
+    });
+
+    it('a data "Link expires on" do preview segue expiresInDays', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData();
+      const today = new Date();
+      const in30 = new Date(today.getTime() + 30 * 86_400_000);
+      const res = await postPreview(cookieHeader, { recipientContactIds: [1], expiresInDays: 30 });
+      expect(res.status).toBe(200);
+      expect(res.body.preview.text).toContain(`Link expires on: ${formatEnGb(in30)}`);
+      expect(res.body.preview.text).not.toContain(`Link expires on: ${formatEnGb(today)}`);
+    });
+
+    it('paridade: preview e envio geram o mesmo assunto, html e texto', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData({ id: 7 });
+      prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+        id: 44,
+        rawTokenHash: 'h',
+        expiresAt: new Date(Date.now() + 7 * 86_400_000),
+        revokedAt: null,
+        firstSeenAt: null,
+        lastSeenAt: null,
+        accessCount: 0,
+        respondedAt: null,
+        quoteRequestId: 7,
+        supplierId: 1,
+        supplierContactId: 1,
+        dispatchEventId: 123,
+        createdById: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      prismaMock.supplierPortalToken.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.supplierPortalToken.create.mockImplementation(({ data }) =>
+        Promise.resolve({ id: 44, ...data }),
+      );
+      sendAndLogMock.mockResolvedValue({ providerMessageId: 'msg-p', status: 'sent' });
+      const payload = {
+        recipientContactIds: [1],
+        subject: 'Assunto paridade',
+        message: 'Mensagem & detalhes\nsegunda linha',
+        expiresInDays: 7,
+      };
+
+      const previewRes = await postPreview(cookieHeader, payload);
+      expect(previewRes.status).toBe(200);
+      const sendRes = await request(app)
+        .post('/api/v1/quote-requests/7/dispatch')
+        .set('Cookie', cookieHeader)
+        .send(payload);
+      expect(sendRes.status).toBe(201);
+      expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+
+      const sent = sendAndLogMock.mock.calls[0][0] as { subject: string; html: string; text: string };
+      const normalizeLink = (value: string) =>
+        value.replace(/https?:\/\/[^\s"<]*portal[^\s"<]*/g, '<LINK>');
+      expect(previewRes.body.preview.subject).toBe(sent.subject);
+      expect(normalizeLink(previewRes.body.preview.html)).toBe(normalizeLink(sent.html));
+      expect(normalizeLink(previewRes.body.preview.text)).toBe(normalizeLink(sent.text));
+    });
+  });
+
   it('injeta a mensagem do comprador ANTES da saudacao "Dear" no html enviado', async () => {
     const cookieHeader = await loginAndGetCookie();
     prismaMock.user.findFirst.mockResolvedValue({

@@ -1,7 +1,7 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import {
@@ -255,6 +255,18 @@ function messageOf(err: unknown): string {
   return 'Erro desconhecido.';
 }
 
+const DISPATCH_PREVIEW_DEBOUNCE_MS = 600;
+
+// Mesma normalizacao que o envio usa (trim no service + `Number(expires) || 7`),
+// para o preview refletir exatamente o que "Enviar agora" vai mandar.
+function normalizeDispatchPreviewInputs(subject: string, message: string, expires: string) {
+  return {
+    subject: subject.trim(),
+    message: message.trim(),
+    expiresInDays: Number(expires) || 7,
+  };
+}
+
 export default function CotacaoDetalhe() {
   const confirm = useConfirm();
   const params = useParams();
@@ -286,6 +298,9 @@ export default function CotacaoDetalhe() {
       preview: { subject: string; html: string; text: string } | null;
       cc: Array<{ email: string; name?: string }>;
     } | null>(null);
+    const [dispatchPreviewInputs, setDispatchPreviewInputs] = useState<
+      ReturnType<typeof normalizeDispatchPreviewInputs> | null
+    >(null);
     const [dispatchResult, setDispatchResult] = useState<DispatchSendResult | null>(null);
 
   // Tokens do portal (links magicos) ja gerados para esta cotacao. Cada
@@ -630,7 +645,11 @@ export default function CotacaoDetalhe() {
 
     const previewDispatchMutation = useMutation({
       mutationFn: () =>
-        previewDispatch(id, selectedContactIds),
+        previewDispatch(
+          id,
+          selectedContactIds,
+          normalizeDispatchPreviewInputs(dispatchSubject, dispatchMessage, dispatchExpires),
+        ),
       onSuccess: (data) => {
         setDispatchError(null);
         setDispatchPreview({
@@ -641,10 +660,74 @@ export default function CotacaoDetalhe() {
         if (!dispatchSubject.trim() && data.preview?.subject) {
           setDispatchSubject(data.preview.subject);
         }
+        // Semeia o cache do preview ao vivo com este resultado: entrar no passo
+        // preview nao dispara uma requisicao duplicada.
+        const normalized = normalizeDispatchPreviewInputs(
+          dispatchSubject,
+          dispatchMessage,
+          dispatchExpires,
+        );
+        const baseline = {
+          ...normalized,
+          subject: normalized.subject || data.preview?.subject || '',
+        };
+        qc.setQueryData(['dispatch-preview', id, selectedContactIds, baseline], data);
+        setDispatchPreviewInputs(baseline);
         setDispatchStep('preview');
       },
       onError: (err) => setDispatchError(messageOf(err)),
     });
+
+    // Preview ao vivo: assunto/mensagem/validade (debounce) atualizam o iframe.
+    useEffect(() => {
+      if (!showDispatchModal || dispatchStep !== 'preview') return;
+      const timer = setTimeout(() => {
+        setDispatchPreviewInputs(
+          normalizeDispatchPreviewInputs(dispatchSubject, dispatchMessage, dispatchExpires),
+        );
+      }, DISPATCH_PREVIEW_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }, [showDispatchModal, dispatchStep, dispatchSubject, dispatchMessage, dispatchExpires]);
+
+    const dispatchPreviewQuery = useQuery({
+      queryKey: ['dispatch-preview', id, selectedContactIds, dispatchPreviewInputs],
+      queryFn: () => previewDispatch(id, selectedContactIds, dispatchPreviewInputs!),
+      enabled: showDispatchModal && dispatchStep === 'preview' && dispatchPreviewInputs !== null,
+      placeholderData: keepPreviousData,
+      staleTime: 30_000,
+      retry: false,
+    });
+
+    // Preview desatualizado: campos atuais != debounced (debounce pendente) ou
+    // requisicao da key atual em andamento. Se o refresh da key atual der erro, libera
+    // o envio (o aviso de erro ja informa que o preview pode estar desatualizado).
+    const currentPreviewInputs = normalizeDispatchPreviewInputs(
+      dispatchSubject,
+      dispatchMessage,
+      dispatchExpires,
+    );
+    const previewInputsPending =
+      dispatchPreviewInputs !== null &&
+      (currentPreviewInputs.subject !== dispatchPreviewInputs.subject ||
+        currentPreviewInputs.message !== dispatchPreviewInputs.message ||
+        currentPreviewInputs.expiresInDays !== dispatchPreviewInputs.expiresInDays);
+    const previewStale =
+      previewInputsPending ||
+      (!dispatchPreviewQuery.isError &&
+        (dispatchPreviewQuery.isFetching || dispatchPreviewQuery.isPlaceholderData));
+
+    // `dispatchPreview` continua sendo o ultimo preview bom: se o refresh falhar,
+    // o iframe mantem o ultimo HTML valido.
+    useEffect(() => {
+      const data = dispatchPreviewQuery.data;
+      if (data && !dispatchPreviewQuery.isPlaceholderData) {
+        setDispatchPreview({
+          recipients: data.recipients,
+          preview: data.preview,
+          cc: data.cc ?? [],
+        });
+      }
+    }, [dispatchPreviewQuery.data, dispatchPreviewQuery.isPlaceholderData]);
 
     const sendDispatchMutation = useMutation({
       mutationFn: () =>
@@ -800,6 +883,7 @@ export default function CotacaoDetalhe() {
       setDispatchMessage('');
       setDispatchExpires('7');
       setDispatchPreview(null);
+      setDispatchPreviewInputs(null);
       setDispatchResult(null);
       setDispatchError(null);
       setShowDispatchModal(true);
@@ -1451,10 +1535,20 @@ export default function CotacaoDetalhe() {
                   </div>
                 )}
 
-                <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
+                <h3 style={{ marginTop: 16, marginBottom: 6 }}>
+                  Preview do e-mail
+                  {previewStale && (
+                    <span
+                      className="text-sm"
+                      style={{ color: 'var(--ink-soft)', marginLeft: 8, fontWeight: 400 }}
+                      role="status"
+                    >
+                      Atualizando preview…
+                    </span>
+                  )}
+                </h3>
                 {dispatchPreview?.preview ? (
                   <iframe
-                                    key={dispatchPreview.preview.html.length}
                                     title="preview-email"
                                     className="preview-frame"
                                     srcDoc={dispatchPreview.preview.html}
@@ -1462,6 +1556,11 @@ export default function CotacaoDetalhe() {
                 ) : (
                   <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
                     Nenhum preview disponivel (nenhum destinatario selecionado).
+                  </p>
+                )}
+                {dispatchPreviewQuery.isError && (
+                  <p style={{ color: 'var(--ink-soft)', marginTop: 8 }} className="text-sm">
+                    Não foi possível atualizar o preview ({messageOf(dispatchPreviewQuery.error)}). O envio usa os campos atuais.
                   </p>
                 )}
 
@@ -1478,7 +1577,9 @@ export default function CotacaoDetalhe() {
                   <button
                     type="button"
                     className="primary-button"
-                    disabled={sendDispatchMutation.isPending || selectedContactIds.length === 0}
+                    disabled={
+                      sendDispatchMutation.isPending || selectedContactIds.length === 0 || previewStale
+                    }
                     onClick={async () => {
                       if (await confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
                         sendDispatchMutation.mutate();

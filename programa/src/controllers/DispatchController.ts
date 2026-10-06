@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { QuoteRequestStatus } from '@prisma/client';
+import { Prisma, QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
@@ -11,6 +11,7 @@ import { SupplierPortalService } from '../services/SupplierPortalService';
 import { portalTokenRegenerateSchema } from '../validators/domain';
 import {
   dispatchCreateSchema,
+  dispatchPreviewSchema,
 } from '../validators/supplierPortal';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
 import { formatIncoterms } from '../utils/incoterm';
@@ -38,9 +39,15 @@ export class DispatchController {
         return res.status(400).json({ message: 'ID da cotacao invalido.' });
       }
 
-      const body = (req.body as { recipientContactIds?: number[]; locale?: string } | undefined) ?? {};
-      const ids = Array.isArray(body.recipientContactIds) ? body.recipientContactIds : [];
-      const contacts = await loadContactsForPreview(id, ids);
+      const parsed = dispatchPreviewSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0];
+        return res.status(400).json({
+          message: firstIssue?.message ?? 'Dados do envio invalidos.',
+          field: firstIssue?.path?.join('.') ?? null,
+        });
+      }
+      const contacts = await loadContactsForPreview(id, parsed.data.recipientContactIds);
       const quoteRequest = await prisma.quoteRequest.findFirst({
         where: { id, deletedAt: null },
         include: {
@@ -57,50 +64,23 @@ export class DispatchController {
             const siblingsBySupplier = await loadSiblingContactsForCc(contacts);
 
       const sample = contacts[0];
-      const subject = `Sourcing request ${quoteRequest.requestCode} - ${quoteRequest.productName}`;
       const portalLink = buildPortalLink('__preview__');
-            const locale = (typeof body.locale === 'string' && body.locale.trim().length > 0)
-              ? body.locale.trim()
-              : DISPATCH_DEFAULT_LOCALE;
-            const rendered = sample
-              ? await renderDispatchFromTemplate(
-                  buildTemplateVars({
-                    subject,
-                    requestCode: quoteRequest.requestCode,
-                    productName: quoteRequest.productName,
-                    quantity: quoteRequest.quantity,
-                    desiredIncoterm: formatIncoterms(quoteRequest.desiredIncoterm),
-                                destinationPort: quoteRequest.destinationPort,
-                                originPort: quoteRequest.originPort,
-                                currency: quoteRequest.currency,
-                                deadlineAt: quoteRequest.deadlineAt,
-                                expiresAt: new Date(),
-                                portalLink,
-                                companyName: profile.companyName,
-                                tradeName: profile.tradeName ?? undefined,
-                                taxId: profile.taxId ?? undefined,
-                                addressLine1: profile.addressLine1 ?? undefined,
-                                addressLine2: profile.addressLine2 ?? undefined,
-                                city: profile.city ?? undefined,
-                                state: profile.state ?? undefined,
-                                postalCode: profile.postalCode ?? undefined,
-                                country: profile.country ?? undefined,
-                                purchasingEmail: profile.purchasingEmail ?? '',
-                                purchasingPhone: profile.purchasingPhone ?? undefined,
-                                contact: sample,
-                                items: quoteRequest.items.map((it) => ({
-                                  marketName: it.catalogItem?.marketName ?? it.productName,
-                                  quantity: it.quantity,
-                                  unit: it.unit,
-                                  desiredIncoterm: it.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
-                                 destinationPort:
-                                   it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
-                                originPort: quoteRequest.originPort ?? undefined,
-                              })),
-                             }),
-                             locale,
-                           )
-                          : null;
+      const locale = parsed.data.locale?.trim() || DISPATCH_DEFAULT_LOCALE;
+      // Mesma formula de SupplierPortalService.createToken (ttlDays * 86_400_000),
+      // para o preview mostrar a mesma data de expiracao do e-mail enviado.
+      const expiresAt = new Date(Date.now() + parsed.data.expiresInDays * 86_400_000);
+      const rendered = sample
+        ? await renderDispatchEmail({
+            quoteRequest,
+            profile,
+            contact: sample,
+            portalLink,
+            expiresAt,
+            subject: parsed.data.subject,
+            customMessage: parsed.data.message,
+            locale,
+          })
+        : null;
 
       return res.status(200).json({
         recipientCount: contacts.length,
@@ -211,7 +191,7 @@ export class DispatchController {
       }
       const subjectBase = parsed.data.subject?.trim()
         ? parsed.data.subject.trim()
-        : `Sourcing request ${quoteRequest.requestCode} - ${quoteRequest.productName}`;
+        : defaultDispatchSubject(quoteRequest);
       const customMessage = parsed.data.message?.trim() ?? '';
       const expiresInDays = parsed.data.expiresInDays;
             const locale = parsed.data.locale?.trim() || DISPATCH_DEFAULT_LOCALE;
@@ -275,51 +255,17 @@ export class DispatchController {
           }
 
           const portalLink = buildPortalLink((token as { rawToken?: string }).rawToken ?? '');
-          const baseSubject = subjectBase;
-          const rendered = await renderDispatchFromTemplate(
-            buildTemplateVars({
-              subject: baseSubject,
-              requestCode: quoteRequest.requestCode,
-              productName: quoteRequest.productName,
-              quantity: quoteRequest.quantity,
-              desiredIncoterm: formatIncoterms(quoteRequest.desiredIncoterm),
-                        destinationPort: quoteRequest.destinationPort,
-                        originPort: quoteRequest.originPort,
-                        currency: quoteRequest.currency,
-                        deadlineAt: quoteRequest.deadlineAt,
-                        expiresAt: persistedToken.expiresAt,
-                        portalLink,
-                        companyName: profile.companyName,
-                        tradeName: profile.tradeName ?? undefined,
-                        taxId: profile.taxId ?? undefined,
-                        addressLine1: profile.addressLine1 ?? undefined,
-                        addressLine2: profile.addressLine2 ?? undefined,
-                        city: profile.city ?? undefined,
-                        state: profile.state ?? undefined,
-                        postalCode: profile.postalCode ?? undefined,
-                        country: profile.country ?? undefined,
-                        purchasingEmail: profile.purchasingEmail ?? '',
-                        purchasingPhone: profile.purchasingPhone ?? undefined,
-                        contact,
-                        items: quoteRequest.items.map((it) => ({
-                          marketName: it.catalogItem?.marketName ?? it.productName,
-                          quantity: it.quantity,
-                          unit: it.unit,
-                          desiredIncoterm: it.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
-                          destinationPort:
-                            it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
-                          originPort: quoteRequest.originPort ?? undefined,
-                        })),
-                      }),
-                                locale,
-                                parsed.data.subject?.trim() || undefined,
-                    );
-
-          const html = injectCustomMessage(rendered.html, customMessage);
-          const text = customMessage
-            ? `${customMessage}\n\n${rendered.text}`
-            : rendered.text;
-          const subject = rendered.subject;
+          const email = await renderDispatchEmail({
+            quoteRequest,
+            profile,
+            contact,
+            portalLink,
+            expiresAt: persistedToken.expiresAt,
+            subject: parsed.data.subject,
+            customMessage,
+            locale,
+          });
+          const { html, text, subject } = email;
 
                     const siblingCc = (siblingsBySupplier.get(contact.supplierId) ?? [])
                       .filter((s) => s.email && s.email.toLowerCase() !== contact.email.toLowerCase())
@@ -776,6 +722,74 @@ export class DispatchController {
       return res.status(handled.status).json({ message: handled.message });
     }
   }
+}
+
+type DispatchQuoteRequest = Prisma.QuoteRequestGetPayload<{
+  include: { items: { include: { catalogItem: true } } };
+}>;
+
+function defaultDispatchSubject(quoteRequest: { requestCode: string; productName: string | null }): string {
+  return `Sourcing request ${quoteRequest.requestCode} - ${quoteRequest.productName}`;
+}
+
+/**
+ * Monta o e-mail de envio (assunto/html/texto). Usado tanto pelo preview quanto
+ * pelo create, para garantir paridade entre o que o comprador ve e o que e enviado.
+ */
+export async function renderDispatchEmail(input: {
+  quoteRequest: DispatchQuoteRequest;
+  profile: ReturnType<typeof requireCompanyProfileFields>;
+  contact: DispatchRecipient;
+  portalLink: string;
+  expiresAt: Date;
+  subject?: string;
+  customMessage?: string;
+  locale: string;
+}): Promise<{ subject: string; html: string; text: string; source: 'database' | 'fallback' }> {
+  const { quoteRequest, profile } = input;
+  const subjectOverride = input.subject?.trim() || undefined;
+  const subjectBase = subjectOverride ?? defaultDispatchSubject(quoteRequest);
+  const rendered = await renderDispatchFromTemplate(
+    buildTemplateVars({
+      subject: subjectBase,
+      requestCode: quoteRequest.requestCode,
+      productName: quoteRequest.productName,
+      quantity: quoteRequest.quantity,
+      desiredIncoterm: formatIncoterms(quoteRequest.desiredIncoterm),
+      destinationPort: quoteRequest.destinationPort,
+      originPort: quoteRequest.originPort,
+      currency: quoteRequest.currency,
+      deadlineAt: quoteRequest.deadlineAt,
+      expiresAt: input.expiresAt,
+      portalLink: input.portalLink,
+      companyName: profile.companyName,
+      tradeName: profile.tradeName ?? undefined,
+      taxId: profile.taxId ?? undefined,
+      addressLine1: profile.addressLine1 ?? undefined,
+      addressLine2: profile.addressLine2 ?? undefined,
+      city: profile.city ?? undefined,
+      state: profile.state ?? undefined,
+      postalCode: profile.postalCode ?? undefined,
+      country: profile.country ?? undefined,
+      purchasingEmail: profile.purchasingEmail ?? '',
+      purchasingPhone: profile.purchasingPhone ?? undefined,
+      contact: input.contact,
+      items: quoteRequest.items.map((it) => ({
+        marketName: it.catalogItem?.marketName ?? it.productName,
+        quantity: it.quantity,
+        unit: it.unit,
+        desiredIncoterm: it.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
+        destinationPort: it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
+        originPort: quoteRequest.originPort ?? undefined,
+      })),
+    }),
+    input.locale,
+    subjectOverride,
+  );
+  const message = input.customMessage?.trim() ?? '';
+  const html = injectCustomMessage(rendered.html, message);
+  const text = message ? `${message}\n\n${rendered.text}` : rendered.text;
+  return { subject: rendered.subject, html, text, source: rendered.source };
 }
 
 function injectCustomMessage(html: string, message: string): string {
