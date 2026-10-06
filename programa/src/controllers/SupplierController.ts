@@ -28,8 +28,7 @@ export class SupplierController {
 
       if (!parsedBody.success) {
         return res.status(400).json({
-          message:
-            'Informe name, acceptedIncoterms e dados operacionais validos para o fornecedor.',
+          message: 'Informe name e dados operacionais validos para o fornecedor.',
         });
       }
 

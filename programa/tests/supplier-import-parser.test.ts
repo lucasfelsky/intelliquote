@@ -77,14 +77,36 @@ describe('parseSupplierRow', () => {
     expect(result.reasons.some((r) => r.includes('Incoterm inválido: XYZ'))).toBe(true);
   });
 
-  it('rejeita incoterm vazio', () => {
+  it('incoterm vazio assume todos', () => {
     const ctx = buildCtx();
     const cells = [...validRow];
     cells[3] = '';
     const result = parseSupplierRow(cells, ctx);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('esperava sucesso');
+    expect(result.data.acceptedIncoterms).toEqual([
+      'EXW',
+      'FCA',
+      'FAS',
+      'FOB',
+      'CFR',
+      'CIF',
+      'CPT',
+      'CIP',
+      'DAP',
+      'DPU',
+      'DDP',
+    ]);
+  });
+
+  it('incoterm valido misturado com invalido ainda rejeita', () => {
+    const ctx = buildCtx();
+    const cells = [...validRow];
+    cells[3] = 'FOB, XYZ';
+    const result = parseSupplierRow(cells, ctx);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('esperava falha');
-    expect(result.reasons).toContain('Informe ao menos um Incoterm');
+    expect(result.reasons.some((r) => r.includes('Incoterm inválido: XYZ'))).toBe(true);
   });
 
   it('prazo vazio assume 30', () => {
@@ -360,6 +382,12 @@ describe('isSupplierImportHeaderValid', () => {
     expect(isSupplierImportHeaderValid(header)).toBe(true);
   });
 
+  it('aceita planilha antiga com Incoterms* (asterisco)', () => {
+    const header = [...SUPPLIER_IMPORT_COLUMNS];
+    header[3] = 'Incoterms*';
+    expect(isSupplierImportHeaderValid(header)).toBe(true);
+  });
+
   it('rejeita colunas trocadas', () => {
     const header = [...SUPPLIER_IMPORT_COLUMNS];
     const swapped = [header[1], header[0], ...header.slice(2)] as string[];
@@ -394,5 +422,20 @@ describe('buildSupplierImportTemplate', () => {
       }
     });
     expect(emailInstruction).toContain('ponto e vírgula (;)');
+  });
+
+  it('a aba Instruções explica que Incoterms vazio = todos', async () => {
+    const buffer = await buildSupplierImportTemplate();
+    const workbook = new exceljs.Workbook();
+    await workbook.xlsx.load(buffer as any);
+    const sheet = workbook.getWorksheet('Instruções');
+    expect(sheet).toBeDefined();
+    let incotermInstruction = '';
+    sheet!.eachRow((row) => {
+      if (String(row.getCell(1).text) === 'Incoterms') {
+        incotermInstruction = String(row.getCell(2).text);
+      }
+    });
+    expect(incotermInstruction).toContain('todos os Incoterms');
   });
 });

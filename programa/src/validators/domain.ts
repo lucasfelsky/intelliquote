@@ -1,5 +1,6 @@
 import { Incoterm, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
 import { z } from 'zod';
+import { normalizeAcceptedIncoterms } from '../utils/incoterm';
 
 const requiredTrimmedStringField = z.string().trim().min(1);
 const uppercaseTrimmedStringField = requiredTrimmedStringField.transform((value) =>
@@ -84,6 +85,15 @@ const optionalIncotermField = z.preprocess(
     value === undefined || value === null || value === '' ? undefined : value,
   incotermField.optional(),
 );
+// Fornecedor sem incoterm selecionado = aceita todos (normaliza para os 11).
+const acceptedIncotermsCreateField = z.preprocess(
+  (value) => (value === undefined || value === null ? [] : value),
+  z.array(incotermField).transform(normalizeAcceptedIncoterms),
+);
+const acceptedIncotermsUpdateField = z
+  .array(incotermField)
+  .transform(normalizeAcceptedIncoterms)
+  .optional();
 
 const nullableDateField = z.preprocess(
   (value) =>
@@ -135,7 +145,7 @@ const familyIdsField = z.preprocess(
 export const supplierCreateSchema = z.object({
   name: requiredTrimmedStringField,
   website: nullableTrimmedStringField.optional(),
-  acceptedIncoterms: z.array(incotermField).min(1),
+  acceptedIncoterms: acceptedIncotermsCreateField,
   status: z.nativeEnum(SupplierStatus).optional(),
   country: nullableTrimmedStringField.optional(),
   notes: nullableTrimmedStringField.optional(),
@@ -147,7 +157,7 @@ export const supplierCreateSchema = z.object({
 export const supplierUpdateSchema = z.object({
   name: optionalTrimmedStringField,
   website: nullableOptionalTrimmedStringField,
-  acceptedIncoterms: z.array(incotermField).min(1).optional(),
+  acceptedIncoterms: acceptedIncotermsUpdateField,
   status: z.nativeEnum(SupplierStatus).optional(),
   country: nullableOptionalTrimmedStringField,
   notes: nullableOptionalTrimmedStringField,
@@ -163,7 +173,7 @@ export const supplierImportRowSchema = z.object({
   name: requiredTrimmedStringField,
   country: nullableTrimmedStringField,
   website: nullableTrimmedStringField,
-  acceptedIncoterms: z.array(incotermField).min(1),
+  acceptedIncoterms: acceptedIncotermsCreateField,
   paymentTermsDays: nonNegativeIntegerField,
   familyIds: z.array(positiveIntegerField).default([]),
   tags: tagsField,
