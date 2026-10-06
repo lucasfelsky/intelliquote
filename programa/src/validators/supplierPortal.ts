@@ -115,4 +115,12 @@ export const dispatchCreateSchema = z.object({
     .default(14),
 });
 
+// Preview reaproveita os limites do create (subject/message/locale/expiresInDays).
+// recipientContactIds e opcional: lista vazia devolve `preview: null`.
+export const dispatchPreviewSchema = dispatchCreateSchema
+  .pick({ subject: true, message: true, locale: true, expiresInDays: true })
+  .extend({
+    recipientContactIds: z.array(positiveIntegerField).max(500).optional().default([]),
+  });
+
 export type DispatchCreateInput = z.infer<typeof dispatchCreateSchema>;

@@ -131,10 +131,16 @@ export interface DispatchPreviewResult {
 export async function previewDispatch(
   quoteRequestId: number,
   recipientContactIds: number[],
+  options: { subject?: string; message?: string; expiresInDays?: number } = {},
 ): Promise<DispatchPreviewResult> {
   return api.post<DispatchPreviewResult>(
     `/v1/quote-requests/${quoteRequestId}/dispatch/preview`,
-    { recipientContactIds },
+    {
+      recipientContactIds,
+      subject: options.subject?.trim() || undefined,
+      message: options.message?.trim() || undefined,
+      expiresInDays: options.expiresInDays,
+    },
   );
 }
 

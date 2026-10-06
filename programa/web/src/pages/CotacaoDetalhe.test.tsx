@@ -301,9 +301,109 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     const dialog = await openDispatchToPreview(container, getByRole);
-    expect(previewDispatch).toHaveBeenCalledWith(1, [10]);
+    expect(previewDispatch).toHaveBeenCalledWith(1, [10], { subject: '', message: '', expiresInDays: 7 });
     const subjectInput = within(dialog).getByLabelText('Assunto') as HTMLInputElement;
     expect(subjectInput.value).toBe('Assunto teste');
+  });
+
+  describe('preview ao vivo no passo preview', () => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    function previewWith(html: string): DispatchPreviewResult {
+      return { ...previewFixture, preview: { subject: 'Assunto teste', html, text: 'oi' } };
+    }
+
+    function frameOf(dialog: HTMLDialogElement) {
+      return dialog.querySelector('iframe[title="preview-email"]') as HTMLIFrameElement;
+    }
+
+    it('9b. sem editar nada: previewDispatch e chamado so 1x (sem refresh duplicado)', async () => {
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      await openDispatchToPreview(container, getByRole);
+      await sleep(900);
+      expect(previewDispatch).toHaveBeenCalledTimes(1);
+    });
+
+    it('9c. editar a mensagem atualiza o preview apos o debounce de 600 ms', async () => {
+      vi.mocked(previewDispatch)
+        .mockResolvedValueOnce(previewWith('<p>antigo</p>'))
+        .mockResolvedValue(previewWith('<p>novo</p>'));
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      expect(frameOf(dialog).getAttribute('srcdoc')).toContain('antigo');
+
+      fireEvent.change(within(dialog).getByLabelText('Mensagem adicional para o fornecedor'), {
+        target: { value: 'Nova msg' },
+      });
+      expect(previewDispatch).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      expect(previewDispatch).toHaveBeenLastCalledWith(1, [10], {
+        subject: 'Assunto teste',
+        message: 'Nova msg',
+        expiresInDays: 7,
+      });
+      await waitFor(() => expect(frameOf(dialog).getAttribute('srcdoc')).toContain('novo'));
+    });
+
+    it('9d. resposta fora de ordem: a mais antiga nao sobrescreve a mais nova', async () => {
+      let resolveOld: (value: DispatchPreviewResult) => void = () => undefined;
+      const oldPromise = new Promise<DispatchPreviewResult>((resolve) => {
+        resolveOld = resolve;
+      });
+      vi.mocked(previewDispatch)
+        .mockResolvedValueOnce(previewFixture)
+        .mockReturnValueOnce(oldPromise)
+        .mockResolvedValue(previewWith('<p>NEW</p>'));
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+      const textarea = within(dialog).getByLabelText('Mensagem adicional para o fornecedor');
+
+      fireEvent.change(textarea, { target: { value: 'a' } });
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      fireEvent.change(textarea, { target: { value: 'ab' } });
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(3), { timeout: 2000 });
+      await waitFor(() => expect(frameOf(dialog).getAttribute('srcdoc')).toContain('NEW'));
+
+      resolveOld(previewWith('<p>OLD</p>'));
+      await sleep(100);
+      expect(frameOf(dialog).getAttribute('srcdoc')).toContain('NEW');
+      expect(frameOf(dialog).getAttribute('srcdoc')).not.toContain('OLD');
+    });
+
+    it('9e. refresh com erro: aviso nao bloqueante, iframe mantido e envio usa os campos atuais', async () => {
+      vi.mocked(previewDispatch)
+        .mockResolvedValueOnce(previewWith('<p>ultimo-bom</p>'))
+        .mockRejectedValue(new Error('falhou'));
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dialog = await openDispatchToPreview(container, getByRole);
+
+      fireEvent.change(within(dialog).getByLabelText('Mensagem adicional para o fornecedor'), {
+        target: { value: 'Nova msg' },
+      });
+      await waitFor(() => expect(dialog.textContent).toContain('Não foi possível atualizar o preview'), {
+        timeout: 2000,
+      });
+      expect(frameOf(dialog).getAttribute('srcdoc')).toContain('ultimo-bom');
+      const sendButton = within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement;
+      expect(sendButton.disabled).toBe(false);
+
+      fireEvent.click(sendButton);
+      const confirmDialog = dialogByTitle(container, 'Confirmar ação');
+      await waitFor(() => expect(confirmDialog.open).toBe(true));
+      fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Confirmar' }));
+      await waitFor(() =>
+        expect(sendDispatch).toHaveBeenCalledWith(1, [10], {
+          subject: 'Assunto teste',
+          message: 'Nova msg',
+          expiresInDays: 7,
+        }),
+      );
+    });
   });
 
   it('10. EMPILHAMENTO Dispatch + Tokens: os dois dialogs abertos ao mesmo tempo', async () => {
