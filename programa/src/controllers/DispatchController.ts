@@ -185,6 +185,10 @@ export class DispatchController {
           });
             const globalCc = getComexCcList();
             const companyCc = readDispatchCc(profileRecord).map((email) => ({ email, name: '' }));
+            const comexCcFirstOnly = parsed.data.comexCcFirstOnly === true;
+            const hasComexCc = globalCc.length + companyCc.length > 0;
+            let comexCcDelivered = false;
+            let comexCcContactId: number | null = null;
             const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ message: 'Sessao expirada. Faca login novamente.' });
@@ -224,6 +228,7 @@ export class DispatchController {
         tokenId?: number;
         dispatchEventId: number;
               ccCount?: number;
+              comexCc?: boolean;
             }> = [];
 
       let sentCount = 0;
@@ -275,7 +280,12 @@ export class DispatchController {
                     // CCs globais e com os contatos secundarios do mesmo
                     // fornecedor. Dedupe case-insensitive e nunca repetimos o
                     // proprio destinatario.
-                    const recipientCc = [...globalCc, ...siblingCc, ...companyCc].reduce<
+                    const includeComexCc = !comexCcFirstOnly || !comexCcDelivered;
+                    const recipientCc = [
+                      ...(includeComexCc ? globalCc : []),
+                      ...siblingCc,
+                      ...(includeComexCc ? companyCc : []),
+                    ].reduce<
                       Array<{ email: string; name: string }>
                     >((acc, current) => {
                       if (!current || !current.email) return acc;
@@ -308,12 +318,17 @@ export class DispatchController {
 
           if (sendResult.status === 'sent') {
             sentCount += 1;
+            if (comexCcFirstOnly && includeComexCc && hasComexCc) {
+              comexCcDelivered = true;
+              comexCcContactId = contact.supplierContactId;
+            }
             results.push({
               supplierContactId: contact.supplierContactId,
               status: 'sent',
               tokenId: persistedToken.id,
               dispatchEventId: dispatchEvent.id,
                         ccCount: recipientCc.length,
+                        comexCc: includeComexCc && hasComexCc,
                       });
                     } else {
                       failedCount += 1;
@@ -324,6 +339,7 @@ export class DispatchController {
                         tokenId: persistedToken.id,
                         dispatchEventId: dispatchEvent.id,
                         ccCount: recipientCc.length,
+                        comexCc: false,
                       });
                     }
                   } catch (error) {
@@ -333,6 +349,7 @@ export class DispatchController {
                       status: 'failed',
                       error: error instanceof Error ? error.message : 'Falha desconhecida.',
                       dispatchEventId: dispatchEvent.id,
+                      comexCc: false,
                     });
                   }
       }
@@ -353,6 +370,8 @@ export class DispatchController {
           recipientsCount: recipients.length,
           sentCount,
           failedCount,
+          comexCcFirstOnly,
+          comexCcContactId,
         },
       });
 

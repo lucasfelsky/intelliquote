@@ -291,6 +291,7 @@ export default function CotacaoDetalhe() {
     const [dispatchSubject, setDispatchSubject] = useState('');
     const [dispatchMessage, setDispatchMessage] = useState('');
     const [dispatchExpires, setDispatchExpires] = useState('7');
+    const [dispatchComexCcFirstOnly, setDispatchComexCcFirstOnly] = useState(true);
     const [dispatchError, setDispatchError] = useState<string | null>(null);
     const [dispatchStep, setDispatchStep] = useState<'select' | 'preview' | 'sent'>('select');
     const [dispatchPreview, setDispatchPreview] = useState<{
@@ -735,6 +736,7 @@ export default function CotacaoDetalhe() {
           subject: dispatchSubject,
           message: dispatchMessage,
           expiresInDays: Number(dispatchExpires) || 7,
+          comexCcFirstOnly: dispatchComexCcFirstOnly,
         }),
       onSuccess: (data) => {
         setDispatchError(null);
@@ -882,6 +884,7 @@ export default function CotacaoDetalhe() {
       setDispatchSubject('');
       setDispatchMessage('');
       setDispatchExpires('7');
+      setDispatchComexCcFirstOnly(true);
       setDispatchPreview(null);
       setDispatchPreviewInputs(null);
       setDispatchResult(null);
@@ -1511,6 +1514,22 @@ export default function CotacaoDetalhe() {
                   placeholder="Opcional. Esta mensagem sera exibida no topo do e-mail."
                 />
 
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}
+                  className="text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={dispatchComexCcFirstOnly}
+                    onChange={(e) => setDispatchComexCcFirstOnly(e.target.checked)}
+                    aria-describedby="dispatchComexCcHelp"
+                  />
+                  Equipe COMEX em cópia só no primeiro e-mail
+                </label>
+                <p id="dispatchComexCcHelp" className="text-xs" style={{ color: 'var(--ink-soft)' }}>
+                  Ligado: só o 1º e-mail enviado leva a equipe COMEX e o CC fixo da empresa. Os contatos do próprio fornecedor continuam em cópia em todos.
+                </p>
+
                 <div className="recipient-summary">
                   {dispatchPreview?.recipients.map((r) => (
                     <span key={r.supplierContactId} className="recipient-summary__pill">
@@ -1531,6 +1550,7 @@ export default function CotacaoDetalhe() {
                       title={companyCcList.join(', ')}
                     >
                       CC fixo da empresa: {companyCcList.join(', ')}
+                      {dispatchComexCcFirstOnly ? ' (só no 1º e-mail)' : ''}
                     </span>
                   </div>
                 )}
@@ -1637,7 +1657,7 @@ export default function CotacaoDetalhe() {
                           <td style={{ color: 'var(--ink-soft)' }} className="text-xs">
                                               {r.error ??
                                                 (r.status === 'sent'
-                                                  ? `Link magico gerado${r.ccCount ? ` · +${r.ccCount} CC` : ''}`
+                                                  ? `Link magico gerado${r.ccCount ? ` · +${r.ccCount} CC` : ''}${dispatchComexCcFirstOnly && r.comexCc ? ' · cópia COMEX' : ''}`
                                                   : '')}
                                             </td>
                                           </tr>
