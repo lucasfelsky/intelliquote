@@ -412,3 +412,317 @@ describe('Portal routes (public, magic-link)', () => {
     }
   });
 });
+
+describe('Portal - preco por incoterm e descricao', () => {
+  let counter = 0;
+  let agentSeq = 0;
+  // O rate limiter do portal e por IP + User-Agent (10/min): isola cada requisicao.
+  const uniqueAgent = () => `vitest-incoterm-${(agentSeq += 1)}`;
+
+  function mockRespondEnv(desiredIncoterm: string[]) {
+    counter += 1;
+    const rawToken = `tok-incoterm-${counter}-` + 'x'.repeat(40);
+    const tokenHash = hashToken(rawToken);
+    const expires = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+    const token = {
+      id: 40 + counter,
+      tokenHash,
+      expiresAt: expires,
+      revokedAt: null,
+      respondedAt: null,
+      accessCount: 0,
+      firstSeenAt: null,
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+    };
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue(token);
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ desiredIncoterm });
+    prismaMock.quoteRequestItem.findMany.mockResolvedValue([{ id: 11, productName: 'Acido' }]);
+    prismaMock.__tx.supplierPortalResponse.findUnique.mockResolvedValue(null);
+    prismaMock.__tx.supplierPortalResponse.create.mockResolvedValue({
+      id: 99,
+      totalPrice: { toString: () => '100.00' },
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      notes: null,
+      submittedAt: new Date(),
+      items: [
+        {
+          id: 1,
+          quoteRequestItemId: 11,
+          unitPrice: '10.00',
+          quantity: 10,
+          totalPrice: { toString: () => '100.00' },
+          leadTimeDays: null,
+          notes: null,
+          incotermPrices: null,
+        },
+      ],
+    });
+    prismaMock.__tx.quoteResponse.upsert.mockResolvedValue({ id: 501 });
+    prismaMock.__tx.supplierPortalToken.update.mockResolvedValue({});
+    return rawToken;
+  }
+
+  async function respond(
+    rawToken: string,
+    overrides: { incoterm?: string; incotermPrices?: { incoterm: string; unitPrice: number }[] } = {},
+  ) {
+    const item: Record<string, unknown> = {
+      quoteRequestItemId: 11,
+      unitPrice: 10,
+      quantity: 10,
+      totalPrice: 100,
+    };
+    if (overrides.incotermPrices) item.incotermPrices = overrides.incotermPrices;
+    return request(app)
+      .post(`/api/portal/${rawToken}/respond`)
+      .set('User-Agent', uniqueAgent())
+      .send({
+        currency: 'USD',
+        incoterm: overrides.incoterm ?? 'FOB',
+        exchangeRate: 5,
+        paymentTermsDays: 30,
+        totalPrice: 100,
+        validityDays: 30,
+        items: [item],
+      });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('salva um preco por incoterm (N=2) e persiste o array', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, {
+      incotermPrices: [
+        { incoterm: 'FOB', unitPrice: 10 },
+        { incoterm: 'CIF', unitPrice: 12.5 },
+      ],
+    });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.items.create[0].incotermPrices).toEqual([
+      { incoterm: 'FOB', unitPrice: '10.00', totalPrice: '100.00' },
+      { incoterm: 'CIF', unitPrice: '12.50', totalPrice: '125.00' },
+    ]);
+  });
+
+  it('rejeita incoterm fora da cotacao em incotermPrices', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, {
+      incotermPrices: [
+        { incoterm: 'FOB', unitPrice: 10 },
+        { incoterm: 'DDP', unitPrice: 12 },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('rejeita incoterm duplicado', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, {
+      incotermPrices: [
+        { incoterm: 'FOB', unitPrice: 10 },
+        { incoterm: 'FOB', unitPrice: 10 },
+      ],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejeita quando falta o preco de um incoterm da cotacao', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, { incotermPrices: [{ incoterm: 'FOB', unitPrice: 10 }] });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejeita incoterm principal fora da cotacao', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, {
+      incoterm: 'DDP',
+      incotermPrices: [
+        { incoterm: 'FOB', unitPrice: 10 },
+        { incoterm: 'CIF', unitPrice: 12 },
+      ],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejeita quando o preco do incoterm principal difere do unitPrice', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, {
+      incotermPrices: [
+        { incoterm: 'FOB', unitPrice: 11 },
+        { incoterm: 'CIF', unitPrice: 12 },
+      ],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('exige incotermPrices em todos os itens quando a cotacao tem 2+ incoterms', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token);
+    expect(res.status).toBe(400);
+  });
+
+  it('normaliza payload legado quando a cotacao tem 1 incoterm (N=1)', async () => {
+    const token = mockRespondEnv(['FOB']);
+    const res = await respond(token);
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.items.create[0].incotermPrices).toEqual([
+      { incoterm: 'FOB', unitPrice: '10.00', totalPrice: '100.00' },
+    ]);
+  });
+
+  it('cotacao com desiredIncoterm duplicado (FOB, FOB) aceita um unico preco FOB', async () => {
+    const token = mockRespondEnv(['FOB', 'FOB']);
+    const res = await respond(token, { incotermPrices: [{ incoterm: 'FOB', unitPrice: 10 }] });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.items.create[0].incotermPrices).toEqual([
+      { incoterm: 'FOB', unitPrice: '10.00', totalPrice: '100.00' },
+    ]);
+  });
+
+  it('rejeita unitPrice absurdo (1e300) dentro de incotermPrices', async () => {
+    const token = mockRespondEnv(['FOB', 'CIF']);
+    const res = await respond(token, {
+      incotermPrices: [
+        { incoterm: 'FOB', unitPrice: 10 },
+        { incoterm: 'CIF', unitPrice: 1e300 },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('cotacao sem incoterms (N=0): preco unico segue funcionando e rejeita incotermPrices', async () => {
+    const legacy = mockRespondEnv([]);
+    const ok = await respond(legacy);
+    expect(ok.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    // Prisma.DbNull (nao e array): coluna fica NULL
+    expect(Array.isArray(created.data.items.create[0].incotermPrices)).toBe(false);
+
+    const withPrices = mockRespondEnv([]);
+    const bad = await respond(withPrices, { incotermPrices: [{ incoterm: 'FOB', unitPrice: 10 }] });
+    expect(bad.status).toBe(400);
+  });
+
+  it('proposta legada (incotermPrices nulo) continua legivel no GET do portal', async () => {
+    const rawToken = 'tok-legacy-view-' + 'y'.repeat(40);
+    const tokenHash = hashToken(rawToken);
+    const fullToken = {
+      id: 60,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 86400000),
+      revokedAt: null,
+      respondedAt: new Date(),
+      accessCount: 1,
+      firstSeenAt: new Date(),
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+      quoteRequest: {
+        id: 5,
+        requestCode: 'QR-1',
+        productName: 'Acido',
+        description: 'Texto',
+        desiredIncoterm: ['FOB', 'CIF'],
+        currency: 'USD',
+        deadlineAt: null,
+        items: [{ id: 11, itemCode: 'A1', productName: 'Acido', quantity: 10, unit: 'UN', description: null, notes: null }],
+      },
+      supplier: { id: 2, name: 'Acme' },
+      supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+    };
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue(fullToken);
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue({
+      id: 7,
+      version: 1,
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      totalPrice: { toString: () => '100.00' },
+      totalPriceCurrency: 'USD',
+      validityDays: 30,
+      notes: null,
+      submittedAt: new Date(),
+      items: [
+        {
+          quoteRequestItemId: 11,
+          unitPrice: { toString: () => '10.00' },
+          quantity: 10,
+          totalPrice: { toString: () => '100.00' },
+          leadTimeDays: null,
+          notes: null,
+          incotermPrices: null,
+        },
+      ],
+    });
+    const res = await request(app).get(`/api/portal/${rawToken}`).set('User-Agent', uniqueAgent());
+    expect(res.status).toBe(200);
+    expect(res.body.response.items[0].unitPrice).toBe('10.00');
+    expect(res.body.response.items[0].incotermPrices).toBeNull();
+    expect(res.body.quoteRequest.description).toBe('Texto');
+  });
+
+  it('descricao so com espacos vira null no GET do portal', async () => {
+    const rawToken = 'tok-blank-desc-' + 'z'.repeat(40);
+    const fullToken = {
+      id: 61,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 86400000),
+      revokedAt: null,
+      respondedAt: null,
+      accessCount: 0,
+      firstSeenAt: null,
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+      quoteRequest: {
+        id: 5,
+        requestCode: 'QR-2',
+        productName: 'Acido',
+        description: '   ',
+        desiredIncoterm: [],
+        currency: 'USD',
+        deadlineAt: null,
+        items: [],
+      },
+      supplier: { id: 2, name: 'Acme' },
+      supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+    };
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue(fullToken);
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue(null);
+    const res = await request(app).get(`/api/portal/${rawToken}`).set('User-Agent', uniqueAgent());
+    expect(res.status).toBe(200);
+    expect(res.body.quoteRequest.description).toBeNull();
+  });
+
+  it('portal.html: campos por incoterm e destaque da descricao (estatico)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'portal.html'), 'utf8');
+    expect(html).toContain('name="incotermPrice"');
+    expect(html).toContain('data-incoterm=');
+    expect(html).toContain('portal-description-callout');
+    expect(html).not.toContain("|| '&nbsp;'");
+    expect(html).toContain('data-incoterm="${esc(inc)}" min="0.0001"');
+    expect(html).toContain('Array.from(new Set(data.quoteRequest.desiredIncoterm || []))');
+    expect(html).toContain('Prices per incoterm');
+    expect(html).toContain('class="incoterm-prices"');
+    expect(html).toContain('class="incoterm-chip"');
+    expect(html).toContain('data-main-badge');
+    expect(html).toContain('.incoterm-main-badge[hidden]');
+    expect(html).toContain('function syncMainIncoterm(form)');
+    expect(html).toContain('aria-label="${esc(inc)} unit price (');
+    expect(html).toContain('name="unitPrice" data-default-qty="${it.quantity}"');
+    expect(html).not.toContain('<label>Unit price ${esc(inc)}');
+  });
+});

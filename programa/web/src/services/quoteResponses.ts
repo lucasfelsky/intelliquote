@@ -26,6 +26,9 @@ export interface QuoteResponseItem {
   notes: string | null;
   productName?: string | null;
   targetPrice?: number | null;
+  incotermPrices?:
+    | { incoterm: Incoterm; unitPrice: string | number; totalPrice: string | number }[]
+    | null;
 }
 
 export interface QuoteResponse {
@@ -222,6 +225,7 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
           notes: (i.notes as string | null) ?? null,
           productName: i.quoteRequestItem?.productName ?? null,
           targetPrice: i.targetPrice === null || i.targetPrice === undefined ? null : asNumber(i.targetPrice),
+          incotermPrices: Array.isArray(i.incotermPrices) ? i.incotermPrices : null,
         }))
       : undefined,
     source,

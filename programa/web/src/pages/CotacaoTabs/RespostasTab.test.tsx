@@ -154,6 +154,57 @@ describe('RespostasTab', () => {
     expect(within(dialogC).getByText('40,00 USD')).toBeTruthy();
   });
 
+  it('3c. normalizeResponse repassa incotermPrices e o pop-up mostra a coluna (2 incoterms)', async () => {
+    const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+      '@/services/quoteResponses',
+    );
+    const normalized = actual.normalizeResponse({
+      ...response,
+      items: [{
+        id: 1, quoteResponseId: 42, quoteRequestItemId: 5,
+        unitPrice: '10.00', quantity: 4, totalPrice: '40.00', leadTimeDays: 15,
+        notes: null, quoteRequestItem: { productName: 'Resina Epóxi' },
+        incotermPrices: [
+          { incoterm: 'FOB', unitPrice: '10.00', totalPrice: '40.00' },
+          { incoterm: 'CIF', unitPrice: '12.50', totalPrice: '50.00' },
+        ],
+      }],
+    });
+    expect(normalized.items?.[0]?.incotermPrices).toHaveLength(2);
+
+    vi.mocked(listQuoteResponses).mockResolvedValue([normalized]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).getByText('Preços por incoterm')).toBeTruthy();
+    expect(within(dialogC).getByText('FOB: 10,00 USD · CIF: 12,50 USD')).toBeTruthy();
+  });
+
+  it('3d. item legado (incotermPrices nulo) normaliza para null e o pop-up fica sem a coluna', async () => {
+    const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+      '@/services/quoteResponses',
+    );
+    const normalized = actual.normalizeResponse({
+      ...response,
+      items: [{
+        id: 1, quoteResponseId: 42, quoteRequestItemId: 5,
+        unitPrice: '10.00', quantity: 4, totalPrice: '40.00', leadTimeDays: 15,
+        notes: null, quoteRequestItem: { productName: 'Resina Epóxi' },
+        incotermPrices: null,
+      }],
+    });
+    expect(normalized.items?.[0]?.incotermPrices).toBeNull();
+
+    vi.mocked(listQuoteResponses).mockResolvedValue([normalized]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).getByText('Resina Epóxi')).toBeTruthy();
+    expect(within(dialogC).queryByText('Preços por incoterm')).toBeNull();
+  });
+
   it('4. modal A é wide', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');

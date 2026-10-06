@@ -108,7 +108,9 @@ async function buildPortalView(tokenId: number) {
       id: token.quoteRequest.id,
       requestCode: token.quoteRequest.requestCode,
       productName: token.quoteRequest.productName,
-      description: token.quoteRequest.description,
+      description: token.quoteRequest.description?.trim()
+        ? token.quoteRequest.description.trim()
+        : null,
       desiredIncoterm: token.quoteRequest.desiredIncoterm,
         destinationPort: token.quoteRequest.destinationPort,
         originPort: token.quoteRequest.originPort ?? 'Shanghai',
@@ -163,6 +165,7 @@ async function buildPortalView(tokenId: number) {
             totalPrice: it.totalPrice.toString(),
             leadTimeDays: it.leadTimeDays,
             notes: it.notes,
+            incotermPrices: it.incotermPrices ?? null,
           })),
         }
       : null,

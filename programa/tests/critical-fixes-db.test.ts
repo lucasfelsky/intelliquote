@@ -189,6 +189,43 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     expect(await prisma.supplierPortalResponseRevision.count({ where: { portalTokenId: token.id } })).toBe(1);
   });
 
+  it('portal grava preco por incoterm, preserva legado nulo e snapshot de revisao', async () => {
+    const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
+    const token = await prisma.supplierPortalToken.create({ data: {
+      tokenHash: `incoterm-${quote.id}`, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id, createdById: adminId,
+      expiresAt: new Date(Date.now() + 86400000),
+    } });
+    const build = (prices: number[]) => ({
+      tokenId: token.id, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id,
+      payload: { currency: 'USD', incoterm: 'FOB' as const, paymentTermsDays: 30,
+        exchangeRate: 5, totalPrice: prices.reduce((a, b) => a + b, 0), validityDays: 30,
+        items: payload(suppliers[0].id, prices).items.map((i: any) => ({
+          ...i, totalPrice: i.unitPrice * i.quantity,
+          incotermPrices: [{ incoterm: 'FOB' as const, unitPrice: i.unitPrice }],
+        })),
+      },
+    });
+    const first = await SupplierPortalResponseService.submit(build([10, 100]));
+    const portalItems = await prisma.supplierPortalResponseItem.findMany({ where: { responseId: first.portalResponse.id } });
+    expect(portalItems).toHaveLength(2);
+    for (const it of portalItems) expect((it.incotermPrices as any[]).length).toBe(1);
+    const mirrored = await prisma.quoteResponseItem.findMany({
+      where: { quoteResponseId: first.quoteResponse.id, deletedAt: null },
+    });
+    for (const it of mirrored) expect((it.incotermPrices as any[])[0].incoterm).toBe('FOB');
+    // Item legado: coluna omitida le null.
+    const legacy = await prisma.supplierPortalResponseItem.create({ data: {
+      responseId: first.portalResponse.id, quoteRequestItemId: quote.items[0].id,
+      unitPrice: 1, quantity: 1, totalPrice: 1,
+    } });
+    expect(legacy.incotermPrices).toBeNull();
+    await SupplierPortalResponseService.submit(build([20, 1]));
+    const revision = await prisma.supplierPortalResponseRevision.findFirst({ where: { portalTokenId: token.id } });
+    expect((revision!.items as any[]).some((i) => Array.isArray(i.incotermPrices))).toBe(true);
+  });
+
   it('portal nao reutiliza cambio USD ao receber proposta em EUR sem taxa', async () => {
     const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
     const token = await prisma.supplierPortalToken.create({ data: {
