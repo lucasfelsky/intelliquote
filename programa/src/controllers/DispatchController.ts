@@ -316,7 +316,9 @@ export class DispatchController {
                       relatedEntityId: String(id),
                     });
 
-          if (sendResult.status === 'sent') {
+          // 'queued' = provedor aceitou o envio: conta como entregue (destinatario
+          // e copia COMEX), igual a 'sent'.
+          if (sendResult.status === 'sent' || sendResult.status === 'queued') {
             sentCount += 1;
             if (comexCcFirstOnly && includeComexCc && hasComexCc) {
               comexCcDelivered = true;

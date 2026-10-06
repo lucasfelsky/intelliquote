@@ -837,6 +837,25 @@ describe('comexCcFirstOnly - equipe COMEX so no primeiro e-mail', () => {
     expect(res.body.results[2].comexCc).toBe(false);
   });
 
+  it("b3) 1o envio 'queued' (provedor aceitou): conta como enviado e a copia NAO passa para o proximo", async () => {
+    const cookie = await setup();
+    sendAndLogMock.mockResolvedValueOnce({ providerMessageId: 'q', status: 'queued' });
+    const res = await request(app)
+      .post('/api/v1/quote-requests/9/dispatch')
+      .set('Cookie', cookie)
+      .send({ recipientContactIds: [10, 20, 30], comexCcFirstOnly: true });
+
+    expect(res.status).toBe(201);
+    expect(sendAndLogMock).toHaveBeenCalledTimes(3);
+    expect(ccOf(0)).toEqual(expect.arrayContaining([COMEX, FIXO]));
+    expect(ccOf(1)).not.toContain(COMEX);
+    expect(ccOf(1)).not.toContain(FIXO);
+    expect(ccOf(2)).not.toContain(COMEX);
+    expect(res.body.sentCount).toBe(3);
+    expect(res.body.failedCount).toBe(0);
+    expect(res.body.results.map((r: { comexCc: boolean }) => r.comexCc)).toEqual([true, false, false]);
+  });
+
   it('b2) 1o envio falha por excecao: a copia passa para o proximo', async () => {
     const cookie = await setup();
     sendAndLogMock.mockRejectedValueOnce(new Error('smtp'));
