@@ -341,19 +341,26 @@
               margin-bottom: 6px;
             }
             .portal-lead { font-size: 13px; color: var(--portal-ink-soft); }
-            .portal-description-callout {
-              margin-top: 12px;
-              padding: 12px 16px;
-              border-left: 4px solid var(--portal-primary);
-              background: var(--portal-warn-bg);
+            .buyer-notes { margin-top: 8px; }
+            .buyer-notes-card {
+              display: flex;
+              align-items: flex-start;
+              gap: 12px;
+              padding: 16px 18px;
+              background: var(--portal-primary-50);
+              border: 1px solid var(--portal-line);
               border-radius: var(--portal-radius-sm);
-              color: var(--portal-ink);
+              box-shadow: var(--portal-shadow-soft);
             }
-            .portal-description-callout p { margin: 0; }
-            .portal-description-callout p + p {
-              margin-top: 4px;
-              font-size: 14px;
+            .buyer-notes-icon { flex: 0 0 auto; margin-top: 2px; color: var(--portal-primary-700); }
+            .buyer-notes-text {
+              margin: 0;
+              min-width: 0;
+              font-size: 15px;
+              line-height: 1.6;
+              color: var(--portal-ink);
               white-space: pre-line;
+              overflow-wrap: anywhere;
             }
       .dg-badge {
         background: var(--portal-warn-bg);
@@ -611,6 +618,8 @@
         .portal-main { padding: 22px 18px 24px; }
         .form-grid { grid-template-columns: 1fr; }
         .incoterm-prices { padding: 12px; }
+        .buyer-notes-card { padding: 14px; gap: 10px; }
+        .buyer-notes-text { font-size: 14px; }
         .supplier-card { flex-wrap: wrap; }
         .supplier-card .expires { width: 100%; text-align: left; }
         .items-table thead { display: none; }
@@ -679,7 +688,7 @@
             ? 'localhost'
             : 'firebase-hosting';
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v54-20260710');
+          document.documentElement.setAttribute('data-portal-version', 'v55-20261006');
         } catch (bootErr) {
           /* swallow: nao e critico */
         }
@@ -840,6 +849,7 @@
               : ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'DAP', 'DDP'];
           const quoteIncoterms = Array.from(new Set(data.quoteRequest.desiredIncoterm || []));
           const hasQuoteIncoterms = quoteIncoterms.length > 0;
+          const buyerNotesText = String(data.quoteRequest.description || '').trim();
           return `
             <form id="portal-form" autocomplete="off">
               <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
@@ -889,9 +899,8 @@
                     const unitVal = prev ? esc(prev.unitPrice) : '';
                     const qtyVal = prev && prev.quantity != null ? prev.quantity : it.quantity;
                     const leadVal = prev && prev.leadTimeDays != null ? prev.leadTimeDays : '';
-                    const itemNotes = prev && prev.notes ? esc(prev.notes) : '';
                     return `
-                  <div class="item-row" data-item-id="${it.id}">
+                  <div class="item-row" data-item-id="${it.id}"${prev && prev.notes ? ` data-prev-notes="${esc(prev.notes)}"` : ''}>
                     <h3>${esc(it.productName)}</h3>
                     <p class="item-meta">
                       <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
@@ -938,14 +947,23 @@
                       <label>Lead time (days)
                         <input type="number" min="0" name="leadTimeDays" value="${leadVal}" />
                       </label>
-                      <label>Item notes
-                        <input type="text" name="notes" value="${itemNotes}" />
-                      </label>
                     </div>
                   </div>`;
                   })
                   .join('')}
               </div>
+
+              ${
+                buyerNotesText
+                  ? `<section class="buyer-notes" id="portal-buyer-notes" aria-labelledby="portal-buyer-notes-title">
+                <h2 class="section-title" id="portal-buyer-notes-title">Notes from the buyer</h2>
+                <div class="buyer-notes-card">
+                  <svg class="buyer-notes-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <p class="buyer-notes-text">${esc(buyerNotesText)}</p>
+                </div>
+              </section>`
+                  : ''
+              }
 
               <div class="actions">
                 <button type="button" class="ghost" id="portal-cancel">Clear</button>
@@ -1038,14 +1056,14 @@
             const quantity = Number(row.querySelector('input[name="quantity"]').value);
             const totalPrice = unitPrice * quantity;
             const leadTimeDaysRaw = row.querySelector('input[name="leadTimeDays"]').value;
-            const notesRaw = row.querySelector('input[name="notes"]').value;
+            const prevNotes = row.getAttribute('data-prev-notes');
             const item = {
               quoteRequestItemId,
               unitPrice,
               quantity,
               totalPrice,
               leadTimeDays: leadTimeDaysRaw === '' ? null : Number(leadTimeDaysRaw),
-              notes: notesRaw ? notesRaw : null,
+              notes: prevNotes ? prevNotes : null,
             };
             if (incotermPrices.length) item.incotermPrices = incotermPrices;
             items.push(item);
@@ -1184,16 +1202,11 @@
                 ? `<span class="badge info">Submitted${currentVersion ? ' · v' + currentVersion : ''}</span> You already sent a proposal. You can revise your prices until the link expires — update the values below and submit again.`
                 : null,
             );
-            const descriptionText = String(data.quoteRequest.description || '').trim();
-            const description = descriptionText
-              ? `<div class="portal-description-callout"><p class="eyebrow">Buyer notes</p><p>${esc(descriptionText)}</p></div>`
-              : '';
             const items = data.quoteRequest.items || [];
             content.innerHTML = `
               <div class="portal-title-block">
                 <p class="eyebrow">Sourcing request ${data.quoteRequest.requestCode}</p>
                 <h1>${items.length === 1 ? items[0].productName : `${items.length} items`}</h1>
-                ${description}
               </div>
               ${renderSupplierCard(data)}
               ${renderItemsTable(items)}

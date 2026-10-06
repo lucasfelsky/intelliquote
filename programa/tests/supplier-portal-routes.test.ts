@@ -711,7 +711,7 @@ describe('Portal - preco por incoterm e descricao', () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'portal.html'), 'utf8');
     expect(html).toContain('name="incotermPrice"');
     expect(html).toContain('data-incoterm=');
-    expect(html).toContain('portal-description-callout');
+    expect(html).not.toContain('portal-description-callout');
     expect(html).not.toContain("|| '&nbsp;'");
     expect(html).toContain('data-incoterm="${esc(inc)}" min="0.0001"');
     expect(html).toContain('Array.from(new Set(data.quoteRequest.desiredIncoterm || []))');
@@ -724,5 +724,29 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).toContain('aria-label="${esc(inc)} unit price (');
     expect(html).toContain('name="unitPrice" data-default-qty="${it.quantity}"');
     expect(html).not.toContain('<label>Unit price ${esc(inc)}');
+  });
+
+  it('portal.html: sem item notes e buyer notes no fim do form (estatico)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'portal.html'), 'utf8');
+    expect(html.match(/name="notes"/g) ?? []).toHaveLength(1);
+    expect(html).toContain('<textarea name="notes"');
+    expect(html).not.toContain('Item notes');
+    expect(html).toContain('data-prev-notes="${esc(prev.notes)}"');
+    expect(html).toContain("row.getAttribute('data-prev-notes')");
+    const iPricing = html.indexOf('<h2 class="section-title">Item pricing</h2>');
+    const iItems = html.indexOf('<div id="portal-items">');
+    const iNotes = html.indexOf('id="portal-buyer-notes"');
+    const iActions = html.indexOf('<div class="actions">');
+    expect(iPricing).toBeGreaterThan(-1);
+    expect(iItems).toBeGreaterThan(iPricing);
+    expect(iNotes).toBeGreaterThan(iItems);
+    expect(iActions).toBeGreaterThan(iNotes);
+    expect(html.split('id="portal-buyer-notes"').length - 1).toBe(1);
+    expect(html).toContain('esc(buyerNotesText)');
+    expect(html).toContain("String(data.quoteRequest.description || '').trim()");
+    expect(html).toMatch(/\.buyer-notes-text\s*\{[^}]*white-space:\s*pre-line/);
+    expect(html).not.toContain('${description}');
   });
 });
