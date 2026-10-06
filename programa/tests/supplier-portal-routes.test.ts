@@ -715,5 +715,14 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).not.toContain("|| '&nbsp;'");
     expect(html).toContain('data-incoterm="${esc(inc)}" min="0.0001"');
     expect(html).toContain('Array.from(new Set(data.quoteRequest.desiredIncoterm || []))');
+    expect(html).toContain('Prices per incoterm');
+    expect(html).toContain('class="incoterm-prices"');
+    expect(html).toContain('class="incoterm-chip"');
+    expect(html).toContain('data-main-badge');
+    expect(html).toContain('.incoterm-main-badge[hidden]');
+    expect(html).toContain('function syncMainIncoterm(form)');
+    expect(html).toContain('aria-label="${esc(inc)} unit price (');
+    expect(html).toContain('name="unitPrice" data-default-qty="${it.quantity}"');
+    expect(html).not.toContain('<label>Unit price ${esc(inc)}');
   });
 });

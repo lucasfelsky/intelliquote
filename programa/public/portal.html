@@ -442,6 +442,68 @@
         min-height: 70px;
       }
       .form-grid .full { grid-column: 1 / -1; }
+      .incoterm-prices {
+        margin: 0 0 14px;
+        padding: 14px;
+        background: var(--portal-bg);
+        border: 1px solid var(--portal-line);
+        border-radius: var(--portal-radius-sm);
+      }
+      .incoterm-prices-title {
+        margin: 0 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--portal-ink-soft);
+      }
+      .incoterm-price-grid .incoterm-price-field {
+        text-transform: none;
+        letter-spacing: normal;
+        padding: 10px 12px;
+        background: #ffffff;
+        border: 1px solid var(--portal-line);
+        border-radius: 10px;
+        min-width: 0;
+      }
+      .incoterm-price-field.is-main {
+        border-color: var(--portal-primary-700);
+        box-shadow: inset 0 0 0 1px var(--portal-primary-700);
+      }
+      .incoterm-price-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .incoterm-chip {
+        display: inline-flex;
+        padding: 3px 10px;
+        border-radius: 8px;
+        background: var(--portal-accent);
+        color: #ffffff;
+        font-family: 'Space Grotesk', 'Manrope', sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+      .incoterm-main-badge {
+        display: inline-flex;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: var(--portal-primary-50);
+        color: var(--portal-dest-fg);
+        border: 1px solid var(--portal-dest-line);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+      .incoterm-main-badge[hidden] { display: none; }
+      .incoterm-price-caption {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--portal-ink-soft);
+        overflow-wrap: anywhere;
+      }
 
       .actions {
         display: flex;
@@ -548,6 +610,7 @@
         .portal-hero { padding: 22px 20px; }
         .portal-main { padding: 22px 18px 24px; }
         .form-grid { grid-template-columns: 1fr; }
+        .incoterm-prices { padding: 12px; }
         .supplier-card { flex-wrap: wrap; }
         .supplier-card .expires { width: 100%; text-align: left; }
         .items-table thead { display: none; }
@@ -834,22 +897,37 @@
                       <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
                       ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
                     </p>
+                    ${
+                      hasQuoteIncoterms
+                        ? `<div class="incoterm-prices" role="group" aria-labelledby="incoterm-prices-title-${it.id}">
+                      <p class="incoterm-prices-title" id="incoterm-prices-title-${it.id}">Prices per incoterm</p>
+                      <div class="form-grid incoterm-price-grid">
+                        ${quoteIncoterms
+                          .map((inc) => {
+                            const found = (prev?.incotermPrices || []).find((p) => p.incoterm === inc);
+                            const val = found
+                              ? esc(found.unitPrice)
+                              : prev && !prev.incotermPrices && inc === selectedIncoterm
+                                ? unitVal
+                                : '';
+                            return `<label class="incoterm-price-field" data-incoterm-field="${esc(inc)}">
+                          <span class="incoterm-price-head">
+                            <span class="incoterm-chip">${esc(inc)}</span>
+                            <span class="incoterm-main-badge" data-main-badge aria-hidden="true" hidden>Main</span>
+                          </span>
+                          <span class="incoterm-price-caption">Unit price &middot; ${esc(currency)} / ${esc(it.unit || 'unit')}</span>
+                          <input type="number" name="incotermPrice" data-incoterm="${esc(inc)}" min="0.0001" step="0.0001" value="${val}" required aria-label="${esc(inc)} unit price (${esc(currency)} / ${esc(it.unit || 'unit')})" />
+                        </label>`;
+                          })
+                          .join('')}
+                      </div>
+                    </div>`
+                        : ''
+                    }
                     <div class="form-grid">
                       ${
                         hasQuoteIncoterms
-                          ? quoteIncoterms
-                              .map((inc) => {
-                                const found = (prev?.incotermPrices || []).find((p) => p.incoterm === inc);
-                                const val = found
-                                  ? esc(found.unitPrice)
-                                  : prev && !prev.incotermPrices && inc === selectedIncoterm
-                                    ? unitVal
-                                    : '';
-                                return `<label>Unit price ${esc(inc)} (${esc(currency)} / ${esc(it.unit || 'unit')})
-                        <input type="number" name="incotermPrice" data-incoterm="${esc(inc)}" min="0.0001" step="0.0001" value="${val}" required />
-                      </label>`;
-                              })
-                              .join('')
+                          ? ''
                           : `<label>Unit price (${esc(currency)} / ${esc(it.unit || 'unit')})
                         <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" value="${unitVal}" required />
                       </label>`
@@ -886,6 +964,7 @@
           // a PTAX do BCB (sugerida pelo backend) ou a taxa que o backend
           // resolver de QuoteResponse previas.
           const updateTotal = () => {
+            syncMainIncoterm(form);
             let sum = 0;
             form.querySelectorAll('.item-row').forEach((row) => {
               const unit = row.querySelector('input[name="incotermPrice"]')
@@ -917,6 +996,18 @@
             }
           });
           updateTotal();
+        }
+
+        // Marca visualmente o incoterm principal (select "incoterm") em cada item.
+        function syncMainIncoterm(form) {
+          const select = form.elements.namedItem('incoterm');
+          const main = select ? select.value : '';
+          form.querySelectorAll('.incoterm-price-field').forEach((field) => {
+            const isMain = field.getAttribute('data-incoterm-field') === main;
+            field.classList.toggle('is-main', isMain);
+            const badge = field.querySelector('[data-main-badge]');
+            if (badge) badge.hidden = !isMain;
+          });
         }
 
         // Preco unitario do incoterm principal (select "incoterm") na linha do item.
