@@ -57,6 +57,9 @@ interface SupplierFormState {
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'];
 
+// Fornecedor que aceita todos os Incoterms (nenhum chip marcado no modal).
+const coversAllIncoterms = (list: string[]) => INCOTERMS.every((t) => list.includes(t));
+
 const emptyForm: SupplierFormState = {
   name: '',
   website: '',
@@ -319,7 +322,9 @@ export default function Fornecedores() {
       country: supplier.country ?? '',
       notes: supplier.notes ?? '',
       status: supplier.status,
-      acceptedIncoterms: supplier.acceptedIncoterms,
+      acceptedIncoterms: coversAllIncoterms(supplier.acceptedIncoterms)
+        ? []
+        : supplier.acceptedIncoterms,
       paymentTermsDays: supplier.paymentTermsDays ?? 30,
       tags: supplier.tags ?? [],
       familyIds: (supplier.families ?? []).map((f) => f.id),
@@ -378,10 +383,6 @@ export default function Fornecedores() {
     setFormError(null);
     if (!form.name.trim()) {
       setFormError('Informe o nome do fornecedor.');
-      return;
-    }
-    if (form.acceptedIncoterms.length === 0) {
-      setFormError('Selecione pelo menos um Incoterm aceito.');
       return;
     }
     if (editing) {
@@ -573,9 +574,11 @@ export default function Fornecedores() {
                       </td>
                       <td>{s.country ?? '—'}</td>
                               <td>
-                                {s.acceptedIncoterms.length > 0
-                                  ? s.acceptedIncoterms.join(', ')
-                                  : '—'}
+                                {coversAllIncoterms(s.acceptedIncoterms)
+                                  ? 'Todos'
+                                  : s.acceptedIncoterms.length > 0
+                                    ? s.acceptedIncoterms.join(', ')
+                                    : '—'}
                               </td>
                               <td>
                                 {s.reviewStats && s.reviewStats.count > 0 && s.reviewStats.avgRating !== null ? (
@@ -906,6 +909,9 @@ export default function Fornecedores() {
                 );
               })}
             </div>
+            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              Nenhum selecionado = todos os Incoterms.
+            </p>
 
             <label className="field-label" style={{ marginTop: 12 }}>
               Famílias que este fornecedor cota

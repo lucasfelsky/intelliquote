@@ -172,7 +172,7 @@ export default function SupplierImportModal({ onClose }: SupplierImportModalProp
               Selecione uma planilha (.xlsx) com as colunas, nesta ordem:
             </p>
             <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--ink-soft)' }}>
-              Nome*, País, Website, Incoterms*, Prazo pagamento (dias), Famílias, Tags,
+              Nome*, País, Website, Incoterms, Prazo pagamento (dias), Famílias, Tags,
               Observações, Contato nome, Contato e-mail, Contato telefone, Contato cargo.
             </p>
             <button

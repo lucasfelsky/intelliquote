@@ -245,6 +245,129 @@ describe('Supplier routes', () => {
     );
   });
 
+  describe('acceptedIncoterms (vazio = todos)', () => {
+    const ALL = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'];
+
+    function mockCreated(): void {
+      prismaMock.supplier.create.mockResolvedValue({
+        id: 30,
+        name: 'Fornecedor Incoterms',
+        acceptedIncoterms: ALL,
+        tags: [],
+        families: [],
+      });
+    }
+
+    function mockUpdated(): void {
+      prismaMock.supplier.findFirst.mockResolvedValue({
+        id: 31,
+        name: 'Fornecedor Incoterms',
+      });
+      prismaMock.supplier.update.mockResolvedValue({
+        id: 31,
+        name: 'Fornecedor Incoterms',
+        acceptedIncoterms: ALL,
+        tags: [],
+        families: [],
+      });
+    }
+
+    it('POST sem acceptedIncoterms grava os 11 na ordem do enum', async () => {
+      const cookies = await loginAs('admin');
+      mockCreated();
+
+      const response = await request(app)
+        .post('/api/v1/suppliers')
+        .set('Cookie', cookies)
+        .send({ name: 'Fornecedor Incoterms' });
+
+      expect(response.status).toBe(201);
+      const call = prismaMock.supplier.create.mock.calls[0]![0];
+      expect(call.data.acceptedIncoterms).toEqual(ALL);
+    });
+
+    it('POST com [] grava os 11', async () => {
+      const cookies = await loginAs('admin');
+      mockCreated();
+
+      const response = await request(app)
+        .post('/api/v1/suppliers')
+        .set('Cookie', cookies)
+        .send({ name: 'Fornecedor Incoterms', acceptedIncoterms: [] });
+
+      expect(response.status).toBe(201);
+      const call = prismaMock.supplier.create.mock.calls[0]![0];
+      expect(call.data.acceptedIncoterms).toEqual(ALL);
+    });
+
+    it('POST com duplicados normaliza (dedup + ordem do enum)', async () => {
+      const cookies = await loginAs('admin');
+      mockCreated();
+
+      const response = await request(app)
+        .post('/api/v1/suppliers')
+        .set('Cookie', cookies)
+        .send({ name: 'Fornecedor Incoterms', acceptedIncoterms: ['CIF', 'FOB', 'CIF'] });
+
+      expect(response.status).toBe(201);
+      const call = prismaMock.supplier.create.mock.calls[0]![0];
+      expect(call.data.acceptedIncoterms).toEqual(['FOB', 'CIF']);
+    });
+
+    it('POST com incoterm invalido responde 400', async () => {
+      const cookies = await loginAs('admin');
+
+      const response = await request(app)
+        .post('/api/v1/suppliers')
+        .set('Cookie', cookies)
+        .send({ name: 'Fornecedor Incoterms', acceptedIncoterms: ['XYZ'] });
+
+      expect(response.status).toBe(400);
+      expect(prismaMock.supplier.create).not.toHaveBeenCalled();
+    });
+
+    it('PUT com [] grava os 11', async () => {
+      const cookies = await loginAs('admin');
+      mockUpdated();
+
+      const response = await request(app)
+        .put('/api/v1/suppliers/31')
+        .set('Cookie', cookies)
+        .send({ acceptedIncoterms: [] });
+
+      expect(response.status).toBe(200);
+      const call = prismaMock.supplier.update.mock.calls[0]![0];
+      expect(call.data.acceptedIncoterms).toEqual(ALL);
+    });
+
+    it('PUT sem acceptedIncoterms nao altera o campo', async () => {
+      const cookies = await loginAs('admin');
+      mockUpdated();
+
+      const response = await request(app)
+        .put('/api/v1/suppliers/31')
+        .set('Cookie', cookies)
+        .send({ name: 'Fornecedor Incoterms' });
+
+      expect(response.status).toBe(200);
+      const call = prismaMock.supplier.update.mock.calls[0]![0];
+      expect(call.data.acceptedIncoterms).toBeUndefined();
+    });
+
+    it('PUT com incoterm invalido responde 400', async () => {
+      const cookies = await loginAs('admin');
+      mockUpdated();
+
+      const response = await request(app)
+        .put('/api/v1/suppliers/31')
+        .set('Cookie', cookies)
+        .send({ acceptedIncoterms: ['XYZ'] });
+
+      expect(response.status).toBe(400);
+      expect(prismaMock.supplier.update).not.toHaveBeenCalled();
+    });
+  });
+
   it('getById retorna families no shape enxuto', async () => {
     const cookies = await loginAs('admin');
 

@@ -185,6 +185,59 @@ describe('SupplierImportController (DB)', () => {
     expect(reasons).toMatch(/E-mail do contato inválido/);
   });
 
+  testDbSkip('POST /api/v1/suppliers/import - coluna Incoterms vazia vira os 11 incoterms', async () => {
+    const workbook = new exceljs.Workbook();
+    const sheet = workbook.addWorksheet('Fornecedores');
+    sheet.addRow([...SUPPLIER_IMPORT_COLUMNS]);
+    sheet.addRow([supplierName('Incoterm Vazio'), 'CN', '', '', '30', '', '', '', '', '', '', '']);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const contentBase64 = buffer.toString('base64');
+
+    const res = await request(app)
+      .post('/api/v1/suppliers/import')
+      .set('Cookie', adminCookies)
+      .send({ contentBase64 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.errorLines.length).toBe(0);
+    expect(res.body.data.validLines.length).toBe(1);
+    expect(res.body.data.validLines[0].name).toBe(supplierName('Incoterm Vazio'));
+    expect(res.body.data.validLines[0].acceptedIncoterms.length).toBe(11);
+  });
+
+  testDbSkip('POST /api/v1/suppliers/import/confirm - acceptedIncoterms [] cria fornecedor com os 11', async () => {
+    const name = supplierName('Confirm Incoterms Vazio');
+    const rows = [
+      {
+        row: 2,
+        data: {
+          name,
+          country: 'CN',
+          website: null,
+          acceptedIncoterms: [],
+          paymentTermsDays: 30,
+          familyIds: [],
+          tags: [],
+          notes: null,
+          contacts: [],
+        },
+      },
+    ];
+
+    const res = await request(app)
+      .post('/api/v1/suppliers/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({ rows });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.successLines.length).toBe(1);
+
+    const created = await prisma.supplier.findFirst({ where: { name } });
+    expect(created).not.toBeNull();
+    expect(created?.acceptedIncoterms.length).toBe(11);
+  });
+
   testDbSkip('POST /api/v1/suppliers/import - cabecalho trocado responde 400', async () => {
     const workbook = new exceljs.Workbook();
     const sheet = workbook.addWorksheet('Fornecedores');

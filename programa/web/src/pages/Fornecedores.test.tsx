@@ -273,6 +273,100 @@ describe('Fornecedores', () => {
     const payload = vi.mocked(api.post).mock.calls[0]?.[1] as { familyIds?: number[] };
     expect(payload.familyIds).toEqual([2]);
   });
+
+  const ALL_INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'];
+
+  function mockSupplierWithAllIncoterms() {
+    const allSupplier = { ...suppliers[0], acceptedIncoterms: ALL_INCOTERMS };
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v1/suppliers') return Promise.resolve([allSupplier]);
+      if (url === '/api/v1/supplier-contacts') {
+        return Promise.resolve({ bySupplier: { 10: contacts } });
+      }
+      if (url === '/api/v1/item-families') {
+        return Promise.resolve({ data: families });
+      }
+      return Promise.resolve([]);
+    });
+  }
+
+  it('15. incoterms — fornecedor com os 11 mostra "Todos" na lista e abre sem chip marcado + dica', async () => {
+    mockSupplierWithAllIncoterms();
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    expect(await findByText('Todos')).toBeTruthy();
+
+    fireEvent.click(getByRole('button', { name: 'Editar' }));
+    const dialog = dialogAt(container, 1);
+    for (const term of ALL_INCOTERMS) {
+      expect(within(dialog).getByRole('button', { name: term }).className).not.toContain('chip--active');
+    }
+    expect(within(dialog).getByText('Nenhum selecionado = todos os Incoterms.')).toBeTruthy();
+  });
+
+  it('16. incoterms — a partir do estado "todos", clicar CIF seleciona só CIF e o PUT envia ["CIF"]', async () => {
+    mockSupplierWithAllIncoterms();
+    vi.mocked(api.put).mockResolvedValue({});
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+
+    fireEvent.click(getByRole('button', { name: 'Editar' }));
+    const dialog = dialogAt(container, 1);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'CIF' }));
+    for (const term of ALL_INCOTERMS) {
+      const className = within(dialog).getByRole('button', { name: term }).className;
+      if (term === 'CIF') expect(className).toContain('chip--active');
+      else expect(className).not.toContain('chip--active');
+    }
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    const payload = vi.mocked(api.put).mock.calls[0]?.[1] as { acceptedIncoterms?: string[] };
+    expect(payload.acceptedIncoterms).toEqual(['CIF']);
+  });
+
+  it('17. incoterms — cadastrar sem chip não bloqueia e o POST envia []', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      id: 31,
+      name: 'Fornecedor Sem Incoterm',
+      acceptedIncoterms: ALL_INCOTERMS,
+      tags: [],
+      families: [],
+    });
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    const dialog = dialogAt(container, 1);
+
+    fireEvent.change(dialog.querySelector('#name') as HTMLInputElement, {
+      target: { value: 'Fornecedor Sem Incoterm' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cadastrar' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const payload = vi.mocked(api.post).mock.calls[0]?.[1] as { acceptedIncoterms?: string[] };
+    expect(payload.acceptedIncoterms).toEqual([]);
+    expect(within(dialog).queryByText('Selecione pelo menos um Incoterm aceito.')).toBeNull();
+  });
+
+  it('18. incoterms — desmarcar o último chip volta ao estado "todos" e o PUT envia []', async () => {
+    vi.mocked(api.put).mockResolvedValue({});
+    const { container, findByText, getByRole } = renderPage();
+    await findByText('ACME Ltda');
+
+    fireEvent.click(getByRole('button', { name: 'Editar' }));
+    const dialog = dialogAt(container, 1);
+    expect(within(dialog).getByRole('button', { name: 'FOB' }).className).toContain('chip--active');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'FOB' }));
+    for (const term of ALL_INCOTERMS) {
+      expect(within(dialog).getByRole('button', { name: term }).className).not.toContain('chip--active');
+    }
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalled());
+    const payload = vi.mocked(api.put).mock.calls[0]?.[1] as { acceptedIncoterms?: string[] };
+    expect(payload.acceptedIncoterms).toEqual([]);
+  });
 });
 
 describe('Fornecedores — importação de planilha', () => {

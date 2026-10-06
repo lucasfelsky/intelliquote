@@ -9,7 +9,7 @@ export const SUPPLIER_IMPORT_COLUMNS = [
   'Nome*',
   'País',
   'Website',
-  'Incoterms*',
+  'Incoterms',
   'Prazo pagamento (dias)',
   'Famílias',
   'Tags',
@@ -142,13 +142,9 @@ export function parseSupplierRow(
     seenIncoterms.add(term);
     acceptedIncoterms.push(term);
   }
-  if (acceptedIncoterms.length === 0) {
-    reasons.push('Informe ao menos um Incoterm');
-  } else {
-    for (const term of acceptedIncoterms) {
-      if (!incotermValues.includes(term)) {
-        reasons.push(`Incoterm inválido: ${term}`);
-      }
+  for (const term of acceptedIncoterms) {
+    if (!incotermValues.includes(term)) {
+      reasons.push(`Incoterm inválido: ${term}`);
     }
   }
 
@@ -319,8 +315,8 @@ export async function buildSupplierImportTemplate(): Promise<Buffer> {
   instructions.addRow(['País', 'Texto opcional.']);
   instructions.addRow(['Website', 'Texto opcional.']);
   instructions.addRow([
-    'Incoterms*',
-    `Obrigatório. Um ou mais valores separados por vírgula (,). Valores válidos: ${Object.values(
+    'Incoterms',
+    `Opcional. Um ou mais valores separados por vírgula (,). Se vazio, o fornecedor aceita todos os Incoterms. Valores válidos: ${Object.values(
       Incoterm,
     ).join(', ')}.`,
   ]);
