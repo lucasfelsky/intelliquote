@@ -17,6 +17,8 @@ import {
 } from '@/services/dispatch';
 import { Tabs, TabList, Tab, TabPanel } from '@/components/Tabs';
 import { Modal } from '@/components/Modal';
+import { CatalogItemPicker, type PickerCatalogItem } from '@/components/CatalogItemPicker';
+import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
 import { RespostasTab } from './CotacaoTabs/RespostasTab';
 import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
 import { ItensTab } from './CotacaoTabs/ItensTab';
@@ -282,6 +284,8 @@ export default function CotacaoDetalhe() {
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState<QuoteRequestItem | null>(null);
   const [newItemPoId, setNewItemPoId] = useState<number | null>(null);
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<PickerCatalogItem | null>(null);
+  const picker = useCatalogItemPickerData(showItemModal);
   const [itemForm, setItemForm] = useState<ItemForm>(emptyItemForm);
   const [itemError, setItemError] = useState<string | null>(null);
 
@@ -502,29 +506,6 @@ export default function CotacaoDetalhe() {
         return map;
       },
       enabled: showDispatchModal,
-    });
-
-    const activeCatalog = useQuery({
-      queryKey: ['catalog-items-active-detail'],
-      queryFn: async () => {
-        const data = await api.get<unknown[] | { data?: unknown[]; items?: unknown[] }>(
-          '/v1/catalog-items',
-          { pageSize: '200' },
-        );
-        const raw = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.data)
-            ? data.data
-            : data?.items ?? [];
-        return (raw as Array<Record<string, unknown>>).map((c) => ({
-          id: Number(c.id),
-          commercialName: String(c.commercialName ?? ''),
-          marketName: String(c.marketName ?? ''),
-          isDangerousGood: Boolean(c.isDangerousGood),
-          isActive: Boolean(c.isActive ?? true),
-        }));
-      },
-      enabled: showItemModal,
     });
 
     const supplierContacts = useQuery({
@@ -837,6 +818,8 @@ export default function CotacaoDetalhe() {
     setEditingItem(null);
     setItemForm(emptyItemForm);
     setItemError(null);
+    setSelectedCatalogItem(null);
+    picker.reset();
     setShowItemModal(true);
   }
 
@@ -855,6 +838,14 @@ export default function CotacaoDetalhe() {
         inheritPort: !hasPort,
       });
       setItemError(null);
+      picker.reset();
+      setSelectedCatalogItem({
+        id: item.catalogItem?.id ?? item.catalogItemId ?? 0,
+        commercialName: item.catalogItem?.commercialName ?? item.productName,
+        marketName: item.catalogItem?.marketName ?? '',
+        isDangerousGood: item.catalogItem?.isDangerousGood ?? false,
+        family: null,
+      });
       setShowItemModal(true);
     }
 
@@ -863,6 +854,8 @@ export default function CotacaoDetalhe() {
     setEditingItem(null);
     setItemForm(emptyItemForm);
     setItemError(null);
+    setSelectedCatalogItem(null);
+    picker.reset();
   }
 
   function openEditQuote() {
@@ -1819,142 +1812,138 @@ export default function CotacaoDetalhe() {
         isOpen={showItemModal}
         onClose={closeItemModal}
         title={editingItem ? 'Editar item' : 'Novo item'}
+        size="wide"
       >
+        {showItemModal && (
         <form onSubmit={handleItemSubmit}>
-            <label className="field-label" htmlFor="itemCatalog">Item do catálogo *</label>
-            <select
-              id="itemCatalog"
-              className="select"
-              value={itemForm.catalogItemId ?? ''}
-              onChange={(e) =>
-                setItemForm({
-                  ...itemForm,
-                  catalogItemId: e.target.value ? Number(e.target.value) : null,
-                })
-              }
-              required
-              disabled={editingItem !== null}
-            >
-              <option value="">Selecione…</option>
-              {(activeCatalog.data ?? [])
-                .filter((c) => c.isActive)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.commercialName} — {c.marketName}
-                    {c.isDangerousGood ? ' (DG)' : ''}
-                  </option>
-                ))}
-            </select>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-              <div>
-                <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
-                <input
-                  id="itemQuantity"
-                  className="input"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={itemForm.quantity}
-                  onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
-                  required
-                />
+          <CatalogItemPicker
+            families={picker.families}
+            familyItems={picker.familyItems}
+            expanded={picker.expanded}
+            onToggleFamily={picker.toggleFamily}
+            isSearching={picker.isSearching}
+            searchItems={picker.searchItems}
+            selectedId={itemForm.catalogItemId}
+            onSelect={(it) => {
+              setItemForm({ ...itemForm, catalogItemId: it.id });
+              setSelectedCatalogItem(it);
+            }}
+            search={picker.search}
+            onSearchChange={picker.setSearch}
+            selectedItem={selectedCatalogItem}
+            disabled={editingItem !== null}
+          >
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+                <div>
+                  <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
+                  <input
+                    id="itemQuantity"
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={itemForm.quantity}
+                    onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="itemUnit">Unidade *</label>
+                  <select
+                    id="itemUnit"
+                    className="select"
+                    value={itemForm.unit}
+                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                    required
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="field-label" htmlFor="itemUnit">Unidade *</label>
-                <select
-                  id="itemUnit"
-                  className="select"
-                  value={itemForm.unit}
-                  onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-                  required
-                >
-                  {UNITS.map((u) => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
 
-            <label className="field-label" htmlFor="itemNotes" style={{ marginTop: 12 }}>
-              Notas
-            </label>
-            <textarea
-              id="itemNotes"
-              className="textarea"
-              rows={3}
-              value={itemForm.notes}
-              onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
-            />
+              <label className="field-label" htmlFor="itemNotes" style={{ marginTop: 12 }}>
+                Notas
+              </label>
+              <textarea
+                id="itemNotes"
+                className="textarea"
+                rows={3}
+                value={itemForm.notes}
+                onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
+              />
 
-                        <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
-                          <legend style={{ padding: '0 6px', fontWeight: 600 }} className="text-xs">Incoterm e destino por item</legend>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
-                            <input
-                              type="checkbox"
-                              checked={itemForm.inheritIncoterm}
-                              onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
-                            />
-                            Usar o INCOTERM da cotação ({formatIncoterms(qr.desiredIncoterm)})
-                          </label>
-                          {!itemForm.inheritIncoterm && (
-                            <div style={{ marginBottom: 8 }}>
-                              <label className="field-label" htmlFor="itemIncoterm">INCOTERM deste item *</label>
-                              <select
-                                id="itemIncoterm"
-                                className="select"
-                                value={itemForm.desiredIncoterm}
-                                onChange={(e) =>
-                                  setItemForm({ ...itemForm, desiredIncoterm: e.target.value as Incoterm })
-                                }
-                              >
-                                <option value="">Selecione…</option>
-                                {INCOTERMS.map((t) => (
-                                  <option key={t} value={t}>{t}</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
-                            <input
-                              type="checkbox"
-                              checked={itemForm.inheritPort}
-                              onChange={(e) => setItemForm({ ...itemForm, inheritPort: e.target.checked })}
-                            />
-                            Usar o porto da cotação ({qr.destinationPort || 'não definido'})
-                          </label>
-                          {!itemForm.inheritPort && (
-                            <div>
-                              <label className="field-label" htmlFor="itemPort">Porto de destino deste item *</label>
+                          <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
+                            <legend style={{ padding: '0 6px', fontWeight: 600 }} className="text-xs">Incoterm e destino por item</legend>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
                               <input
-                                id="itemPort"
-                                className="input"
-                                value={itemForm.destinationPort}
-                                onChange={(e) => setItemForm({ ...itemForm, destinationPort: e.target.value })}
-                                placeholder="Ex.: Porto de Santos"
-                                maxLength={120}
+                                type="checkbox"
+                                checked={itemForm.inheritIncoterm}
+                                onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
                               />
-                            </div>
-                          )}
-                        </fieldset>
+                              Usar o INCOTERM da cotação ({formatIncoterms(qr.desiredIncoterm)})
+                            </label>
+                            {!itemForm.inheritIncoterm && (
+                              <div style={{ marginBottom: 8 }}>
+                                <label className="field-label" htmlFor="itemIncoterm">INCOTERM deste item *</label>
+                                <select
+                                  id="itemIncoterm"
+                                  className="select"
+                                  value={itemForm.desiredIncoterm}
+                                  onChange={(e) =>
+                                    setItemForm({ ...itemForm, desiredIncoterm: e.target.value as Incoterm })
+                                  }
+                                >
+                                  <option value="">Selecione…</option>
+                                  {INCOTERMS.map((t) => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
+                              <input
+                                type="checkbox"
+                                checked={itemForm.inheritPort}
+                                onChange={(e) => setItemForm({ ...itemForm, inheritPort: e.target.checked })}
+                              />
+                              Usar o porto da cotação ({qr.destinationPort || 'não definido'})
+                            </label>
+                            {!itemForm.inheritPort && (
+                              <div>
+                                <label className="field-label" htmlFor="itemPort">Porto de destino deste item *</label>
+                                <input
+                                  id="itemPort"
+                                  className="input"
+                                  value={itemForm.destinationPort}
+                                  onChange={(e) => setItemForm({ ...itemForm, destinationPort: e.target.value })}
+                                  placeholder="Ex.: Porto de Santos"
+                                  maxLength={120}
+                                />
+                              </div>
+                            )}
+                          </fieldset>
 
-                        {itemError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{itemError}</p>
-            )}
+                          {itemError && (
+                <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{itemError}</p>
+              )}
 
-            <div className="modal-actions">
-              <button type="button" className="ghost-button" onClick={closeItemModal}>
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={createItem.isPending || updateItem.isPending}
-              >
-                {editingItem ? 'Salvar alterações' : 'Adicionar'}
-              </button>
-            </div>
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={closeItemModal}>
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={createItem.isPending || updateItem.isPending}
+                >
+                  {editingItem ? 'Salvar alterações' : 'Adicionar'}
+                </button>
+              </div>
+          </CatalogItemPicker>
         </form>
+        )}
       </Modal>
 
       <Modal isOpen={showEditModal} onClose={closeEditModal} title="Editar cotação">

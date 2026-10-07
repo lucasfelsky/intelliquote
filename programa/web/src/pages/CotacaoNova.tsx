@@ -1,24 +1,14 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { CatalogItemPicker, type PickerCatalogItem } from '@/components/CatalogItemPicker';
 import { Modal } from '@/components/Modal';
+import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
 
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
-
-interface ItemFamilySummary {
-  id: number;
-  name: string;
-}
-
-interface FamilyItemsEntry {
-  items: PickerCatalogItem[];
-  isLoading: boolean;
-  total: number;
-}
 
 interface DraftItem {
   tempId: number;
@@ -54,35 +44,6 @@ function formatNumber(value: number): string {
 
 let tempIdCounter = 1;
 
-function parseCatalogItemRecord(c: Record<string, unknown>): PickerCatalogItem {
-  return {
-    id: Number(c.id),
-    commercialName: String(c.commercialName ?? ''),
-    marketName: String(c.marketName ?? ''),
-    isDangerousGood: Boolean(c.isDangerousGood),
-    family: c.family
-      ? { id: Number((c.family as Record<string, unknown>).id), name: String((c.family as Record<string, unknown>).name) }
-      : null,
-  };
-}
-
-function parseCatalogItemList(data: unknown): PickerCatalogItem[] {
-  const list = Array.isArray((data as { data?: unknown[] })?.data)
-    ? (data as { data: unknown[] }).data
-    : Array.isArray(data)
-      ? data
-      : [];
-  return (list as Array<Record<string, unknown>>).map(parseCatalogItemRecord);
-}
-
-function parsePaginatedCatalogItems(data: unknown): { items: PickerCatalogItem[]; totalItems: number } {
-  const items = parseCatalogItemList(data);
-  const totalItems = Number(
-    (data as { pagination?: { totalItems?: number } })?.pagination?.totalItems ?? items.length,
-  );
-  return { items, totalItems };
-}
-
 export default function CotacaoNova() {
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -106,86 +67,13 @@ export default function CotacaoNova() {
   const [itemForm, setItemForm] = useState<ItemFormState>(emptyItemForm);
   const [itemError, setItemError] = useState<string | null>(null);
   const [editingTempId, setEditingTempId] = useState<number | null>(null);
-  const [itemSearch, setItemSearch] = useState('');
-  const [debouncedItemSearch, setDebouncedItemSearch] = useState('');
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<PickerCatalogItem | null>(null);
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
-  // Debounce ~300ms pra busca server-side do catálogo, mesmo padrão do ComparacaoTab.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedItemSearch(itemSearch);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [itemSearch]);
+  const picker = useCatalogItemPickerData(showItemModal);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
-
-  const isSearching = debouncedItemSearch.trim().length > 0;
-
-  // MODO NAVEGAR: todas as famílias ativas viram pastas (fechadas por padrão).
-  const familiesQuery = useQuery({
-    queryKey: ['item-families'],
-    queryFn: async () => {
-      const data = await api.get<unknown>('/v1/item-families');
-      const list = Array.isArray((data as { data?: unknown[] })?.data)
-        ? (data as { data: unknown[] }).data
-        : [];
-      return (list as Array<Record<string, unknown>>).map((f) => ({
-        id: Number(f.id),
-        name: String(f.name ?? ''),
-      })) as ItemFamilySummary[];
-    },
-    enabled: showItemModal,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // MODO BUSCA: busca global server-side (casa nome/ncm/dbcorpCode/família).
-  const searchQuery = useQuery({
-    queryKey: ['catalog-items-search', debouncedItemSearch],
-    queryFn: async () => {
-      const data = await api.get<unknown>('/v1/catalog-items', {
-        search: debouncedItemSearch,
-        pageSize: '100',
-      });
-      return parseCatalogItemList(data);
-    },
-    enabled: showItemModal && isSearching,
-    placeholderData: keepPreviousData,
-  });
-
-  // Lazy por família: uma query por id expandido, só em MODO NAVEGAR.
-  const familyIds = useMemo(() => Array.from(expanded), [expanded]);
-  const familyItemQueries = useQueries({
-    queries: familyIds.map((id) => ({
-      queryKey: ['catalog-items-family', id],
-      queryFn: async () => {
-        const data = await api.get<unknown>('/v1/catalog-items', {
-          family: String(id),
-          pageSize: '100',
-        });
-        return parsePaginatedCatalogItems(data);
-      },
-      enabled: showItemModal && !isSearching,
-      staleTime: 5 * 60 * 1000,
-    })),
-  });
-
-  const familyItems = useMemo(() => {
-    const map = new Map<number, FamilyItemsEntry>();
-    familyIds.forEach((id, idx) => {
-      const q = familyItemQueries[idx];
-      if (!q) return;
-      map.set(id, {
-        items: q.data?.items ?? [],
-        isLoading: q.isLoading,
-        total: q.data?.totalItems ?? 0,
-      });
-    });
-    return map;
-  }, [familyIds, familyItemQueries]);
 
   const createQuote = useMutation({
     mutationFn: async () => {
@@ -229,9 +117,8 @@ export default function CotacaoNova() {
     setEditingTempId(null);
     setItemForm(emptyItemForm);
     setItemError(null);
-    setItemSearch('');
+    picker.reset();
     setSelectedCatalogItem(null);
-    setExpanded(new Set());
     setShowItemModal(true);
   }
 
@@ -244,7 +131,7 @@ export default function CotacaoNova() {
       notes: item.notes,
     });
     setItemError(null);
-    setItemSearch('');
+    picker.reset();
     setSelectedCatalogItem({
       id: item.catalogItemId,
       commercialName: item.commercialName,
@@ -252,7 +139,6 @@ export default function CotacaoNova() {
       isDangerousGood: item.isDangerousGood,
       family: null,
     });
-    setExpanded(new Set());
     setShowItemModal(true);
   }
 
@@ -261,8 +147,7 @@ export default function CotacaoNova() {
     setEditingTempId(null);
     setItemForm(emptyItemForm);
     setItemError(null);
-    setItemSearch('');
-    setExpanded(new Set());
+    picker.reset();
   }
 
   const handleItemSubmit = useCallback((e: React.FormEvent) => {
@@ -591,29 +476,19 @@ export default function CotacaoNova() {
         {showItemModal && (
           <form onSubmit={handleItemSubmit}>
             <CatalogItemPicker
-              families={familiesQuery.data ?? []}
-              familyItems={familyItems}
-              expanded={expanded}
-              onToggleFamily={(id) => {
-                setExpanded((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(id)) {
-                    next.delete(id);
-                  } else {
-                    next.add(id);
-                  }
-                  return next;
-                });
-              }}
-              isSearching={isSearching}
-              searchItems={searchQuery.data ?? []}
+              families={picker.families}
+              familyItems={picker.familyItems}
+              expanded={picker.expanded}
+              onToggleFamily={picker.toggleFamily}
+              isSearching={picker.isSearching}
+              searchItems={picker.searchItems}
               selectedId={itemForm.catalogItemId}
               onSelect={(item) => {
                 setItemForm({ ...itemForm, catalogItemId: item.id });
                 setSelectedCatalogItem(item);
               }}
-              search={itemSearch}
-              onSearchChange={setItemSearch}
+              search={picker.search}
+              onSearchChange={picker.setSearch}
               selectedItem={selectedCatalogItem}
               disabled={editingTempId !== null}
             >

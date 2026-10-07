@@ -85,7 +85,18 @@ const quoteFixture = {
   quoteResponses: [],
 };
 
-const getImpl = async (path: string): Promise<unknown> => {
+const catalogFixture = [
+  {
+    id: 150,
+    commercialName: 'Item Cento e Cinquenta',
+    marketName: 'IC150',
+    isDangerousGood: false,
+    isActive: true,
+    family: { id: 1, name: 'Monômero' },
+  },
+];
+
+const getImpl = async (path: string, params?: Record<string, string>): Promise<unknown> => {
   if (path.startsWith('/v1/quote-requests/')) return quoteFixture;
   if (path === '/api/v1/company-profile') return { dispatchCc: [] };
   if (path === '/v1/suppliers') {
@@ -102,7 +113,13 @@ const getImpl = async (path: string): Promise<unknown> => {
     return { bySupplier: { '5': [{ id: 10, name: 'Contato', email: 'c@acme.com', isPrimary: true }] } };
   }
   if (path === '/v1/catalog-items') {
-    return [{ id: 3, commercialName: 'Produto X', marketName: 'PX', isDangerousGood: false, isActive: true }];
+    const search = params?.search?.trim().toLowerCase();
+    const list = search
+      ? catalogFixture.filter((c) => c.commercialName.toLowerCase().includes(search))
+      : params?.family === '1'
+        ? catalogFixture
+        : [];
+    return { data: list, pagination: { totalItems: list.length } };
   }
   if (path === '/v1/item-families') {
     return { data: [{ id: 1, name: 'Monômero', isActive: true }] };
@@ -190,7 +207,7 @@ describe('CotacaoDetalhe', () => {
     vi.mocked(api.post).mockReset();
     vi.mocked(api.put).mockReset();
     vi.mocked(api.del).mockReset();
-    vi.mocked(api.get).mockImplementation(getImpl as typeof api.get);
+    vi.mocked(api.get).mockImplementation(getImpl as unknown as typeof api.get);
 
     vi.mocked(previewDispatch).mockReset();
     vi.mocked(sendDispatch).mockReset();
@@ -218,7 +235,7 @@ describe('CotacaoDetalhe', () => {
     }
   });
 
-  it('2. Modal C abre pela aba Itens: título "Novo item", tamanho default, sem título duplicado', async () => {
+  it('2. Modal C abre pela aba Itens: título "Novo item", tamanho wide, sem título duplicado', async () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
@@ -226,7 +243,7 @@ describe('CotacaoDetalhe', () => {
     const dialog = dialogByTitle(container, 'Novo item');
     expect(dialog.open).toBe(true);
     expect(dialog.className).toContain('modal-dialog');
-    expect(dialog.className).not.toContain('modal-dialog--wide');
+    expect(dialog.className).toContain('modal-dialog--wide');
     expect(dialog.querySelectorAll('h2').length).toBe(1);
   });
 
@@ -241,10 +258,10 @@ describe('CotacaoDetalhe', () => {
       _count: { dispatchEvents },
     });
     const useQuote = (dispatchEvents: number) => {
-      vi.mocked(api.get).mockImplementation((async (path: string) =>
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) =>
         path.startsWith('/v1/quote-requests/')
           ? groupedQuote(dispatchEvents)
-          : getImpl(path)) as typeof api.get);
+          : getImpl(path, params)) as unknown as typeof api.get);
     };
 
     it('3a. cotação já enviada (sem respostas) mostra o aviso', async () => {
@@ -265,7 +282,7 @@ describe('CotacaoDetalhe', () => {
     });
   });
 
-  it('3. Modal C em edição: título dinâmico, catálogo desabilitado, quantidade preenchida', async () => {
+  it('3. Modal C em edição: título dinâmico, item atual só leitura (sem busca), quantidade preenchida', async () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
@@ -273,10 +290,90 @@ describe('CotacaoDetalhe', () => {
     fireEvent.click(within(table).getByRole('button', { name: 'Editar' }));
     const dialog = dialogByTitle(container, 'Editar item');
     expect(dialog.open).toBe(true);
-    const catalogSelect = within(dialog).getByLabelText('Item do catálogo *') as HTMLSelectElement;
-    expect(catalogSelect.disabled).toBe(true);
+    expect(dialog.textContent).toContain('Produto X');
+    expect(within(dialog).queryByPlaceholderText('Buscar item do catálogo...')).toBeNull();
     const qtyInput = within(dialog).getByLabelText('Quantidade *') as HTMLInputElement;
     expect(qtyInput.value).toBe('50');
+  });
+
+  it('3c. Novo item: busca server-side acha item além do teto de 100 e cria com catalogItemId', async () => {
+    vi.mocked(api.post).mockResolvedValue({ id: 99 });
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('tab', { name: 'Itens' }));
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    const dialog = dialogByTitle(container, 'Novo item');
+    fireEvent.change(within(dialog).getByPlaceholderText('Buscar item do catálogo...'), {
+      target: { value: 'cento' },
+    });
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(
+        '/v1/catalog-items',
+        expect.objectContaining({ search: 'cento', pageSize: '100' }),
+      ),
+    );
+    const itemButton = await within(dialog).findByRole('button', { name: 'Item Cento e Cinquenta' });
+    fireEvent.click(itemButton);
+    fireEvent.change(within(dialog).getByLabelText('Quantidade *'), { target: { value: '5' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Adicionar' }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        '/v1/quote-requests/1/items',
+        expect.objectContaining({ catalogItemId: 150, quantity: 5 }),
+      ),
+    );
+  });
+
+  it('3d. Novo item: modo navegar mostra a pasta fechada e carrega os itens da família ao abrir', async () => {
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('tab', { name: 'Itens' }));
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    const dialog = dialogByTitle(container, 'Novo item');
+    const folder = await within(dialog).findByRole('button', { name: 'Monômero' });
+    expect(folder.getAttribute('aria-expanded')).toBe('false');
+    expect(within(dialog).queryByRole('button', { name: 'Item Cento e Cinquenta' })).toBeNull();
+    fireEvent.click(folder);
+    await waitFor(() =>
+      expect(api.get).toHaveBeenCalledWith(
+        '/v1/catalog-items',
+        expect.objectContaining({ family: '1' }),
+      ),
+    );
+    expect(await within(dialog).findByRole('button', { name: 'Item Cento e Cinquenta' })).toBeTruthy();
+  });
+
+  it('3e. Edição salva o item atual (catalogItemId 3) mesmo fora de qualquer página do catálogo', async () => {
+    vi.mocked(api.put).mockResolvedValue({ id: 10 });
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('tab', { name: 'Itens' }));
+    fireEvent.click(within(getByRole('table')).getByRole('button', { name: 'Editar' }));
+    const dialog = dialogByTitle(container, 'Editar item');
+    fireEvent.change(within(dialog).getByLabelText('Quantidade *'), { target: { value: '60' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() =>
+      expect(api.put).toHaveBeenCalledWith(
+        '/v1/quote-request-items/10',
+        expect.objectContaining({ catalogItemId: 3, quantity: 60 }),
+      ),
+    );
+  });
+
+  it('3f. Novo item não faz mais a carga de catálogo com pageSize 200', async () => {
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('tab', { name: 'Itens' }));
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    const dialog = dialogByTitle(container, 'Novo item');
+    await within(dialog).findByRole('button', { name: 'Monômero' });
+    const catalogCalls = vi
+      .mocked(api.get)
+      .mock.calls.filter(
+        ([path, params]) =>
+          path === '/v1/catalog-items' && (params as Record<string, string> | undefined)?.pageSize === '200',
+      );
+    expect(catalogCalls).toHaveLength(0);
   });
 
   it('4. Modal C cancela: fecha e não chama api.post', async () => {
