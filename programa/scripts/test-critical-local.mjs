@@ -44,6 +44,27 @@ function readPostmasterPid() {
     return Number.isInteger(pid) && pid > 0 ? pid : null;
   } catch { return null; }
 }
+function normalizePath(p) {
+  return String(p).replace(/\//g, '\\').toLowerCase();
+}
+// Confirma que o PID lido de postmaster.pid e mesmo o postgres deste cluster
+// (PID reutilizado por outro processo nunca pode ser morto por engano).
+function isClusterPostmaster(pid) {
+  try {
+    const dir = normalizePath(dataDir);
+    if (process.platform === 'win32') {
+      const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+        `Get-CimInstance Win32_Process -Filter "ProcessId=${pid}" | Select-Object Name,CommandLine | ConvertTo-Json -Compress`],
+      { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+      const info = JSON.parse(out);
+      if (typeof info?.Name !== 'string' || typeof info?.CommandLine !== 'string') return false;
+      return info.Name.toLowerCase() === 'postgres.exe' && normalizePath(info.CommandLine).includes(dir);
+    }
+    const args = execFileSync('ps', ['-o', 'args=', '-p', String(pid)],
+      { encoding: 'utf8', timeout: 10000 });
+    return args.includes('postgres') && normalizePath(args).includes(dir);
+  } catch { return false; }
+}
 function listDescendants(rootPid) {
   // taskkill /T nao alcanca filhos cujo pai ja morreu (io_worker orfao): mapeia a
   // arvore enquanto o postmaster ainda existe.
@@ -73,8 +94,10 @@ function taskkill(args) {
     child.once('exit', resolve);
   });
 }
-async function killTree(pid) {
+async function killTree(pid, beforeFirstKill) {
   if (!pid) return;
+  let notified = false;
+  const notify = () => { if (!notified) { notified = true; beforeFirstKill?.(); } };
   if (process.platform === 'win32') {
     // Mata filhos primeiro e repete: processos criados durante o desligamento
     // (io_worker) apontam para um pai ja morto e escapam do taskkill /T.
@@ -84,23 +107,35 @@ async function killTree(pid) {
       found.forEach(p => known.add(p));
       const targets = attempt === 0 ? [...known] : found;
       if (attempt > 0 && targets.length === 0) break;
-      if (targets.length > 0) await taskkill([...targets.flatMap(p => ['/PID', String(p)]), '/T', '/F']);
+      if (targets.length > 0) { notify(); await taskkill([...targets.flatMap(p => ['/PID', String(p)]), '/T', '/F']); }
       await new Promise(r => setTimeout(r, 500));
     }
     return;
   }
+  notify();
   try { process.kill(-pid, 'SIGKILL'); } catch { /* ignora */ }
   try { process.kill(pid, 'SIGKILL'); } catch { /* ja encerrado */ }
 }
 async function teardown() {
   const pid = readPostmasterPid();
+  // pg.stop() registra o listener de 'exit' ao ser chamado: precisa comecar com o
+  // postmaster ainda vivo (antes do primeiro kill), senao o evento nunca chega.
+  let stopping = null;
+  const startStop = () => { stopping ??= withTimeout(pg.stop(), STOP_TIMEOUT_MS); };
   // Banco descartavel: mata postmaster + filhos (io_worker etc.) enquanto o pai
   // ainda vive; depois de morto, taskkill /T nao alcanca os filhos orfaos.
-  await killTree(pid);
+  // So mata por PID se ele for o postgres deste cluster (anti PID reutilizado).
+  if (pid && isClusterPostmaster(pid)) {
+    console.log(`teardown: postmaster ${pid} confirmado (postgres.exe + dataDir do cluster).`);
+    await killTree(pid, startStop);
+  } else {
+    console.error(`teardown: PID ${pid} nao confere com o postgres do cluster; nao mato por PID.`);
+  }
+  startStop();
   try {
-    await withTimeout(pg.stop(), STOP_TIMEOUT_MS);
+    await stopping;
   } catch (err) {
-    console.error(`pg.stop() nao concluiu (${err.message}); processos ja encerrados via kill.`);
+    console.error(`pg.stop() nao concluiu (${err.message}).`);
   }
   try { rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* best effort */ }
 }

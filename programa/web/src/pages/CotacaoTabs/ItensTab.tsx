@@ -30,7 +30,7 @@ interface ItensTabProps {
   purchaseOrders: PurchaseOrder[];
   defaultIncoterm: string;
   defaultPort: string | null;
-  hasResponses: boolean;
+  hasResponsesOrDispatch: boolean;
   onAddItem: (purchaseOrderId: number | null) => void;
   onEditItem: (item: ItensTabItem) => void;
   onRemoveItem: (item: ItensTabItem) => void;
@@ -48,7 +48,7 @@ function formatNumber(value: number): string {
 export function ItensTab(props: ItensTabProps) {
   const {
     quoteRequestId, status, canEdit, items, defaultIncoterm, defaultPort,
-    hasResponses, onAddItem, onEditItem, onRemoveItem, removePending,
+    hasResponsesOrDispatch, onAddItem, onEditItem, onRemoveItem, removePending,
   } = props;
   const qc = useQueryClient();
   const confirm = useConfirm();
@@ -261,7 +261,7 @@ export function ItensTab(props: ItensTabProps) {
         )}
       </div>
       {error && <p className="form-error" role="alert">{error}</p>}
-      {hasResponses && !legacy && (
+      {hasResponsesOrDispatch && !legacy && (
         <p className="muted">
           Cotação já tem respostas/envio: reagrupar POs não altera e-mails já enviados nem propostas.
         </p>

@@ -43,6 +43,7 @@ interface QuoteRequest {
   createdById: number | null;
   items?: QuoteRequestItem[];
   purchaseOrders?: PurchaseOrder[];
+  dispatchCount?: number;
   quoteResponses?: QuoteResponseSummary[];
 }
 
@@ -195,6 +196,7 @@ function normalize(qr: unknown): QuoteRequest {
       createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
       items,
       purchaseOrders: Array.isArray(obj.purchaseOrders) ? (obj.purchaseOrders as PurchaseOrder[]) : [],
+      dispatchCount: Number((obj._count as { dispatchEvents?: unknown } | undefined)?.dispatchEvents ?? 0) || 0,
       quoteResponses: responses,
     };
   }
@@ -1186,7 +1188,7 @@ export default function CotacaoDetalhe() {
               purchaseOrders={qr.purchaseOrders ?? []}
               defaultIncoterm={formatIncoterms(qr.desiredIncoterm)}
               defaultPort={qr.destinationPort}
-              hasResponses={(qr.quoteResponses?.length ?? 0) > 0}
+              hasResponsesOrDispatch={(qr.quoteResponses?.length ?? 0) > 0 || (qr.dispatchCount ?? 0) > 0}
               onAddItem={openNewItem}
               onEditItem={(it) => openEditItem(it as QuoteRequestItem)}
               onRemoveItem={async (it) => {

@@ -230,6 +230,41 @@ describe('CotacaoDetalhe', () => {
     expect(dialog.querySelectorAll('h2').length).toBe(1);
   });
 
+  describe('aviso de reagrupamento de POs (aba Itens)', () => {
+    const groupedQuote = (dispatchEvents: number) => ({
+      ...quoteFixture,
+      purchaseOrders: [
+        { id: 7, quoteRequestId: 1, label: 'PO 1', position: 1, createdAt: '', updatedAt: '' },
+      ],
+      items: [{ ...quoteFixture.items[0], purchaseOrderId: 7 }],
+      quoteResponses: [],
+      _count: { dispatchEvents },
+    });
+    const useQuote = (dispatchEvents: number) => {
+      vi.mocked(api.get).mockImplementation((async (path: string) =>
+        path.startsWith('/v1/quote-requests/')
+          ? groupedQuote(dispatchEvents)
+          : getImpl(path)) as typeof api.get);
+    };
+
+    it('3a. cotação já enviada (sem respostas) mostra o aviso', async () => {
+      useQuote(1);
+      const { findByRole, findByText } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(await findByRole('tab', { name: 'Itens' }));
+      expect(await findByText(/reagrupar POs não altera/)).toBeTruthy();
+    });
+
+    it('3b. cotação sem envio e sem respostas não mostra o aviso', async () => {
+      useQuote(0);
+      const { findByRole, findAllByText, queryByText } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(await findByRole('tab', { name: 'Itens' }));
+      expect((await findAllByText('PO 1')).length).toBeGreaterThan(0);
+      expect(queryByText(/reagrupar POs não altera/)).toBeNull();
+    });
+  });
+
   it('3. Modal C em edição: título dinâmico, catálogo desabilitado, quantidade preenchida', async () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });

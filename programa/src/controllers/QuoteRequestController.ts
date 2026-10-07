@@ -139,6 +139,7 @@ export class QuoteRequestController {
             orderBy: { createdAt: 'asc' },
           },
           purchaseOrders: { orderBy: { position: 'asc' } },
+          _count: { select: { dispatchEvents: { where: { status: { not: 'failed' } } } } },
           quoteResponses: {
             where: { deletedAt: null },
             include: {

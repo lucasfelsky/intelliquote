@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createPurchaseOrder,
   deletePurchaseOrderWithReallocation,
+  nextDefaultPurchaseOrderLabel,
   resolveReallocationTarget,
 } from '../src/services/QuotePurchaseOrderService';
 
@@ -132,5 +134,71 @@ describe('deletePurchaseOrderWithReallocation', () => {
     expect(tx.items).toHaveLength(2);
     expect(tx.items.every((i) => i.purchaseOrderId === null)).toBe(true);
     expect(tx.orders).toHaveLength(0);
+  });
+});
+
+describe('nextDefaultPurchaseOrderLabel', () => {
+  it('sem POs comeca em PO 1', () => {
+    expect(nextDefaultPurchaseOrderLabel([], 1)).toBe('PO 1');
+  });
+  it('pula rotulo ja existente', () => {
+    expect(nextDefaultPurchaseOrderLabel(['PO 2'], 2)).toBe('PO 3');
+  });
+  it('ignora caixa e espacos ao comparar', () => {
+    expect(nextDefaultPurchaseOrderLabel(['po 3', ' PO 2 '], 2)).toBe('PO 4');
+  });
+  it('rotulo customizado nao colide', () => {
+    expect(nextDefaultPurchaseOrderLabel(['Embarque'], 2)).toBe('PO 2');
+  });
+});
+
+describe('createPurchaseOrder: rotulo unico apos excluir e recriar', () => {
+  // Stub em memoria com label/create/findMany(select), alem do necessario para excluir.
+  function makeLabelTx() {
+    type O = { id: number; quoteRequestId: number; label: string; position: number };
+    const orders: O[] = [];
+    let nextId = 100;
+    return {
+      orders,
+      quoteRequestPurchaseOrder: {
+        findMany: async ({ where }: any) =>
+          orders
+            .filter((o) => o.quoteRequestId === where.quoteRequestId)
+            .sort((a, b) => a.position - b.position || a.id - b.id)
+            .map((o) => ({ ...o })),
+        create: async ({ data }: any) => {
+          const o = { id: nextId++, ...data };
+          orders.push(o);
+          return { ...o };
+        },
+        update: async ({ where, data }: any) => {
+          const o = orders.find((x) => x.id === where.id)!;
+          Object.assign(o, data);
+          return o;
+        },
+        delete: async ({ where }: any) => {
+          orders.splice(orders.findIndex((x) => x.id === where.id), 1);
+        },
+      },
+      quoteRequestItem: {
+        findMany: async () => [],
+        updateMany: async () => undefined,
+      },
+    };
+  }
+
+  it('PO 1, PO 2, exclui PO 1, cria de novo => PO 2 e PO 3', async () => {
+    const tx = makeLabelTx();
+    const first = await createPurchaseOrder(tx, { quoteRequestId: 1 });
+    await createPurchaseOrder(tx, { quoteRequestId: 1 });
+    await deletePurchaseOrderWithReallocation(tx, {
+      id: first.purchaseOrder.id,
+      quoteRequestId: 1,
+    });
+    const third = await createPurchaseOrder(tx, { quoteRequestId: 1 });
+
+    expect(third.purchaseOrder.position).toBe(2);
+    expect(third.purchaseOrder.label).toBe('PO 3');
+    expect(tx.orders.map((o) => o.label).sort()).toEqual(['PO 2', 'PO 3']);
   });
 });

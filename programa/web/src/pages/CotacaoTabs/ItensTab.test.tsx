@@ -42,7 +42,7 @@ function renderTab(over: Partial<React.ComponentProps<typeof ItensTab>> = {}) {
         purchaseOrders={[]}
         defaultIncoterm="FOB"
         defaultPort="Itapoá"
-        hasResponses={false}
+        hasResponsesOrDispatch={false}
         onAddItem={vi.fn()}
         onEditItem={vi.fn()}
         onRemoveItem={vi.fn()}
@@ -159,5 +159,19 @@ describe('ItensTab', () => {
     expect(screen.queryByText('+ Adicionar PO')).toBeNull();
     expect(screen.queryByLabelText('Mover para PO')).toBeNull();
     expect(screen.queryByText('Remover PO')).toBeNull();
+  });
+
+  it('com PO e envio/respostas mostra o aviso de reagrupamento', () => {
+    renderTab({
+      hasResponsesOrDispatch: true,
+      purchaseOrders: [po(1, 1, 'PO 1')],
+      items: [item(1, 'A', 1)],
+    });
+    expect(screen.getByText(/reagrupar POs não altera/)).toBeTruthy();
+  });
+
+  it('modo legado (sem PO) não mostra o aviso mesmo com envio', () => {
+    renderTab({ hasResponsesOrDispatch: true, items: [item(1, 'A', null)] });
+    expect(screen.queryByText(/reagrupar POs não altera/)).toBeNull();
   });
 });

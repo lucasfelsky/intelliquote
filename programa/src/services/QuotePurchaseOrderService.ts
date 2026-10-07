@@ -55,19 +55,37 @@ export async function normalizePositions(
   return orders;
 }
 
+/**
+ * Rotulo padrao "PO N" com N unico na cotacao (sem diferenciar maiusculas):
+ * o primeiro N >= startAt cujo rotulo ainda nao existe. "PO " + inteiro fica
+ * sempre muito abaixo do limite de 60 caracteres (purchaseOrderLabelField).
+ */
+export function nextDefaultPurchaseOrderLabel(existingLabels: string[], startAt: number): string {
+  const taken = new Set(existingLabels.map((l) => l.trim().toLowerCase()));
+  let n = Math.max(1, startAt);
+  while (taken.has(`po ${n}`)) n += 1;
+  return `PO ${n}`;
+}
+
 export async function createPurchaseOrder(
   tx: Tx,
   input: { quoteRequestId: number; label?: string; adoptUnassigned?: boolean },
 ): Promise<{ purchaseOrder: PurchaseOrderDTO; movedItemIds: number[] }> {
-  const last = await tx.quoteRequestPurchaseOrder.findFirst({
-    where: { quoteRequestId: input.quoteRequestId },
-    orderBy: { position: 'desc' },
-  });
-  const position = (last?.position ?? 0) + 1;
+  const existing: { position: number; label: string }[] =
+    await tx.quoteRequestPurchaseOrder.findMany({
+      where: { quoteRequestId: input.quoteRequestId },
+      select: { position: true, label: true },
+    });
+  const position = existing.reduce((max, o) => Math.max(max, o.position), 0) + 1;
   const purchaseOrder = await tx.quoteRequestPurchaseOrder.create({
     data: {
       quoteRequestId: input.quoteRequestId,
-      label: input.label?.trim() || `PO ${position}`,
+      label:
+        input.label?.trim() ||
+        nextDefaultPurchaseOrderLabel(
+          existing.map((o) => o.label),
+          position,
+        ),
       position,
     },
   });

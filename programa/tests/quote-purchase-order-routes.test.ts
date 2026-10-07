@@ -54,7 +54,7 @@ describe('Rotas de PO da cotacao', () => {
   it('R1 cria PO com label default e sem mover itens', async () => {
     const cookies = await loginAs('comprador');
     p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
-    tx.quoteRequestPurchaseOrder.findFirst.mockResolvedValue(null);
+    tx.quoteRequestPurchaseOrder.findMany.mockResolvedValue([]);
     tx.quoteRequestPurchaseOrder.create.mockResolvedValue({
       id: 1, quoteRequestId: 5, label: 'PO 1', position: 1,
     });
@@ -73,10 +73,29 @@ describe('Rotas de PO da cotacao', () => {
     expect(tx.quoteRequestItem.updateMany).not.toHaveBeenCalled();
   });
 
+  it('R1 usa rotulo padrao unico quando PO 2 ja existe', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
+    tx.quoteRequestPurchaseOrder.findMany.mockResolvedValue([{ position: 1, label: 'PO 2' }]);
+    tx.quoteRequestPurchaseOrder.create.mockResolvedValue({
+      id: 2, quoteRequestId: 5, label: 'PO 3', position: 2,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/5/purchase-orders')
+      .set('Cookie', cookies)
+      .send({});
+
+    expect(res.status).toBe(201);
+    expect(tx.quoteRequestPurchaseOrder.create).toHaveBeenCalledWith({
+      data: { quoteRequestId: 5, label: 'PO 3', position: 2 },
+    });
+  });
+
   it('R1 com adoptUnassigned move itens sem PO para a nova PO', async () => {
     const cookies = await loginAs('comprador');
     p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
-    tx.quoteRequestPurchaseOrder.findFirst.mockResolvedValue(null);
+    tx.quoteRequestPurchaseOrder.findMany.mockResolvedValue([]);
     tx.quoteRequestPurchaseOrder.create.mockResolvedValue({
       id: 1, quoteRequestId: 5, label: 'PO 1', position: 1,
     });
