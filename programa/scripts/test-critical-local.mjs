@@ -121,7 +121,13 @@ async function teardown() {
   // pg.stop() registra o listener de 'exit' ao ser chamado: precisa comecar com o
   // postmaster ainda vivo (antes do primeiro kill), senao o evento nunca chega.
   let stopping = null;
-  const startStop = () => { stopping ??= withTimeout(pg.stop(), STOP_TIMEOUT_MS); };
+  const startStop = () => {
+    if (stopping) return;
+    stopping = withTimeout(pg.stop(), STOP_TIMEOUT_MS);
+    // A rejeicao (ex.: EBUSY no fs.rm da lib enquanto o killTree ainda roda) pode ocorrer
+    // antes do 'await stopping' abaixo: sem este handler vira unhandledRejection e derruba o script.
+    stopping.catch(() => {});
+  };
   // Banco descartavel: mata postmaster + filhos (io_worker etc.) enquanto o pai
   // ainda vive; depois de morto, taskkill /T nao alcanca os filhos orfaos.
   // So mata por PID se ele for o postgres deste cluster (anti PID reutilizado).
