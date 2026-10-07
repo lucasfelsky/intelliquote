@@ -475,10 +475,11 @@ export default function CotacaoDetalhe() {
           pagination?: { totalPages?: number };
         };
         const PAGE_SIZE = 100;
-        const MAX_PAGES = 50;
+        // Guarda contra loop infinito SOMENTE para resposta sem totalPages.
+        const MAX_PAGES_WITHOUT_TOTAL = 50;
         const raw: unknown[] = [];
         const seenIds = new Set<unknown>();
-        for (let page = 1; page <= MAX_PAGES; page += 1) {
+        for (let page = 1; ; page += 1) {
           const res = await api.get<unknown[] | SuppliersPage>('/v1/suppliers', {
             status: 'active',
             page: String(page),
@@ -499,9 +500,17 @@ export default function CotacaoDetalhe() {
             raw.push(row);
           }
           const totalPages = res?.pagination?.totalPages;
-          const hasNext =
-            typeof totalPages === 'number' ? page < totalPages : rows.length >= PAGE_SIZE;
-          if (!hasNext) break;
+          if (typeof totalPages === 'number') {
+            // Servidor informa o total: itera ate a ultima pagina.
+            if (page >= totalPages) break;
+          } else {
+            if (rows.length < PAGE_SIZE) break;
+            if (page >= MAX_PAGES_WITHOUT_TOTAL) {
+              throw new Error(
+                'Resposta de fornecedores sem total de paginas excedeu o limite de seguranca.',
+              );
+            }
+          }
         }
         return raw.map((s) => {
           const obj = s as Record<string, unknown>;
@@ -540,11 +549,19 @@ export default function CotacaoDetalhe() {
       queryFn: async () => {
         const ids = activeSuppliers.data?.map((s) => s.id) ?? [];
         if (ids.length === 0) return {} as Record<number, Array<{ id: number; name: string; email: string; isPrimary: boolean }>>;
-        const data = await api.get<{ bySupplier?: Record<string, unknown[]> }>(
-          '/v1/supplier-contacts',
-          { supplierIds: ids.join(',') },
-        );
-        return parseContactsBySupplier(data);
+        // Lotes de ate 100 ids por chamada (evita estourar o limite de URL);
+        // cada resposta traz { bySupplier } e os ids sao disjuntos entre lotes.
+        const CONTACTS_BATCH_SIZE = 100;
+        const bySupplier: Record<string, unknown[]> = {};
+        for (let i = 0; i < ids.length; i += CONTACTS_BATCH_SIZE) {
+          const batch = ids.slice(i, i + CONTACTS_BATCH_SIZE);
+          const data = await api.get<{ bySupplier?: Record<string, unknown[]> }>(
+            '/v1/supplier-contacts',
+            { supplierIds: batch.join(',') },
+          );
+          Object.assign(bySupplier, data?.bySupplier ?? {});
+        }
+        return parseContactsBySupplier({ bySupplier });
       },
       enabled: showDispatchModal && Boolean(activeSuppliers.data),
     });
@@ -1265,7 +1282,21 @@ export default function CotacaoDetalhe() {
                   vai como &quot;Para&quot;; os demais do mesmo fornecedor entram em cópia.
                 </p>
                 {activeSuppliers.isLoading && <p>Carregando fornecedores…</p>}
-                {!activeSuppliers.isLoading && (activeSuppliers.data ?? []).length === 0 && (
+                {activeSuppliers.isError && (
+                  <div className="empty-state" role="alert">
+                    <strong>Não foi possível carregar os fornecedores.</strong>
+                    <p>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => void activeSuppliers.refetch()}
+                      >
+                        Tentar de novo
+                      </button>
+                    </p>
+                  </div>
+                )}
+                {!activeSuppliers.isLoading && !activeSuppliers.isError && (activeSuppliers.data ?? []).length === 0 && (
                   <div className="empty-state">
                     <strong>Nenhum fornecedor ativo</strong>
                     <p>Cadastre fornecedores ativos com contatos antes de enviar.</p>

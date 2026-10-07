@@ -490,6 +490,131 @@ describe('CotacaoDetalhe', () => {
     });
   });
 
+  describe('lista de fornecedores do envio: totalPages, lotes de contatos e erro', () => {
+    const makeSuppliers = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, i) => ({
+        id: 1000 + from + i,
+        name: `Fornecedor ${String(from + i).padStart(3, '0')}`,
+        status: 'active',
+        families: [],
+      }));
+
+    const openDispatch = async () => {
+      const utils = renderPage();
+      await utils.findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(utils.getByRole('button', { name: 'Enviar cotacao' }));
+      return { ...utils, dialog: dialogByTitle(utils.container, 'Enviar cotação para fornecedores') };
+    };
+
+    it('9k. totalPages=3: carrega as 3 páginas e lista fornecedores de todas', async () => {
+      const baseImpl = getImpl;
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) => {
+        if (path === '/v1/suppliers') {
+          const page = Number(params?.page ?? '1');
+          const pagination = { page, pageSize: 100, totalItems: 250, totalPages: 3 };
+          if (page === 1) return { data: makeSuppliers(1, 100), pagination };
+          if (page === 2) return { data: makeSuppliers(101, 200), pagination };
+          return { data: makeSuppliers(201, 250), pagination };
+        }
+        return baseImpl(path, params);
+      }) as unknown as typeof api.get);
+
+      const { dialog } = await openDispatch();
+      await waitFor(() => expect(within(dialog).getByText('Fornecedor 250')).toBeTruthy());
+      expect(within(dialog).getByText('Fornecedor 001')).toBeTruthy();
+      expect(within(dialog).getByText('Fornecedor 150')).toBeTruthy();
+      const pages = vi
+        .mocked(api.get)
+        .mock.calls.filter(([path]) => path === '/v1/suppliers')
+        .map(([, params]) => (params as Record<string, string>).page);
+      expect(pages).toEqual(['1', '2', '3']);
+    });
+
+    it('9l. sem totalPages e sempre página cheia: atinge o guarda e mostra estado de erro (sem lista parcial)', async () => {
+      const baseImpl = getImpl;
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) => {
+        if (path === '/v1/suppliers') {
+          const page = Number(params?.page ?? '1');
+          const from = (page - 1) * 100 + 1;
+          return { data: makeSuppliers(from, from + 99) };
+        }
+        return baseImpl(path, params);
+      }) as unknown as typeof api.get);
+
+      const { dialog } = await openDispatch();
+      await waitFor(() =>
+        expect(within(dialog).getByText('Não foi possível carregar os fornecedores.')).toBeTruthy(),
+      );
+      expect(within(dialog).getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
+      expect(within(dialog).queryByText('Nenhum fornecedor ativo')).toBeNull();
+      expect(within(dialog).queryByText('Fornecedor 001')).toBeNull();
+    });
+
+    it('9m. 250 fornecedores: contatos buscados em 3 lotes (<=100 ids) e todos selecionáveis', async () => {
+      const baseImpl = getImpl;
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) => {
+        if (path === '/v1/suppliers') {
+          const page = Number(params?.page ?? '1');
+          const pagination = { page, pageSize: 100, totalItems: 250, totalPages: 3 };
+          const from = (page - 1) * 100 + 1;
+          return { data: makeSuppliers(from, Math.min(from + 99, 250)), pagination };
+        }
+        if (path === '/v1/supplier-contacts') {
+          const ids = String(params?.supplierIds ?? '').split(',').map(Number);
+          const bySupplier: Record<string, unknown[]> = {};
+          for (const sid of ids) {
+            bySupplier[String(sid)] = [
+              { id: sid * 10, name: `Contato ${sid}`, email: `c${sid}@x.com`, isPrimary: true },
+            ];
+          }
+          return { bySupplier };
+        }
+        return baseImpl(path, params);
+      }) as unknown as typeof api.get);
+
+      const { dialog } = await openDispatch();
+      await waitFor(() => expect(within(dialog).getByText('Fornecedor 250')).toBeTruthy());
+      await waitFor(() => {
+        const calls = vi.mocked(api.get).mock.calls.filter(([path]) => path === '/v1/supplier-contacts');
+        expect(calls).toHaveLength(3);
+      });
+      const batches = vi
+        .mocked(api.get)
+        .mock.calls.filter(([path]) => path === '/v1/supplier-contacts')
+        .map(([, params]) => String((params as Record<string, string>).supplierIds).split(','));
+      expect(batches.map((b) => b.length)).toEqual([100, 100, 50]);
+      expect(new Set(batches.flat()).size).toBe(250);
+
+      // Contatos de todos os lotes mesclados: seleciona fornecedor do 1º e do 3º lote.
+      const rowOf = (name: string) => within(dialog).getByText(name).closest('label') as HTMLElement;
+      for (const name of ['Fornecedor 001', 'Fornecedor 250']) {
+        await waitFor(() => expect(within(rowOf(name)).getAllByRole('checkbox').length).toBeGreaterThan(0));
+        fireEvent.click(within(rowOf(name)).getByRole('checkbox'));
+      }
+      await waitFor(() => expect(within(dialog).getByText('2 destinatario(s) selecionado(s)')).toBeTruthy());
+    });
+
+    it('9n. erro ao carregar fornecedores: mensagem + "Tentar de novo" refaz a query', async () => {
+      const baseImpl = getImpl;
+      let failing = true;
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) => {
+        if (path === '/v1/suppliers' && failing) throw new Error('falha de rede');
+        return baseImpl(path, params);
+      }) as unknown as typeof api.get);
+
+      const { dialog } = await openDispatch();
+      await waitFor(() =>
+        expect(within(dialog).getByText('Não foi possível carregar os fornecedores.')).toBeTruthy(),
+      );
+      expect(within(dialog).queryByText('Nenhum fornecedor ativo')).toBeNull();
+
+      failing = false;
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Tentar de novo' }));
+      await waitFor(() => expect(within(dialog).getByText('ACME Ltda')).toBeTruthy());
+      expect(within(dialog).queryByText('Não foi possível carregar os fornecedores.')).toBeNull();
+    });
+  });
+
   describe('chave "Equipe COMEX em cópia só no primeiro e-mail"', () => {
     const CHECKBOX_NAME = 'Equipe COMEX em cópia só no primeiro e-mail';
 
