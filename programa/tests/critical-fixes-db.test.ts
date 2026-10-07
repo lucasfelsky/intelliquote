@@ -241,4 +241,39 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
       },
     })).rejects.toThrow('Exchange rate');
   });
+
+  it('exclui PO realocando itens (anterior/proxima/sem PO) sem apagar itens e mantem posicoes contiguas', async () => {
+    const [i1, i2] = quote.items;
+    const pos: any[] = [];
+    for (const n of [1, 2, 3]) {
+      const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+        .set('Cookie', cookies).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      pos.push(res.body.purchaseOrder);
+      expect(res.body.purchaseOrder.position).toBe(n);
+    }
+    await prisma.quoteRequestItem.update({ where: { id: i1.id }, data: { purchaseOrderId: pos[0].id } });
+    await prisma.quoteRequestItem.update({ where: { id: i2.id }, data: { purchaseOrderId: pos[1].id } });
+
+    // primeira -> proxima
+    let del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[0].id}`).set('Cookie', cookies);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    expect(del.body.reassignedToPurchaseOrderId).toBe(pos[1].id);
+    expect((await prisma.quoteRequestItem.findUnique({ where: { id: i1.id } })).purchaseOrderId).toBe(pos[1].id);
+    let remaining = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(remaining.map((o: any) => [o.id, o.position])).toEqual([[pos[1].id, 1], [pos[2].id, 2]]);
+
+    // ultima -> anterior
+    del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[2].id}`).set('Cookie', cookies);
+    expect(del.body.reassignedToPurchaseOrderId).toBe(pos[1].id);
+
+    // unica -> sem PO
+    del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[1].id}`).set('Cookie', cookies);
+    expect(del.status).toBe(200);
+    expect(del.body.reassignedToPurchaseOrderId).toBeNull();
+    const items = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
+    expect(items).toHaveLength(2);
+    expect(items.every((i: any) => i.purchaseOrderId === null)).toBe(true);
+    expect(await prisma.quoteRequestPurchaseOrder.count({ where: { quoteRequestId: quote.id } })).toBe(0);
+  });
 });

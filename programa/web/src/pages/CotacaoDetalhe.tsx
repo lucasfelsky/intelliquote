@@ -19,6 +19,8 @@ import { Tabs, TabList, Tab, TabPanel } from '@/components/Tabs';
 import { Modal } from '@/components/Modal';
 import { RespostasTab } from './CotacaoTabs/RespostasTab';
 import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
+import { ItensTab } from './CotacaoTabs/ItensTab';
+import type { PurchaseOrder } from '@/services/purchaseOrders';
 
 type QuoteStatus = 'open' | 'closed';
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
@@ -40,6 +42,7 @@ interface QuoteRequest {
   closedAt: string | null;
   createdById: number | null;
   items?: QuoteRequestItem[];
+  purchaseOrders?: PurchaseOrder[];
   quoteResponses?: QuoteResponseSummary[];
 }
 
@@ -65,6 +68,7 @@ interface QuoteRequestItem {
   destinationPort: string | null;
   catalogItemId: number | null;
   catalogItem?: CatalogItemLite | null;
+  purchaseOrderId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -141,11 +145,6 @@ function formatDateTime(iso: string | null): string {
     + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatNumber(value: number | undefined | null): string {
-  if (typeof value !== 'number' || Number.isNaN(value)) return '—';
-  return value.toLocaleString('pt-BR');
-}
-
 function toDateInput(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -195,6 +194,7 @@ function normalize(qr: unknown): QuoteRequest {
       closedAt: (obj.closedAt as string | null) ?? null,
       createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
       items,
+      purchaseOrders: Array.isArray(obj.purchaseOrders) ? (obj.purchaseOrders as PurchaseOrder[]) : [],
       quoteResponses: responses,
     };
   }
@@ -221,6 +221,8 @@ function normalizeItem(it: unknown): QuoteRequestItem {
     destinationPort: (obj.destinationPort as string | null) ?? null,
     catalogItemId:
       typeof obj.catalogItemId === 'number' ? obj.catalogItemId : null,
+    purchaseOrderId:
+      typeof obj.purchaseOrderId === 'number' ? obj.purchaseOrderId : null,
     catalogItem: catalog
       ? {
           id: Number(catalog.id),
@@ -277,6 +279,7 @@ export default function CotacaoDetalhe() {
 
   const [showItemModal, setShowItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState<QuoteRequestItem | null>(null);
+  const [newItemPoId, setNewItemPoId] = useState<number | null>(null);
   const [itemForm, setItemForm] = useState<ItemForm>(emptyItemForm);
   const [itemError, setItemError] = useState<string | null>(null);
 
@@ -380,6 +383,9 @@ export default function CotacaoDetalhe() {
         };
         if (payload.catalogItemId !== null) {
           body.catalogItemId = payload.catalogItemId;
+        }
+        if (newItemPoId !== null) {
+          body.purchaseOrderId = newItemPoId;
         }
         if (!payload.inheritIncoterm && payload.desiredIncoterm) {
           body.desiredIncoterm = payload.desiredIncoterm;
@@ -824,7 +830,8 @@ export default function CotacaoDetalhe() {
       }
     }
 
-  function openNewItem() {
+  function openNewItem(purchaseOrderId: number | null = null) {
+    setNewItemPoId(purchaseOrderId);
     setEditingItem(null);
     setItemForm(emptyItemForm);
     setItemError(null);
@@ -1171,81 +1178,24 @@ export default function CotacaoDetalhe() {
 
         <TabPanel value="itens">
           <section className="card">
-            <div className="page-header" style={{ marginBottom: 8 }}>
-              <h2>Itens</h2>
-              {canEdit && qr.status === 'open' && (
-                <button type="button" className="primary-button" onClick={openNewItem}>
-                  + Adicionar item
-                </button>
-              )}
-            </div>
-            {items.length === 0 ? (
-              <div className="empty-state">
-                <strong>Nenhum item cadastrado</strong>
-                <p>
-                  {canEdit && qr.status === 'open'
-                    ? 'Use o botão “Adicionar item” para começar.'
-                    : 'Esta cotação ainda não possui itens.'}
-                </p>
-              </div>
-            ) : (
-              <div className="table-wrapper">
-                <table className="table">
-                <thead>
-                  <tr>
-                    <th>Nome comercial</th>
-                    <th>Nome de mercado</th>
-                    <th>Qtd</th>
-                    <th>Unidade</th>
-                    <th>Incoterm</th>
-                    <th>Porto</th>
-                    <th>DG</th>
-                    <th>Notas</th>
-                    {canEdit && qr.status === 'open' && <th>Ações</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr key={it.id}>
-                      <td><strong>{it.catalogItem?.commercialName ?? it.productName}</strong></td>
-                      <td>{it.catalogItem?.marketName ?? '—'}</td>
-                      <td>{formatNumber(it.quantity)}</td>
-                      <td>{it.unit}</td>
-                      <td>{it.desiredIncoterm ?? formatIncoterms(qr.desiredIncoterm)}</td>
-                      <td>{it.destinationPort ?? qr.destinationPort ?? '—'}</td>
-                      <td>{it.catalogItem?.isDangerousGood ? 'Sim' : '—'}</td>
-                      <td>{it.notes ?? '—'}</td>
-                      {canEdit && qr.status === 'open' && (
-                        <td>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={() => openEditItem(it)}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost-button"
-                              onClick={async () => {
-                                if (await confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
-                                  removeItem.mutate(it.id);
-                                }
-                              }}
-                              disabled={removeItem.isPending}
-                            >
-                              Remover
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-                </table>
-              </div>
-            )}
+            <ItensTab
+              quoteRequestId={qr.id}
+              status={qr.status}
+              canEdit={canEdit}
+              items={items}
+              purchaseOrders={qr.purchaseOrders ?? []}
+              defaultIncoterm={formatIncoterms(qr.desiredIncoterm)}
+              defaultPort={qr.destinationPort}
+              hasResponses={(qr.quoteResponses?.length ?? 0) > 0}
+              onAddItem={openNewItem}
+              onEditItem={(it) => openEditItem(it as QuoteRequestItem)}
+              onRemoveItem={async (it) => {
+                if (await confirm(`Remover o item ${it.catalogItem?.commercialName ?? it.productName}?`)) {
+                  removeItem.mutate(it.id);
+                }
+              }}
+              removePending={removeItem.isPending}
+            />
           </section>
         </TabPanel>
 

@@ -138,6 +138,7 @@ export class QuoteRequestController {
             include: { catalogItem: true },
             orderBy: { createdAt: 'asc' },
           },
+          purchaseOrders: { orderBy: { position: 'asc' } },
           quoteResponses: {
             where: { deletedAt: null },
             include: {
