@@ -149,3 +149,59 @@ describe('Email template routes — quote_reply', () => {
     expect(args.where).toEqual({ key_locale: { key: 'quote_reply', locale: 'en' } });
   });
 });
+
+describe('Email template routes — quote_po (preview)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.quoteRequest.findFirst.mockResolvedValue(null);
+  });
+
+  it('preview sem customizacao traz o logo (data URI), a mensagem de exemplo e a assinatura', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_po', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('fallback');
+    expect(res.body.html).toContain('data:image/png;base64,');
+    expect(res.body.html).not.toContain('cid:');
+    expect(res.body.html).toContain('Kindly confirm receipt.');
+    expect(res.body.html).toContain('Purchasing | SQ Quimica');
+    expect(res.body.html.indexOf('Kindly confirm receipt.')).toBeGreaterThan(
+      res.body.html.indexOf('Dear all,'),
+    );
+    expect(res.body.text).toContain('Kindly confirm receipt.');
+  });
+
+  it('preview de template do banco com placeholders novos renderiza mensagem, assinatura e logo', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue({
+      id: 3,
+      key: 'quote_po',
+      locale: 'en',
+      subject: 'Purchase Order - {{requestCode}}',
+      htmlBody: '{{companyLogo}}<p>Dear all,</p>{{message}}{{senderSignature}}',
+      textBody: 'Dear all,\r\n\r\n{{messageText}}{{senderSignatureText}}PO reference: {{requestCode}}',
+      isActive: true,
+      updatedAt: new Date(),
+      updatedById: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_po', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('database');
+    expect(res.body.html).toContain('data:image/png;base64,');
+    expect(res.body.html).toContain('Kindly confirm receipt.');
+    expect(res.body.html).toContain('Purchasing | SQ Quimica');
+    expect(res.body.text).toContain('Kindly confirm receipt.');
+    expect(res.body.text).toContain('PO reference:');
+  });
+});

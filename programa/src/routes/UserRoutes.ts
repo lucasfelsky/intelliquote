@@ -15,6 +15,26 @@ userRoutes.get('/users/:id', ...adminOnly, UserController.getById);
 userRoutes.put('/users/:id', ...adminOnly, UserController.update);
 userRoutes.post('/users/:id/reset-password', ...adminOnly, UserController.resetPassword);
 
+// Assinatura de e-mail do PROPRIO usuario logado (usada no e-mail da Ordem de
+// Compra). Qualquer papel autenticado (inclusive viewer); sem :id -- tudo
+// opera sobre req.user.id.
+userRoutes.get('/account/email-signature', ...anyAuthenticated, UserController.getEmailSignature);
+userRoutes.put(
+  '/account/email-signature/text',
+  ...anyAuthenticated,
+  UserController.updateEmailSignatureText,
+);
+userRoutes.put(
+  '/account/email-signature/image',
+  ...anyAuthenticated,
+  UserController.updateEmailSignatureImage,
+);
+userRoutes.delete(
+  '/account/email-signature/image',
+  ...anyAuthenticated,
+  UserController.deleteEmailSignatureImage,
+);
+
 // Lista leve de perfis para alimentar seletores de UI (picker de CC,
 // mencoes em envios etc). Retorna apenas dados de identificacao — sem
 // hash de senha, sem contadores. Restringimos a usuarios ativos por

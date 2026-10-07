@@ -63,6 +63,7 @@ model User {
   createdDispatchEvents  DispatchEvent[]       @relation("DispatchEventCreatedBy")
   createdPortalTokens    SupplierPortalToken[] @relation("SupplierPortalTokenCreatedBy")
   createdSupplierReviews SupplierReview[]      @relation("SupplierReviewCreatedBy")
+  emailSignature         UserEmailSignature?
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -500,6 +501,21 @@ model EmailTemplate {
 
   @@unique([key, locale])
   @@index([key])
+}
+
+// Assinatura de e-mail por usuario (usada no e-mail da Ordem de Compra).
+// Tabela propria (e nao colunas em User) porque AuthService le o User inteiro
+// em toda request autenticada -- um bytea ali seria carregado o tempo todo.
+model UserEmailSignature {
+  userId        Int      @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text          String?
+  imageData     Bytes?
+  imageMimeType String?
+  imageWidth    Int?
+  imageHeight   Int?
+  imageSize     Int?
+  updatedAt     DateTime @updatedAt
 }
 
 model SupplierPortalToken {

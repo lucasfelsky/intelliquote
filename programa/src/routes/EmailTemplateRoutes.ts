@@ -16,10 +16,13 @@ import {
 import {
   renderPoSections,
   renderPoPlainText,
+  renderPoHtmlFromTemplate,
+  renderPoTextFromTemplate,
   loadFileTemplate as loadPoFileTemplate,
   PO_TEMPLATE_KEY,
   type QuotePoVars,
 } from '../mailer/renderQuotePo';
+import { emailLogoDataUri, emailLogoDisplaySize } from '../mailer/emailLogo';
 import {
   renderReminderSections,
   renderReminderPlainText,
@@ -87,6 +90,13 @@ function renderPoSampleVars(): QuotePoVars {
     supplierContactName: 'Joao Fornecedor',
     forwarderInfo: 'Global Forwarders Ltda.\nAttn: Maria Santos\nmaria@globalforwarders.com\n+55 47 99999-1234',
     destinationPort: 'NAVEGANTES, BRAZIL',
+    message: 'Please find attached our purchase order. Kindly confirm receipt.',
+    senderName: 'Maria Santos',
+    senderEmail: 'comex@sqquimica.com',
+    signatureText: 'Maria Santos\nPurchasing | SQ Quimica\ncomex@sqquimica.com',
+    // O iframe de preview nao resolve cid:, entao o logo vai como data URI.
+    companyLogoSrc: emailLogoDataUri(),
+    companyLogoWidth: emailLogoDisplaySize().width,
   };
 }
 
@@ -219,7 +229,7 @@ emailTemplateRoutes.get(
         if (!poTemplate) {
           return res.status(200).json({
             subject: poSample.subject,
-            html: renderPoSections(loadPoFileTemplate(), poSample),
+            html: renderPoHtmlFromTemplate(loadPoFileTemplate(), poSample),
             text: renderPoPlainText(poSample),
             isActive: false,
             source: 'fallback',
@@ -231,8 +241,8 @@ emailTemplateRoutes.get(
         const poVars = { ...poSample, subject: poSubject };
         return res.status(200).json({
           subject: poSubject,
-          html: renderPoSections(poTemplate.htmlBody, poVars),
-          text: renderPoSections(poTemplate.textBody, poVars),
+          html: renderPoHtmlFromTemplate(poTemplate.htmlBody, poVars),
+          text: renderPoTextFromTemplate(poTemplate.textBody, poVars),
           isActive: poTemplate.isActive,
           source: 'database',
           locale,

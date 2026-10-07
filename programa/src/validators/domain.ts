@@ -390,6 +390,30 @@ export const userPasswordResetSchema = z.object({
   password: z.string().min(8, 'A palavra-passe deve ter pelo menos 8 caracteres.'),
 });
 
+// Assinatura de e-mail do proprio usuario (Minha conta). Texto: ate 2000
+// caracteres apos o trim; string vazia vira null (remove o texto).
+export const ACCOUNT_SIGNATURE_TEXT_MAX_LENGTH = 2000;
+export const accountSignatureTextSchema = z.object({
+  text: z
+    .string('Informe o texto da assinatura (ou null para remover).')
+    .trim()
+    .max(
+      ACCOUNT_SIGNATURE_TEXT_MAX_LENGTH,
+      `O texto da assinatura deve ter no maximo ${ACCOUNT_SIGNATURE_TEXT_MAX_LENGTH} caracteres.`,
+    )
+    .nullable()
+    .transform((value) => (value ? value : null)),
+});
+
+// Imagem da assinatura: so' PNG/JPEG. O tipo declarado precisa bater com o
+// detectado pelo conteudo (validado no controller via detectImage).
+export const accountSignatureImageSchema = z.object({
+  fileName: z.string().trim().min(1, 'Informe o nome do arquivo.').max(255),
+  contentBase64: z.string().min(1, 'Envie o conteudo da imagem em base64.'),
+  fileType: z.enum(['image/png', 'image/jpeg'], 'Apenas imagens PNG ou JPEG sao aceitas.'),
+  fileSize: z.coerce.number().int().nonnegative(),
+});
+
 export const passwordRecoveryRequestSchema = z.object({
   email: z.string().trim().email('Informe um e-mail valido.'),
 });

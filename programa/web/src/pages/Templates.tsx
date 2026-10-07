@@ -93,6 +93,9 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{supplierContactName}}', label: 'Contato' },
     { token: '{{forwarderInfo}}', label: 'Contato do despachante' },
     { token: '{{destinationPort}}', label: 'Porto de destino' },
+    { token: '{{message}}', label: 'Mensagem do modal (após “Dear all,”)' },
+    { token: '{{senderSignature}}', label: 'Assinatura do usuário' },
+    { token: '{{companyLogo}}', label: 'Logo da SQ' },
   ],
   quote_reminder: [
     { token: '{{subject}}', label: 'Assunto' },
