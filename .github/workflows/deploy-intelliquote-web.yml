@@ -20,6 +20,12 @@
 #   VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID,
 #   VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID,
 #   VITE_FIREBASE_APP_ID, VITE_INTELLIQUOTE_API_BASE, VITE_PORTAL_URL.
+#
+# Gate de CI: o job `ci-gate` bloqueia o deploy se o commit nao estiver contido
+# na main com o workflow "CI" (push/main) verde (jobs `Unit + Build` e
+# `E2E (Playwright)`); se o CI ainda roda, espera ate ~25 min. Escape hatch so via
+# workflow_dispatch: skip_ci_gate=true + skip_ci_gate_reason (logado). Enquanto o
+# gate espera, uma 2a execucao fica pendente (concurrency sem cancel-in-progress).
 
 name: Deploy frontend (Firebase Hosting)
 
@@ -28,6 +34,17 @@ on:
     tags:
       - "web-v*"
   workflow_dispatch:
+    inputs:
+      skip_ci_gate:
+        description: "EMERGENCIA: pula o gate de CI verde na main. Exige skip_ci_gate_reason."
+        type: boolean
+        required: false
+        default: false
+      skip_ci_gate_reason:
+        description: "Motivo do skip do gate de CI (obrigatorio se skip_ci_gate=true; fica logado)."
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -41,8 +58,65 @@ env:
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
 
 jobs:
+  ci-gate:
+    name: Gate - CI verde na main
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout (so scripts do gate)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Decidir modo (gate ou skip explicito)
+        id: mode
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          SKIP: ${{ inputs.skip_ci_gate }}
+          REASON: ${{ inputs.skip_ci_gate_reason }}
+        run: |
+          skip=false
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$SKIP" = "true" ]; then
+            skip=true
+            if [ -z "${REASON//[[:space:]]/}" ]; then
+              echo "::error::skip_ci_gate=true exige skip_ci_gate_reason preenchido."
+              exit 1
+            fi
+            # Motivo vindo da API pode ter quebra de linha: achata para nao injetar workflow commands.
+            REASON="${REASON//$'\r'/ }"
+            REASON="${REASON//$'\n'/ }"
+            sha="$(git rev-parse HEAD)"
+            echo "::warning::Gate de CI PULADO por $GITHUB_ACTOR em $sha: $REASON"
+            {
+              echo "### Gate de CI PULADO"
+              echo "- Ator: $GITHUB_ACTOR"
+              echo "- Commit: $sha"
+              echo "- Motivo: $REASON"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.mode.outputs.skip != 'true'
+        with:
+          node-version: "22"
+
+      - name: Aguardar CI verde na main
+        if: steps.mode.outputs.skip != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/wait-ci-green.mjs --sha "$(git rev-parse HEAD)" --branch main --workflow ci.yml
+
   build-and-deploy:
     name: Build + Deploy web to Firebase Hosting
+    needs: ci-gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
