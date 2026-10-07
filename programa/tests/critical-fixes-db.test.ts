@@ -314,7 +314,40 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     await Promise.race([holdingP, done]);
     return { release, done };
   }
-  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Prova deterministica de espera: faz polling (limite de tempo) em pg_stat_activity ate achar um
+  // backend bloqueado (wait_event_type = 'Lock') cuja query e o SELECT ... FOR NO KEY UPDATE da
+  // linha QuoteRequest, e confere em pg_locks que esse backend ainda NAO tem lock de escrita
+  // (RowExclusiveLock) em nenhuma tabela filha: ou seja, esta esperando o pai ANTES de gravar filhos.
+  async function expectBlockedOnQuoteRequestLock(timeoutMs = 10000) {
+    const { Prisma } = await import('@prisma/client');
+    const deadline = Date.now() + timeoutMs;
+    let waiting: { pid: number; query: string; wait_event_type: string; waiting_on: string | null }[] = [];
+    while (Date.now() < deadline) {
+      waiting = await prisma.$queryRaw`
+        SELECT a.pid, a.query, a.wait_event_type,
+               (SELECT string_agg(l.mode || ':' || COALESCE(c.relname, l.locktype), ',')
+                  FROM pg_locks l LEFT JOIN pg_class c ON c.oid = l.relation
+                 WHERE l.pid = a.pid AND NOT l.granted) AS waiting_on
+          FROM pg_stat_activity a
+         WHERE a.datname = current_database()
+           AND a.pid <> pg_backend_pid()
+           AND a.wait_event_type = 'Lock'
+           AND a.query LIKE '%FOR NO KEY UPDATE%'
+           AND a.query LIKE '%"QuoteRequest"%'`;
+      if (waiting.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(waiting.length, 'nenhum backend bloqueado no SELECT ... FOR NO KEY UPDATE da cotacao').toBeGreaterThan(0);
+    const pids = waiting.map((w) => Number(w.pid));
+    const writes: { relname: string; mode: string }[] = await prisma.$queryRaw`
+      SELECT c.relname, l.mode
+        FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
+       WHERE l.pid IN (${Prisma.join(pids)}) AND l.granted AND l.locktype = 'relation'
+         AND l.mode IN ('RowExclusiveLock', 'ShareRowExclusiveLock', 'ExclusiveLock')
+         AND c.relname NOT LIKE 'pg\\_%' AND c.relkind = 'r'`;
+    expect(writes, 'backend esperando o pai nao pode ter gravado em tabelas filhas').toEqual([]);
+  }
 
   it('criacao concorrente de PO na mesma cotacao gera posicoes e rotulos distintos (lock da cotacao)', async () => {
     const post = () => request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
@@ -378,7 +411,7 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
         await lockQuoteRequestForPurchaseOrders(tx, quote.id);
         secondGotLock = true;
       }, { timeout: 30000 });
-      await sleep(700);
+      await expectBlockedOnQuoteRequestLock();
       expect(secondGotLock).toBe(false);
       holder.release();
       await second;
@@ -403,9 +436,8 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     try {
       const deletion = request(app).delete(`/api/v1/quote-requests/${quote.id}`)
         .set('Cookie', cookies).then((res) => res);
-      await sleep(700);
-      const during = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
-      expect(during.every((i: any) => i.deletedAt === null)).toBe(true);
+      // Prova da espera: backend do DELETE bloqueado no lock do pai, sem escrita previa nos filhos.
+      await expectBlockedOnQuoteRequestLock();
       holder.release();
       const res = await deletion;
       expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -425,8 +457,8 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     try {
       const reopening = request(app).post(`/api/v1/quote-requests/${quote.id}/reopen`)
         .set('Cookie', cookies).then((res) => res);
-      await sleep(700);
-      expect((await prisma.quoteResponse.findUnique({ where: { id: proposals[0].id } })).isWinner).toBe(true);
+      // Prova da espera: backend do reopen bloqueado no lock do pai, antes do updateMany das respostas.
+      await expectBlockedOnQuoteRequestLock();
       holder.release();
       const res = await reopening;
       expect(res.status, JSON.stringify(res.body)).toBe(200);
