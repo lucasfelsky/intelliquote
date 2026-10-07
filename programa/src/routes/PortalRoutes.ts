@@ -90,6 +90,10 @@ async function buildPortalView(tokenId: number) {
             include: { catalogItem: true },
             orderBy: { createdAt: 'asc' },
           },
+          purchaseOrders: {
+            select: { id: true, label: true, position: true },
+            orderBy: [{ position: 'asc' }, { id: 'asc' }],
+          },
         },
       },
       supplier: true,
@@ -116,8 +120,12 @@ async function buildPortalView(tokenId: number) {
         originPort: token.quoteRequest.originPort ?? 'Shanghai',
         currency: token.quoteRequest.currency,
         deadlineAt: token.quoteRequest.deadlineAt,
+        purchaseOrders: [...(token.quoteRequest.purchaseOrders ?? [])]
+          .sort((a, b) => a.position - b.position || a.id - b.id)
+          .map((po) => ({ id: po.id, label: po.label, position: po.position })),
         items: token.quoteRequest.items.map((item) => ({
                   id: item.id,
+                  purchaseOrderId: item.purchaseOrderId ?? null,
                   itemCode: item.itemCode,
                   productName: item.catalogItem?.marketName ?? item.productName,
                   description: item.description,

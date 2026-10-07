@@ -255,6 +255,32 @@
       }
       .items-table tbody tr:last-child td { border-bottom: none; }
       .items-table tbody tr:nth-child(even) td { background: #fafdfb; }
+      .items-table tr.po-group-head th {
+        background: var(--portal-primary-50);
+        color: var(--portal-accent);
+        text-align: left;
+        padding: 10px 14px;
+        font-size: 13px;
+        font-weight: 700;
+        border-top: 1px solid var(--portal-line-soft);
+        border-bottom: 1px solid var(--portal-line);
+        overflow-wrap: anywhere;
+      }
+      .po-group { margin-bottom: 8px; }
+      .po-group-title {
+        margin: 18px 0 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--portal-line-soft);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--portal-accent);
+        overflow-wrap: anywhere;
+      }
+      .po-group:first-child .po-group-title {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+      }
       .items-table td.num {
         text-align: right;
         font-variant-numeric: tabular-nums;
@@ -635,6 +661,16 @@
           border: none;
         }
         .items-table td.num { text-align: right; }
+        .items-table tbody tr.po-group-head {
+          display: block;
+          padding: 0;
+          border-bottom: none;
+        }
+        .items-table tr.po-group-head th {
+          display: block;
+          padding: 8px 0;
+          overflow-wrap: anywhere;
+        }
                 .items-table td.incoterm-cell { display: block; padding: 4px 0; }
                 .items-table td.origin-cell { display: block; padding: 4px 0; }
                 .items-table td.destination-cell { display: block; padding: 4px 0; }
@@ -688,7 +724,7 @@
             ? 'localhost'
             : 'firebase-hosting';
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v55-20261006');
+          document.documentElement.setAttribute('data-portal-version', 'v56-20261007');
         } catch (bootErr) {
           /* swallow: nao e critico */
         }
@@ -745,6 +781,34 @@
           );
         }
 
+        // Agrupa itens por PO (ordem: position asc, id asc). Pula PO sem itens;
+        // itens sem PO (ou com PO desconhecida) vao para o grupo final "Other items".
+        // Retorna null (modo plano, markup de sempre) quando nao ha PO ou quando
+        // nenhum item pertence a uma PO listada.
+        function groupItemsByPurchaseOrder(items, purchaseOrders) {
+          if (!Array.isArray(purchaseOrders) || purchaseOrders.length === 0) return null;
+          if (!Array.isArray(items) || items.length === 0) return null;
+          const orderedPos = purchaseOrders
+            .slice()
+            .sort((a, b) => a.position - b.position || a.id - b.id);
+          const knownIds = new Set(orderedPos.map((po) => po.id));
+          const groups = [];
+          orderedPos.forEach((po) => {
+            const poItems = items.filter((it) => it.purchaseOrderId === po.id);
+            if (poItems.length > 0) {
+              groups.push({ key: String(po.id), label: po.label, items: poItems });
+            }
+          });
+          if (groups.length === 0) return null;
+          const otherItems = items.filter(
+            (it) => it.purchaseOrderId === null || it.purchaseOrderId === undefined || !knownIds.has(it.purchaseOrderId),
+          );
+          if (otherItems.length > 0) {
+            groups.push({ key: 'other', label: 'Other items', items: otherItems });
+          }
+          return groups;
+        }
+
         function renderSupplierCard(data) {
           const supplierName = data.supplier?.name || '-';
           const contact = data.contact || {};
@@ -766,7 +830,7 @@
             </div>`;
         }
 
-        function renderItemsTable(items) {
+        function renderItemsTable(items, purchaseOrders) {
           if (!items || items.length === 0) return '';
           const hasIncotermColumn = items.some(
             (it) => it.desiredIncoterm || it.destinationPort,
@@ -774,22 +838,7 @@
           const hasOriginColumn = items.some(
             (it) => it.originPort,
           );
-          return `
-            <h2 class="section-title">Requested items</h2>
-            <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}${hasOriginColumn ? ' items-table--with-origin' : ''}">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  ${hasIncotermColumn ? '<th>Incoterm</th>' : ''}
-                  ${hasOriginColumn ? '<th>Origin</th>' : ''}
-                  <th>Destination</th>
-                  <th style="text-align:right;">Quantity</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${items
-                  .map(
-                    (it) => `
+          const renderItemsTableRow = (it) => `
                   <tr>
                                       <td>
                                         <strong>${it.productName}</strong>
@@ -815,10 +864,35 @@
                         : '<span class="origin-empty">—</span>'
                     }</td>
                     <td class="num">${formatNumber(it.quantity, 0)} ${it.unit || ''}</td>
-                  </tr>`,
-                  )
-                  .join('')}
-              </tbody>
+                  </tr>`;
+          const poGroups = groupItemsByPurchaseOrder(items, purchaseOrders);
+          const colCount = 3 + (hasIncotermColumn ? 1 : 0) + (hasOriginColumn ? 1 : 0);
+          const bodies = poGroups
+            ? poGroups
+                .map(
+                  (group) => `
+              <tbody class="po-group" data-po-group="${esc(group.key)}">
+                <tr class="po-group-head"><th colspan="${colCount}" scope="colgroup" class="po-group-title">${esc(group.label)}</th></tr>
+                ${group.items.map(renderItemsTableRow).join('')}
+              </tbody>`,
+                )
+                .join('')
+            : `
+              <tbody>
+                ${items.map(renderItemsTableRow).join('')}
+              </tbody>`;
+          return `
+            <h2 class="section-title">Requested items</h2>
+            <table class="items-table${hasIncotermColumn ? ' items-table--with-incoterm' : ''}${hasOriginColumn ? ' items-table--with-origin' : ''}">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  ${hasIncotermColumn ? '<th>Incoterm</th>' : ''}
+                  ${hasOriginColumn ? '<th>Origin</th>' : ''}
+                  <th>Destination</th>
+                  <th style="text-align:right;">Quantity</th>
+                </tr>
+              </thead>${bodies}
             </table>`;
         }
 
@@ -850,6 +924,75 @@
           const quoteIncoterms = Array.from(new Set(data.quoteRequest.desiredIncoterm || []));
           const hasQuoteIncoterms = quoteIncoterms.length > 0;
           const buyerNotesText = String(data.quoteRequest.description || '').trim();
+          const renderItemRow = (it) => {
+                  const prev = respItemById[it.id];
+                  const unitVal = prev ? esc(prev.unitPrice) : '';
+                  const qtyVal = prev && prev.quantity != null ? prev.quantity : it.quantity;
+                  const leadVal = prev && prev.leadTimeDays != null ? prev.leadTimeDays : '';
+                  return `
+                <div class="item-row" data-item-id="${it.id}"${prev && prev.notes ? ` data-prev-notes="${esc(prev.notes)}"` : ''}>
+                  <h3>${esc(it.productName)}</h3>
+                  <p class="item-meta">
+                    <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
+                    ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
+                  </p>
+                  ${
+                    hasQuoteIncoterms
+                      ? `<div class="incoterm-prices" role="group" aria-labelledby="incoterm-prices-title-${it.id}">
+                    <p class="incoterm-prices-title" id="incoterm-prices-title-${it.id}">Prices per incoterm</p>
+                    <div class="form-grid incoterm-price-grid">
+                      ${quoteIncoterms
+                        .map((inc) => {
+                          const found = (prev?.incotermPrices || []).find((p) => p.incoterm === inc);
+                          const val = found
+                            ? esc(found.unitPrice)
+                            : prev && !prev.incotermPrices && inc === selectedIncoterm
+                              ? unitVal
+                              : '';
+                          return `<label class="incoterm-price-field" data-incoterm-field="${esc(inc)}">
+                        <span class="incoterm-price-head">
+                          <span class="incoterm-chip">${esc(inc)}</span>
+                          <span class="incoterm-main-badge" data-main-badge aria-hidden="true" hidden>Main</span>
+                        </span>
+                        <span class="incoterm-price-caption">Unit price &middot; ${esc(currency)} / ${esc(it.unit || 'unit')}</span>
+                        <input type="number" name="incotermPrice" data-incoterm="${esc(inc)}" min="0.0001" step="0.0001" value="${val}" required aria-label="${esc(inc)} unit price (${esc(currency)} / ${esc(it.unit || 'unit')})" />
+                      </label>`;
+                        })
+                        .join('')}
+                    </div>
+                  </div>`
+                      : ''
+                  }
+                  <div class="form-grid">
+                    ${
+                      hasQuoteIncoterms
+                        ? ''
+                        : `<label>Unit price (${esc(currency)} / ${esc(it.unit || 'unit')})
+                      <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" value="${unitVal}" required />
+                    </label>`
+                    }
+                    <label>Quantity
+                      <input type="number" min="0" name="quantity" value="${qtyVal}" required />
+                    </label>
+                    <label>Lead time (days)
+                      <input type="number" min="0" name="leadTimeDays" value="${leadVal}" />
+                    </label>
+                  </div>
+                </div>`;
+          };
+          const renderPricingItems = () => {
+            const poGroups = groupItemsByPurchaseOrder(items, data.quoteRequest.purchaseOrders);
+            if (!poGroups) return items.map(renderItemRow).join('');
+            return poGroups
+              .map(
+                (group) => `
+                <section class="po-group" data-po-group="${esc(group.key)}" aria-labelledby="po-group-title-${esc(group.key)}">
+                  <h3 class="po-group-title" id="po-group-title-${esc(group.key)}">${esc(group.label)}</h3>
+                  ${group.items.map(renderItemRow).join('')}
+                </section>`,
+              )
+              .join('');
+          };
           return `
             <form id="portal-form" autocomplete="off">
               <input type="hidden" name="quoteRequestId" value="${data.quoteRequest.id}" />
@@ -893,64 +1036,7 @@
 
               <h2 class="section-title">Item pricing</h2>
               <div id="portal-items">
-                ${items
-                  .map((it) => {
-                    const prev = respItemById[it.id];
-                    const unitVal = prev ? esc(prev.unitPrice) : '';
-                    const qtyVal = prev && prev.quantity != null ? prev.quantity : it.quantity;
-                    const leadVal = prev && prev.leadTimeDays != null ? prev.leadTimeDays : '';
-                    return `
-                  <div class="item-row" data-item-id="${it.id}"${prev && prev.notes ? ` data-prev-notes="${esc(prev.notes)}"` : ''}>
-                    <h3>${esc(it.productName)}</h3>
-                    <p class="item-meta">
-                      <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
-                      ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
-                    </p>
-                    ${
-                      hasQuoteIncoterms
-                        ? `<div class="incoterm-prices" role="group" aria-labelledby="incoterm-prices-title-${it.id}">
-                      <p class="incoterm-prices-title" id="incoterm-prices-title-${it.id}">Prices per incoterm</p>
-                      <div class="form-grid incoterm-price-grid">
-                        ${quoteIncoterms
-                          .map((inc) => {
-                            const found = (prev?.incotermPrices || []).find((p) => p.incoterm === inc);
-                            const val = found
-                              ? esc(found.unitPrice)
-                              : prev && !prev.incotermPrices && inc === selectedIncoterm
-                                ? unitVal
-                                : '';
-                            return `<label class="incoterm-price-field" data-incoterm-field="${esc(inc)}">
-                          <span class="incoterm-price-head">
-                            <span class="incoterm-chip">${esc(inc)}</span>
-                            <span class="incoterm-main-badge" data-main-badge aria-hidden="true" hidden>Main</span>
-                          </span>
-                          <span class="incoterm-price-caption">Unit price &middot; ${esc(currency)} / ${esc(it.unit || 'unit')}</span>
-                          <input type="number" name="incotermPrice" data-incoterm="${esc(inc)}" min="0.0001" step="0.0001" value="${val}" required aria-label="${esc(inc)} unit price (${esc(currency)} / ${esc(it.unit || 'unit')})" />
-                        </label>`;
-                          })
-                          .join('')}
-                      </div>
-                    </div>`
-                        : ''
-                    }
-                    <div class="form-grid">
-                      ${
-                        hasQuoteIncoterms
-                          ? ''
-                          : `<label>Unit price (${esc(currency)} / ${esc(it.unit || 'unit')})
-                        <input type="number" min="0" step="0.0001" name="unitPrice" data-default-qty="${it.quantity}" value="${unitVal}" required />
-                      </label>`
-                      }
-                      <label>Quantity
-                        <input type="number" min="0" name="quantity" value="${qtyVal}" required />
-                      </label>
-                      <label>Lead time (days)
-                        <input type="number" min="0" name="leadTimeDays" value="${leadVal}" />
-                      </label>
-                    </div>
-                  </div>`;
-                  })
-                  .join('')}
+                ${renderPricingItems()}
               </div>
 
               ${
@@ -1209,7 +1295,7 @@
                 <h1>${items.length === 1 ? items[0].productName : `${items.length} items`}</h1>
               </div>
               ${renderSupplierCard(data)}
-              ${renderItemsTable(items)}
+              ${renderItemsTable(items, data.quoteRequest.purchaseOrders)}
               ${renderForm(data, false)}
             `;
             attachFormBehavior(data);

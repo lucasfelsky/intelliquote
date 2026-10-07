@@ -725,6 +725,111 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(res.body.quoteRequest.description).toBeNull();
   });
 
+  function buildPoToken(id: number, rawToken: string, quoteRequestExtra: Record<string, unknown>, items: unknown[]) {
+    return {
+      id,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 86400000),
+      revokedAt: null,
+      respondedAt: null,
+      accessCount: 0,
+      firstSeenAt: null,
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+      quoteRequest: {
+        id: 5,
+        requestCode: 'QR-PO',
+        productName: 'Acido',
+        description: null,
+        desiredIncoterm: ['FOB'],
+        currency: 'USD',
+        deadlineAt: null,
+        items,
+        ...quoteRequestExtra,
+      },
+      supplier: { id: 2, name: 'Acme' },
+      supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+    };
+  }
+
+  it('GET do portal expoe purchaseOrders ordenadas e purchaseOrderId nos itens', async () => {
+    const rawToken = 'tok-po-group-' + 'p'.repeat(40);
+    const fullToken = buildPoToken(
+      62,
+      rawToken,
+      {
+        purchaseOrders: [
+          { id: 20, label: 'PO 2', position: 2, createdAt: new Date() },
+          { id: 10, label: 'PO 1', position: 1, createdAt: new Date() },
+        ],
+      },
+      [
+        { id: 1, itemCode: 'A1', productName: 'Acido', quantity: 10, unit: 'UN', description: null, notes: null, purchaseOrderId: 20 },
+        { id: 2, itemCode: 'A2', productName: 'Base', quantity: 5, unit: 'UN', description: null, notes: null, purchaseOrderId: null },
+      ],
+    );
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue(fullToken);
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue(null);
+    const res = await request(app).get(`/api/portal/${rawToken}`).set('User-Agent', uniqueAgent());
+    expect(res.status).toBe(200);
+    expect(res.body.quoteRequest.purchaseOrders).toEqual([
+      { id: 10, label: 'PO 1', position: 1 },
+      { id: 20, label: 'PO 2', position: 2 },
+    ]);
+    for (const po of res.body.quoteRequest.purchaseOrders) {
+      expect(Object.keys(po).sort()).toEqual(['id', 'label', 'position']);
+    }
+    expect(res.body.quoteRequest.items.map((i: { purchaseOrderId: number | null }) => i.purchaseOrderId)).toEqual([
+      20,
+      null,
+    ]);
+    expect(prismaMock.supplierPortalToken.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          quoteRequest: expect.objectContaining({
+            include: expect.objectContaining({
+              purchaseOrders: expect.objectContaining({
+                orderBy: [{ position: 'asc' }, { id: 'asc' }],
+              }),
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('GET do portal de cotacao sem PO responde purchaseOrders [] e purchaseOrderId null', async () => {
+    const rawToken = 'tok-no-po-group-' + 'n'.repeat(40);
+    const fullToken = buildPoToken(63, rawToken, {}, [
+      { id: 1, itemCode: 'A1', productName: 'Acido', quantity: 10, unit: 'UN', description: null, notes: null },
+    ]);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue(fullToken);
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue(null);
+    const res = await request(app).get(`/api/portal/${rawToken}`).set('User-Agent', uniqueAgent());
+    expect(res.status).toBe(200);
+    expect(res.body.quoteRequest.purchaseOrders).toEqual([]);
+    expect(res.body.quoteRequest.items[0].purchaseOrderId).toBeNull();
+  });
+
+  it('portal.html: agrupamento por PO (estatico)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'portal.html'), 'utf8');
+    expect(html).toContain('function groupItemsByPurchaseOrder(');
+    expect(html).toContain("'Other items'");
+    expect(html).toContain('class="po-group"');
+    expect(html).toContain('class="po-group-title"');
+    expect(html).toContain('po-group-head');
+    expect(html).toContain('${esc(group.label)}');
+    expect(html).toContain("data-portal-version', 'v56-20261007'");
+    expect(html).not.toContain('v55-20261006');
+    const mediaStart = html.indexOf('@media (max-width: 640px)');
+    expect(mediaStart).toBeGreaterThan(-1);
+    const mediaEnd = html.indexOf('</style>', mediaStart);
+    expect(html.slice(mediaStart, mediaEnd)).toContain('.items-table tr.po-group-head');
+  });
+
   it('portal.html: campos por incoterm e destaque da descricao (estatico)', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
