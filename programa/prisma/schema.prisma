@@ -166,6 +166,7 @@ model QuoteRequest {
   updatedAt       DateTime                 @updatedAt
   deletedAt       DateTime?
   items           QuoteRequestItem[]
+  purchaseOrders  QuoteRequestPurchaseOrder[]
   quoteResponses  QuoteResponse[]
   comparisons     QuoteComparison[]
   portalTokens    SupplierPortalToken[]
@@ -194,7 +195,9 @@ model QuoteRequestItem {
   createdAt           DateTime                     @default(now())
   updatedAt           DateTime                     @updatedAt
   deletedAt           DateTime?
+  purchaseOrderId     Int?
   quoteRequest        QuoteRequest                 @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  purchaseOrder       QuoteRequestPurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
   catalogItem         CatalogItem?                 @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   portalResponseItems SupplierPortalResponseItem[]
   quoteResponseItems  QuoteResponseItem[]
@@ -202,6 +205,20 @@ model QuoteRequestItem {
   @@index([quoteRequestId])
   @@index([catalogItemId])
   @@index([deletedAt])
+  @@index([purchaseOrderId])
+}
+
+model QuoteRequestPurchaseOrder {
+  id             Int                @id @default(autoincrement())
+  quoteRequestId Int
+  label          String
+  position       Int
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  quoteRequest   QuoteRequest       @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  items          QuoteRequestItem[]
+
+  @@index([quoteRequestId, position])
 }
 
 model CatalogItem {

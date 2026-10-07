@@ -28,6 +28,12 @@ quoteRequestItemRoutes.put(
   allowRoles(['admin', 'comprador']),
   QuoteRequestItemController.update,
 );
+quoteRequestItemRoutes.patch(
+  '/quote-request-items/:id/purchase-order',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  QuoteRequestItemController.movePurchaseOrder,
+);
 quoteRequestItemRoutes.delete(
   '/quote-request-items/:id',
   requireAuth,

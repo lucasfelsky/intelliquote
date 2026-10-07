@@ -3,6 +3,10 @@ import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
+  itemCreatePurchaseOrderIdSchema,
+  itemMovePurchaseOrderSchema,
+} from '../validators/domain';
+import {
   handleControllerError,
   HttpError,
   isNonEmptyString,
@@ -25,6 +29,7 @@ export class QuoteRequestItemController {
         destinationPort,
         targetPrice,
         notes,
+        purchaseOrderId,
       } = req.body;
 
       const hasCatalog = catalogItemId !== undefined && catalogItemId !== null;
@@ -47,7 +52,10 @@ export class QuoteRequestItemController {
           destinationPort !== null &&
           !isNonEmptyString(destinationPort)) ||
         (targetPrice !== undefined && targetPrice !== null && !isPositiveNumber(targetPrice)) ||
-        (notes !== undefined && notes !== null && !isNonEmptyString(notes))
+        (notes !== undefined && notes !== null && !isNonEmptyString(notes)) ||
+        (purchaseOrderId !== undefined &&
+          purchaseOrderId !== null &&
+          !itemCreatePurchaseOrderIdSchema.safeParse(purchaseOrderId).success)
       ) {
         return res.status(400).json({
           message:
@@ -69,6 +77,19 @@ export class QuoteRequestItemController {
         quoteRequest.status,
         'Nao e possivel adicionar itens em cotacoes fechadas.',
       );
+
+      let resolvedPurchaseOrderId: number | null = null;
+      if (purchaseOrderId !== undefined && purchaseOrderId !== null) {
+        const po = await prisma.quoteRequestPurchaseOrder.findUnique({
+          where: { id: Number(purchaseOrderId) },
+        });
+        if (!po || po.quoteRequestId !== quoteRequestId) {
+          return res.status(400).json({
+            message: 'A PO informada nao pertence a esta cotacao.',
+          });
+        }
+        resolvedPurchaseOrderId = po.id;
+      }
 
       let resolvedCatalogItemId: number | null = null;
       let resolvedProductName: string;
@@ -119,6 +140,7 @@ export class QuoteRequestItemController {
           targetPrice:
             targetPrice !== undefined && targetPrice !== null ? Number(targetPrice) : null,
           notes: isNonEmptyString(notes) ? notes.trim() : null,
+          purchaseOrderId: resolvedPurchaseOrderId,
         },
         include: {
           quoteRequest: true,
@@ -359,6 +381,71 @@ export class QuoteRequestItemController {
         metadata: {
           quoteRequestId: existingItem.quoteRequestId,
         },
+      });
+
+      return res.status(200).json(item);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async movePurchaseOrder(
+    req: Request,
+    res: Response,
+  ): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID do item invalido.' });
+      }
+      const { purchaseOrderId } = itemMovePurchaseOrderSchema.parse(
+        req.body ?? {},
+      );
+
+      const item = await prisma.$transaction(async (tx) => {
+        const existingItem = await tx.quoteRequestItem.findUnique({
+          where: { id },
+          include: { quoteRequest: true },
+        });
+        if (!existingItem || existingItem.quoteRequest.deletedAt) {
+          throw new HttpError(404, 'Item da cotacao nao encontrado.');
+        }
+        ensureQuoteRequestOpen(
+          existingItem.quoteRequest.status,
+          'Reabra a cotacao antes de mover os seus itens.',
+        );
+
+        if (purchaseOrderId !== null) {
+          const po = await tx.quoteRequestPurchaseOrder.findUnique({
+            where: { id: purchaseOrderId },
+          });
+          if (!po) {
+            throw new HttpError(404, 'PO nao encontrada.');
+          }
+          if (po.quoteRequestId !== existingItem.quoteRequestId) {
+            throw new HttpError(400, 'A PO informada nao pertence a cotacao do item.');
+          }
+        }
+
+        const updated = await tx.quoteRequestItem.update({
+          where: { id },
+          data: { purchaseOrderId },
+          include: { quoteRequest: true, catalogItem: true },
+        });
+        await AuditLogService.log(
+          {
+            entityType: 'quote_request_item',
+            entityId: id,
+            action: 'move_po',
+            performedById: req.user?.id ?? null,
+            beforeData: { purchaseOrderId: existingItem.purchaseOrderId },
+            afterData: { purchaseOrderId },
+            metadata: { quoteRequestId: existingItem.quoteRequestId },
+          },
+          tx,
+        );
+        return updated;
       });
 
       return res.status(200).json(item);

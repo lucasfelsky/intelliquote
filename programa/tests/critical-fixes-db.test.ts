@@ -68,6 +68,7 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
       // role.create nos mesmos nomes e a ordem de execucao nao e garantida.
       await prisma.companyProfile.update({ where: { id: 1 }, data: { awardApprovalThreshold: initialThreshold } });
       await prisma.supplierPortalToken.deleteMany({ where: { createdById: { in: userIds } } });
+      await prisma.dispatchEvent.deleteMany({ where: { createdById: { in: userIds } } });
       await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
       await prisma.user.deleteMany({ where: { id: { in: userIds } } });
       await prisma.role.deleteMany({ where: { id: { in: createdRoleIds }, users: { none: {} } } });
@@ -240,5 +241,74 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
         items: payload(suppliers[0].id).items.map((i: any) => ({ ...i, totalPrice: i.unitPrice * i.quantity })),
       },
     })).rejects.toThrow('Exchange rate');
+  });
+
+  it('exclui PO realocando itens (anterior/proxima/sem PO) sem apagar itens e mantem posicoes contiguas', async () => {
+    const [i1, i2] = quote.items;
+    const pos: any[] = [];
+    for (const n of [1, 2, 3]) {
+      const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+        .set('Cookie', cookies).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      pos.push(res.body.purchaseOrder);
+      expect(res.body.purchaseOrder.position).toBe(n);
+    }
+    await prisma.quoteRequestItem.update({ where: { id: i1.id }, data: { purchaseOrderId: pos[0].id } });
+    await prisma.quoteRequestItem.update({ where: { id: i2.id }, data: { purchaseOrderId: pos[1].id } });
+
+    // primeira -> proxima
+    let del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[0].id}`).set('Cookie', cookies);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    expect(del.body.reassignedToPurchaseOrderId).toBe(pos[1].id);
+    expect((await prisma.quoteRequestItem.findUnique({ where: { id: i1.id } })).purchaseOrderId).toBe(pos[1].id);
+    let remaining = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(remaining.map((o: any) => [o.id, o.position])).toEqual([[pos[1].id, 1], [pos[2].id, 2]]);
+
+    // ultima -> anterior
+    del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[2].id}`).set('Cookie', cookies);
+    expect(del.body.reassignedToPurchaseOrderId).toBe(pos[1].id);
+
+    // unica -> sem PO
+    del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[1].id}`).set('Cookie', cookies);
+    expect(del.status).toBe(200);
+    expect(del.body.reassignedToPurchaseOrderId).toBeNull();
+    const items = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
+    expect(items).toHaveLength(2);
+    expect(items.every((i: any) => i.purchaseOrderId === null)).toBe(true);
+    expect(await prisma.quoteRequestPurchaseOrder.count({ where: { quoteRequestId: quote.id } })).toBe(0);
+  });
+
+  it('rotulo padrao de PO e unico apos excluir e recriar', async () => {
+    const created: any[] = [];
+    for (let n = 0; n < 2; n++) {
+      const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+        .set('Cookie', cookies).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      created.push(res.body.purchaseOrder);
+    }
+    const del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${created[0].id}`).set('Cookie', cookies);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    const again = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({});
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
+    expect(again.body.purchaseOrder.label).toBe('PO 3');
+
+    const orders = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id } });
+    expect(new Set(orders.map((o: any) => o.label)).size).toBe(orders.length);
+  });
+
+  it('GET da cotacao conta envios (dispatchEvents) ignorando os que falharam', async () => {
+    const before = await request(app).get(`/api/v1/quote-requests/${quote.id}`).set('Cookie', cookies);
+    expect(before.status, JSON.stringify(before.body)).toBe(200);
+    expect(before.body._count.dispatchEvents).toBe(0);
+
+    await prisma.dispatchEvent.create({ data: { quoteRequestId: quote.id, createdById: adminId,
+      recipientsCount: 1, subject: 't', status: 'completed' } });
+    await prisma.dispatchEvent.create({ data: { quoteRequestId: quote.id, createdById: adminId,
+      recipientsCount: 1, subject: 't', status: 'failed' } });
+
+    const after = await request(app).get(`/api/v1/quote-requests/${quote.id}`).set('Cookie', cookies);
+    expect(after.status, JSON.stringify(after.body)).toBe(200);
+    expect(after.body._count.dispatchEvents).toBe(1);
   });
 });

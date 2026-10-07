@@ -486,3 +486,28 @@ export type {
   SupplierPortalResponseItemInput,
   DispatchCreateInput,
 } from './supplierPortal';
+
+const purchaseOrderLabelField = z
+  .string({ error: 'Informe o rotulo da PO.' })
+  .trim()
+  .min(1, 'Informe o rotulo da PO.')
+  .max(60, 'O rotulo da PO deve ter no maximo 60 caracteres.');
+
+export const purchaseOrderCreateSchema = z.object({
+  label: purchaseOrderLabelField.optional(),
+  adoptUnassigned: z.boolean().optional().default(false),
+});
+
+export const purchaseOrderRenameSchema = z.object({
+  label: purchaseOrderLabelField,
+});
+
+export const purchaseOrderReorderSchema = z.object({
+  orderedIds: z.array(z.number().int().positive()),
+});
+
+export const itemMovePurchaseOrderSchema = z.object({
+  purchaseOrderId: z.number().int().positive().nullable(),
+});
+
+export const itemCreatePurchaseOrderIdSchema = z.number().int().positive();
