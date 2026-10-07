@@ -438,6 +438,58 @@ describe('CotacaoDetalhe', () => {
     expect(subjectInput.value).toBe('Assunto teste');
   });
 
+  describe('lista de fornecedores do envio (backend limita pageSize a 100)', () => {
+    const makeSuppliers = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, i) => ({
+        id: 1000 + from + i,
+        name: `Fornecedor ${String(from + i).padStart(3, '0')}`,
+        status: 'active',
+        families: [],
+      }));
+
+    it('9i. percorre todas as páginas: lista fornecedor da 2ª página e nenhuma chamada usa pageSize > 100', async () => {
+      const baseImpl = getImpl;
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) => {
+        if (path === '/v1/suppliers') {
+          const page = Number(params?.page ?? '1');
+          const pagination = (p: number) => ({ page: p, pageSize: 100, totalItems: 130, totalPages: 2 });
+          if (page === 1) return { data: makeSuppliers(1, 100), pagination: pagination(1) };
+          if (page === 2) return { data: makeSuppliers(101, 130), pagination: pagination(2) };
+          return { data: [], pagination: pagination(page) };
+        }
+        return baseImpl(path, params);
+      }) as unknown as typeof api.get);
+
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+      const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
+      await waitFor(() => expect(within(dialog).getByText('Fornecedor 130')).toBeTruthy());
+      expect(within(dialog).getByText('Fornecedor 001')).toBeTruthy();
+      expect(within(dialog).getByText('Fornecedor 101')).toBeTruthy();
+
+      const supplierCalls = vi
+        .mocked(api.get)
+        .mock.calls.filter(([path]) => path === '/v1/suppliers')
+        .map(([, params]) => params as Record<string, string>);
+      expect(supplierCalls.map((p) => p.page)).toEqual(['1', '2']);
+      for (const p of supplierCalls) {
+        expect(p.status).toBe('active');
+        expect(Number(p.pageSize)).toBeLessThanOrEqual(100);
+      }
+    });
+
+    it('9j. lista simples (formato legado) é consumida numa única chamada', async () => {
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+      const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
+      await waitFor(() => expect(within(dialog).getByText('ACME Ltda')).toBeTruthy());
+      const supplierCalls = vi.mocked(api.get).mock.calls.filter(([path]) => path === '/v1/suppliers');
+      expect(supplierCalls).toHaveLength(1);
+    });
+  });
+
   describe('chave "Equipe COMEX em cópia só no primeiro e-mail"', () => {
     const CHECKBOX_NAME = 'Equipe COMEX em cópia só no primeiro e-mail';
 

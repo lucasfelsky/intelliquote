@@ -467,15 +467,42 @@ export default function CotacaoDetalhe() {
     const activeSuppliers = useQuery({
       queryKey: ['suppliers-active'],
       queryFn: async () => {
-        const data = await api.get<unknown[] | { data?: unknown[]; items?: unknown[] }>(
-          '/v1/suppliers',
-          { status: 'active', pageSize: '200' },
-        );
-        const raw = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.data)
-            ? data.data
-            : data?.items ?? [];
+        // O backend limita pageSize a 100 (utils/http.ts): percorre todas as
+        // paginas para nao cortar fornecedores ativos alem do teto.
+        type SuppliersPage = {
+          data?: unknown[];
+          items?: unknown[];
+          pagination?: { totalPages?: number };
+        };
+        const PAGE_SIZE = 100;
+        const MAX_PAGES = 50;
+        const raw: unknown[] = [];
+        const seenIds = new Set<unknown>();
+        for (let page = 1; page <= MAX_PAGES; page += 1) {
+          const res = await api.get<unknown[] | SuppliersPage>('/v1/suppliers', {
+            status: 'active',
+            page: String(page),
+            pageSize: String(PAGE_SIZE),
+          });
+          if (Array.isArray(res)) {
+            // Formato legado (lista simples, sem paginacao): ja veio completo.
+            raw.push(...res);
+            break;
+          }
+          const rows = Array.isArray(res?.data) ? res.data : (res?.items ?? []);
+          for (const row of rows) {
+            const rowId = (row as Record<string, unknown> | null)?.id;
+            if (rowId != null) {
+              if (seenIds.has(rowId)) continue;
+              seenIds.add(rowId);
+            }
+            raw.push(row);
+          }
+          const totalPages = res?.pagination?.totalPages;
+          const hasNext =
+            typeof totalPages === 'number' ? page < totalPages : rows.length >= PAGE_SIZE;
+          if (!hasNext) break;
+        }
         return raw.map((s) => {
           const obj = s as Record<string, unknown>;
           const familiesRaw = Array.isArray(obj.families) ? obj.families : [];
