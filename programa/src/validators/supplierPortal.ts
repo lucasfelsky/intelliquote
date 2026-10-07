@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { Incoterm } from '@prisma/client';
 
+import { ORIGIN_PORT_MAX_LENGTH } from '../utils/originPort';
+
 const templateLocaleSchema = z
   .string()
   .trim()
@@ -54,6 +56,12 @@ const optionalCurrencyCodeField = z.preprocess(
   currencyCodeField.optional(),
 );
 
+// Porto de origem: ''/espacos/null viram null; max 120. undefined = ausente (portal antigo).
+const originPortField = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() || null : value),
+  z.string().max(ORIGIN_PORT_MAX_LENGTH).nullable().optional(),
+);
+
 export const supplierPortalResponseItemSchema = z.object({
   quoteRequestItemId: positiveIntegerField,
   unitPrice: positiveNumberField,
@@ -61,6 +69,7 @@ export const supplierPortalResponseItemSchema = z.object({
   totalPrice: positiveNumberField,
   leadTimeDays: optionalNonNegativeIntegerField,
   notes: optionalTrimmedStringField,
+  originPort: originPortField,
   incotermPrices: z
     .array(
       z.object({
@@ -81,6 +90,7 @@ export const supplierPortalResponseSubmitSchema = z.object({
   totalPriceCurrency: optionalCurrencyCodeField,
   validityDays: z.coerce.number().int().min(1).max(365),
   notes: optionalTrimmedStringField,
+  originPort: originPortField,
   items: z.array(supplierPortalResponseItemSchema).min(1, 'Informe ao menos um item.'),
 });
 

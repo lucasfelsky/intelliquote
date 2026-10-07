@@ -165,6 +165,7 @@ async function buildPortalView(tokenId: number) {
           totalPriceCurrency: response.totalPriceCurrency,
           validityDays: response.validityDays,
           notes: response.notes,
+          originPort: response.originPort ?? null,
           submittedAt: response.submittedAt,
           items: response.items.map((it) => ({
             quoteRequestItemId: it.quoteRequestItemId,
@@ -173,6 +174,7 @@ async function buildPortalView(tokenId: number) {
             totalPrice: it.totalPrice.toString(),
             leadTimeDays: it.leadTimeDays,
             notes: it.notes,
+            originPort: it.originPort ?? null,
             incotermPrices: it.incotermPrices ?? null,
           })),
         }
@@ -187,6 +189,7 @@ async function buildPortalView(tokenId: number) {
       totalPriceCurrency: rev.totalPriceCurrency,
       validityDays: rev.validityDays,
       notes: rev.notes,
+      originPort: rev.originPort ?? null,
       submittedAt: rev.submittedAt,
       supersededAt: rev.supersededAt,
       items: rev.items,

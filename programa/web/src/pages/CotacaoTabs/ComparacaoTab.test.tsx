@@ -575,4 +575,65 @@ describe('ComparacaoTab', () => {
       expect(dashes.length).toBeGreaterThan(0);
     });
   });
+  describe('Origem por item (informativa)', () => {
+    const withOrigins = {
+      ...winner,
+      originPort: 'Shanghai',
+      itemOrigins: [
+        { quoteRequestItemId: 1, productName: 'Produto A', originPort: 'Shanghai', overridden: false },
+        { quoteRequestItemId: 2, productName: 'Produto B', originPort: 'Ningbo', overridden: true },
+      ],
+    };
+
+    it('21. ranking mostra "Origem: Shanghai · Produto B: Ningbo"', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [withOrigins, loser],
+      });
+      const { findByText } = renderTab();
+      await findByText('Origem: Shanghai · Produto B: Ningbo');
+    });
+
+    it('22. resposta sem origem (legado/historico sem itemOrigins) mostra "Origem: —" e nao quebra', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, loser],
+      });
+      const { findAllByText } = renderTab();
+      const lines = await findAllByText('Origem: —');
+      expect(lines.length).toBe(2);
+    });
+
+    it('23. mais de 3 overrides mostra os 3 primeiros e "+N"', async () => {
+      const many = {
+        ...winner,
+        originPort: 'Shanghai',
+        itemOrigins: ['A', 'B', 'C', 'D', 'E'].map((name, i) => ({
+          quoteRequestItemId: i + 1,
+          productName: `Produto ${name}`,
+          originPort: `Porto ${name}`,
+          overridden: true,
+        })),
+      };
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [many, loser],
+      });
+      const { findByText } = renderTab();
+      await findByText(
+        'Origem: Shanghai · Produto A: Porto A · Produto B: Porto B · Produto C: Porto C · +2',
+      );
+    });
+
+    it('24. card de uma unica resposta (bypass) tambem mostra a origem', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [withOrigins],
+        responseCount: 1,
+      });
+      const { findByText } = renderTab();
+      await findByText('Apenas um fornecedor respondeu — sem comparação.');
+      await findByText('Origem: Shanghai · Produto B: Ningbo');
+    });
+  });
 });

@@ -36,6 +36,18 @@ function formatLeadTime(days: number | undefined | null): string {
   return typeof days === 'number' && days > 0 ? `${days} dias` : '—';
 }
 
+// Origem informada pelo fornecedor (informativa; nao entra em score/landed cost):
+// "Origem: <geral>" + ate 3 itens com origem propria ("· Produto: Porto") e "+N".
+const MAX_ORIGIN_OVERRIDES_SHOWN = 3;
+function formatOriginLine(r: ComparisonResult): string {
+  const overrides = (r.itemOrigins ?? []).filter((entry) => entry.overridden);
+  const shown = overrides.slice(0, MAX_ORIGIN_OVERRIDES_SHOWN).map(
+    (entry) => ` · ${entry.productName ?? `Item ${entry.quoteRequestItemId}`}: ${entry.originPort ?? '—'}`,
+  );
+  const rest = overrides.length - shown.length;
+  return `Origem: ${r.originPort ?? '—'}${shown.join('')}${rest > 0 ? ` · +${rest}` : ''}`;
+}
+
 // Espelha o limite do backend (app.ts / QuoteResponseController) -- valida
 // no cliente antes de gastar o upload/base64 num arquivo que sera rejeitado.
 const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -521,6 +533,7 @@ export function ComparacaoTab({
               )}
             </div>
             {contactLine && <span className="cmp-row__contact">{contactLine}</span>}
+            <span className="cmp-row__contact">{formatOriginLine(r)}</span>
           </div>
           <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>
           <div>
@@ -787,6 +800,7 @@ export function ComparacaoTab({
                     <div className="cmp-bypass-supplier__name">
                       <strong>{bypassName}</strong>
                       {bypassContactLine && <span>{bypassContactLine}</span>}
+                      <span className="cmp-row__contact">{formatOriginLine(only)}</span>
                     </div>
                   </div>
                   <div className="cmp-bypass-supplier__stats">

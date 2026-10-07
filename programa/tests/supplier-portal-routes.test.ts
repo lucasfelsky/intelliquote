@@ -822,8 +822,9 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).toContain('class="po-group-title"');
     expect(html).toContain('po-group-head');
     expect(html).toContain('${esc(group.label)}');
-    expect(html).toContain("data-portal-version', 'v56-20261007'");
+    expect(html).toContain("data-portal-version', 'v58-20261007'");
     expect(html).not.toContain('v55-20261006');
+    expect(html).not.toContain('v56-20261007');
     const mediaStart = html.indexOf('@media (max-width: 640px)');
     expect(mediaStart).toBeGreaterThan(-1);
     const mediaEnd = html.indexOf('</style>', mediaStart);
@@ -873,5 +874,272 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).toContain("String(data.quoteRequest.description || '').trim()");
     expect(html).toMatch(/\.buyer-notes-text\s*\{[^}]*white-space:\s*pre-line/);
     expect(html).not.toContain('${description}');
+  });
+});
+
+describe('Portal - porto de origem por item (informativo)', () => {
+  let counter = 0;
+  let agentSeq = 0;
+  // O rate limiter do portal e por IP + User-Agent (10/min): isola cada requisicao.
+  const uniqueAgent = () => `vitest-origin-${(agentSeq += 1)}`;
+
+  const itemRow = (id: number, extra: Record<string, unknown> = {}) => ({
+    id: id * 10,
+    quoteRequestItemId: id,
+    unitPrice: '10.00',
+    quantity: 10,
+    totalPrice: { toString: () => '100.00' },
+    leadTimeDays: null,
+    notes: null,
+    incotermPrices: null,
+    originPort: null,
+    ...extra,
+  });
+
+  function mockEnv(opts: { existing?: Record<string, unknown> | null; created?: Record<string, unknown> } = {}) {
+    counter += 1;
+    const rawToken = `tok-origin-${counter}-` + 'o'.repeat(40);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+      id: 80 + counter,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      revokedAt: null,
+      respondedAt: opts.existing ? new Date() : null,
+      accessCount: 0,
+      firstSeenAt: null,
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+    });
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ desiredIncoterm: [] });
+    prismaMock.quoteRequestItem.findMany.mockResolvedValue([
+      { id: 11, productName: 'A' },
+      { id: 12, productName: 'B' },
+      { id: 13, productName: 'C' },
+    ]);
+    prismaMock.__tx.supplierPortalResponse.findUnique.mockResolvedValue(opts.existing ?? null);
+    const stored = {
+      id: 99,
+      version: opts.existing ? 2 : 1,
+      totalPrice: { toString: () => '300.00' },
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      notes: null,
+      originPort: 'Shanghai',
+      submittedAt: new Date(),
+      items: [itemRow(11), itemRow(12, { originPort: 'Ningbo' }), itemRow(13)],
+      ...(opts.created ?? {}),
+    };
+    prismaMock.__tx.supplierPortalResponse.create.mockResolvedValue(stored);
+    prismaMock.__tx.supplierPortalResponse.update.mockResolvedValue(stored);
+    prismaMock.__tx.quoteResponse.upsert.mockResolvedValue({ id: 501 });
+    prismaMock.__tx.supplierPortalToken.update.mockResolvedValue({});
+    return rawToken;
+  }
+
+  function respond(rawToken: string, body: Record<string, unknown>) {
+    return request(app)
+      .post(`/api/portal/${rawToken}/respond`)
+      .set('User-Agent', uniqueAgent())
+      .send({
+        currency: 'USD',
+        incoterm: 'FOB',
+        exchangeRate: 5,
+        paymentTermsDays: 30,
+        totalPrice: 300,
+        validityDays: 30,
+        ...body,
+      });
+  }
+
+  const baseItem = (id: number, extra: Record<string, unknown> = {}) => ({
+    quoteRequestItemId: id,
+    unitPrice: 10,
+    quantity: 10,
+    totalPrice: 100,
+    ...extra,
+  });
+
+  const origins = (rows: { originPort: string | null }[]) => rows.map((row) => row.originPort);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('persiste a origem geral e grava null nos itens iguais a geral (herda)', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      originPort: 'Shanghai',
+      items: [
+        baseItem(11),
+        baseItem(12, { originPort: 'Ningbo' }),
+        baseItem(13, { originPort: 'shanghai ' }),
+      ],
+    });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.originPort).toBe('Shanghai');
+    expect(origins(created.data.items.create)).toEqual([null, 'Ningbo', null]);
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(upsert.create.originPort).toBe('Shanghai');
+    expect(upsert.update.originPort).toBe('Shanghai');
+    expect(origins(upsert.create.items.create)).toEqual([null, 'Ningbo', null]);
+    expect(origins(upsert.update.items.create)).toEqual([null, 'Ningbo', null]);
+  });
+
+  it('payload legado sem originPort (portal em cache) grava geral e itens null', async () => {
+    const token = mockEnv({
+      created: { originPort: null, items: [itemRow(11), itemRow(12), itemRow(13)] },
+    });
+    const res = await respond(token, { items: [baseItem(11), baseItem(12), baseItem(13)] });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.originPort).toBeNull();
+    expect(origins(created.data.items.create)).toEqual([null, null, null]);
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(upsert.create.originPort).toBeNull();
+    expect(origins(upsert.create.items.create)).toEqual([null, null, null]);
+  });
+
+  it('item com origem mas sem geral informada grava a origem do item', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      originPort: '   ',
+      items: [baseItem(11, { originPort: ' Busan ' }), baseItem(12), baseItem(13)],
+    });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.originPort).toBeNull();
+    expect(created.data.items.create[0].originPort).toBe('Busan');
+  });
+
+  it('rejeita originPort com mais de 120 caracteres (geral e item)', async () => {
+    const tooLong = 'x'.repeat(121);
+    const t1 = mockEnv();
+    const geral = await respond(t1, {
+      originPort: tooLong,
+      items: [baseItem(11), baseItem(12), baseItem(13)],
+    });
+    expect(geral.status).toBe(400);
+    const t2 = mockEnv();
+    const item = await respond(t2, {
+      items: [baseItem(11, { originPort: tooLong }), baseItem(12), baseItem(13)],
+    });
+    expect(item.status).toBe(400);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('revisao: o snapshot guarda a origem geral e a dos itens da versao anterior', async () => {
+    const token = mockEnv({
+      existing: {
+        id: 77,
+        portalTokenId: 3,
+        version: 1,
+        currency: 'USD',
+        incoterm: 'FOB',
+        paymentTermsDays: 30,
+        totalPrice: { toString: () => '300.00' },
+        totalPriceCurrency: 'USD',
+        validityDays: 30,
+        notes: null,
+        originPort: 'Shanghai',
+        submittedAt: new Date(),
+        items: [itemRow(11), itemRow(12, { originPort: 'Ningbo' }), itemRow(13)],
+      },
+    });
+    const res = await respond(token, {
+      originPort: 'Qingdao',
+      items: [baseItem(11), baseItem(12, { originPort: 'Busan' }), baseItem(13)],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.revised).toBe(true);
+    const snapshot = prismaMock.__tx.supplierPortalResponseRevision.create.mock.calls[0][0].data;
+    expect(snapshot.originPort).toBe('Shanghai');
+    expect(origins(snapshot.items)).toEqual([null, 'Ningbo', null]);
+    const updated = prismaMock.__tx.supplierPortalResponse.update.mock.calls[0][0];
+    expect(updated.data.originPort).toBe('Qingdao');
+    expect(origins(updated.data.items.create)).toEqual([null, 'Busan', null]);
+  });
+
+  it('GET do portal devolve origem geral, dos itens e do historico', async () => {
+    counter += 1;
+    const rawToken = `tok-origin-get-${counter}-` + 'g'.repeat(40);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+      id: 90 + counter,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 86400000),
+      revokedAt: null,
+      respondedAt: new Date(),
+      accessCount: 1,
+      firstSeenAt: new Date(),
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+      quoteRequest: {
+        id: 5,
+        requestCode: 'QR-OR',
+        productName: 'Acido',
+        description: null,
+        desiredIncoterm: [],
+        originPort: 'Pedido do comprador',
+        currency: 'USD',
+        deadlineAt: null,
+        items: [
+          { id: 11, itemCode: 'A', productName: 'A', quantity: 10, unit: 'UN', description: null, notes: null },
+        ],
+      },
+      supplier: { id: 2, name: 'Acme' },
+      supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+    });
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue({
+      id: 99,
+      version: 2,
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      totalPrice: { toString: () => '100.00' },
+      totalPriceCurrency: 'USD',
+      validityDays: 30,
+      notes: null,
+      originPort: 'Shanghai',
+      submittedAt: new Date(),
+      items: [itemRow(11, { originPort: 'Ningbo' })],
+    });
+    prismaMock.supplierPortalResponseRevision.findMany.mockResolvedValue([
+      {
+        version: 1,
+        currency: 'USD',
+        incoterm: 'FOB',
+        paymentTermsDays: 30,
+        totalPrice: { toString: () => '90.00' },
+        totalPriceCurrency: 'USD',
+        validityDays: 30,
+        notes: null,
+        originPort: 'Qingdao',
+        submittedAt: new Date(),
+        supersededAt: new Date(),
+        items: [{ quoteRequestItemId: 11, originPort: 'Busan' }],
+      },
+    ]);
+    const res = await request(app).get(`/api/portal/${rawToken}`).set('User-Agent', uniqueAgent());
+    expect(res.status).toBe(200);
+    expect(res.body.response.originPort).toBe('Shanghai');
+    expect(res.body.response.items[0].originPort).toBe('Ningbo');
+    expect(res.body.history[0].originPort).toBe('Qingdao');
+    expect(res.body.history[0].items[0].originPort).toBe('Busan');
+    // origem PEDIDA pelo comprador segue inalterada
+    expect(res.body.quoteRequest.originPort).toBe('Pedido do comprador');
+  });
+
+  it('portal.html: campo de origem por item e versao (estatico)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'portal.html'), 'utf8');
+    expect(html).toContain('name="itemOriginPort"');
+    expect(html).toContain('data-origin-inherit');
+    expect(html).toContain('data-origin-initial-inherit');
+    expect(html).toContain('Different from proposal origin');
+    expect(html).toContain('v58-');
   });
 });
