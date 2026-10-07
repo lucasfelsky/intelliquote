@@ -11,6 +11,8 @@ export interface PurchaseOrder {
 
 export interface CreatePurchaseOrderResult {
   purchaseOrder: PurchaseOrder;
+  /** Presente quando o POST usou group: true (lista final das 2 POs, por position). */
+  purchaseOrders?: PurchaseOrder[];
   movedItemIds: number[];
 }
 
@@ -18,11 +20,14 @@ export interface DeletePurchaseOrderResult {
   deletedId: number;
   reassignedToPurchaseOrderId: number | null;
   movedItemIds: number[];
+  /** true quando sobrava 1 PO e o agrupamento foi desfeito (as 2 POs foram removidas). */
+  dissolved: boolean;
+  dissolvedPurchaseOrder: { id: number; label: string; position: number } | null;
 }
 
 export function createPurchaseOrder(
   quoteRequestId: number,
-  body: { label?: string; adoptUnassigned?: boolean } = {},
+  body: { label?: string; adoptUnassigned?: boolean; group?: boolean } = {},
 ): Promise<CreatePurchaseOrderResult> {
   return api.post<CreatePurchaseOrderResult>(
     `/v1/quote-requests/${quoteRequestId}/purchase-orders`,

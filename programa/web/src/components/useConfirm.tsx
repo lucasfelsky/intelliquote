@@ -6,6 +6,8 @@ interface ConfirmOptions {
   message: string;
   confirmText?: string;
   cancelText?: string;
+  /** 'danger' pinta o botao de confirmar como destrutivo; default inalterado. */
+  tone?: 'default' | 'danger';
 }
 
 type ConfirmContextType = (options: ConfirmOptions | string) => Promise<boolean>;
@@ -52,7 +54,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           <button type="button" className="ghost-button" onClick={handleCancel}>
             {options.cancelText || 'Cancelar'}
           </button>
-          <button type="button" className="primary-button" onClick={handleConfirm}>
+          <button
+            type="button"
+            className={options.tone === 'danger' ? 'danger-button' : 'primary-button'}
+            onClick={handleConfirm}
+          >
             {options.confirmText || 'Confirmar'}
           </button>
         </div>

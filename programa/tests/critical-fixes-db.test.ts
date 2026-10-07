@@ -243,10 +243,10 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     })).rejects.toThrow('Exchange rate');
   });
 
-  it('exclui PO realocando itens (anterior/proxima/sem PO) sem apagar itens e mantem posicoes contiguas', async () => {
+  it('exclui PO realocando itens (anterior/proxima/sem PO), mantem posicoes contiguas e dissolve ao sobrar uma', async () => {
     const [i1, i2] = quote.items;
     const pos: any[] = [];
-    for (const n of [1, 2, 3]) {
+    for (const n of [1, 2, 3, 4]) {
       const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
         .set('Cookie', cookies).send({});
       expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -256,22 +256,27 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     await prisma.quoteRequestItem.update({ where: { id: i1.id }, data: { purchaseOrderId: pos[0].id } });
     await prisma.quoteRequestItem.update({ where: { id: i2.id }, data: { purchaseOrderId: pos[1].id } });
 
-    // primeira -> proxima
+    // primeira -> proxima (4 -> 3)
     let del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[0].id}`).set('Cookie', cookies);
     expect(del.status, JSON.stringify(del.body)).toBe(200);
+    expect(del.body.dissolved).toBe(false);
     expect(del.body.reassignedToPurchaseOrderId).toBe(pos[1].id);
     expect((await prisma.quoteRequestItem.findUnique({ where: { id: i1.id } })).purchaseOrderId).toBe(pos[1].id);
-    let remaining = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
-    expect(remaining.map((o: any) => [o.id, o.position])).toEqual([[pos[1].id, 1], [pos[2].id, 2]]);
+    const remaining = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(remaining.map((o: any) => [o.id, o.position])).toEqual([[pos[1].id, 1], [pos[2].id, 2], [pos[3].id, 3]]);
 
-    // ultima -> anterior
+    // ultima -> anterior (3 -> 2)
+    del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[3].id}`).set('Cookie', cookies);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    expect(del.body.dissolved).toBe(false);
+    expect(del.body.reassignedToPurchaseOrderId).toBe(pos[2].id);
+
+    // sobram 2: excluir uma dissolve o agrupamento (2 -> 0), itens ficam sem PO
     del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[2].id}`).set('Cookie', cookies);
-    expect(del.body.reassignedToPurchaseOrderId).toBe(pos[1].id);
-
-    // unica -> sem PO
-    del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[1].id}`).set('Cookie', cookies);
-    expect(del.status).toBe(200);
+    expect(del.status, JSON.stringify(del.body)).toBe(200);
+    expect(del.body.dissolved).toBe(true);
     expect(del.body.reassignedToPurchaseOrderId).toBeNull();
+    expect(del.body.dissolvedPurchaseOrder.id).toBe(pos[1].id);
     const items = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
     expect(items).toHaveLength(2);
     expect(items.every((i: any) => i.purchaseOrderId === null)).toBe(true);
@@ -280,7 +285,7 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
 
   it('rotulo padrao de PO e unico apos excluir e recriar', async () => {
     const created: any[] = [];
-    for (let n = 0; n < 2; n++) {
+    for (let n = 0; n < 3; n++) {
       const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
         .set('Cookie', cookies).send({});
       expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -288,13 +293,61 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     }
     const del = await request(app).delete(`/api/v1/quote-request-purchase-orders/${created[0].id}`).set('Cookie', cookies);
     expect(del.status, JSON.stringify(del.body)).toBe(200);
+    expect(del.body.dissolved).toBe(false);
     const again = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
       .set('Cookie', cookies).send({});
     expect(again.status, JSON.stringify(again.body)).toBe(201);
-    expect(again.body.purchaseOrder.label).toBe('PO 3');
+    expect(again.body.purchaseOrder.label).toBe('PO 4');
 
     const orders = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id } });
     expect(new Set(orders.map((o: any) => o.label)).size).toBe(orders.length);
+  });
+
+  it('agrupar por PO (group:true) cria 2 POs atomicamente e rejeita repetir', async () => {
+    const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({ group: true });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.purchaseOrders.map((o: any) => [o.label, o.position])).toEqual([['PO 1', 1], ['PO 2', 2]]);
+    expect(res.body.purchaseOrder.label).toBe('PO 2');
+
+    const orders = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(orders.map((o: any) => o.position)).toEqual([1, 2]);
+    const items = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i: any) => i.purchaseOrderId === orders[0].id)).toBe(true);
+
+    const again = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({ group: true });
+    expect(again.status, JSON.stringify(again.body)).toBe(409);
+    expect(await prisma.quoteRequestPurchaseOrder.count({ where: { quoteRequestId: quote.id } })).toBe(2);
+  });
+
+  it('cotacao legada com 1 PO: group cria so mais 1 e adota os itens soltos', async () => {
+    const plain = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({});
+    expect(plain.status, JSON.stringify(plain.body)).toBe(201);
+    const legacyId = plain.body.purchaseOrder.id;
+    expect(await prisma.quoteRequestItem.count({ where: { quoteRequestId: quote.id, purchaseOrderId: null } })).toBeGreaterThan(0);
+
+    const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({ group: true });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const orders = await prisma.quoteRequestPurchaseOrder.findMany({ where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(orders).toHaveLength(2);
+    expect(orders[0].id).toBe(legacyId);
+    expect(res.body.purchaseOrder.id).toBe(orders[1].id);
+    const items = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
+    expect(items.every((i: any) => i.purchaseOrderId === legacyId)).toBe(true);
+  });
+
+  it('group concorrente: exatamente um 201 e um 409, total de 2 POs (lock da cotacao)', async () => {
+    const post = () => request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({ group: true });
+    const results = await Promise.all([post(), post()]);
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses, JSON.stringify(results.map((r) => r.body))).toEqual([201, 409]);
+    expect(await prisma.quoteRequestPurchaseOrder.count({ where: { quoteRequestId: quote.id } })).toBe(2);
   });
 
   // Segura o lock da linha QuoteRequest numa tx aberta ate release(). mode 'update' e o

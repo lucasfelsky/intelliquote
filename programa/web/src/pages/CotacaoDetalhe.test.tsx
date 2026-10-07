@@ -252,6 +252,7 @@ describe('CotacaoDetalhe', () => {
       ...quoteFixture,
       purchaseOrders: [
         { id: 7, quoteRequestId: 1, label: 'PO 1', position: 1, createdAt: '', updatedAt: '' },
+        { id: 8, quoteRequestId: 1, label: 'PO 2', position: 2, createdAt: '', updatedAt: '' },
       ],
       items: [{ ...quoteFixture.items[0], purchaseOrderId: 7 }],
       quoteResponses: [],

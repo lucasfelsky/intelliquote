@@ -183,6 +183,31 @@ describe('portal.html - agrupamento por PO (jsdom)', () => {
     expect(document.querySelector('.po-group-head')).toBeNull();
   });
 
+  it('1 PO com todos os itens: modo plano (sem .po-group/.po-group-head)', async () => {
+    await mountPortal(
+      makePayload([{ id: 10, label: 'PO 1', position: 1 }], [makeItem(1, 10), makeItem(2, 10)]),
+    );
+
+    expect(document.querySelector('.po-group')).toBeNull();
+    expect(document.querySelector('.po-group-head')).toBeNull();
+    expect(document.querySelector('[data-po-group]')).toBeNull();
+    const itemsContainer = document.getElementById('portal-items') as HTMLElement;
+    const rows = itemsContainer.querySelectorAll('.item-row');
+    expect(rows).toHaveLength(2);
+    rows.forEach((row) => expect(row.parentElement).toBe(itemsContainer));
+  });
+
+  it('1 PO + itens soltos: modo plano', async () => {
+    await mountPortal(
+      makePayload([{ id: 10, label: 'PO 1', position: 1 }], [makeItem(1, 10), makeItem(2, null)]),
+    );
+
+    expect(document.querySelector('.po-group')).toBeNull();
+    expect(document.querySelector('.po-group-head')).toBeNull();
+    expect(document.querySelector('[data-po-group]')).toBeNull();
+    expect(document.querySelectorAll('#portal-items .item-row')).toHaveLength(2);
+  });
+
   it('payload enviado e equivalente com e sem agrupamento (comparacao ordenada por item)', async () => {
     const mountedA = await mountPortal(
       makePayload(pos, [makeItem(1, 20), makeItem(2, null), makeItem(3, 10), makeItem(4, 20)]),

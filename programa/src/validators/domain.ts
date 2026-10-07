@@ -493,10 +493,15 @@ const purchaseOrderLabelField = z
   .min(1, 'Informe o rotulo da PO.')
   .max(60, 'O rotulo da PO deve ter no maximo 60 caracteres.');
 
-export const purchaseOrderCreateSchema = z.object({
-  label: purchaseOrderLabelField.optional(),
-  adoptUnassigned: z.boolean().optional().default(false),
-});
+export const purchaseOrderCreateSchema = z
+  .object({
+    label: purchaseOrderLabelField.optional(),
+    adoptUnassigned: z.boolean().optional().default(false),
+    group: z.boolean().optional().default(false),
+  })
+  .refine((v) => !v.group || (v.label === undefined && !v.adoptUnassigned), {
+    message: 'Agrupar por PO nao aceita rotulo nem adoptUnassigned.',
+  });
 
 export const purchaseOrderRenameSchema = z.object({
   label: purchaseOrderLabelField,
