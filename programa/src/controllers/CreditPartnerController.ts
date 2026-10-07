@@ -80,6 +80,10 @@ async function assertNameAvailable(
   name: string,
   excludeId?: number,
 ): Promise<void> {
+  // Serializa check-and-write por nome (mesmo padrao do import de fornecedores): sem isso dois
+  // POST/PUT concorrentes passam pelo findFirst antes de qualquer escrita e gravam duplicados.
+  // Indice unico parcial/case-insensitive nao e representavel no schema Prisma (geraria drift).
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`credit_partner:${name.trim().toLowerCase()}`}))`;
   const duplicate = await tx.creditPartner.findFirst({
     where: {
       deletedAt: null,

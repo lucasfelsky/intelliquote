@@ -15,6 +15,7 @@ vi.mock('../src/lib/prisma', () => {
       create: vi.fn(),
     },
     auditLog: { create: vi.fn() },
+    $executeRaw: vi.fn(),
   };
   const prisma = {
     user: { findUnique: vi.fn(), findFirst: vi.fn() },
@@ -314,6 +315,14 @@ describe('/api/v1/credit-partners', () => {
       name: { equals: 'banco alfa', mode: 'insensitive' },
     });
     expect(tx.creditPartner.create).not.toHaveBeenCalled();
+    // Lock por nome normalizado ANTES do check (serializa POST/PUT concorrentes).
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    const [sqlParts, lockKey] = tx.$executeRaw.mock.calls[0] as [TemplateStringsArray, string];
+    expect(sqlParts.join('?')).toContain('pg_advisory_xact_lock(hashtext(');
+    expect(lockKey).toBe('credit_partner:banco alfa');
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.creditPartner.findFirst.mock.invocationCallOrder[0] as number,
+    );
   });
 
   it('PUT sincroniza contatos (update/create/delete) e grava AuditLog update', async () => {
