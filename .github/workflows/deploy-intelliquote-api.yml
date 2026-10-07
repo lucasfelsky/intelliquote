@@ -29,6 +29,12 @@
 # O build da imagem acontece direto no runner (ubuntu-latest ja tem Docker).
 # Essa abordagem evita o bucket GCS que o `gcloud builds submit` exige, que
 # o GitHub runner nao consegue acessar via WIF de forma confiavel.
+#
+# Gate de CI: o job `ci-gate` bloqueia o deploy se o commit nao estiver contido
+# na main com o workflow "CI" (push/main) verde (jobs `Unit + Build` e
+# `E2E (Playwright)`); se o CI ainda roda, espera ate ~25 min. Escape hatch so via
+# workflow_dispatch: skip_ci_gate=true + skip_ci_gate_reason (logado). Enquanto o
+# gate espera, uma 2a execucao fica pendente (concurrency sem cancel-in-progress).
 
 name: Deploy backend (Cloud Run)
 
@@ -41,6 +47,16 @@ on:
         default: "latest"
       backend_build_tag:
         description: "Valor de BACKEND_BUILD_TAG (ex: 2026-06-19-r46-catalog-items-admin). Padrao: igual a tag."
+        required: false
+        default: ""
+      skip_ci_gate:
+        description: "EMERGENCIA: pula o gate de CI verde na main. Exige skip_ci_gate_reason."
+        type: boolean
+        required: false
+        default: false
+      skip_ci_gate_reason:
+        description: "Motivo do skip do gate de CI (obrigatorio se skip_ci_gate=true; fica logado)."
+        type: string
         required: false
         default: ""
   push:
@@ -64,8 +80,65 @@ env:
 # Variáveis e secrets do GitHub às vezes vêm com whitespace acidental;
 # normaliza no inicio do job para não dar "invalid project id".
 jobs:
+  ci-gate:
+    name: Gate - CI verde na main
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout (so scripts do gate)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
+      - name: Decidir modo (gate ou skip explicito)
+        id: mode
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          SKIP: ${{ inputs.skip_ci_gate }}
+          REASON: ${{ inputs.skip_ci_gate_reason }}
+        run: |
+          skip=false
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$SKIP" = "true" ]; then
+            skip=true
+            if [ -z "${REASON//[[:space:]]/}" ]; then
+              echo "::error::skip_ci_gate=true exige skip_ci_gate_reason preenchido."
+              exit 1
+            fi
+            # Motivo vindo da API pode ter quebra de linha: achata para nao injetar workflow commands.
+            REASON="${REASON//$'\r'/ }"
+            REASON="${REASON//$'\n'/ }"
+            sha="$(git rev-parse HEAD)"
+            echo "::warning::Gate de CI PULADO por $GITHUB_ACTOR em $sha: $REASON"
+            {
+              echo "### Gate de CI PULADO"
+              echo "- Ator: $GITHUB_ACTOR"
+              echo "- Commit: $sha"
+              echo "- Motivo: $REASON"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.mode.outputs.skip != 'true'
+        with:
+          node-version: "22"
+
+      - name: Aguardar CI verde na main
+        if: steps.mode.outputs.skip != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/wait-ci-green.mjs --sha "$(git rev-parse HEAD)" --branch main --workflow ci.yml
+
   build-and-deploy:
     name: Build (Cloud Build) + Deploy (Cloud Run)
+    needs: ci-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -86,14 +159,25 @@ jobs:
       - name: Resolver tag e build tag
         id: tags
         shell: bash
+        # Inputs via env (nunca ${{ }} dentro de run:) para evitar injecao de expressao.
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_BACKEND_BUILD_TAG: ${{ inputs.backend_build_tag }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$EVENT" = "push" ]; then
             REF="${GITHUB_REF_NAME}"
             echo "image_tag=${REF#backend-v}" >> "$GITHUB_OUTPUT"
             echo "backend_build_tag=${REF#backend-v}" >> "$GITHUB_OUTPUT"
           else
-            IMAGE_TAG="${{ inputs.tag }}"
-            BACKEND_BUILD_TAG="${{ inputs.backend_build_tag }}"
+            IMAGE_TAG="$INPUT_TAG"
+            BACKEND_BUILD_TAG="$INPUT_BACKEND_BUILD_TAG"
+            for v in "$IMAGE_TAG" "$BACKEND_BUILD_TAG"; do
+              if [ -n "$v" ] && ! [[ "$v" =~ ^[A-Za-z0-9._-]+$ ]]; then
+                echo "::error::tag/backend_build_tag invalido (permitido: letras, numeros, . _ -)."
+                exit 1
+              fi
+            done
             if [ -z "$BACKEND_BUILD_TAG" ]; then
               BACKEND_BUILD_TAG="$IMAGE_TAG"
             fi
