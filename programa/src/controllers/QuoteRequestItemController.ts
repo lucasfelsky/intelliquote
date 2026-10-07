@@ -2,6 +2,7 @@ import { Incoterm, Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
+import { lockQuoteRequestForPurchaseOrders } from '../services/QuotePurchaseOrderService';
 import {
   itemCreatePurchaseOrderIdSchema,
   itemMovePurchaseOrderSchema,
@@ -404,6 +405,18 @@ export class QuoteRequestItemController {
       );
 
       const item = await prisma.$transaction(async (tx) => {
+        // Ordem de lock "QuoteRequest primeiro": pre-leitura (sem trava) so do pai,
+        // lock, e so entao a leitura completa + validacoes (que passam a enxergar
+        // soft-delete/close concorrentes ja confirmados).
+        const ref = await tx.quoteRequestItem.findUnique({
+          where: { id },
+          select: { quoteRequestId: true },
+        });
+        if (!ref) {
+          throw new HttpError(404, 'Item da cotacao nao encontrado.');
+        }
+        await lockQuoteRequestForPurchaseOrders(tx, ref.quoteRequestId);
+
         const existingItem = await tx.quoteRequestItem.findUnique({
           where: { id },
           include: { quoteRequest: true },

@@ -23,6 +23,7 @@ vi.mock('../src/lib/prisma', () => {
       update: vi.fn(),
       findFirst: vi.fn(),
     },
+    $queryRaw: vi.fn(),
   };
 
   const prisma = {
@@ -118,6 +119,7 @@ const prismaMock = prisma as unknown as {
   };
   $transaction: ReturnType<typeof vi.fn>;
   __tx: {
+    $queryRaw: ReturnType<typeof vi.fn>;
     supplierPortalResponseItem: {
       updateMany: ReturnType<typeof vi.fn>;
     };
@@ -179,6 +181,29 @@ describe('Quote workflow routes', () => {
         },
       }),
     );
+  });
+
+  it('reopen trava a linha QuoteRequest (FOR NO KEY UPDATE) antes de limpar vencedoras e atualizar o pai', async () => {
+    const cookies = await loginAs('gestor');
+
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ id: 5, status: 'closed' });
+    prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.__tx.quoteRequest.update.mockResolvedValue({ id: 5, status: 'open', closedAt: null });
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/5/reopen')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const tx = prismaMock.__tx;
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = tx.$queryRaw.mock.calls[0];
+    expect(strings.join('?')).toMatch(/SELECT id FROM "QuoteRequest" WHERE id = \? FOR NO KEY UPDATE/);
+    expect(values).toEqual([5]);
+
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(tx.quoteResponse.updateMany.mock.invocationCallOrder[0]);
+    expect(lockOrder).toBeLessThan(tx.quoteRequest.update.mock.invocationCallOrder[0]);
   });
 
   it('bloqueia alteracao direta de status pela rota de update da cotacao', async () => {
@@ -302,6 +327,40 @@ describe('Quote workflow routes', () => {
         }),
       }),
     );
+  });
+
+  it('soft-delete trava a linha QuoteRequest (FOR NO KEY UPDATE) antes de qualquer updateMany', async () => {
+    const cookies = await loginAs('comprador');
+
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 5,
+      deletedAt: null,
+      items: [{ id: 10, catalogItemId: 100 }],
+      quoteResponses: [{ id: 21 }],
+    });
+
+    const response = await request(app)
+      .delete('/api/v1/quote-requests/5')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const tx = prismaMock.__tx;
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = tx.$queryRaw.mock.calls[0];
+    expect(strings.join('?')).toMatch(/SELECT id FROM "QuoteRequest" WHERE id = \? FOR NO KEY UPDATE/);
+    expect(values).toEqual([5]);
+
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    for (const fn of [
+      tx.supplierPortalResponseItem.updateMany,
+      tx.supplierPortalResponse.updateMany,
+      tx.quoteResponse.updateMany,
+      tx.quoteRequestItem.updateMany,
+      tx.supplierPortalToken.updateMany,
+      tx.quoteRequest.update,
+    ]) {
+      expect(lockOrder).toBeLessThan(fn.mock.invocationCallOrder[0]);
+    }
   });
 
   it('permite que admin tambem delete cotacoes', async () => {
