@@ -297,6 +297,182 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     expect(new Set(orders.map((o: any) => o.label)).size).toBe(orders.length);
   });
 
+  // Segura o lock da linha QuoteRequest numa tx aberta ate release(). mode 'update' e o
+  // controle negativo (FOR UPDATE), que conflita com o KEY SHARE de INSERT com FK.
+  async function holdQuoteLock(mode: 'nku' | 'update' = 'nku') {
+    const { lockQuoteRequestForPurchaseOrders } = await import('../src/services/QuotePurchaseOrderService');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let holding!: () => void;
+    const holdingP = new Promise<void>((resolve) => { holding = resolve; });
+    const done = prisma.$transaction(async (tx: any) => {
+      if (mode === 'nku') await lockQuoteRequestForPurchaseOrders(tx, quote.id);
+      else await tx.$queryRaw`SELECT id FROM "QuoteRequest" WHERE id = ${quote.id} FOR UPDATE`;
+      holding();
+      await gate;
+    }, { timeout: 30000 });
+    await Promise.race([holdingP, done]);
+    return { release, done };
+  }
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it('criacao concorrente de PO na mesma cotacao gera posicoes e rotulos distintos (lock da cotacao)', async () => {
+    const post = () => request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+      .set('Cookie', cookies).send({});
+    const results = await Promise.all([post(), post(), post(), post(), post(), post()]);
+    for (const res of results) expect(res.status, JSON.stringify(res.body)).toBe(201);
+
+    const orders = await prisma.quoteRequestPurchaseOrder.findMany({
+      where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(orders.map((o: any) => o.position)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(new Set(orders.map((o: any) => o.label)).size).toBe(6);
+    expect(orders.map((o: any) => o.label).sort()).toEqual(['PO 1', 'PO 2', 'PO 3', 'PO 4', 'PO 5', 'PO 6']);
+  });
+
+  it('reorder concorrente de POs nao gera deadlock (500) e termina com posicoes contiguas', async () => {
+    const ids: number[] = [];
+    for (let n = 0; n < 3; n++) {
+      const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+        .set('Cookie', cookies).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      ids.push(res.body.purchaseOrder.id);
+    }
+    const reorder = (orderedIds: number[]) => request(app)
+      .put(`/api/v1/quote-requests/${quote.id}/purchase-orders/order`)
+      .set('Cookie', cookies).send({ orderedIds });
+    const permutations = [
+      [ids[0], ids[1], ids[2]], [ids[2], ids[1], ids[0]],
+      [ids[1], ids[2], ids[0]], [ids[2], ids[0], ids[1]],
+    ];
+    for (let round = 0; round < 3; round++) {
+      const results = await Promise.all(permutations.map((p) => reorder(p)));
+      for (const res of results) expect(res.status, JSON.stringify(res.body)).toBe(200);
+    }
+
+    const orders = await prisma.quoteRequestPurchaseOrder.findMany({
+      where: { quoteRequestId: quote.id }, orderBy: { position: 'asc' } });
+    expect(orders.map((o: any) => o.position)).toEqual([1, 2, 3]);
+  });
+
+  it('lock da cotacao (NO KEY UPDATE) serializa locks entre si mas nao bloqueia INSERT com FK para QuoteRequest', async () => {
+    const { lockQuoteRequestForPurchaseOrders } = await import('../src/services/QuotePurchaseOrderService');
+    const insertsWithFk = (tokenHash: string, lockTimeoutMs: number) => prisma.$transaction(async (tx: any) => {
+      await tx.$queryRaw`SELECT set_config('lock_timeout', ${String(lockTimeoutMs)}, true)`;
+      await tx.supplierPortalToken.create({ data: {
+        tokenHash, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+        createdById: adminId, supplierContactId: suppliers[0].contacts[0].id,
+        expiresAt: new Date(Date.now() + 86400000),
+      } });
+      await tx.dispatchEvent.create({ data: { quoteRequestId: quote.id, createdById: adminId,
+        recipientsCount: 1, subject: 'nokey', status: 'completed' } });
+    }, { timeout: 30000 });
+
+    const holder = await holdQuoteLock('nku');
+    try {
+      // INSERT com FK (KEY SHARE no pai) nao pode esperar o NKU: FOR UPDATE esperaria (ciclo com o soft-delete).
+      await insertsWithFk(`nokey-${quote.id}`, 2000);
+
+      // Outro lock da mesma cotacao (PO op, soft-delete, reopen) espera o primeiro liberar.
+      let secondGotLock = false;
+      const second = prisma.$transaction(async (tx: any) => {
+        await lockQuoteRequestForPurchaseOrders(tx, quote.id);
+        secondGotLock = true;
+      }, { timeout: 30000 });
+      await sleep(700);
+      expect(secondGotLock).toBe(false);
+      holder.release();
+      await second;
+      expect(secondGotLock).toBe(true);
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+
+    // Controle negativo: com FOR UPDATE o mesmo INSERT espera e estoura o lock_timeout.
+    const negative = await holdQuoteLock('update');
+    try {
+      await expect(insertsWithFk(`nokey-neg-${quote.id}`, 1000)).rejects.toThrow();
+    } finally {
+      negative.release();
+      await negative.done;
+    }
+  });
+
+  it('soft-delete da cotacao espera o lock da cotacao (nada e gravado antes de liberar)', async () => {
+    const holder = await holdQuoteLock();
+    try {
+      const deletion = request(app).delete(`/api/v1/quote-requests/${quote.id}`)
+        .set('Cookie', cookies).then((res) => res);
+      await sleep(700);
+      const during = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
+      expect(during.every((i: any) => i.deletedAt === null)).toBe(true);
+      holder.release();
+      const res = await deletion;
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    const after = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quote.id } });
+    expect(after).toHaveLength(2);
+    expect(after.every((i: any) => i.deletedAt !== null)).toBe(true);
+  });
+
+  it('reopen espera o lock da cotacao (vencedora so e limpa depois de liberar)', async () => {
+    await prisma.quoteRequest.update({ where: { id: quote.id }, data: { status: 'closed', closedAt: new Date() } });
+    await prisma.quoteResponse.update({ where: { id: proposals[0].id }, data: { isWinner: true } });
+    const holder = await holdQuoteLock();
+    try {
+      const reopening = request(app).post(`/api/v1/quote-requests/${quote.id}/reopen`)
+        .set('Cookie', cookies).then((res) => res);
+      await sleep(700);
+      expect((await prisma.quoteResponse.findUnique({ where: { id: proposals[0].id } })).isWinner).toBe(true);
+      holder.release();
+      const res = await reopening;
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    expect((await prisma.quoteResponse.findUnique({ where: { id: proposals[0].id } })).isWinner).toBe(false);
+  });
+
+  it('PO ops, move_po e soft-delete concorrentes nao geram deadlock (500)', async () => {
+    const pos: any[] = [];
+    for (let n = 0; n < 2; n++) {
+      const res = await request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+        .set('Cookie', cookies).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      pos.push(res.body.purchaseOrder);
+    }
+    await prisma.quoteRequestItem.update({ where: { id: quote.items[0].id }, data: { purchaseOrderId: pos[0].id } });
+    await prisma.quoteRequestItem.update({ where: { id: quote.items[1].id }, data: { purchaseOrderId: pos[1].id } });
+
+    const results = await Promise.all([
+      request(app).delete(`/api/v1/quote-request-purchase-orders/${pos[0].id}`).set('Cookie', cookies),
+      request(app).post(`/api/v1/quote-requests/${quote.id}/purchase-orders`)
+        .set('Cookie', cookies).send({ adoptUnassigned: true }),
+      request(app).patch(`/api/v1/quote-request-items/${quote.items[1].id}/purchase-order`)
+        .set('Cookie', cookies).send({ purchaseOrderId: pos[1].id }),
+      request(app).delete(`/api/v1/quote-requests/${quote.id}`).set('Cookie', cookies),
+    ]);
+    for (const res of results) {
+      expect([200, 201, 400, 404], JSON.stringify(res.body)).toContain(res.status);
+    }
+  });
+
+  it('reopen e soft-delete concorrentes da mesma cotacao nao geram deadlock (500)', async () => {
+    await prisma.quoteRequest.update({ where: { id: quote.id }, data: { status: 'closed', closedAt: new Date() } });
+    await prisma.quoteResponse.update({ where: { id: proposals[0].id }, data: { isWinner: true } });
+    const results = await Promise.all([
+      request(app).post(`/api/v1/quote-requests/${quote.id}/reopen`).set('Cookie', cookies),
+      request(app).delete(`/api/v1/quote-requests/${quote.id}`).set('Cookie', cookies),
+    ]);
+    for (const res of results) {
+      expect(res.status, JSON.stringify(res.body)).not.toBe(500);
+    }
+  });
+
   it('GET da cotacao conta envios (dispatchEvents) ignorando os que falharam', async () => {
     const before = await request(app).get(`/api/v1/quote-requests/${quote.id}`).set('Cookie', cookies);
     expect(before.status, JSON.stringify(before.body)).toBe(200);

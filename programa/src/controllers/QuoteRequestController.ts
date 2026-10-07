@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
+import { lockQuoteRequestForPurchaseOrders } from '../services/QuotePurchaseOrderService';
 import { SupplierRegretNotificationService } from '../services/SupplierRegretNotificationService';
 import {
   quoteRequestCloseSchema,
@@ -400,6 +401,10 @@ export class QuoteRequestController {
       }
 
       const reopenedQuoteRequest = await prisma.$transaction(async (tx) => {
+        // Ordem de lock "QuoteRequest primeiro": sem isto, reopen (respostas -> pai)
+        // cruza com o soft-delete (pai -> respostas) e abre deadlock (40P01).
+        await lockQuoteRequestForPurchaseOrders(tx, id);
+
         await tx.quoteResponse.updateMany({
           where: { quoteRequestId: id },
           data: { isWinner: false },
@@ -469,6 +474,11 @@ export class QuoteRequestController {
       // da cotacao e os tokens do portal sao marcados como removidos
       // para manter integridade referencial e impedir acessos futuros.
       await prisma.$transaction(async (tx) => {
+        // Ordem de lock "QuoteRequest primeiro" (mesma das operacoes de PO): sem isto,
+        // os updateMany dos filhos abaixo, seguidos do update do pai, cruzam com
+        // create/delete/move de PO e com o reopen e abrem deadlock (40P01).
+        await lockQuoteRequestForPurchaseOrders(tx, id);
+
         const responseIds = existingQuoteRequest.quoteResponses.map((r) => r.id);
 
         if (responseIds.length > 0) {

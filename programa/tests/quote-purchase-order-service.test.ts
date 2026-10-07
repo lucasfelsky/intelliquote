@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createPurchaseOrder,
   deletePurchaseOrderWithReallocation,
+  lockQuoteRequestForPurchaseOrders,
   nextDefaultPurchaseOrderLabel,
+  reorderPurchaseOrders,
   resolveReallocationTarget,
 } from '../src/services/QuotePurchaseOrderService';
 
@@ -14,6 +16,7 @@ function makeTx(orders: Order[], items: Item[]) {
   return {
     items,
     orders,
+    $queryRaw: async (..._args: any[]) => [],
     quoteRequestPurchaseOrder: {
       findMany: async ({ where }: any) =>
         orders
@@ -160,6 +163,7 @@ describe('createPurchaseOrder: rotulo unico apos excluir e recriar', () => {
     let nextId = 100;
     return {
       orders,
+      $queryRaw: async (..._args: any[]) => [],
       quoteRequestPurchaseOrder: {
         findMany: async ({ where }: any) =>
           orders
@@ -200,5 +204,74 @@ describe('createPurchaseOrder: rotulo unico apos excluir e recriar', () => {
     expect(third.purchaseOrder.position).toBe(2);
     expect(third.purchaseOrder.label).toBe('PO 3');
     expect(tx.orders.map((o) => o.label).sort()).toEqual(['PO 2', 'PO 3']);
+  });
+});
+
+describe('lock da cotacao (QuoteRequest FOR NO KEY UPDATE)', () => {
+  // Tx que registra a ordem das operacoes para provar "lock primeiro".
+  function makeRecordingTx() {
+    const log: string[] = [];
+    const lockValues: unknown[][] = [];
+    const tx = {
+      log,
+      lockValues,
+      $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+        log.push('lock');
+        lockValues.push(values);
+        return [];
+      },
+      quoteRequestPurchaseOrder: {
+        findMany: async () => {
+          log.push('findMany');
+          return [{ id: 1, position: 1, label: 'PO 1' }, { id: 2, position: 2, label: 'PO 2' }];
+        },
+        create: async ({ data }: any) => {
+          log.push('create');
+          return { id: 3, ...data };
+        },
+        update: async ({ where, data }: any) => {
+          log.push('update');
+          return { id: where.id, ...data };
+        },
+        delete: async () => {
+          log.push('delete');
+        },
+      },
+      quoteRequestItem: {
+        findMany: async () => [],
+        updateMany: async () => {
+          log.push('updateMany');
+        },
+      },
+    };
+    return tx;
+  }
+
+  it('lockQuoteRequestForPurchaseOrders passa o id como parametro', async () => {
+    const tx = makeRecordingTx();
+    await lockQuoteRequestForPurchaseOrders(tx, 42);
+    expect(tx.lockValues).toEqual([[42]]);
+  });
+
+  it('createPurchaseOrder trava antes de ler posicoes e de criar', async () => {
+    const tx = makeRecordingTx();
+    await createPurchaseOrder(tx, { quoteRequestId: 7 });
+    expect(tx.log.slice(0, 3)).toEqual(['lock', 'findMany', 'create']);
+    expect(tx.lockValues).toEqual([[7]]);
+  });
+
+  it('reorderPurchaseOrders trava antes de ler e de atualizar posicoes', async () => {
+    const tx = makeRecordingTx();
+    await reorderPurchaseOrders(tx, 7, [2, 1]);
+    expect(tx.log).toEqual(['lock', 'findMany', 'update', 'update']);
+    expect(tx.lockValues).toEqual([[7]]);
+  });
+
+  it('deletePurchaseOrderWithReallocation trava antes de qualquer leitura/escrita', async () => {
+    const tx = makeRecordingTx();
+    await deletePurchaseOrderWithReallocation(tx, { id: 2, quoteRequestId: 7 });
+    expect(tx.log[0]).toBe('lock');
+    expect(tx.log.filter((e) => e === 'lock')).toHaveLength(1);
+    expect(tx.lockValues).toEqual([[7]]);
   });
 });

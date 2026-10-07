@@ -35,6 +35,33 @@ export function resolveReallocationTarget(
   return next ? next.id : null;
 }
 
+/**
+ * Serializa as operacoes de PO de uma cotacao travando a linha pai
+ * ("QuoteRequest") com lock de linha NO KEY UPDATE.
+ *
+ * Regra de ordem de lock: "QuoteRequest primeiro". Deve ser a PRIMEIRA operacao
+ * da transacao (antes de ler/calcular position ou rotulo e antes de qualquer
+ * escrita em filhos), para nao criar deadlock (40P01) entre transacoes que
+ * seguram filhos e esperam o pai.
+ *
+ * Por que NO KEY UPDATE e nao FOR UPDATE: o Postgres toma FOR KEY SHARE na linha
+ * pai em todo INSERT com FK para QuoteRequest (regenerateToken, compare, submit do
+ * portal, supplierReview). FOR UPDATE conflita com KEY SHARE e criaria ciclos com
+ * transacoes que fazem updateMany e depois um INSERT com FK. NO KEY UPDATE ainda
+ * conflita com ele mesmo (serializa as operacoes abaixo entre si), mas nao
+ * bloqueia INSERTs com FK.
+ *
+ * Chamado por: criar PO, reordenar POs, excluir PO (neste arquivo), move_po
+ * (QuoteRequestItemController), soft-delete e reopen (QuoteRequestController).
+ * O close ja trava o pai na 1a escrita (quoteRequest.update).
+ */
+export async function lockQuoteRequestForPurchaseOrders(
+  tx: Tx,
+  quoteRequestId: number,
+): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM "QuoteRequest" WHERE id = ${quoteRequestId} FOR NO KEY UPDATE`;
+}
+
 export async function normalizePositions(
   tx: Tx,
   quoteRequestId: number,
@@ -71,6 +98,7 @@ export async function createPurchaseOrder(
   tx: Tx,
   input: { quoteRequestId: number; label?: string; adoptUnassigned?: boolean },
 ): Promise<{ purchaseOrder: PurchaseOrderDTO; movedItemIds: number[] }> {
+  await lockQuoteRequestForPurchaseOrders(tx, input.quoteRequestId);
   const existing: { position: number; label: string }[] =
     await tx.quoteRequestPurchaseOrder.findMany({
       where: { quoteRequestId: input.quoteRequestId },
@@ -121,6 +149,7 @@ export async function reorderPurchaseOrders(
   quoteRequestId: number,
   orderedIds: number[],
 ): Promise<PurchaseOrderDTO[]> {
+  await lockQuoteRequestForPurchaseOrders(tx, quoteRequestId);
   const current = await tx.quoteRequestPurchaseOrder.findMany({
     where: { quoteRequestId },
   });
@@ -159,6 +188,7 @@ export async function deletePurchaseOrderWithReallocation(
   reassignedToPurchaseOrderId: number | null;
   movedItemIds: number[];
 }> {
+  await lockQuoteRequestForPurchaseOrders(tx, purchaseOrder.quoteRequestId);
   const orders = await tx.quoteRequestPurchaseOrder.findMany({
     where: { quoteRequestId: purchaseOrder.quoteRequestId },
     select: { id: true, position: true },
