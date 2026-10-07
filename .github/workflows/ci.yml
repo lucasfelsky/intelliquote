@@ -88,7 +88,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: unit-and-build
     # Sem teto o job herdava 360 min: um apt travado segurava o CI (e o gate de deploy) por horas.
-    timeout-minutes: 30
+    # 20 min < 25 min de espera do gate: E2E travado falha (erro claro) antes do deploy desistir.
+    timeout-minutes: 20
     # Services abaixo: Postgres 16 (Prisma) e MailHog (SMTP dev).
     # O webServer do playwright.config.ts sobe `npm run dev` no :3000 e
     # aponta para esses services via env vars.
