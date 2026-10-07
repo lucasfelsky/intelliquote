@@ -84,7 +84,7 @@ describe('resolveReallocationTarget', () => {
     expect(resolveReallocationTarget(sparse, 2)).toBe(1);
   });
   it('id inexistente lanca erro', () => {
-    expect(() => resolveReallocationTarget(three, 99)).toThrow();
+    expect(() => resolveReallocationTarget(three, 99)).toThrow(expect.objectContaining({ status: 404 }));
   });
 });
 

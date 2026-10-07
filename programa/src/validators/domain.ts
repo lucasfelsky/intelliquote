@@ -509,3 +509,5 @@ export const purchaseOrderReorderSchema = z.object({
 export const itemMovePurchaseOrderSchema = z.object({
   purchaseOrderId: z.number().int().positive().nullable(),
 });
+
+export const itemCreatePurchaseOrderIdSchema = z.number().int().positive();

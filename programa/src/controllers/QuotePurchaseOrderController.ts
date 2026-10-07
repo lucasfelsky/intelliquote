@@ -121,17 +121,19 @@ export class QuotePurchaseOrderController {
 
       const result = await prisma.$transaction(async (tx) => {
         const ordered = await reorderPurchaseOrders(tx, quote.id, body.orderedIds);
-        await AuditLogService.log(
-          {
-            entityType: 'quote_request_purchase_order',
-            entityId: quote.id,
-            action: 'reorder',
-            performedById: req.user?.id ?? null,
-            afterData: { orderedIds: body.orderedIds },
-            metadata: { quoteRequestId: quote.id },
-          },
-          tx,
-        );
+        for (const po of ordered) {
+          await AuditLogService.log(
+            {
+              entityType: 'quote_request_purchase_order',
+              entityId: po.id,
+              action: 'reorder',
+              performedById: req.user?.id ?? null,
+              afterData: { position: po.position, orderedIds: body.orderedIds },
+              metadata: { quoteRequestId: quote.id },
+            },
+            tx,
+          );
+        }
         return ordered;
       });
 

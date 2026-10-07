@@ -22,7 +22,7 @@ export function resolveReallocationTarget(
 ): number | null {
   const deleted = orders.find((o) => o.id === deletedId);
   if (!deleted) {
-    throw new Error(`PO ${deletedId} nao encontrada na lista informada.`);
+    throw new HttpError(404, `PO ${deletedId} nao encontrada na lista informada.`);
   }
   const others = orders.filter((o) => o.id !== deletedId);
   const previous = others

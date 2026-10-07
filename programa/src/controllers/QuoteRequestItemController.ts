@@ -2,7 +2,10 @@ import { Incoterm, Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
-import { itemMovePurchaseOrderSchema } from '../validators/domain';
+import {
+  itemCreatePurchaseOrderIdSchema,
+  itemMovePurchaseOrderSchema,
+} from '../validators/domain';
 import {
   handleControllerError,
   HttpError,
@@ -52,7 +55,7 @@ export class QuoteRequestItemController {
         (notes !== undefined && notes !== null && !isNonEmptyString(notes)) ||
         (purchaseOrderId !== undefined &&
           purchaseOrderId !== null &&
-          !isPositiveNumber(purchaseOrderId))
+          !itemCreatePurchaseOrderIdSchema.safeParse(purchaseOrderId).success)
       ) {
         return res.status(400).json({
           message:
@@ -400,33 +403,31 @@ export class QuoteRequestItemController {
         req.body ?? {},
       );
 
-      const existingItem = await prisma.quoteRequestItem.findUnique({
-        where: { id },
-        include: { quoteRequest: true },
-      });
-      if (!existingItem) {
-        return res.status(404).json({ message: 'Item da cotacao nao encontrado.' });
-      }
-      ensureQuoteRequestOpen(
-        existingItem.quoteRequest.status,
-        'Reabra a cotacao antes de mover os seus itens.',
-      );
-
-      if (purchaseOrderId !== null) {
-        const po = await prisma.quoteRequestPurchaseOrder.findUnique({
-          where: { id: purchaseOrderId },
-        });
-        if (!po) {
-          return res.status(404).json({ message: 'PO nao encontrada.' });
-        }
-        if (po.quoteRequestId !== existingItem.quoteRequestId) {
-          return res.status(400).json({
-            message: 'A PO informada nao pertence a cotacao do item.',
-          });
-        }
-      }
-
       const item = await prisma.$transaction(async (tx) => {
+        const existingItem = await tx.quoteRequestItem.findUnique({
+          where: { id },
+          include: { quoteRequest: true },
+        });
+        if (!existingItem || existingItem.quoteRequest.deletedAt) {
+          throw new HttpError(404, 'Item da cotacao nao encontrado.');
+        }
+        ensureQuoteRequestOpen(
+          existingItem.quoteRequest.status,
+          'Reabra a cotacao antes de mover os seus itens.',
+        );
+
+        if (purchaseOrderId !== null) {
+          const po = await tx.quoteRequestPurchaseOrder.findUnique({
+            where: { id: purchaseOrderId },
+          });
+          if (!po) {
+            throw new HttpError(404, 'PO nao encontrada.');
+          }
+          if (po.quoteRequestId !== existingItem.quoteRequestId) {
+            throw new HttpError(400, 'A PO informada nao pertence a cotacao do item.');
+          }
+        }
+
         const updated = await tx.quoteRequestItem.update({
           where: { id },
           data: { purchaseOrderId },

@@ -7,12 +7,14 @@ vi.mock('../src/lib/prisma', () => {
     quoteRequestPurchaseOrder: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
     quoteRequestItem: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       updateMany: vi.fn(),
       update: vi.fn(),
     },
@@ -166,11 +168,11 @@ describe('Rotas de PO da cotacao', () => {
 
   it('R5 retorna 400 com PO de outra cotacao', async () => {
     const cookies = await loginAs('comprador');
-    p.quoteRequestItem.findUnique.mockResolvedValue({
+    tx.quoteRequestItem.findUnique.mockResolvedValue({
       id: 9, quoteRequestId: 5, purchaseOrderId: null,
       quoteRequest: { id: 5, status: 'open' },
     });
-    p.quoteRequestPurchaseOrder.findUnique.mockResolvedValue({ id: 3, quoteRequestId: 6 });
+    tx.quoteRequestPurchaseOrder.findUnique.mockResolvedValue({ id: 3, quoteRequestId: 6 });
 
     const res = await request(app)
       .patch('/api/v1/quote-request-items/9/purchase-order')
@@ -183,7 +185,7 @@ describe('Rotas de PO da cotacao', () => {
 
   it('R5 aceita purchaseOrderId null', async () => {
     const cookies = await loginAs('comprador');
-    p.quoteRequestItem.findUnique.mockResolvedValue({
+    tx.quoteRequestItem.findUnique.mockResolvedValue({
       id: 9, quoteRequestId: 5, purchaseOrderId: 3,
       quoteRequest: { id: 5, status: 'open' },
     });
@@ -198,6 +200,75 @@ describe('Rotas de PO da cotacao', () => {
     expect(tx.quoteRequestItem.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 9 }, data: { purchaseOrderId: null } }),
     );
+  });
+
+  it('R5 retorna 404 com PO inexistente', async () => {
+    const cookies = await loginAs('comprador');
+    tx.quoteRequestItem.findUnique.mockResolvedValue({
+      id: 9, quoteRequestId: 5, purchaseOrderId: null,
+      quoteRequest: { id: 5, status: 'open', deletedAt: null },
+    });
+    tx.quoteRequestPurchaseOrder.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .patch('/api/v1/quote-request-items/9/purchase-order')
+      .set('Cookie', cookies)
+      .send({ purchaseOrderId: 99 });
+
+    expect(res.status).toBe(404);
+    expect(tx.quoteRequestItem.update).not.toHaveBeenCalled();
+  });
+
+  it('R5 retorna 404 com cotacao excluida', async () => {
+    const cookies = await loginAs('comprador');
+    tx.quoteRequestItem.findUnique.mockResolvedValue({
+      id: 9, quoteRequestId: 5, purchaseOrderId: null,
+      quoteRequest: { id: 5, status: 'open', deletedAt: new Date() },
+    });
+
+    const res = await request(app)
+      .patch('/api/v1/quote-request-items/9/purchase-order')
+      .set('Cookie', cookies)
+      .send({ purchaseOrderId: 3 });
+
+    expect(res.status).toBe(404);
+    expect(tx.quoteRequestItem.update).not.toHaveBeenCalled();
+  });
+
+  it('R5 retorna 400 com purchaseOrderId nao inteiro', async () => {
+    const cookies = await loginAs('comprador');
+
+    const res = await request(app)
+      .patch('/api/v1/quote-request-items/9/purchase-order')
+      .set('Cookie', cookies)
+      .send({ purchaseOrderId: 1.5 });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('R4 retorna 404 ao excluir PO inexistente', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequestPurchaseOrder.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .delete('/api/v1/quote-request-purchase-orders/99')
+      .set('Cookie', cookies);
+
+    expect(res.status).toBe(404);
+    expect(tx.quoteRequestPurchaseOrder.delete).not.toHaveBeenCalled();
+  });
+
+  it('R6 retorna 400 ao criar item com PO de outra cotacao', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequest.findUnique.mockResolvedValue({ id: 5, status: 'open', destinationPort: null });
+    p.quoteRequestPurchaseOrder.findUnique.mockResolvedValue({ id: 3, quoteRequestId: 6 });
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/5/items')
+      .set('Cookie', cookies)
+      .send({ productName: 'Item', quantity: 1, unit: 'kg', purchaseOrderId: 3 });
+
+    expect(res.status).toBe(400);
   });
 
   it('viewer recebe 403 nas rotas de escrita', async () => {

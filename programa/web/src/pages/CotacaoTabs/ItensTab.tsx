@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useConfirm } from '@/components/useConfirm';
 import {
@@ -57,12 +57,12 @@ export function ItensTab(props: ItensTabProps) {
   const [error, setError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const renameSubmittedRef = useRef(false);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   function refresh() {
-    qc.invalidateQueries({ queryKey: ['quote-request', String(quoteRequestId)] });
+    // mesma key de CotacaoDetalhe.tsx (id numérico)
     qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
-    qc.invalidateQueries({ queryKey: ['quote-request-items'] });
   }
   const onError = (err: unknown) => setError(errorMessage(err));
   const onSuccess = () => { setError(null); refresh(); };
@@ -113,9 +113,15 @@ export function ItensTab(props: ItensTabProps) {
   }
 
   function submitRename(po: PurchaseOrder) {
+    // Enter seguido de onBlur dispararia 2 PATCH: guarda síncrona via ref
+    if (renameSubmittedRef.current) return;
     const label = renameValue.trim();
     if (!label || label === po.label) { setRenamingId(null); return; }
-    renamePo.mutate({ id: po.id, label });
+    renameSubmittedRef.current = true;
+    renamePo.mutate(
+      { id: po.id, label },
+      { onError: () => { renameSubmittedRef.current = false; }, onSuccess: () => { renameSubmittedRef.current = false; } },
+    );
   }
 
   function moveOrder(index: number, delta: -1 | 1) {
