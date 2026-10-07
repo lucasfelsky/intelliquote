@@ -721,7 +721,7 @@ describe('CotacaoDetalhe', () => {
       });
       expect(previewDispatch).toHaveBeenCalledTimes(1);
 
-      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2));
       expect(previewDispatch).toHaveBeenLastCalledWith(1, [10], {
         subject: 'Assunto teste',
         message: 'Nova msg',
@@ -745,9 +745,9 @@ describe('CotacaoDetalhe', () => {
       const textarea = within(dialog).getByLabelText('Mensagem adicional para o fornecedor');
 
       fireEvent.change(textarea, { target: { value: 'a' } });
-      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2));
       fireEvent.change(textarea, { target: { value: 'ab' } });
-      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(3), { timeout: 2000 });
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(3));
       await waitFor(() => expect(frameOf(dialog).getAttribute('srcdoc')).toContain('NEW'));
 
       resolveOld(previewWith('<p>OLD</p>'));
@@ -767,9 +767,7 @@ describe('CotacaoDetalhe', () => {
       fireEvent.change(within(dialog).getByLabelText('Mensagem adicional para o fornecedor'), {
         target: { value: 'Nova msg' },
       });
-      await waitFor(() => expect(dialog.textContent).toContain('Não foi possível atualizar o preview'), {
-        timeout: 2000,
-      });
+      await waitFor(() => expect(dialog.textContent).toContain('Não foi possível atualizar o preview'));
       expect(frameOf(dialog).getAttribute('srcdoc')).toContain('ultimo-bom');
       const sendButton = within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement;
       expect(sendButton.disabled).toBe(false);
@@ -821,7 +819,7 @@ describe('CotacaoDetalhe', () => {
       expect(dialog.textContent).toContain('Atualizando preview');
 
       // Requisicao da key atual em andamento.
-      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2), { timeout: 2000 });
+      await waitFor(() => expect(previewDispatch).toHaveBeenCalledTimes(2));
       expect(sendButton().disabled).toBe(true);
       expect(dialog.textContent).toContain('Atualizando preview');
 
@@ -845,9 +843,7 @@ describe('CotacaoDetalhe', () => {
       expect(
         (within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement).disabled,
       ).toBe(true);
-      await waitFor(() => expect(dialog.textContent).toContain('Não foi possível atualizar o preview'), {
-        timeout: 2000,
-      });
+      await waitFor(() => expect(dialog.textContent).toContain('Não foi possível atualizar o preview'));
       expect(
         (within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement).disabled,
       ).toBe(false);

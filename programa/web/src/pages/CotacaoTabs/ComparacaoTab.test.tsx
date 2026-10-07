@@ -393,7 +393,6 @@ describe('ComparacaoTab', () => {
             incotermWeight: 0,
             qualityWeight: 1,
           }),
-        { timeout: 2000 },
       );
     });
   });
