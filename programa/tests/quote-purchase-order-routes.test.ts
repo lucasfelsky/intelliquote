@@ -159,6 +159,77 @@ describe('Rotas de PO da cotacao', () => {
     expect(lockOrder).toBeLessThan(tx.quoteRequestItem.updateMany.mock.invocationCallOrder[0]);
   });
 
+  it('R1 group cria PO 1 + PO 2 e adota itens sem PO', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
+    const po1 = { id: 1, quoteRequestId: 5, label: 'PO 1', position: 1 };
+    const po2 = { id: 2, quoteRequestId: 5, label: 'PO 2', position: 2 };
+    tx.quoteRequestPurchaseOrder.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([po1, po2]);
+    tx.quoteRequestPurchaseOrder.create
+      .mockResolvedValueOnce(po1)
+      .mockResolvedValueOnce(po2);
+    tx.quoteRequestItem.findMany.mockResolvedValueOnce([{ id: 11 }, { id: 12 }]);
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/5/purchase-orders')
+      .set('Cookie', cookies)
+      .send({ group: true });
+
+    expect(res.status).toBe(201);
+    expect(res.body.purchaseOrders).toHaveLength(2);
+    expect(res.body.purchaseOrder.id).toBe(2);
+    expect(res.body.movedItemIds).toEqual([11, 12]);
+    expect(tx.quoteRequestPurchaseOrder.create).toHaveBeenCalledTimes(2);
+    expect(tx.quoteRequestPurchaseOrder.create).toHaveBeenNthCalledWith(1, {
+      data: { quoteRequestId: 5, label: 'PO 1', position: 1 },
+    });
+    expect(tx.quoteRequestPurchaseOrder.create).toHaveBeenNthCalledWith(2, {
+      data: { quoteRequestId: 5, label: 'PO 2', position: 2 },
+    });
+    expect(tx.quoteRequestItem.updateMany).toHaveBeenCalledWith({
+      where: { quoteRequestId: 5, purchaseOrderId: null },
+      data: { purchaseOrderId: 1 },
+    });
+    expectLockOf(5);
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(tx.quoteRequestPurchaseOrder.findMany.mock.invocationCallOrder[0]);
+    expect(lockOrder).toBeLessThan(tx.quoteRequestPurchaseOrder.create.mock.invocationCallOrder[0]);
+    expect(tx.auditLog.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('R1 group com 2 POs retorna 409 e nao cria', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
+    tx.quoteRequestPurchaseOrder.findMany.mockResolvedValueOnce([
+      { id: 1, quoteRequestId: 5, label: 'PO 1', position: 1 },
+      { id: 2, quoteRequestId: 5, label: 'PO 2', position: 2 },
+    ]);
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/5/purchase-orders')
+      .set('Cookie', cookies)
+      .send({ group: true });
+
+    expect(res.status).toBe(409);
+    expect(tx.quoteRequestPurchaseOrder.create).not.toHaveBeenCalled();
+    expect(tx.quoteRequestItem.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('R1 group com label retorna 400', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/5/purchase-orders')
+      .set('Cookie', cookies)
+      .send({ group: true, label: 'X' });
+
+    expect(res.status).toBe(400);
+    expect(tx.quoteRequestPurchaseOrder.create).not.toHaveBeenCalled();
+  });
+
   it('R1 retorna 400 em cotacao fechada', async () => {
     const cookies = await loginAs('comprador');
     p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'closed' });
@@ -231,9 +302,11 @@ describe('Rotas de PO da cotacao', () => {
       id: 2, quoteRequestId: 5, label: 'PO 2', position: 2,
       quoteRequest: { id: 5, status: 'open', deletedAt: null },
     });
-    tx.quoteRequestPurchaseOrder.findMany
-      .mockResolvedValueOnce([{ id: 1, position: 1 }, { id: 2, position: 2 }])
-      .mockResolvedValueOnce([{ id: 1, position: 1 }]);
+    // 2 POs: a exclusao dissolve o agrupamento (sem normalizePositions, 1 so leitura de POs).
+    tx.quoteRequestPurchaseOrder.findMany.mockResolvedValueOnce([
+      { id: 1, position: 1, label: 'PO 1' },
+      { id: 2, position: 2, label: 'PO 2' },
+    ]);
     tx.quoteRequestItem.findMany.mockResolvedValue([]);
 
     const res = await request(app)
@@ -255,8 +328,12 @@ describe('Rotas de PO da cotacao', () => {
       quoteRequest: { id: 5, status: 'open', deletedAt: null },
     });
     tx.quoteRequestPurchaseOrder.findMany
-      .mockResolvedValueOnce([{ id: 1, position: 1 }, { id: 2, position: 2 }])
-      .mockResolvedValueOnce([{ id: 1, position: 1 }]);
+      .mockResolvedValueOnce([
+        { id: 1, position: 1, label: 'PO 1' },
+        { id: 2, position: 2, label: 'PO 2' },
+        { id: 3, position: 3, label: 'PO 3' },
+      ])
+      .mockResolvedValueOnce([{ id: 1, position: 1 }, { id: 3, position: 3 }]);
     tx.quoteRequestItem.findMany.mockResolvedValue([{ id: 21 }, { id: 22 }]);
 
     const res = await request(app)
@@ -268,12 +345,55 @@ describe('Rotas de PO da cotacao', () => {
       deletedId: 2,
       reassignedToPurchaseOrderId: 1,
       movedItemIds: [21, 22],
+      dissolved: false,
+      dissolvedPurchaseOrder: null,
     });
     expect(tx.quoteRequestItem.updateMany).toHaveBeenCalledWith({
       where: { purchaseOrderId: 2 },
       data: { purchaseOrderId: 1 },
     });
     expect(tx.quoteRequestPurchaseOrder.delete).toHaveBeenCalledWith({ where: { id: 2 } });
+  });
+
+  it('R4 com 2 POs dissolve o agrupamento: exclui as duas e deixa itens sem PO', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequestPurchaseOrder.findUnique.mockResolvedValue({
+      id: 2, quoteRequestId: 5, label: 'PO 2', position: 2,
+      quoteRequest: { id: 5, status: 'open', deletedAt: null },
+    });
+    tx.quoteRequestPurchaseOrder.findMany.mockResolvedValueOnce([
+      { id: 1, position: 1, label: 'PO 1' },
+      { id: 2, position: 2, label: 'PO 2' },
+    ]);
+    tx.quoteRequestItem.findMany
+      .mockResolvedValueOnce([{ id: 21 }])
+      .mockResolvedValueOnce([{ id: 11 }]);
+
+    const res = await request(app)
+      .delete('/api/v1/quote-request-purchase-orders/2')
+      .set('Cookie', cookies);
+
+    expect(res.status).toBe(200);
+    expect(res.body.dissolved).toBe(true);
+    expect(res.body.reassignedToPurchaseOrderId).toBeNull();
+    expect(res.body.dissolvedPurchaseOrder).toEqual({ id: 1, label: 'PO 1', position: 1 });
+    expect(res.body.movedItemIds).toEqual([21, 11]);
+    expect(tx.quoteRequestItem.updateMany).toHaveBeenCalledWith({
+      where: { purchaseOrderId: 2 },
+      data: { purchaseOrderId: null },
+    });
+    expect(tx.quoteRequestItem.updateMany).toHaveBeenCalledWith({
+      where: { purchaseOrderId: 1 },
+      data: { purchaseOrderId: null },
+    });
+    expect(tx.quoteRequestPurchaseOrder.delete).toHaveBeenCalledWith({ where: { id: 2 } });
+    expect(tx.quoteRequestPurchaseOrder.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    expectLockOf(5);
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(tx.quoteRequestPurchaseOrder.findMany.mock.invocationCallOrder[0]);
+    expect(lockOrder).toBeLessThan(tx.quoteRequestItem.updateMany.mock.invocationCallOrder[0]);
+    expect(lockOrder).toBeLessThan(tx.quoteRequestPurchaseOrder.delete.mock.invocationCallOrder[0]);
+    expect(tx.auditLog.create).toHaveBeenCalledTimes(2);
   });
 
   it('R5 retorna 400 com PO de outra cotacao', async () => {

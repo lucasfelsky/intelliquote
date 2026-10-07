@@ -51,7 +51,7 @@ export function resolveReallocationTarget(
  * conflita com ele mesmo (serializa as operacoes abaixo entre si), mas nao
  * bloqueia INSERTs com FK.
  *
- * Chamado por: criar PO, reordenar POs, excluir PO (neste arquivo), move_po
+ * Chamado por: criar PO, agrupar, reordenar POs, excluir PO (neste arquivo), move_po
  * (QuoteRequestItemController), soft-delete e reopen (QuoteRequestController).
  * O close ja trava o pai na 1a escrita (quoteRequest.update).
  */
@@ -133,6 +133,77 @@ export async function createPurchaseOrder(
   return { purchaseOrder, movedItemIds };
 }
 
+/**
+ * Agrupa a cotacao por PO de forma atomica: garante exatamente 2 POs
+ * (a "primeira" adota os itens sem PO; a "segunda" nasce vazia).
+ *
+ * - 0 POs: cria "PO 1" (adota os itens soltos) + "PO 2" (vazia).
+ * - 1 PO (cotacao legada): mantem a PO (id, rotulo, itens), adota os itens soltos
+ *   e cria so mais uma.
+ * - 2+ POs: 409 sem escrever nada.
+ *
+ * Lock primeiro, uma vez; nao chama createPurchaseOrder (evita lock duplo).
+ */
+export async function groupPurchaseOrders(
+  tx: Tx,
+  quoteRequestId: number,
+): Promise<{
+  purchaseOrder: PurchaseOrderDTO;
+  purchaseOrders: PurchaseOrderDTO[];
+  movedItemIds: number[];
+  createdIds: number[];
+  adoptedIntoPurchaseOrderId: number;
+}> {
+  await lockQuoteRequestForPurchaseOrders(tx, quoteRequestId);
+  const existing: PurchaseOrderDTO[] = await tx.quoteRequestPurchaseOrder.findMany({
+    where: { quoteRequestId },
+    orderBy: [{ position: 'asc' }, { id: 'asc' }],
+  });
+  if (existing.length >= 2) {
+    throw new HttpError(409, 'A cotacao ja esta agrupada por PO.');
+  }
+
+  const createdIds: number[] = [];
+  let first: PurchaseOrderDTO;
+  if (existing.length === 1) {
+    first = existing[0];
+  } else {
+    first = await tx.quoteRequestPurchaseOrder.create({
+      data: { quoteRequestId, label: nextDefaultPurchaseOrderLabel([], 1), position: 1 },
+    });
+    createdIds.push(first.id);
+  }
+
+  const unassigned = await tx.quoteRequestItem.findMany({
+    where: { quoteRequestId, purchaseOrderId: null },
+    select: { id: true },
+  });
+  const movedItemIds: number[] = unassigned.map((i: { id: number }) => i.id);
+  await tx.quoteRequestItem.updateMany({
+    where: { quoteRequestId, purchaseOrderId: null },
+    data: { purchaseOrderId: first.id },
+  });
+
+  const second: PurchaseOrderDTO = await tx.quoteRequestPurchaseOrder.create({
+    data: {
+      quoteRequestId,
+      label: nextDefaultPurchaseOrderLabel([first.label], 2),
+      position: first.position + 1,
+    },
+  });
+  createdIds.push(second.id);
+
+  const purchaseOrders = await normalizePositions(tx, quoteRequestId);
+  const normalizedSecond = purchaseOrders.find((o) => o.id === second.id) ?? second;
+  return {
+    purchaseOrder: normalizedSecond,
+    purchaseOrders,
+    movedItemIds,
+    createdIds,
+    adoptedIntoPurchaseOrderId: first.id,
+  };
+}
+
 export async function renamePurchaseOrder(
   tx: Tx,
   id: number,
@@ -177,22 +248,61 @@ export async function reorderPurchaseOrders(
   return result;
 }
 
+export interface DeletePurchaseOrderOutcome {
+  deletedId: number;
+  reassignedToPurchaseOrderId: number | null;
+  movedItemIds: number[];
+  dissolved: boolean;
+  dissolvedPurchaseOrder: { id: number; label: string; position: number } | null;
+}
+
 /**
  * Exclui a PO realocando seus itens (nunca apaga itens) e normaliza posicoes.
+ * Se sobrar exatamente 1 PO (2 -> 1), dissolve o agrupamento: a PO restante
+ * tambem e excluida e todos os itens voltam a ficar sem PO ("PO unica nao existe").
  */
 export async function deletePurchaseOrderWithReallocation(
   tx: Tx,
   purchaseOrder: { id: number; quoteRequestId: number },
-): Promise<{
-  deletedId: number;
-  reassignedToPurchaseOrderId: number | null;
-  movedItemIds: number[];
-}> {
+): Promise<DeletePurchaseOrderOutcome> {
   await lockQuoteRequestForPurchaseOrders(tx, purchaseOrder.quoteRequestId);
   const orders = await tx.quoteRequestPurchaseOrder.findMany({
     where: { quoteRequestId: purchaseOrder.quoteRequestId },
-    select: { id: true, position: true },
+    select: { id: true, position: true, label: true },
   });
+  const remaining = orders.filter((o: { id: number }) => o.id !== purchaseOrder.id);
+  if (remaining.length === 1 && orders.some((o: { id: number }) => o.id === purchaseOrder.id)) {
+    const survivor = remaining[0] as { id: number; position: number; label: string };
+    const itemsA = await tx.quoteRequestItem.findMany({
+      where: { purchaseOrderId: purchaseOrder.id },
+      select: { id: true },
+    });
+    const itemsB = await tx.quoteRequestItem.findMany({
+      where: { purchaseOrderId: survivor.id },
+      select: { id: true },
+    });
+    await tx.quoteRequestItem.updateMany({
+      where: { purchaseOrderId: purchaseOrder.id },
+      data: { purchaseOrderId: null },
+    });
+    await tx.quoteRequestItem.updateMany({
+      where: { purchaseOrderId: survivor.id },
+      data: { purchaseOrderId: null },
+    });
+    await tx.quoteRequestPurchaseOrder.delete({ where: { id: purchaseOrder.id } });
+    await tx.quoteRequestPurchaseOrder.delete({ where: { id: survivor.id } });
+    return {
+      deletedId: purchaseOrder.id,
+      reassignedToPurchaseOrderId: null,
+      movedItemIds: [...itemsA, ...itemsB].map((i: { id: number }) => i.id),
+      dissolved: true,
+      dissolvedPurchaseOrder: {
+        id: survivor.id,
+        label: survivor.label,
+        position: survivor.position,
+      },
+    };
+  }
   const targetId = resolveReallocationTarget(orders, purchaseOrder.id);
   const items = await tx.quoteRequestItem.findMany({
     where: { purchaseOrderId: purchaseOrder.id },
@@ -209,5 +319,7 @@ export async function deletePurchaseOrderWithReallocation(
     deletedId: purchaseOrder.id,
     reassignedToPurchaseOrderId: targetId,
     movedItemIds,
+    dissolved: false,
+    dissolvedPurchaseOrder: null,
   };
 }

@@ -785,8 +785,9 @@
         // itens sem PO (ou com PO desconhecida) vao para o grupo final "Other items".
         // Retorna null (modo plano, markup de sempre) quando nao ha PO ou quando
         // nenhum item pertence a uma PO listada.
+        // Agrupamento so existe com 2+ POs (cotacao legada com 1 PO = modo plano).
         function groupItemsByPurchaseOrder(items, purchaseOrders) {
-          if (!Array.isArray(purchaseOrders) || purchaseOrders.length === 0) return null;
+          if (!Array.isArray(purchaseOrders) || purchaseOrders.length < 2) return null;
           if (!Array.isArray(items) || items.length === 0) return null;
           const orderedPos = purchaseOrders
             .slice()

@@ -4,6 +4,7 @@ import { AuditLogService } from '../services/AuditLogService';
 import {
   createPurchaseOrder,
   deletePurchaseOrderWithReallocation,
+  groupPurchaseOrders,
   renamePurchaseOrder,
   reorderPurchaseOrders,
 } from '../services/QuotePurchaseOrderService';
@@ -56,6 +57,33 @@ export class QuotePurchaseOrderController {
       const body = purchaseOrderCreateSchema.parse(req.body ?? {});
 
       const result = await prisma.$transaction(async (tx) => {
+        if (body.group) {
+          const grouped = await groupPurchaseOrders(tx, quote.id);
+          for (const createdId of grouped.createdIds) {
+            const createdPo = grouped.purchaseOrders.find((o) => o.id === createdId);
+            await AuditLogService.log(
+              {
+                entityType: 'quote_request_purchase_order',
+                entityId: createdId,
+                action: 'create',
+                performedById: req.user?.id ?? null,
+                afterData: createdPo ?? null,
+                metadata: {
+                  quoteRequestId: quote.id,
+                  mode: 'group',
+                  adoptedIntoPurchaseOrderId: grouped.adoptedIntoPurchaseOrderId,
+                  movedItemIds: grouped.movedItemIds,
+                },
+              },
+              tx,
+            );
+          }
+          return {
+            purchaseOrder: grouped.purchaseOrder,
+            purchaseOrders: grouped.purchaseOrders,
+            movedItemIds: grouped.movedItemIds,
+          };
+        }
         const created = await createPurchaseOrder(tx, {
           quoteRequestId: quote.id,
           label: body.label,
@@ -168,10 +196,31 @@ export class QuotePurchaseOrderController {
               quoteRequestId: po.quoteRequestId,
               reassignedToPurchaseOrderId: outcome.reassignedToPurchaseOrderId,
               movedItemIds: outcome.movedItemIds,
+              dissolved: outcome.dissolved,
             },
           },
           tx,
         );
+        if (outcome.dissolved && outcome.dissolvedPurchaseOrder) {
+          const survivor = outcome.dissolvedPurchaseOrder;
+          await AuditLogService.log(
+            {
+              entityType: 'quote_request_purchase_order',
+              entityId: survivor.id,
+              action: 'delete',
+              performedById: req.user?.id ?? null,
+              beforeData: { label: survivor.label, position: survivor.position },
+              afterData: null,
+              metadata: {
+                quoteRequestId: po.quoteRequestId,
+                reason: 'dissolve',
+                triggeredByPurchaseOrderId: po.id,
+                movedItemIds: outcome.movedItemIds,
+              },
+            },
+            tx,
+          );
+        }
         return outcome;
       });
 
