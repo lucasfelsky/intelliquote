@@ -1,5 +1,11 @@
 import { afterEach } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
+
+// findBy*/waitFor resolvem no PRIMEIRO sucesso (polling 50 ms + MutationObserver); o timeout so define
+// quanto esperar antes de declarar FALHA. Sob CPU saturada (varios processos vitest) o default de
+// 1000 ms estoura de forma intermitente. Falha real continua falhando, com a mesma mensagem
+// descritiva do Testing Library; so muda a janela de espera.
+configure({ asyncUtilTimeout: 5000 });
 
 // Medido em `web/` com o jsdom instalado pelo passo 2 (jsdom@29.1.1):
 //   node --input-type=module -e "import {JSDOM} from 'jsdom'; const d=new JSDOM('<dialog id=x></dialog>');

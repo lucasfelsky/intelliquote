@@ -11,6 +11,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: false,
     setupFiles: ['./src/test/setup.ts'],
+    // Maior que asyncUtilTimeout (5000): o waitFor/findBy que falhar estoura antes do teste e preserva a
+    // mensagem descritiva do Testing Library em vez de "Test timed out".
+    testTimeout: 20000,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });
