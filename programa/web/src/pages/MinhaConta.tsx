@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
 import { useConfirm } from '@/components/useConfirm';
 import {
   SIGNATURE_IMAGE_MAX_HEIGHT,
@@ -16,7 +17,12 @@ import {
   type EmailSignature,
 } from '@/services/account';
 
-const SIGNATURE_QUERY_KEY = ['account', 'email-signature'] as const;
+// Escopo por usuario: o QueryClient e' compartilhado e o logout nao o limpa;
+// sem o id, outro usuario logado no mesmo SPA veria (e poderia salvar) a
+// assinatura em cache do anterior.
+function signatureQueryKey(userId: number | null | undefined) {
+  return ['account', 'email-signature', userId ?? null] as const;
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.message) return error.message;
@@ -27,17 +33,30 @@ function errorMessage(error: unknown, fallback: string): string {
 export default function MinhaConta() {
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const signatureKey = signatureQueryKey(userId);
 
   const [textDraft, setTextDraft] = useState<string | null>(null);
   const [textMessage, setTextMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [imageMessage, setImageMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [draftOwner, setDraftOwner] = useState<number | null>(userId);
+
+  // Troca de usuario sem recarregar: descarta rascunho e mensagens do anterior.
+  if (draftOwner !== userId) {
+    setDraftOwner(userId);
+    setTextDraft(null);
+    setTextMessage(null);
+    setImageMessage(null);
+  }
 
   const signature = useQuery({
-    queryKey: SIGNATURE_QUERY_KEY,
+    queryKey: signatureKey,
     queryFn: getEmailSignature,
+    enabled: userId !== null,
   });
 
-  // Hidrata o rascunho do texto uma unica vez, quando os dados chegam.
+  // Hidrata o rascunho do texto uma vez por usuario, quando os dados chegam.
   useEffect(() => {
     if (signature.data && textDraft === null) {
       setTextDraft(signature.data.text ?? '');
@@ -47,7 +66,7 @@ export default function MinhaConta() {
   const saveText = useMutation({
     mutationFn: (text: string | null) => saveEmailSignatureText(text),
     onSuccess: (result) => {
-      qc.setQueryData<EmailSignature>(SIGNATURE_QUERY_KEY, (current) =>
+      qc.setQueryData<EmailSignature>(signatureKey, (current) =>
         current ? { ...current, text: result.text } : current,
       );
       setTextDraft(result.text ?? '');
@@ -60,7 +79,7 @@ export default function MinhaConta() {
   const uploadImage = useMutation({
     mutationFn: (file: File) => uploadEmailSignatureImage(file),
     onSuccess: (result) => {
-      qc.setQueryData<EmailSignature>(SIGNATURE_QUERY_KEY, (current) =>
+      qc.setQueryData<EmailSignature>(signatureKey, (current) =>
         current ? { ...current, image: result.image } : current,
       );
       setImageMessage({ kind: 'success', text: 'Imagem da assinatura salva.' });
@@ -72,7 +91,7 @@ export default function MinhaConta() {
   const removeImage = useMutation({
     mutationFn: () => deleteEmailSignatureImage(),
     onSuccess: () => {
-      qc.setQueryData<EmailSignature>(SIGNATURE_QUERY_KEY, (current) =>
+      qc.setQueryData<EmailSignature>(signatureKey, (current) =>
         current ? { ...current, image: null } : current,
       );
       setImageMessage({ kind: 'success', text: 'Imagem removida.' });

@@ -217,6 +217,9 @@ export default function Templates() {
         textBody: current.textBody,
         isActive: current.isActive,
       });
+    } else if (preview.data && preview.data.source === 'fallback' && preview.data.draft) {
+      // Rascunho com placeholders crus: salvar nao congela os dados de exemplo.
+      setDraft({ ...preview.data.draft, isActive: true });
     } else if (preview.data && preview.data.source === 'fallback' && preview.data.html) {
       setDraft({
         subject: preview.data.subject,

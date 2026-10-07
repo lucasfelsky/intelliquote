@@ -24,6 +24,11 @@ vi.mock('@/services/account', async (importOriginal) => {
   return { ...actual, readImageDimensions: vi.fn(async () => ({ width: 300, height: 90 })) };
 });
 
+let mockUserId = 1;
+vi.mock('@/auth/AuthProvider', () => ({
+  useAuth: () => ({ user: { id: mockUserId, name: 'Maria', email: 'maria@sqquimica.com', role: 'comprador' } }),
+}));
+
 import { api, ApiError } from '@/api/client';
 import { readImageDimensions } from '@/services/account';
 
@@ -56,6 +61,7 @@ function renderPage() {
 
 describe('MinhaConta - assinatura de e-mail', () => {
   beforeEach(() => {
+    mockUserId = 1;
     vi.mocked(api.get).mockReset();
     vi.mocked(api.put).mockReset();
     vi.mocked(api.del).mockReset();
@@ -202,5 +208,30 @@ describe('MinhaConta - assinatura de e-mail', () => {
     fireEvent.click(getByRole('button', { name: 'Salvar texto' }));
     const alert = await findByRole('alert');
     expect(alert.textContent).toContain('2000 caracteres');
+  });
+
+  it('troca de usuario sem recarregar: nao reaproveita assinatura nem rascunho do anterior', async () => {
+    // Mesmo QueryClient (logout nao o limpa): a chave precisa incluir o id do usuario.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => (
+      <QueryClientProvider client={qc}>
+        <ConfirmProvider>
+          <MinhaConta />
+        </ConfirmProvider>
+      </QueryClientProvider>
+    );
+    vi.mocked(api.get).mockResolvedValueOnce({ ...BASE_SIGNATURE, text: 'Assinatura da Maria' });
+    const view = render(tree());
+    const textarea = (await view.findByLabelText('Texto (opcional)')) as HTMLTextAreaElement;
+    expect(textarea.value).toBe('Assinatura da Maria');
+    fireEvent.change(textarea, { target: { value: 'rascunho nao salvo da Maria' } });
+
+    mockUserId = 2;
+    vi.mocked(api.get).mockResolvedValueOnce({ ...BASE_SIGNATURE, name: 'Joao', text: 'Assinatura do Joao' });
+    view.rerender(tree());
+    await waitFor(() =>
+      expect((view.getByLabelText('Texto (opcional)') as HTMLTextAreaElement).value).toBe('Assinatura do Joao'),
+    );
+    expect(vi.mocked(api.get)).toHaveBeenCalledTimes(2);
   });
 });

@@ -177,6 +177,33 @@ describe('Email template routes — quote_po (preview)', () => {
     expect(res.body.text).toContain('Kindly confirm receipt.');
   });
 
+  it('fallback devolve rascunho editavel com placeholders crus (sem dados de exemplo nem data URI)', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_po', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    const draft = res.body.draft as { subject: string; htmlBody: string; textBody: string };
+    expect(draft.subject).toBe('{{subject}}');
+    for (const placeholder of ['{{message}}', '{{senderSignature}}', '{{companyLogo}}', '{{forwarderInfo}}']) {
+      expect(draft.htmlBody).toContain(placeholder);
+    }
+    for (const placeholder of ['{{messageText}}', '{{senderSignatureText}}', '{{forwarderInfo}}', '{{destinationPort}}']) {
+      expect(draft.textBody).toContain(placeholder);
+    }
+    // Nada do preview de exemplo pode virar corpo salvo.
+    for (const body of [draft.htmlBody, draft.textBody]) {
+      expect(body).not.toContain('Kindly confirm receipt.');
+      expect(body).not.toContain('Maria Santos');
+      expect(body).not.toContain('data:image/png;base64,');
+    }
+    expect(draft.textBody.indexOf('{{messageText}}')).toBeGreaterThan(draft.textBody.indexOf('Dear all,'));
+  });
+
   it('preview de template do banco com placeholders novos renderiza mensagem, assinatura e logo', async () => {
     const cookieHeader = await loginAsAdmin();
     prismaMock.emailTemplate.findUnique.mockResolvedValue({

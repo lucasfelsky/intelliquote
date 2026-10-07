@@ -249,6 +249,23 @@ export function renderPoPlainText(vars: QuotePoVars): string {
     'Dear all,',
     '',
     ...(message ? [normalizeNewlines(message).replace(/\n/g, '\r\n'), ''] : []),
+    ...poPlainTextBodyLines(vars.destinationPort || 'as agreed', vars.forwarderInfo || ''),
+  ].join('\r\n');
+  return `${body}\r\n\r\n${composeSignature(vars).signature.plainText}`;
+}
+
+// Rascunho EDITAVEL do texto puro (tela Templates sem linha no banco): mantem os
+// placeholders crus. Nunca usar o preview renderido como rascunho -- ao salvar,
+// mensagem/assinatura de exemplo virariam texto fixo e o envio ignoraria o modal.
+export function buildPoTextTemplateDraft(): string {
+  const [first, ...rest] = poPlainTextBodyLines('{{destinationPort}}', '{{forwarderInfo}}');
+  // {{messageText}} renderiza "mensagem\r\n\r\n" ou '' (sem linha vazia sobrando).
+  const body = ['Dear all,', '', `{{messageText}}${first}`, ...rest].join('\r\n');
+  return `${body}\r\n\r\n{{senderSignatureText}}`;
+}
+
+function poPlainTextBodyLines(destinationPort: string, forwarderInfo: string): string[] {
+  return [
     'Attached is our PO. We look forward to receiving the PI soon.',
     'Please inform estimated cargo delivery date:',
     '',
@@ -282,12 +299,11 @@ export function renderPoPlainText(vars: QuotePoVars): string {
     '- Manufacturing date and Expiring/Validity date',
     '- All data must be digital (handwritten will no longer be accepted).',
     '',
-    `Port of Destination: ${vars.destinationPort || 'as agreed'}`,
+    `Port of Destination: ${destinationPort}`,
     '',
     "Here below is the forwarder's contact info:",
-    vars.forwarderInfo || '',
-  ].join('\r\n');
-  return `${body}\r\n\r\n${composeSignature(vars).signature.plainText}`;
+    forwarderInfo,
+  ];
 }
 
 export interface RenderedQuotePo {

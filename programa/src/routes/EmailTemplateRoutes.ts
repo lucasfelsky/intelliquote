@@ -18,6 +18,7 @@ import {
   renderPoPlainText,
   renderPoHtmlFromTemplate,
   renderPoTextFromTemplate,
+  buildPoTextTemplateDraft,
   loadFileTemplate as loadPoFileTemplate,
   PO_TEMPLATE_KEY,
   type QuotePoVars,
@@ -234,6 +235,14 @@ emailTemplateRoutes.get(
             isActive: false,
             source: 'fallback',
             locale,
+            // Rascunho editavel com placeholders crus ({{message}},
+            // {{senderSignature}}, {{companyLogo}}...). O html/text acima sao so'
+            // preview com dados de exemplo e NAO podem virar o corpo salvo.
+            draft: {
+              subject: '{{subject}}',
+              htmlBody: loadPoFileTemplate(),
+              textBody: buildPoTextTemplateDraft(),
+            },
           });
         }
 
