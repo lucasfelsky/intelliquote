@@ -157,24 +157,6 @@ export function ItensTab(props: ItensTabProps) {
         {editable && (
           <td>
             <div style={{ display: 'flex', gap: 6 }}>
-              {!legacy && (
-                <select
-                  aria-label="Mover para PO"
-                  value={it.purchaseOrderId !== null && orderIds.has(it.purchaseOrderId) ? String(it.purchaseOrderId) : ''}
-                  disabled={moveItem.isPending}
-                  onChange={(e) =>
-                    moveItem.mutate({
-                      itemId: it.id,
-                      poId: e.target.value === '' ? null : Number(e.target.value),
-                    })
-                  }
-                >
-                  <option value="">Sem PO</option>
-                  {orders.map((o) => (
-                    <option key={o.id} value={o.id}>{o.label}</option>
-                  ))}
-                </select>
-              )}
               <button type="button" className="ghost-button" onClick={() => onEditItem(it)}>
                 Editar
               </button>

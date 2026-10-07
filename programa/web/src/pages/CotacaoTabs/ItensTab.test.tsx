@@ -124,13 +124,19 @@ describe('ItensTab', () => {
     expect(deletePurchaseOrder).not.toHaveBeenCalled();
   });
 
-  it('select "Mover para PO" move o item', async () => {
+  it('modo agrupado não tem select "Mover para PO" e mantém Editar/Remover', () => {
     renderTab({
       purchaseOrders: [po(1, 1, 'PO 1'), po(2, 2, 'PO 2')],
-      items: [item(1, 'A', 1)],
+      items: [item(1, 'A', 1), item(2, 'B', null)],
     });
-    fireEvent.change(screen.getByLabelText('Mover para PO'), { target: { value: '2' } });
-    await waitFor(() => expect(moveItemToPurchaseOrder).toHaveBeenCalledWith(1, 2));
+    expect(screen.queryByLabelText('Mover para PO')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    const row = within(screen.getByTestId('item-row-1'));
+    expect(row.getByRole('button', { name: 'Editar' })).toBeTruthy();
+    expect(row.getByRole('button', { name: 'Remover' })).toBeTruthy();
+    const unassignedRow = within(screen.getByTestId('item-row-2'));
+    expect(unassignedRow.getByRole('button', { name: 'Editar' })).toBeTruthy();
+    expect(unassignedRow.getByRole('button', { name: 'Remover' })).toBeTruthy();
   });
 
   it('arrastar e soltar item em outro grupo move o item', async () => {
