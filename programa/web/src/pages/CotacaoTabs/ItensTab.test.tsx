@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, fireEvent, waitFor, screen, within } from '@testing-library/react';
+import { render, fireEvent, waitFor, screen, within, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ItensTab, type ItensTabItem } from './ItensTab';
 
@@ -17,7 +17,7 @@ vi.mock('@/services/purchaseOrders', () => ({
 }));
 
 import {
-  createPurchaseOrder, deletePurchaseOrder, moveItemToPurchaseOrder, renamePurchaseOrder,
+  createPurchaseOrder, deletePurchaseOrder, moveItemToPurchaseOrder, renamePurchaseOrder, reorderPurchaseOrders,
 } from '@/services/purchaseOrders';
 
 const confirmMock = vi.fn(async (_opts?: unknown) => true);
@@ -321,5 +321,42 @@ describe('ItensTab', () => {
     fireEvent.blur(input);
     await waitFor(() => expect(renamePurchaseOrder).toHaveBeenCalledTimes(1));
     expect(renamePurchaseOrder).toHaveBeenCalledWith(1, '4500012345');
+  });
+
+  it('renomear: o aria-labelledby do grupo continua resolvendo para o input durante a edição', () => {
+    renderTab({
+      purchaseOrders: [po(1, 1, 'PO 1'), po(2, 2, 'PO 2')],
+      items: [item(1, 'A', 1)],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Renomear PO 1' }));
+    const input = screen.getByLabelText('Rótulo da PO');
+    const labelledBy = screen.getByTestId('po-group-1').getAttribute('aria-labelledby');
+    expect(labelledBy).toBeTruthy();
+    expect(document.getElementById(labelledBy as string)).toBe(input);
+  });
+
+  it('foco pendente órfão é descartado após 5 s e não rouba o foco num re-render tardio', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const orders = [po(1, 1, 'PO 1'), po(2, 2, 'PO 2'), po(3, 3, 'PO 3')];
+      const items = [item(1, 'A', 1), item(2, 'B', 2), item(3, 'C', 3)];
+      const { rerenderTab } = renderTab({ purchaseOrders: orders, items });
+      fireEvent.click(screen.getByRole('button', { name: 'Descer PO 1' }));
+      await waitFor(() => expect(reorderPurchaseOrders).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByRole('status').textContent).toContain('agora é a'));
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      rerenderTab({
+        purchaseOrders: [po(2, 1, 'PO 2'), po(1, 2, 'PO 1'), po(3, 3, 'PO 3')],
+        items,
+      });
+      const down1 = screen.getByRole('button', { name: 'Descer PO 1' });
+      const up1 = screen.getByRole('button', { name: 'Subir PO 1' });
+      expect(document.activeElement).not.toBe(down1);
+      expect(document.activeElement).not.toBe(up1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
