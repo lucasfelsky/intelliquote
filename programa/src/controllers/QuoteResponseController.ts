@@ -1083,6 +1083,22 @@ export class QuoteResponseController {
         });
       }
 
+      // E-mail ja saiu: falha ao marcar "PO enviada" na cotacao nao vira 5xx.
+      try {
+        await prisma.quoteRequest.update({
+          where: { id: quoteRequest.id },
+          data: { purchaseOrderSentAt: new Date() },
+        });
+      } catch (error) {
+        logger.error(
+          {
+            quoteRequestId: quoteRequest.id,
+            reason: error instanceof Error ? error.message : String(error),
+          },
+          'Falha ao marcar PO enviada; e-mail ja enviado.',
+        );
+      }
+
       return res.status(200).json({
         status: sendResult.status,
         to: primaryContact.email,

@@ -163,6 +163,7 @@ model QuoteRequest {
   deadlineAt      DateTime?
   status          QuoteRequestStatus       @default(open)
   closedAt        DateTime?
+  purchaseOrderSentAt DateTime?
   createdById     Int?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt

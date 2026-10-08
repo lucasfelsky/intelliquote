@@ -248,6 +248,9 @@ export const quoteRequestUpdateSchema = z.object({
   deadlineAt: nullableOptionalDateField,
 });
 
+// Filtro da lista de Cotacoes: PO enviada (true) / nao enviada (false); ausente = sem filtro.
+export const quoteRequestPoSentQuerySchema = z.enum(['true', 'false']).optional();
+
 // Porto de origem informado pelo fornecedor: ''/espacos viram null (herda a geral); max 120.
 // undefined = ausente (no update, nao mexe).
 const originPortField = z.preprocess(

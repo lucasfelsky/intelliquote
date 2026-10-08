@@ -7,6 +7,7 @@ import { SupplierRegretNotificationService } from '../services/SupplierRegretNot
 import {
   quoteRequestCloseSchema,
   quoteRequestCreateSchema,
+  quoteRequestPoSentQuerySchema,
   quoteRequestUpdateSchema,
 } from '../validators/domain';
 import {
@@ -568,6 +569,9 @@ function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
   const status = parseOptionalQueryString(req.query.status);
   const incoterm = parseOptionalQueryString(req.query.incoterm);
   const includeDeleted = parseOptionalQueryString(req.query.includeDeleted) === 'true';
+  const poSent = quoteRequestPoSentQuerySchema.parse(
+    parseOptionalQueryString(req.query.poSent) ?? undefined,
+  );
   const where: Prisma.QuoteRequestWhereInput = {};
 
   if (!includeDeleted) {
@@ -588,6 +592,12 @@ function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
 
   if (incoterm && (Object.values(Incoterm) as string[]).includes(incoterm)) {
     where.desiredIncoterm = { has: incoterm as Incoterm };
+  }
+
+  if (poSent === 'true') {
+    where.purchaseOrderSentAt = { not: null };
+  } else if (poSent === 'false') {
+    where.purchaseOrderSentAt = null;
   }
 
   return where;
