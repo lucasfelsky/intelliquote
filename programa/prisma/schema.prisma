@@ -275,6 +275,8 @@ model QuoteResponse {
   paymentTermsDays  Int
   leadTimeDays      Int?
   notes             String?
+  // Porto de origem declarado pelo fornecedor (geral da proposta); NULL = nao informado
+  originPort        String?
   submittedAt       DateTime                @default(now())
   version           Int                     @default(1)
   isWinner          Boolean                 @default(false)
@@ -309,6 +311,8 @@ model QuoteResponseItem {
   targetPrice        Decimal?  @db.Decimal(12, 2)
   // [{ incoterm, unitPrice, totalPrice }]; NULL = proposta legada de preco unico
   incotermPrices     Json?
+  // Origem informada pelo fornecedor so quando difere da geral; NULL = herda a geral
+  originPort         String?
   deletedAt          DateTime?
 
   quoteResponse    QuoteResponse    @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
@@ -604,6 +608,8 @@ model SupplierPortalResponse {
   totalPriceCurrency String                       @default("USD")
   validityDays       Int                          @default(30)
   notes              String?
+  // Porto de origem geral declarado pelo fornecedor; NULL = nao informado
+  originPort         String?
   // Versao da resposta corrente. Cada revisao do fornecedor incrementa este
   // contador; as versoes anteriores ficam preservadas (read-only) em
   // SupplierPortalResponseRevision.
@@ -641,7 +647,8 @@ model SupplierPortalResponseRevision {
   totalPriceCurrency String
   validityDays       Int
   notes              String?
-  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes }]
+  originPort         String?
+  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes, originPort }]
   items              Json
   submittedAt        DateTime
   supersededAt       DateTime            @default(now())
@@ -662,6 +669,8 @@ model SupplierPortalResponseItem {
   notes              String?
   // [{ incoterm, unitPrice, totalPrice }]; NULL = proposta legada de preco unico
   incotermPrices     Json?
+  // Origem informada pelo fornecedor so quando difere da geral; NULL = herda a geral
+  originPort         String?
   deletedAt          DateTime?
   response           SupplierPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   quoteRequestItem   QuoteRequestItem       @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)

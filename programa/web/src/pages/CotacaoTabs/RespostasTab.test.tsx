@@ -11,13 +11,19 @@ vi.mock('@/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
   ApiError: class ApiError extends Error {},
 }));
-vi.mock('@/services/quoteResponses', () => ({
+vi.mock('@/services/quoteResponses', async (importOriginal) => {
+  // Helpers puros de origem vem do modulo real; o resto segue mockado.
+  const actual = await importOriginal<typeof import('@/services/quoteResponses')>();
+  return {
+  effectiveOriginPort: actual.effectiveOriginPort,
+  isOriginOverride: actual.isOriginOverride,
   listQuoteResponses: vi.fn(),
   createQuoteResponse: vi.fn(),
   deleteQuoteResponse: vi.fn(),
   INCOTERMS: ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'],
   messageOf: (e: unknown) => String(e),
-}));
+  };
+});
 vi.mock('@/services/dispatch', () => ({
   previewQuoteResponseReply: vi.fn(),
   replyToQuoteResponse: vi.fn(),
@@ -339,5 +345,83 @@ describe('RespostasTab', () => {
         ],
       })
     );
+  });
+  describe('origem do fornecedor (informativa)', () => {
+    const originItems = [
+      {
+        id: 601, quoteResponseId: 44, quoteRequestItemId: 5,
+        unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+        notes: null, productName: 'Resina Epóxi', originPort: null,
+      },
+      {
+        id: 602, quoteResponseId: 44, quoteRequestItemId: 6,
+        unitPrice: 20, quantity: 2, totalPrice: 40, leadTimeDays: 10,
+        notes: null, productName: 'Catalisador Y', originPort: 'Ningbo',
+      },
+    ];
+
+    it('14. mostra "Origem: Shanghai" e o badge "1 item de outra origem"', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        { ...response, id: 44, originPort: 'Shanghai', items: originItems },
+      ]);
+      const { findByText } = renderTab();
+      await findByText('Origem: Shanghai');
+      await findByText('1 item de outra origem');
+    });
+
+    it('15. pop-up de itens: coluna Origem (herdado sem badge; override com "difere da geral")', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        { ...response, id: 44, originPort: 'Shanghai', items: originItems },
+      ]);
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+      const [, , dialogC] = getDialogs(container);
+      expect(within(dialogC).getByRole('columnheader', { name: 'Origem' })).toBeTruthy();
+      const rows = within(dialogC).getAllByRole('row');
+      const inherited = rows.find((row) => row.textContent?.includes('Resina Epóxi'))!;
+      const overridden = rows.find((row) => row.textContent?.includes('Catalisador Y'))!;
+      expect(inherited.textContent).toContain('Shanghai');
+      expect(inherited.textContent).not.toContain('difere da geral');
+      expect(overridden.textContent).toContain('Ningbo');
+      expect(overridden.textContent).toContain('difere da geral');
+    });
+
+    it('16. resposta legada (tudo null): "Origem: —", sem badge e sem coluna Origem', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        {
+          ...response, id: 45, originPort: null,
+          items: originItems.map((item) => ({ ...item, originPort: null })),
+        },
+      ]);
+      const { container, findByText, getByRole, queryByText } = renderTab();
+      await findByText('Origem: —');
+      expect(queryByText(/de outra origem/)).toBeNull();
+      fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+      const [, , dialogC] = getDialogs(container);
+      expect(within(dialogC).queryByRole('columnheader', { name: 'Origem' })).toBeNull();
+    });
+
+    it('17. normalizeResponse mapeia originPort geral e do item (ausente -> null)', async () => {
+      const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+        '@/services/quoteResponses',
+      );
+      const normalized = actual.normalizeResponse({
+        ...response,
+        originPort: ' Shanghai ',
+        items: [
+          { id: 1, quoteResponseId: 42, quoteRequestItemId: 5, unitPrice: '1', quantity: 1, totalPrice: '1', originPort: 'Ningbo' },
+          { id: 2, quoteResponseId: 42, quoteRequestItemId: 6, unitPrice: '1', quantity: 1, totalPrice: '1' },
+        ],
+      });
+      expect(normalized.originPort).toBe('Shanghai');
+      expect(normalized.items?.map((item) => item.originPort)).toEqual(['Ningbo', null]);
+      expect(actual.normalizeResponse({ ...response }).originPort).toBeNull();
+      expect(actual.isOriginOverride('shanghai', 'Shanghai ')).toBe(false);
+      expect(actual.isOriginOverride('Ningbo', 'Shanghai')).toBe(true);
+      expect(actual.isOriginOverride('Ningbo', null)).toBe(true);
+      expect(actual.effectiveOriginPort(null, 'Shanghai')).toBe('Shanghai');
+      expect(actual.effectiveOriginPort(' Ningbo ', 'Shanghai')).toBe('Ningbo');
+    });
   });
 });

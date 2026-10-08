@@ -227,6 +227,57 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     expect((revision!.items as any[]).some((i) => Array.isArray(i.incotermPrices))).toBe(true);
   });
 
+  it('portal grava origem geral e por item (override vs igual a geral), espelha e fotografa na revisao', async () => {
+    const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
+    const token = await prisma.supplierPortalToken.create({ data: {
+      tokenHash: `origin-${quote.id}`, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id, createdById: adminId,
+      expiresAt: new Date(Date.now() + 86400000),
+    } });
+    const build = (general: string | null, origins: Array<string | null>, prices = [10, 100]) => ({
+      tokenId: token.id, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id,
+      payload: { currency: 'USD', incoterm: 'FOB' as const, paymentTermsDays: 30,
+        exchangeRate: 5, totalPrice: prices.reduce((a, b) => a + b, 0), validityDays: 30,
+        originPort: general,
+        items: payload(suppliers[0].id, prices).items.map((i: any, idx: number) => ({
+          ...i, totalPrice: i.unitPrice * i.quantity,
+          incotermPrices: [{ incoterm: 'FOB' as const, unitPrice: i.unitPrice }],
+          originPort: origins[idx],
+        })),
+      },
+    });
+    const first = await SupplierPortalResponseService.submit(build('Shanghai', ['Ningbo', 'shanghai ']));
+    const byItem = (rows: any[]) => rows.sort((a, b) => a.quoteRequestItemId - b.quoteRequestItemId).map((r) => r.originPort);
+    const portalItems = await prisma.supplierPortalResponseItem.findMany({ where: { responseId: first.portalResponse.id } });
+    expect(byItem(portalItems)).toEqual(['Ningbo', null]);
+    expect((await prisma.supplierPortalResponse.findUnique({ where: { id: first.portalResponse.id } })).originPort).toBe('Shanghai');
+    const mirrored = await prisma.quoteResponseItem.findMany({
+      where: { quoteResponseId: first.quoteResponse.id, deletedAt: null },
+    });
+    expect(byItem(mirrored)).toEqual(['Ningbo', null]);
+    expect((await prisma.quoteResponse.findUnique({ where: { id: first.quoteResponse.id } })).originPort).toBe('Shanghai');
+    // Legado: coluna omitida le null (heranca de uma geral tambem nula).
+    const legacy = await prisma.supplierPortalResponseItem.create({ data: {
+      responseId: first.portalResponse.id, quoteRequestItemId: quote.items[0].id,
+      unitPrice: 1, quantity: 1, totalPrice: 1,
+    } });
+    expect(legacy.originPort).toBeNull();
+    await prisma.supplierPortalResponseItem.delete({ where: { id: legacy.id } });
+
+    await SupplierPortalResponseService.submit(build('Qingdao', [null, 'Busan'], [20, 1]));
+    const revision = await prisma.supplierPortalResponseRevision.findFirst({ where: { portalTokenId: token.id } });
+    expect(revision!.originPort).toBe('Shanghai');
+    expect(byItem(revision!.items as any[])).toEqual(['Ningbo', null]);
+    const current = await prisma.supplierPortalResponse.findUnique({
+      where: { id: first.portalResponse.id }, include: { items: true },
+    });
+    expect(current.originPort).toBe('Qingdao');
+    expect(byItem(current.items)).toEqual([null, 'Busan']);
+    // Informativo: o landed cost segue a formula de sempre (20*1 + 1*1 = 21 USD * 5 = 105).
+    expect(Number((await prisma.quoteResponse.findUnique({ where: { id: first.quoteResponse.id } })).totalLandedCost)).toBe(105);
+  });
+
   it('portal nao reutiliza cambio USD ao receber proposta em EUR sem taxa', async () => {
     const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
     const token = await prisma.supplierPortalToken.create({ data: {

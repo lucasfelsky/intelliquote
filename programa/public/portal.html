@@ -512,6 +512,18 @@
         min-height: 70px;
       }
       .form-grid .full { grid-column: 1 / -1; }
+      .origin-override-hint {
+        grid-column: 1 / -1;
+        justify-self: start;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--portal-warn-fg);
+        background: var(--portal-warn-bg);
+        border: 1px solid var(--portal-warn-line);
+        border-radius: 999px;
+        padding: 2px 10px;
+      }
+      .origin-override-hint[hidden] { display: none; }
       .incoterm-prices {
         margin: 0 0 14px;
         padding: 14px;
@@ -762,7 +774,7 @@
             ? 'localhost'
             : 'firebase-hosting';
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v57-20261007');
+          document.documentElement.setAttribute('data-portal-version', 'v58-20261007');
         } catch (bootErr) {
           /* swallow: nao e critico */
         }
@@ -940,6 +952,13 @@
             </table>`;
         }
 
+        // Comparacao de portos (espelha sameOrigin do backend): sem caixa/espacos, ambos preenchidos.
+        function sameOriginPort(a, b) {
+          const left = String(a == null ? '' : a).trim().toLowerCase();
+          const right = String(b == null ? '' : b).trim().toLowerCase();
+          return !!left && !!right && left === right;
+        }
+
         function renderForm(data, readOnly) {
           const items = data.quoteRequest.items || [];
           const resp = data.response || null;
@@ -968,8 +987,17 @@
           const quoteIncoterms = Array.from(new Set(data.quoteRequest.desiredIncoterm || []));
           const hasQuoteIncoterms = quoteIncoterms.length > 0;
           const buyerNotesText = String(data.quoteRequest.description || '').trim();
+          // Origem geral inicial: a da resposta salva (revisao) ou a do pedido.
+          const generalOriginInitial = String(
+            (resp && resp.originPort) || data.quoteRequest.originPort || 'Shanghai',
+          );
           const renderItemRow = (it) => {
                   const prev = respItemById[it.id];
+                  // Origem por item: so e "propria" quando difere da geral; senao herda.
+                  const prevOrigin = prev && prev.originPort ? String(prev.originPort).trim() : '';
+                  const originOverride = !!prevOrigin && !sameOriginPort(prevOrigin, generalOriginInitial);
+                  const itemOriginValue = originOverride ? prevOrigin : generalOriginInitial;
+                  const itemOriginInherit = originOverride ? '0' : '1';
                   const unitVal = prev ? esc(prev.unitPrice) : '';
                   const qtyVal = prev && prev.quantity != null ? prev.quantity : it.quantity;
                   const leadVal = prev && prev.leadTimeDays != null ? prev.leadTimeDays : '';
@@ -1021,6 +1049,10 @@
                     <label>Lead time (days)
                       <input type="number" min="0" name="leadTimeDays" value="${leadVal}" />
                     </label>
+                    <label>Origin port
+                      <input type="text" name="itemOriginPort" value="${esc(itemOriginValue)}" maxlength="120" data-origin-inherit="${itemOriginInherit}" data-origin-initial-inherit="${itemOriginInherit}" />
+                    </label>
+                    <span class="origin-override-hint" data-origin-override hidden>Different from proposal origin</span>
                   </div>
                 </div>`;
           };
@@ -1062,7 +1094,7 @@
                   </select>
                 </label>
                 <label>Origin port
-                  <input type="text" name="originPort" value="${esc(data.quoteRequest.originPort || 'Shanghai')}" maxlength="120" />
+                  <input type="text" name="originPort" value="${esc(generalOriginInitial)}" maxlength="120" />
                 </label>
                 <label>Payment terms (days)
                   <input type="number" min="0" max="365" name="paymentTermsDays" value="${defaultPaymentTermsDays}" required />
@@ -1127,10 +1159,59 @@
           form.querySelectorAll('.item-row input').forEach((el) => {
             el.addEventListener('input', updateTotal);
           });
+          // Origin port por item: pre-preenchido com a origem geral e acompanhando-a
+          // enquanto nao for editado (data-origin-inherit="1"). Item igual a geral = herda.
+          const generalOrigin = form.elements.namedItem('originPort');
+          const itemOriginInputs = () =>
+            Array.from(form.querySelectorAll('input[name="itemOriginPort"]'));
+          const refreshOriginBadges = () => {
+            const general = generalOrigin ? generalOrigin.value : '';
+            itemOriginInputs().forEach((el) => {
+              const row = el.closest('.item-row');
+              const hint = row ? row.querySelector('[data-origin-override]') : null;
+              if (!hint) return;
+              hint.hidden = !(
+                el.getAttribute('data-origin-inherit') === '0' && !sameOriginPort(el.value, general)
+              );
+            });
+          };
+          if (generalOrigin) {
+            generalOrigin.addEventListener('input', () => {
+              itemOriginInputs().forEach((el) => {
+                if (el.getAttribute('data-origin-inherit') === '1') el.value = generalOrigin.value;
+              });
+              refreshOriginBadges();
+            });
+          }
+          itemOriginInputs().forEach((el) => {
+            el.addEventListener('input', () => {
+              const value = el.value.trim();
+              const general = generalOrigin ? generalOrigin.value : '';
+              el.setAttribute(
+                'data-origin-inherit',
+                !value || sameOriginPort(value, general) ? '1' : '0',
+              );
+              refreshOriginBadges();
+            });
+            el.addEventListener('blur', () => {
+              if (!el.value.trim()) {
+                el.value = generalOrigin ? generalOrigin.value : '';
+                el.setAttribute('data-origin-inherit', '1');
+                refreshOriginBadges();
+              }
+            });
+          });
           const incotermSelect = form.elements.namedItem('incoterm');
           if (incotermSelect) incotermSelect.addEventListener('change', updateTotal);
           document.getElementById('portal-cancel').addEventListener('click', () => {
             form.reset();
+            itemOriginInputs().forEach((el) => {
+              el.setAttribute(
+                'data-origin-inherit',
+                el.getAttribute('data-origin-initial-inherit') || '1',
+              );
+            });
+            refreshOriginBadges();
             updateTotal();
           });
           form.addEventListener('submit', async (event) => {
@@ -1143,6 +1224,7 @@
               if (submit) submit.disabled = false;
             }
           });
+          refreshOriginBadges();
           updateTotal();
         }
 
@@ -1170,6 +1252,8 @@
 
         function collectItems(form) {
           const items = [];
+          const generalOriginField = form.elements.namedItem('originPort');
+          const generalOriginValue = generalOriginField ? generalOriginField.value : '';
           form.querySelectorAll('.item-row').forEach((row) => {
             const quoteRequestItemId = Number(row.getAttribute('data-item-id'));
             const incotermInputs = row.querySelectorAll('input[name="incotermPrice"]');
@@ -1187,6 +1271,10 @@
             const totalPrice = unitPrice * quantity;
             const leadTimeDaysRaw = row.querySelector('input[name="leadTimeDays"]').value;
             const prevNotes = row.getAttribute('data-prev-notes');
+            // Origem por item: null = herda a origem geral (igual a geral ou vazio).
+            const originField = row.querySelector('input[name="itemOriginPort"]');
+            const originValue = originField ? originField.value.trim() : '';
+            const originInherits = !originField || originField.getAttribute('data-origin-inherit') === '1';
             const item = {
               quoteRequestItemId,
               unitPrice,
@@ -1194,6 +1282,10 @@
               totalPrice,
               leadTimeDays: leadTimeDaysRaw === '' ? null : Number(leadTimeDaysRaw),
               notes: prevNotes ? prevNotes : null,
+              originPort:
+                originInherits || !originValue || sameOriginPort(originValue, generalOriginValue)
+                  ? null
+                  : originValue,
             };
             if (incotermPrices.length) item.incotermPrices = incotermPrices;
             items.push(item);
@@ -1217,6 +1309,7 @@
             totalPriceCurrency: currency,
             validityDays: Number(form.elements.namedItem('validityDays').value),
             notes: form.elements.namedItem('notes').value || null,
+            originPort: form.elements.namedItem('originPort').value.trim() || null,
             exchangeRate: currency === 'BRL' ? null : exchangeRate,
             items: collectItems(form),
           };

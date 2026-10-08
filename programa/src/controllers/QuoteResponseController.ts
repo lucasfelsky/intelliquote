@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
 import { priceForComparison } from '../utils/quoteBasket';
+import { buildItemOrigins, normalizeItemOriginPort } from '../utils/originPort';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
@@ -107,6 +108,8 @@ export class QuoteResponseController {
             totalPrice,
             leadTimeDays: item.leadTimeDays ?? null,
             notes: item.notes ?? null,
+            // null = herda a origem geral da proposta
+            originPort: normalizeItemOriginPort(item.originPort, payload.originPort),
           };
         });
         finalOfferedPrice = total;
@@ -159,6 +162,7 @@ export class QuoteResponseController {
         paymentTermsDays: payload.paymentTermsDays,
         leadTimeDays: payload.leadTimeDays ?? null,
         notes: payload.notes ?? null,
+        originPort: payload.originPort ?? null,
         submittedAt: payload.submittedAt,
         createdById: req.user?.id ?? null,
         items: {
@@ -361,15 +365,22 @@ export class QuoteResponseController {
           const currencyChanged =
             payload.currency !== undefined &&
             payload.currency !== existingQuoteResponse.currency;
-          const previousItems = currencyChanged
-            ? []
-            : await prisma.quoteResponseItem.findMany({
-                where: { quoteResponseId: id, deletedAt: null },
-                select: { quoteRequestItemId: true, incotermPrices: true },
-              });
+          const previousItems = await prisma.quoteResponseItem.findMany({
+            where: { quoteResponseId: id, deletedAt: null },
+            select: { quoteRequestItemId: true, incotermPrices: true, originPort: true },
+          });
           const previousMap = new Map(
-            previousItems.map((prev) => [prev.quoteRequestItemId, prev.incotermPrices]),
+            currencyChanged
+              ? []
+              : previousItems.map((prev) => [prev.quoteRequestItemId, prev.incotermPrices]),
           );
+          const previousOrigins = new Map(
+            previousItems.map((prev) => [prev.quoteRequestItemId, prev.originPort]),
+          );
+          const finalGeneralOrigin =
+            payload.originPort !== undefined
+              ? payload.originPort
+              : existingQuoteResponse.originPort;
           let total = 0;
           itemsToUpdate = payload.items.map((item) => {
             const totalPrice = item.unitPrice * item.quantity;
@@ -381,6 +392,13 @@ export class QuoteResponseController {
               totalPrice,
               leadTimeDays: item.leadTimeDays ?? null,
               notes: item.notes ?? null,
+              // undefined = preserva a origem anterior do item; null/igual a geral = herda
+              originPort: normalizeItemOriginPort(
+                item.originPort === undefined
+                  ? previousOrigins.get(item.quoteRequestItemId)
+                  : item.originPort,
+                finalGeneralOrigin,
+              ),
               incotermPrices: previousMap.has(item.quoteRequestItemId)
                 ? mergeManualIncotermPrices(
                     previousMap.get(item.quoteRequestItemId),
@@ -454,6 +472,7 @@ export class QuoteResponseController {
           paymentTermsDays: payload.paymentTermsDays,
           leadTimeDays: payload.leadTimeDays,
           notes: payload.notes,
+          originPort: payload.originPort,
           submittedAt: payload.submittedAt,
           version: shouldIncrementVersion(payload) ? { increment: 1 } : undefined,
           items: itemsToUpdate !== undefined ? { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToUpdate } : undefined,
@@ -1080,7 +1099,14 @@ export class QuoteResponseController {
           },
           items: {
             where: { deletedAt: null },
-            select: { leadTimeDays: true, quoteRequestItemId: true, unitPrice: true, quantity: true },
+            select: {
+              leadTimeDays: true,
+              quoteRequestItemId: true,
+              unitPrice: true,
+              quantity: true,
+              originPort: true,
+              quoteRequestItem: { select: { productName: true } },
+            },
           },
         },
       });
@@ -1261,6 +1287,9 @@ export class QuoteResponseController {
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
             : null,
           leadTimeDays,
+          // Informativo (nao entra em score/landed): origem geral + origem efetiva por item.
+          originPort: sourceResponse?.originPort ?? null,
+          itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
         };
       });
 
@@ -1331,7 +1360,14 @@ export class QuoteResponseController {
           },
           items: {
             where: { deletedAt: null },
-            select: { leadTimeDays: true, quoteRequestItemId: true, unitPrice: true, quantity: true },
+            select: {
+              leadTimeDays: true,
+              quoteRequestItemId: true,
+              unitPrice: true,
+              quantity: true,
+              originPort: true,
+              quoteRequestItem: { select: { productName: true } },
+            },
           },
         },
       });
@@ -1424,6 +1460,9 @@ export class QuoteResponseController {
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
             : null,
           leadTimeDays,
+          // Informativo (nao entra em score/landed): origem geral + origem efetiva por item.
+          originPort: sourceResponse?.originPort ?? null,
+          itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
         };
       });
 
@@ -1822,6 +1861,7 @@ function shouldIncrementVersion(payload: Record<string, unknown>): boolean {
     'paymentTermsDays',
     'leadTimeDays',
     'notes',
+    'originPort',
     'submittedAt',
   ].some((field) => field in payload);
 }

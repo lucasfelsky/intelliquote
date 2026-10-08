@@ -831,6 +831,151 @@ describe('Comparison routes', () => {
       expect(resultById.get(12)).toBeNull();
     });
 
+    it('devolve originPort e itemOrigins por proposta sem alterar score nem landed cost (informativo)', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'USD',
+        items: [1, 2].map((id) => ({ id, quantity: 1 })),
+      });
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: null,
+      });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+      const buildResponses = (withOrigin: boolean) => [
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 40,
+          insuranceCost: 10,
+          otherFees: 20,
+          importDuty: 14,
+          ipi: 5,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          isWinner: false,
+          originPort: withOrigin ? 'Shanghai' : null,
+          items: [
+            {
+              quoteRequestItemId: 1,
+              quantity: 1,
+              unitPrice: 40,
+              leadTimeDays: 12,
+              originPort: null,
+              quoteRequestItem: { productName: 'Produto A' },
+            },
+            {
+              quoteRequestItemId: 2,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 18,
+              originPort: withOrigin ? 'Ningbo' : null,
+              quoteRequestItem: { productName: 'Produto B' },
+            },
+          ],
+          supplier: { id: 101, name: 'Global Parts Ltd', contacts: [] },
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 120,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 10,
+          importDuty: 10,
+          ipi: 4,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'FOB',
+          paymentTermsDays: 30,
+          isWinner: false,
+          originPort: null,
+          items: [
+            {
+              quoteRequestItemId: 1,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 25,
+              originPort: null,
+              quoteRequestItem: { productName: 'Produto A' },
+            },
+            {
+              quoteRequestItemId: 2,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 25,
+              originPort: null,
+              quoteRequestItem: { productName: 'Produto B' },
+            },
+          ],
+          supplier: { id: 102, name: 'Nihon Trading', contacts: [] },
+        },
+      ];
+
+      type Result = {
+        quoteResponseId: number;
+        totalScore: number;
+        totalLandedCost: number;
+        originPort: string | null;
+        itemOrigins: Array<{
+          quoteRequestItemId: number;
+          productName: string | null;
+          originPort: string | null;
+          overridden: boolean;
+        }>;
+      };
+      const weights = { priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 };
+
+      prismaMock.quoteResponse.findMany.mockResolvedValue(buildResponses(true));
+      const withOrigin = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+      prismaMock.quoteResponse.findMany.mockResolvedValue(buildResponses(false));
+      const withoutOrigin = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(withOrigin.status).toBe(200);
+      expect(withoutOrigin.status).toBe(200);
+
+      const byId = (body: { results: Result[] }) =>
+        new Map(body.results.map((item) => [item.quoteResponseId, item]));
+      const a = byId(withOrigin.body);
+      const b = byId(withoutOrigin.body);
+
+      expect(a.get(11)?.originPort).toBe('Shanghai');
+      expect(a.get(11)?.itemOrigins).toEqual([
+        { quoteRequestItemId: 1, productName: 'Produto A', originPort: 'Shanghai', overridden: false },
+        { quoteRequestItemId: 2, productName: 'Produto B', originPort: 'Ningbo', overridden: true },
+      ]);
+      expect(a.get(12)?.originPort).toBeNull();
+      expect(a.get(12)?.itemOrigins.every((item) => item.originPort === null && !item.overridden)).toBe(true);
+      expect(b.get(11)?.itemOrigins.every((item) => item.originPort === null)).toBe(true);
+
+      // Informativo: score, landed cost e vencedora identicos com ou sem origem.
+      for (const id of [11, 12]) {
+        expect(a.get(id)?.totalScore).toBe(b.get(id)?.totalScore);
+        expect(a.get(id)?.totalLandedCost).toBe(b.get(id)?.totalLandedCost);
+      }
+      expect(withOrigin.body.winnerQuoteResponseId).toBe(withoutOrigin.body.winnerQuoteResponseId);
+    });
+
     it('com 1 proposta retorna responseCount 1 (sem gate de minimo 2)', async () => {
       const cookies = await loginAs('viewer');
 

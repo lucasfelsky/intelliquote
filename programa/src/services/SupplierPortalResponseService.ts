@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../utils/http';
 import { sumQuoteItems } from '../utils/quoteBasket';
+import { normalizeItemOriginPort } from '../utils/originPort';
 import { QuoteComparisonService } from './QuoteComparisonService';
 import { ExchangeRateService } from './ExchangeRateService';
 import type {
@@ -83,6 +84,7 @@ export class SupplierPortalResponseService {
       totalPriceCurrency: input.payload.totalPriceCurrency ?? currency,
       validityDays: input.payload.validityDays,
       notes: input.payload.notes ?? null,
+      originPort: input.payload.originPort ?? null,
       submitterIp: input.meta?.ip ?? null,
       submitterUserAgent: input.meta?.userAgent ?? null,
     };
@@ -96,6 +98,8 @@ export class SupplierPortalResponseService {
           totalPrice: new Prisma.Decimal(item.totalPrice),
           leadTimeDays: item.leadTimeDays ?? null,
           notes: item.notes ?? null,
+          // null = herda a origem geral da proposta (igual a geral ou vazio)
+          originPort: normalizeItemOriginPort(item.originPort, input.payload.originPort),
           incotermPrices: prices
             ? prices.map((p) => ({
                 incoterm: p.incoterm,
@@ -131,6 +135,7 @@ export class SupplierPortalResponseService {
             totalPriceCurrency: existing.totalPriceCurrency,
             validityDays: existing.validityDays,
             notes: existing.notes,
+            originPort: existing.originPort,
             submittedAt: existing.submittedAt,
             items: existing.items.map((it) => ({
               quoteRequestItemId: it.quoteRequestItemId,
@@ -140,6 +145,7 @@ export class SupplierPortalResponseService {
               leadTimeDays: it.leadTimeDays,
               notes: it.notes,
               incotermPrices: it.incotermPrices ?? null,
+              originPort: it.originPort ?? null,
             })),
           },
         });
@@ -271,6 +277,7 @@ async function syncQuoteResponseFromPortal(
     paymentTermsDays: input.portalResponse.paymentTermsDays,
     leadTimeDays,
     notes: input.portalResponse.notes ?? null,
+    originPort: input.portalResponse.originPort ?? null,
     submittedAt,
   } satisfies Partial<Prisma.QuoteResponseUncheckedCreateInput>;
 
@@ -281,6 +288,7 @@ async function syncQuoteResponseFromPortal(
     totalPrice: item.totalPrice,
     leadTimeDays: item.leadTimeDays,
     notes: item.notes,
+    originPort: item.originPort ?? null,
     incotermPrices: (item.incotermPrices as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
   }));
 
