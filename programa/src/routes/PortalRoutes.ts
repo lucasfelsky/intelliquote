@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
-import { SupplierPortalService } from '../services/SupplierPortalService';
+import { PORTAL_INVALID_LINK_MESSAGE, SupplierPortalService } from '../services/SupplierPortalService';
 import { SupplierPortalResponseService } from '../services/SupplierPortalResponseService';
 import { SupplierResponseNotificationService } from '../services/SupplierResponseNotificationService';
 import { ExchangeRateService } from '../services/ExchangeRateService';
@@ -10,6 +10,9 @@ import { formatIncoterms } from '../utils/incoterm';
 import { prisma } from '../lib/prisma';
 
 const portalRoutes = Router();
+
+const PORTAL_INVALID_PAYLOAD_MESSAGE =
+  'The submitted data is invalid. Please review the form and try again.';
 
 interface PortalAttemptBucket {
   invalidCount: number;
@@ -60,7 +63,7 @@ const portalRateLimiter = rateLimit({
   keyGenerator: (req) => getClientKey(req),
   handler: (req, res) => {
     res.status(429).json({
-      message: 'Muitas tentativas em pouco tempo. Aguarde um instante antes de tentar novamente.',
+      message: 'Too many requests in a short time. Please wait a moment and try again.',
     });
   },
 });
@@ -68,9 +71,26 @@ const portalRateLimiter = rateLimit({
 function getTokenFromRequest(req: Request): string {
   const raw = req.params.token;
   if (typeof raw !== 'string' || raw.length < 16) {
-    throw new HttpError(404, 'Link invalido ou expirado.');
+    throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
   }
   return raw;
+}
+
+// Mensagens ao fornecedor para erros nao-HttpError: mantem o status de
+// handleControllerError (compartilhado com o comprador) e troca so o texto.
+function portalFallbackMessage(status: number): string {
+  switch (status) {
+    case 400:
+      return PORTAL_INVALID_PAYLOAD_MESSAGE;
+    case 404:
+      return PORTAL_INVALID_LINK_MESSAGE;
+    case 409:
+      return 'Your proposal could not be saved due to a conflict. Please reload the page and try again.';
+    case 503:
+      return 'The service is temporarily unavailable. Please try again in a few minutes.';
+    default:
+      return 'Something went wrong on our side. Please try again in a few minutes.';
+  }
 }
 
 function getRequestMeta(req: Request) {
@@ -101,7 +121,7 @@ async function buildPortalView(tokenId: number) {
     },
   });
   if (!token) {
-    throw new HttpError(404, 'Link invalido ou expirado.');
+    throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
   }
 
   const response = await SupplierPortalResponseService.getByTokenId(token.id);
@@ -209,7 +229,7 @@ portalRoutes.get('/api/portal/:token', portalRateLimiter, async (req, res) => {
     if (isLocked(key)) {
       res.status(429).json({
         message:
-          'Acesso temporariamente bloqueado apos multiplas tentativas invalidas. Tente novamente em alguns minutos.',
+          'Access temporarily blocked after several invalid attempts. Please try again in a few minutes.',
       });
       return;
     }
@@ -239,7 +259,7 @@ portalRoutes.get('/api/portal/:token', portalRateLimiter, async (req, res) => {
     return;
   }
   const handled = handleControllerError(error);
-  res.status(handled.status).json({ message: handled.message });
+  res.status(handled.status).json({ message: portalFallbackMessage(handled.status) });
   }
 });
 
@@ -260,7 +280,7 @@ portalRoutes.get('/api/portal/:token/respond', portalRateLimiter, async (req, re
       return;
     }
     const handled = handleControllerError(error);
-    res.status(handled.status).json({ message: handled.message });
+    res.status(handled.status).json({ message: portalFallbackMessage(handled.status) });
   }
 });
 
@@ -277,7 +297,7 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
     // (sobrescreve a atual e guarda a anterior no historico). Nao ha mais 409.
     const parsed = supplierPortalResponseSubmitSchema.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ message: 'Os dados enviados sao invalidos.' });
+      res.status(400).json({ message: PORTAL_INVALID_PAYLOAD_MESSAGE });
       return;
     }
 
@@ -327,7 +347,7 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
       return;
     }
     const handled = handleControllerError(error);
-    res.status(handled.status).json({ message: handled.message });
+    res.status(handled.status).json({ message: portalFallbackMessage(handled.status) });
   }
 });
 

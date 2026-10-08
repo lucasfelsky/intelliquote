@@ -89,6 +89,7 @@ export class SmtpMailer implements Mailer {
             filename: att.filename,
             content: att.content,
             contentType: att.contentType,
+            ...(att.cid ? { cid: att.cid, contentDisposition: 'inline' as const } : {}),
           })),
           headers: msg.tags?.length ? { 'X-Tags': msg.tags.join(',') } : undefined,
         });

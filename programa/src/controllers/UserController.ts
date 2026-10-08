@@ -3,10 +3,14 @@ import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
+  accountSignatureImageSchema,
+  accountSignatureTextSchema,
   userCreateSchema,
   userPasswordResetSchema,
   userUpdateSchema,
 } from '../validators/domain';
+import { detectImage } from '../utils/imageInfo';
+import { buildPoSenderSignature } from '../mailer/renderQuotePo';
 import {
   buildPaginatedResponse,
   handleControllerError,
@@ -21,6 +25,45 @@ import { hashPassword } from '../utils/password';
 const userInclude = {
   role: true,
 } as const;
+
+// Limites da imagem da assinatura de e-mail (sem redimensionamento no
+// servidor: fora do limite, o usuario precisa reduzir a imagem).
+const SIGNATURE_IMAGE_MAX_BYTES = 300 * 1024;
+const SIGNATURE_IMAGE_MAX_WIDTH = 600;
+const SIGNATURE_IMAGE_MAX_HEIGHT = 300;
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+
+function decodeSignatureImage(contentBase64: string): Buffer {
+  const withoutPrefix = contentBase64.startsWith('data:')
+    ? contentBase64.slice(contentBase64.indexOf(',') + 1)
+    : contentBase64;
+  const normalized = withoutPrefix.replace(/\s+/g, '');
+  // Teto do base64 antes de decodificar (evita alocar buffer enorme).
+  if (normalized.length > Math.ceil((SIGNATURE_IMAGE_MAX_BYTES * 4) / 3) + 8) {
+    throw new HttpError(400, 'A imagem excede o limite de 300 KB.');
+  }
+  if (normalized.length === 0 || normalized.length % 4 !== 0 || !BASE64_PATTERN.test(normalized)) {
+    throw new HttpError(400, 'Conteudo base64 da imagem invalido.');
+  }
+  return Buffer.from(normalized, 'base64');
+}
+
+function serializeSignatureImage(row: {
+  imageData: Uint8Array | null;
+  imageMimeType: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  imageSize: number | null;
+}) {
+  if (!row.imageData || !row.imageMimeType) return null;
+  return {
+    dataUri: `data:${row.imageMimeType};base64,${Buffer.from(row.imageData).toString('base64')}`,
+    mimeType: row.imageMimeType,
+    width: row.imageWidth,
+    height: row.imageHeight,
+    size: row.imageSize,
+  };
+}
 
 export class UserController {
   static async create(req: Request, res: Response): Promise<Response> {
@@ -193,6 +236,191 @@ export class UserController {
       });
 
       return res.status(200).json(serializeUser(updatedUser));
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // ---- Assinatura de e-mail do PROPRIO usuario (/account/email-signature*) ----
+  // Sempre sobre req.user.id: nenhuma rota recebe :id (admin nao edita a
+  // assinatura de outro usuario -- ela sai em e-mail externo em nome da pessoa).
+
+  static async getEmailSignature(req: Request, res: Response): Promise<Response> {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Autenticacao necessaria.' });
+      }
+
+      const signature = await prisma.userEmailSignature.findUnique({
+        where: { userId: user.id },
+      });
+
+      return res.status(200).json({
+        name: user.name,
+        email: user.email,
+        text: signature?.text ?? null,
+        image: signature ? serializeSignatureImage(signature) : null,
+        fallbackSignature: buildPoSenderSignature({
+          name: user.name,
+          email: user.email,
+          hasImage: false,
+        }).plainText.replace(/\r\n/g, '\n'),
+      });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async updateEmailSignatureText(req: Request, res: Response): Promise<Response> {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Autenticacao necessaria.' });
+      }
+
+      const parsedBody = accountSignatureTextSchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
+        return res.status(400).json({
+          message: parsedBody.error.issues[0]?.message ?? 'Dados invalidos.',
+        });
+      }
+
+      const { text } = parsedBody.data;
+      await prisma.userEmailSignature.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, text },
+        update: { text },
+      });
+
+      await AuditLogService.log({
+        entityType: 'user',
+        entityId: user.id,
+        action: 'update_email_signature_text',
+        performedById: user.id,
+        metadata: { hasText: text !== null, length: text?.length ?? 0 },
+      });
+
+      return res.status(200).json({ text });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async updateEmailSignatureImage(req: Request, res: Response): Promise<Response> {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Autenticacao necessaria.' });
+      }
+
+      const parsedBody = accountSignatureImageSchema.safeParse(req.body ?? {});
+      if (!parsedBody.success) {
+        return res.status(400).json({
+          message: parsedBody.error.issues[0]?.message ?? 'Dados invalidos.',
+        });
+      }
+
+      const buffer = decodeSignatureImage(parsedBody.data.contentBase64);
+      if (buffer.length === 0) {
+        throw new HttpError(400, 'Conteudo da imagem vazio.');
+      }
+      if (buffer.length > SIGNATURE_IMAGE_MAX_BYTES) {
+        throw new HttpError(400, 'A imagem excede o limite de 300 KB.');
+      }
+
+      const detected = detectImage(buffer);
+      if (!detected) {
+        throw new HttpError(400, 'Arquivo de imagem invalido. Use PNG ou JPEG.');
+      }
+      if (detected.mimeType !== parsedBody.data.fileType) {
+        throw new HttpError(
+          400,
+          'O tipo da imagem enviada nao corresponde ao conteudo do arquivo.',
+        );
+      }
+      if (
+        detected.width > SIGNATURE_IMAGE_MAX_WIDTH ||
+        detected.height > SIGNATURE_IMAGE_MAX_HEIGHT
+      ) {
+        throw new HttpError(
+          400,
+          `Redimensione para no maximo ${SIGNATURE_IMAGE_MAX_WIDTH}x${SIGNATURE_IMAGE_MAX_HEIGHT} px.`,
+        );
+      }
+
+      const imageFields = {
+        imageData: new Uint8Array(buffer),
+        imageMimeType: detected.mimeType,
+        imageWidth: detected.width,
+        imageHeight: detected.height,
+        imageSize: buffer.length,
+      };
+      await prisma.userEmailSignature.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, ...imageFields },
+        update: imageFields,
+      });
+
+      const image = {
+        dataUri: `data:${detected.mimeType};base64,${buffer.toString('base64')}`,
+        mimeType: detected.mimeType,
+        width: detected.width,
+        height: detected.height,
+        size: buffer.length,
+      };
+
+      // Os bytes da imagem NAO entram no AuditLog.
+      await AuditLogService.log({
+        entityType: 'user',
+        entityId: user.id,
+        action: 'update_email_signature_image',
+        performedById: user.id,
+        metadata: {
+          mimeType: detected.mimeType,
+          width: detected.width,
+          height: detected.height,
+          size: buffer.length,
+        },
+      });
+
+      return res.status(200).json({ image });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  static async deleteEmailSignatureImage(req: Request, res: Response): Promise<Response> {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Autenticacao necessaria.' });
+      }
+
+      // updateMany: idempotente (sem registro, nao ha o que zerar).
+      await prisma.userEmailSignature.updateMany({
+        where: { userId: user.id },
+        data: {
+          imageData: null,
+          imageMimeType: null,
+          imageWidth: null,
+          imageHeight: null,
+          imageSize: null,
+        },
+      });
+
+      await AuditLogService.log({
+        entityType: 'user',
+        entityId: user.id,
+        action: 'delete_email_signature_image',
+        performedById: user.id,
+      });
+
+      return res.status(204).send();
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
