@@ -526,6 +526,227 @@ describe('Quote response routes', () => {
   });
 });
 
+describe('Quote response manual - item temporariamente indisponivel', () => {
+  const previousPrices = [
+    { incoterm: 'FOB', unitPrice: '10.00', totalPrice: '100.00' },
+    { incoterm: 'CIF', unitPrice: '12.50', totalPrice: '125.00' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('POST: item indisponivel grava zeros/DbNull e o total soma so os disponiveis', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 101 });
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    const response = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        items: [
+          { quoteRequestItemId: 11, unitPrice: 2, quantity: 50 },
+          // preco/quantidade/lead/origem enviados para item indisponivel sao ignorados
+          {
+            quoteRequestItemId: 12,
+            isUnavailable: true,
+            unitPrice: 99,
+            quantity: 7,
+            leadTimeDays: 9,
+            originPort: 'Ningbo',
+            notes: 'Sem estoque',
+          },
+        ],
+      });
+
+    expect(response.status).toBe(201);
+    const createData = prismaMock.quoteResponse.create.mock.calls[0][0].data;
+    expect(Number(createData.offeredPrice)).toBe(100);
+    const [available, unavailable] = createData.items.create;
+    expect(available).toMatchObject({ quoteRequestItemId: 11, unitPrice: 2, quantity: 50, totalPrice: 100 });
+    expect(available.isUnavailable).toBeUndefined();
+    expect(unavailable).toEqual({
+      quoteRequestItemId: 12,
+      unitPrice: 0,
+      quantity: 0,
+      totalPrice: 0,
+      leadTimeDays: null,
+      notes: 'Sem estoque',
+      originPort: null,
+      incotermPrices: Prisma.DbNull,
+      isUnavailable: true,
+    });
+  });
+
+  it('POST: item disponivel sem unitPrice -> 400', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    const response = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        items: [{ quoteRequestItemId: 11, quantity: 50 }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(prismaMock.quoteResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('PUT: item indisponivel nao herda incotermPrices/origem e o total soma so os disponiveis', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.findUnique.mockResolvedValue({
+      id: 55,
+      quoteRequestId: 1,
+      supplierId: 2,
+      offeredPrice: '100.00',
+      currency: 'USD',
+      exchangeRate: '5.00',
+      freightCost: '0',
+      insuranceCost: '0',
+      otherFees: '0',
+      importDuty: '0',
+      ipi: '0',
+      pis: '0',
+      cofins: '0',
+      offeredIncoterm: 'FOB',
+      originPort: 'Shanghai',
+      quoteRequest: { status: 'open' },
+      supplier: { status: 'active', acceptedIncoterms: ['FOB', 'CIF'] },
+    });
+    prismaMock.quoteResponse.update.mockResolvedValue({ id: 55 });
+    prismaMock.quoteResponseItem.findMany.mockResolvedValue([
+      { quoteRequestItemId: 11, incotermPrices: previousPrices, originPort: 'Ningbo' },
+      { quoteRequestItemId: 12, incotermPrices: previousPrices, originPort: 'Ningbo' },
+    ]);
+
+    const response = await request(app)
+      .put('/api/v1/quote-responses/55')
+      .set('Cookie', cookies)
+      .send({
+        items: [
+          { quoteRequestItemId: 11, unitPrice: 10, quantity: 10 },
+          { quoteRequestItemId: 12, isUnavailable: true },
+        ],
+      });
+
+    expect(response.status).toBe(200);
+    const data = prismaMock.quoteResponse.update.mock.calls[0][0].data;
+    expect(Number(data.offeredPrice)).toBe(100);
+    expect(data.items.create[0].incotermPrices).toEqual(previousPrices);
+    expect(data.items.create[1]).toMatchObject({
+      quoteRequestItemId: 12,
+      unitPrice: 0,
+      quantity: 0,
+      totalPrice: 0,
+      leadTimeDays: null,
+      originPort: null,
+      isUnavailable: true,
+    });
+    expect(data.items.create[1].incotermPrices).toBe(Prisma.DbNull);
+  });
+
+  describe('PUT em proposta vencedora (isWinner)', () => {
+    async function putOnWinner(items: Array<Record<string, unknown>>) {
+      const cookies = await loginAs('comprador');
+      prismaMock.quoteResponse.findUnique.mockResolvedValue({
+        id: 55,
+        quoteRequestId: 1,
+        supplierId: 2,
+        offeredPrice: '100.00',
+        currency: 'USD',
+        exchangeRate: '5.00',
+        freightCost: '0',
+        insuranceCost: '0',
+        otherFees: '0',
+        importDuty: '0',
+        ipi: '0',
+        pis: '0',
+        cofins: '0',
+        offeredIncoterm: 'FOB',
+        isWinner: true,
+        quoteRequest: { status: 'open' },
+        supplier: { status: 'active', acceptedIncoterms: ['FOB'] },
+      });
+      prismaMock.quoteResponse.update.mockResolvedValue({ id: 55 });
+      prismaMock.quoteResponseItem.findMany.mockResolvedValue([]);
+      const response = await request(app)
+        .put('/api/v1/quote-responses/55')
+        .set('Cookie', cookies)
+        .send({ items });
+      expect(response.status).toBe(200);
+      return prismaMock.quoteResponse.update.mock.calls[0][0].data;
+    }
+
+    it('item indisponivel no payload zera isWinner (nao pode mais vencer)', async () => {
+      const data = await putOnWinner([
+        { quoteRequestItemId: 11, unitPrice: 10, quantity: 10 },
+        { quoteRequestItemId: 12, isUnavailable: true },
+      ]);
+      expect(data.isWinner).toBe(false);
+    });
+
+    it('sem item indisponivel o PUT nao mexe em isWinner (chave ausente)', async () => {
+      const data = await putOnWinner([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
+      expect(data.isWinner).toBeUndefined();
+    });
+  });
+
+  it('PUT: todos os itens indisponiveis -> offeredPrice 0; item disponivel sem unitPrice -> 400', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.findUnique.mockResolvedValue({
+      id: 55,
+      quoteRequestId: 1,
+      supplierId: 2,
+      offeredPrice: '100.00',
+      currency: 'USD',
+      exchangeRate: '5.00',
+      freightCost: '0',
+      insuranceCost: '0',
+      otherFees: '0',
+      importDuty: '0',
+      ipi: '0',
+      pis: '0',
+      cofins: '0',
+      offeredIncoterm: 'FOB',
+      quoteRequest: { status: 'open' },
+      supplier: { status: 'active', acceptedIncoterms: ['FOB'] },
+    });
+    prismaMock.quoteResponse.update.mockResolvedValue({ id: 55 });
+    prismaMock.quoteResponseItem.findMany.mockResolvedValue([]);
+
+    const allUnavailable = await request(app)
+      .put('/api/v1/quote-responses/55')
+      .set('Cookie', cookies)
+      .send({ items: [{ quoteRequestItemId: 11, isUnavailable: true }] });
+    expect(allUnavailable.status).toBe(200);
+    expect(Number(prismaMock.quoteResponse.update.mock.calls[0][0].data.offeredPrice)).toBe(0);
+
+    prismaMock.quoteResponse.update.mockClear();
+    const missingPrice = await request(app)
+      .put('/api/v1/quote-responses/55')
+      .set('Cookie', cookies)
+      .send({ items: [{ quoteRequestItemId: 11, quantity: 5 }] });
+    expect(missingPrice.status).toBe(400);
+    expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
+  });
+});
+
 // O login e' limitado por rate limit (por IP): reaproveita o cookie ja obtido por papel.
 const cookieCache = new Map<string, string[]>();
 

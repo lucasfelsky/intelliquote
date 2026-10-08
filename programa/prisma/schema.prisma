@@ -314,6 +314,8 @@ model QuoteResponseItem {
   incotermPrices     Json?
   // Origem informada pelo fornecedor so quando difere da geral; NULL = herda a geral
   originPort         String?
+  // Fornecedor marcou 'Temporarily unavailable'; precos/quantidade gravados como 0 e ignorados em somas
+  isUnavailable      Boolean   @default(false)
   deletedAt          DateTime?
 
   quoteResponse    QuoteResponse    @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
@@ -649,7 +651,7 @@ model SupplierPortalResponseRevision {
   validityDays       Int
   notes              String?
   originPort         String?
-  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes, originPort }]
+  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes, originPort, isUnavailable }]
   items              Json
   submittedAt        DateTime
   supersededAt       DateTime            @default(now())
@@ -672,6 +674,8 @@ model SupplierPortalResponseItem {
   incotermPrices     Json?
   // Origem informada pelo fornecedor so quando difere da geral; NULL = herda a geral
   originPort         String?
+  // Fornecedor marcou 'Temporarily unavailable'; precos/quantidade gravados como 0 e ignorados em somas
+  isUnavailable      Boolean                @default(false)
   deletedAt          DateTime?
   response           SupplierPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   quoteRequestItem   QuoteRequestItem       @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)

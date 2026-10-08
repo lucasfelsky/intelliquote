@@ -524,6 +524,60 @@
         padding: 2px 10px;
       }
       .origin-override-hint[hidden] { display: none; }
+      /* Item "Temporarily unavailable": checkbox por item que bloqueia preco/qtd/lead time/origem. */
+      .item-unavailable-toggle {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--portal-ink-soft);
+        cursor: pointer;
+      }
+      .item-unavailable-toggle input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        margin: 0;
+        flex: 0 0 20px;
+        cursor: pointer;
+        accent-color: var(--portal-primary-700);
+      }
+      .item-unavailable-hint {
+        margin: 0 0 12px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--portal-warn-fg);
+        background: var(--portal-warn-bg);
+        border: 1px solid var(--portal-warn-line);
+        border-radius: var(--portal-radius-sm);
+        padding: 8px 12px;
+      }
+      .item-unavailable-hint[hidden] { display: none; }
+      .item-row.is-unavailable {
+        background: #f6f8f7;
+        border-style: dashed;
+      }
+      .item-row.is-unavailable .incoterm-prices,
+      .item-row.is-unavailable .form-grid {
+        opacity: 0.55;
+      }
+      .item-row.is-unavailable input:disabled {
+        background: #eef2f0;
+        cursor: not-allowed;
+      }
+      .portal-all-unavailable {
+        margin: 0 0 14px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--portal-warn-fg);
+        background: var(--portal-warn-bg);
+        border: 1px solid var(--portal-warn-line);
+        border-radius: var(--portal-radius-sm);
+        padding: 12px 16px;
+      }
+      .portal-all-unavailable[hidden] { display: none; }
       .incoterm-prices {
         margin: 0 0 14px;
         padding: 14px;
@@ -692,6 +746,7 @@
         .portal-hero { padding: 22px 20px; }
         .portal-main { padding: 22px 18px 24px; }
         .form-grid { grid-template-columns: 1fr; }
+        .item-unavailable-toggle { width: 100%; }
         .incoterm-prices { padding: 12px; }
         .buyer-notes-card { padding: 14px; gap: 10px; }
         .buyer-notes-text { font-size: 14px; }
@@ -774,7 +829,7 @@
             ? 'localhost'
             : 'firebase-hosting';
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v58-20261007');
+          document.documentElement.setAttribute('data-portal-version', 'v59-20261008');
         } catch (bootErr) {
           /* swallow: nao e critico */
         }
@@ -993,14 +1048,20 @@
           );
           const renderItemRow = (it) => {
                   const prev = respItemById[it.id];
+                  // Revisao de item ja enviado como "Temporarily unavailable": campos voltam
+                  // vazios (o servidor grava zeros), quantidade volta a pedida e origem herda a geral.
+                  const prevUnavailable = !!(prev && prev.isUnavailable);
                   // Origem por item: so e "propria" quando difere da geral; senao herda.
-                  const prevOrigin = prev && prev.originPort ? String(prev.originPort).trim() : '';
+                  const prevOrigin =
+                    prev && !prevUnavailable && prev.originPort ? String(prev.originPort).trim() : '';
                   const originOverride = !!prevOrigin && !sameOriginPort(prevOrigin, generalOriginInitial);
                   const itemOriginValue = originOverride ? prevOrigin : generalOriginInitial;
                   const itemOriginInherit = originOverride ? '0' : '1';
-                  const unitVal = prev ? esc(prev.unitPrice) : '';
-                  const qtyVal = prev && prev.quantity != null ? prev.quantity : it.quantity;
-                  const leadVal = prev && prev.leadTimeDays != null ? prev.leadTimeDays : '';
+                  const unitVal = prev && !prevUnavailable ? esc(prev.unitPrice) : '';
+                  const qtyVal =
+                    prev && !prevUnavailable && prev.quantity != null ? prev.quantity : it.quantity;
+                  const leadVal =
+                    prev && !prevUnavailable && prev.leadTimeDays != null ? prev.leadTimeDays : '';
                   return `
                 <div class="item-row" data-item-id="${it.id}"${prev && prev.notes ? ` data-prev-notes="${esc(prev.notes)}"` : ''}>
                   <h3>${esc(it.productName)}</h3>
@@ -1008,6 +1069,11 @@
                     <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
                     ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
                   </p>
+                  <label class="item-unavailable-toggle">
+                    <input type="checkbox" name="itemUnavailable" ${prevUnavailable ? 'checked' : ''} aria-describedby="item-unavailable-hint-${it.id}" />
+                    <span>Temporarily unavailable</span>
+                  </label>
+                  <p class="item-unavailable-hint" id="item-unavailable-hint-${it.id}" data-unavailable-hint hidden>Not quoted - prices and details for this item will not be sent.</p>
                   ${
                     hasQuoteIncoterms
                       ? `<div class="incoterm-prices" role="group" aria-labelledby="incoterm-prices-title-${it.id}">
@@ -1114,6 +1180,7 @@
               <div id="portal-items">
                 ${renderPricingItems()}
               </div>
+              <p class="portal-all-unavailable" id="portal-all-unavailable" role="status" hidden>All items are marked as temporarily unavailable. Submitting will tell the buyer you cannot supply any item right now.</p>
 
               ${
                 buyerNotesText
@@ -1143,10 +1210,20 @@
           // O exchange rate nao e exibido para o fornecedor; o sistema usa
           // a PTAX do BCB (sugerida pelo backend) ou a taxa que o backend
           // resolver de QuoteResponse previas.
+          const rowIsUnavailable = (row) => row.getAttribute('data-unavailable') === '1';
+          const allUnavailableNotice = document.getElementById('portal-all-unavailable');
           const updateTotal = () => {
             syncMainIncoterm(form);
             let sum = 0;
+            let rowCount = 0;
+            let unavailableCount = 0;
             form.querySelectorAll('.item-row').forEach((row) => {
+              rowCount += 1;
+              // Item indisponivel nao entra no total.
+              if (rowIsUnavailable(row)) {
+                unavailableCount += 1;
+                return;
+              }
               const unit = row.querySelector('input[name="incotermPrice"]')
                 ? mainUnitPrice(form, row)
                 : Number(row.querySelector('input[name="unitPrice"]').value || 0);
@@ -1154,7 +1231,9 @@
               const itemTotal = unit * qty;
               sum += Number.isFinite(itemTotal) ? itemTotal : 0;
             });
-            totalInput.value = sum ? sum.toFixed(2) : '';
+            const allUnavailable = rowCount > 0 && unavailableCount === rowCount;
+            totalInput.value = allUnavailable ? '0.00' : sum ? sum.toFixed(2) : '';
+            if (allUnavailableNotice) allUnavailableNotice.hidden = !allUnavailable;
           };
           form.querySelectorAll('.item-row input').forEach((el) => {
             el.addEventListener('input', updateTotal);
@@ -1170,14 +1249,17 @@
               const row = el.closest('.item-row');
               const hint = row ? row.querySelector('[data-origin-override]') : null;
               if (!hint) return;
-              hint.hidden = !(
-                el.getAttribute('data-origin-inherit') === '0' && !sameOriginPort(el.value, general)
-              );
+              hint.hidden =
+                rowIsUnavailable(row) ||
+                !(el.getAttribute('data-origin-inherit') === '0' && !sameOriginPort(el.value, general));
             });
           };
           if (generalOrigin) {
             generalOrigin.addEventListener('input', () => {
               itemOriginInputs().forEach((el) => {
+                const row = el.closest('.item-row');
+                // Linha indisponivel nao recebe a origem geral (o valor volta ao desmarcar).
+                if (row && rowIsUnavailable(row)) return;
                 if (el.getAttribute('data-origin-inherit') === '1') el.value = generalOrigin.value;
               });
               refreshOriginBadges();
@@ -1201,16 +1283,81 @@
               }
             });
           });
+          // "Temporarily unavailable" por item: bloqueia e limpa visualmente preco(s),
+          // quantidade, lead time e origem. O digitado fica em memoria (stash, nunca
+          // serializado) e volta ao desmarcar.
+          const UNAVAILABLE_FIELDS =
+            'input[name="incotermPrice"], input[name="unitPrice"], input[name="quantity"], input[name="leadTimeDays"], input[name="itemOriginPort"]';
+          const stash = new Map();
+          const setRowUnavailable = (row, on) => {
+            const fields = Array.from(row.querySelectorAll(UNAVAILABLE_FIELDS));
+            if (on) {
+              fields.forEach((field) => {
+                if (!stash.has(field)) {
+                  stash.set(field, {
+                    value: field.value,
+                    inherit: field.getAttribute('data-origin-inherit'),
+                  });
+                }
+                field.value = '';
+                field.disabled = true;
+              });
+            } else {
+              fields.forEach((field) => {
+                const saved = stash.get(field);
+                if (saved) {
+                  field.value = saved.value;
+                  if (field.name === 'itemOriginPort') {
+                    if (saved.inherit !== null) field.setAttribute('data-origin-inherit', saved.inherit);
+                    // Origem herdada acompanha a origem geral ATUAL.
+                    if (saved.inherit === '1' && generalOrigin) field.value = generalOrigin.value;
+                  }
+                  stash.delete(field);
+                }
+                field.disabled = false;
+              });
+            }
+            row.classList.toggle('is-unavailable', on);
+            if (on) row.setAttribute('data-unavailable', '1');
+            else row.removeAttribute('data-unavailable');
+            const unavailableHint = row.querySelector('[data-unavailable-hint]');
+            if (unavailableHint) unavailableHint.hidden = !on;
+            const toggle = row.querySelector('input[name="itemUnavailable"]');
+            if (toggle) toggle.checked = on;
+            refreshOriginBadges();
+            updateTotal();
+          };
+          form.querySelectorAll('input[name="itemUnavailable"]').forEach((box) => {
+            box.addEventListener('change', () => {
+              setRowUnavailable(box.closest('.item-row'), box.checked);
+            });
+          });
           const incotermSelect = form.elements.namedItem('incoterm');
           if (incotermSelect) incotermSelect.addEventListener('change', updateTotal);
           document.getElementById('portal-cancel').addEventListener('click', () => {
             form.reset();
+            // reset() devolve valores e checkboxes ao estado inicial, mas nao desfaz o
+            // bloqueio (disabled/classes) nem o stash: reaplica conforme o checkbox inicial.
+            stash.clear();
+            const unavailableRows = [];
+            form.querySelectorAll('.item-row').forEach((row) => {
+              row.querySelectorAll(UNAVAILABLE_FIELDS).forEach((field) => {
+                field.disabled = false;
+              });
+              row.classList.remove('is-unavailable');
+              row.removeAttribute('data-unavailable');
+              const unavailableHint = row.querySelector('[data-unavailable-hint]');
+              if (unavailableHint) unavailableHint.hidden = true;
+              const toggle = row.querySelector('input[name="itemUnavailable"]');
+              if (toggle && toggle.checked) unavailableRows.push(row);
+            });
             itemOriginInputs().forEach((el) => {
               el.setAttribute(
                 'data-origin-inherit',
                 el.getAttribute('data-origin-initial-inherit') || '1',
               );
             });
+            unavailableRows.forEach((row) => setRowUnavailable(row, true));
             refreshOriginBadges();
             updateTotal();
           });
@@ -1223,6 +1370,10 @@
               const submit = document.getElementById('portal-submit');
               if (submit) submit.disabled = false;
             }
+          });
+          // Estado inicial (modo revisao): itens ja enviados como indisponiveis.
+          form.querySelectorAll('input[name="itemUnavailable"]').forEach((box) => {
+            if (box.checked) setRowUnavailable(box.closest('.item-row'), true);
           });
           refreshOriginBadges();
           updateTotal();
@@ -1256,6 +1407,16 @@
           const generalOriginValue = generalOriginField ? generalOriginField.value : '';
           form.querySelectorAll('.item-row').forEach((row) => {
             const quoteRequestItemId = Number(row.getAttribute('data-item-id'));
+            // Item "Temporarily unavailable": so id, flag e notas (sem preco/qtd/lead/origem).
+            if (row.getAttribute('data-unavailable') === '1') {
+              const unavailableNotes = row.getAttribute('data-prev-notes');
+              items.push({
+                quoteRequestItemId,
+                isUnavailable: true,
+                notes: unavailableNotes ? unavailableNotes : null,
+              });
+              return;
+            }
             const incotermInputs = row.querySelectorAll('input[name="incotermPrice"]');
             const incotermPrices = [];
             incotermInputs.forEach((el) => {
@@ -1343,11 +1504,15 @@
               return;
             }
             await loadPortal();
+            const allItemsUnavailable =
+              payload.items.length > 0 && payload.items.every((item) => item.isUnavailable === true);
             setStatus(
               'success',
-              json.revised
-                ? `Prices revised successfully${json.version ? ' (v' + json.version + ')' : ''}. Thank you!`
-                : 'Proposal submitted successfully. Thank you!',
+              allItemsUnavailable
+                ? 'Response sent: all items marked as temporarily unavailable. Thank you!'
+                : json.revised
+                  ? `Prices revised successfully${json.version ? ' (v' + json.version + ')' : ''}. Thank you!`
+                  : 'Proposal submitted successfully. Thank you!',
             );
           } catch (error) {
             setStatus('error', 'Network error while submitting. Please try again.');

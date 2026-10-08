@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/utils/password';
@@ -824,7 +825,8 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).toContain('class="po-group-title"');
     expect(html).toContain('po-group-head');
     expect(html).toContain('${esc(group.label)}');
-    expect(html).toContain("data-portal-version', 'v58-20261007'");
+    expect(html).toContain("data-portal-version', 'v59-20261008'");
+    expect(html).not.toContain('v58-20261007');
     expect(html).not.toContain('v55-20261006');
     expect(html).not.toContain('v57-20261007');
     expect(html).not.toContain('v56-20261007');
@@ -1143,6 +1145,388 @@ describe('Portal - porto de origem por item (informativo)', () => {
     expect(html).toContain('data-origin-inherit');
     expect(html).toContain('data-origin-initial-inherit');
     expect(html).toContain('Different from proposal origin');
-    expect(html).toContain('v58-');
+    expect(html).toContain('v59-');
+    expect(html).not.toContain('v58-20261007');
+  });
+});
+
+describe('Portal - item temporariamente indisponivel', () => {
+  let counter = 0;
+  let agentSeq = 0;
+  // O rate limiter do portal e por IP + User-Agent (10/min): isola cada requisicao.
+  const uniqueAgent = () => `vitest-unavailable-${(agentSeq += 1)}`;
+
+  const itemRow = (id: number, extra: Record<string, unknown> = {}) => ({
+    id: id * 10,
+    quoteRequestItemId: id,
+    unitPrice: '10.00',
+    quantity: 10,
+    totalPrice: { toString: () => '100.00' },
+    leadTimeDays: null,
+    notes: null,
+    incotermPrices: null,
+    originPort: null,
+    isUnavailable: false,
+    ...extra,
+  });
+  const unavailableRow = (id: number) =>
+    itemRow(id, {
+      unitPrice: '0.00',
+      quantity: 0,
+      totalPrice: { toString: () => '0.00' },
+      isUnavailable: true,
+    });
+
+  function mockEnv(
+    opts: {
+      desiredIncoterm?: string[];
+      existing?: Record<string, unknown> | null;
+      storedItems?: Record<string, unknown>[];
+    } = {},
+  ) {
+    counter += 1;
+    const rawToken = `tok-unavail-${counter}-` + 'u'.repeat(40);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+      id: 120 + counter,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      revokedAt: null,
+      respondedAt: opts.existing ? new Date() : null,
+      accessCount: 0,
+      firstSeenAt: null,
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+    });
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+      desiredIncoterm: opts.desiredIncoterm ?? [],
+    });
+    prismaMock.quoteRequestItem.findMany.mockResolvedValue([
+      { id: 11, productName: 'A' },
+      { id: 12, productName: 'B' },
+      { id: 13, productName: 'C' },
+    ]);
+    prismaMock.__tx.supplierPortalResponse.findUnique.mockResolvedValue(opts.existing ?? null);
+    const stored = {
+      id: 99,
+      version: opts.existing ? 2 : 1,
+      totalPrice: { toString: () => '200.00' },
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      notes: null,
+      originPort: null,
+      submittedAt: new Date(),
+      items: opts.storedItems ?? [itemRow(11), unavailableRow(12), itemRow(13)],
+    };
+    prismaMock.__tx.supplierPortalResponse.create.mockResolvedValue(stored);
+    prismaMock.__tx.supplierPortalResponse.update.mockResolvedValue(stored);
+    prismaMock.__tx.quoteResponse.upsert.mockResolvedValue({ id: 501 });
+    prismaMock.__tx.supplierPortalToken.update.mockResolvedValue({});
+    return rawToken;
+  }
+
+  function respond(rawToken: string, body: Record<string, unknown>) {
+    return request(app)
+      .post(`/api/portal/${rawToken}/respond`)
+      .set('User-Agent', uniqueAgent())
+      .send({
+        currency: 'USD',
+        incoterm: 'FOB',
+        exchangeRate: 5,
+        paymentTermsDays: 30,
+        totalPrice: 200,
+        validityDays: 30,
+        ...body,
+      });
+  }
+
+  const baseItem = (id: number, extra: Record<string, unknown> = {}) => ({
+    quoteRequestItemId: id,
+    unitPrice: 10,
+    quantity: 10,
+    totalPrice: 100,
+    ...extra,
+  });
+  const unavailableItem = (id: number, extra: Record<string, unknown> = {}) => ({
+    quoteRequestItemId: id,
+    isUnavailable: true,
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('1 item indisponivel + 2 cotados: grava zeros/null/DbNull e o total soma so os cotados', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      items: [baseItem(11), unavailableItem(12, { notes: 'Back in 30 days' }), baseItem(13)],
+    });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    const [first, second, third] = created.data.items.create;
+    expect(first.isUnavailable).toBe(false);
+    expect(third.isUnavailable).toBe(false);
+    expect(second).toMatchObject({
+      quoteRequestItemId: 12,
+      quantity: 0,
+      leadTimeDays: null,
+      originPort: null,
+      isUnavailable: true,
+      notes: 'Back in 30 days',
+    });
+    expect(second.unitPrice.toString()).toBe('0');
+    expect(second.totalPrice.toString()).toBe('0');
+    expect(second.incotermPrices).toBe(Prisma.DbNull);
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(Number(upsert.create.offeredPrice)).toBe(200);
+    expect(upsert.create.items.create.map((i: { isUnavailable: boolean }) => i.isUnavailable)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+    expect(upsert.update.items.create[1].isUnavailable).toBe(true);
+  });
+
+  it('todos indisponiveis com totalPrice 0: 201 e QuoteResponse com offeredPrice 0', async () => {
+    const token = mockEnv({
+      storedItems: [unavailableRow(11), unavailableRow(12), unavailableRow(13)],
+    });
+    const res = await respond(token, {
+      totalPrice: 0,
+      items: [unavailableItem(11), unavailableItem(12), unavailableItem(13)],
+    });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.items.create.every((i: { isUnavailable: boolean }) => i.isUnavailable)).toBe(true);
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(Number(upsert.create.offeredPrice)).toBe(0);
+    expect(upsert.create.leadTimeDays).toBeNull();
+  });
+
+  it('todos indisponiveis em USD sem cambio disponivel (sem taxa enviada e sem PTAX): 201, cambio neutro 1', async () => {
+    const token = mockEnv({
+      storedItems: [unavailableRow(11), unavailableRow(12), unavailableRow(13)],
+    });
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const res = await respond(token, {
+      exchangeRate: null,
+      totalPrice: 0,
+      items: [unavailableItem(11), unavailableItem(12), unavailableItem(13)],
+    });
+
+    expect(res.status).toBe(201);
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(Number(upsert.create.offeredPrice)).toBe(0);
+    expect(Number(upsert.create.exchangeRate)).toBe(1);
+    expect(Number(upsert.create.totalLandedCost)).toBe(0);
+  });
+
+  it('item disponivel em USD sem cambio disponivel continua dando 400 em ingles', async () => {
+    const token = mockEnv();
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const res = await respond(token, {
+      exchangeRate: null,
+      items: [baseItem(11), unavailableItem(12), baseItem(13)],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Exchange rate unavailable');
+  });
+
+  it('todos indisponiveis com totalPrice diferente de 0 -> 400 (total nao confere)', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      totalPrice: 50,
+      items: [unavailableItem(11), unavailableItem(12), unavailableItem(13)],
+    });
+    expect(res.status).toBe(400);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('item indisponivel COM preco/qtd/lead/origem enviados: tudo ignorado (grava 0/null)', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      items: [
+        baseItem(11),
+        unavailableItem(12, {
+          unitPrice: 99,
+          quantity: 5,
+          totalPrice: 495,
+          leadTimeDays: 7,
+          originPort: 'Ningbo',
+          incotermPrices: [{ incoterm: 'FOB', unitPrice: 99 }],
+        }),
+        baseItem(13),
+      ],
+    });
+    expect(res.status).toBe(201);
+    const second = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0].data.items.create[1];
+    expect(second.unitPrice.toString()).toBe('0');
+    expect(second.quantity).toBe(0);
+    expect(second.totalPrice.toString()).toBe('0');
+    expect(second.leadTimeDays).toBeNull();
+    expect(second.originPort).toBeNull();
+    expect(second.incotermPrices).toBe(Prisma.DbNull);
+  });
+
+  it('item disponivel sem unitPrice -> 400 (so indisponivel dispensa preco)', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      items: [
+        { quoteRequestItemId: 11, quantity: 10, totalPrice: 100 },
+        unavailableItem(12),
+        baseItem(13),
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('quoteRequestItemId duplicado (1 disponivel + 1 indisponivel) -> 400', async () => {
+    const token = mockEnv();
+    const res = await respond(token, {
+      totalPrice: 100,
+      items: [baseItem(11), unavailableItem(11)],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Duplicate item/);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('cotacao com 2 incoterms: item indisponivel sem incotermPrices -> 201 (sem PORTAL_OUTDATED)', async () => {
+    const token = mockEnv({ desiredIncoterm: ['FOB', 'CIF'] });
+    const prices = [
+      { incoterm: 'FOB', unitPrice: 10 },
+      { incoterm: 'CIF', unitPrice: 11 },
+    ];
+    const res = await respond(token, {
+      items: [
+        baseItem(11, { incotermPrices: prices }),
+        unavailableItem(12),
+        baseItem(13, { incotermPrices: prices }),
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.code).not.toBe('PORTAL_OUTDATED');
+    const [first, second] = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0].data.items.create;
+    expect(first.incotermPrices).toHaveLength(2);
+    expect(second.incotermPrices).toBe(Prisma.DbNull);
+  });
+
+  it('item disponivel sem incotermPrices em cotacao de 2 incoterms continua dando PORTAL_OUTDATED', async () => {
+    const token = mockEnv({ desiredIncoterm: ['FOB', 'CIF'] });
+    const res = await respond(token, {
+      items: [baseItem(11), unavailableItem(12), baseItem(13)],
+    });
+    expect(res.status).toBe(400);
+    expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('revisao: o snapshot guarda isUnavailable por item da versao anterior', async () => {
+    const token = mockEnv({
+      existing: {
+        id: 77,
+        portalTokenId: 3,
+        version: 1,
+        currency: 'USD',
+        incoterm: 'FOB',
+        paymentTermsDays: 30,
+        totalPrice: { toString: () => '200.00' },
+        totalPriceCurrency: 'USD',
+        validityDays: 30,
+        notes: null,
+        originPort: null,
+        submittedAt: new Date(),
+        items: [itemRow(11), unavailableRow(12), itemRow(13)],
+      },
+      storedItems: [itemRow(11), itemRow(12), itemRow(13)],
+    });
+    const res = await respond(token, {
+      totalPrice: 300,
+      items: [baseItem(11), baseItem(12), baseItem(13)],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.revised).toBe(true);
+    const snapshot = prismaMock.__tx.supplierPortalResponseRevision.create.mock.calls[0][0].data;
+    expect(snapshot.items.map((i: { isUnavailable: boolean }) => i.isUnavailable)).toEqual([
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it('GET do portal devolve isUnavailable nos itens da resposta', async () => {
+    counter += 1;
+    const rawToken = `tok-unavail-get-${counter}-` + 'g'.repeat(40);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+      id: 150 + counter,
+      tokenHash: hashToken(rawToken),
+      expiresAt: new Date(Date.now() + 86400000),
+      revokedAt: null,
+      respondedAt: new Date(),
+      accessCount: 1,
+      firstSeenAt: new Date(),
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+      quoteRequest: {
+        id: 5,
+        requestCode: 'QR-UN',
+        productName: 'Acido',
+        description: null,
+        desiredIncoterm: [],
+        originPort: null,
+        currency: 'USD',
+        deadlineAt: null,
+        items: [
+          { id: 11, itemCode: 'A', productName: 'A', quantity: 10, unit: 'UN', description: null, notes: null },
+          { id: 12, itemCode: 'B', productName: 'B', quantity: 10, unit: 'UN', description: null, notes: null },
+        ],
+      },
+      supplier: { id: 2, name: 'Acme' },
+      supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+    });
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue({
+      id: 99,
+      version: 1,
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      totalPrice: { toString: () => '100.00' },
+      totalPriceCurrency: 'USD',
+      validityDays: 30,
+      notes: null,
+      originPort: null,
+      submittedAt: new Date(),
+      items: [itemRow(11), unavailableRow(12)],
+    });
+    prismaMock.supplierPortalResponseRevision.findMany.mockResolvedValue([]);
+    const res = await request(app).get(`/api/portal/${rawToken}`).set('User-Agent', uniqueAgent());
+    expect(res.status).toBe(200);
+    expect(res.body.response.items.map((i: { isUnavailable: boolean }) => i.isUnavailable)).toEqual([
+      false,
+      true,
+    ]);
+  });
+
+  it('portal.html: checkbox por item, aviso de todos indisponiveis e payload sem preco (estatico)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'portal.html'), 'utf8');
+    expect(html).toContain('name="itemUnavailable"');
+    expect(html).toContain('Temporarily unavailable');
+    expect(html).toContain('id="portal-all-unavailable"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain('isUnavailable: true');
+    expect(html).toContain("data-portal-version', 'v59-20261008'");
+    expect(html).not.toContain('v58-20261007');
   });
 });

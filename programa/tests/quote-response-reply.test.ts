@@ -581,11 +581,11 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponseItem.updateMany).toHaveBeenCalledTimes(2);
     expect(prismaMock.quoteResponseItem.updateMany).toHaveBeenCalledWith({
-      where: { id: 201, quoteResponseId: 88, deletedAt: null },
+      where: { id: 201, quoteResponseId: 88, deletedAt: null, isUnavailable: false },
       data: { targetPrice: 3.2 },
     });
     expect(prismaMock.quoteResponseItem.updateMany).toHaveBeenCalledWith({
-      where: { id: 202, quoteResponseId: 88, deletedAt: null },
+      where: { id: 202, quoteResponseId: 88, deletedAt: null, isUnavailable: false },
       data: { targetPrice: 1.8 },
     });
     // Multi-item NAO grava o bloco agregado (decisao de produto: usa so' os
@@ -617,6 +617,89 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponseItem.updateMany).not.toHaveBeenCalled();
     expect(res.body.html).toContain('Target: 3.20 USD');
+  });
+
+  describe('item temporariamente indisponivel', () => {
+    const responseWithUnavailableItem = {
+      ...multiItemQuoteResponse,
+      items: [
+        multiItemQuoteResponse.items[0],
+        {
+          id: 202,
+          quoteRequestItemId: 22,
+          unitPrice: 0,
+          quantity: 0,
+          totalPrice: 0,
+          leadTimeDays: null,
+          notes: null,
+          targetPrice: null,
+          isUnavailable: true,
+        },
+      ],
+    };
+
+    it('e-mail (HTML e texto) mostra "Temporarily unavailable" sem preco/total do item', async () => {
+      const cookieHeader = await loginAsComprador();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(responseWithUnavailableItem);
+      prismaMock.supplierContact.findFirst.mockResolvedValue({
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      });
+      sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-unavailable' });
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/88/reply')
+        .set('Cookie', cookieHeader)
+        .send({});
+
+      expect(res.status).toBe(200);
+      const call = sendAndLogMock.mock.calls[0][0];
+      expect(call.html).toContain('Temporarily unavailable');
+      expect(call.text).toContain('Temporarily unavailable');
+      // item 22 (indisponivel): sem preco unitario/total (nem o 2.00 / 400.00 de antes)
+      for (const body of [call.html, call.text]) {
+        expect(body).not.toContain('2.00 USD');
+        expect(body).not.toContain('400.00 USD');
+        expect(body).not.toMatch(/(^|[^\d.,])0\.00 USD/);
+      }
+      // item 21 (disponivel) segue com preco normal
+      expect(call.html).toContain('3.50 USD');
+    });
+
+    it('itemTargets de item indisponivel e ignorado (nao grava e nao aparece no e-mail)', async () => {
+      const cookieHeader = await loginAsComprador();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(responseWithUnavailableItem);
+      prismaMock.supplierContact.findFirst.mockResolvedValue({
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      });
+      prismaMock.quoteResponseItem.updateMany.mockResolvedValue({ count: 1 });
+      sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-unavailable-target' });
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/88/reply')
+        .set('Cookie', cookieHeader)
+        .send({
+          itemTargets: [
+            { quoteResponseItemId: 201, targetPrice: 3.2 },
+            { quoteResponseItemId: 202, targetPrice: 1.8 },
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      // o filtro isUnavailable: false no where impede a gravacao do alvo do item indisponivel
+      for (const [arg] of prismaMock.quoteResponseItem.updateMany.mock.calls) {
+        expect(arg.where.isUnavailable).toBe(false);
+      }
+      const call = sendAndLogMock.mock.calls[0][0];
+      expect(call.html).toContain('Target: 3.20 USD');
+      expect(call.html).not.toContain('Target: 1.80 USD');
+      expect(call.text).not.toContain('Target: 1.80 USD');
+    });
   });
 
   it('caminho de 1 item / targetPrice agregado continua funcionando quando nao vem itemTargets', async () => {
