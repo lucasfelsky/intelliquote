@@ -332,6 +332,9 @@ export function ComparacaoTab({
       previewQuoteResponseReply(vars.id, { subject: vars.subject, message: vars.message }),
     onSuccess: (data) => {
       setReplyPreviewData(data);
+      // O assunto padrao (igual ao do envio inicial da cotacao) vem do backend;
+      // o que o usuario ja digitou nunca e' sobrescrito.
+      setReplySubject((prev) => (prev.trim() ? prev : data.subject));
       setReplyModalError(null);
     },
     onError: (err) => setReplyModalError(messageOf(err)),
@@ -354,14 +357,13 @@ export function ComparacaoTab({
 
   function openReplyModal(r: ComparisonResult) {
     if (!r.quoteResponseId) return;
-    const itemName = productName || requestCode;
-    const defaultSubject = `${itemName} - SQ QUIMICA - ${r.supplier?.name}`;
     setReplyTarget(r);
-    setReplySubject(defaultSubject);
+    // Assunto padrao vem do backend (mesmo do envio inicial); ver onSuccess do preview.
+    setReplySubject('');
     setReplyMessage('');
     setReplyPreviewData(null);
     setReplyModalError(null);
-    replyPreviewMutation.mutate({ id: r.quoteResponseId, subject: defaultSubject, message: '' });
+    replyPreviewMutation.mutate({ id: r.quoteResponseId, subject: '', message: '' });
   }
 
   function closeReplyModal() {
@@ -909,6 +911,9 @@ export function ComparacaoTab({
                 <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
                   Para: <strong>{replyPreviewData.to}</strong>
                   {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
+                  Assunto: <strong>{replyPreviewData.subject}</strong>
                 </p>
                 <iframe
                   key={replyPreviewData.html.length}

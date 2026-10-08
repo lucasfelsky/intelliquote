@@ -94,6 +94,54 @@ describe('Email template routes — quote_reply', () => {
     expect(res.body.subject).toContain('SQ QUIMICA');
   });
 
+  it('preview do quote_reply sem customizacao mostra mensagem de exemplo apos "Dear" e a coluna TARGET PRICE', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+    prismaMock.quoteRequest.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_reply', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.html).toContain('TARGET PRICE');
+    expect(res.body.html.indexOf('Could you review the prices below?')).toBeGreaterThan(
+      res.body.html.indexOf('Dear Joao Fornecedor,'),
+    );
+  });
+
+  it('fallback do quote_reply devolve rascunho editavel com placeholders crus (sem dados de exemplo)', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+    prismaMock.quoteRequest.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_reply', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    const draft = res.body.draft as { subject: string; htmlBody: string; textBody: string };
+    expect(draft.subject).toBe('{{subject}}');
+    for (const placeholder of ['{{message}}', '{{itemsHeaderRow}}', '{{itemsRows}}']) {
+      expect(draft.htmlBody).toContain(placeholder);
+    }
+    for (const placeholder of ['{{messageText}}', '{{itemsTextTable}}', '{{supplierContactName}}']) {
+      expect(draft.textBody).toContain(placeholder);
+    }
+    // Nada do preview de exemplo pode virar corpo salvo.
+    for (const body of [draft.htmlBody, draft.textBody]) {
+      expect(body).not.toContain('Could you review the prices below?');
+      expect(body).not.toContain('PI-TPO');
+      expect(body).not.toContain('Joao Fornecedor');
+      expect(body).not.toContain('TARGET PRICE');
+    }
+    expect(draft.textBody.indexOf('{{messageText}}')).toBeGreaterThan(
+      draft.textBody.indexOf('Dear {{supplierContactName}},'),
+    );
+  });
+
   it('preview do quote_reply usa o template salvo no banco quando existe', async () => {
     const cookieHeader = await loginAsAdmin();
     prismaMock.emailTemplate.findUnique.mockResolvedValue({

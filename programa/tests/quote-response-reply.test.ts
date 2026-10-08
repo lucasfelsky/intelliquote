@@ -33,6 +33,10 @@ vi.mock('../src/lib/prisma', () => {
     },
     supplierContact: {
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    mailLog: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
     companyProfile: {
       findUnique: vi.fn(),
@@ -53,11 +57,16 @@ const prismaMock = prisma as unknown as {
   session: { create: ReturnType<typeof vi.fn> };
   quoteResponse: { findFirst: ReturnType<typeof vi.fn> };
   quoteResponseItem: { updateMany: ReturnType<typeof vi.fn> };
-  supplierContact: { findFirst: ReturnType<typeof vi.fn> };
+  supplierContact: { findFirst: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  mailLog: { findMany: ReturnType<typeof vi.fn> };
   companyProfile: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   emailTemplate: { findUnique: ReturnType<typeof vi.fn> };
   auditLog: { create: ReturnType<typeof vi.fn> };
 };
+
+// O rate limit de /auth/login do app (20 tentativas por janela) estoura com tantos
+// testes neste arquivo: faz o login HTTP uma vez e reaproveita o cookie.
+let cachedLoginCookie: string | null = null;
 
 async function loginAsComprador(): Promise<string> {
   const passwordHash = await hashPassword('ChangeMe123!');
@@ -77,6 +86,7 @@ async function loginAsComprador(): Promise<string> {
     role: { name: 'comprador' },
   });
   prismaMock.session.create.mockImplementation(({ data }) => Promise.resolve({ id: data.id }));
+  if (cachedLoginCookie) return cachedLoginCookie;
   const res = await request(app).post('/api/v1/auth/login').send({
     email: 'comprador@intelliquote.local',
     password: 'ChangeMe123!',
@@ -85,7 +95,8 @@ async function loginAsComprador(): Promise<string> {
     throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
   const cookies = (res.headers['set-cookie'] as string[] | undefined) ?? [];
-  return cookies.map((c) => c.split(';')[0]).join('; ');
+  cachedLoginCookie = cookies.map((c) => c.split(';')[0]).join('; ');
+  return cachedLoginCookie;
 }
 
 const baseQuoteResponse = {
@@ -154,9 +165,32 @@ const multiItemQuoteResponse = {
   ],
 };
 
+// Copias intactas das fixtures: reply() muta o objeto da proposta e os testes
+// antigos deixam alvos gravados nas fixtures compartilhadas.
+const pristineBaseQuoteResponse = structuredClone(baseQuoteResponse);
+const pristineMultiItemQuoteResponse = structuredClone(multiItemQuoteResponse);
+
+// Linha `quote_reply` do banco (EmailTemplateService.get serializa estes campos).
+function dbReplyTemplate(overrides: { subject?: string; htmlBody?: string; textBody?: string }) {
+  return {
+    id: 1,
+    key: 'quote_reply',
+    locale: 'en',
+    subject: overrides.subject ?? 'Banco',
+    htmlBody: overrides.htmlBody ?? '<p>Dear {{supplierContactName}},</p><table><tbody>{{itemsRows}}</tbody></table>',
+    textBody: overrides.textBody ?? 'Dear {{supplierContactName}},',
+    isActive: true,
+    updatedAt: new Date(),
+    updatedById: null,
+  };
+}
+
 describe('POST /api/v1/quote-responses/:id/reply', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.mailLog.findMany.mockResolvedValue([]);
+    prismaMock.supplierContact.findMany.mockResolvedValue([]);
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
     prismaMock.companyProfile.findUnique.mockResolvedValue({
       id: 1,
       companyName: 'SQ Quimica',
@@ -218,6 +252,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
 
     // Teste D - bloco Target Price ausente quando não preenchido
     expect(call.html).not.toContain('Target Price');
+    expect(call.html).not.toContain('TARGET PRICE');
     
     expect(prismaMock.auditLog.create).toHaveBeenCalledTimes(1);
     const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
@@ -279,9 +314,12 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(sendAndLogMock).toHaveBeenCalledTimes(1);
     const call = sendAndLogMock.mock.calls[0][0];
     
-    expect(call.html).toContain('Target Price');
+    // Proposta legada (0 itens): o alvo agregado vira a coluna TARGET PRICE em todas as linhas.
+    expect(call.html).toContain('TARGET PRICE');
     expect(call.html).toContain('4.50 USD');
-    expect(call.text).toContain('Target Price: 4.50 USD');
+    expect(call.html).not.toContain('Target Price:');
+    expect(call.text).toContain('Unit Price\tTarget Price\tTotal');
+    expect(call.text).toContain('4.50 USD');
 
     // Scenario 1: Target Price overrides winning text
     expect(call.html).toContain('we would like to discuss adjusting the price towards our target below');
@@ -506,7 +544,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       },
     });
     const call = sendAndLogMock.mock.calls[0][0];
-    expect(call.html).toContain('Target Price');
+    expect(call.html).toContain('TARGET PRICE');
   });
 
   it('não atualiza o targetPrice no preview', async () => {
@@ -523,7 +561,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
     expect(prismaMock.quoteResponseTargetPriceHistory.create).not.toHaveBeenCalled();
-    expect(res.body.html).toContain('Target Price');
+    expect(res.body.html).toContain('TARGET PRICE');
   });
 
   it('remove targetPrice se enviado null e não renderiza no email', async () => {
@@ -552,6 +590,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(prismaMock.quoteResponseTargetPriceHistory.create).not.toHaveBeenCalled();
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.html).not.toContain('Target Price');
+    expect(call.html).not.toContain('TARGET PRICE');
   });
 
   // Target price POR ITEM (multi-item)
@@ -593,8 +632,11 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
 
     const call = sendAndLogMock.mock.calls[0][0];
-    expect(call.html).toContain('Target: 3.20 USD');
-    expect(call.html).toContain('Target: 1.80 USD');
+    // Alvo por item na coluna TARGET PRICE (nao mais como sub-linha "Target:").
+    expect(call.html).toContain('TARGET PRICE');
+    expect(call.html).toContain('3.20 USD');
+    expect(call.html).toContain('1.80 USD');
+    expect(call.html).not.toContain('Target: ');
   });
 
   it('preview com itemTargets NAO persiste (updateMany nao e chamado)', async () => {
@@ -616,7 +658,8 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
 
     expect(res.status).toBe(200);
     expect(prismaMock.quoteResponseItem.updateMany).not.toHaveBeenCalled();
-    expect(res.body.html).toContain('Target: 3.20 USD');
+    expect(res.body.html).toContain('TARGET PRICE');
+    expect(res.body.html).toContain('3.20 USD');
   });
 
   describe('item temporariamente indisponivel', () => {
@@ -696,9 +739,10 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
         expect(arg.where.isUnavailable).toBe(false);
       }
       const call = sendAndLogMock.mock.calls[0][0];
-      expect(call.html).toContain('Target: 3.20 USD');
-      expect(call.html).not.toContain('Target: 1.80 USD');
-      expect(call.text).not.toContain('Target: 1.80 USD');
+      expect(call.html).toContain('TARGET PRICE');
+      expect(call.html).toContain('3.20 USD');
+      expect(call.html).not.toContain('1.80 USD');
+      expect(call.text).not.toContain('1.80 USD');
     });
   });
 
@@ -722,5 +766,375 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(prismaMock.quoteResponseItem.updateMany).not.toHaveBeenCalled();
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.html).not.toContain('Target:');
+  });
+
+  // ---------------------------------------------------------------------
+  // Assunto padrao = assunto do envio inicial (MailLog), mensagem no topo,
+  // coluna TARGET PRICE
+  // ---------------------------------------------------------------------
+  describe('assunto do envio inicial, mensagem no topo e coluna TARGET PRICE', () => {
+    const baseQuoteResponse = pristineBaseQuoteResponse;
+    const multiItemQuoteResponse = pristineMultiItemQuoteResponse;
+    const contact = { id: 9, name: 'John Supplier', email: 'john@acme.com', isPrimary: true };
+
+    function dispatchLog(overrides: Record<string, unknown> = {}) {
+      return {
+        subject: 'Sourcing request QR-2026-005 - Photoiniator',
+        toEmail: 'john@acme.com',
+        templateVars: { supplierContactId: 9 },
+        ...overrides,
+      };
+    }
+
+    async function setup(quoteResponse: unknown) {
+      const cookieHeader = await loginAsComprador();
+      // reply() muta o objeto da proposta (alvos por item); clone evita vazar entre testes.
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(structuredClone(quoteResponse));
+      prismaMock.supplierContact.findFirst.mockResolvedValue(contact);
+      prismaMock.supplierContact.findMany.mockResolvedValue([
+        { id: 9, email: 'john@acme.com' },
+        { id: 10, email: 'Jane@Acme.com' },
+      ]);
+      sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-x' });
+      return cookieHeader;
+    }
+
+    async function send(cookieHeader: string, id: number, body: Record<string, unknown> = {}) {
+      const res = await request(app)
+        .post(`/api/v1/quote-responses/${id}/reply`)
+        .set('Cookie', cookieHeader)
+        .send(body);
+      expect(res.status).toBe(200);
+      return sendAndLogMock.mock.calls[sendAndLogMock.mock.calls.length - 1][0];
+    }
+
+    async function preview(cookieHeader: string, id: number, body: Record<string, unknown> = {}) {
+      const res = await request(app)
+        .post(`/api/v1/quote-responses/${id}/reply/preview`)
+        .set('Cookie', cookieHeader)
+        .send(body);
+      expect(res.status).toBe(200);
+      return res.body as { subject: string; html: string; text: string };
+    }
+
+    const singleItemResponse = {
+      ...baseQuoteResponse,
+      targetPrice: null,
+      items: [
+        { id: 301, quoteRequestItemId: 11, unitPrice: 3.5, quantity: 500, totalPrice: 1750, leadTimeDays: null, notes: null, targetPrice: null },
+      ],
+    };
+
+    // (a) assunto padrao = assunto do dispatch (sem "Re:")
+    it('sem subject digitado usa o assunto do envio inicial (MailLog) no envio e no preview', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([dispatchLog()]);
+
+      const call = await send(cookieHeader, 77);
+      expect(call.subject).toBe('Sourcing request QR-2026-005 - Photoiniator');
+      expect(call.subject).not.toMatch(/^Re:/i);
+
+      const prev = await preview(cookieHeader, 77);
+      expect(prev.subject).toBe('Sourcing request QR-2026-005 - Photoiniator');
+      // (e) paridade preview x envio
+      expect(prev.subject).toBe(call.subject);
+    });
+
+    it('consulta apenas logs quote-dispatch sent/queued desta cotacao', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([dispatchLog()]);
+
+      await preview(cookieHeader, 77);
+
+      expect(prismaMock.mailLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            templateId: 'quote-dispatch',
+            relatedEntityType: 'quote_request',
+            relatedEntityId: '5',
+            status: { in: ['sent', 'queued'] },
+          }),
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+    });
+
+    // Regressao do reviewer: o filtro do fornecedor tem que ir no WHERE; senao, numa
+    // cotacao enviada a muitos contatos, o log do fornecedor sai da janela do take.
+    it('o filtro do fornecedor vai no where do MailLog (contatos do fornecedor, e-mail e supplierContactId)', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([dispatchLog()]);
+
+      await preview(cookieHeader, 77);
+
+      const args = prismaMock.mailLog.findMany.mock.calls[0][0];
+      expect(args.where.OR).toEqual(
+        expect.arrayContaining([
+          { toEmail: { in: ['john@acme.com', 'jane@acme.com'], mode: 'insensitive' } },
+          { templateVars: { path: ['supplierContactId'], equals: 9 } },
+          { templateVars: { path: ['supplierContactId'], equals: '9' } },
+          { templateVars: { path: ['supplierContactId'], equals: 10 } },
+          { templateVars: { path: ['supplierContactId'], equals: '10' } },
+        ]),
+      );
+      // take pequeno: so vale depois do filtro do fornecedor
+      expect(args.take).toBeLessThanOrEqual(10);
+      expect(args.orderBy).toEqual({ createdAt: 'desc' });
+    });
+
+    it('fornecedor sem contatos nao consulta o MailLog (cai no padrao legado)', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.supplierContact.findMany.mockResolvedValue([]);
+
+      const call = await send(cookieHeader, 77);
+      expect(prismaMock.mailLog.findMany).not.toHaveBeenCalled();
+      expect(call.subject).toBe('Photoiniator - SQ QUIMICA - Acme Chemicals');
+    });
+
+    // (b) log de outro contato ignorado; o mais recente valido vence
+    it('ignora log de outro fornecedor e usa o mais recente do contato certo', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([
+        dispatchLog({ subject: 'Assunto de OUTRO fornecedor', toEmail: 'x@other.com', templateVars: { supplierContactId: 99 } }),
+        dispatchLog({ subject: 'Assunto valido mais recente', toEmail: 'jane@acme.com', templateVars: { supplierContactId: 10 } }),
+        dispatchLog({ subject: 'Assunto antigo', templateVars: { supplierContactId: 9 } }),
+      ]);
+
+      const call = await send(cookieHeader, 77);
+      expect(call.subject).toBe('Assunto valido mais recente');
+    });
+
+    it('casa pelo e-mail do destinatario (case-insensitive) quando o log nao tem supplierContactId', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([
+        dispatchLog({ subject: 'Por e-mail', toEmail: 'JOHN@acme.com', templateVars: null }),
+      ]);
+
+      const call = await send(cookieHeader, 77);
+      expect(call.subject).toBe('Por e-mail');
+    });
+
+    // (c) sem log -> padrao legado
+    it('sem envio registrado cai no assunto padrao legado', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([]);
+
+      const call = await send(cookieHeader, 77);
+      expect(call.subject).toBe('Photoiniator - SQ QUIMICA - Acme Chemicals');
+    });
+
+    it('sem envio registrado usa o assunto do template do banco, se houver', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([]);
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(dbReplyTemplate({ subject: 'Banco - {{requestCode}}' }));
+
+      const call = await send(cookieHeader, 77);
+      expect(call.subject).toBe('Banco - QR-2026-005');
+    });
+
+    it('o assunto do envio inicial vence o assunto do template do banco', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([dispatchLog()]);
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(dbReplyTemplate({ subject: 'Banco - {{requestCode}}' }));
+
+      const call = await send(cookieHeader, 77);
+      expect(call.subject).toBe('Sourcing request QR-2026-005 - Photoiniator');
+    });
+
+    // (d) regressao: o assunto digitado vence MailLog E o template do banco
+    it('o assunto digitado vence o MailLog e o template do banco com subject proprio', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      prismaMock.mailLog.findMany.mockResolvedValue([dispatchLog()]);
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(dbReplyTemplate({ subject: 'Banco - {{requestCode}}' }));
+
+      const call = await send(cookieHeader, 77, { subject: '  Contraproposta - PI-TPO  ' });
+      expect(call.subject).toBe('Contraproposta - PI-TPO');
+      // digitado: nem precisa consultar o MailLog
+      expect(prismaMock.mailLog.findMany).not.toHaveBeenCalled();
+
+      const prev = await preview(cookieHeader, 77, { subject: 'Contraproposta - PI-TPO' });
+      expect(prev.subject).toBe('Contraproposta - PI-TPO');
+    });
+
+    // (f) mensagem no topo, com destaque
+    it('mensagem entra logo apos "Dear ...," com destaque e no topo do texto puro', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      const call = await send(cookieHeader, 77, { message: 'Linha 1 <b>x</b>\nLinha 2' });
+
+      const msgHtml = 'Linha 1 &lt;b&gt;x&lt;/b&gt;<br />Linha 2';
+      const idxMsg = call.html.indexOf(msgHtml);
+      expect(idxMsg).toBeGreaterThan(call.html.indexOf('Dear John Supplier,'));
+      expect(idxMsg).toBeLessThan(call.html.indexOf('Thank you for your quotation'));
+      expect(call.html).toContain('border-left:4px solid #184054');
+      expect(call.html).toContain('bgcolor="#EEF7F4"');
+      // antes da tabela de itens
+      expect(idxMsg).toBeLessThan(call.html.indexOf('ITEM'));
+      expect(call.html).not.toContain('<!--CUSTOM_MESSAGE_SLOT-->');
+
+      const idxText = call.text.indexOf('Linha 1 <b>x</b>');
+      expect(idxText).toBeGreaterThan(call.text.indexOf('Dear John Supplier,'));
+      expect(idxText).toBeLessThan(call.text.indexOf('Thank you for your quotation'));
+      expect(call.text.startsWith('Dear John Supplier,')).toBe(true);
+    });
+
+    it('sem mensagem nao sobra bloco de destaque nem linha vazia a mais', async () => {
+      const cookieHeader = await setup(baseQuoteResponse);
+      const call = await send(cookieHeader, 77, {});
+      expect(call.html).not.toContain('border-left:4px solid #184054');
+      expect(call.text).toMatch(/^Dear John Supplier,\r\n\r\nThank you for your quotation/);
+    });
+
+    // (g) coluna TARGET PRICE
+    it('multi-item com alvos por item: coluna TARGET PRICE cinza, sem linha solta nem sub-linha', async () => {
+      const cookieHeader = await setup(multiItemQuoteResponse);
+      prismaMock.quoteResponseItem.updateMany.mockResolvedValue({ count: 1 });
+
+      const call = await send(cookieHeader, 88, {
+        itemTargets: [
+          { quoteResponseItemId: 201, targetPrice: 3.2 },
+          { quoteResponseItemId: 202, targetPrice: null },
+        ],
+      });
+
+      expect(call.html).toContain('TARGET PRICE');
+      expect(call.html).toContain('#E5E7EB');
+      expect(call.html).toContain('3.20 USD');
+      expect(call.html).not.toContain('Target Price:');
+      expect(call.html).not.toContain('Target: ');
+      // header + 2 linhas = 3 celulas cinza; item sem alvo mostra o travessao
+      expect(call.html.split('bgcolor="#E5E7EB"')).toHaveLength(4);
+      expect(call.html).toContain('&#8212;');
+      expect(call.text).toContain('Unit Price\tTarget Price\tTotal');
+      expect(call.text).toContain('3.20 USD');
+    });
+
+    it('sem alvo nenhum nao ha coluna TARGET PRICE', async () => {
+      const cookieHeader = await setup(multiItemQuoteResponse);
+      const call = await send(cookieHeader, 88, {});
+      expect(call.html).not.toContain('TARGET PRICE');
+      expect(call.html).not.toContain('#E5E7EB');
+      expect(call.text).not.toContain('Target Price');
+    });
+
+    it('1 item + targetPrice agregado: o alvo aparece na linha desse item (coluna)', async () => {
+      const cookieHeader = await setup(singleItemResponse);
+      prismaMock.quoteResponse.update = vi.fn().mockResolvedValue({});
+      prismaMock.quoteResponseTargetPriceHistory = { create: vi.fn().mockResolvedValue({}) } as any;
+
+      const call = await send(cookieHeader, 77, { targetPrice: 3.1 });
+      expect(call.html).toContain('TARGET PRICE');
+      expect(call.html).toContain('3.10 USD');
+      expect(call.html).not.toContain('Target Price:');
+      expect(call.html).toContain('we would like to discuss adjusting the price');
+      // historico do agregado preservado
+      expect(prismaMock.quoteResponseTargetPriceHistory.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('1 item: o alvo proprio do item vence o agregado', async () => {
+      const cookieHeader = await setup({
+        ...singleItemResponse,
+        targetPrice: 4.5,
+        items: [{ ...singleItemResponse.items[0], targetPrice: 2.75 }],
+      });
+
+      const call = await send(cookieHeader, 77, {});
+      expect(call.html).toContain('2.75 USD');
+      expect(call.html).not.toContain('4.50 USD');
+    });
+
+    it('multi-item com agregado persistido e sem alvos por item nao mostra coluna nem linha solta', async () => {
+      const cookieHeader = await setup({ ...multiItemQuoteResponse, targetPrice: 5 });
+
+      const call = await send(cookieHeader, 88, {});
+      expect(call.html).not.toContain('TARGET PRICE');
+      expect(call.html).not.toContain('Target Price:');
+      expect(call.html).not.toContain('5.00 USD');
+      expect(call.html).toContain('reviewing your proposal along with other offers received');
+    });
+
+    it('item indisponivel no modo coluna tem a 6a celula (TARGET PRICE) com travessao', async () => {
+      const cookieHeader = await setup({
+        ...multiItemQuoteResponse,
+        items: [
+          multiItemQuoteResponse.items[0],
+          { ...multiItemQuoteResponse.items[1], unitPrice: 0, quantity: 0, totalPrice: 0, isUnavailable: true },
+        ],
+      });
+
+      const call = await send(cookieHeader, 88, {
+        itemTargets: [{ quoteResponseItemId: 201, targetPrice: 3.2 }],
+      });
+      expect(call.html).toContain('TARGET PRICE');
+      const rows = call.html.match(/<tr bgcolor="#[0-9A-Fa-f]{6}" style="background-color:#[0-9A-Fa-f]{6};">[\s\S]*?<\/tr>/g) ?? [];
+      // 1 header + 2 linhas de item, todas com 6 celulas
+      expect(rows).toHaveLength(3);
+      for (const row of rows) {
+        expect((row.match(/<t[dh] /g) ?? []).length).toBe(6);
+      }
+      const unavailableRow = rows.find((row) => row.includes('Temporarily unavailable'))!;
+      expect(unavailableRow).toContain('bgcolor="#E5E7EB"');
+      expect(call.text).toMatch(/Resin X\t[^\t]*\t[^\t]*\tTemporarily unavailable\t—\t—/);
+    });
+
+    // (h) template legado no banco (thead fixo + slot, sem placeholders novos)
+    it('template legado do banco: mensagem no slot, sub-linha "Target:" e sem coluna', async () => {
+      const cookieHeader = await setup(multiItemQuoteResponse);
+      prismaMock.quoteResponseItem.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(
+        dbReplyTemplate({
+          htmlBody: [
+            '<p>Dear {{supplierContactName}},</p>',
+            '<table><thead><tr><th>ITEM</th><th>INCOTERM</th><th>QUANTITY</th><th>UNIT PRICE</th><th>TOTAL</th></tr></thead>',
+            '<tbody>{{itemsRows}}</tbody></table>',
+            '{{#targetPriceStr}}<p>Target Price: {{targetPriceStr}}</p>{{/targetPriceStr}}',
+            '<!--CUSTOM_MESSAGE_SLOT-->',
+          ].join('\n'),
+          textBody: 'Dear {{supplierContactName}},\n\n{{itemsText}}\n\nBest regards,',
+        }),
+      );
+
+      const call = await send(cookieHeader, 88, {
+        message: 'Mensagem no slot',
+        itemTargets: [{ quoteResponseItemId: 201, targetPrice: 3.2 }],
+      });
+
+      expect(call.html).not.toContain('TARGET PRICE');
+      expect(call.html).toContain('Target: 3.20 USD');
+      expect(call.html).not.toContain('Target Price:');
+      expect(call.html).not.toContain('<!--CUSTOM_MESSAGE_SLOT-->');
+      expect(call.html.indexOf('Mensagem no slot')).toBeGreaterThan(call.html.indexOf('</table>'));
+      // texto: mensagem prefixada (formato antigo) e {{itemsText}} renderiza as linhas
+      expect(call.text.startsWith('Mensagem no slot\n\nDear John Supplier,')).toBe(true);
+      expect(call.text).toContain('PI-TPO');
+      expect(call.text).toContain('(Target: 3.20 USD)');
+    });
+
+    it('template do banco com os placeholders novos: mensagem so no {{message}} e coluna gerada', async () => {
+      const cookieHeader = await setup(multiItemQuoteResponse);
+      prismaMock.quoteResponseItem.updateMany.mockResolvedValue({ count: 1 });
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(
+        dbReplyTemplate({
+          htmlBody: [
+            '<p>Dear {{supplierContactName}},</p>{{message}}',
+            '<table><thead>{{itemsHeaderRow}}</thead><tbody>{{itemsRows}}</tbody></table>',
+            '{{#targetPriceStr}}<p>Target Price: {{targetPriceStr}}</p>{{/targetPriceStr}}',
+            '<!--CUSTOM_MESSAGE_SLOT-->',
+          ].join('\n'),
+          textBody: 'Dear {{supplierContactName}},\n\n{{messageText}}{{itemsTextTable}}',
+        }),
+      );
+
+      const call = await send(cookieHeader, 88, {
+        message: 'Mensagem unica',
+        itemTargets: [{ quoteResponseItemId: 201, targetPrice: 3.2 }],
+      });
+
+      expect(call.html.split('Mensagem unica')).toHaveLength(2);
+      expect(call.html).toContain('TARGET PRICE');
+      expect(call.html).not.toContain('Target Price:');
+      expect(call.html).not.toContain('<!--CUSTOM_MESSAGE_SLOT-->');
+      expect(call.text.split('Mensagem unica')).toHaveLength(2);
+      expect(call.text).toContain('Unit Price\tTarget Price\tTotal');
+    });
   });
 });

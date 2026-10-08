@@ -249,7 +249,7 @@ describe('RespostasTab', () => {
     expect(dialogB.className).toContain('modal-dialog--wide');
     await waitFor(() =>
       expect(previewQuoteResponseReply).toHaveBeenCalledWith(42, {
-        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        subject: '',
         message: '',
         targetPrice: 90,
       })
@@ -312,7 +312,7 @@ describe('RespostasTab', () => {
 
     await waitFor(() =>
       expect(previewQuoteResponseReply).toHaveBeenCalledWith(43, {
-        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        subject: '',
         message: '',
         itemTargets: [
           { quoteResponseItemId: 501, targetPrice: null },
@@ -333,11 +333,13 @@ describe('RespostasTab', () => {
     fireEvent.change(within(dialogB).getByLabelText('Resina Epóxi'), { target: { value: '8.5' } });
     fireEvent.change(within(dialogB).getByLabelText('Catalisador Y'), { target: { value: '18' } });
 
+    // O assunto padrao chega do preview (backend); o botao so habilita depois.
+    await waitFor(() => expect((dialogB.querySelector('#replySubject') as HTMLInputElement).value).toBe('s'));
     fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
 
     await waitFor(() =>
       expect(replyToQuoteResponse).toHaveBeenCalledWith(43, {
-        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        subject: 's',
         message: '',
         itemTargets: [
           { quoteResponseItemId: 501, targetPrice: 8.5 },
@@ -346,6 +348,97 @@ describe('RespostasTab', () => {
       })
     );
   });
+  describe('assunto padrao do envio inicial e rotulo do alvo (1 item)', () => {
+    const DISPATCH_SUBJECT = 'Sourcing request QR-1 - Produto X';
+
+    it('abre com o assunto vazio, preenche com o assunto devolvido pelo preview e mostra "Assunto:" no preview', async () => {
+      vi.mocked(previewQuoteResponseReply).mockResolvedValue({
+        to: 'x@acme.com', cc: [], subject: DISPATCH_SUBJECT, html: '<p>oi</p>', text: 'oi',
+      });
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'Responder' }));
+      const [, dialogB] = getDialogs(container);
+
+      // Sem calculo local: o primeiro preview vai com assunto vazio.
+      await waitFor(() =>
+        expect(previewQuoteResponseReply).toHaveBeenCalledWith(42, {
+          subject: '',
+          message: '',
+          targetPrice: 90,
+        })
+      );
+      const subjectInput = dialogB.querySelector('#replySubject') as HTMLInputElement;
+      await waitFor(() => expect(subjectInput.value).toBe(DISPATCH_SUBJECT));
+      expect(await within(dialogB).findByText(DISPATCH_SUBJECT, { selector: 'strong' })).toBeTruthy();
+      expect(within(dialogB).getByText(/Assunto:/)).toBeTruthy();
+    });
+
+    it('assunto editado vai no envio e nao e sobrescrito por novo preview', async () => {
+      vi.mocked(previewQuoteResponseReply).mockResolvedValue({
+        to: 'x@acme.com', cc: [], subject: DISPATCH_SUBJECT, html: '<p>oi</p>', text: 'oi',
+      });
+      vi.mocked(replyToQuoteResponse).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'Responder' }));
+      const [, dialogB] = getDialogs(container);
+      const subjectInput = dialogB.querySelector('#replySubject') as HTMLInputElement;
+      await waitFor(() => expect(subjectInput.value).toBe(DISPATCH_SUBJECT));
+
+      fireEvent.change(subjectInput, { target: { value: 'Contraproposta - Produto X' } });
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Atualizar preview' }));
+      await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledTimes(2));
+      expect(previewQuoteResponseReply).toHaveBeenLastCalledWith(42, {
+        subject: 'Contraproposta - Produto X',
+        message: '',
+        targetPrice: 90,
+      });
+      expect(subjectInput.value).toBe('Contraproposta - Produto X');
+
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(42, {
+          subject: 'Contraproposta - Produto X',
+          message: '',
+          targetPrice: 90,
+        })
+      );
+    });
+
+    it('proposta de 1 item: o campo unico leva o nome do item no rotulo (mesmo id e payload agregado)', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        {
+          ...response,
+          id: 47,
+          items: [
+            {
+              id: 801, quoteResponseId: 47, quoteRequestItemId: 5,
+              unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+              notes: null, productName: 'Resina Epóxi', targetPrice: null,
+            },
+          ],
+        },
+      ]);
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'Responder' }));
+      const [, dialogB] = getDialogs(container);
+
+      expect(dialogB.querySelector('#replyTargetPrice')).not.toBeNull();
+      expect(dialogB.querySelector('#replyItemTarget-801')).toBeNull();
+      expect(within(dialogB).getByText('Preço-alvo — Resina Epóxi (opcional)')).toBeTruthy();
+    });
+
+    it('proposta sem itens (legada) mantem o rotulo generico', async () => {
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'Responder' }));
+      const [, dialogB] = getDialogs(container);
+      expect(within(dialogB).getByText('Preço-alvo (opcional)')).toBeTruthy();
+    });
+  });
+
   describe('origem do fornecedor (informativa)', () => {
     const originItems = [
       {
@@ -515,17 +608,18 @@ describe('RespostasTab - item temporariamente indisponivel', () => {
 
     await waitFor(() =>
       expect(previewQuoteResponseReply).toHaveBeenCalledWith(46, {
-        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        subject: '',
         message: '',
         itemTargets: [{ quoteResponseItemId: 701, targetPrice: null }],
       })
     );
 
     fireEvent.change(dialogB.querySelector('#replyItemTarget-701') as HTMLInputElement, { target: { value: '8.5' } });
+    await waitFor(() => expect((dialogB.querySelector('#replySubject') as HTMLInputElement).value).toBe('s'));
     fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
     await waitFor(() =>
       expect(replyToQuoteResponse).toHaveBeenCalledWith(46, {
-        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        subject: 's',
         message: '',
         itemTargets: [{ quoteResponseItemId: 701, targetPrice: 8.5 }],
       })

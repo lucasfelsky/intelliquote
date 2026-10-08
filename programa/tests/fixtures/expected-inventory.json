@@ -126,7 +126,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 47
+    "migrations": 48
   },
   "emailTemplates": [
     "credit_support_request@en",

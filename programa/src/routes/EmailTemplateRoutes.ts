@@ -9,6 +9,9 @@ import { renderSections, renderDispatchTemplate, type QuoteDispatchVars } from '
 import {
   renderReplySections,
   renderReplyPlainText,
+  renderReplyHtmlFromTemplate,
+  renderReplyTextFromTemplate,
+  buildReplyTextTemplateDraft,
   loadFileTemplate as loadReplyFileTemplate,
   REPLY_TEMPLATE_KEY,
   type QuoteReplyVars,
@@ -77,9 +80,12 @@ function renderReplySampleVars(): QuoteReplyVars {
     supplierContactName: 'Joao Fornecedor',
     currency: 'USD',
     isWinner: true,
+    // Exemplo de preview: mensagem do modal + alvo por item (coluna TARGET PRICE).
+    message: 'Thank you for the offer. Could you review the prices below?',
+    hasItemTargets: true,
     items: [
-      { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG', unitPrice: 4.99 },
-      { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG', unitPrice: 4.99 },
+      { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG', unitPrice: 4.99, targetPrice: 4.5 },
+      { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG', unitPrice: 4.99, targetPrice: 4.25 },
     ],
   };
 }
@@ -181,6 +187,7 @@ emailTemplateRoutes.get(
               // sem QuoteResponse.offeredPrice pra usar, mantem o preco de
               // exemplo pra o admin ver a coluna preenchida.
               unitPrice: 4.99,
+              targetPrice: 4.5,
             }));
           }
         }
@@ -191,11 +198,20 @@ emailTemplateRoutes.get(
           // pra o admin ter um ponto de partida real pra editar.
           return res.status(200).json({
             subject: replySample.subject,
-            html: renderReplySections(loadReplyFileTemplate(), replySample),
+            html: renderReplyHtmlFromTemplate(loadReplyFileTemplate(), replySample),
             text: renderReplyPlainText(replySample),
             isActive: false,
             source: 'fallback',
             locale,
+            // Rascunho editavel com placeholders crus ({{message}},
+            // {{itemsHeaderRow}}, {{itemsRows}}, {{messageText}}...). O html/text
+            // acima sao so' preview com dados de exemplo e NAO podem virar o
+            // corpo salvo.
+            draft: {
+              subject: '{{subject}}',
+              htmlBody: loadReplyFileTemplate(),
+              textBody: buildReplyTextTemplateDraft(),
+            },
           });
         }
 
@@ -203,8 +219,8 @@ emailTemplateRoutes.get(
         const replyVars = { ...replySample, subject: replySubject };
         return res.status(200).json({
           subject: replySubject,
-          html: renderReplySections(replyTemplate.htmlBody, replyVars),
-          text: renderReplySections(replyTemplate.textBody, replyVars),
+          html: renderReplyHtmlFromTemplate(replyTemplate.htmlBody, replyVars),
+          text: renderReplyTextFromTemplate(replyTemplate.textBody, replyVars),
           isActive: replyTemplate.isActive,
           source: 'database',
           locale,

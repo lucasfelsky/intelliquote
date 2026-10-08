@@ -195,6 +195,9 @@ export function RespostasTab({
       }),
     onSuccess: (data) => {
       setReplyPreviewData(data);
+      // O assunto padrao (igual ao do envio inicial da cotacao) vem do backend;
+      // o que o usuario ja digitou nunca e' sobrescrito.
+      setReplySubject((prev) => (prev.trim() ? prev : data.subject));
       setReplyModalError(null);
     },
     onError: (err) => setReplyModalError(messageOf(err)),
@@ -260,11 +263,9 @@ export function RespostasTab({
   }
 
   function openReplyModal(r: QuoteResponse) {
-    const itemName = productName || requestCode;
-    const supplierName = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
-    const defaultSubject = `${itemName} - SQ QUIMICA - ${supplierName}`;
     setReplyTarget(r);
-    setReplySubject(defaultSubject);
+    // Assunto padrao vem do backend (mesmo do envio inicial); ver onSuccess do preview.
+    setReplySubject('');
     setReplyMessage('');
     setReplyPreviewData(null);
     setReplyModalError(null);
@@ -278,7 +279,7 @@ export function RespostasTab({
       setReplyTargetPrice('');
       replyPreviewMutation.mutate({
         id: r.id,
-        subject: defaultSubject,
+        subject: '',
         message: '',
         itemTargets: buildItemTargetsPayload(r, initialValues),
       });
@@ -288,7 +289,7 @@ export function RespostasTab({
     setReplyItemTargets({});
     setReplyTargetPrice(r.targetPrice != null ? String(r.targetPrice) : '');
     const initialTargetPrice = r.targetPrice != null ? Number(r.targetPrice) : null;
-    replyPreviewMutation.mutate({ id: r.id, subject: defaultSubject, message: '', targetPrice: initialTargetPrice });
+    replyPreviewMutation.mutate({ id: r.id, subject: '', message: '', targetPrice: initialTargetPrice });
   }
 
   function closeReplyModal() {
@@ -780,7 +781,9 @@ export function RespostasTab({
             ) : (
               <>
                 <label className="field-label" htmlFor="replyTargetPrice" style={{ marginTop: 12 }}>
-                  Preço-alvo (opcional)
+                  {replyTarget.items?.length === 1
+                    ? `Preço-alvo — ${replyTarget.items[0]?.productName || productName || requestCode} (opcional)`
+                    : 'Preço-alvo (opcional)'}
                 </label>
                 <input
                   id="replyTargetPrice"
@@ -841,6 +844,9 @@ export function RespostasTab({
                 <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
                   Para: <strong>{replyPreviewData.to}</strong>
                   {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                </p>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
+                  Assunto: <strong>{replyPreviewData.subject}</strong>
                 </p>
                 <iframe
                   key={replyPreviewData.html.length}
