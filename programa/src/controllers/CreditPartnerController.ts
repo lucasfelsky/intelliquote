@@ -288,10 +288,17 @@ export class CreditPartnerController {
           throw new HttpError(404, 'Parceiro de credito nao encontrado.');
         }
 
+        const now = new Date();
         const deleted = await tx.creditPartner.update({
           where: { id },
-          data: { deletedAt: new Date(), isActive: false },
+          data: { deletedAt: now, isActive: false },
           include: creditPartnerInclude,
+        });
+
+        // Credit Support: excluir o parceiro revoga os encaminhamentos ativos (links deixam de abrir).
+        const revoked = await tx.creditSupportRequest.updateMany({
+          where: { creditPartnerId: id, revokedAt: null },
+          data: { revokedAt: now },
         });
 
         await AuditLogService.log(
@@ -302,6 +309,7 @@ export class CreditPartnerController {
             performedById: req.user?.id ?? null,
             beforeData: serializeCreditPartner(before),
             afterData: { ...serializeCreditPartner(deleted), deletedAt: deleted.deletedAt },
+            metadata: { revokedCreditSupportRequests: revoked.count },
           },
           tx,
         );
