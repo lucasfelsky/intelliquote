@@ -41,7 +41,7 @@
             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#184054" style="background-color:#184054;">
               <tr>
                 <td align="left" style="padding:24px 32px;color:#ffffff;font-family:Arial,sans-serif;">
-                  <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#5FE0BF;margin:0 0 8px 0;">
+                  {{companyLogo}}<div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#5FE0BF;margin:0 0 8px 0;">
                     SQ Quimica &#183; Purchase Order
                   </div>
                   <div class="h1" style="font-size:20px;line-height:26px;font-weight:bold;color:#ffffff;margin:0;">
@@ -54,7 +54,7 @@
             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
               <tr>
                 <td style="padding:24px 32px 8px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#1F2933;">
-                  <p style="margin:0 0 12px 0;">Dear all,</p>
+                  <p style="margin:0 0 12px 0;">Dear all,</p>{{message}}
                   <p style="margin:0 0 12px 0;">Attached is our PO. We look forward to receiving the PI soon.<br />Please inform estimated cargo delivery date:</p>
                   <p style="margin:0;">Please note the original BL copies should be issued at destination, please coordinate with our forwarder accordingly</p>
                 </td>
@@ -118,7 +118,7 @@
               </tr>
             </table>
 
-            <!--CUSTOM_MESSAGE_SLOT-->
+            {{senderSignature}}
 
             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
               <tr>

@@ -14,11 +14,16 @@ import {
   injectReplyCustomMessage,
   withReplyCustomMessageText,
 } from '../mailer/renderQuoteReply';
+import { renderPoFromTemplate } from '../mailer/renderQuotePo';
 import {
-  renderPoFromTemplate,
-  injectPoCustomMessage,
-  withPoCustomMessageText,
-} from '../mailer/renderQuotePo';
+  EMAIL_LOGO_CID,
+  EMAIL_SIGNATURE_CID,
+  emailLogoDisplaySize,
+  getEmailLogoAttachment,
+  isEmailLogoPlaceholder,
+} from '../mailer/emailLogo';
+import type { MailAttachment } from '../mailer/Mailer';
+import { logger } from '../lib/logger';
 import { formatIncoterms, mergeManualIncotermPrices } from '../utils/incoterm';
 import {
   quoteComparisonWeightsSchema,
@@ -904,16 +909,68 @@ export class QuoteResponseController {
         quoteRequest.items?.[0]?.destinationPort?.trim() ||
         'as agreed';
 
-      const rendered = await renderPoFromTemplate({
-        subject: parsedBody.data.subject?.trim() || defaultSubject,
-        requestCode: quoteRequest.requestCode,
-        supplierContactName: primaryContact.name,
-        forwarderInfo: parsedBody.data.forwarderInfo?.trim() ?? '',
-        destinationPort,
-      });
+      const subjectOverride = parsedBody.data.subject?.trim() || undefined;
 
-      const html = injectPoCustomMessage(rendered.html, message);
-      const text = withPoCustomMessageText(rendered.text, message);
+      if (isEmailLogoPlaceholder()) {
+        logger.warn(
+          { templateKey: 'quote_po' },
+          'Logo da SQ no e-mail da PO ainda e o PLACEHOLDER (src/mailer/assets/sqLogoPng.ts).',
+        );
+      }
+
+      // Assinatura do proprio usuario logado (Minha conta). Nome e e-mail vem
+      // de req.user; texto e imagem, da tabela UserEmailSignature.
+      const signature = req.user?.id
+        ? await prisma.userEmailSignature.findUnique({ where: { userId: req.user.id } })
+        : null;
+      const signatureImage =
+        signature?.imageData && signature.imageMimeType
+          ? { data: Buffer.from(signature.imageData), mimeType: signature.imageMimeType }
+          : null;
+
+      const rendered = await renderPoFromTemplate(
+        {
+          subject: subjectOverride || defaultSubject,
+          requestCode: quoteRequest.requestCode,
+          supplierContactName: primaryContact.name,
+          forwarderInfo: parsedBody.data.forwarderInfo?.trim() ?? '',
+          destinationPort,
+          message,
+          senderName: req.user?.name,
+          senderEmail: req.user?.email,
+          signatureText: signature?.text ?? null,
+          signatureImageSrc: signatureImage ? `cid:${EMAIL_SIGNATURE_CID}` : undefined,
+          signatureImageWidth: signature?.imageWidth ?? undefined,
+          signatureImageHeight: signature?.imageHeight ?? undefined,
+          companyLogoSrc: `cid:${EMAIL_LOGO_CID}`,
+          companyLogoWidth: emailLogoDisplaySize().width,
+        },
+        undefined,
+        subjectOverride,
+      );
+
+      const { html, text } = rendered;
+
+      const attachments: MailAttachment[] = [
+        {
+          filename: parsedBody.data.fileName,
+          content: buffer,
+          contentType: 'application/pdf',
+        },
+      ];
+      // Cada imagem inline so' e' anexada se o HTML final a referenciar
+      // (template customizado pode ter removido o placeholder).
+      if (html.includes(`cid:${EMAIL_LOGO_CID}`)) {
+        attachments.push(getEmailLogoAttachment());
+      }
+      if (signatureImage && html.includes(`cid:${EMAIL_SIGNATURE_CID}`)) {
+        attachments.push({
+          filename: signatureImage.mimeType === 'image/png' ? 'signature.png' : 'signature.jpg',
+          content: signatureImage.data,
+          contentType: signatureImage.mimeType,
+          cid: EMAIL_SIGNATURE_CID,
+        });
+      }
 
       const sendResult = await sendAndLog({
         to: { email: primaryContact.email, name: primaryContact.name },
@@ -929,16 +986,11 @@ export class QuoteResponseController {
           supplierContactId: primaryContact.id,
           forwarderInfo: parsedBody.data.forwarderInfo ?? null,
           hasCustomMessage: Boolean(message),
+          hasSignatureImage: Boolean(signatureImage),
         },
         relatedEntityType: 'quote_response',
         relatedEntityId: String(id),
-        attachments: [
-          {
-            filename: parsedBody.data.fileName,
-            content: buffer,
-            contentType: 'application/pdf',
-          },
-        ],
+        attachments,
       });
 
       await AuditLogService.log({

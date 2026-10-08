@@ -93,6 +93,9 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{supplierContactName}}', label: 'Contato' },
     { token: '{{forwarderInfo}}', label: 'Contato do despachante' },
     { token: '{{destinationPort}}', label: 'Porto de destino' },
+    { token: '{{message}}', label: 'Mensagem do modal (após “Dear all,”)' },
+    { token: '{{senderSignature}}', label: 'Assinatura do usuário' },
+    { token: '{{companyLogo}}', label: 'Logo da SQ' },
   ],
   quote_reminder: [
     { token: '{{subject}}', label: 'Assunto' },
@@ -214,6 +217,9 @@ export default function Templates() {
         textBody: current.textBody,
         isActive: current.isActive,
       });
+    } else if (preview.data && preview.data.source === 'fallback' && preview.data.draft) {
+      // Rascunho com placeholders crus: salvar nao congela os dados de exemplo.
+      setDraft({ ...preview.data.draft, isActive: true });
     } else if (preview.data && preview.data.source === 'fallback' && preview.data.html) {
       setDraft({
         subject: preview.data.subject,

@@ -4,7 +4,7 @@ import { mailerEnv } from '../config/env';
 import { logger } from '../lib/logger';
 import { ConsoleMailer } from './ConsoleMailer';
 import { SmtpMailer } from './SmtpMailer';
-import type { Mailer, MailMessage, MailSendResult } from './Mailer';
+import type { Mailer, MailAttachment, MailMessage, MailSendResult } from './Mailer';
 
 let singleton: Mailer | null = null;
 
@@ -38,7 +38,8 @@ export interface SendAndLogInput {
   // Anexo so'-envio (ex.: PDF da Ordem de Compra). NAO persistido em disco;
   // NAO entra no mailLog/AuditLog (so' fileName/fileSize, ver metadata do
   // caller) -- efemero no processo do Cloud Run.
-  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+  // `cid` marca imagem inline (logo/assinatura do e-mail da PO).
+  attachments?: MailAttachment[];
 }
 
 export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult> {
