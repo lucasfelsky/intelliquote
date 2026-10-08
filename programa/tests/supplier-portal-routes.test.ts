@@ -1306,6 +1306,42 @@ describe('Portal - item temporariamente indisponivel', () => {
     expect(upsert.create.leadTimeDays).toBeNull();
   });
 
+  it('todos indisponiveis em USD sem cambio disponivel (sem taxa enviada e sem PTAX): 201, cambio neutro 1', async () => {
+    const token = mockEnv({
+      storedItems: [unavailableRow(11), unavailableRow(12), unavailableRow(13)],
+    });
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const res = await respond(token, {
+      exchangeRate: null,
+      totalPrice: 0,
+      items: [unavailableItem(11), unavailableItem(12), unavailableItem(13)],
+    });
+
+    expect(res.status).toBe(201);
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(Number(upsert.create.offeredPrice)).toBe(0);
+    expect(Number(upsert.create.exchangeRate)).toBe(1);
+    expect(Number(upsert.create.totalLandedCost)).toBe(0);
+  });
+
+  it('item disponivel em USD sem cambio disponivel continua dando 400 em ingles', async () => {
+    const token = mockEnv();
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.__tx.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const res = await respond(token, {
+      exchangeRate: null,
+      items: [baseItem(11), unavailableItem(12), baseItem(13)],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Exchange rate unavailable');
+  });
+
   it('todos indisponiveis com totalPrice diferente de 0 -> 400 (total nao confere)', async () => {
     const token = mockEnv();
     const res = await respond(token, {

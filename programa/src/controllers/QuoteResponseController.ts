@@ -1697,6 +1697,18 @@ export class QuoteResponseController {
         });
       }
 
+      // O fornecedor pode ter revisado a proposta (portal/API) depois da comparacao e marcado item
+      // indisponivel: ela saiu do ranking e nao pode ser aprovada como vencedora.
+      const winnerResponse = await prisma.quoteResponse.findFirst({
+        where: { id: comparison.winnerQuoteResponseId, quoteRequestId, deletedAt: null },
+        select: { items: { where: { deletedAt: null }, select: { isUnavailable: true } } },
+      });
+      if (winnerResponse?.items?.some((item) => item.isUnavailable)) {
+        return res.status(409).json({
+          message: 'A proposta vencedora mudou (itens indisponíveis). Refaça a comparação antes de aprovar.',
+        });
+      }
+
       await prisma.$transaction(async (tx) => {
         // Uma proposta removida nao pode voltar a vencer por uma aprovacao antiga.
         await tx.quoteResponse.updateMany({

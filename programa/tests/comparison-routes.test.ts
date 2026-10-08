@@ -1424,6 +1424,63 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
     expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
   });
 
+  describe('approveAward revalida o vencedor da comparacao pendente', () => {
+    function mockPendingComparison() {
+      prismaMock.quoteComparison.findUnique.mockResolvedValue({
+        id: 999,
+        quoteRequestId: 1,
+        approvalStatus: 'pending',
+        winnerQuoteResponseId: 11,
+      });
+      prismaMock.quoteComparison.findFirst.mockResolvedValue({ id: 999 });
+      prismaMock.__tx.quoteComparison.update.mockResolvedValue({});
+      prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+    }
+
+    it('vencedor que virou item indisponivel apos a comparacao -> 409, nada e alterado', async () => {
+      const cookies = await loginAs('admin');
+      mockPendingComparison();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue({
+        items: [{ isUnavailable: false }, { isUnavailable: true }],
+      });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toBe(
+        'A proposta vencedora mudou (itens indisponíveis). Refaça a comparação antes de aprovar.',
+      );
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.update).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteComparison.update).not.toHaveBeenCalled();
+    });
+
+    it('vencedor completo -> aprova como antes', async () => {
+      const cookies = await loginAs('admin');
+      mockPendingComparison();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue({
+        items: [{ isUnavailable: false }, { isUnavailable: false }],
+      });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.quoteComparison.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ approvalStatus: 'approved' }),
+        }),
+      );
+      expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { isWinner: true } }),
+      );
+    });
+  });
+
   it('winner (escolha manual): proposta com item indisponivel -> 400 e nada e gravado', async () => {
     const cookies = await loginAs('comprador');
     mockEnv([]);

@@ -266,17 +266,16 @@ async function syncQuoteResponseFromPortal(
   const offeredPrice = sumQuoteItems(availableItems);
   const currency = (input.portalResponse.currency ?? 'USD').toUpperCase();
   const providedRate = input.providedExchangeRate ?? null;
+  // Todos os itens indisponiveis: offeredPrice 0, a proposta fica fora do ranking e nao ha o
+  // que converter -> nao exige PTAX (QuoteResponse.exchangeRate e NOT NULL; 1 = neutro).
+  const needsRate = currency !== 'BRL' && availableItems.length > 0;
+  const usableProvidedRate = providedRate && providedRate > 0 ? providedRate : null;
   const exchangeRate =
     currency === 'BRL'
       ? 1
-      : providedRate && providedRate > 0
-        ? providedRate
-        : await resolveExchangeRate(
-            tx,
-            input.quoteRequestId,
-            currency,
-          );
-  if (currency !== 'BRL' && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
+      : (usableProvidedRate ??
+        (needsRate ? await resolveExchangeRate(tx, input.quoteRequestId, currency) : 1));
+  if (needsRate && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
     throw new HttpError(
       400,
       'Exchange rate unavailable for this currency. Please contact the buyer.',
