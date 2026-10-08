@@ -65,6 +65,7 @@ model User {
   createdSupplierReviews SupplierReview[]      @relation("SupplierReviewCreatedBy")
   emailSignature         UserEmailSignature?
   createdCreditPartners  CreditPartner[]       @relation("CreditPartnerCreatedBy")
+  createdCreditSupportRequests CreditSupportRequest[] @relation("CreditSupportRequestCreatedBy")
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -117,6 +118,7 @@ model Supplier {
   portalResponses   SupplierPortalResponse[]
   reviews           SupplierReview[]
   families          ItemFamily[]
+  creditSupportRequests CreditSupportRequest[]
   createdBy         User?                    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -176,6 +178,7 @@ model QuoteRequest {
   portalResponses SupplierPortalResponse[]
   dispatchEvents  DispatchEvent[]
   review          SupplierReview?
+  creditSupportRequests CreditSupportRequest[]
   createdBy       User?                    @relation("QuoteRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([createdById])
@@ -204,6 +207,7 @@ model QuoteRequestItem {
   catalogItem         CatalogItem?                 @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   portalResponseItems SupplierPortalResponseItem[]
   quoteResponseItems  QuoteResponseItem[]
+  creditSupportItems  CreditSupportRequestItem[]
 
   @@index([quoteRequestId])
   @@index([catalogItemId])
@@ -293,6 +297,7 @@ model QuoteResponse {
   items             QuoteResponseItem[]
   wonComparisons    QuoteComparison[]       @relation("ComparisonWinner")
   targetPriceHistory QuoteResponseTargetPriceHistory[]
+  creditSupportRequests CreditSupportRequest[]
 
   @@unique([quoteRequestId, supplierId])
   @@index([quoteRequestId])
@@ -440,6 +445,7 @@ model CreditPartner {
   updatedAt   DateTime               @updatedAt
   deletedAt   DateTime?
   contacts    CreditPartnerContact[]
+  supportRequests CreditSupportRequest[]
   createdBy   User?                  @relation("CreditPartnerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([isActive])
@@ -458,6 +464,7 @@ model CreditPartnerContact {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   creditPartner   CreditPartner @relation(fields: [creditPartnerId], references: [id], onDelete: Cascade)
+  supportRequests CreditSupportRequest[]
 
   @@index([creditPartnerId])
 }
@@ -698,11 +705,91 @@ model SupplierPortalTokenLog {
   userAgent  String?
   meta       Json?
   occurredAt DateTime            @default(now())
+  creditSupportRequestId Int?
   token      SupplierPortalToken? @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  creditSupportRequest CreditSupportRequest? @relation(fields: [creditSupportRequestId], references: [id], onDelete: Cascade)
 
   @@index([tokenId])
   @@index([occurredAt])
   @@index([kind])
+  @@index([creditSupportRequestId])
+}
+
+// Credit Support (PR2a): encaminhamento da proposta do fornecedor a um parceiro de credito.
+// Snapshot CONGELADO no envio; so o hash do token e persistido (o bruto vive apenas na resposta
+// HTTP ao comprador). Sem soft-delete: ciclo de vida = revokedAt/expiresAt.
+model CreditSupportRequest {
+  id                       Int       @id @default(autoincrement())
+  quoteRequestId           Int
+  quoteResponseId          Int
+  supplierId               Int
+  creditPartnerId          Int
+  creditPartnerContactId   Int?
+  recipientEmails          String    @default("[]")
+  emailSubject             String
+  emailMessage             String?
+  tokenHash                String    @unique
+  expiresAt                DateTime
+  revokedAt                DateTime?
+  firstSeenAt              DateTime?
+  lastSeenAt               DateTime?
+  accessCount              Int       @default(0)
+  sourceResponseVersion    Int
+  currency                 String
+  offeredIncoterm          Incoterm
+  originalPaymentTermsDays Int
+  originalTotalPrice       Decimal   @db.Decimal(14, 2)
+  originPort               String?
+  respondedAt              DateTime?
+  responseVersion          Int       @default(0)
+  partnerPaymentTermsDays  Int?
+  partnerValidityDays      Int?
+  partnerNotes             String?
+  partnerTotalPrice        Decimal?  @db.Decimal(14, 2)
+  submitterIp              String?
+  submitterUserAgent       String?
+  createdById              Int
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  quoteRequest             QuoteRequest             @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  quoteResponse            QuoteResponse            @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
+  supplier                 Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  creditPartner            CreditPartner            @relation(fields: [creditPartnerId], references: [id], onDelete: Restrict)
+  creditPartnerContact     CreditPartnerContact?    @relation(fields: [creditPartnerContactId], references: [id], onDelete: SetNull)
+  createdBy                User                     @relation("CreditSupportRequestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items                    CreditSupportRequestItem[]
+  logs                     SupplierPortalTokenLog[]
+
+  @@index([quoteRequestId])
+  @@index([quoteResponseId])
+  @@index([creditPartnerId])
+  @@index([creditPartnerContactId])
+  @@index([createdById])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model CreditSupportRequestItem {
+  id                 Int       @id @default(autoincrement())
+  requestId          Int
+  quoteRequestItemId Int
+  position           Int
+  productName        String
+  itemCode           String?
+  unit               String
+  quantity           Int
+  originalUnitPrice  Decimal   @db.Decimal(14, 2)
+  originalTotalPrice Decimal   @db.Decimal(14, 2)
+  isUnavailable      Boolean   @default(false)
+  originPort         String?
+  isDangerousGood    Boolean   @default(false)
+  partnerUnitPrice   Decimal?  @db.Decimal(14, 2)
+  partnerTotalPrice  Decimal?  @db.Decimal(14, 2)
+  request            CreditSupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  quoteRequestItem   QuoteRequestItem     @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, quoteRequestItemId])
+  @@index([quoteRequestItemId])
 }
 
 model MailLog {

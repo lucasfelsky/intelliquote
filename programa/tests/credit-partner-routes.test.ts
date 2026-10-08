@@ -14,6 +14,7 @@ vi.mock('../src/lib/prisma', () => {
       update: vi.fn(),
       create: vi.fn(),
     },
+    creditSupportRequest: { updateMany: vi.fn() },
     auditLog: { create: vi.fn() },
     $executeRaw: vi.fn(),
   };
@@ -47,6 +48,7 @@ const prismaMock = prisma as unknown as {
   __tx: {
     creditPartner: { findFirst: Mock; create: Mock; update: Mock };
     creditPartnerContact: { deleteMany: Mock; update: Mock; create: Mock };
+    creditSupportRequest: { updateMany: Mock };
     auditLog: { create: Mock };
   };
 };
@@ -130,6 +132,7 @@ describe('/api/v1/credit-partners', () => {
     tx.creditPartnerContact.update.mockResolvedValue({});
     tx.creditPartnerContact.create.mockResolvedValue({});
     tx.auditLog.create.mockResolvedValue({});
+    tx.creditSupportRequest.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.creditPartner.findMany.mockResolvedValue([partnerRow()]);
   });
 
@@ -416,6 +419,26 @@ describe('/api/v1/credit-partners', () => {
     });
   });
 
+  it('DELETE revoga os encaminhamentos de credit support ativos no mesmo tx e registra a contagem', async () => {
+    const cookie = await loginAs('admin');
+    tx.creditPartner.findFirst.mockResolvedValue(partnerRow());
+    tx.creditPartner.update.mockResolvedValue(
+      partnerRow({ isActive: false, deletedAt: new Date() }),
+    );
+    tx.creditSupportRequest.updateMany.mockResolvedValue({ count: 2 });
+
+    const res = await request(app).delete('/api/v1/credit-partners/5').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledTimes(1);
+    const args = tx.creditSupportRequest.updateMany.mock.calls[0][0];
+    expect(args.where).toEqual({ creditPartnerId: 5, revokedAt: null });
+    expect(args.data.revokedAt).toBeInstanceOf(Date);
+    expect(tx.auditLog.create.mock.calls[0][0].data.metadata).toEqual({
+      revokedCreditSupportRequests: 2,
+    });
+  });
+
   it('DELETE em parceiro ja excluido/inexistente retorna 404', async () => {
     const cookie = await loginAs('admin');
 
@@ -423,6 +446,7 @@ describe('/api/v1/credit-partners', () => {
 
     expect(res.status).toBe(404);
     expect(tx.creditPartner.update).not.toHaveBeenCalled();
+    expect(tx.creditSupportRequest.updateMany).not.toHaveBeenCalled();
     expect(tx.auditLog.create).not.toHaveBeenCalled();
   });
 });

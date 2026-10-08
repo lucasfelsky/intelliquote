@@ -661,3 +661,48 @@ export const itemMovePurchaseOrderSchema = z.object({
 });
 
 export const itemCreatePurchaseOrderIdSchema = z.number().int().positive();
+
+// Credit Support (PR2a): encaminhamento da proposta ao parceiro de credito.
+const creditSupportTtlField = z
+  .number({ error: 'Informe a validade do link em dias.' })
+  .int('A validade do link deve ser um numero inteiro de dias.')
+  .min(1, 'A validade do link deve ser de no minimo 1 dia.')
+  .max(60, 'A validade do link deve ser de no maximo 60 dias.');
+
+export const creditSupportForwardSchema = z.object({
+  creditPartnerId: z
+    .number({ error: 'Parceiro de credito invalido.' })
+    .int('Parceiro de credito invalido.')
+    .positive('Parceiro de credito invalido.')
+    .optional(),
+  contactIds: z
+    .array(
+      z
+        .number({ error: 'Contato invalido.' })
+        .int('Contato invalido.')
+        .positive('Contato invalido.'),
+    )
+    .min(1, 'Selecione ao menos um contato.')
+    .max(20, 'Limite de 20 contatos por encaminhamento.')
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: 'Ha contatos repetidos na selecao.',
+    })
+    .optional(),
+  subject: z
+    .string({ error: 'Assunto invalido.' })
+    .trim()
+    .min(1, 'Informe o assunto do e-mail.')
+    .max(255, 'O assunto deve ter no maximo 255 caracteres.')
+    .optional(),
+  message: z
+    .string({ error: 'Mensagem invalida.' })
+    .max(4000, 'A mensagem deve ter no maximo 4000 caracteres.')
+    .optional(),
+  ttlDays: creditSupportTtlField.optional(),
+});
+
+export const creditSupportResendSchema = z.object({
+  ttlDays: creditSupportTtlField.optional(),
+});
+
+export type CreditSupportForwardInput = z.infer<typeof creditSupportForwardSchema>;
