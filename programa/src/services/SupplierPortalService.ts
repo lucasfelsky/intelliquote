@@ -10,6 +10,8 @@ import { HttpError } from '../utils/http';
 import { hashToken } from '../utils/tokens';
 
 export const DEFAULT_TOKEN_TTL_DAYS = 14;
+export const PORTAL_INVALID_LINK_MESSAGE =
+  'This link is invalid or has expired. Please contact your buyer to request a new one.';
 export const TOKEN_RANDOM_BYTES = 32;
 
 export interface TokenGeneration {
@@ -168,7 +170,7 @@ export class SupplierPortalService {
         meta: { reason: 'not_found' },
         client,
       }).catch(() => undefined);
-      throw new HttpError(404, 'Link invalido ou expirado.');
+      throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
     }
 
     if (token.revokedAt) {
@@ -180,7 +182,7 @@ export class SupplierPortalService {
         meta: { reason: 'revoked' },
         client,
       });
-      throw new HttpError(404, 'Link invalido ou expirado.');
+      throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
     }
 
     if (token.expiresAt.getTime() <= Date.now()) {
@@ -192,7 +194,7 @@ export class SupplierPortalService {
         meta: { reason: 'expired' },
         client,
       });
-      throw new HttpError(404, 'Link invalido ou expirado.');
+      throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
     }
 
     if (token.respondedAt) {
