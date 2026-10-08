@@ -29,6 +29,10 @@ export interface QuoteResponseItem {
   incotermPrices?:
     | { incoterm: Incoterm; unitPrice: string | number; totalPrice: string | number }[]
     | null;
+  // Porto de origem informado pelo fornecedor so quando difere da geral; null = herda a geral.
+  originPort?: string | null;
+  // Fornecedor marcou "Temporarily unavailable": preco/quantidade chegam como 0 e nao valem nada.
+  isUnavailable?: boolean;
 }
 
 export interface QuoteResponse {
@@ -56,6 +60,8 @@ export interface QuoteResponse {
   createdAt: string;
   updatedAt: string;
   targetPrice?: number | null;
+  // Porto de origem geral declarado pelo fornecedor (informativo); null = nao informado.
+  originPort?: string | null;
   items?: QuoteResponseItem[];
   source?: 'manual' | 'portal';
   supplier?: {
@@ -99,6 +105,14 @@ export interface QuoteResponsePayload {
   }[];
 }
 
+// Origem efetiva por item (informativa; nao entra em score nem landed cost).
+export interface ItemOrigin {
+  quoteRequestItemId: number;
+  productName: string | null;
+  originPort: string | null;
+  overridden: boolean;
+}
+
 export interface ComparisonResult {
   currency?: string;
   id?: number;
@@ -129,6 +143,8 @@ export interface ComparisonResult {
   totalScore: number;
   isWinner: boolean;
   leadTimeDays: number | null;
+  originPort?: string | null;
+  itemOrigins?: ItemOrigin[];
 }
 
 export interface ComparisonRecord {
@@ -168,6 +184,34 @@ function asNumber(value: unknown): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+function asOriginPort(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+// Regra de heranca da origem (espelha src/utils/originPort.ts do backend).
+export function sameOrigin(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = asOriginPort(a);
+  const right = asOriginPort(b);
+  return left !== null && right !== null && left.toLowerCase() === right.toLowerCase();
+}
+
+/** Origem efetiva do item: a propria, ou a geral quando herda. */
+export function effectiveOriginPort(
+  item: string | null | undefined,
+  general: string | null | undefined,
+): string | null {
+  return asOriginPort(item) ?? asOriginPort(general);
+}
+
+/** Item com origem propria diferente da geral (ou geral nao informada). */
+export function isOriginOverride(
+  item: string | null | undefined,
+  general: string | null | undefined,
+): boolean {
+  const own = asOriginPort(item);
+  return own !== null && !sameOrigin(own, general);
 }
 
 function asIncoterm(value: unknown): Incoterm {
@@ -213,6 +257,7 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
     createdAt: String(obj.createdAt ?? ''),
     updatedAt: String(obj.updatedAt ?? ''),
     targetPrice: obj.targetPrice === null || obj.targetPrice === undefined ? null : asNumber(obj.targetPrice),
+    originPort: asOriginPort(obj.originPort),
     items: Array.isArray(obj.items)
       ? obj.items.map((i: any) => ({
           id: asNumber(i.id),
@@ -226,6 +271,8 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
           productName: i.quoteRequestItem?.productName ?? null,
           targetPrice: i.targetPrice === null || i.targetPrice === undefined ? null : asNumber(i.targetPrice),
           incotermPrices: Array.isArray(i.incotermPrices) ? i.incotermPrices : null,
+          originPort: asOriginPort(i.originPort),
+          isUnavailable: Boolean(i.isUnavailable),
         }))
       : undefined,
     source,
@@ -314,6 +361,16 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
     leadTimeDays: obj.leadTimeDays === null || obj.leadTimeDays === undefined
       ? null
       : asNumber(obj.leadTimeDays),
+    originPort: asOriginPort(obj.originPort),
+    // Ausente (historico persistido) -> undefined: a UI simplesmente nao mostra overrides.
+    itemOrigins: Array.isArray(obj.itemOrigins)
+      ? obj.itemOrigins.map((entry: any) => ({
+          quoteRequestItemId: asNumber(entry?.quoteRequestItemId),
+          productName: typeof entry?.productName === 'string' ? entry.productName : null,
+          originPort: asOriginPort(entry?.originPort),
+          overridden: Boolean(entry?.overridden),
+        }))
+      : undefined,
   };
 }
 
@@ -371,12 +428,40 @@ export async function deleteQuoteResponse(id: number): Promise<void> {
   await api.del<void>(`/v1/quote-responses/${id}`);
 }
 
+// Proposta que ficou FORA do ranking porque o fornecedor marcou item(ns) como
+// temporariamente indisponivel(is).
+export interface ExcludedComparisonResponse {
+  quoteResponseId: number;
+  supplierId: number;
+  supplier: { id: number; name: string };
+  unavailableItems: { quoteRequestItemId: number; productName: string }[];
+}
+
+function normalizeExcluded(raw: unknown): ExcludedComparisonResponse[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry: any) => ({
+    quoteResponseId: asNumber(entry?.quoteResponseId),
+    supplierId: asNumber(entry?.supplierId),
+    supplier: {
+      id: asNumber(entry?.supplier?.id ?? entry?.supplierId),
+      name: String(entry?.supplier?.name ?? ''),
+    },
+    unavailableItems: Array.isArray(entry?.unavailableItems)
+      ? entry.unavailableItems.map((item: any) => ({
+          quoteRequestItemId: asNumber(item?.quoteRequestItemId),
+          productName: String(item?.productName ?? ''),
+        }))
+      : [],
+  }));
+}
+
 export interface ExecuteComparisonResult {
   results: ComparisonResult[];
   pendingApproval: boolean;
   winnerQuoteResponseId: number | null;
   thresholdValue: number | null;
   comparisonId: number;
+  excluded?: ExcludedComparisonResponse[];
 }
 
 export async function executeComparison(
@@ -398,6 +483,7 @@ export async function executeComparison(
     winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     comparisonId: asNumber(obj.comparisonId),
+    excluded: normalizeExcluded(obj.excluded),
   };
 }
 
@@ -407,6 +493,7 @@ export interface PreviewComparisonResult {
   pendingApproval: boolean;
   thresholdValue: number | null;
   responseCount: number;
+  excluded?: ExcludedComparisonResponse[];
 }
 
 export async function previewComparison(
@@ -428,6 +515,7 @@ export async function previewComparison(
     pendingApproval: Boolean(obj.pendingApproval),
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     responseCount: asNumber(obj.responseCount),
+    excluded: normalizeExcluded(obj.excluded),
   };
 }
 

@@ -203,6 +203,7 @@ async function buildPortalView(tokenId: number) {
           totalPriceCurrency: response.totalPriceCurrency,
           validityDays: response.validityDays,
           notes: response.notes,
+          originPort: response.originPort ?? null,
           submittedAt: response.submittedAt,
           items: response.items.map((it) => ({
             quoteRequestItemId: it.quoteRequestItemId,
@@ -211,6 +212,8 @@ async function buildPortalView(tokenId: number) {
             totalPrice: it.totalPrice.toString(),
             leadTimeDays: it.leadTimeDays,
             notes: it.notes,
+            originPort: it.originPort ?? null,
+            isUnavailable: it.isUnavailable,
             incotermPrices: it.incotermPrices ?? null,
           })),
         }
@@ -225,6 +228,7 @@ async function buildPortalView(tokenId: number) {
       totalPriceCurrency: rev.totalPriceCurrency,
       validityDays: rev.validityDays,
       notes: rev.notes,
+      originPort: rev.originPort ?? null,
       submittedAt: rev.submittedAt,
       supersededAt: rev.supersededAt,
       items: rev.items,
@@ -341,6 +345,7 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
       totalPrice: response.totalPrice.toString(),
       currency: response.currency,
       itemsCount: parsed.data.items.length,
+      unavailableCount: parsed.data.items.filter((item) => item.isUnavailable).length,
       version: response.version,
       revised: result.revised,
     });

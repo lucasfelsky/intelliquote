@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { priceForComparison, sumQuoteItems } from '../src/utils/quoteBasket';
+import { classifyForComparison, priceForComparison, sumQuoteItems } from '../src/utils/quoteBasket';
 import { QuoteComparisonService } from '../src/services/QuoteComparisonService';
 
 const requested = [{ id: 1, quantity: 10 }, { id: 2, quantity: 2 }];
@@ -42,5 +42,63 @@ describe('Comparação pela cesta completa', () => {
     ];
     expect(proposals.map(p => QuoteComparisonService.calculateLandedCost(p).totalLandedCost)).toEqual([105, 100]);
     expect(() => QuoteComparisonService.compareResponses(proposals)).toThrow('mesma moeda');
+  });
+});
+
+describe('classifyForComparison (item temporariamente indisponivel)', () => {
+  const unavailable = (id: number) => ({
+    quoteRequestItemId: id,
+    quantity: 0,
+    unitPrice: 0,
+    isUnavailable: true,
+  });
+
+  it('proposta completa sem flag: complete com o preco da cesta (regra atual)', () => {
+    expect(classifyForComparison(requested, { id: 5, offeredPrice: 1, items })).toEqual({
+      kind: 'complete',
+      price: 52.5,
+    });
+  });
+
+  it('legado sem itens segue no contrato agregado', () => {
+    expect(classifyForComparison([], { id: 5, offeredPrice: '123.45' })).toEqual({
+      kind: 'complete',
+      price: 123.45,
+    });
+  });
+
+  it('disponiveis + indisponiveis cobrindo exatamente a cesta: unavailable (fora do ranking)', () => {
+    expect(
+      classifyForComparison(requested, {
+        id: 5,
+        offeredPrice: 32.5,
+        items: [items[0], unavailable(2)],
+      }),
+    ).toEqual({ kind: 'unavailable', unavailableItemIds: [2] });
+    expect(
+      classifyForComparison(requested, {
+        id: 6,
+        offeredPrice: 0,
+        items: [unavailable(1), unavailable(2)],
+      }),
+    ).toEqual({ kind: 'unavailable', unavailableItemIds: [1, 2] });
+  });
+
+  it.each([
+    ['item faltando', [unavailable(1)]],
+    ['item fora da cesta', [items[0], unavailable(99)]],
+    ['duplicata', [items[0], unavailable(1)]],
+    ['quantidade divergente no item disponivel', [{ ...items[0], quantity: 9 }, unavailable(2)]],
+    ['item extra', [items[0], items[1], unavailable(3)]],
+  ])('continua lancando o 400 de proposta parcial: %s', (_label, invalid) => {
+    expect(() =>
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: invalid }),
+    ).toThrow(/informe todos os itens/);
+  });
+
+  it('proposta parcial SEM flag continua lancando o 400 de sempre', () => {
+    expect(() =>
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: items.slice(0, 1) }),
+    ).toThrow(/informe todos os itens/);
   });
 });

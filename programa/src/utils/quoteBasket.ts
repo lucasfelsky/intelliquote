@@ -24,6 +24,12 @@ export function sumQuoteItems(items: ResponseItem[]): number {
   return total.toDecimalPlaces(2).toNumber();
 }
 
+function partialProposalError(responseId: number): HttpError {
+  return new HttpError(400,
+    `Proposta #${responseId}: para comparar, informe todos os itens nas quantidades solicitadas. Propostas parciais ou com quantidades diferentes precisam ser ajustadas.`,
+  );
+}
+
 export function priceForComparison(
   requestedItems: RequestItem[],
   response: { id: number; offeredPrice: Amount; items?: ResponseItem[] },
@@ -36,9 +42,47 @@ export function priceForComparison(
     !requested.has(item.quoteRequestItemId) ||
     !new Prisma.Decimal(item.quantity).equals(requested.get(item.quoteRequestItemId)!),
   )) {
-    throw new HttpError(400,
-      `Proposta #${response.id}: para comparar, informe todos os itens nas quantidades solicitadas. Propostas parciais ou com quantidades diferentes precisam ser ajustadas.`,
-    );
+    throw partialProposalError(response.id);
   }
   return sumQuoteItems(items);
+}
+
+export type ComparisonClassification =
+  | { kind: 'complete'; price: number }
+  | { kind: 'unavailable'; unavailableItemIds: number[] };
+
+// Classifica uma proposta para a comparacao (item "Temporarily unavailable"):
+// - 'complete': cobre a cesta pedida -> preco da cesta (regra atual, inalterada);
+// - 'unavailable': o UNICO motivo de nao cobrir a cesta sao itens marcados pelo
+//   fornecedor como indisponiveis (disponiveis + indisponiveis cobrem exatamente os itens
+//   pedidos, sem duplicata, e os disponiveis tem a quantidade pedida) -> fica fora do ranking;
+// - qualquer outra falta (item faltando, quantidade divergente, duplicata) lanca o mesmo
+//   400 de proposta parcial de sempre.
+export function classifyForComparison(
+  requestedItems: RequestItem[],
+  response: {
+    id: number;
+    offeredPrice: Amount;
+    items?: (ResponseItem & { isUnavailable?: boolean })[];
+  },
+): ComparisonClassification {
+  const items = response.items ?? [];
+  const unavailableItemIds = items
+    .filter((item) => item.isUnavailable)
+    .map((item) => item.quoteRequestItemId);
+  if (unavailableItemIds.length === 0) {
+    return { kind: 'complete', price: priceForComparison(requestedItems, response) };
+  }
+  const requested = new Map(requestedItems.map((item) => [item.id, item.quantity]));
+  const seen = new Set<number>();
+  const coversBasket =
+    items.length === requested.size &&
+    items.every((item) => {
+      const requestedQuantity = requested.get(item.quoteRequestItemId);
+      if (requestedQuantity === undefined || seen.has(item.quoteRequestItemId)) return false;
+      seen.add(item.quoteRequestItemId);
+      return item.isUnavailable || new Prisma.Decimal(item.quantity).equals(requestedQuantity);
+    });
+  if (!coversBasket) throw partialProposalError(response.id);
+  return { kind: 'unavailable', unavailableItemIds };
 }

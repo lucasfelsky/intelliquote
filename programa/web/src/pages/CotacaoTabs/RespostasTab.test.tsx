@@ -11,13 +11,19 @@ vi.mock('@/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
   ApiError: class ApiError extends Error {},
 }));
-vi.mock('@/services/quoteResponses', () => ({
+vi.mock('@/services/quoteResponses', async (importOriginal) => {
+  // Helpers puros de origem vem do modulo real; o resto segue mockado.
+  const actual = await importOriginal<typeof import('@/services/quoteResponses')>();
+  return {
+  effectiveOriginPort: actual.effectiveOriginPort,
+  isOriginOverride: actual.isOriginOverride,
   listQuoteResponses: vi.fn(),
   createQuoteResponse: vi.fn(),
   deleteQuoteResponse: vi.fn(),
   INCOTERMS: ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'],
   messageOf: (e: unknown) => String(e),
-}));
+  };
+});
 vi.mock('@/services/dispatch', () => ({
   previewQuoteResponseReply: vi.fn(),
   replyToQuoteResponse: vi.fn(),
@@ -339,5 +345,204 @@ describe('RespostasTab', () => {
         ],
       })
     );
+  });
+  describe('origem do fornecedor (informativa)', () => {
+    const originItems = [
+      {
+        id: 601, quoteResponseId: 44, quoteRequestItemId: 5,
+        unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+        notes: null, productName: 'Resina Epóxi', originPort: null,
+      },
+      {
+        id: 602, quoteResponseId: 44, quoteRequestItemId: 6,
+        unitPrice: 20, quantity: 2, totalPrice: 40, leadTimeDays: 10,
+        notes: null, productName: 'Catalisador Y', originPort: 'Ningbo',
+      },
+    ];
+
+    it('14. mostra "Origem: Shanghai" e o badge "1 item de outra origem"', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        { ...response, id: 44, originPort: 'Shanghai', items: originItems },
+      ]);
+      const { findByText } = renderTab();
+      await findByText('Origem: Shanghai');
+      await findByText('1 item de outra origem');
+    });
+
+    it('15. pop-up de itens: coluna Origem (herdado sem badge; override com "difere da geral")', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        { ...response, id: 44, originPort: 'Shanghai', items: originItems },
+      ]);
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+      const [, , dialogC] = getDialogs(container);
+      expect(within(dialogC).getByRole('columnheader', { name: 'Origem' })).toBeTruthy();
+      const rows = within(dialogC).getAllByRole('row');
+      const inherited = rows.find((row) => row.textContent?.includes('Resina Epóxi'))!;
+      const overridden = rows.find((row) => row.textContent?.includes('Catalisador Y'))!;
+      expect(inherited.textContent).toContain('Shanghai');
+      expect(inherited.textContent).not.toContain('difere da geral');
+      expect(overridden.textContent).toContain('Ningbo');
+      expect(overridden.textContent).toContain('difere da geral');
+    });
+
+    it('16. resposta legada (tudo null): "Origem: —", sem badge e sem coluna Origem', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        {
+          ...response, id: 45, originPort: null,
+          items: originItems.map((item) => ({ ...item, originPort: null })),
+        },
+      ]);
+      const { container, findByText, getByRole, queryByText } = renderTab();
+      await findByText('Origem: —');
+      expect(queryByText(/de outra origem/)).toBeNull();
+      fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+      const [, , dialogC] = getDialogs(container);
+      expect(within(dialogC).queryByRole('columnheader', { name: 'Origem' })).toBeNull();
+    });
+
+    it('17. normalizeResponse mapeia originPort geral e do item (ausente -> null)', async () => {
+      const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+        '@/services/quoteResponses',
+      );
+      const normalized = actual.normalizeResponse({
+        ...response,
+        originPort: ' Shanghai ',
+        items: [
+          { id: 1, quoteResponseId: 42, quoteRequestItemId: 5, unitPrice: '1', quantity: 1, totalPrice: '1', originPort: 'Ningbo' },
+          { id: 2, quoteResponseId: 42, quoteRequestItemId: 6, unitPrice: '1', quantity: 1, totalPrice: '1' },
+        ],
+      });
+      expect(normalized.originPort).toBe('Shanghai');
+      expect(normalized.items?.map((item) => item.originPort)).toEqual(['Ningbo', null]);
+      expect(actual.normalizeResponse({ ...response }).originPort).toBeNull();
+      expect(actual.isOriginOverride('shanghai', 'Shanghai ')).toBe(false);
+      expect(actual.isOriginOverride('Ningbo', 'Shanghai')).toBe(true);
+      expect(actual.isOriginOverride('Ningbo', null)).toBe(true);
+      expect(actual.effectiveOriginPort(null, 'Shanghai')).toBe('Shanghai');
+      expect(actual.effectiveOriginPort(' Ningbo ', 'Shanghai')).toBe('Ningbo');
+    });
+  });
+});
+
+describe('RespostasTab - item temporariamente indisponivel', () => {
+  const unavailableItems = (allUnavailable: boolean) => [
+    {
+      id: 701, quoteResponseId: 46, quoteRequestItemId: 5,
+      unitPrice: allUnavailable ? 0 : 10, quantity: allUnavailable ? 0 : 4,
+      totalPrice: allUnavailable ? 0 : 40, leadTimeDays: allUnavailable ? null : 15,
+      notes: null, productName: 'Resina Epóxi', targetPrice: null,
+      isUnavailable: allUnavailable,
+    },
+    {
+      id: 702, quoteResponseId: 46, quoteRequestItemId: 6,
+      unitPrice: 0, quantity: 0, totalPrice: 0, leadTimeDays: null,
+      notes: null, productName: 'Catalisador Y', targetPrice: null,
+      isUnavailable: true,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.mocked(listQuoteResponses).mockReset();
+    vi.mocked(previewQuoteResponseReply).mockReset();
+    vi.mocked(replyToQuoteResponse).mockReset();
+    vi.mocked(getTargetPriceHistory).mockReset();
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockResolvedValue([{ id: 7, name: 'ACME Ltda', status: 'active', country: 'BR' }]);
+    vi.mocked(getTargetPriceHistory).mockResolvedValue([]);
+    vi.mocked(previewQuoteResponseReply).mockResolvedValue({
+      to: 'x@acme.com', cc: [], subject: 's', html: '<p>oi</p>', text: 'oi',
+    });
+  });
+
+  it('18. badge na linha: "1 item indisponível" (parcial) e "Todos os itens indisponíveis"', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([
+      { ...response, id: 46, items: unavailableItems(false) },
+    ]);
+    const first = renderTab();
+    await first.findByText('1 item indisponível');
+    first.unmount();
+
+    vi.mocked(listQuoteResponses).mockResolvedValue([
+      { ...response, id: 46, items: unavailableItems(true) },
+    ]);
+    const second = renderTab();
+    await second.findByText('Todos os itens indisponíveis');
+  });
+
+  it('19. resposta sem item indisponivel nao mostra badge de indisponibilidade', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([multiItemResponse]);
+    const { findByText, queryByText } = renderTab();
+    await findByText('ACME Ltda');
+    expect(queryByText(/indisponíve/)).toBeNull();
+  });
+
+  it('20. pop-up de itens: item indisponivel mostra "—" nos valores e o badge "Temporariamente indisponível"', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([
+      { ...response, id: 46, items: unavailableItems(false) },
+    ]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    const bodyRows = within(dialogC).getAllByRole('row').slice(1);
+    expect(bodyRows).toHaveLength(2);
+    // disponivel: valores normais
+    expect(within(bodyRows[0]!).getByText('40,00 USD')).toBeTruthy();
+    expect(within(bodyRows[0]!).queryByText('Temporariamente indisponível')).toBeNull();
+    // indisponivel: sem 0,00 USD; "—" em qtd/preco/total/lead time e badge junto ao produto
+    expect(within(bodyRows[1]!).getByText('Temporariamente indisponível')).toBeTruthy();
+    expect(within(bodyRows[1]!).queryByText('0,00 USD')).toBeNull();
+    const cells = Array.from(bodyRows[1]!.querySelectorAll('td')).map((td) => td.textContent);
+    expect(cells.slice(1)).toEqual(['—', '—', '—', '—']);
+  });
+
+  it('21. modal Responder multi-item: alvo do item indisponivel desabilitado e fora do payload do preview/envio', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([
+      { ...response, id: 46, items: unavailableItems(false) },
+    ]);
+    vi.mocked(replyToQuoteResponse).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Responder' }));
+    const [, dialogB] = getDialogs(container);
+
+    const unavailableInput = dialogB.querySelector('#replyItemTarget-702') as HTMLInputElement;
+    expect(unavailableInput.disabled).toBe(true);
+    expect((dialogB.querySelector('#replyItemTarget-701') as HTMLInputElement).disabled).toBe(false);
+    expect(within(dialogB).getByText('Catalisador Y (temporariamente indisponível)')).toBeTruthy();
+
+    await waitFor(() =>
+      expect(previewQuoteResponseReply).toHaveBeenCalledWith(46, {
+        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        message: '',
+        itemTargets: [{ quoteResponseItemId: 701, targetPrice: null }],
+      })
+    );
+
+    fireEvent.change(dialogB.querySelector('#replyItemTarget-701') as HTMLInputElement, { target: { value: '8.5' } });
+    fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+    await waitFor(() =>
+      expect(replyToQuoteResponse).toHaveBeenCalledWith(46, {
+        subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+        message: '',
+        itemTargets: [{ quoteResponseItemId: 701, targetPrice: 8.5 }],
+      })
+    );
+  });
+
+  it('22. normalizeResponse mapeia isUnavailable por item (ausente -> false)', async () => {
+    const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+      '@/services/quoteResponses',
+    );
+    const normalized = actual.normalizeResponse({
+      ...response,
+      items: [
+        { id: 1, quoteResponseId: 42, quoteRequestItemId: 5, unitPrice: '0', quantity: 0, totalPrice: '0', isUnavailable: true },
+        { id: 2, quoteResponseId: 42, quoteRequestItemId: 6, unitPrice: '1', quantity: 1, totalPrice: '1' },
+      ],
+    });
+    expect(normalized.items?.map((item) => item.isUnavailable)).toEqual([true, false]);
   });
 });

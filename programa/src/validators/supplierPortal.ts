@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { Incoterm } from '@prisma/client';
 
+import { ORIGIN_PORT_MAX_LENGTH } from '../utils/originPort';
+
 const templateLocaleSchema = z
   .string()
   .trim()
@@ -54,13 +56,30 @@ const optionalCurrencyCodeField = z.preprocess(
   currencyCodeField.optional(),
 );
 
-export const supplierPortalResponseItemSchema = z.object({
+// Porto de origem: ''/espacos/null viram null; max 120. undefined = ausente (portal antigo).
+const originPortField = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() || null : value),
+  z.string().max(ORIGIN_PORT_MAX_LENGTH).nullable().optional(),
+);
+
+const optionalQuantityField = z.preprocess(
+  (value) =>
+    value === undefined || value === null || value === '' ? undefined : value,
+  nonNegativeIntegerField.optional(),
+);
+
+// Item marcado como "Temporarily unavailable" nao carrega preco/quantidade: o
+// servidor ignora qualquer valor enviado e grava zeros. Item disponivel segue
+// exigindo unitPrice, quantity e totalPrice (superRefine abaixo).
+const supplierPortalResponseItemBaseSchema = z.object({
   quoteRequestItemId: positiveIntegerField,
-  unitPrice: positiveNumberField,
-  quantity: nonNegativeIntegerField,
-  totalPrice: positiveNumberField,
+  isUnavailable: z.boolean().optional().default(false),
+  unitPrice: optionalPositiveNumberField,
+  quantity: optionalQuantityField,
+  totalPrice: optionalPositiveNumberField,
   leadTimeDays: optionalNonNegativeIntegerField,
   notes: optionalTrimmedStringField,
+  originPort: originPortField,
   incotermPrices: z
     .array(
       z.object({
@@ -72,15 +91,37 @@ export const supplierPortalResponseItemSchema = z.object({
     .optional(),
 });
 
+export const supplierPortalResponseItemSchema = supplierPortalResponseItemBaseSchema.superRefine(
+  (item, ctx) => {
+    if (item.isUnavailable) return;
+    const required = [
+      ['unitPrice', item.unitPrice],
+      ['quantity', item.quantity],
+      ['totalPrice', item.totalPrice],
+    ] as const;
+    for (const [field, value] of required) {
+      if (value === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: `Provide ${field} for every item that is not marked as unavailable.`,
+        });
+      }
+    }
+  },
+);
+
 export const supplierPortalResponseSubmitSchema = z.object({
   currency: optionalCurrencyCodeField,
   incoterm: z.nativeEnum(Incoterm),
   paymentTermsDays: z.coerce.number().int().min(0).max(365),
   exchangeRate: optionalPositiveNumberField,
-  totalPrice: positiveNumberField,
+  // 0 e valido quando todos os itens estao marcados como indisponiveis.
+  totalPrice: z.coerce.number().min(0),
   totalPriceCurrency: optionalCurrencyCodeField,
   validityDays: z.coerce.number().int().min(1).max(365),
   notes: optionalTrimmedStringField,
+  originPort: originPortField,
   items: z.array(supplierPortalResponseItemSchema).min(1, 'Informe ao menos um item.'),
 });
 
@@ -90,6 +131,21 @@ export type SupplierPortalResponseSubmitInput = z.infer<
 export type SupplierPortalResponseItemInput = z.infer<
   typeof supplierPortalResponseItemSchema
 >;
+export type AvailablePortalItem = Omit<
+  SupplierPortalResponseItemInput,
+  'unitPrice' | 'quantity' | 'totalPrice' | 'isUnavailable'
+> & { unitPrice: number; quantity: number; totalPrice: number; isUnavailable: false };
+
+export function isAvailablePortalItem(
+  item: SupplierPortalResponseItemInput,
+): item is AvailablePortalItem {
+  return (
+    !item.isUnavailable &&
+    item.unitPrice !== undefined &&
+    item.quantity !== undefined &&
+    item.totalPrice !== undefined
+  );
+}
 
 export const dispatchRecipientSelectionSchema = z.object({
   supplierContactId: positiveIntegerField,

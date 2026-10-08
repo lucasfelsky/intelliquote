@@ -6,7 +6,9 @@ import { useAuth } from '@/auth/AuthProvider';
 import {
   createQuoteResponse,
   deleteQuoteResponse,
+  effectiveOriginPort,
   INCOTERMS,
+  isOriginOverride,
   listQuoteResponses,
   messageOf,
   type Incoterm,
@@ -208,10 +210,13 @@ export function RespostasTab({
     r: QuoteResponse,
     values: Record<number, string>,
   ): { quoteResponseItemId: number; targetPrice: number | null }[] {
-    return (r.items ?? []).map((item) => ({
-      quoteResponseItemId: item.id,
-      targetPrice: values[item.id]?.trim() ? Number(values[item.id]) : null,
-    }));
+    // Item indisponivel nao recebe preco-alvo (o backend tambem ignora).
+    return (r.items ?? [])
+      .filter((item) => !item.isUnavailable)
+      .map((item) => ({
+        quoteResponseItemId: item.id,
+        targetPrice: values[item.id]?.trim() ? Number(values[item.id]) : null,
+      }));
   }
 
   const replySendMutation = useMutation({
@@ -425,6 +430,31 @@ export function RespostasTab({
                       {r.supplier?.name ?? `Fornecedor #${r.supplierId}`}
                     </button>
                     {r.supplier?.country && <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{r.supplier.country}</div>}
+                    <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Origem: {r.originPort ?? '—'}</div>
+                    {(() => {
+                      const overrides = (r.items ?? []).filter((item) =>
+                        isOriginOverride(item.originPort, r.originPort),
+                      ).length;
+                      return overrides > 0 ? (
+                        <span className="badge" style={{ marginTop: 4 }}>
+                          {overrides} {overrides === 1 ? 'item' : 'itens'} de outra origem
+                        </span>
+                      ) : null;
+                    })()}
+                    {(() => {
+                      const allItems = r.items ?? [];
+                      const unavailable = allItems.filter((item) => item.isUnavailable).length;
+                      if (unavailable === 0) return null;
+                      return (
+                        <div>
+                          <span className="badge" style={{ marginTop: 4 }}>
+                            {unavailable === allItems.length
+                              ? 'Todos os itens indisponíveis'
+                              : `${unavailable} ${unavailable === 1 ? 'item indisponível' : 'itens indisponíveis'}`}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {r.isWinner && (
                       <div>
                         <span className="badge badge--muted">Vencedora</span>
@@ -713,6 +743,7 @@ export function RespostasTab({
                   <div key={item.id} style={{ marginTop: 8 }}>
                     <label className="field-label" htmlFor={`replyItemTarget-${item.id}`}>
                       {item.productName || productName || requestCode}
+                      {item.isUnavailable ? ' (temporariamente indisponível)' : ''}
                     </label>
                     <input
                       id={`replyItemTarget-${item.id}`}
@@ -720,7 +751,8 @@ export function RespostasTab({
                       type="number"
                       step="0.01"
                       min="0"
-                      value={replyItemTargets[item.id] ?? ''}
+                      disabled={Boolean(item.isUnavailable)}
+                      value={item.isUnavailable ? '' : (replyItemTargets[item.id] ?? '')}
                       onChange={(e) =>
                         setReplyItemTargets((prev) => ({ ...prev, [item.id]: e.target.value }))
                       }
@@ -843,12 +875,16 @@ export function RespostasTab({
             ? itemsTarget.items.map((item) => ({
                 key: String(item.id),
                 productName: item.productName || productName || requestCode,
-                quantity: formatNumber(item.quantity),
-                unitPrice: formatCurrency(item.unitPrice, currency),
-                totalPrice: formatCurrency(item.totalPrice, currency),
-                leadTimeDays: item.leadTimeDays != null ? formatNumber(item.leadTimeDays) : '—',
+                unavailable: Boolean(item.isUnavailable),
+                // Item indisponivel: valores gravados (0) nao sao exibidos.
+                quantity: item.isUnavailable ? '—' : formatNumber(item.quantity),
+                unitPrice: item.isUnavailable ? '—' : formatCurrency(item.unitPrice, currency),
+                totalPrice: item.isUnavailable ? '—' : formatCurrency(item.totalPrice, currency),
+                leadTimeDays: item.leadTimeDays != null && !item.isUnavailable ? formatNumber(item.leadTimeDays) : '—',
+                origin: item.isUnavailable ? '—' : effectiveOriginPort(item.originPort, itemsTarget.originPort) ?? '—',
+                originOverride: !item.isUnavailable && isOriginOverride(item.originPort, itemsTarget.originPort),
                 incotermPrices:
-                  item.incotermPrices && item.incotermPrices.length >= 2
+                  !item.isUnavailable && item.incotermPrices && item.incotermPrices.length >= 2
                     ? item.incotermPrices
                         .map((p) => `${p.incoterm}: ${formatCurrency(Number(p.unitPrice), currency)}`)
                         .join(' · ')
@@ -857,14 +893,22 @@ export function RespostasTab({
             : [{
                 key: 'fallback',
                 productName: productName || requestCode,
+                unavailable: false,
                 quantity: '—',
                 unitPrice: formatCurrency(itemsTarget.offeredPrice, currency),
                 totalPrice: formatCurrency(itemsTarget.offeredPrice, currency),
                 leadTimeDays: itemsTarget.leadTimeDays != null ? formatNumber(itemsTarget.leadTimeDays) : '—',
+                origin: itemsTarget.originPort ?? '—',
+                originOverride: false,
                 incotermPrices: '—',
               }];
           const showIncotermPrices = (itemsTarget.items ?? []).some(
-            (item) => (item.incotermPrices?.length ?? 0) >= 2,
+            (item) => !item.isUnavailable && (item.incotermPrices?.length ?? 0) >= 2,
+          );
+          const showOrigin = (itemsTarget.items ?? []).some(
+            (item) =>
+              !item.isUnavailable &&
+              effectiveOriginPort(item.originPort, itemsTarget.originPort) !== null,
           );
           return (
             <div className="table-wrapper">
@@ -876,17 +920,31 @@ export function RespostasTab({
                     <th>Preço unit.</th>
                     <th>Total</th>
                     <th>Lead time</th>
+                    {showOrigin && <th>Origem</th>}
                     {showIncotermPrices && <th>Preços por incoterm</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.key}>
-                      <td>{row.productName}</td>
+                      <td>
+                        {row.productName}
+                        {row.unavailable && (
+                          <span className="badge" style={{ marginLeft: 6 }}>Temporariamente indisponível</span>
+                        )}
+                      </td>
                       <td>{row.quantity}</td>
                       <td>{row.unitPrice}</td>
                       <td>{row.totalPrice}</td>
                       <td>{row.leadTimeDays}</td>
+                      {showOrigin && (
+                        <td>
+                          {row.origin}
+                          {row.originOverride && (
+                            <span className="badge" style={{ marginLeft: 6 }}>difere da geral</span>
+                          )}
+                        </td>
+                      )}
                       {showIncotermPrices && <td>{row.incotermPrices}</td>}
                     </tr>
                   ))}

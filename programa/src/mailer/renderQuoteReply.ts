@@ -41,6 +41,8 @@ export interface QuoteReplyItem {
   // sem quebrar o tsc. Renderizado como sub-linha na celula de Unit Price,
   // sem coluna nova.
   targetPrice?: number | null;
+  // Fornecedor marcou o item como "Temporarily unavailable": sem preco/total/target.
+  isUnavailable?: boolean;
 }
 
 export interface QuoteReplyVars {
@@ -68,6 +70,8 @@ function formatMoney(value: number | null, currency: string): string {
   return `${formatEnNumber(value)} ${escapeHtml(currency)}`;
 }
 
+const UNAVAILABLE_LABEL = 'Temporarily unavailable';
+
 function renderItemsRows(items: QuoteReplyItem[], currency: string): string {
   if (items.length === 0) {
     return `
@@ -78,6 +82,16 @@ function renderItemsRows(items: QuoteReplyItem[], currency: string): string {
   return items
     .map((item, idx) => {
       const bg = idx % 2 === 0 ? '#F8FBFA' : '#ffffff';
+      if (item.isUnavailable) {
+        return `
+      <tr bgcolor="${bg}" style="background-color:${bg};">
+        <td align="left" width="200" style="width:200px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.name)}</td>
+        <td align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${escapeHtml(item.incoterm)}</td>
+        <td align="right" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#1F2933;">${formatEnNumber(item.quantity)} ${escapeHtml(item.unit)}</td>
+        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">${UNAVAILABLE_LABEL}</td>
+        <td align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #ECF1EF;font-family:Arial,sans-serif;font-size:13px;color:#9aa4ad;font-style:italic;">&#8212;</td>
+      </tr>`;
+      }
       const total = item.unitPrice === null ? null : item.unitPrice * item.quantity;
       const emptyStyle = item.unitPrice === null ? 'color:#9aa4ad;font-style:italic;' : 'color:#1F2933;';
       // Target-price POR ITEM: sub-linha dentro da propria celula de Unit
@@ -99,6 +113,9 @@ function renderItemsRows(items: QuoteReplyItem[], currency: string): string {
 }
 
 function renderItemsTextRow(item: QuoteReplyItem, currency: string): string {
+  if (item.isUnavailable) {
+    return `${item.name}	${item.incoterm}	${formatEnNumber(item.quantity)} ${item.unit}	${UNAVAILABLE_LABEL}	—`;
+  }
   const total = item.unitPrice === null ? null : item.unitPrice * item.quantity;
   const unitPriceText = item.unitPrice === null ? '—' : `${formatEnNumber(item.unitPrice)} ${currency}`;
   const totalText = total === null ? '—' : `${formatEnNumber(total)} ${currency}`;

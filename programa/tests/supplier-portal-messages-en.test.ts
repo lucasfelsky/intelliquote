@@ -221,7 +221,8 @@ describe('Portal do fornecedor - mensagens em ingles', () => {
         .set('User-Agent', nextUa())
         .send(submitPayload([item, { ...item }], 40));
       expect(res.status).toBe(400);
-      expect(res.body.message).toBe('The proposal contains duplicated items or invalid prices/quantities.');
+      // O #116 valida duplicados antes (PortalHttpError em ingles); o mapa de sumQuoteItems segue como rede de seguranca.
+      expect(res.body.message).toMatch(/^Duplicate item in the proposal \(id=7\)/);
       expect(res.body.message).not.toMatch(PT_ANY_PATTERN);
     });
 

@@ -1,6 +1,7 @@
 import { Incoterm, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
 import { z } from 'zod';
 import { normalizeAcceptedIncoterms } from '../utils/incoterm';
+import { ORIGIN_PORT_MAX_LENGTH } from '../utils/originPort';
 
 const requiredTrimmedStringField = z.string().trim().min(1);
 const uppercaseTrimmedStringField = requiredTrimmedStringField.transform((value) =>
@@ -247,6 +248,38 @@ export const quoteRequestUpdateSchema = z.object({
   deadlineAt: nullableOptionalDateField,
 });
 
+// Porto de origem informado pelo fornecedor: ''/espacos viram null (herda a geral); max 120.
+// undefined = ausente (no update, nao mexe).
+const originPortField = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim() || null : value),
+  z.string().max(ORIGIN_PORT_MAX_LENGTH).nullable().optional(),
+);
+
+// Item da resposta manual. `isUnavailable` = "Temporarily unavailable": a API ignora
+// preco/quantidade enviados e grava zeros; item disponivel exige unitPrice e quantity.
+const quoteResponseItemInputSchema = z
+  .object({
+    quoteRequestItemId: positiveIntegerField,
+    isUnavailable: z.boolean().optional().default(false),
+    unitPrice: optionalPositiveNumberField,
+    quantity: optionalPositiveIntegerField,
+    leadTimeDays: nullableOptionalNonNegativeIntegerField,
+    notes: nullableOptionalTrimmedStringField,
+    originPort: originPortField,
+  })
+  .superRefine((item, ctx) => {
+    if (item.isUnavailable) return;
+    for (const field of ['unitPrice', 'quantity'] as const) {
+      if (item[field] === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: `Informe ${field} para todo item que nao esta marcado como indisponivel.`,
+        });
+      }
+    }
+  });
+
 export const quoteResponseCreateSchema = z.object({
   quoteRequestId: positiveIntegerField,
   supplierId: positiveIntegerField,
@@ -265,18 +298,9 @@ export const quoteResponseCreateSchema = z.object({
   paymentTermsDays: nonNegativeIntegerField,
   leadTimeDays: nullableNonNegativeIntegerField.optional(),
   notes: nullableTrimmedStringField.optional(),
+  originPort: originPortField,
   submittedAt: optionalDateField,
-  items: z
-    .array(
-      z.object({
-        quoteRequestItemId: positiveIntegerField,
-        unitPrice: positiveNumberField,
-        quantity: positiveIntegerField,
-        leadTimeDays: nullableOptionalNonNegativeIntegerField,
-        notes: nullableOptionalTrimmedStringField,
-      })
-    )
-    .optional(),
+  items: z.array(quoteResponseItemInputSchema).optional(),
 });
 
 export const quoteResponseUpdateSchema = z.object({
@@ -301,18 +325,9 @@ export const quoteResponseUpdateSchema = z.object({
   ),
   leadTimeDays: nullableOptionalNonNegativeIntegerField,
   notes: nullableOptionalTrimmedStringField,
+  originPort: originPortField,
   submittedAt: optionalDateField,
-  items: z
-    .array(
-      z.object({
-        quoteRequestItemId: positiveIntegerField,
-        unitPrice: positiveNumberField,
-        quantity: positiveIntegerField,
-        leadTimeDays: nullableOptionalNonNegativeIntegerField,
-        notes: nullableOptionalTrimmedStringField,
-      })
-    )
-    .optional(),
+  items: z.array(quoteResponseItemInputSchema).optional(),
 });
 
 // Usado tanto pra preview quanto pro envio de verdade do botao "Responder"
