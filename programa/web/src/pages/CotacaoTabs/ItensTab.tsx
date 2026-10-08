@@ -120,6 +120,15 @@ export function ItensTab(props: ItensTabProps) {
     setPendingFocus(null);
   });
 
+  // Descarta um alvo de foco órfão (a lista nunca refletiu a ação): evita roubar o foco depois.
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const timer = setTimeout(() => {
+      setPendingFocus((cur) => (cur === pendingFocus ? null : cur));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [pendingFocus]);
+
   // Região de status estável (sempre montada): limpa e escreve no quadro seguinte para o
   // leitor de tela anunciar também mensagens repetidas.
   const announce = useCallback((message: string) => {
@@ -414,6 +423,7 @@ export function ItensTab(props: ItensTabProps) {
             <div className="po-group-head__title">
               {renaming && po ? (
                 <input
+                  id={`po-title-${key}`}
                   className="input po-rename-input"
                   aria-label="Rótulo da PO"
                   value={renameValue}
