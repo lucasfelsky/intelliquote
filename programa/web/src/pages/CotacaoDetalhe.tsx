@@ -763,6 +763,16 @@ export default function CotacaoDetalhe() {
       }
     }, [dispatchPreviewQuery.data, dispatchPreviewQuery.isPlaceholderData]);
 
+    // O Modal abre o <dialog> num efeito do pai (depois dos filhos): foca o campo útil
+    // (Quantidade na edição, busca no Novo item) só depois disso.
+    useEffect(() => {
+      if (!showItemModal) return;
+      const timer = setTimeout(() => {
+        document.getElementById(editingItem ? 'itemQuantity' : 'catalogItemSearch')?.focus();
+      }, 0);
+      return () => clearTimeout(timer);
+    }, [showItemModal, editingItem]);
+
     const sendDispatchMutation = useMutation({
       mutationFn: () =>
         sendDispatch(id, selectedContactIds, {
@@ -870,16 +880,19 @@ export default function CotacaoDetalhe() {
   function openEditItem(item: QuoteRequestItem) {
     setEditingItem(item);
       const hasIncoterm = !!item.desiredIncoterm;
-      const hasPort = !!item.destinationPort;
+      // O backend materializa o porto da cotação no item: porto igual ao da cotação = herdado.
+      const quotePort = (detail.data?.destinationPort ?? '').trim().toLowerCase();
+      const itemPort = (item.destinationPort ?? '').trim().toLowerCase();
+      const inheritPort = itemPort === '' || itemPort === quotePort;
       setItemForm({
         catalogItemId: item.catalogItemId,
         quantity: String(item.quantity),
         unit: item.unit,
         notes: item.notes ?? '',
         desiredIncoterm: item.desiredIncoterm ?? '',
-        destinationPort: item.destinationPort ?? '',
+        destinationPort: inheritPort ? '' : (item.destinationPort ?? ''),
         inheritIncoterm: !hasIncoterm,
-        inheritPort: !hasPort,
+        inheritPort,
       });
       setItemError(null);
       picker.reset();
@@ -1870,7 +1883,7 @@ export default function CotacaoDetalhe() {
         isOpen={showItemModal}
         onClose={closeItemModal}
         title={editingItem ? 'Editar item' : 'Novo item'}
-        size="wide"
+        size={editingItem !== null ? undefined : 'wide'}
       >
         {showItemModal && (
         <form onSubmit={handleItemSubmit}>
@@ -1891,39 +1904,89 @@ export default function CotacaoDetalhe() {
             selectedItem={selectedCatalogItem}
             disabled={editingItem !== null}
           >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
+            <div className="form-grid">
+              <div>
+                <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
+                <input
+                  id="itemQuantity"
+                  className="input"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={itemForm.quantity}
+                  onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="itemUnit">Unidade *</label>
+                <select
+                  id="itemUnit"
+                  className="select"
+                  value={itemForm.unit}
+                  onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
+                  required
+                >
+                  {UNITS.map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <fieldset className="item-form__scope">
+              <legend>Incoterm e destino</legend>
+              <label className="item-form__check">
+                <input
+                  type="checkbox"
+                  checked={itemForm.inheritIncoterm}
+                  onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
+                />
+                {qr.desiredIncoterm.length > 1 ? 'Usar os INCOTERMS da cotação' : 'Usar o INCOTERM da cotação'} ({formatIncoterms(qr.desiredIncoterm)})
+              </label>
+              {!itemForm.inheritIncoterm && (
                 <div>
-                  <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
-                  <input
-                    id="itemQuantity"
-                    className="input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={itemForm.quantity}
-                    onChange={(e) => setItemForm({ ...itemForm, quantity: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="itemUnit">Unidade *</label>
+                  <label className="field-label" htmlFor="itemIncoterm">INCOTERM deste item *</label>
                   <select
-                    id="itemUnit"
+                    id="itemIncoterm"
                     className="select"
-                    value={itemForm.unit}
-                    onChange={(e) => setItemForm({ ...itemForm, unit: e.target.value })}
-                    required
+                    value={itemForm.desiredIncoterm}
+                    onChange={(e) =>
+                      setItemForm({ ...itemForm, desiredIncoterm: e.target.value as Incoterm })
+                    }
                   >
-                    {UNITS.map((u) => (
-                      <option key={u} value={u}>{u}</option>
+                    <option value="">Selecione…</option>
+                    {INCOTERMS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
                 </div>
-              </div>
-
-              <label className="field-label" htmlFor="itemNotes" style={{ marginTop: 12 }}>
-                Notas
+              )}
+              <label className="item-form__check">
+                <input
+                  type="checkbox"
+                  checked={itemForm.inheritPort}
+                  onChange={(e) => setItemForm({ ...itemForm, inheritPort: e.target.checked })}
+                />
+                Usar o porto da cotação ({qr.destinationPort || 'não definido'})
               </label>
+              {!itemForm.inheritPort && (
+                <div>
+                  <label className="field-label" htmlFor="itemPort">Porto de destino deste item *</label>
+                  <input
+                    id="itemPort"
+                    className="input"
+                    value={itemForm.destinationPort}
+                    onChange={(e) => setItemForm({ ...itemForm, destinationPort: e.target.value })}
+                    placeholder="Ex.: Porto de Santos"
+                    maxLength={120}
+                  />
+                </div>
+              )}
+            </fieldset>
+
+            <div>
+              <label className="field-label" htmlFor="itemNotes">Notas</label>
               <textarea
                 id="itemNotes"
                 className="textarea"
@@ -1931,75 +1994,25 @@ export default function CotacaoDetalhe() {
                 value={itemForm.notes}
                 onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
               />
-
-                          <fieldset style={{ marginTop: 16, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
-                            <legend style={{ padding: '0 6px', fontWeight: 600 }} className="text-xs">Incoterm e destino por item</legend>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
-                              <input
-                                type="checkbox"
-                                checked={itemForm.inheritIncoterm}
-                                onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
-                              />
-                              Usar o INCOTERM da cotação ({formatIncoterms(qr.desiredIncoterm)})
-                            </label>
-                            {!itemForm.inheritIncoterm && (
-                              <div style={{ marginBottom: 8 }}>
-                                <label className="field-label" htmlFor="itemIncoterm">INCOTERM deste item *</label>
-                                <select
-                                  id="itemIncoterm"
-                                  className="select"
-                                  value={itemForm.desiredIncoterm}
-                                  onChange={(e) =>
-                                    setItemForm({ ...itemForm, desiredIncoterm: e.target.value as Incoterm })
-                                  }
-                                >
-                                  <option value="">Selecione…</option>
-                                  {INCOTERMS.map((t) => (
-                                    <option key={t} value={t}>{t}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }} className="text-sm">
-                              <input
-                                type="checkbox"
-                                checked={itemForm.inheritPort}
-                                onChange={(e) => setItemForm({ ...itemForm, inheritPort: e.target.checked })}
-                              />
-                              Usar o porto da cotação ({qr.destinationPort || 'não definido'})
-                            </label>
-                            {!itemForm.inheritPort && (
-                              <div>
-                                <label className="field-label" htmlFor="itemPort">Porto de destino deste item *</label>
-                                <input
-                                  id="itemPort"
-                                  className="input"
-                                  value={itemForm.destinationPort}
-                                  onChange={(e) => setItemForm({ ...itemForm, destinationPort: e.target.value })}
-                                  placeholder="Ex.: Porto de Santos"
-                                  maxLength={120}
-                                />
-                              </div>
-                            )}
-                          </fieldset>
-
-                          {itemError && (
-                <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{itemError}</p>
-              )}
-
-              <div className="modal-actions">
-                <button type="button" className="ghost-button" onClick={closeItemModal}>
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={createItem.isPending || updateItem.isPending}
-                >
-                  {editingItem ? 'Salvar alterações' : 'Adicionar'}
-                </button>
-              </div>
+            </div>
           </CatalogItemPicker>
+
+          {itemError && (
+            <p className="alert alert--error item-form__error" role="alert">{itemError}</p>
+          )}
+
+          <div className="modal-actions">
+            <button type="button" className="ghost-button" onClick={closeItemModal}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={createItem.isPending || updateItem.isPending}
+            >
+              {editingItem ? 'Salvar alterações' : 'Adicionar'}
+            </button>
+          </div>
         </form>
         )}
       </Modal>

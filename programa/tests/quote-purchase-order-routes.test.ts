@@ -230,6 +230,19 @@ describe('Rotas de PO da cotacao', () => {
     expect(tx.quoteRequestPurchaseOrder.create).not.toHaveBeenCalled();
   });
 
+  it('R1 group com adoptUnassigned retorna 400', async () => {
+    const cookies = await loginAs('comprador');
+    p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'open' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/5/purchase-orders')
+      .set('Cookie', cookies)
+      .send({ group: true, adoptUnassigned: true });
+
+    expect(res.status).toBe(400);
+    expect(tx.quoteRequestPurchaseOrder.create).not.toHaveBeenCalled();
+  });
+
   it('R1 retorna 400 em cotacao fechada', async () => {
     const cookies = await loginAs('comprador');
     p.quoteRequest.findFirst.mockResolvedValue({ id: 5, status: 'closed' });

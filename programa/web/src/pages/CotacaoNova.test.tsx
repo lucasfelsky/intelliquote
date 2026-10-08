@@ -153,6 +153,30 @@ describe('CotacaoNova', () => {
     expect(reopenedDialog.querySelector('.modal-header h2')?.textContent).toBe('Editar item');
   });
 
+  it('3b. edição do rascunho: largura padrão e ações como filhas diretas do form', async () => {
+    const { container, getByRole, getByLabelText } = renderPage();
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+
+    const dialog = getDialog(container);
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: /Químicos/ })).toBeTruthy();
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Químicos/ }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole('button', { name: 'Soda Cáustica' })).toBeTruthy();
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Soda Cáustica' }));
+    fireEvent.change(getByLabelText('Quantidade *'), { target: { value: '10' } });
+    fireEvent.click(getByRole('button', { name: 'Adicionar' }));
+
+    fireEvent.click(getByRole('button', { name: 'Editar' }));
+    const reopenedDialog = getDialog(container);
+    expect(reopenedDialog.querySelector('.modal-header h2')?.textContent).toBe('Editar item');
+    expect(reopenedDialog.className).not.toContain('modal-dialog--wide');
+    expect(reopenedDialog.querySelector('form > .modal-actions')).not.toBeNull();
+  });
+
   it('4. tamanho wide: className contém modal-dialog--wide', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
