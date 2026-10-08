@@ -62,11 +62,21 @@ const originPortField = z.preprocess(
   z.string().max(ORIGIN_PORT_MAX_LENGTH).nullable().optional(),
 );
 
-export const supplierPortalResponseItemSchema = z.object({
+const optionalQuantityField = z.preprocess(
+  (value) =>
+    value === undefined || value === null || value === '' ? undefined : value,
+  nonNegativeIntegerField.optional(),
+);
+
+// Item marcado como "Temporarily unavailable" nao carrega preco/quantidade: o
+// servidor ignora qualquer valor enviado e grava zeros. Item disponivel segue
+// exigindo unitPrice, quantity e totalPrice (superRefine abaixo).
+const supplierPortalResponseItemBaseSchema = z.object({
   quoteRequestItemId: positiveIntegerField,
-  unitPrice: positiveNumberField,
-  quantity: nonNegativeIntegerField,
-  totalPrice: positiveNumberField,
+  isUnavailable: z.boolean().optional().default(false),
+  unitPrice: optionalPositiveNumberField,
+  quantity: optionalQuantityField,
+  totalPrice: optionalPositiveNumberField,
   leadTimeDays: optionalNonNegativeIntegerField,
   notes: optionalTrimmedStringField,
   originPort: originPortField,
@@ -81,12 +91,33 @@ export const supplierPortalResponseItemSchema = z.object({
     .optional(),
 });
 
+export const supplierPortalResponseItemSchema = supplierPortalResponseItemBaseSchema.superRefine(
+  (item, ctx) => {
+    if (item.isUnavailable) return;
+    const required = [
+      ['unitPrice', item.unitPrice],
+      ['quantity', item.quantity],
+      ['totalPrice', item.totalPrice],
+    ] as const;
+    for (const [field, value] of required) {
+      if (value === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: `Provide ${field} for every item that is not marked as unavailable.`,
+        });
+      }
+    }
+  },
+);
+
 export const supplierPortalResponseSubmitSchema = z.object({
   currency: optionalCurrencyCodeField,
   incoterm: z.nativeEnum(Incoterm),
   paymentTermsDays: z.coerce.number().int().min(0).max(365),
   exchangeRate: optionalPositiveNumberField,
-  totalPrice: positiveNumberField,
+  // 0 e valido quando todos os itens estao marcados como indisponiveis.
+  totalPrice: z.coerce.number().min(0),
   totalPriceCurrency: optionalCurrencyCodeField,
   validityDays: z.coerce.number().int().min(1).max(365),
   notes: optionalTrimmedStringField,
@@ -100,6 +131,21 @@ export type SupplierPortalResponseSubmitInput = z.infer<
 export type SupplierPortalResponseItemInput = z.infer<
   typeof supplierPortalResponseItemSchema
 >;
+export type AvailablePortalItem = Omit<
+  SupplierPortalResponseItemInput,
+  'unitPrice' | 'quantity' | 'totalPrice' | 'isUnavailable'
+> & { unitPrice: number; quantity: number; totalPrice: number; isUnavailable: false };
+
+export function isAvailablePortalItem(
+  item: SupplierPortalResponseItemInput,
+): item is AvailablePortalItem {
+  return (
+    !item.isUnavailable &&
+    item.unitPrice !== undefined &&
+    item.quantity !== undefined &&
+    item.totalPrice !== undefined
+  );
+}
 
 export const dispatchRecipientSelectionSchema = z.object({
   supplierContactId: positiveIntegerField,

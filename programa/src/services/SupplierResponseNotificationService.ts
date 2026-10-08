@@ -7,6 +7,18 @@ import {
   renderSupplierResponseReceivedFromTemplate,
 } from '../mailer/renderSupplierResponseReceived';
 
+// O template pode estar no banco (editavel), entao o aviso de indisponibilidade
+// viaja no proprio valor de {{itemsCount}} em vez de um placeholder novo.
+function formatItemsCount(total: number, unavailable: number): string {
+  if (unavailable <= 0) return String(total);
+  if (unavailable >= total) {
+    return total === 1
+      ? `${total} (temporariamente indisponível)`
+      : `${total} (todos temporariamente indisponíveis)`;
+  }
+  return `${total} (${unavailable} temporariamente ${unavailable > 1 ? 'indisponíveis' : 'indisponível'})`;
+}
+
 // F1 (backlog 2026-07-12): fecha o loop do portal — quando o fornecedor
 // submete (ou revisa) uma resposta, o COMPRADOR que disparou a cotação
 // (token.createdBy) é avisado por e-mail. Antes ele só descobria abrindo a
@@ -22,6 +34,8 @@ export class SupplierResponseNotificationService {
     totalPrice: string;
     currency: string;
     itemsCount: number;
+    // Itens marcados "Temporarily unavailable" pelo fornecedor (default 0).
+    unavailableCount?: number;
     version: number;
     revised: boolean;
   }): Promise<void> {
@@ -68,7 +82,7 @@ export class SupplierResponseNotificationService {
         productName: token.quoteRequest.productName ?? '',
         totalPrice: input.totalPrice,
         currency: input.currency,
-        itemsCount: input.itemsCount,
+        itemsCount: formatItemsCount(input.itemsCount, input.unavailableCount ?? 0),
         revisionLabel,
         responsesUrl: `${base}/respostas`,
       });

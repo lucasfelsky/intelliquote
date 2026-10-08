@@ -31,6 +31,8 @@ export interface QuoteResponseItem {
     | null;
   // Porto de origem informado pelo fornecedor so quando difere da geral; null = herda a geral.
   originPort?: string | null;
+  // Fornecedor marcou "Temporarily unavailable": preco/quantidade chegam como 0 e nao valem nada.
+  isUnavailable?: boolean;
 }
 
 export interface QuoteResponse {
@@ -270,6 +272,7 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
           targetPrice: i.targetPrice === null || i.targetPrice === undefined ? null : asNumber(i.targetPrice),
           incotermPrices: Array.isArray(i.incotermPrices) ? i.incotermPrices : null,
           originPort: asOriginPort(i.originPort),
+          isUnavailable: Boolean(i.isUnavailable),
         }))
       : undefined,
     source,
@@ -425,12 +428,40 @@ export async function deleteQuoteResponse(id: number): Promise<void> {
   await api.del<void>(`/v1/quote-responses/${id}`);
 }
 
+// Proposta que ficou FORA do ranking porque o fornecedor marcou item(ns) como
+// temporariamente indisponivel(is).
+export interface ExcludedComparisonResponse {
+  quoteResponseId: number;
+  supplierId: number;
+  supplier: { id: number; name: string };
+  unavailableItems: { quoteRequestItemId: number; productName: string }[];
+}
+
+function normalizeExcluded(raw: unknown): ExcludedComparisonResponse[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry: any) => ({
+    quoteResponseId: asNumber(entry?.quoteResponseId),
+    supplierId: asNumber(entry?.supplierId),
+    supplier: {
+      id: asNumber(entry?.supplier?.id ?? entry?.supplierId),
+      name: String(entry?.supplier?.name ?? ''),
+    },
+    unavailableItems: Array.isArray(entry?.unavailableItems)
+      ? entry.unavailableItems.map((item: any) => ({
+          quoteRequestItemId: asNumber(item?.quoteRequestItemId),
+          productName: String(item?.productName ?? ''),
+        }))
+      : [],
+  }));
+}
+
 export interface ExecuteComparisonResult {
   results: ComparisonResult[];
   pendingApproval: boolean;
   winnerQuoteResponseId: number | null;
   thresholdValue: number | null;
   comparisonId: number;
+  excluded?: ExcludedComparisonResponse[];
 }
 
 export async function executeComparison(
@@ -452,6 +483,7 @@ export async function executeComparison(
     winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     comparisonId: asNumber(obj.comparisonId),
+    excluded: normalizeExcluded(obj.excluded),
   };
 }
 
@@ -461,6 +493,7 @@ export interface PreviewComparisonResult {
   pendingApproval: boolean;
   thresholdValue: number | null;
   responseCount: number;
+  excluded?: ExcludedComparisonResponse[];
 }
 
 export async function previewComparison(
@@ -482,6 +515,7 @@ export async function previewComparison(
     pendingApproval: Boolean(obj.pendingApproval),
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     responseCount: asNumber(obj.responseCount),
+    excluded: normalizeExcluded(obj.excluded),
   };
 }
 

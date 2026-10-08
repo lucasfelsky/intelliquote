@@ -5,9 +5,10 @@ import { sumQuoteItems } from '../utils/quoteBasket';
 import { normalizeItemOriginPort } from '../utils/originPort';
 import { QuoteComparisonService } from './QuoteComparisonService';
 import { ExchangeRateService } from './ExchangeRateService';
-import type {
-  SupplierPortalResponseItemInput,
-  SupplierPortalResponseSubmitInput,
+import {
+  isAvailablePortalItem,
+  type SupplierPortalResponseItemInput,
+  type SupplierPortalResponseSubmitInput,
 } from '../validators/supplierPortal';
 
 export interface SubmittedResponseMeta {
@@ -32,9 +33,27 @@ export class SupplierPortalResponseService {
     meta?: SubmittedResponseMeta;
   }) {
     const client = prisma;
-    const totalItems = input.payload.items.length;
-    const computedTotal = sumQuoteItems(input.payload.items);
+    // Itens "Temporarily unavailable" nao entram em nenhuma soma/checagem de preco:
+    // o servidor ignora qualquer valor enviado para eles e grava zeros.
+    const seenItemIds = new Set<number>();
     for (const item of input.payload.items) {
+      if (seenItemIds.has(item.quoteRequestItemId)) {
+        throw new HttpError(
+          400,
+          `Duplicate item in the proposal (id=${item.quoteRequestItemId}). Please reload the page.`,
+        );
+      }
+      seenItemIds.add(item.quoteRequestItemId);
+    }
+    const availableItems = input.payload.items.filter(isAvailablePortalItem);
+    if (
+      availableItems.length !==
+      input.payload.items.filter((item) => !item.isUnavailable).length
+    ) {
+      throw new HttpError(400, 'Provide unitPrice, quantity and totalPrice for every available item.');
+    }
+    const computedTotal = sumQuoteItems(availableItems);
+    for (const item of availableItems) {
       const expectedTotal = new Prisma.Decimal(item.unitPrice).times(item.quantity);
       if (expectedTotal.minus(item.totalPrice).abs().gt(0.01)) {
         throw new HttpError(400, 'The item total does not match the unit price times the quantity.');
@@ -90,6 +109,19 @@ export class SupplierPortalResponseService {
     };
     const itemsCreate = input.payload.items.map(
       (item: SupplierPortalResponseItemInput, index: number) => {
+        if (!isAvailablePortalItem(item)) {
+          return {
+            quoteRequestItemId: item.quoteRequestItemId,
+            unitPrice: new Prisma.Decimal(0),
+            quantity: 0,
+            totalPrice: new Prisma.Decimal(0),
+            leadTimeDays: null,
+            notes: item.notes ?? null,
+            originPort: null,
+            incotermPrices: Prisma.DbNull,
+            isUnavailable: true,
+          };
+        }
         const prices = normalizedIncotermPrices[index];
         return {
           quoteRequestItemId: item.quoteRequestItemId,
@@ -109,6 +141,7 @@ export class SupplierPortalResponseService {
                   .toFixed(2),
               }))
             : Prisma.DbNull,
+          isUnavailable: false,
         };
       },
     );
@@ -146,6 +179,7 @@ export class SupplierPortalResponseService {
               notes: it.notes,
               incotermPrices: it.incotermPrices ?? null,
               originPort: it.originPort ?? null,
+              isUnavailable: it.isUnavailable,
             })),
           },
         });
@@ -223,7 +257,9 @@ async function syncQuoteResponseFromPortal(
   const items = [...input.portalResponse.items].sort(
     (a, b) => a.quoteRequestItemId - b.quoteRequestItemId,
   );
-  const offeredPrice = sumQuoteItems(items);
+  // Itens indisponiveis (valores 0) ficam fora de preco e prazo medio.
+  const availableItems = items.filter((item) => !item.isUnavailable);
+  const offeredPrice = sumQuoteItems(availableItems);
   const currency = (input.portalResponse.currency ?? 'USD').toUpperCase();
   const providedRate = input.providedExchangeRate ?? null;
   const exchangeRate =
@@ -257,7 +293,7 @@ async function syncQuoteResponseFromPortal(
   });
 
   const submittedAt = input.portalResponse.submittedAt;
-  const leadTimeDays = computeAverageLeadTime(items);
+  const leadTimeDays = computeAverageLeadTime(availableItems);
 
   const data = {
     quoteRequestId: input.quoteRequestId,
@@ -289,6 +325,7 @@ async function syncQuoteResponseFromPortal(
     leadTimeDays: item.leadTimeDays,
     notes: item.notes,
     originPort: item.originPort ?? null,
+    isUnavailable: item.isUnavailable,
     incotermPrices: (item.incotermPrices as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
   }));
 
@@ -330,7 +367,7 @@ function normalizeIncotermPrices(
   items: SupplierPortalResponseItemInput[],
 ): (NormalizedIncotermPrice[] | null)[] {
   if (quoteIncoterms.length === 0) {
-    if (items.some((item) => item.incotermPrices !== undefined)) {
+    if (items.some((item) => !item.isUnavailable && item.incotermPrices !== undefined)) {
       throw new HttpError(400, 'This quote has no incoterms. Please send a single price per item.');
     }
     return items.map(() => null);
@@ -340,6 +377,8 @@ function normalizeIncotermPrices(
     throw new HttpError(400, `Incoterm ${mainIncoterm} is not part of this quote. If a field is missing, reload the page.`);
   }
   return items.map((item) => {
+    // Item indisponivel nao tem preco: nada a validar nem a gravar por incoterm.
+    if (!isAvailablePortalItem(item)) return null;
     if (!item.incotermPrices) {
       if (quoteIncoterms.length >= 2) {
         throw new HttpError(

@@ -460,13 +460,15 @@ export function ComparacaoTab({
           comment: reviewComment.trim() || null,
         }
       : null;
-    if (responseCount < 2) {
-      // Sem 2ª proposta não há comparação a persistir -- persistBeforeAction
-      // sempre falharia no gate de "pelo menos duas propostas" do backend.
+    if (comparableCount < 2) {
+      // Sem 2ª proposta COMPLETA não há comparação a persistir -- persistBeforeAction
+      // sempre falharia no gate de "pelo menos duas propostas completas" do backend.
       const ok = await confirm({
         title: 'Concluir com uma só resposta?',
         message:
-          'Esta cotação teve apenas uma resposta, então não há comparação. Tem certeza que deseja concluí-la?',
+          excludedResponses.length > 0
+            ? 'Esta cotação tem menos de duas propostas completas (as demais têm item temporariamente indisponível e ficaram fora do ranking), então não há comparação. Tem certeza que deseja concluí-la?'
+            : 'Esta cotação teve apenas uma resposta, então não há comparação. Tem certeza que deseja concluí-la?',
         confirmText: 'Concluir mesmo assim',
         cancelText: 'Voltar',
       });
@@ -615,6 +617,10 @@ export function ComparacaoTab({
   const rankingCurrencyLabel = rankingCurrency === 'USD' ? 'US$' : rankingCurrency === 'BRL' ? 'R$' : rankingCurrency;
   const basketLabel = `Total dos itens${rankingCurrencyLabel ? ` (${rankingCurrencyLabel})` : ''}`;
   const responseCount = previewQuery.data?.responseCount ?? 0;
+  // Propostas com item "Temporarily unavailable" ficam FORA do ranking (backend).
+  const excludedResponses = previewQuery.data?.excluded ?? [];
+  // Propostas que realmente entram no ranking (as excluidas nao contam).
+  const comparableCount = responseCount - excludedResponses.length;
   const previewPendingApproval = previewQuery.data?.pendingApproval ?? false;
   const previewWinnerId = previewQuery.data?.winnerQuoteResponseId ?? null;
   const rankedResults = previewResults.map((r) => ({
@@ -771,7 +777,23 @@ export function ComparacaoTab({
           </div>
         )}
 
-        {previewQuery.data && responseCount === 1 && (() => {
+        {previewQuery.data && responseCount > 0 && comparableCount === 0 && (
+          <div className="cmp-bypass">
+            <div className="cmp-bypass-alert">
+              <div className="cmp-bypass-alert__icon">
+                <AlertIcon />
+              </div>
+              <div className="cmp-bypass-alert__text">
+                <strong>Nenhuma proposta completa para comparar.</strong>
+                <span>
+                  Todas as propostas têm item temporariamente indisponível e ficaram fora do ranking.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {previewQuery.data && comparableCount === 1 && (() => {
           const only = previewResults[0];
           const bypassName = only?.supplier?.name ?? (only ? `Fornecedor #${only.supplierId}` : '—');
           const bypassContactBits = only
@@ -785,8 +807,15 @@ export function ComparacaoTab({
                   <AlertIcon />
                 </div>
                 <div className="cmp-bypass-alert__text">
-                  <strong>Apenas um fornecedor respondeu — sem comparação.</strong>
+                  <strong>
+                    {excludedResponses.length > 0
+                      ? 'Apenas uma proposta completa — sem comparação.'
+                      : 'Apenas um fornecedor respondeu — sem comparação.'}
+                  </strong>
                   <span>
+                    {excludedResponses.length > 0
+                      ? 'As demais propostas têm item temporariamente indisponível e ficaram fora do ranking. '
+                      : ''}
                     Não há como comparar sem uma segunda proposta. Você pode seguir com este
                     fornecedor enviando a Ordem de Compra diretamente.
                   </span>
@@ -831,7 +860,7 @@ export function ComparacaoTab({
           );
         })()}
 
-        {previewQuery.data && responseCount >= 2 && (
+        {previewQuery.data && comparableCount >= 2 && (
           <>
             {previewPendingApproval && (
               <p className="alert alert--warning" style={{ marginBottom: 12 }}>
@@ -850,6 +879,25 @@ export function ComparacaoTab({
             </div>
             <div className="cmp-rows">{renderRankingCards(rankedResults)}</div>
           </>
+        )}
+
+        {previewQuery.data && excludedResponses.length > 0 && (
+          <section aria-labelledby="cmp-excluded-title" style={{ marginTop: 16 }}>
+            <h3 id="cmp-excluded-title" style={{ fontSize: 14, margin: '0 0 8px' }}>
+              Fora do ranking — itens indisponíveis
+            </h3>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--ink-soft)' }}>
+              {excludedResponses.map((entry) => (
+                <li key={entry.quoteResponseId} style={{ marginBottom: 4 }}>
+                  <strong style={{ color: 'var(--ink)' }}>
+                    {entry.supplier.name || `Fornecedor #${entry.supplierId}`}
+                  </strong>
+                  {' — Temporariamente indisponível: '}
+                  {entry.unavailableItems.map((item) => item.productName).join(', ')}
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         </div>
       </div>

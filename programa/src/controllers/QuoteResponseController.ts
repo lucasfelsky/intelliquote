@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
-import { priceForComparison } from '../utils/quoteBasket';
+import { classifyForComparison, priceForComparison } from '../utils/quoteBasket';
 import { buildItemOrigins, normalizeItemOriginPort } from '../utils/originPort';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
@@ -94,6 +94,13 @@ export class QuoteResponseController {
       if (payload.items && payload.items.length > 0) {
         let total = 0;
         itemsToCreate = payload.items.map((item) => {
+          // Item indisponivel: valores ignorados e gravados como 0 (fora da soma).
+          if (item.isUnavailable) {
+            return unavailableItemData(item.quoteRequestItemId, item.notes);
+          }
+          if (item.unitPrice === undefined || item.quantity === undefined) {
+            throw new HttpError(400, 'Informe unitPrice e quantity para os itens disponiveis.');
+          }
           const totalPrice = item.unitPrice * item.quantity;
           total += totalPrice;
           return {
@@ -378,6 +385,12 @@ export class QuoteResponseController {
               : existingQuoteResponse.originPort;
           let total = 0;
           itemsToUpdate = payload.items.map((item) => {
+            if (item.isUnavailable) {
+              return unavailableItemData(item.quoteRequestItemId, item.notes);
+            }
+            if (item.unitPrice === undefined || item.quantity === undefined) {
+              throw new HttpError(400, 'Informe unitPrice e quantity para os itens disponiveis.');
+            }
             const totalPrice = item.unitPrice * item.quantity;
             total += totalPrice;
             return {
@@ -470,6 +483,8 @@ export class QuoteResponseController {
           originPort: payload.originPort,
           submittedAt: payload.submittedAt,
           version: shouldIncrementVersion(payload) ? { increment: 1 } : undefined,
+          // Proposta com item indisponivel sai do ranking e nao pode ser vencedora (como no sync do portal).
+          isWinner: itemsToUpdate?.some((item) => item.isUnavailable) ? false : undefined,
           items: itemsToUpdate !== undefined ? { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToUpdate } : undefined,
         },
       });
@@ -675,6 +690,18 @@ export class QuoteResponseController {
     let hasItemTargets = false;
     const items = quoteRequest.items.map((item) => {
       const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
+      if (responseItem?.isUnavailable) {
+        // Fornecedor marcou "Temporarily unavailable": sem preco e sem target no e-mail.
+        return {
+          name: item.catalogItem?.marketName ?? item.productName,
+          incoterm: item.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: null,
+          targetPrice: null,
+          isUnavailable: true,
+        };
+      }
       const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
       const overrideTarget = responseItem ? itemTargetOverrides.get(responseItem.id) : undefined;
       const itemTargetPrice = overrideTarget !== undefined
@@ -799,7 +826,13 @@ export class QuoteResponseController {
       if (parsedBody.data.itemTargets && parsedBody.data.itemTargets.length > 0) {
         for (const itemTarget of parsedBody.data.itemTargets) {
           await prisma.quoteResponseItem.updateMany({
-            where: { id: itemTarget.quoteResponseItemId, quoteResponseId: id, deletedAt: null },
+            // Target de item indisponivel e ignorado.
+            where: {
+              id: itemTarget.quoteResponseItemId,
+              quoteResponseId: id,
+              deletedAt: null,
+              isUnavailable: false,
+            },
             data: { targetPrice: itemTarget.targetPrice },
           });
         }
@@ -807,7 +840,9 @@ export class QuoteResponseController {
           const match = parsedBody.data.itemTargets!.find(
             (t) => t.quoteResponseItemId === responseItem.id,
           );
-          return match ? { ...responseItem, targetPrice: match.targetPrice as any } : responseItem;
+          return match && !responseItem.isUnavailable
+            ? { ...responseItem, targetPrice: match.targetPrice as any }
+            : responseItem;
         });
       }
 
@@ -1053,6 +1088,7 @@ export class QuoteResponseController {
               unitPrice: true,
               quantity: true,
               originPort: true,
+              isUnavailable: true,
               quoteRequestItem: { select: { productName: true } },
             },
           },
@@ -1071,7 +1107,17 @@ export class QuoteResponseController {
         });
       }
 
-      const supplierIds = Array.from(new Set(responses.map(r => r.supplierId)));
+      // Propostas com item "Temporarily unavailable" ficam FORA do ranking (nao entram
+      // no compareResponses nem no min(offeredPrice)); a formula do score nao muda.
+      const { complete, excluded } = partitionForComparison(quoteRequest.items ?? [], responses);
+
+      if (complete.length < 2) {
+        return res.status(400).json({
+          message: `Sao necessarias pelo menos duas propostas completas para comparar (${excluded.length} com item temporariamente indisponivel ficaram fora do ranking).`,
+        });
+      }
+
+      const supplierIds = Array.from(new Set(complete.map(({ response }) => response.supplierId)));
       const reviews = await prisma.supplierReview.groupBy({
         by: ['supplierId'],
         _avg: { qualityRating: true },
@@ -1081,11 +1127,11 @@ export class QuoteResponseController {
         reviews.map(r => [r.supplierId, r._avg.qualityRating]),
       );
 
-      const comparisonInputs = responses.map((response) => ({
+      const comparisonInputs = complete.map(({ response, price }) => ({
         id: response.id,
         quoteRequestId: response.quoteRequestId,
         supplierId: response.supplierId,
-        offeredPrice: priceForComparison(quoteRequest.items ?? [], response),
+        offeredPrice: price,
         currency: response.currency,
         exchangeRate: Number(response.exchangeRate),
         freightCost: Number(response.freightCost),
@@ -1203,6 +1249,7 @@ export class QuoteResponseController {
               requiresApproval,
               threshold,
               quoteResponseIds: responses.map((response) => response.id),
+              excludedQuoteResponseIds: excluded.map((entry) => entry.quoteResponseId),
             },
           },
           tx,
@@ -1247,6 +1294,7 @@ export class QuoteResponseController {
         winnerQuoteResponseId: requiresApproval ? winner?.id : null,
         thresholdValue: requiresApproval ? threshold : null,
         comparisonId: comparisonRecord.id,
+        excluded,
       });
     } catch (error) {
       const handled = handleControllerError(error);
@@ -1314,6 +1362,7 @@ export class QuoteResponseController {
               unitPrice: true,
               quantity: true,
               originPort: true,
+              isUnavailable: true,
               quoteRequestItem: { select: { productName: true } },
             },
           },
@@ -1329,10 +1378,25 @@ export class QuoteResponseController {
           pendingApproval: false,
           thresholdValue: null,
           responseCount,
+          excluded: [],
         });
       }
 
-      const supplierIds = Array.from(new Set(responses.map(r => r.supplierId)));
+      // Mesma particao do compare: proposta com item indisponivel fica fora do ranking.
+      const { complete, excluded } = partitionForComparison(quoteRequest.items ?? [], responses);
+
+      if (complete.length === 0) {
+        return res.status(200).json({
+          results: [],
+          winnerQuoteResponseId: null,
+          pendingApproval: false,
+          thresholdValue: null,
+          responseCount,
+          excluded,
+        });
+      }
+
+      const supplierIds = Array.from(new Set(complete.map(({ response }) => response.supplierId)));
       const reviews = await prisma.supplierReview.groupBy({
         by: ['supplierId'],
         _avg: { qualityRating: true },
@@ -1342,11 +1406,11 @@ export class QuoteResponseController {
         reviews.map(r => [r.supplierId, r._avg.qualityRating]),
       );
 
-      const comparisonInputs = responses.map((response) => ({
+      const comparisonInputs = complete.map(({ response, price }) => ({
         id: response.id,
         quoteRequestId: response.quoteRequestId,
         supplierId: response.supplierId,
-        offeredPrice: priceForComparison(quoteRequest.items ?? [], response),
+        offeredPrice: price,
         currency: response.currency,
         exchangeRate: Number(response.exchangeRate),
         freightCost: Number(response.freightCost),
@@ -1420,6 +1484,7 @@ export class QuoteResponseController {
         pendingApproval: requiresApproval,
         thresholdValue: requiresApproval ? threshold : null,
         responseCount,
+        excluded,
       });
     } catch (error) {
       const handled = handleControllerError(error);
@@ -1654,6 +1719,14 @@ export class QuoteResponseController {
         });
       }
 
+      // Proposta com item "Temporarily unavailable" fica fora do ranking e nao pode vencer.
+      if ((chosenResponse.items ?? []).some((item) => item.isUnavailable)) {
+        throw new HttpError(
+          400,
+          'Proposta com item temporariamente indisponivel nao pode ser escolhida como vencedora.',
+        );
+      }
+
       const profile = await CompanyProfileService.get();
       const threshold = profile.awardApprovalThreshold == null ? null : Number(profile.awardApprovalThreshold);
       const exceedsThreshold = QuoteComparisonService.requiresAwardApproval({
@@ -1748,6 +1821,70 @@ export class QuoteResponseController {
       return res.status(handled.status).json({ message: handled.message });
     }
   }
+}
+
+type ComparisonSourceResponse = {
+  id: number;
+  offeredPrice: Prisma.Decimal;
+  supplierId: number;
+  supplier: { id: number; name: string };
+  items: {
+    quoteRequestItemId: number;
+    quantity: number;
+    unitPrice: Prisma.Decimal;
+    isUnavailable: boolean;
+    quoteRequestItem: { productName: string };
+  }[];
+};
+
+// Separa as propostas que entram no ranking (cobrem a cesta) das que ficam FORA por
+// terem item "Temporarily unavailable". Propostas parciais sem a flag continuam
+// lancando o 400 de sempre (priceForComparison).
+function partitionForComparison<T extends ComparisonSourceResponse>(
+  requestedItems: { id: number; quantity: number }[],
+  responses: T[],
+) {
+  const complete: { response: T; price: number }[] = [];
+  const excluded: {
+    quoteResponseId: number;
+    supplierId: number;
+    supplier: { id: number; name: string };
+    unavailableItems: { quoteRequestItemId: number; productName: string }[];
+  }[] = [];
+  for (const response of responses) {
+    const classification = classifyForComparison(requestedItems, response);
+    if (classification.kind === 'complete') {
+      complete.push({ response, price: classification.price });
+      continue;
+    }
+    excluded.push({
+      quoteResponseId: response.id,
+      supplierId: response.supplierId,
+      supplier: { id: response.supplier.id, name: response.supplier.name },
+      unavailableItems: response.items
+        .filter((item) => item.isUnavailable)
+        .map((item) => ({
+          quoteRequestItemId: item.quoteRequestItemId,
+          productName: item.quoteRequestItem.productName,
+        })),
+    });
+  }
+  return { complete, excluded };
+}
+
+// Item "Temporarily unavailable" (resposta manual): precos/quantidade 0 e sem incoterm/origem.
+function unavailableItemData(quoteRequestItemId: number, notes: string | null | undefined) {
+  return {
+    quoteRequestItemId,
+    unitPrice: 0,
+    quantity: 0,
+    totalPrice: 0,
+    leadTimeDays: null,
+    notes: notes ?? null,
+    originPort: null,
+    incotermPrices: Prisma.DbNull,
+    isUnavailable: true,
+  };
 }
 
 function parseComparisonWeights(payload: unknown): QuoteComparisonWeights | null {
