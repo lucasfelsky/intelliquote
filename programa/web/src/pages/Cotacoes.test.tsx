@@ -123,6 +123,34 @@ describe('Cotacoes (lista)', () => {
 
     fireEvent.change(select, { target: { value: 'todas' } });
     await waitFor(() => expect(lastParams()[1]).not.toHaveProperty('poSent'));
-    expect(lastParams()[1]).toEqual({});
+    expect(lastParams()[1]).toEqual({ page: '1', pageSize: '50' });
+  });
+
+  it('mudar o filtro de PO estando na pagina 2 volta para page 1', async () => {
+    vi.mocked(api.get).mockImplementation((async (_url: string, params?: Record<string, string>) => {
+      const page = Number(params?.page ?? 1);
+      return {
+        data: page === 1 ? [quote(1, 'QR-001', PO_SENT_AT)] : [quote(55, 'QR-055', null)],
+        pagination: { page, pageSize: 50, totalItems: 60, totalPages: 2 },
+      };
+    }) as unknown as typeof api.get);
+    renderPage();
+    await screen.findByText('QR-001');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
+    await screen.findByText('QR-055');
+    expect(vi.mocked(api.get)).toHaveBeenLastCalledWith(
+      '/v1/quote-requests',
+      expect.objectContaining({ page: '2' }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Filtro de PO enviada'), { target: { value: 'enviada' } });
+
+    await waitFor(() =>
+      expect(vi.mocked(api.get)).toHaveBeenLastCalledWith(
+        '/v1/quote-requests',
+        expect.objectContaining({ poSent: 'true', page: '1', pageSize: '50' }),
+      ),
+    );
   });
 });
