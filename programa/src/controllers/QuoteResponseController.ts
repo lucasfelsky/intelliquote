@@ -11,11 +11,7 @@ import {
 } from '../services/QuoteComparisonService';
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
 import { sendAndLog } from '../mailer/MailerService';
-import {
-  renderReplyFromTemplate,
-  injectReplyCustomMessage,
-  withReplyCustomMessageText,
-} from '../mailer/renderQuoteReply';
+import { renderReplyFromTemplate, type QuoteReplyItem } from '../mailer/renderQuoteReply';
 import { renderPoFromTemplate } from '../mailer/renderQuotePo';
 import {
   EMAIL_LOGO_CID,
@@ -677,9 +673,65 @@ export class QuoteResponseController {
     });
   }
 
+  // Assunto REALMENTE enviado no e-mail de envio inicial (dispatch) da cotacao
+  // para um contato deste fornecedor: MailLog mais recente (sent/queued) com
+  // templateId 'quote-dispatch'. Casa pelo supplierContactId gravado em
+  // templateVars; fallback pelo e-mail do destinatario. Sem log -> null (o
+  // chamador cai no assunto do template/padrao legado).
+  private static async findDispatchSubjectForSupplier(
+    quoteRequestId: number,
+    supplierId: number,
+  ): Promise<string | null> {
+    const contacts = await prisma.supplierContact.findMany({
+      where: { supplierId },
+      select: { id: true, email: true },
+    });
+    if (contacts.length === 0) return null;
+    const contactIds = new Set(contacts.map((c) => c.id));
+    const contactEmails = new Set(contacts.map((c) => c.email.trim().toLowerCase()));
+
+    // O filtro do fornecedor vai no WHERE (nao em memoria): cotacao enviada a muitos
+    // contatos tem um MailLog por contato, e o do fornecedor alvo pode estar fora dos
+    // N mais recentes da cotacao inteira. Casa por supplierContactId (numero; string por
+    // garantia) ou pelo e-mail do destinatario (case-insensitive).
+    const logs = await prisma.mailLog.findMany({
+      where: {
+        templateId: 'quote-dispatch',
+        relatedEntityType: 'quote_request',
+        relatedEntityId: String(quoteRequestId),
+        status: { in: ['sent', 'queued'] },
+        OR: [
+          { toEmail: { in: [...contactEmails], mode: 'insensitive' } },
+          ...contacts.flatMap((c) => [
+            { templateVars: { path: ['supplierContactId'], equals: c.id } },
+            { templateVars: { path: ['supplierContactId'], equals: String(c.id) } },
+          ]),
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: { subject: true, toEmail: true, templateVars: true },
+    });
+
+    for (const log of logs) {
+      const subject = log.subject?.trim();
+      if (!subject) continue;
+      const vars = log.templateVars as { supplierContactId?: unknown } | null;
+      const rawContactId = vars?.supplierContactId;
+      const logContactId =
+        typeof rawContactId === 'number' ? rawContactId : typeof rawContactId === 'string' ? Number(rawContactId) : null;
+      if (logContactId !== null && contactIds.has(logContactId)) return subject;
+      if (contactEmails.has((log.toEmail ?? '').trim().toLowerCase())) return subject;
+    }
+    return null;
+  }
+
   // Renderiza o e-mail de resposta para uma proposta, aplicando o
   // assunto/mensagem digitados na hora (na modal de "Responder") por cima
   // do template padrao/customizado (`quote_reply`, ver Templates.tsx).
+  //
+  // Precedencia do assunto: digitado > assunto do envio inicial (MailLog do
+  // dispatch) > assunto do template do banco > padrao legado.
   private static async renderReplyFor(
     quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>,
     overrides: {
@@ -694,6 +746,11 @@ export class QuoteResponseController {
     const itemName = quoteRequest.productName || quoteRequest.requestCode;
     const defaultSubject = `${itemName} - SQ QUIMICA - ${supplier.name}`;
     const message = overrides.message?.trim() ?? '';
+    const typedSubject = overrides.subject?.trim() ?? '';
+    const subjectOverride =
+      typedSubject ||
+      (await QuoteResponseController.findDispatchSubjectForSupplier(quoteRequest.id, quoteResponse.supplierId)) ||
+      undefined;
     // QuoteResponse guarda um preco agregado por fornecedor (nao por item);
     // repetimos o mesmo unitPrice em todas as linhas em vez de mostrar "-",
     // que escondia o preco que o fornecedor de fato ofertou.
@@ -707,8 +764,21 @@ export class QuoteResponseController {
       itemTargetOverrides.set(t.quoteResponseItemId, t.targetPrice);
     }
 
+    // Preco-alvo AGREGADO efetivo (override > persistido).
+    const aggregateTarget: number | undefined =
+      overrides.targetPrice !== undefined
+        ? (overrides.targetPrice === null ? undefined : overrides.targetPrice)
+        : (quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined);
+
+    // Alvo por linha (coluna TARGET PRICE):
+    //  - >=2 itens na proposta: so' o alvo POR ITEM (o agregado e' ignorado);
+    //  - 1 item: o agregado vale como alvo daquele item (o do proprio item vence);
+    //  - 0 itens (proposta legada): o agregado aparece em todas as linhas.
+    const responseItemCount = quoteResponse.items?.length ?? 0;
+    const aggregateAppliesToRows = responseItemCount <= 1 && aggregateTarget !== undefined;
+
     let hasItemTargets = false;
-    const items = quoteRequest.items.map((item) => {
+    const items: QuoteReplyItem[] = quoteRequest.items.map((item) => {
       const responseItem = quoteResponse.items?.find((i) => i.quoteRequestItemId === item.id);
       if (responseItem?.isUnavailable) {
         // Fornecedor marcou "Temporarily unavailable": sem preco e sem target no e-mail.
@@ -724,9 +794,15 @@ export class QuoteResponseController {
       }
       const actualUnitPrice = responseItem ? Number(responseItem.unitPrice) : (Number.isFinite(unitPrice) ? unitPrice : null);
       const overrideTarget = responseItem ? itemTargetOverrides.get(responseItem.id) : undefined;
-      const itemTargetPrice = overrideTarget !== undefined
+      let itemTargetPrice: number | null = overrideTarget !== undefined
         ? overrideTarget
         : (responseItem?.targetPrice != null ? Number(responseItem.targetPrice) : null);
+      let targetFromAggregate = false;
+      // Com 1 item, o agregado ocupa a linha desse item; com 0 itens, todas.
+      if (itemTargetPrice === null && aggregateAppliesToRows && (responseItem || responseItemCount === 0)) {
+        itemTargetPrice = aggregateTarget ?? null;
+        targetFromAggregate = itemTargetPrice !== null;
+      }
       if (itemTargetPrice !== null) hasItemTargets = true;
       return {
         name: item.catalogItem?.marketName ?? item.productName,
@@ -735,27 +811,35 @@ export class QuoteResponseController {
         unit: item.unit,
         unitPrice: actualUnitPrice,
         targetPrice: itemTargetPrice,
+        ...(targetFromAggregate ? { targetFromAggregate: true } : {}),
       };
     });
 
-    const rendered = await renderReplyFromTemplate({
-      subject: overrides.subject?.trim() || defaultSubject,
-      quoteRequestId: quoteRequest.id,
-      requestCode: quoteRequest.requestCode,
-      productName: quoteRequest.productName ?? '',
-      supplierName: supplier.name,
-      supplierContactName: contactName,
-      currency: quoteResponse.currency,
-      targetPrice: overrides.targetPrice !== undefined ? (overrides.targetPrice === null ? undefined : overrides.targetPrice) : (quoteResponse.targetPrice ? Number(quoteResponse.targetPrice) : undefined),
-      hasItemTargets,
-      isWinner: quoteResponse.isWinner,
-      items,
-    });
+    const rendered = await renderReplyFromTemplate(
+      {
+        subject: defaultSubject,
+        quoteRequestId: quoteRequest.id,
+        requestCode: quoteRequest.requestCode,
+        productName: quoteRequest.productName ?? '',
+        supplierName: supplier.name,
+        supplierContactName: contactName,
+        currency: quoteResponse.currency,
+        // Multi-item usa SO' os targets por item: o agregado (eventualmente
+        // antigo) nao entra no e-mail.
+        targetPrice: responseItemCount <= 1 ? aggregateTarget : undefined,
+        hasItemTargets,
+        isWinner: quoteResponse.isWinner,
+        items,
+        message,
+      },
+      undefined,
+      subjectOverride,
+    );
 
     return {
       subject: rendered.subject,
-      html: injectReplyCustomMessage(rendered.html, message),
-      text: withReplyCustomMessageText(rendered.text, message),
+      html: rendered.html,
+      text: rendered.text,
     };
   }
 

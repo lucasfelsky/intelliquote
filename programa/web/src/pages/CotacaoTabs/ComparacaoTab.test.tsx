@@ -256,15 +256,39 @@ describe('ComparacaoTab', () => {
     expect(dialog.open).toBe(false);
   });
 
-  it('5. openReplyModal intacto: assunto default e disparo do preview ao abrir', async () => {
+  it('5. openReplyModal: preview dispara ao abrir com assunto vazio (o padrao vem do backend)', async () => {
     const { findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
     fireEvent.click(getByRole('button', { name: 'Responder' }));
     await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledTimes(1));
     expect(previewQuoteResponseReply).toHaveBeenCalledWith(42, {
-      subject: 'Produto X - SQ QUIMICA - ACME Ltda',
+      subject: '',
       message: '',
     });
+  });
+
+  it('5b. o assunto padrao devolvido pelo preview preenche o campo e aparece em "Assunto:"; o digitado nao e sobrescrito', async () => {
+    vi.mocked(previewQuoteResponseReply).mockResolvedValue({
+      to: 'x@acme.com',
+      cc: [],
+      subject: 'Sourcing request QR-1 - Produto X',
+      html: '<p>oi</p>',
+      text: 'oi',
+    });
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Responder' }));
+    await waitFor(() => expect(getDialog(container).open).toBe(true));
+    const dialog = getDialog(container);
+    const subjectInput = within(dialog).getByLabelText('Assunto') as HTMLInputElement;
+    await waitFor(() => expect(subjectInput.value).toBe('Sourcing request QR-1 - Produto X'));
+    expect(await within(dialog).findByText('Sourcing request QR-1 - Produto X', { selector: 'strong' })).toBeTruthy();
+
+    fireEvent.change(subjectInput, { target: { value: 'Contraproposta' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Atualizar preview' }));
+    await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledTimes(2));
+    expect(previewQuoteResponseReply).toHaveBeenLastCalledWith(42, { subject: 'Contraproposta', message: '' });
+    expect(subjectInput.value).toBe('Contraproposta');
   });
 
   it('6. vencedor manual: botão "Definir como vencedora" abre modal e chama setManualWinner com o motivo', async () => {

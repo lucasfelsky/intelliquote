@@ -55,6 +55,7 @@
               <tr>
                 <td style="padding:24px 32px 8px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#1F2933;">
                   <p style="margin:0 0 12px 0;">Dear {{supplierContactName}},</p>
+                  {{message}}
                   <p style="margin:0 0 12px 0;">{{introText}}</p>
                   <p style="margin:0;">{{itemsIntroText}}</p>
                 </td>
@@ -66,13 +67,7 @@
                 <td style="padding:8px 32px 8px 32px;">
                   <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;">
                     <thead>
-                      <tr bgcolor="#F8FBFA" style="background-color:#F8FBFA;">
-                        <th align="left" width="200" style="width:200px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">ITEM</th>
-                        <th align="left" width="80" style="width:80px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">INCOTERM</th>
-                        <th align="right" width="100" style="width:100px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">QUANTITY</th>
-                        <th align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">UNIT PRICE</th>
-                        <th align="right" width="90" style="width:90px;padding:10px 12px;border-bottom:1px solid #DCE9E5;color:#4A5560;font-size:11px;font-weight:bold;font-family:Arial,sans-serif;">TOTAL</th>
-                      </tr>
+                      {{itemsHeaderRow}}
                     </thead>
                     <tbody>
                       {{itemsRows}}
@@ -81,18 +76,6 @@
                 </td>
               </tr>
             </table>
-
-            {{#targetPriceStr}}
-            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
-              <tr>
-                <td style="padding:16px 32px 8px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#1F2933;">
-                  <p style="margin:0;"><strong>Target Price:</strong> {{targetPriceStr}}</p>
-                </td>
-              </tr>
-            </table>
-            {{/targetPriceStr}}
-
-            <!--CUSTOM_MESSAGE_SLOT-->
 
             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
               <tr>

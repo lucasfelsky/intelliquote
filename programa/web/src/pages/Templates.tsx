@@ -85,6 +85,8 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{supplierContactName}}', label: 'Contato' },
     { token: '{{introText}}', label: 'Texto de introdução dinâmico' },
     { token: '{{itemsIntroText}}', label: 'Texto de itens dinâmico' },
+    { token: '{{message}}', label: 'Mensagem do modal (após “Dear …,”)' },
+    { token: '{{itemsHeaderRow}}', label: 'Cabeçalho da tabela (coluna Target Price)' },
     { token: '{{itemsRows}}', label: 'Tabela de itens' },
   ],
   quote_po: [
