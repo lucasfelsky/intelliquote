@@ -405,6 +405,30 @@ export const userPasswordResetSchema = z.object({
   password: z.string().min(8, 'A palavra-passe deve ter pelo menos 8 caracteres.'),
 });
 
+// Assinatura de e-mail do proprio usuario (Minha conta). Texto: ate 2000
+// caracteres apos o trim; string vazia vira null (remove o texto).
+export const ACCOUNT_SIGNATURE_TEXT_MAX_LENGTH = 2000;
+export const accountSignatureTextSchema = z.object({
+  text: z
+    .string('Informe o texto da assinatura (ou null para remover).')
+    .trim()
+    .max(
+      ACCOUNT_SIGNATURE_TEXT_MAX_LENGTH,
+      `O texto da assinatura deve ter no maximo ${ACCOUNT_SIGNATURE_TEXT_MAX_LENGTH} caracteres.`,
+    )
+    .nullable()
+    .transform((value) => (value ? value : null)),
+});
+
+// Imagem da assinatura: so' PNG/JPEG. O tipo declarado precisa bater com o
+// detectado pelo conteudo (validado no controller via detectImage).
+export const accountSignatureImageSchema = z.object({
+  fileName: z.string().trim().min(1, 'Informe o nome do arquivo.').max(255),
+  contentBase64: z.string().min(1, 'Envie o conteudo da imagem em base64.'),
+  fileType: z.enum(['image/png', 'image/jpeg'], 'Apenas imagens PNG ou JPEG sao aceitas.'),
+  fileSize: z.coerce.number().int().nonnegative(),
+});
+
 export const passwordRecoveryRequestSchema = z.object({
   email: z.string().trim().email('Informe um e-mail valido.'),
 });
@@ -484,6 +508,107 @@ export const helpArticleListQuerySchema = z.object({
     ])
     .optional(),
   search: z.string().trim().min(2).max(80).optional(),
+});
+
+// Parceiros de credito (Credit Support): cadastro de empresas que oferecem
+// condicao de pagamento estendida. `contacts` sempre chega como a lista FINAL
+// (no update, id existente = atualiza, sem id = cria, ausente = remove).
+function boundedNullableOptionalField(max: number, label: string) {
+  return z.preprocess(
+    (value) =>
+      value === undefined ? undefined : value === null || value === '' ? null : value,
+    requiredTrimmedStringField
+      .max(max, `${label} deve ter no maximo ${max} caracteres.`)
+      .nullable()
+      .optional(),
+  );
+}
+
+// Website opcional; se presente, so http/https (rejeita javascript:, data: etc.).
+const creditPartnerWebsiteField = z.preprocess(
+  (value) =>
+    value === undefined ? undefined : value === null || value === '' ? null : value,
+  requiredTrimmedStringField
+    .max(300, 'O website deve ter no maximo 300 caracteres.')
+    .refine(
+      (value) => {
+        try {
+          const url = new URL(value);
+          return url.protocol === 'http:' || url.protocol === 'https:';
+        } catch {
+          return false;
+        }
+      },
+      { message: 'Informe um website valido com http:// ou https://.' },
+    )
+    .nullable()
+    .optional(),
+);
+
+const creditPartnerContactBaseSchema = z.object({
+  id: positiveIntegerField.optional(),
+  name: requiredTrimmedStringField.max(200, 'O nome do contato deve ter no maximo 200 caracteres.'),
+  email: lowercasedEmailField.refine((value) => value.length <= 254, {
+    message: 'O e-mail deve ter no maximo 254 caracteres.',
+  }),
+  phone: boundedNullableOptionalField(40, 'O telefone'),
+  position: boundedNullableOptionalField(120, 'O cargo'),
+  isPrimary: z.boolean().optional(),
+});
+
+export const creditPartnerContactInputSchema = creditPartnerContactBaseSchema;
+
+const creditPartnerContactsField = z
+  .array(creditPartnerContactInputSchema)
+  .min(1, 'Informe ao menos um contato.')
+  .max(20, 'Limite de 20 contatos por parceiro.')
+  .superRefine((contacts, ctx) => {
+    const emails = new Set<string>();
+    for (const contact of contacts) {
+      if (emails.has(contact.email)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Ha e-mails duplicados entre os contatos do parceiro.',
+        });
+        break;
+      }
+      emails.add(contact.email);
+    }
+    if (contacts.filter((contact) => contact.isPrimary === true).length > 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Apenas um contato pode ser o principal.',
+      });
+    }
+  });
+
+const creditPartnerNameField = requiredTrimmedStringField.max(
+  200,
+  'O nome do parceiro deve ter no maximo 200 caracteres.',
+);
+
+export const creditPartnerCreateSchema = z.object({
+  name: creditPartnerNameField,
+  taxId: boundedNullableOptionalField(40, 'O CNPJ/Tax ID'),
+  website: creditPartnerWebsiteField,
+  country: boundedNullableOptionalField(80, 'O pais'),
+  notes: boundedNullableOptionalField(2000, 'As observacoes'),
+  isActive: z.boolean().optional(),
+  contacts: creditPartnerContactsField,
+});
+
+export const creditPartnerUpdateSchema = z.object({
+  name: creditPartnerNameField.optional(),
+  taxId: boundedNullableOptionalField(40, 'O CNPJ/Tax ID'),
+  website: creditPartnerWebsiteField,
+  country: boundedNullableOptionalField(80, 'O pais'),
+  notes: boundedNullableOptionalField(2000, 'As observacoes'),
+  isActive: z.boolean().optional(),
+  contacts: creditPartnerContactsField.optional(),
+});
+
+export const creditPartnerListQuerySchema = z.object({
+  active: z.enum(['true', 'false']).optional(),
 });
 
 export const portalTokenRegenerateSchema = z.object({

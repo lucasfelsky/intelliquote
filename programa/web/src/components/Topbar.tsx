@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 
 export default function Topbar() {
@@ -15,6 +16,9 @@ export default function Topbar() {
           <small>{user?.email}</small>
         </div>
         <span className="badge">{user?.role}</span>
+        <Link to="/minha-conta" className="ghost-button">
+          Minha conta
+        </Link>
         <button type="button" className="ghost-button" onClick={() => void logout()}>
           Sair
         </button>

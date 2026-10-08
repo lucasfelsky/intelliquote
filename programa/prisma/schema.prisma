@@ -63,6 +63,8 @@ model User {
   createdDispatchEvents  DispatchEvent[]       @relation("DispatchEventCreatedBy")
   createdPortalTokens    SupplierPortalToken[] @relation("SupplierPortalTokenCreatedBy")
   createdSupplierReviews SupplierReview[]      @relation("SupplierReviewCreatedBy")
+  emailSignature         UserEmailSignature?
+  createdCreditPartners  CreditPartner[]       @relation("CreditPartnerCreatedBy")
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -421,6 +423,41 @@ model SupplierContact {
   @@index([supplierId, isPrimary])
 }
 
+model CreditPartner {
+  id          Int                    @id @default(autoincrement())
+  name        String
+  taxId       String?
+  website     String?
+  country     String?
+  notes       String?
+  isActive    Boolean                @default(true)
+  createdById Int?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  deletedAt   DateTime?
+  contacts    CreditPartnerContact[]
+  createdBy   User?                  @relation("CreditPartnerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+model CreditPartnerContact {
+  id              Int           @id @default(autoincrement())
+  creditPartnerId Int
+  name            String
+  email           String
+  phone           String?
+  position        String?
+  isPrimary       Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  creditPartner   CreditPartner @relation(fields: [creditPartnerId], references: [id], onDelete: Cascade)
+
+  @@index([creditPartnerId])
+}
+
 model Attachment {
   id           String   @id @default(cuid())
   fileName     String
@@ -506,6 +543,21 @@ model EmailTemplate {
 
   @@unique([key, locale])
   @@index([key])
+}
+
+// Assinatura de e-mail por usuario (usada no e-mail da Ordem de Compra).
+// Tabela propria (e nao colunas em User) porque AuthService le o User inteiro
+// em toda request autenticada -- um bytea ali seria carregado o tempo todo.
+model UserEmailSignature {
+  userId        Int      @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text          String?
+  imageData     Bytes?
+  imageMimeType String?
+  imageWidth    Int?
+  imageHeight   Int?
+  imageSize     Int?
+  updatedAt     DateTime @updatedAt
 }
 
 model SupplierPortalToken {

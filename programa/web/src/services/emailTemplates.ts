@@ -8,6 +8,8 @@ export interface EmailTemplatePreview {
   isActive: boolean;
   source: 'database' | 'fallback';
   locale: string;
+  // Fallback: corpo editavel com placeholders crus (preferir ao html/text de preview).
+  draft?: { subject: string; htmlBody: string; textBody: string };
 }
 
 interface EmailTemplateRecordApi {

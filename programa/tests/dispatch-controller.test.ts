@@ -447,6 +447,49 @@ describe('Dispatch controller', () => {
     expect(res.body.preview.subject).toContain('QR-2026-003');
   });
 
+  it('preview agrupa os itens por PO quando a cotacao tem 2+ POs', async () => {
+    const cookieHeader = await loginAndGetCookie();
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 1,
+      name: 'Admin',
+      email: 'admin@intelliquote.local',
+      isActive: true,
+      role: { name: 'admin' },
+    });
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 7,
+      requestCode: 'QR-2026-003',
+      productName: 'X',
+      desiredIncoterm: ['CIF'],
+      currency: 'USD',
+      deadlineAt: null,
+      items: [
+        { id: 1, productName: 'Item um', quantity: 1, unit: 'UN', purchaseOrderId: 1, createdAt: new Date() },
+        { id: 2, productName: 'Item dois', quantity: 2, unit: 'UN', purchaseOrderId: 2, createdAt: new Date() },
+        { id: 3, productName: 'Item tres', quantity: 3, unit: 'UN', purchaseOrderId: null, createdAt: new Date() },
+      ],
+      purchaseOrders: [
+        { id: 1, label: 'PO-ALFA', position: 1 },
+        { id: 2, label: 'PO-BETA', position: 2 },
+      ],
+    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      { id: 1, name: 'A', email: 'a@a.com', supplierId: 1, supplier: { id: 1, name: 'S1' } },
+    ]);
+    const res = await request(app)
+      .post('/api/v1/quote-requests/7/dispatch/preview')
+      .set('Cookie', cookieHeader)
+      .send({ recipientContactIds: [1] });
+    expect(res.status).toBe(200);
+    for (const field of ['html', 'text'] as const) {
+      expect(res.body.preview[field]).toContain('PO-ALFA');
+      expect(res.body.preview[field]).toContain('PO-BETA');
+      expect(res.body.preview[field]).toContain('Other items');
+    }
+    const findFirstArg = prismaMock.quoteRequest.findFirst.mock.calls[0][0];
+    expect(findFirstArg.include.purchaseOrders).toBeDefined();
+  });
+
   describe('preview acompanha assunto/mensagem/validade do modal', () => {
     const formatEnGb = (d: Date) =>
       new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
@@ -1089,6 +1132,7 @@ describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
     const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
 
     expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/ja respondeu/);
     expect(tx.supplierPortalToken.create).not.toHaveBeenCalled();
     expect(tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
   });
@@ -1100,6 +1144,7 @@ describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
     const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
 
     expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Token nao encontrado.');
   });
 
   it('POST regenerate com expiresInDays invalido retorna 400', async () => {

@@ -17,6 +17,7 @@ import Relatorios from '@/pages/Relatorios';
 import Ajuda from '@/pages/Ajuda';
 import Auditoria from '@/pages/Auditoria';
 import Templates from '@/pages/Templates';
+import MinhaConta from '@/pages/MinhaConta';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -88,6 +89,7 @@ export default function App() {
                   <Route path="/ajuda" element={<Ajuda />} />
                   <Route path="/auditoria" element={<Auditoria />} />
                   <Route path="/templates" element={<Templates />} />
+                  <Route path="/minha-conta" element={<MinhaConta />} />
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

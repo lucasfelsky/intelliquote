@@ -179,7 +179,9 @@ describe('Portal routes (public, magic-link)', () => {
       console.error('DEBUG 500 first route:', res.body, res.text);
     }
     expect(res.status).toBe(404);
-    expect(res.body.message).toMatch(/inv[aá]lido|expirado/i);
+    expect(res.body.message).toBe(
+      'This link is invalid or has expired. Please contact your buyer to request a new one.',
+    );
   });
 
   it('retorna dados do quote request quando o token e valido', async () => {

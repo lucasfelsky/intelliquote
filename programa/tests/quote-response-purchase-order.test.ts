@@ -35,6 +35,9 @@ vi.mock('../src/lib/prisma', () => {
     emailTemplate: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    userEmailSignature: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
     },
@@ -49,6 +52,7 @@ const prismaMock = prisma as unknown as {
   supplierContact: { findFirst: ReturnType<typeof vi.fn> };
   companyProfile: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   emailTemplate: { findUnique: ReturnType<typeof vi.fn> };
+  userEmailSignature: { findUnique: ReturnType<typeof vi.fn> };
   auditLog: { create: ReturnType<typeof vi.fn> };
 };
 
@@ -119,6 +123,8 @@ const basePoBody = {
 describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+    prismaMock.userEmailSignature.findUnique.mockResolvedValue(null);
     prismaMock.companyProfile.findUnique.mockResolvedValue({
       id: 1,
       companyName: 'SQ Quimica',
@@ -158,7 +164,8 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
     expect(call.html).toContain('Dear all,');
     expect(call.html).toContain('Global Forwarders Ltda.');
     expect(call.html).toContain('maria@globalforwarders.com');
-    expect(call.attachments).toHaveLength(1);
+    // PDF + logo da SQ inline (sem imagem de assinatura cadastrada).
+    expect(call.attachments).toHaveLength(2);
     expect(call.attachments[0].filename).toBe('PO-2026-005.pdf');
     expect(call.attachments[0].contentType).toBe('application/pdf');
     expect(Buffer.isBuffer(call.attachments[0].content)).toBe(true);
@@ -305,5 +312,156 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
     expect(call.subject).toBe('PO revisada - QR-2026-005');
     expect(call.html).toContain('Favor confirmar recebimento.');
     expect(call.text).toContain('Favor confirmar recebimento.');
+  });
+
+  describe('e-mail da PO: logo, assinatura, mensagem e assunto', () => {
+    const SIGNATURE_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+    function dbTemplate(overrides: { subject?: string; htmlBody: string; textBody: string }) {
+      return {
+        id: 1,
+        key: 'quote_po',
+        locale: 'en',
+        subject: overrides.subject ?? 'Purchase Order - {{requestCode}}',
+        htmlBody: overrides.htmlBody,
+        textBody: overrides.textBody,
+        isActive: true,
+        updatedAt: new Date(),
+        updatedById: null,
+      };
+    }
+
+    async function arrangeSendable(): Promise<string> {
+      const cookieHeader = await loginAsComprador();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
+      prismaMock.supplierContact.findFirst.mockResolvedValue({
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      });
+      sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-x' });
+      return cookieHeader;
+    }
+
+    it('o assunto do modal vence o assunto do template do banco', async () => {
+      const cookieHeader = await arrangeSendable();
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(
+        dbTemplate({
+          htmlBody: '<p>Dear all,</p>{{message}}<p>{{subject}}</p>{{senderSignature}}',
+          textBody: 'Dear all,\r\n\r\n{{messageText}}{{senderSignatureText}}',
+        }),
+      );
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/purchase-order')
+        .set('Cookie', cookieHeader)
+        .send({ ...basePoBody, subject: 'PO revisada' });
+
+      expect(res.status).toBe(200);
+      const call = sendAndLogMock.mock.calls[0][0];
+      expect(call.subject).toBe('PO revisada');
+      expect(call.html).toContain('<p>PO revisada</p>');
+    });
+
+    it('sem assunto no modal vale o assunto do template do banco', async () => {
+      const cookieHeader = await arrangeSendable();
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(
+        dbTemplate({
+          subject: 'DB subject {{requestCode}}',
+          htmlBody: '<p>{{subject}}</p>{{senderSignature}}',
+          textBody: '{{subject}}',
+        }),
+      );
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/purchase-order')
+        .set('Cookie', cookieHeader)
+        .send(basePoBody);
+
+      expect(res.status).toBe(200);
+      expect(sendAndLogMock.mock.calls[0][0].subject).toBe('DB subject QR-2026-005');
+    });
+
+    it('com imagem de assinatura: anexos = PDF + logo + assinatura (mime gravado)', async () => {
+      const cookieHeader = await arrangeSendable();
+      prismaMock.userEmailSignature.findUnique.mockResolvedValue({
+        userId: 1,
+        text: 'Maria Compradora\nSQ Quimica',
+        imageData: SIGNATURE_BYTES,
+        imageMimeType: 'image/jpeg',
+        imageWidth: 300,
+        imageHeight: 90,
+        imageSize: SIGNATURE_BYTES.length,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/purchase-order')
+        .set('Cookie', cookieHeader)
+        .send({ ...basePoBody, message: 'Mensagem no topo' });
+
+      expect(res.status).toBe(200);
+      expect(prismaMock.userEmailSignature.findUnique).toHaveBeenCalledWith({ where: { userId: 1 } });
+      const call = sendAndLogMock.mock.calls[0][0];
+      expect(call.attachments).toHaveLength(3);
+      expect(call.attachments[0].contentType).toBe('application/pdf');
+      expect(call.attachments[1]).toMatchObject({
+        cid: 'sq-logo@intelliquote',
+        contentType: 'image/png',
+        filename: 'sq-logo.png',
+      });
+      expect(call.attachments[2]).toMatchObject({
+        cid: 'sender-signature@intelliquote',
+        contentType: 'image/jpeg',
+        filename: 'signature.jpg',
+      });
+      expect(Buffer.from(call.attachments[2].content).equals(SIGNATURE_BYTES)).toBe(true);
+      expect(call.html).toContain('src="cid:sq-logo@intelliquote"');
+      expect(call.html).toContain('src="cid:sender-signature@intelliquote"');
+      expect(call.html).toContain('Maria Compradora<br />SQ Quimica');
+      // Mensagem logo abaixo de "Dear all,".
+      expect(call.html.indexOf('Mensagem no topo')).toBeGreaterThan(call.html.indexOf('Dear all,'));
+      expect(call.html.indexOf('Mensagem no topo')).toBeLessThan(call.html.indexOf('Attached is our PO'));
+      // Os bytes da imagem nao vao para o AuditLog.
+      expect(JSON.stringify(prismaMock.auditLog.create.mock.calls[0][0])).not.toContain('iVBOR');
+      expect(call.templateVars.hasSignatureImage).toBe(true);
+    });
+
+    it('sem assinatura: fallback "Best regards," + nome + e-mail; anexos = PDF + logo', async () => {
+      const cookieHeader = await arrangeSendable();
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/purchase-order')
+        .set('Cookie', cookieHeader)
+        .send(basePoBody);
+
+      expect(res.status).toBe(200);
+      const call = sendAndLogMock.mock.calls[0][0];
+      expect(call.html).toContain('Best regards,<br />Comprador<br />comprador@intelliquote.local');
+      expect(call.text).toContain('Best regards,\r\nComprador\r\ncomprador@intelliquote.local');
+      expect(call.attachments).toHaveLength(2);
+      expect(call.attachments[1].cid).toBe('sq-logo@intelliquote');
+      expect(call.html).not.toContain('sender-signature@intelliquote');
+    });
+
+    it('template do banco sem {{companyLogo}}: o logo nao e anexado', async () => {
+      const cookieHeader = await arrangeSendable();
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(
+        dbTemplate({
+          htmlBody: '<p>Dear all,</p>{{message}}{{senderSignature}}',
+          textBody: 'Dear all,',
+        }),
+      );
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/purchase-order')
+        .set('Cookie', cookieHeader)
+        .send(basePoBody);
+
+      expect(res.status).toBe(200);
+      const call = sendAndLogMock.mock.calls[0][0];
+      expect(call.attachments).toHaveLength(1);
+      expect(call.html).not.toContain('cid:sq-logo@intelliquote');
+    });
   });
 });

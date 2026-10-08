@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ConfirmProvider } from '@/components/useConfirm';
 import Empresa from './Empresa';
 
 let mockRole = 'comprador';
@@ -19,7 +20,9 @@ function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <Empresa />
+      <ConfirmProvider>
+        <Empresa />
+      </ConfirmProvider>
     </QueryClientProvider>,
   );
 }

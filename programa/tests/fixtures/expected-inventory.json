@@ -6,6 +6,7 @@
       "AuthController.ts",
       "CatalogItemController.ts",
       "CatalogItemImportController.ts",
+      "CreditPartnerController.ts",
       "DispatchController.ts",
       "FirebaseAuthController.ts",
       "HelpController.ts",
@@ -58,6 +59,7 @@
       "AuthRoutes.ts",
       "CatalogItemRoutes.ts",
       "CompanyProfileRoutes.ts",
+      "CreditPartnerRoutes.ts",
       "EmailTemplateRoutes.ts",
       "ExchangeRateRoutes.ts",
       "ItemFamilyRoutes.ts",
@@ -80,6 +82,8 @@
       "AuditLog",
       "CatalogItem",
       "CompanyProfile",
+      "CreditPartner",
+      "CreditPartnerContact",
       "DispatchEvent",
       "EmailTemplate",
       "ExchangeRate",
@@ -104,7 +108,8 @@
       "SupplierPortalToken",
       "SupplierPortalTokenLog",
       "SupplierReview",
-      "User"
+      "User",
+      "UserEmailSignature"
     ],
     "enums": [
       "Incoterm",
@@ -112,7 +117,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 38
+    "migrations": 42
   },
   "emailTemplates": [
     "quote_dispatch@en",
@@ -126,6 +131,7 @@
     "DELETE /:key/:locale",
     "DELETE /attachments/:id",
     "DELETE /catalog-items/:id",
+    "DELETE /credit-partners/:id",
     "DELETE /quote-request-items/:id",
     "DELETE /quote-request-purchase-orders/:id",
     "DELETE /quote-requests/:id",
@@ -146,6 +152,7 @@
     "GET /auth/password-recovery/tokens",
     "GET /catalog-items",
     "GET /catalog-items/:id",
+    "GET /credit-partners",
     "GET /help/articles",
     "GET /item-families",
     "GET /preview",
@@ -186,6 +193,7 @@
     "POST /catalog-items",
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
+    "POST /credit-partners",
     "POST /item-families",
     "POST /portal-tokens/:id/regenerate",
     "POST /portal-tokens/:id/revoke",
@@ -218,6 +226,7 @@
     "PUT /",
     "PUT /:key/:locale",
     "PUT /catalog-items/:id",
+    "PUT /credit-partners/:id",
     "PUT /item-families/:id",
     "PUT /quote-request-items/:id",
     "PUT /quote-requests/:id",
@@ -225,7 +234,11 @@
     "PUT /supplier-contacts/:id",
     "PUT /suppliers/:id",
     "PUT /suppliers/:supplierId/contacts/:id",
-    "PUT /users/:id"
+    "PUT /users/:id",
+    "DELETE /account/email-signature/image",
+    "GET /account/email-signature",
+    "PUT /account/email-signature/image",
+    "PUT /account/email-signature/text"
   ],
   "web": {
     "pages": [
@@ -243,7 +256,8 @@
       "PlaceholderPage.tsx",
       "Relatorios.tsx",
       "Templates.tsx",
-      "Usuarios.tsx"
+      "Usuarios.tsx",
+      "MinhaConta.tsx"
     ],
     "authContextKeys": [
       "exchangeError",
@@ -281,7 +295,8 @@
       "/relatorios",
       "/respostas",
       "/templates",
-      "/usuarios"
+      "/usuarios",
+      "/minha-conta"
     ]
   },
   "_comment": "Espelho versionado do Inventario/IntelliQuote da vault. Gerado por: node scripts/audit-vault.cjs --print. Ao atualizar, atualize TAMBEM o arquivo da vault que a mensagem de erro do script indica. Criado em 2026-07-23 (auditoria vault x codigo) — ver L26 em Limitacoes conhecidas.md.",
