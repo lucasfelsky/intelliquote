@@ -28,6 +28,9 @@ vi.mock('../src/lib/prisma', () => {
     supplierContact: {
       findFirst: vi.fn(),
     },
+    forwarder: {
+      findFirst: vi.fn(),
+    },
     companyProfile: {
       findUnique: vi.fn(),
       create: vi.fn(),
@@ -50,6 +53,7 @@ const prismaMock = prisma as unknown as {
   session: { create: ReturnType<typeof vi.fn> };
   quoteResponse: { findFirst: ReturnType<typeof vi.fn> };
   supplierContact: { findFirst: ReturnType<typeof vi.fn> };
+  forwarder: { findFirst: ReturnType<typeof vi.fn> };
   companyProfile: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   emailTemplate: { findUnique: ReturnType<typeof vi.fn> };
   userEmailSignature: { findUnique: ReturnType<typeof vi.fn> };
@@ -312,6 +316,78 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
     expect(call.subject).toBe('PO revisada - QR-2026-005');
     expect(call.html).toContain('Favor confirmar recebimento.');
     expect(call.text).toContain('Favor confirmar recebimento.');
+  });
+
+  it('forwarderId valido vai para templateVars e para o metadata do audit', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    prismaMock.forwarder.findFirst.mockResolvedValue({ id: 7, companyName: 'Global' });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-fw' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/purchase-order')
+      .set('Cookie', cookieHeader)
+      .send({ ...basePoBody, forwarderId: 7 });
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.forwarder.findFirst.mock.calls[0][0].where).toEqual({
+      id: 7,
+      deletedAt: null,
+    });
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.templateVars.forwarderId).toBe(7);
+    // O conteudo do e-mail continua sendo o texto editado, nao o cadastro.
+    expect(call.html).toContain('Global Forwarders Ltda.');
+    const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
+    expect(auditArgs.data.metadata.forwarderId).toBe(7);
+  });
+
+  it('retorna 400 quando o forwarderId nao existe ou foi excluido', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    prismaMock.forwarder.findFirst.mockResolvedValue(null);
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/purchase-order')
+      .set('Cookie', cookieHeader)
+      .send({ ...basePoBody, forwarderId: 999 });
+
+    expect(res.status).toBe(400);
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('sem forwarderId nao consulta o cadastro e grava forwarderId null', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-nofw' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/purchase-order')
+      .set('Cookie', cookieHeader)
+      .send(basePoBody);
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.forwarder.findFirst).not.toHaveBeenCalled();
+    expect(sendAndLogMock.mock.calls[0][0].templateVars.forwarderId).toBeNull();
   });
 
   describe('e-mail da PO: logo, assinatura, mensagem e assunto', () => {

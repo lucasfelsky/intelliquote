@@ -66,6 +66,7 @@ model User {
   emailSignature         UserEmailSignature?
   createdCreditPartners  CreditPartner[]       @relation("CreditPartnerCreatedBy")
   createdCreditSupportRequests CreditSupportRequest[] @relation("CreditSupportRequestCreatedBy")
+  createdForwarders      Forwarder[]           @relation("ForwarderCreatedBy")
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -467,6 +468,40 @@ model CreditPartnerContact {
   supportRequests CreditSupportRequest[]
 
   @@index([creditPartnerId])
+}
+
+model Forwarder {
+  id          Int                @id @default(autoincrement())
+  companyName String
+  address     String?
+  website     String?
+  notes       String?
+  isActive    Boolean            @default(true)
+  isDefault   Boolean            @default(false)
+  createdById Int?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?
+  contacts    ForwarderContact[]
+  createdBy   User?              @relation("ForwarderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+model ForwarderContact {
+  id          Int       @id @default(autoincrement())
+  forwarderId Int
+  name        String
+  email       String?
+  phone       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  forwarder   Forwarder @relation(fields: [forwarderId], references: [id], onDelete: Cascade)
+
+  @@index([forwarderId])
 }
 
 model Attachment {
