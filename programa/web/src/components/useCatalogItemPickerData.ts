@@ -12,7 +12,6 @@ function parseCatalogItemRecord(c: Record<string, unknown>): PickerCatalogItem {
     id: Number(c.id),
     commercialName: String(c.commercialName ?? ''),
     marketName: String(c.marketName ?? ''),
-    isDangerousGood: Boolean(c.isDangerousGood),
     family: c.family
       ? { id: Number((c.family as Record<string, unknown>).id), name: String((c.family as Record<string, unknown>).name) }
       : null,

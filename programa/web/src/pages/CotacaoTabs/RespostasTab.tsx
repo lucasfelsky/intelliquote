@@ -455,6 +455,20 @@ export function RespostasTab({
                         </div>
                       );
                     })()}
+                    {(() => {
+                      // DG informado pelo fornecedor (item indisponivel nunca conta como DG).
+                      const dg = (r.items ?? []).filter(
+                        (item) => item.isDangerousGood && !item.isUnavailable,
+                      ).length;
+                      if (dg === 0) return null;
+                      return (
+                        <div>
+                          <span className="badge" style={{ marginTop: 4 }} data-testid="dg-count-badge">
+                            {dg} {dg === 1 ? 'item DG' : 'itens DG'}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {r.isWinner && (
                       <div>
                         <span className="badge badge--muted">Vencedora</span>
@@ -876,6 +890,7 @@ export function RespostasTab({
                 key: String(item.id),
                 productName: item.productName || productName || requestCode,
                 unavailable: Boolean(item.isUnavailable),
+                dg: item.isUnavailable ? '—' : item.isDangerousGood ? 'DG' : 'Não',
                 // Item indisponivel: valores gravados (0) nao sao exibidos.
                 quantity: item.isUnavailable ? '—' : formatNumber(item.quantity),
                 unitPrice: item.isUnavailable ? '—' : formatCurrency(item.unitPrice, currency),
@@ -894,6 +909,7 @@ export function RespostasTab({
                 key: 'fallback',
                 productName: productName || requestCode,
                 unavailable: false,
+                dg: 'Não',
                 quantity: '—',
                 unitPrice: formatCurrency(itemsTarget.offeredPrice, currency),
                 totalPrice: formatCurrency(itemsTarget.offeredPrice, currency),
@@ -902,6 +918,9 @@ export function RespostasTab({
                 originOverride: false,
                 incotermPrices: '—',
               }];
+          const showDg = (itemsTarget.items ?? []).some(
+            (item) => item.isDangerousGood && !item.isUnavailable,
+          );
           const showIncotermPrices = (itemsTarget.items ?? []).some(
             (item) => !item.isUnavailable && (item.incotermPrices?.length ?? 0) >= 2,
           );
@@ -920,6 +939,7 @@ export function RespostasTab({
                     <th>Preço unit.</th>
                     <th>Total</th>
                     <th>Lead time</th>
+                    {showDg && <th>DG</th>}
                     {showOrigin && <th>Origem</th>}
                     {showIncotermPrices && <th>Preços por incoterm</th>}
                   </tr>
@@ -937,6 +957,11 @@ export function RespostasTab({
                       <td>{row.unitPrice}</td>
                       <td>{row.totalPrice}</td>
                       <td>{row.leadTimeDays}</td>
+                      {showDg && (
+                        <td>
+                          {row.dg === 'DG' ? <span className="badge" data-testid="dg-item-badge">DG</span> : row.dg}
+                        </td>
+                      )}
                       {showOrigin && (
                         <td>
                           {row.origin}

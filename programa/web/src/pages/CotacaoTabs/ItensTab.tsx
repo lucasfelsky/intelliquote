@@ -28,7 +28,7 @@ export interface ItensTabItem {
   desiredIncoterm: string | null;
   destinationPort: string | null;
   purchaseOrderId: number | null;
-  catalogItem?: { commercialName: string; marketName: string; isDangerousGood: boolean } | null;
+  catalogItem?: { commercialName: string; marketName: string } | null;
 }
 
 interface ItensTabProps {
@@ -36,6 +36,8 @@ interface ItensTabProps {
   status: 'open' | 'closed';
   canEdit: boolean;
   items: ItensTabItem[];
+  // Quantas respostas ativas (nao indisponiveis) marcaram cada item como DG; ausente = nenhum.
+  dgCountByItemId?: Record<number, number>;
   purchaseOrders: PurchaseOrder[];
   defaultIncoterm: string;
   defaultPort: string | null;
@@ -353,7 +355,17 @@ export function ItensTab(props: ItensTabProps) {
         <td>{it.desiredIncoterm ?? defaultIncoterm}</td>
         <td>{it.destinationPort ?? defaultPort ?? '—'}</td>
         <td>
-          {it.catalogItem?.isDangerousGood ? <span className="badge badge--danger">DG</span> : '—'}
+          {(() => {
+            const dgCount = props.dgCountByItemId?.[it.id] ?? 0;
+            return dgCount > 0 ? (
+              <span
+                className="badge badge--danger"
+                title={`Informado como DG por ${dgCount} ${dgCount === 1 ? 'fornecedor' : 'fornecedores'}`}
+              >
+                DG
+              </span>
+            ) : '—';
+          })()}
         </td>
         <td className="cell-truncate" title={it.notes ?? undefined}>{it.notes ?? '—'}</td>
         {editable && (

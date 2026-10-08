@@ -261,6 +261,8 @@ const quoteResponseItemInputSchema = z
   .object({
     quoteRequestItemId: positiveIntegerField,
     isUnavailable: z.boolean().optional().default(false),
+    // undefined = nao informado (create grava false; update preserva o valor anterior)
+    isDangerousGood: z.boolean().optional(),
     unitPrice: optionalPositiveNumberField,
     quantity: optionalPositiveIntegerField,
     leadTimeDays: nullableOptionalNonNegativeIntegerField,

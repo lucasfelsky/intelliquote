@@ -120,6 +120,8 @@ export class SupplierPortalResponseService {
             originPort: null,
             incotermPrices: Prisma.DbNull,
             isUnavailable: true,
+            // Item indisponivel ignora DG mesmo que o cliente envie true
+            isDangerousGood: false,
           };
         }
         const prices = normalizedIncotermPrices[index];
@@ -142,6 +144,7 @@ export class SupplierPortalResponseService {
               }))
             : Prisma.DbNull,
           isUnavailable: false,
+          isDangerousGood: item.isDangerousGood,
         };
       },
     );
@@ -180,6 +183,7 @@ export class SupplierPortalResponseService {
               incotermPrices: it.incotermPrices ?? null,
               originPort: it.originPort ?? null,
               isUnavailable: it.isUnavailable,
+              isDangerousGood: it.isDangerousGood,
             })),
           },
         });
@@ -326,6 +330,7 @@ async function syncQuoteResponseFromPortal(
     notes: item.notes,
     originPort: item.originPort ?? null,
     isUnavailable: item.isUnavailable,
+    isDangerousGood: item.isUnavailable ? false : item.isDangerousGood,
     incotermPrices: (item.incotermPrices as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
   }));
 

@@ -636,6 +636,49 @@ describe('ComparacaoTab', () => {
       await findByText('Origem: Shanghai · Produto B: Ningbo');
     });
   });
+
+  describe('Selo DG (informativo)', () => {
+    const withDg = {
+      ...winner,
+      dgItems: [
+        { quoteRequestItemId: 1, productName: 'Produto A' },
+        { quoteRequestItemId: 2, productName: 'Produto B' },
+      ],
+    };
+
+    it('30. ranking mostra o selo "DG · 2" com os nomes no title, so na proposta que marcou DG', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [withDg, loser],
+      });
+      const { findByTestId, getAllByTestId } = renderTab();
+      const seal = await findByTestId('dg-seal');
+      expect(seal.textContent).toBe('DG · 2');
+      expect(seal.getAttribute('title')).toBe('Informado como DG pelo fornecedor: Produto A, Produto B');
+      expect(getAllByTestId('dg-seal')).toHaveLength(1);
+    });
+
+    it('31. sem dgItems (historico) ou vazio nao mostra selo', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, { ...loser, dgItems: [] }],
+      });
+      const { findAllByText, queryByTestId } = renderTab();
+      await findAllByText('Origem: —');
+      expect(queryByTestId('dg-seal')).toBeNull();
+    });
+
+    it('32. card de uma unica resposta (bypass) tambem mostra o selo', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [withDg],
+        responseCount: 1,
+      });
+      const { findByText, findByTestId } = renderTab();
+      await findByText('Apenas um fornecedor respondeu — sem comparação.');
+      expect((await findByTestId('dg-seal')).textContent).toBe('DG · 2');
+    });
+  });
 });
 
 describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', () => {

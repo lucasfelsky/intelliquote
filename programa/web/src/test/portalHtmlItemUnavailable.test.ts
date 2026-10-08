@@ -259,6 +259,7 @@ describe('portal.html - Temporarily unavailable por item (jsdom)', () => {
     expect(Object.keys(body.items[0]!).sort()).toEqual(
       [
         'incotermPrices',
+        'isDangerousGood',
         'leadTimeDays',
         'notes',
         'originPort',
