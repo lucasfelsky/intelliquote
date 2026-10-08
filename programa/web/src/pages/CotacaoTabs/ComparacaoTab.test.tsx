@@ -22,6 +22,10 @@ vi.mock('@/services/dispatch', () => ({
   replyToQuoteResponse: vi.fn(),
   sendPurchaseOrder: vi.fn(),
 }));
+vi.mock('@/services/forwarders', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/forwarders')>()),
+  listForwarders: vi.fn().mockResolvedValue([]),
+}));
 
 import {
   approveAward,

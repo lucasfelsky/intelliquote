@@ -5,6 +5,7 @@ import LoginGate from '@/pages/LoginGate';
 import AppShell from '@/components/AppShell';
 import Home from '@/pages/Home';
 import Fornecedores from '@/pages/Fornecedores';
+import Forwarders from '@/pages/Forwarders';
 import Usuarios from '@/pages/Usuarios';
 import Empresa from '@/pages/Empresa';
 import Cotacoes from '@/pages/Cotacoes';
@@ -76,6 +77,7 @@ export default function App() {
                 <Route element={<AppShell />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/fornecedores" element={<Fornecedores />} />
+                  <Route path="/forwarders" element={<Forwarders />} />
                   <Route path="/usuarios" element={<Usuarios />} />
                   <Route path="/empresa" element={<Empresa />} />
                   <Route path="/cotacoes" element={<Cotacoes />} />

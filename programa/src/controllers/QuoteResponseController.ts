@@ -1054,6 +1054,19 @@ export class QuoteResponseController {
         return res.status(400).json({ message: 'O PDF excede o limite de 10MB.' });
       }
 
+      // forwarderId e' so' rastreio (o texto do e-mail continua sendo forwarderInfo);
+      // inativo e' aceito, excluido nao.
+      const forwarderId = parsedBody.data.forwarderId ?? null;
+      if (forwarderId !== null) {
+        const forwarder = await prisma.forwarder.findFirst({
+          where: { id: forwarderId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!forwarder) {
+          return res.status(400).json({ message: 'Forwarder nao encontrado.' });
+        }
+      }
+
       const { quoteRequest } = quoteResponse;
       const defaultSubject = `Purchase Order - ${quoteRequest.requestCode}`;
       const message = parsedBody.data.message?.trim() ?? '';
@@ -1138,6 +1151,7 @@ export class QuoteResponseController {
           supplierId: quoteResponse.supplier.id,
           supplierContactId: primaryContact.id,
           forwarderInfo: parsedBody.data.forwarderInfo ?? null,
+          forwarderId,
           hasCustomMessage: Boolean(message),
           hasSignatureImage: Boolean(signatureImage),
         },
@@ -1158,6 +1172,7 @@ export class QuoteResponseController {
           subject: rendered.subject,
           fileName: parsedBody.data.fileName,
           fileSize: buffer.length,
+          forwarderId,
         },
       });
 
