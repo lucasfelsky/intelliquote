@@ -173,7 +173,6 @@ async function buildPortalView(tokenId: number) {
                   destinationPort: item.destinationPort ?? token.quoteRequest.destinationPort,
                   originPort: token.quoteRequest.originPort ?? 'Shanghai',
                   notes: item.notes,
-                  isDangerousGood: item.catalogItem?.isDangerousGood ?? false,
                 })),
       },
     supplier: {
@@ -214,6 +213,7 @@ async function buildPortalView(tokenId: number) {
             notes: it.notes,
             originPort: it.originPort ?? null,
             isUnavailable: it.isUnavailable,
+            isDangerousGood: it.isDangerousGood,
             incotermPrices: it.incotermPrices ?? null,
           })),
         }

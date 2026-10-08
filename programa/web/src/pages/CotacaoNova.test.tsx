@@ -26,7 +26,6 @@ const familyItemsById: Record<number, unknown[]> = {
       id: 1,
       commercialName: 'Soda Cáustica',
       marketName: 'NaOH',
-      isDangerousGood: false,
       family: { id: 1, name: 'Químicos' },
     },
   ],
@@ -35,7 +34,6 @@ const familyItemsById: Record<number, unknown[]> = {
       id: 2,
       commercialName: 'Fibra de Vidro',
       marketName: 'FDV',
-      isDangerousGood: false,
       family: { id: 2, name: 'Materiais' },
     },
   ],
@@ -45,7 +43,6 @@ const allItemsFlat = Object.values(familyItemsById).flat() as Array<{
   id: number;
   commercialName: string;
   marketName: string;
-  isDangerousGood: boolean;
   family: { id: number; name: string };
 }>;
 

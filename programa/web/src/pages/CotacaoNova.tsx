@@ -15,7 +15,6 @@ interface DraftItem {
   catalogItemId: number;
   commercialName: string;
   marketName: string;
-  isDangerousGood: boolean;
   quantity: number;
   unit: string;
   notes: string;
@@ -146,7 +145,6 @@ export default function CotacaoNova() {
       id: item.catalogItemId,
       commercialName: item.commercialName,
       marketName: item.marketName,
-      isDangerousGood: item.isDangerousGood,
       family: null,
     });
     setShowItemModal(true);
@@ -187,7 +185,6 @@ export default function CotacaoNova() {
       catalogItemId: catalogItem.id,
       commercialName: catalogItem.commercialName,
       marketName: catalogItem.marketName,
-      isDangerousGood: catalogItem.isDangerousGood,
       quantity: qty,
       unit: itemForm.unit,
       notes: itemForm.notes.trim(),
@@ -406,7 +403,6 @@ export default function CotacaoNova() {
                   <th>Nome de mercado</th>
                   <th>Qtd</th>
                   <th>Unidade</th>
-                  <th>DG</th>
                   <th>Notas</th>
                   <th>Ações</th>
                 </tr>
@@ -418,7 +414,6 @@ export default function CotacaoNova() {
                     <td>{it.marketName}</td>
                     <td>{formatNumber(it.quantity)}</td>
                     <td>{it.unit}</td>
-                    <td>{it.isDangerousGood ? 'Sim' : '—'}</td>
                     <td>{it.notes || '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>

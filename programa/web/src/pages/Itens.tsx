@@ -12,7 +12,6 @@ interface CatalogItem {
   marketName: string;
   ncm: string | null;
   dbcorpCode: string | null;
-  isDangerousGood: boolean;
   notes: string | null;
   isActive: boolean;
   familyId: number | null;
@@ -26,7 +25,6 @@ type FormState = {
   marketName: string;
   ncm: string;
   dbcorpCode: string;
-  isDangerousGood: boolean;
   familyId: number | '';
   notes: string;
 };
@@ -36,7 +34,6 @@ const EMPTY_FORM: FormState = {
   marketName: '',
   ncm: '',
   dbcorpCode: '',
-  isDangerousGood: false,
   familyId: '',
   notes: '',
 };
@@ -59,7 +56,6 @@ interface CatalogItemPayload extends Record<string, unknown> {
   marketName: string;
   ncm: string | null;
   dbcorpCode: string | null;
-  isDangerousGood: boolean;
   familyId: number | null;
   notes: string | null;
 }
@@ -72,6 +68,7 @@ interface ImportErrorLine {
 interface ImportPreview {
   validLines: Record<string, unknown>[];
   errorLines: ImportErrorLine[];
+  warnings?: string[];
 }
 
 interface ImportResult {
@@ -177,7 +174,6 @@ export default function Itens() {
       marketName: item.marketName,
       ncm: item.ncm ?? '',
       dbcorpCode: item.dbcorpCode ?? '',
-      isDangerousGood: item.isDangerousGood,
       familyId: item.familyId ?? '',
       notes: item.notes ?? '',
     });
@@ -220,7 +216,6 @@ export default function Itens() {
       marketName: form.marketName.trim(),
       ncm: form.ncm.trim() || null,
       dbcorpCode: form.dbcorpCode.trim() || null,
-      isDangerousGood: form.isDangerousGood,
       familyId: form.familyId !== '' ? Number(form.familyId) : null,
       notes: form.notes.trim() || null,
     };
@@ -399,7 +394,6 @@ export default function Itens() {
                       <div className="itens-card__market">{item.marketName}</div>
                     </div>
                     <div className="itens-card__badges">
-                      {item.isDangerousGood && <span className="itens-card__badge itens-card__badge--dg">DG</span>}
                       <span
                         className={`itens-card__badge ${
                           item.isActive ? 'itens-card__badge--active' : 'itens-card__badge--inactive'
@@ -571,16 +565,6 @@ export default function Itens() {
                 />
               </label>
             </div>
-            <label
-              className={`itens-form__switch${form.isDangerousGood ? ' itens-form__switch--active' : ''}`}
-            >
-              <input
-                type="checkbox"
-                checked={form.isDangerousGood}
-                onChange={(e) => setForm({ ...form, isDangerousGood: e.target.checked })}
-              />
-              <span>{form.isDangerousGood ? 'Mercadoria perigosa (DG) — ativo' : 'Marcar como mercadoria perigosa (DG)'}</span>
-            </label>
             <label className="field" style={{ marginTop: 12 }}>
               <span>Observações</span>
               <textarea
@@ -611,7 +595,7 @@ export default function Itens() {
             <div style={{ flex: 1 }}>
               <p style={{ marginBottom: 16 }}>
                 Selecione uma planilha (xlsx) com as colunas na seguinte ordem:<br/>
-                <strong>1. Nome Comercial, 2. Nome de Mercado, 3. NCM, 4. Código DB, 5. Família, 6. Carga Perigosa (Sim/Não), 7. Notas</strong>
+                <strong>1. Nome Comercial, 2. Nome de Mercado, 3. NCM, 4. Código DB, 5. Família, 6. (coluna ignorada — DG agora é informado pelo fornecedor na resposta), 7. Notas</strong>
               </p>
               <input
                 type="file"
@@ -642,6 +626,17 @@ export default function Itens() {
                   <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
                     {importPreview.errorLines.map((e, idx) => (
                       <li key={idx}>Linha {e.row}: {e.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {(importPreview.warnings?.length ?? 0) > 0 && (
+                <div className="alert" role="status" style={{ marginBottom: 16 }}>
+                  <strong style={{ display: 'block', marginBottom: 8 }}>Avisos:</strong>
+                  <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                    {importPreview.warnings?.map((w, idx) => (
+                      <li key={idx}>{w}</li>
                     ))}
                   </ul>
                 </div>

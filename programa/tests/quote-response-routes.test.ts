@@ -287,9 +287,28 @@ describe('Quote response routes', () => {
       const data = await putItems([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
       expect(prismaMock.quoteResponseItem.findMany).toHaveBeenCalledWith({
         where: { quoteResponseId: 55, deletedAt: null },
-        select: { quoteRequestItemId: true, incotermPrices: true, originPort: true },
+        select: {
+          quoteRequestItemId: true,
+          incotermPrices: true,
+          originPort: true,
+          isDangerousGood: true,
+        },
       });
       expect(data.items.create[0].incotermPrices).toEqual(previousPrices);
+    });
+
+    it('PUT sem isDangerousGood preserva o DG anterior do item; com valor sobrescreve', async () => {
+      prismaMock.quoteResponseItem.findMany.mockResolvedValue([
+        { quoteRequestItemId: 11, incotermPrices: previousPrices, isDangerousGood: true },
+      ]);
+      const preserved = await putItems([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
+      expect(preserved.items.create[0].isDangerousGood).toBe(true);
+
+      prismaMock.quoteResponse.update.mockClear();
+      const cleared = await putItems([
+        { quoteRequestItemId: 11, unitPrice: 10, quantity: 10, isDangerousGood: false },
+      ]);
+      expect(cleared.items.create[0].isDangerousGood).toBe(false);
     });
 
     it('atualiza o incoterm principal quando o unitPrice muda', async () => {
@@ -563,6 +582,7 @@ describe('Quote response manual - item temporariamente indisponivel', () => {
             leadTimeDays: 9,
             originPort: 'Ningbo',
             notes: 'Sem estoque',
+            isDangerousGood: true,
           },
         ],
       });
@@ -583,7 +603,58 @@ describe('Quote response manual - item temporariamente indisponivel', () => {
       originPort: null,
       incotermPrices: Prisma.DbNull,
       isUnavailable: true,
+      // DG enviado para item indisponivel e ignorado
+      isDangerousGood: false,
     });
+    expect(available.isDangerousGood).toBe(false);
+  });
+
+  it('POST: item disponivel com isDangerousGood true grava DG', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 102 });
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    const response = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        items: [{ quoteRequestItemId: 11, unitPrice: 2, quantity: 50, isDangerousGood: true }],
+      });
+
+    expect(response.status).toBe(201);
+    const [item] = prismaMock.quoteResponse.create.mock.calls[0][0].data.items.create;
+    expect(item.isDangerousGood).toBe(true);
+  });
+
+  it('POST: item disponivel sem isDangerousGood grava false', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 103 });
+    prismaMock.quoteRequest.findUnique = vi.fn().mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi.fn().mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+
+    const response = await request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        currency: 'USD',
+        exchangeRate: 5,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        items: [{ quoteRequestItemId: 11, unitPrice: 2, quantity: 50 }],
+      });
+
+    expect(response.status).toBe(201);
+    const [item] = prismaMock.quoteResponse.create.mock.calls[0][0].data.items.create;
+    expect(item.isDangerousGood).toBe(false);
   });
 
   it('POST: item disponivel sem unitPrice -> 400', async () => {

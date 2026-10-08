@@ -62,6 +62,33 @@ beforeEach(() => {
   confirmMock.mockResolvedValue(true);
 });
 
+describe('ItensTab - DG informado pelo fornecedor', () => {
+  const dgCell = (id: number) => screen.getByTestId(`item-row-${id}`).querySelectorAll('td')[6]!;
+
+  it('coluna DG mostra o selo quando >=1 resposta marcou o item (title com a contagem) e "—" nos demais', () => {
+    renderTab({
+      items: [item(1, 'Resina A', null), item(2, 'Resina B', null), item(3, 'Resina C', null)],
+      dgCountByItemId: { 1: 2, 3: 1 },
+    });
+    expect(dgCell(1).textContent).toBe('DG');
+    expect(dgCell(1).querySelector('.badge')?.getAttribute('title')).toBe('Informado como DG por 2 fornecedores');
+    expect(dgCell(2).textContent).toBe('—');
+    expect(dgCell(3).querySelector('.badge')?.getAttribute('title')).toBe('Informado como DG por 1 fornecedor');
+  });
+
+  it('sem dgCountByItemId nenhum item mostra DG (o DG do catalogo nao vale mais)', () => {
+    renderTab({
+      items: [
+        {
+          ...item(1, 'Resina A', null),
+          catalogItem: { commercialName: 'Resina A', marketName: 'RESINA A', isDangerousGood: true } as never,
+        },
+      ],
+    });
+    expect(dgCell(1).textContent).toBe('—');
+  });
+});
+
 describe('ItensTab', () => {
   it('cotação sem PO renderiza tabela única sem grupos', () => {
     renderTab({ items: [item(1, 'Resina A', null)] });

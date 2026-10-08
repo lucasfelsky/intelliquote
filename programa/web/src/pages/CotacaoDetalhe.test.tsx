@@ -75,7 +75,6 @@ const quoteFixture = {
         id: 3,
         commercialName: 'Produto X',
         marketName: 'PX',
-        isDangerousGood: false,
         familyId: 1,
       },
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -90,7 +89,6 @@ const catalogFixture = [
     id: 150,
     commercialName: 'Item Cento e Cinquenta',
     marketName: 'IC150',
-    isDangerousGood: false,
     isActive: true,
     family: { id: 1, name: 'Monômero' },
   },
@@ -280,6 +278,62 @@ describe('CotacaoDetalhe', () => {
       fireEvent.click(await findByRole('tab', { name: 'Itens' }));
       expect((await findAllByText('PO 1')).length).toBeGreaterThan(0);
       expect(queryByText(/reagrupar POs não altera/)).toBeNull();
+    });
+  });
+
+  describe('DG vem das respostas dos fornecedores (aba Itens)', () => {
+    const quoteWithResponses = (responseItems: Array<Record<string, unknown>>[]) => ({
+      ...quoteFixture,
+      quoteResponses: responseItems.map((items, index) => ({
+        id: 500 + index,
+        supplierId: 5,
+        offeredPrice: 10,
+        currency: 'USD',
+        offeredIncoterm: 'FOB',
+        items,
+      })),
+    });
+    const useQuote = (quote: unknown) => {
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) =>
+        path.startsWith('/v1/quote-requests/') ? quote : getImpl(path, params)) as unknown as typeof api.get);
+    };
+    const dgCellText = (table: HTMLElement) => {
+      const bodyRow = within(table).getAllByRole('row')[1]!;
+      return bodyRow.querySelectorAll('td')[6]?.textContent;
+    };
+
+    it('3d. selo DG quando uma resposta ativa marcou o item e ela nao esta indisponivel', async () => {
+      useQuote(
+        quoteWithResponses([
+          [{ quoteRequestItemId: 10, isDangerousGood: true, isUnavailable: false }],
+          [{ quoteRequestItemId: 10, isDangerousGood: true, isUnavailable: true }],
+          [{ quoteRequestItemId: 10, isDangerousGood: false, isUnavailable: false }],
+        ]),
+      );
+      const { findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(getByRole('tab', { name: 'Itens' }));
+      const table = getByRole('table');
+      expect(dgCellText(table)).toBe('DG');
+      expect(table.querySelector('.badge--danger')?.getAttribute('title')).toBe(
+        'Informado como DG por 1 fornecedor',
+      );
+    });
+
+    it('3e. sem resposta marcando DG (mesmo com DG legado no catalogo) a coluna mostra "—"', async () => {
+      useQuote({
+        ...quoteWithResponses([[{ quoteRequestItemId: 10, isDangerousGood: false, isUnavailable: false }]]),
+        items: [
+          {
+            ...quoteFixture.items[0],
+            catalogItem: { ...quoteFixture.items[0]!.catalogItem, isDangerousGood: true },
+          },
+        ],
+      });
+      const { findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(getByRole('tab', { name: 'Itens' }));
+      expect(dgCellText(getByRole('table'))).toBe('—');
     });
   });
 

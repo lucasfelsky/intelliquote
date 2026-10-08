@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
 import { classifyForComparison, priceForComparison } from '../utils/quoteBasket';
+import { buildDangerousGoodItems } from '../utils/dangerousGoods';
 import { buildItemOrigins, normalizeItemOriginPort } from '../utils/originPort';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
@@ -117,6 +118,7 @@ export class QuoteResponseController {
             notes: item.notes ?? null,
             // null = herda a origem geral da proposta
             originPort: normalizeItemOriginPort(item.originPort, payload.originPort),
+            isDangerousGood: item.isDangerousGood ?? false,
           };
         });
         finalOfferedPrice = total;
@@ -374,7 +376,12 @@ export class QuoteResponseController {
             payload.currency !== existingQuoteResponse.currency;
           const previousItems = await prisma.quoteResponseItem.findMany({
             where: { quoteResponseId: id, deletedAt: null },
-            select: { quoteRequestItemId: true, incotermPrices: true, originPort: true },
+            select: {
+              quoteRequestItemId: true,
+              incotermPrices: true,
+              originPort: true,
+              isDangerousGood: true,
+            },
           });
           const previousMap = new Map(
             currencyChanged
@@ -383,6 +390,9 @@ export class QuoteResponseController {
           );
           const previousOrigins = new Map(
             previousItems.map((prev) => [prev.quoteRequestItemId, prev.originPort]),
+          );
+          const previousDangerousGoods = new Map(
+            previousItems.map((prev) => [prev.quoteRequestItemId, prev.isDangerousGood]),
           );
           const finalGeneralOrigin =
             payload.originPort !== undefined
@@ -412,6 +422,11 @@ export class QuoteResponseController {
                   : item.originPort,
                 finalGeneralOrigin,
               ),
+              // undefined = preserva o DG anterior do item
+              isDangerousGood:
+                item.isDangerousGood ??
+                previousDangerousGoods.get(item.quoteRequestItemId) ??
+                false,
               incotermPrices: previousMap.has(item.quoteRequestItemId)
                 ? mergeManualIncotermPrices(
                     previousMap.get(item.quoteRequestItemId),
@@ -1141,6 +1156,7 @@ export class QuoteResponseController {
               quantity: true,
               originPort: true,
               isUnavailable: true,
+              isDangerousGood: true,
               quoteRequestItem: { select: { productName: true } },
             },
           },
@@ -1337,6 +1353,8 @@ export class QuoteResponseController {
           // Informativo (nao entra em score/landed): origem geral + origem efetiva por item.
           originPort: sourceResponse?.originPort ?? null,
           itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
+          // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
+          dgItems: buildDangerousGoodItems(sourceResponse?.items),
         };
       });
 
@@ -1415,6 +1433,7 @@ export class QuoteResponseController {
               quantity: true,
               originPort: true,
               isUnavailable: true,
+              isDangerousGood: true,
               quoteRequestItem: { select: { productName: true } },
             },
           },
@@ -1527,6 +1546,8 @@ export class QuoteResponseController {
           // Informativo (nao entra em score/landed): origem geral + origem efetiva por item.
           originPort: sourceResponse?.originPort ?? null,
           itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
+          // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
+          dgItems: buildDangerousGoodItems(sourceResponse?.items),
         };
       });
 
@@ -1897,6 +1918,7 @@ type ComparisonSourceResponse = {
     quantity: number;
     unitPrice: Prisma.Decimal;
     isUnavailable: boolean;
+    isDangerousGood?: boolean;
     quoteRequestItem: { productName: string };
   }[];
 };
@@ -1948,6 +1970,8 @@ function unavailableItemData(quoteRequestItemId: number, notes: string | null | 
     originPort: null,
     incotermPrices: Prisma.DbNull,
     isUnavailable: true,
+    // Item indisponivel ignora DG
+    isDangerousGood: false,
   };
 }
 
