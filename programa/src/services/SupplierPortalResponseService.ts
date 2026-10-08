@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { HttpError } from '../utils/http';
+import { PortalHttpError } from '../utils/portalHttpError';
 import { sumQuoteItems } from '../utils/quoteBasket';
 import { normalizeItemOriginPort } from '../utils/originPort';
 import { QuoteComparisonService } from './QuoteComparisonService';
@@ -38,7 +38,7 @@ export class SupplierPortalResponseService {
     const seenItemIds = new Set<number>();
     for (const item of input.payload.items) {
       if (seenItemIds.has(item.quoteRequestItemId)) {
-        throw new HttpError(
+        throw new PortalHttpError(
           400,
           `Duplicate item in the proposal (id=${item.quoteRequestItemId}). Please reload the page.`,
         );
@@ -50,17 +50,17 @@ export class SupplierPortalResponseService {
       availableItems.length !==
       input.payload.items.filter((item) => !item.isUnavailable).length
     ) {
-      throw new HttpError(400, 'Provide unitPrice, quantity and totalPrice for every available item.');
+      throw new PortalHttpError(400, 'Provide unitPrice, quantity and totalPrice for every available item.');
     }
     const computedTotal = sumQuoteItems(availableItems);
     for (const item of availableItems) {
       const expectedTotal = new Prisma.Decimal(item.unitPrice).times(item.quantity);
       if (expectedTotal.minus(item.totalPrice).abs().gt(0.01)) {
-        throw new HttpError(400, 'The item total does not match the unit price times the quantity.');
+        throw new PortalHttpError(400, 'The item total does not match the unit price times the quantity.');
       }
     }
     if (Math.abs(computedTotal - Number(input.payload.totalPrice)) > 0.01) {
-      throw new HttpError(
+      throw new PortalHttpError(
         400,
         'The proposal total does not match the sum of the items.',
       );
@@ -73,7 +73,7 @@ export class SupplierPortalResponseService {
     const itemIdSet = new Set(quoteRequestItems.map((item) => item.id));
     for (const item of input.payload.items) {
       if (!itemIdSet.has(item.quoteRequestItemId)) {
-        throw new HttpError(
+        throw new PortalHttpError(
           400,
           `Invalid item in the proposal (id=${item.quoteRequestItemId}). Please reload the page.`,
         );
@@ -93,7 +93,7 @@ export class SupplierPortalResponseService {
 
     const currency = input.payload.currency ?? 'USD';
     if (input.payload.totalPriceCurrency && input.payload.totalPriceCurrency !== currency) {
-      throw new HttpError(400, 'The total currency must match the proposal currency.');
+      throw new PortalHttpError(400, 'The total currency must match the proposal currency.');
     }
     const scalarData = {
       currency,
@@ -272,7 +272,7 @@ async function syncQuoteResponseFromPortal(
       : (usableProvidedRate ??
         (needsRate ? await resolveExchangeRate(tx, input.quoteRequestId, currency) : 1));
   if (needsRate && (!Number.isFinite(exchangeRate) || exchangeRate <= 0)) {
-    throw new HttpError(
+    throw new PortalHttpError(
       400,
       'Exchange rate unavailable for this currency. Please contact the buyer.',
     );
@@ -367,20 +367,20 @@ function normalizeIncotermPrices(
 ): (NormalizedIncotermPrice[] | null)[] {
   if (quoteIncoterms.length === 0) {
     if (items.some((item) => !item.isUnavailable && item.incotermPrices !== undefined)) {
-      throw new HttpError(400, 'This quote has no incoterms. Please send a single price per item.');
+      throw new PortalHttpError(400, 'This quote has no incoterms. Please send a single price per item.');
     }
     return items.map(() => null);
   }
   const allowed = new Set(quoteIncoterms);
   if (!allowed.has(mainIncoterm)) {
-    throw new HttpError(400, `Incoterm ${mainIncoterm} is not part of this quote. If a field is missing, reload the page.`);
+    throw new PortalHttpError(400, `Incoterm ${mainIncoterm} is not part of this quote. If a field is missing, reload the page.`);
   }
   return items.map((item) => {
     // Item indisponivel nao tem preco: nada a validar nem a gravar por incoterm.
     if (!isAvailablePortalItem(item)) return null;
     if (!item.incotermPrices) {
       if (quoteIncoterms.length >= 2) {
-        throw new HttpError(
+        throw new PortalHttpError(
           400,
           `This page was updated. Please reload it (Ctrl+F5) to quote a price for each incoterm: ${quoteIncoterms.join(', ')}.`,
           'PORTAL_OUTDATED',
@@ -391,22 +391,22 @@ function normalizeIncotermPrices(
     const seen = new Set<string>();
     for (const entry of item.incotermPrices) {
       if (!allowed.has(entry.incoterm)) {
-        throw new HttpError(400, `Incoterm ${entry.incoterm} is not part of this quote. If a field is missing, reload the page.`);
+        throw new PortalHttpError(400, `Incoterm ${entry.incoterm} is not part of this quote. If a field is missing, reload the page.`);
       }
       if (seen.has(entry.incoterm)) {
-        throw new HttpError(400, 'Provide a single price per incoterm.');
+        throw new PortalHttpError(400, 'Provide a single price per incoterm.');
       }
       seen.add(entry.incoterm);
     }
     if (seen.size !== allowed.size) {
-      throw new HttpError(
+      throw new PortalHttpError(
         400,
         `Provide a price for every incoterm of this quote: ${quoteIncoterms.join(', ')}. If a field is missing, reload the page.`,
       );
     }
     const main = item.incotermPrices.find((entry) => entry.incoterm === mainIncoterm);
     if (!main || Math.abs(Number(main.unitPrice) - Number(item.unitPrice)) > 0.0001) {
-      throw new HttpError(
+      throw new PortalHttpError(
         400,
         'The main incoterm price must match the item unit price.',
       );
@@ -439,7 +439,7 @@ async function resolveExchangeRate(
   if (cached && cached.rateToBrl > 0) {
     return cached.rateToBrl;
   }
-  throw new HttpError(
+  throw new PortalHttpError(
     400,
     'Exchange rate unavailable for this currency. Please contact the buyer.',
   );
