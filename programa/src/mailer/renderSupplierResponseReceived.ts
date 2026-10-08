@@ -39,7 +39,7 @@ export interface SupplierResponseReceivedVars {
   productName: string;
   totalPrice: string;
   currency: string;
-  itemsCount: number;
+  itemsCount: number | string;
   // Presentes apenas quando o fornecedor REVISOU uma resposta anterior —
   // controlam a section {{#revisionLabel}} do template.
   revisionLabel: string;

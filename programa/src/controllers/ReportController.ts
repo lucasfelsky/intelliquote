@@ -328,6 +328,7 @@ export class ReportController {
         where: {
           deletedAt: null,
           quoteRequestItem: { catalogItemId },
+          isUnavailable: false,
           response: {
             deletedAt: null,
             ...(dateFilter ? { submittedAt: dateFilter } : {}),

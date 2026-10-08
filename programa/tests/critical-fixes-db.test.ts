@@ -278,6 +278,92 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     expect(Number((await prisma.quoteResponse.findUnique({ where: { id: first.quoteResponse.id } })).totalLandedCost)).toBe(105);
   });
 
+  it('item indisponivel: portal grava isUnavailable (portal + espelho) e a proposta fica fora do ranking', async () => {
+    const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
+    const supplierC = await prisma.supplier.create({ data: {
+      name: 'C', acceptedIncoterms: ['FOB'], contacts: { create: { name: 'C', email: 'C@local.test', isPrimary: true } },
+    } });
+    const proposalC = (await request(app).post('/api/v1/quote-responses').set('Cookie', cookies)
+      .send(payload(supplierC.id, [30, 1])).expect(201)).body;
+    const token = await prisma.supplierPortalToken.create({ data: {
+      tokenHash: `unavailable-${quote.id}`, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id, createdById: adminId,
+      expiresAt: new Date(Date.now() + 86400000),
+    } });
+    const [item1, item2] = quote.items;
+    const submitWith = (unavailableIds: number[]) => {
+      const available = quote.items.filter((i: any) => !unavailableIds.includes(i.id));
+      return SupplierPortalResponseService.submit({
+        tokenId: token.id, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+        supplierContactId: suppliers[0].contacts[0].id,
+        payload: { currency: 'USD', incoterm: 'FOB' as const, paymentTermsDays: 30, exchangeRate: 5,
+          totalPrice: available.length * 10, validityDays: 30,
+          items: quote.items.map((i: any) => unavailableIds.includes(i.id)
+            ? { quoteRequestItemId: i.id, isUnavailable: true }
+            : { quoteRequestItemId: i.id, isUnavailable: false, unitPrice: 10, quantity: i.quantity, totalPrice: 10 * i.quantity }),
+        },
+      });
+    };
+
+    // 1) 1 item indisponivel: coluna true nas duas tabelas, zeros gravados, total so dos disponiveis.
+    const submitted = await submitWith([item2.id]);
+    expect(submitted.quoteResponse.id).toBe(proposals[0].id);
+    expect(Number(submitted.quoteResponse.offeredPrice)).toBe(10);
+    const byItem = (rows: any[]) => rows.sort((a, b) => a.quoteRequestItemId - b.quoteRequestItemId);
+    const portalItems = byItem(await prisma.supplierPortalResponseItem.findMany({ where: { responseId: submitted.portalResponse.id } }));
+    expect(portalItems.map((r: any) => r.isUnavailable)).toEqual([false, true]);
+    expect(Number(portalItems[1].unitPrice)).toBe(0);
+    expect(portalItems[1].quantity).toBe(0);
+    const mirrored = byItem(await prisma.quoteResponseItem.findMany({
+      where: { quoteResponseId: submitted.quoteResponse.id, deletedAt: null },
+    }));
+    expect(mirrored.map((r: any) => r.isUnavailable)).toEqual([false, true]);
+    expect(Number(mirrored[1].totalPrice)).toBe(0);
+
+    // 2) preview e compare: A fica em `excluded`; ranking so com B e C; nenhum score inventado pelo sentinel 0.
+    const preview = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare/preview`).set('Cookie', cookies).send(weights);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body.responseCount).toBe(3);
+    expect(preview.body.results.map((r: any) => r.supplierId).sort()).toEqual([suppliers[1].id, supplierC.id].sort());
+    expect(preview.body.winnerQuoteResponseId).toBe(proposals[1].id);
+    expect(preview.body.excluded).toHaveLength(1);
+    expect(preview.body.excluded[0]).toMatchObject({ quoteResponseId: proposals[0].id, supplierId: suppliers[0].id });
+    expect(preview.body.excluded[0].unavailableItems).toEqual([{ quoteRequestItemId: item2.id, productName: 'Item 2' }]);
+    for (const r of preview.body.results) expect(Number.isFinite(r.totalScore)).toBe(true);
+    const compare = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare`).set('Cookie', cookies).send(weights);
+    expect(compare.status, JSON.stringify(compare.body)).toBe(200);
+    expect(compare.body.excluded).toHaveLength(1);
+    const saved = await prisma.quoteComparisonResult.findMany({ where: { comparisonId: compare.body.comparisonId } });
+    expect(saved.map((r: any) => r.quoteResponseId).sort()).toEqual([proposals[1].id, proposalC.id].sort());
+    expect((await prisma.quoteResponse.findUnique({ where: { id: proposals[0].id } })).isWinner).toBe(false);
+
+    // 3) escolha manual de proposta com item indisponivel e barrada.
+    const manual = await request(app).post(`/api/v1/quote-requests/${quote.id}/winner`).set('Cookie', cookies)
+      .send({ quoteResponseId: proposals[0].id, reason: 'teste' });
+    expect(manual.status).toBe(400);
+    expect(manual.body.message).toContain('indisponivel');
+
+    // 4) todos indisponiveis (total 0): continua fora do ranking, sem score.
+    await submitWith([item1.id, item2.id]);
+    expect(Number((await prisma.quoteResponse.findUnique({ where: { id: proposals[0].id } })).offeredPrice)).toBe(0);
+    const allOut = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare/preview`).set('Cookie', cookies).send(weights);
+    expect(allOut.status, JSON.stringify(allOut.body)).toBe(200);
+    expect(allOut.body.results.map((r: any) => r.supplierId)).not.toContain(suppliers[0].id);
+    expect(allOut.body.excluded[0].unavailableItems).toHaveLength(2);
+    for (const r of allOut.body.results) expect(Number.isFinite(r.totalScore)).toBe(true);
+
+    // 5) menos de 2 propostas completas: /compare = 400 sem criar comparison; preview = 200.
+    await request(app).delete(`/api/v1/quote-responses/${proposalC.id}`).set('Cookie', cookies).expect(204);
+    const comparisonsBefore = await prisma.quoteComparison.count({ where: { quoteRequestId: quote.id } });
+    const blocked = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare`).set('Cookie', cookies).send(weights);
+    expect(blocked.status).toBe(400);
+    expect(blocked.body.message).toContain('duas propostas completas');
+    expect(await prisma.quoteComparison.count({ where: { quoteRequestId: quote.id } })).toBe(comparisonsBefore);
+    const lonely = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare/preview`).set('Cookie', cookies).send(weights);
+    expect(lonely.status).toBe(200);
+    expect(lonely.body.results).toHaveLength(1);
+  });
+
   it('portal nao reutiliza cambio USD ao receber proposta em EUR sem taxa', async () => {
     const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
     const token = await prisma.supplierPortalToken.create({ data: {

@@ -195,6 +195,7 @@ async function buildPortalView(tokenId: number) {
             leadTimeDays: it.leadTimeDays,
             notes: it.notes,
             originPort: it.originPort ?? null,
+            isUnavailable: it.isUnavailable,
             incotermPrices: it.incotermPrices ?? null,
           })),
         }
@@ -326,6 +327,7 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
       totalPrice: response.totalPrice.toString(),
       currency: response.currency,
       itemsCount: parsed.data.items.length,
+      unavailableCount: parsed.data.items.filter((item) => item.isUnavailable).length,
       version: response.version,
       revised: result.revised,
     });

@@ -224,6 +224,23 @@ describe('Reports and help routes', () => {
     expect(june.bestSupplier.supplierId).toBe(2); // Beta = menor preco
   });
 
+  it('price-history: ignora item indisponivel (0.00 nao vira melhor preco do mes)', async () => {
+    const cookies = await loginAs('viewer');
+    prismaMock.supplierPortalResponseItem.findMany.mockClear();
+    prismaMock.supplierPortalResponseItem.findMany.mockResolvedValue([] as never);
+
+    const response = await request(app)
+      .get('/api/v1/reports/price-history?catalogItemId=42')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.supplierPortalResponseItem.findMany).toHaveBeenCalledTimes(1);
+    const where = prismaMock.supplierPortalResponseItem.findMany.mock.calls[0][0].where;
+    expect(where.isUnavailable).toBe(false);
+    expect(where.deletedAt).toBeNull();
+    expect(where.quoteRequestItem).toEqual({ catalogItemId: 42 });
+  });
+
   it('price-history: catalogItemId invalido -> 400', async () => {
     const cookies = await loginAs('viewer');
     const response = await request(app)

@@ -96,6 +96,60 @@ describe('SupplierResponseNotificationService', () => {
     expect(args.text).toContain('revisão v3');
   });
 
+  it('itens indisponiveis: itemsCount vira texto com a quantidade de indisponiveis', async () => {
+    findUniqueMock.mockResolvedValue(tokenFixture());
+
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse({
+      ...BASE_INPUT,
+      unavailableCount: 1,
+    });
+    let args = sendAndLogMock.mock.calls[0][0];
+    expect(args.text).toContain('Itens: 3 (1 temporariamente indisponível)');
+    expect(args.html).toContain('3 (1 temporariamente indisponível)');
+
+    sendAndLogMock.mockClear();
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse({
+      ...BASE_INPUT,
+      unavailableCount: 2,
+    });
+    args = sendAndLogMock.mock.calls[0][0];
+    expect(args.text).toContain('Itens: 3 (2 temporariamente indisponíveis)');
+
+    sendAndLogMock.mockClear();
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse({
+      ...BASE_INPUT,
+      unavailableCount: 3,
+    });
+    args = sendAndLogMock.mock.calls[0][0];
+    expect(args.text).toContain('Itens: 3 (todos temporariamente indisponíveis)');
+
+    // 1 item total e indisponivel: singular, sem "todos"
+    sendAndLogMock.mockClear();
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse({
+      ...BASE_INPUT,
+      itemsCount: 1,
+      unavailableCount: 1,
+    });
+    args = sendAndLogMock.mock.calls[0][0];
+    expect(args.text).toContain('Itens: 1 (temporariamente indisponível)');
+    expect(args.text).not.toContain('todos');
+  });
+
+  it('sem itens indisponiveis (ausente ou 0): itemsCount continua so o numero', async () => {
+    findUniqueMock.mockResolvedValue(tokenFixture());
+
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse(BASE_INPUT);
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse({
+      ...BASE_INPUT,
+      unavailableCount: 0,
+    });
+    for (const [args] of sendAndLogMock.mock.calls) {
+      expect(args.text).toContain('Itens: 3');
+      expect(args.text).not.toContain('indisponível');
+      expect(args.text).not.toContain('indisponíveis');
+    }
+  });
+
   it('token inexistente: nao envia e nao lanca', async () => {
     findUniqueMock.mockResolvedValue(null);
 
