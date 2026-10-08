@@ -17,10 +17,10 @@ import StarRating from '@/components/StarRating';
 import {
   previewQuoteResponseReply,
   replyToQuoteResponse,
-  sendPurchaseOrder,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
 import { Modal } from '@/components/Modal';
+import { PurchaseOrderModal } from './PurchaseOrderModal';
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -47,10 +47,6 @@ function formatOriginLine(r: ComparisonResult): string {
   const rest = overrides.length - shown.length;
   return `Origem: ${r.originPort ?? '—'}${shown.join('')}${rest > 0 ? ` · +${rest}` : ''}`;
 }
-
-// Espelha o limite do backend (app.ts / QuoteResponseController) -- valida
-// no cliente antes de gastar o upload/base64 num arquivo que sera rejeitado.
-const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 // Toggles de critério: padrão só Preço; regra mín 1 / máx 2 selecionados. Cada
 // selecionado entra com peso 1, os demais com peso 0 (os 4 sempre são enviados).
@@ -357,86 +353,19 @@ export function ComparacaoTab({
   }
 
   // Botao "Enviar Ordem de Compra" -- so' aparece sobre a proposta vencedora
-  // (r.isWinner). Anexo = upload de PDF em base64 (so'-envio, sem storage
-  // duravel). Forwarder = texto digitado na hora, no modal.
+  // (r.isWinner). O modal (PDF, forwarder, mensagem) vive em PurchaseOrderModal.
   const [poTarget, setPoTarget] = useState<ComparisonResult | null>(null);
-  const [poSubject, setPoSubject] = useState('');
-  const [poForwarderInfo, setPoForwarderInfo] = useState('');
-  const [poMessage, setPoMessage] = useState('');
-  const [poFileName, setPoFileName] = useState('');
-  const [poFileBase64, setPoFileBase64] = useState('');
-  const [poFileSize, setPoFileSize] = useState(0);
-  const [poModalError, setPoModalError] = useState<string | null>(null);
-
-  const poSendMutation = useMutation({
-    mutationFn: () => {
-      if (!poTarget?.quoteResponseId) throw new Error('Proposta sem ID.');
-      return sendPurchaseOrder(poTarget.quoteResponseId, {
-        subject: poSubject,
-        message: poMessage,
-        forwarderInfo: poForwarderInfo,
-        fileName: poFileName,
-        contentBase64: poFileBase64,
-        fileType: 'application/pdf',
-        fileSize: poFileSize,
-      });
-    },
-    onSuccess: () => {
-      setFeedback({ kind: 'ok', text: 'Ordem de Compra enviada ao fornecedor.' });
-      if (poTarget) {
-        setReviewTarget(poTarget);
-        setReviewOpen(true);
-      }
-      closePoModal();
-    },
-    onError: (err) => setPoModalError(messageOf(err)),
-  });
 
   function openPoModal(r: ComparisonResult) {
     if (!r.quoteResponseId) return;
-    const itemName = productName || requestCode;
     setPoTarget(r);
-    setPoSubject(`Purchase Order - ${itemName}`);
-    setPoForwarderInfo('');
-    setPoMessage('');
-    setPoFileName('');
-    setPoFileBase64('');
-    setPoFileSize(0);
-    setPoModalError(null);
   }
 
-  function closePoModal() {
+  function handlePoSent(target: ComparisonResult) {
+    setFeedback({ kind: 'ok', text: 'Ordem de Compra enviada ao fornecedor.' });
+    setReviewTarget(target);
+    setReviewOpen(true);
     setPoTarget(null);
-    setPoFileName('');
-    setPoFileBase64('');
-    setPoFileSize(0);
-    setPoModalError(null);
-  }
-
-  function handlePoFileChange(file: File | null) {
-    if (!file) {
-      setPoFileName('');
-      setPoFileBase64('');
-      setPoFileSize(0);
-      return;
-    }
-    if (file.type !== 'application/pdf') {
-      setPoModalError('Selecione um arquivo PDF.');
-      return;
-    }
-    if (file.size > MAX_PO_FILE_SIZE_BYTES) {
-      setPoModalError('O PDF excede o limite de 10MB.');
-      return;
-    }
-    setPoModalError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPoFileName(file.name);
-      setPoFileBase64(String(reader.result ?? ''));
-      setPoFileSize(file.size);
-    };
-    reader.onerror = () => setPoModalError('Não foi possível ler o arquivo selecionado.');
-    reader.readAsDataURL(file);
   }
 
   function closeReviewModal() {
@@ -996,95 +925,14 @@ export function ComparacaoTab({
       </Modal>
 
       {poTarget && (
-        <Modal
-          isOpen
-          onClose={closePoModal}
-          size="wide"
-          title={`Enviar Ordem de Compra — ${poTarget.supplier?.name ?? `Fornecedor #${poTarget.supplierId}`}`}
-        >
-          <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
-            {requestCode} · {productName}
-          </p>
-
-          <label className="field-label" htmlFor="poSubject" style={{ marginTop: 12 }}>
-            Assunto
-          </label>
-          <input
-            id="poSubject"
-            className="input"
-            value={poSubject}
-            onChange={(e) => setPoSubject(e.target.value)}
-          />
-
-          <label className="field-label" htmlFor="poFile" style={{ marginTop: 12 }}>
-            PDF da Ordem de Compra
-          </label>
-          <input
-            id="poFile"
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => handlePoFileChange(e.target.files?.[0] ?? null)}
-          />
-          {poFileName && (
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
-              Selecionado: {poFileName} ({(poFileSize / 1024 / 1024).toFixed(2)} MB)
-            </p>
-          )}
-
-          <label className="field-label" htmlFor="poForwarderInfo" style={{ marginTop: 12 }}>
-            Contato do despachante (forwarder)
-          </label>
-          <textarea
-            id="poForwarderInfo"
-            className="textarea"
-            rows={3}
-            value={poForwarderInfo}
-            onChange={(e) => setPoForwarderInfo(e.target.value)}
-            placeholder="Nome, e-mail e telefone do despachante responsável pelo embarque."
-          />
-
-          <label className="field-label" htmlFor="poMessage" style={{ marginTop: 12 }}>
-            Mensagem
-          </label>
-          <textarea
-            id="poMessage"
-            className="textarea"
-            rows={3}
-            value={poMessage}
-            onChange={(e) => setPoMessage(e.target.value)}
-            placeholder="Opcional. Aparece logo após a saudação, no topo do e-mail."
-          />
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
-            Assinatura: definida em{' '}
-            <a href="/minha-conta" target="_blank" rel="noreferrer">
-              Minha conta
-            </a>
-            .
-          </p>
-
-          {poModalError && (
-            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{poModalError}</p>
-          )}
-
-          <div className="modal-actions">
-            <button type="button" className="ghost-button" onClick={closePoModal}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              disabled={
-                poSendMutation.isPending ||
-                !poSubject.trim() ||
-                !poFileBase64 ||
-                !poForwarderInfo.trim()
-              }
-              onClick={() => poSendMutation.mutate()}
-            >
-              {poSendMutation.isPending ? 'Enviando…' : 'Enviar Ordem de Compra'}
-            </button>
-          </div>
-        </Modal>
+        <PurchaseOrderModal
+          key={poTarget.quoteResponseId}
+          target={poTarget}
+          requestCode={requestCode}
+          productName={productName}
+          onClose={() => setPoTarget(null)}
+          onSent={handlePoSent}
+        />
       )}
 
       {winnerTarget && (

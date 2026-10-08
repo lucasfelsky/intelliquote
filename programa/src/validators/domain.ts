@@ -360,6 +360,7 @@ export const quotePurchaseOrderSchema = z.object({
   subject: z.string().trim().max(300).optional(),
   message: z.string().trim().max(4000).optional(),
   forwarderInfo: z.string().trim().max(2000).optional(),
+  forwarderId: positiveIntegerField.optional(),
   fileName: z.string().trim().min(1, 'Informe o nome do arquivo.'),
   contentBase64: z.string().min(1, 'Envie o conteudo do PDF em base64.'),
   fileType: z.literal(
@@ -608,6 +609,89 @@ export const creditPartnerUpdateSchema = z.object({
 });
 
 export const creditPartnerListQuerySchema = z.object({
+  active: z.enum(['true', 'false']).optional(),
+});
+
+// Forwarders (agentes de carga): cadastro usado no e-mail da Ordem de Compra.
+// `contacts` e' a lista FINAL (mesma semantica dos parceiros de credito); e-mail
+// do contato e' opcional e nao pode repetir entre contatos do mesmo forwarder.
+const forwarderContactEmailField = z.preprocess(
+  (value) =>
+    value === undefined ? undefined : value === null || value === '' ? null : value,
+  lowercasedEmailField
+    .refine((value) => value.length <= 254, {
+      message: 'O e-mail deve ter no maximo 254 caracteres.',
+    })
+    .nullable()
+    .optional(),
+);
+
+export const forwarderContactInputSchema = z.object({
+  id: positiveIntegerField.optional(),
+  name: requiredTrimmedStringField.max(200, 'O nome do contato deve ter no maximo 200 caracteres.'),
+  email: forwarderContactEmailField,
+  phone: boundedNullableOptionalField(40, 'O telefone'),
+});
+
+const forwarderContactsField = z
+  .array(forwarderContactInputSchema)
+  .min(1, 'Informe ao menos um contato.')
+  .max(20, 'Limite de 20 contatos por forwarder.')
+  .superRefine((contacts, ctx) => {
+    const emails = new Set<string>();
+    for (const contact of contacts) {
+      if (!contact.email) {
+        continue;
+      }
+      if (emails.has(contact.email)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Ha e-mails duplicados entre os contatos do forwarder.',
+        });
+        break;
+      }
+      emails.add(contact.email);
+    }
+  });
+
+const forwarderCompanyNameField = requiredTrimmedStringField.max(
+  200,
+  'O nome da empresa deve ter no maximo 200 caracteres.',
+);
+
+const FORWARDER_INACTIVE_DEFAULT_MESSAGE = 'Forwarder inativo nao pode ser o padrao.';
+
+export const forwarderCreateSchema = z
+  .object({
+    companyName: forwarderCompanyNameField,
+    address: boundedNullableOptionalField(500, 'O endereco'),
+    website: creditPartnerWebsiteField,
+    notes: boundedNullableOptionalField(2000, 'As observacoes'),
+    isActive: z.boolean().optional(),
+    isDefault: z.boolean().optional(),
+    contacts: forwarderContactsField,
+  })
+  .refine((value) => !(value.isDefault === true && value.isActive === false), {
+    message: FORWARDER_INACTIVE_DEFAULT_MESSAGE,
+    path: ['isDefault'],
+  });
+
+export const forwarderUpdateSchema = z
+  .object({
+    companyName: forwarderCompanyNameField.optional(),
+    address: boundedNullableOptionalField(500, 'O endereco'),
+    website: creditPartnerWebsiteField,
+    notes: boundedNullableOptionalField(2000, 'As observacoes'),
+    isActive: z.boolean().optional(),
+    isDefault: z.boolean().optional(),
+    contacts: forwarderContactsField.optional(),
+  })
+  .refine((value) => !(value.isDefault === true && value.isActive === false), {
+    message: FORWARDER_INACTIVE_DEFAULT_MESSAGE,
+    path: ['isDefault'],
+  });
+
+export const forwarderListQuerySchema = z.object({
   active: z.enum(['true', 'false']).optional(),
 });
 
