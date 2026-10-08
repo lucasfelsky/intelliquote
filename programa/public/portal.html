@@ -236,14 +236,14 @@
         overflow: hidden;
       }
       .items-table thead th {
-        background: #f1f7f4;
-        color: var(--portal-ink);
+        background: var(--portal-line-soft);
+        color: var(--portal-ink-soft);
         text-align: left;
         padding: 12px 14px;
-        font-weight: 600;
-        font-size: 12px;
+        font-weight: 700;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 0.8px;
         border-bottom: 1px solid var(--portal-line);
       }
       .items-table thead th:last-child { text-align: right; }
@@ -255,16 +255,52 @@
       }
       .items-table tbody tr:last-child td { border-bottom: none; }
       .items-table tbody tr:nth-child(even) td { background: #fafdfb; }
+      .items-table tbody.po-group tr:not(.po-group-head) td { background: #ffffff; }
       .items-table tr.po-group-head th {
-        background: var(--portal-primary-50);
-        color: var(--portal-accent);
+        background: #ffffff;
+        color: var(--portal-ink);
         text-align: left;
-        padding: 10px 14px;
-        font-size: 13px;
-        font-weight: 700;
-        border-top: 1px solid var(--portal-line-soft);
+        text-transform: none;
+        letter-spacing: 0;
+        padding: 14px 14px 8px;
+        border-top: 0;
         border-bottom: 1px solid var(--portal-line);
         overflow-wrap: anywhere;
+      }
+      .items-table tbody.po-group + tbody.po-group tr.po-group-head th {
+        padding-top: 22px;
+        border-top: 1px solid var(--portal-line);
+      }
+      .po-group-head__bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+      .po-group-label {
+        font-family: 'Space Grotesk', 'Manrope', sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--portal-ink);
+        overflow-wrap: anywhere;
+      }
+      .po-group-count {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 10px;
+        border-radius: 999px;
+        background: var(--portal-line-soft);
+        color: var(--portal-ink-soft);
+        font-family: 'Manrope', system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
       }
       .po-group { margin-bottom: 8px; }
       .po-group-title {
@@ -281,6 +317,7 @@
         padding-top: 0;
         border-top: none;
       }
+      h3.po-group-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
       .items-table td.num {
         text-align: right;
         font-variant-numeric: tabular-nums;
@@ -663,7 +700,7 @@
         .items-table thead { display: none; }
         .items-table tbody tr {
           display: block;
-          padding: 10px 0;
+          padding: 10px 14px;
           border-bottom: 1px solid var(--portal-line-soft);
         }
         .items-table tbody td {
@@ -680,9 +717,10 @@
         }
         .items-table tr.po-group-head th {
           display: block;
-          padding: 8px 0;
+          padding: 14px 14px 8px;
           overflow-wrap: anywhere;
         }
+        .items-table tbody.po-group + tbody.po-group tr.po-group-head th { padding-top: 18px; }
                 .items-table td.incoterm-cell { display: block; padding: 4px 0; }
                 .items-table td.origin-cell { display: block; padding: 4px 0; }
                 .items-table td.destination-cell { display: block; padding: 4px 0; }
@@ -793,6 +831,11 @@
           );
         }
 
+        // Contador do grupo de PO: "1 item" / "N items".
+        function countLabel(n) {
+          return n === 1 ? '1 item' : n + ' items';
+        }
+
         // Agrupa itens por PO (ordem: position asc, id asc). Pula PO sem itens;
         // itens sem PO (ou com PO desconhecida) vao para o grupo final "Other items".
         // Retorna null (modo plano, markup de sempre) quando nao ha PO ou quando
@@ -885,7 +928,7 @@
                 .map(
                   (group) => `
               <tbody class="po-group" data-po-group="${esc(group.key)}">
-                <tr class="po-group-head"><th colspan="${colCount}" scope="colgroup" class="po-group-title">${esc(group.label)}</th></tr>
+                <tr class="po-group-head"><th colspan="${colCount}" scope="rowgroup" class="po-group-title"><span class="po-group-head__bar"><span class="po-group-label">${esc(group.label)}</span><span class="sr-only">, </span><span class="po-group-count">${countLabel(group.items.length)}</span></span></th></tr>
                 ${group.items.map(renderItemsTableRow).join('')}
               </tbody>`,
                 )
@@ -1020,7 +1063,7 @@
               .map(
                 (group) => `
                 <section class="po-group" data-po-group="${esc(group.key)}" aria-labelledby="po-group-title-${esc(group.key)}">
-                  <h3 class="po-group-title" id="po-group-title-${esc(group.key)}">${esc(group.label)}</h3>
+                  <h3 class="po-group-title" id="po-group-title-${esc(group.key)}"><span class="po-group-label">${esc(group.label)}</span><span class="sr-only">, </span><span class="po-group-count">${countLabel(group.items.length)}</span></h3>
                   ${group.items.map(renderItemRow).join('')}
                 </section>`,
               )

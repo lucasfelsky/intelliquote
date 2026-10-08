@@ -824,6 +824,7 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).toContain('${esc(group.label)}');
     expect(html).toContain("data-portal-version', 'v58-20261007'");
     expect(html).not.toContain('v55-20261006');
+    expect(html).not.toContain('v57-20261007');
     expect(html).not.toContain('v56-20261007');
     const mediaStart = html.indexOf('@media (max-width: 640px)');
     expect(mediaStart).toBeGreaterThan(-1);
