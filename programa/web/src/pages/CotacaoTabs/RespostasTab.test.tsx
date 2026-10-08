@@ -546,3 +546,81 @@ describe('RespostasTab - item temporariamente indisponivel', () => {
     expect(normalized.items?.map((item) => item.isUnavailable)).toEqual([true, false]);
   });
 });
+
+describe('RespostasTab - DG informado pelo fornecedor', () => {
+  const dgItems = [
+    {
+      id: 801, quoteResponseId: 46, quoteRequestItemId: 5,
+      unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+      notes: null, productName: 'Resina Epóxi', targetPrice: null,
+      isUnavailable: false, isDangerousGood: true,
+    },
+    {
+      id: 802, quoteResponseId: 46, quoteRequestItemId: 6,
+      unitPrice: 5, quantity: 2, totalPrice: 10, leadTimeDays: 7,
+      notes: null, productName: 'Catalisador Y', targetPrice: null,
+      isUnavailable: false, isDangerousGood: false,
+    },
+    {
+      id: 803, quoteResponseId: 46, quoteRequestItemId: 7,
+      unitPrice: 0, quantity: 0, totalPrice: 0, leadTimeDays: null,
+      notes: null, productName: 'Solvente Z', targetPrice: null,
+      isUnavailable: true, isDangerousGood: true,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.mocked(listQuoteResponses).mockReset();
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockResolvedValue([{ id: 7, name: 'ACME Ltda', status: 'active', country: 'BR' }]);
+    vi.mocked(getTargetPriceHistory).mockReset();
+    vi.mocked(getTargetPriceHistory).mockResolvedValue([]);
+  });
+
+  it('23. badge "1 item DG" na linha (item indisponivel nao conta como DG)', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{ ...response, id: 46, items: dgItems }]);
+    const { findByText, getByTestId } = renderTab();
+    await findByText('ACME Ltda');
+    expect(getByTestId('dg-count-badge').textContent).toBe('1 item DG');
+  });
+
+  it('24. sem nenhum item DG nao mostra badge nem coluna DG', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([multiItemResponse]);
+    const { container, findByText, getByRole, queryByTestId } = renderTab();
+    await findByText('ACME Ltda');
+    expect(queryByTestId('dg-count-badge')).toBeNull();
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).queryByRole('columnheader', { name: 'DG' })).toBeNull();
+  });
+
+  it('25. pop-up de itens: coluna DG com selo no DG, "Não" no não DG e "—" no indisponivel', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{ ...response, id: 46, items: dgItems }]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).getByRole('columnheader', { name: 'DG' })).toBeTruthy();
+    const bodyRows = within(dialogC).getAllByRole('row').slice(1);
+    expect(bodyRows).toHaveLength(3);
+    const dgCell = (rowEl: HTMLElement) => rowEl.querySelectorAll('td')[5]?.textContent;
+    expect(dgCell(bodyRows[0]!)).toBe('DG');
+    expect(dgCell(bodyRows[1]!)).toBe('Não');
+    expect(dgCell(bodyRows[2]!)).toBe('—');
+  });
+
+  it('26. normalizeResponse mapeia isDangerousGood por item (ausente -> false; indisponivel -> false)', async () => {
+    const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+      '@/services/quoteResponses',
+    );
+    const normalized = actual.normalizeResponse({
+      ...response,
+      items: [
+        { id: 1, quoteResponseId: 42, quoteRequestItemId: 5, unitPrice: '1', quantity: 1, totalPrice: '1', isDangerousGood: true },
+        { id: 2, quoteResponseId: 42, quoteRequestItemId: 6, unitPrice: '1', quantity: 1, totalPrice: '1' },
+        { id: 3, quoteResponseId: 42, quoteRequestItemId: 7, unitPrice: '0', quantity: 0, totalPrice: '0', isUnavailable: true, isDangerousGood: true },
+      ],
+    });
+    expect(normalized.items?.map((item) => item.isDangerousGood)).toEqual([true, false, false]);
+  });
+});

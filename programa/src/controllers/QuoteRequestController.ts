@@ -146,6 +146,11 @@ export class QuoteRequestController {
             where: { deletedAt: null },
             include: {
               supplier: true,
+              // Minimo para a aba Itens/Respostas mostrar o DG informado pelo fornecedor.
+              items: {
+                where: { deletedAt: null },
+                select: { quoteRequestItemId: true, isDangerousGood: true, isUnavailable: true },
+              },
             },
           },
         },

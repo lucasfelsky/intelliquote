@@ -74,6 +74,8 @@ const optionalQuantityField = z.preprocess(
 const supplierPortalResponseItemBaseSchema = z.object({
   quoteRequestItemId: positiveIntegerField,
   isUnavailable: z.boolean().optional().default(false),
+  // Checkbox simples do portal: ausente/desmarcado = nao DG. Item indisponivel e sempre gravado como false.
+  isDangerousGood: z.boolean().optional().default(false),
   unitPrice: optionalPositiveNumberField,
   quantity: optionalQuantityField,
   totalPrice: optionalPositiveNumberField,

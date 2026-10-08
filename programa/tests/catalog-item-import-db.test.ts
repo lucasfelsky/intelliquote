@@ -93,6 +93,10 @@ describe('CatalogItemImportController (DB)', () => {
     expect(res.body.data.validLines[0].familyId).toBe(testFamilyId);
     expect(res.body.data.validLines[0].familyToCreate).toBe(false);
     expect(res.body.data.validLines[0].dbcorpCode).toBe('DB1'); // normalized to upper case
+    // Coluna 6 (antiga DG) e ignorada: nao vai para a linha valida e gera um aviso
+    expect(res.body.data.validLines[0]).not.toHaveProperty('isDangerousGood');
+    expect(res.body.data.warnings).toHaveLength(1);
+    expect(res.body.data.warnings[0]).toMatch(/^1 linha\(s\) marcam DG na coluna 6/);
 
     // Row 5: family not found -> no longer rejected, marked for creation on confirm
     expect(res.body.data.validLines[1].commercialName).toBe('Import C4');
@@ -118,7 +122,7 @@ describe('CatalogItemImportController (DB)', () => {
 
   testDbSkip('POST /api/v1/catalog-items/import/confirm - success and duplicates', async () => {
     const items = [
-      { commercialName: 'Import Confirm 1', marketName: `Market Import ${runId} Confirm 1`, ncm: '11111111', isDangerousGood: false },
+      { commercialName: 'Import Confirm 1', marketName: `Market Import ${runId} Confirm 1`, ncm: '11111111', isDangerousGood: true }, // cliente antigo: DG ignorado
       { commercialName: 'Import Confirm 2', marketName: `Market Import ${runId} Confirm 1`, ncm: '22222222', isDangerousGood: false } // Duplicate marketName
     ];
 
@@ -130,6 +134,10 @@ describe('CatalogItemImportController (DB)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.successLines.length).toBe(1);
     expect(res.body.data.successLines[0].commercialName).toBe('Import Confirm 1');
+    const created = await prisma.catalogItem.findUnique({
+      where: { marketName: `Market Import ${runId} Confirm 1` },
+    });
+    expect(created?.isDangerousGood).toBe(false);
     expect(res.body.data.errorLines.length).toBe(1);
     expect(res.body.data.errorLines[0].reason).toMatch(/Já existe um item de catálogo com o Nome de Mercado fornecido/i);
   });

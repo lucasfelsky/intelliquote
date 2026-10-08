@@ -1507,7 +1507,6 @@ dialog.modal-dialog--wide { max-width: 760px; }
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
-.itens-card__badge--dg { background: #fde2d3; color: var(--danger); }
 .itens-card__badge--active { background: var(--primary-50); color: var(--primary-700); }
 .itens-card__badge--inactive { background: var(--surface-alt); color: var(--ink-soft); }
 .itens-card__meta {

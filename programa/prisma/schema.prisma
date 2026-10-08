@@ -230,6 +230,7 @@ model CatalogItem {
   marketName        String
   ncm               String?
   dbcorpCode        String?
+  /// DEPRECATED: DG agora e informado pelo fornecedor por item da resposta (QuoteResponseItem/SupplierPortalResponseItem). Nao e mais lida nem escrita; DROP em PR futuro de limpeza.
   isDangerousGood   Boolean            @default(false)
   notes             String?
   isActive          Boolean            @default(true)
@@ -316,6 +317,8 @@ model QuoteResponseItem {
   originPort         String?
   // Fornecedor marcou 'Temporarily unavailable'; precos/quantidade gravados como 0 e ignorados em somas
   isUnavailable      Boolean   @default(false)
+  // Fornecedor marcou o item como Dangerous Goods (checkbox simples; false = nao DG); sempre false se isUnavailable
+  isDangerousGood    Boolean   @default(false)
   deletedAt          DateTime?
 
   quoteResponse    QuoteResponse    @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
@@ -651,7 +654,7 @@ model SupplierPortalResponseRevision {
   validityDays       Int
   notes              String?
   originPort         String?
-  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes, originPort, isUnavailable }]
+  // [{ quoteRequestItemId, unitPrice, quantity, totalPrice, leadTimeDays, notes, originPort, isUnavailable, isDangerousGood }] (revisoes antigas sem isDangerousGood = false)
   items              Json
   submittedAt        DateTime
   supersededAt       DateTime            @default(now())
@@ -676,6 +679,8 @@ model SupplierPortalResponseItem {
   originPort         String?
   // Fornecedor marcou 'Temporarily unavailable'; precos/quantidade gravados como 0 e ignorados em somas
   isUnavailable      Boolean                @default(false)
+  // Fornecedor marcou o item como Dangerous Goods (checkbox simples; false = nao DG); sempre false se isUnavailable
+  isDangerousGood    Boolean                @default(false)
   deletedAt          DateTime?
   response           SupplierPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
   quoteRequestItem   QuoteRequestItem       @relation(fields: [quoteRequestItemId], references: [id], onDelete: Cascade)

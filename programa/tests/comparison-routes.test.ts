@@ -981,6 +981,152 @@ describe('Comparison routes', () => {
       expect(withOrigin.body.winnerQuoteResponseId).toBe(withoutOrigin.body.winnerQuoteResponseId);
     });
 
+    it('devolve dgItems por proposta sem alterar score nem landed cost (informativo); indisponivel nao conta', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'USD',
+        items: [1, 2].map((id) => ({ id, quantity: 1 })),
+      });
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: null,
+      });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+      const buildResponses = (withDg: boolean) => [
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 40,
+          insuranceCost: 10,
+          otherFees: 20,
+          importDuty: 14,
+          ipi: 5,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          isWinner: false,
+          originPort: null,
+          items: [
+            {
+              quoteRequestItemId: 1,
+              quantity: 1,
+              unitPrice: 40,
+              leadTimeDays: 12,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: withDg,
+              quoteRequestItem: { productName: 'Produto A' },
+            },
+            {
+              quoteRequestItemId: 2,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 18,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: false,
+              quoteRequestItem: { productName: 'Produto B' },
+            },
+          ],
+          supplier: { id: 101, name: 'Global Parts Ltd', contacts: [] },
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 120,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 10,
+          importDuty: 10,
+          ipi: 4,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'FOB',
+          paymentTermsDays: 30,
+          isWinner: false,
+          originPort: null,
+          items: [
+            {
+              quoteRequestItemId: 1,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 25,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: false,
+              quoteRequestItem: { productName: 'Produto A' },
+            },
+            {
+              quoteRequestItemId: 2,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 25,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: withDg,
+              quoteRequestItem: { productName: 'Produto B' },
+            },
+          ],
+          supplier: { id: 102, name: 'Nihon Trading', contacts: [] },
+        },
+      ];
+
+      type Result = {
+        quoteResponseId: number;
+        totalScore: number;
+        totalLandedCost: number;
+        dgItems: Array<{ quoteRequestItemId: number; productName: string }>;
+      };
+      const weights = { priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 };
+
+      prismaMock.quoteResponse.findMany.mockResolvedValue(buildResponses(true));
+      const withDg = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+      prismaMock.quoteResponse.findMany.mockResolvedValue(buildResponses(false));
+      const withoutDg = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(withDg.status).toBe(200);
+      expect(withoutDg.status).toBe(200);
+      expect(prismaMock.quoteResponse.findMany.mock.calls.at(-1)?.[0].include.items.select).toMatchObject({
+        isDangerousGood: true,
+      });
+
+      const byId = (body: { results: Result[] }) =>
+        new Map(body.results.map((item) => [item.quoteResponseId, item]));
+      const a = byId(withDg.body);
+      const b = byId(withoutDg.body);
+
+      expect(a.get(11)?.dgItems).toEqual([{ quoteRequestItemId: 1, productName: 'Produto A' }]);
+      expect(a.get(12)?.dgItems).toEqual([{ quoteRequestItemId: 2, productName: 'Produto B' }]);
+      expect(b.get(11)?.dgItems).toEqual([]);
+      expect(b.get(12)?.dgItems).toEqual([]);
+
+      // Informativo: score, landed cost e vencedora identicos com ou sem DG.
+      for (const id of [11, 12]) {
+        expect(a.get(id)?.totalScore).toBe(b.get(id)?.totalScore);
+        expect(a.get(id)?.totalLandedCost).toBe(b.get(id)?.totalLandedCost);
+      }
+      expect(withDg.body.winnerQuoteResponseId).toBe(withoutDg.body.winnerQuoteResponseId);
+    });
+
     it('com 1 proposta retorna responseCount 1 (sem gate de minimo 2)', async () => {
       const cookies = await loginAs('viewer');
 

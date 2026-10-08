@@ -124,7 +124,6 @@ describe('CatalogItem routes', () => {
       expect(prismaMock.catalogItem.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            isDangerousGood: true,
             OR: expect.arrayContaining([
               { commercialName: { contains: 'ACET', mode: 'insensitive' } },
             ]),
@@ -132,6 +131,9 @@ describe('CatalogItem routes', () => {
           include: { family: true },
         }),
       );
+      // DG saiu do catalogo: o filtro legado onlyDg e ignorado.
+      const where = prismaMock.catalogItem.findMany.mock.calls[0][0].where;
+      expect(where).not.toHaveProperty('isDangerousGood');
     });
 
     it('bloqueia viewer de criar item', async () => {
@@ -175,7 +177,7 @@ describe('CatalogItem routes', () => {
           marketName: 'SOLVENTE X 5L',
           ncm: '38140000',
           dbcorpCode: 'db-100',
-          isDangerousGood: false,
+          isDangerousGood: true,
         });
 
       expect(response.status).toBe(201);
@@ -188,6 +190,8 @@ describe('CatalogItem routes', () => {
           }),
         }),
       );
+      // DG agora e informado pelo fornecedor na resposta: o cadastro nao grava mais.
+      expect(prismaMock.catalogItem.create.mock.calls[0][0].data).not.toHaveProperty('isDangerousGood');
       expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -287,6 +291,32 @@ describe('CatalogItem routes', () => {
 
       expect(response.status).toBe(409);
       expect(prismaMock.catalogItem.update).not.toHaveBeenCalled();
+    });
+
+    it('ignora isDangerousGood no update (DG deixou de ser do catalogo)', async () => {
+      const cookies = await loginAs('admin');
+      prismaMock.catalogItem.findUnique.mockResolvedValueOnce({
+        id: 7,
+        commercialName: 'Solvente',
+        marketName: 'SOLVENTE A',
+        ncm: null,
+        dbcorpCode: null,
+        isDangerousGood: false,
+        notes: null,
+        isActive: true,
+      });
+      prismaMock.catalogItem.update.mockResolvedValue({});
+      prismaMock.auditLog.create.mockResolvedValue({ id: 1 });
+
+      const response = await request(app)
+        .put('/api/v1/catalog-items/7')
+        .set('Cookie', cookies)
+        .send({ notes: 'ok', isDangerousGood: true });
+
+      expect(response.status).toBe(200);
+      const data = prismaMock.catalogItem.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({ notes: 'ok' });
+      expect(data).not.toHaveProperty('isDangerousGood');
     });
 
     it('limpa NCM quando enviado como string vazia', async () => {
