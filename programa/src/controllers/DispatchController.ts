@@ -55,6 +55,10 @@ export class DispatchController {
             include: { catalogItem: true },
             orderBy: { createdAt: 'asc' },
           },
+          purchaseOrders: {
+            select: { id: true, label: true, position: true },
+            orderBy: [{ position: 'asc' }, { id: 'asc' }],
+          },
         },
       });
       if (!quoteRequest) {
@@ -139,6 +143,10 @@ export class DispatchController {
           items: {
             include: { catalogItem: true },
             orderBy: { createdAt: 'asc' },
+          },
+          purchaseOrders: {
+            select: { id: true, label: true, position: true },
+            orderBy: [{ position: 'asc' }, { id: 'asc' }],
           },
         },
       });
@@ -746,7 +754,10 @@ export class DispatchController {
 }
 
 type DispatchQuoteRequest = Prisma.QuoteRequestGetPayload<{
-  include: { items: { include: { catalogItem: true } } };
+  include: {
+    items: { include: { catalogItem: true } };
+    purchaseOrders: { select: { id: true; label: true; position: true } };
+  };
 }>;
 
 function defaultDispatchSubject(quoteRequest: { requestCode: string; productName: string | null }): string {
@@ -802,6 +813,12 @@ export async function renderDispatchEmail(input: {
         desiredIncoterm: it.desiredIncoterm ?? formatIncoterms(quoteRequest.desiredIncoterm),
         destinationPort: it.destinationPort ?? quoteRequest.destinationPort ?? undefined,
         originPort: quoteRequest.originPort ?? undefined,
+        purchaseOrderId: it.purchaseOrderId ?? null,
+      })),
+      purchaseOrders: (quoteRequest.purchaseOrders ?? []).map((po) => ({
+        id: po.id,
+        label: po.label,
+        position: po.position,
       })),
     }),
     input.locale,
@@ -880,7 +897,10 @@ function buildTemplateVars(input: {
     unit: string;
     desiredIncoterm?: string;
     destinationPort?: string;
+    originPort?: string;
+    purchaseOrderId?: number | null;
   }>;
+  purchaseOrders?: Array<{ id: number; label: string; position: number }>;
 }) {
   const summaryName =
     input.items[0]?.marketName ?? input.productName ?? 'Sourcing request';
@@ -912,6 +932,7 @@ function buildTemplateVars(input: {
     purchasingEmail: input.purchasingEmail,
     purchasingPhone: input.purchasingPhone,
     items: input.items,
+    purchaseOrders: input.purchaseOrders ?? [],
   };
 }
 
