@@ -11,8 +11,6 @@ type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 
 interface QuoteRequest {
   id: number;
   requestCode: string;
-  productName: string;
-  quantity: number;
   description: string | null;
   desiredIncoterm: Incoterm[];
   currency: string;
@@ -21,6 +19,7 @@ interface QuoteRequest {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+  purchaseOrderSentAt: string | null;
   createdById: number | null;
   _count?: { quoteResponses?: number; items?: number };
 }
@@ -28,6 +27,16 @@ interface QuoteRequest {
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as const;
 
 type StatusFilter = 'todas' | 'abertas' | 'fechadas';
+type PoFilter = 'todas' | 'enviada' | 'nao-enviada';
+
+// Data local dd/mm/aaaa (formatacao local; nunca converter para UTC, que vira o dia anterior em BRT).
+function formatPoSentDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
 
 function formatNumber(value: number | undefined | null): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -54,8 +63,6 @@ function normalize(qr: unknown): QuoteRequest {
   return {
     id: Number(obj.id),
     requestCode: String(obj.requestCode ?? ''),
-    productName: String(obj.productName ?? ''),
-    quantity: Number(obj.quantity ?? 0),
     description: (obj.description as string | null) ?? null,
     desiredIncoterm: asIncoterms(obj.desiredIncoterm),
     currency: String(obj.currency ?? 'USD'),
@@ -64,6 +71,7 @@ function normalize(qr: unknown): QuoteRequest {
     createdAt: String(obj.createdAt ?? ''),
     updatedAt: String(obj.updatedAt ?? ''),
     closedAt: (obj.closedAt as string | null) ?? null,
+    purchaseOrderSentAt: (obj.purchaseOrderSentAt as string | null) ?? null,
     createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
     _count: countObj
       ? {
@@ -82,18 +90,25 @@ export default function Cotacoes() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
   const [incotermFilter, setIncotermFilter] = useState<Incoterm | 'todos'>('todos');
+  const [poFilter, setPoFilter] = useState<PoFilter>('todas');
   const [actionError, setActionError] = useState<string | null>(null);
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
   const canDelete = user?.role === 'admin' || user?.role === 'comprador';
 
   const list = useQuery({
-    queryKey: ['quote-requests', { search, status: statusFilter, incoterm: incotermFilter }],
+    queryKey: [
+      'quote-requests',
+      { search, status: statusFilter, incoterm: incotermFilter, poSent: poFilter },
+    ],
+    // Volta atualizada (PO enviada no detalhe) sem invalidar de dentro do modal.
+    refetchOnMount: 'always',
     queryFn: async () => {
       const params: Record<string, string> = {};
       if (search.trim()) params.search = search.trim();
       if (statusFilter !== 'todas') params.status = statusFilter === 'abertas' ? 'open' : 'closed';
       if (incotermFilter !== 'todos') params.incoterm = incotermFilter;
+      if (poFilter !== 'todas') params.poSent = poFilter === 'enviada' ? 'true' : 'false';
       const data = await api.get<unknown>(`/v1/quote-requests`, params);
       const items = unwrapList(data);
       return items.map(normalize);
@@ -156,6 +171,17 @@ export default function Cotacoes() {
               <option key={t} value={t}>Incoterm: {t}</option>
             ))}
           </select>
+          <select
+            className="select"
+            aria-label="Filtro de PO enviada"
+            value={poFilter}
+            onChange={(e) => setPoFilter(e.target.value as PoFilter)}
+            style={{ maxWidth: 170 }}
+          >
+            <option value="todas">PO: todas</option>
+            <option value="enviada">PO enviada</option>
+            <option value="nao-enviada">PO não enviada</option>
+          </select>
           {canCreate && (
             <button
               type="button"
@@ -200,11 +226,10 @@ export default function Cotacoes() {
               <tr>
                 <th>#</th>
                 <th>Código</th>
-                <th>Produto</th>
-                <th>Qtd</th>
                 <th>Incoterm desejado</th>
                 <th>Itens</th>
                 <th>Respostas</th>
+                <th>PO</th>
                 <th className="col-status">Status</th>
                 <th>Ações</th>
               </tr>
@@ -214,8 +239,6 @@ export default function Cotacoes() {
                 <tr key={qr.id}>
                   <td>{qr.id}</td>
                   <td><strong>{qr.requestCode}</strong></td>
-                  <td>{qr.productName}</td>
-                  <td>{formatNumber(qr.quantity)}</td>
                   <td>
                     <div className="chip-row">
                       {qr.desiredIncoterm.map((t) => (
@@ -225,6 +248,19 @@ export default function Cotacoes() {
                   </td>
                   <td>{formatNumber(qr._count?.items)}</td>
                   <td>{formatNumber(qr._count?.quoteResponses)}</td>
+                  <td>
+                    {qr.purchaseOrderSentAt ? (
+                      <span
+                        className="badge badge--info"
+                        title={`PO enviada em ${formatPoSentDate(qr.purchaseOrderSentAt)}`}
+                        aria-label={`PO enviada em ${formatPoSentDate(qr.purchaseOrderSentAt)}`}
+                      >
+                        PO enviada
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="col-status">
                     <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
                       {qr.status === 'open' ? 'Aberta' : 'Fechada'}
