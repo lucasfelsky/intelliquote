@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { prisma as defaultPrisma } from '../lib/prisma';
 import { HttpError } from '../utils/http';
+import { PortalHttpError } from '../utils/portalHttpError';
 import { hashToken } from '../utils/tokens';
 
 export const DEFAULT_TOKEN_TTL_DAYS = 14;
@@ -170,7 +171,7 @@ export class SupplierPortalService {
         meta: { reason: 'not_found' },
         client,
       }).catch(() => undefined);
-      throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+      throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
     }
 
     if (token.revokedAt) {
@@ -182,7 +183,7 @@ export class SupplierPortalService {
         meta: { reason: 'revoked' },
         client,
       });
-      throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+      throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
     }
 
     if (token.expiresAt.getTime() <= Date.now()) {
@@ -194,7 +195,7 @@ export class SupplierPortalService {
         meta: { reason: 'expired' },
         client,
       });
-      throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+      throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
     }
 
     if (token.respondedAt) {
