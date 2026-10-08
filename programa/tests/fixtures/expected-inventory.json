@@ -108,7 +108,8 @@
       "SupplierPortalToken",
       "SupplierPortalTokenLog",
       "SupplierReview",
-      "User"
+      "User",
+      "UserEmailSignature"
     ],
     "enums": [
       "Incoterm",
@@ -116,7 +117,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 38
+    "migrations": 40
   },
   "emailTemplates": [
     "quote_dispatch@en",
@@ -233,7 +234,11 @@
     "PUT /supplier-contacts/:id",
     "PUT /suppliers/:id",
     "PUT /suppliers/:supplierId/contacts/:id",
-    "PUT /users/:id"
+    "PUT /users/:id",
+    "DELETE /account/email-signature/image",
+    "GET /account/email-signature",
+    "PUT /account/email-signature/image",
+    "PUT /account/email-signature/text"
   ],
   "web": {
     "pages": [
@@ -251,7 +256,8 @@
       "PlaceholderPage.tsx",
       "Relatorios.tsx",
       "Templates.tsx",
-      "Usuarios.tsx"
+      "Usuarios.tsx",
+      "MinhaConta.tsx"
     ],
     "authContextKeys": [
       "exchangeError",
@@ -289,7 +295,8 @@
       "/relatorios",
       "/respostas",
       "/templates",
-      "/usuarios"
+      "/usuarios",
+      "/minha-conta"
     ]
   },
   "_comment": "Espelho versionado do Inventario/IntelliQuote da vault. Gerado por: node scripts/audit-vault.cjs --print. Ao atualizar, atualize TAMBEM o arquivo da vault que a mensagem de erro do script indica. Criado em 2026-07-23 (auditoria vault x codigo) — ver L26 em Limitacoes conhecidas.md.",

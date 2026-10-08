@@ -7,6 +7,8 @@ export interface MailAttachment {
   filename: string;
   content: Buffer;
   contentType?: string;
+  // Content-ID para imagem inline (referenciada no HTML como src="cid:<cid>").
+  cid?: string;
 }
 
 export interface MailMessage {

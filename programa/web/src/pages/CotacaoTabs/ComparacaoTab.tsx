@@ -990,8 +990,15 @@ export function ComparacaoTab({
             rows={3}
             value={poMessage}
             onChange={(e) => setPoMessage(e.target.value)}
-            placeholder="Opcional. Aparece no corpo do e-mail, acima da referência da cotação."
+            placeholder="Opcional. Aparece logo após a saudação, no topo do e-mail."
           />
+          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
+            Assinatura: definida em{' '}
+            <a href="/minha-conta" target="_blank" rel="noreferrer">
+              Minha conta
+            </a>
+            .
+          </p>
 
           {poModalError && (
             <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{poModalError}</p>
