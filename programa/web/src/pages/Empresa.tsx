@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { CreditPartnersSection } from '@/components/CreditPartnersSection';
 
 interface DirectoryUser {
   id: number;
@@ -808,6 +809,8 @@ export default function Empresa() {
         </div>
         </fieldset>
       </form>
+
+      <CreditPartnersSection />
     </div>
   );
 }
