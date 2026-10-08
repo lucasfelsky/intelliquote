@@ -48,6 +48,24 @@ function formatOriginLine(r: ComparisonResult): string {
   return `Origem: ${r.originPort ?? '—'}${shown.join('')}${rest > 0 ? ` · +${rest}` : ''}`;
 }
 
+// Selo DG (informativo; nao entra em score/landed cost): itens que o fornecedor marcou como
+// Dangerous Goods. dgItems ausente (historico persistido) ou vazio -> sem selo.
+function DgSeal({ result }: { result: ComparisonResult }) {
+  const dgItems = result.dgItems ?? [];
+  if (dgItems.length === 0) return null;
+  const names = dgItems.map((entry) => entry.productName || `Item ${entry.quoteRequestItemId}`).join(', ');
+  return (
+    <span
+      className="badge"
+      data-testid="dg-seal"
+      title={`Informado como DG pelo fornecedor: ${names}`}
+      style={{ alignSelf: 'flex-start', marginTop: 2 }}
+    >
+      DG · {dgItems.length}
+    </span>
+  );
+}
+
 // Toggles de critério: padrão só Preço; regra mín 1 / máx 2 selecionados. Cada
 // selecionado entra com peso 1, os demais com peso 0 (os 4 sempre são enviados).
 type Criterion = 'price' | 'payment' | 'incoterm' | 'quality';
@@ -465,6 +483,7 @@ export function ComparacaoTab({
             </div>
             {contactLine && <span className="cmp-row__contact">{contactLine}</span>}
             <span className="cmp-row__contact">{formatOriginLine(r)}</span>
+            <DgSeal result={r} />
           </div>
           <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>
           <div>
@@ -759,6 +778,7 @@ export function ComparacaoTab({
                       <strong>{bypassName}</strong>
                       {bypassContactLine && <span>{bypassContactLine}</span>}
                       <span className="cmp-row__contact">{formatOriginLine(only)}</span>
+                      <DgSeal result={only} />
                     </div>
                   </div>
                   <div className="cmp-bypass-supplier__stats">

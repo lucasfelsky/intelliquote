@@ -18,7 +18,6 @@ function catalogItem(id: number, commercialName: string) {
     marketName: `Mercado ${commercialName}`,
     ncm: null,
     dbcorpCode: null,
-    isDangerousGood: false,
     notes: null,
     isActive: true,
     familyId: null,
@@ -39,6 +38,9 @@ const page2Response = {
   data: page2Items,
   pagination: { page: 2, pageSize: 50, totalItems: 75, totalPages: 2 },
 };
+
+// Linha legada: o backend ainda devolve a coluna DEPRECATED, mas a tela nao a usa mais.
+const legacyDgItem = { ...catalogItem(9, 'Item DG Legado'), isDangerousGood: true };
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -128,5 +130,57 @@ describe('Itens (catálogo) — paginação', () => {
       const lastCall = calls[calls.length - 1];
       expect(lastCall?.[1]).toMatchObject({ page: 1, search: 'Item' });
     });
+  });
+});
+
+
+describe('Itens (catálogo) — DG saiu do cadastro', () => {
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('item-families')) return Promise.resolve({ data: [] });
+      if (url.includes('catalog-items')) {
+        return Promise.resolve({
+          data: [legacyDgItem],
+          pagination: { page: 1, pageSize: 50, totalItems: 1, totalPages: 1 },
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+  });
+
+  it('6. card nao mostra selo DG nem para linha legada com isDangerousGood true', async () => {
+    const { findByText, queryByText } = renderPage();
+    await findByText('Item DG Legado');
+    expect(queryByText('DG')).toBeNull();
+  });
+
+  it('7. formulario de novo item e de edicao nao tem o campo DG', async () => {
+    const { findByText, getByRole, queryByText, queryByRole } = renderPage();
+    await findByText('Item DG Legado');
+    fireEvent.click(getByRole('button', { name: '+ Novo item' }));
+    await findByText('Código DBCorp');
+    expect(queryByText(/perigosa/i)).toBeNull();
+    expect(queryByRole('checkbox', { name: /DG|perigosa/i })).toBeNull();
+  });
+
+  it('8. importacao: texto da coluna 6 ignorada e avisos do preview exibidos', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      data: {
+        validLines: [{ commercialName: 'X', marketName: 'Mercado X' }],
+        errorLines: [],
+        warnings: ['1 linha(s) marcam DG na coluna 6, que foi ignorada.'],
+      },
+    });
+    const { findByText, getByRole, container } = renderPage();
+    await findByText('Item DG Legado');
+    fireEvent.click(getByRole('button', { name: 'Importar' }));
+    await findByText(/coluna ignorada — DG agora é informado pelo fornecedor/);
+    const input = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['x'], 'itens.xlsx');
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(getByRole('button', { name: 'Carregar e Validar' }));
+    await findByText('1 linha(s) marcam DG na coluna 6, que foi ignorada.');
   });
 });

@@ -4,7 +4,6 @@ export interface PickerCatalogItem {
   id: number;
   commercialName: string;
   marketName: string;
-  isDangerousGood: boolean;
   family: { id: number; name: string } | null;
 }
 
@@ -82,18 +81,6 @@ function ItemButton({
     >
       <span style={{ fontWeight: isSelected ? 600 : 400 }}>
         {item.commercialName}
-        {item.isDangerousGood && (
-          <span style={{
-            marginLeft: 6,
-            fontSize: 11,
-            background: 'var(--danger)',
-            color: 'var(--surface)',
-            padding: '2px 4px',
-            borderRadius: 4,
-          }}>
-            DG
-          </span>
-        )}
       </span>
     </button>
   );
@@ -148,12 +135,6 @@ export function CatalogItemPicker({
             <span className="field-label" id="itemCurrentLabel">Item</span>
             <span className="item-picker__current-name">
               {selectedItem.commercialName}
-              {selectedItem.isDangerousGood && (
-                <>
-                  {' '}
-                  <span className="badge badge--danger">DG</span>
-                </>
-              )}
             </span>
             <span className="item-picker__current-hint">
               O produto não muda na edição. Para trocar, remova este item e adicione outro.
@@ -186,18 +167,6 @@ export function CatalogItemPicker({
               }}>
                 <strong style={{ fontSize: 14 }}>
                   {selectedItem.commercialName}
-                  {selectedItem.isDangerousGood && (
-                    <span style={{
-                      marginLeft: 6,
-                      fontSize: 11,
-                      background: 'var(--danger)',
-                      color: 'var(--surface)',
-                      padding: '2px 4px',
-                      borderRadius: 4,
-                    }}>
-                      DG
-                    </span>
-                  )}
                 </strong>
                 <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
                   Família: {selectedItem.family?.name ?? 'Sem família'}

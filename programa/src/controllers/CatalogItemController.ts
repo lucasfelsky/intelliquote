@@ -18,15 +18,11 @@ export class CatalogItemController {
       const pagination = parsePagination(req);
       const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
       const familyIdStr = typeof req.query.family === 'string' ? req.query.family.trim() : '';
-      const onlyDg = req.query.onlyDg === 'true';
       const includeInactive = req.query.includeInactive === 'true';
 
       const where: Record<string, unknown> = {};
       if (!includeInactive) {
         where.isActive = true;
-      }
-      if (onlyDg) {
-        where.isDangerousGood = true;
       }
       if (search) {
         where.OR = [
@@ -88,7 +84,6 @@ export class CatalogItemController {
       const marketName = isNonEmptyString(body.marketName) ? body.marketName.trim() : null;
       const ncm = isNonEmptyString(body.ncm) ? body.ncm.trim() : null;
       const dbcorpCode = isNonEmptyString(body.dbcorpCode) ? body.dbcorpCode.trim().toUpperCase() : null;
-      const isDangerousGood = body.isDangerousGood === true;
       const notes = isNonEmptyString(body.notes) ? body.notes.trim() : null;
       const familyId = typeof body.familyId === 'number' ? body.familyId : null;
       const isActive = body.isActive === undefined ? true : body.isActive !== false;
@@ -119,7 +114,6 @@ export class CatalogItemController {
           ncm,
           dbcorpCode,
           familyId,
-          isDangerousGood,
           notes,
           isActive,
         },
@@ -189,9 +183,6 @@ export class CatalogItemController {
         } else if (isNonEmptyString(body.dbcorpCode)) {
           data.dbcorpCode = body.dbcorpCode.trim().toUpperCase();
         }
-      }
-      if (body.isDangerousGood !== undefined) {
-        data.isDangerousGood = body.isDangerousGood === true;
       }
       if (body.notes !== undefined) {
         data.notes = isNonEmptyString(body.notes) ? body.notes.trim() : null;

@@ -30,6 +30,9 @@ export class CatalogItemImportController {
 
       const validLines: any[] = [];
       const errorLines: any[] = [];
+      // Coluna 6 (antiga "Dangerous goods") e posicional e foi mantida so para nao deslocar
+      // "Notas": o DG agora e informado pelo fornecedor na resposta, entao o valor e ignorado.
+      let ignoredDangerousGoodRows = 0;
 
       let rowCount = 0;
       worksheet.eachRow((row, rowNumber) => {
@@ -50,7 +53,7 @@ export class CatalogItemImportController {
         let ncm = row.getCell(3).text?.replace(/\D/g, '').trim() || null;
         let dbcorpCode = row.getCell(4).text?.trim() || null;
         const familyName = row.getCell(5).text?.trim();
-        const isDangerousGoodText = row.getCell(6).text?.trim().toLowerCase();
+        const ignoredDangerousGoodText = row.getCell(6).text?.trim().toLowerCase();
         const notes = row.getCell(7).text?.trim() || null;
 
         if (!commercialName || !marketName) {
@@ -78,7 +81,9 @@ export class CatalogItemImportController {
           }
         }
 
-        const isDangerousGood = isDangerousGoodText === 'sim' || isDangerousGoodText === 'true';
+        if (ignoredDangerousGoodText === 'sim' || ignoredDangerousGoodText === 'true') {
+          ignoredDangerousGoodRows++;
+        }
 
         validLines.push({
           commercialName,
@@ -88,12 +93,18 @@ export class CatalogItemImportController {
           familyId,
           familyName: familyName || null,
           familyToCreate,
-          isDangerousGood,
           notes,
         });
       });
 
-      res.json({ data: { validLines, errorLines } });
+      const warnings: string[] = [];
+      if (ignoredDangerousGoodRows > 0) {
+        warnings.push(
+          `${ignoredDangerousGoodRows} linha(s) marcam DG na coluna 6, que foi ignorada: o DG agora é informado pelo fornecedor na resposta da cotação.`,
+        );
+      }
+
+      res.json({ data: { validLines, errorLines, warnings } });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -142,7 +153,6 @@ export class CatalogItemImportController {
               marketName: item.marketName,
               ncm: item.ncm,
               dbcorpCode: item.dbcorpCode,
-              isDangerousGood: item.isDangerousGood,
               familyId,
               notes: item.notes,
               isActive: true,

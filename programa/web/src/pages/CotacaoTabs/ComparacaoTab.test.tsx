@@ -640,6 +640,150 @@ describe('ComparacaoTab', () => {
       await findByText('Origem: Shanghai · Produto B: Ningbo');
     });
   });
+
+  describe('Selo DG (informativo)', () => {
+    const withDg = {
+      ...winner,
+      dgItems: [
+        { quoteRequestItemId: 1, productName: 'Produto A' },
+        { quoteRequestItemId: 2, productName: 'Produto B' },
+      ],
+    };
+
+    it('30. ranking mostra o selo "DG · 2" com os nomes no title, so na proposta que marcou DG', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [withDg, loser],
+      });
+      const { findByTestId, getAllByTestId } = renderTab();
+      const seal = await findByTestId('dg-seal');
+      expect(seal.textContent).toBe('DG · 2');
+      expect(seal.getAttribute('title')).toBe('Informado como DG pelo fornecedor: Produto A, Produto B');
+      expect(getAllByTestId('dg-seal')).toHaveLength(1);
+    });
+
+    it('31. sem dgItems (historico) ou vazio nao mostra selo', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, { ...loser, dgItems: [] }],
+      });
+      const { findAllByText, queryByTestId } = renderTab();
+      await findAllByText('Origem: —');
+      expect(queryByTestId('dg-seal')).toBeNull();
+    });
+
+    it('32. card de uma unica resposta (bypass) tambem mostra o selo', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [withDg],
+        responseCount: 1,
+      });
+      const { findByText, findByTestId } = renderTab();
+      await findByText('Apenas um fornecedor respondeu — sem comparação.');
+      expect((await findByTestId('dg-seal')).textContent).toBe('DG · 2');
+    });
+  });
+});
+
+describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', () => {
+  const excludedGamma = {
+    quoteResponseId: 44,
+    supplierId: 9,
+    supplier: { id: 9, name: 'Gamma SA' },
+    unavailableItems: [
+      { quoteRequestItemId: 5, productName: 'Resina Epóxi' },
+      { quoteRequestItemId: 6, productName: 'Catalisador Y' },
+    ],
+  };
+
+  it('25. ranking com 2 completas + 1 excluida: secao "Fora do ranking" com fornecedor e itens indisponiveis', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      results: [winner, loser],
+      winnerQuoteResponseId: 42,
+      pendingApproval: false,
+      thresholdValue: null,
+      responseCount: 3,
+      excluded: [excludedGamma],
+    });
+    const { findByText, getByRole, queryByText } = renderTab();
+    const heading = await findByText('Fora do ranking — itens indisponíveis');
+    expect(heading.tagName).toBe('H3');
+    const section = heading.closest('section') as HTMLElement;
+    expect(within(section).getByText('Gamma SA')).toBeTruthy();
+    expect(section.textContent).toContain('Temporariamente indisponível: Resina Epóxi, Catalisador Y');
+    // o ranking segue so com as completas
+    expect(getByRole('button', { name: 'Definir como vencedora' })).toBeTruthy();
+    expect(queryByText('Apenas um fornecedor respondeu — sem comparação.')).toBeNull();
+    expect(queryByText('Apenas uma proposta completa — sem comparação.')).toBeNull();
+  });
+
+  it('26. nenhuma completa (results vazio): mostra o aviso e a secao "Fora do ranking" (sem by-pass)', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      results: [],
+      winnerQuoteResponseId: null,
+      pendingApproval: false,
+      thresholdValue: null,
+      responseCount: 2,
+      excluded: [
+        excludedGamma,
+        { ...excludedGamma, quoteResponseId: 45, supplierId: 10, supplier: { id: 10, name: 'Delta Ltda' } },
+      ],
+    });
+    const { findByText, queryByRole, queryByText } = renderTab();
+    await findByText('Nenhuma proposta completa para comparar.');
+    const heading = await findByText('Fora do ranking — itens indisponíveis');
+    const section = heading.closest('section') as HTMLElement;
+    expect(within(section).getByText('Gamma SA')).toBeTruthy();
+    expect(within(section).getByText('Delta Ltda')).toBeTruthy();
+    expect(queryByText(/Apenas um/)).toBeNull();
+    expect(queryByRole('button', { name: 'Enviar Ordem de Compra' })).toBeNull();
+  });
+
+  it('27. so 1 completa + excluida: by-pass com texto proprio e a secao "Fora do ranking"', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      results: [winner],
+      winnerQuoteResponseId: null,
+      pendingApproval: false,
+      thresholdValue: null,
+      responseCount: 2,
+      excluded: [excludedGamma],
+    });
+    const { findByText } = renderTab();
+    await findByText('Apenas uma proposta completa — sem comparação.');
+    await findByText('Fora do ranking — itens indisponíveis');
+  });
+
+  it('28. sem propostas excluidas nao existe a secao "Fora do ranking"', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...defaultPreview,
+      results: [winner, loser],
+      excluded: [],
+    });
+    const { findByText, queryByText } = renderTab();
+    await findByText('ACME Ltda');
+    expect(queryByText('Fora do ranking — itens indisponíveis')).toBeNull();
+  });
+
+  it('29. concluir com 1 completa + excluida fecha direto (sem executeComparison, que daria 400)', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      results: [winner],
+      winnerQuoteResponseId: null,
+      pendingApproval: false,
+      thresholdValue: null,
+      responseCount: 2,
+      excluded: [excludedGamma],
+    });
+    const { container, findByText, getByRole } = renderOpenTab();
+    await findByText('Apenas uma proposta completa — sem comparação.');
+
+    fireEvent.click(getByRole('button', { name: 'Concluir cotação' }));
+    const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    await waitFor(() => expect(reviewDialog.open).toBe(true));
+    fireEvent.click(within(reviewDialog).getByRole('button', { name: 'Concluir cotação' }));
+
+    await waitFor(() => expect(closeQuoteRequest).toHaveBeenCalledTimes(1));
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
 });
 
 describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', () => {

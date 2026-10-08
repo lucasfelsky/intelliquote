@@ -425,16 +425,6 @@
               white-space: pre-line;
               overflow-wrap: anywhere;
             }
-      .dg-badge {
-        background: var(--portal-warn-bg);
-        color: var(--portal-warn-fg);
-        border: 1px solid var(--portal-warn-line);
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-weight: 700;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-      }
       .commercial-name {
         font-size: 12px;
         color: var(--portal-muted);
@@ -525,7 +515,8 @@
       }
       .origin-override-hint[hidden] { display: none; }
       /* Item "Temporarily unavailable": checkbox por item que bloqueia preco/qtd/lead time/origem. */
-      .item-unavailable-toggle {
+      .item-unavailable-toggle,
+      .item-dg-toggle {
         display: flex;
         align-items: center;
         gap: 10px;
@@ -536,7 +527,8 @@
         color: var(--portal-ink-soft);
         cursor: pointer;
       }
-      .item-unavailable-toggle input[type="checkbox"] {
+      .item-unavailable-toggle input[type="checkbox"],
+      .item-dg-toggle input[type="checkbox"] {
         width: 20px;
         height: 20px;
         margin: 0;
@@ -555,6 +547,9 @@
         padding: 8px 12px;
       }
       .item-unavailable-hint[hidden] { display: none; }
+      /* Checkbox DG por item: simples (desmarcado = nao DG); bloqueado e desmarcado se o item esta indisponivel. */
+      .item-dg-toggle input[type="checkbox"]:disabled,
+      .item-dg-toggle input[type="checkbox"]:disabled + span { cursor: not-allowed; opacity: 0.55; }
       .item-row.is-unavailable {
         background: #f6f8f7;
         border-style: dashed;
@@ -746,7 +741,8 @@
         .portal-hero { padding: 22px 20px; }
         .portal-main { padding: 22px 18px 24px; }
         .form-grid { grid-template-columns: 1fr; }
-        .item-unavailable-toggle { width: 100%; }
+        .item-unavailable-toggle,
+        .item-dg-toggle { width: 100%; }
         .incoterm-prices { padding: 12px; }
         .buyer-notes-card { padding: 14px; gap: 10px; }
         .buyer-notes-text { font-size: 14px; }
@@ -829,7 +825,7 @@
             ? 'localhost'
             : 'firebase-hosting';
           document.documentElement.setAttribute('data-served-from', servedFrom);
-          document.documentElement.setAttribute('data-portal-version', 'v59-20261008');
+          document.documentElement.setAttribute('data-portal-version', 'v60-20261008');
         } catch (bootErr) {
           /* swallow: nao e critico */
         }
@@ -1067,13 +1063,16 @@
                   <h3>${esc(it.productName)}</h3>
                   <p class="item-meta">
                     <span class="chip">${it.quantity} ${esc(it.unit || '')}</span>
-                    ${it.isDangerousGood ? `<span class="dg-badge">DG</span>` : ''}
                   </p>
                   <label class="item-unavailable-toggle">
                     <input type="checkbox" name="itemUnavailable" ${prevUnavailable ? 'checked' : ''} aria-describedby="item-unavailable-hint-${it.id}" />
                     <span>Temporarily unavailable</span>
                   </label>
                   <p class="item-unavailable-hint" id="item-unavailable-hint-${it.id}" data-unavailable-hint hidden>Not quoted - prices and details for this item will not be sent.</p>
+                  <label class="item-dg-toggle">
+                    <input type="checkbox" name="itemDangerousGood" ${prev && !prevUnavailable && prev.isDangerousGood ? 'checked' : ''} />
+                    <span>Dangerous goods (DG)</span>
+                  </label>
                   ${
                     hasQuoteIncoterms
                       ? `<div class="incoterm-prices" role="group" aria-labelledby="incoterm-prices-title-${it.id}">
@@ -1287,7 +1286,7 @@
           // quantidade, lead time e origem. O digitado fica em memoria (stash, nunca
           // serializado) e volta ao desmarcar.
           const UNAVAILABLE_FIELDS =
-            'input[name="incotermPrice"], input[name="unitPrice"], input[name="quantity"], input[name="leadTimeDays"], input[name="itemOriginPort"]';
+            'input[name="incotermPrice"], input[name="unitPrice"], input[name="quantity"], input[name="leadTimeDays"], input[name="itemOriginPort"], input[name="itemDangerousGood"]';
           const stash = new Map();
           const setRowUnavailable = (row, on) => {
             const fields = Array.from(row.querySelectorAll(UNAVAILABLE_FIELDS));
@@ -1296,17 +1295,20 @@
                 if (!stash.has(field)) {
                   stash.set(field, {
                     value: field.value,
+                    checked: field.checked,
                     inherit: field.getAttribute('data-origin-inherit'),
                   });
                 }
-                field.value = '';
+                if (field.type === 'checkbox') field.checked = false;
+                else field.value = '';
                 field.disabled = true;
               });
             } else {
               fields.forEach((field) => {
                 const saved = stash.get(field);
                 if (saved) {
-                  field.value = saved.value;
+                  if (field.type === 'checkbox') field.checked = saved.checked;
+                  else field.value = saved.value;
                   if (field.name === 'itemOriginPort') {
                     if (saved.inherit !== null) field.setAttribute('data-origin-inherit', saved.inherit);
                     // Origem herdada acompanha a origem geral ATUAL.
@@ -1436,8 +1438,10 @@
             const originField = row.querySelector('input[name="itemOriginPort"]');
             const originValue = originField ? originField.value.trim() : '';
             const originInherits = !originField || originField.getAttribute('data-origin-inherit') === '1';
+            const dgField = row.querySelector('input[name="itemDangerousGood"]');
             const item = {
               quoteRequestItemId,
+              isDangerousGood: !!(dgField && dgField.checked),
               unitPrice,
               quantity,
               totalPrice,

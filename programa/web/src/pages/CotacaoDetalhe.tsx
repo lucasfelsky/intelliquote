@@ -53,7 +53,6 @@ interface CatalogItemLite {
   id: number;
   commercialName: string;
   marketName: string;
-  isDangerousGood: boolean;
   familyId: number | null;
 }
 
@@ -87,8 +86,28 @@ interface QuoteResponseSummary {
   totalLandedCost?: number;
   paymentTermsDays?: number;
   targetPrice?: number | null;
-  items?: any[];
+  items?: {
+    quoteRequestItemId: number;
+    isDangerousGood?: boolean;
+    isUnavailable?: boolean;
+  }[];
   isWinner?: boolean;
+}
+
+// DG vem da resposta do fornecedor (nao do catalogo): quantas respostas ativas marcaram cada item
+// como DG; item indisponivel na resposta nao conta.
+function buildDgCountByItemId(
+  responses: QuoteResponseSummary[] | undefined,
+): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const response of responses ?? []) {
+    for (const item of response.items ?? []) {
+      if (item.isDangerousGood && !item.isUnavailable) {
+        counts[item.quoteRequestItemId] = (counts[item.quoteRequestItemId] ?? 0) + 1;
+      }
+    }
+  }
+  return counts;
 }
 
 interface QuoteRequestForm {
@@ -232,7 +251,6 @@ function normalizeItem(it: unknown): QuoteRequestItem {
           id: Number(catalog.id),
           commercialName: String(catalog.commercialName ?? ''),
           marketName: String(catalog.marketName ?? ''),
-          isDangerousGood: Boolean(catalog.isDangerousGood),
           familyId: typeof catalog.familyId === 'number' ? catalog.familyId : null,
         }
       : null,
@@ -900,7 +918,6 @@ export default function CotacaoDetalhe() {
         id: item.catalogItem?.id ?? item.catalogItemId ?? 0,
         commercialName: item.catalogItem?.commercialName ?? item.productName,
         marketName: item.catalogItem?.marketName ?? '',
-        isDangerousGood: item.catalogItem?.isDangerousGood ?? false,
         family: null,
       });
       setShowItemModal(true);
@@ -1235,6 +1252,7 @@ export default function CotacaoDetalhe() {
               status={qr.status}
               canEdit={canEdit}
               items={items}
+              dgCountByItemId={buildDgCountByItemId(qr.quoteResponses)}
               purchaseOrders={qr.purchaseOrders ?? []}
               defaultIncoterm={formatIncoterms(qr.desiredIncoterm)}
               defaultPort={qr.destinationPort}

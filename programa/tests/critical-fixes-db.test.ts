@@ -364,6 +364,53 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     expect(lonely.body.results).toHaveLength(1);
   });
 
+  it('DG por item: coluna nova existe (default false), portal grava DG no portal + espelho, revisao fotografa e indisponivel zera', async () => {
+    const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
+    const token = await prisma.supplierPortalToken.create({ data: {
+      tokenHash: `dg-${quote.id}`, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id, createdById: adminId,
+      expiresAt: new Date(Date.now() + 86400000),
+    } });
+    const build = (flags: Array<{ dg: boolean; unavailable?: boolean }>) => ({
+      tokenId: token.id, quoteRequestId: quote.id, supplierId: suppliers[0].id,
+      supplierContactId: suppliers[0].contacts[0].id,
+      payload: { currency: 'USD', incoterm: 'FOB' as const, paymentTermsDays: 30, exchangeRate: 5,
+        totalPrice: flags.filter((f) => !f.unavailable).length * 10, validityDays: 30,
+        items: quote.items.map((i: any, idx: number) => flags[idx].unavailable
+          ? { quoteRequestItemId: i.id, isUnavailable: true, isDangerousGood: flags[idx].dg }
+          : { quoteRequestItemId: i.id, isUnavailable: false, unitPrice: 10, quantity: i.quantity,
+              totalPrice: 10 * i.quantity, isDangerousGood: flags[idx].dg }),
+      },
+    });
+    const dgOf = (rows: any[]) =>
+      [...rows].sort((a, b) => a.quoteRequestItemId - b.quoteRequestItemId).map((r) => r.isDangerousGood);
+
+    const first = await SupplierPortalResponseService.submit(build([{ dg: true }, { dg: false }]));
+    const portalItems = await prisma.supplierPortalResponseItem.findMany({ where: { responseId: first.portalResponse.id } });
+    expect(dgOf(portalItems)).toEqual([true, false]);
+    const mirrored = await prisma.quoteResponseItem.findMany({
+      where: { quoteResponseId: first.quoteResponse.id, deletedAt: null },
+    });
+    expect(dgOf(mirrored)).toEqual([true, false]);
+    // Linha criada sem a coluna (legado): default false, sem estado "nao informado".
+    const legacy = await prisma.supplierPortalResponseItem.create({ data: {
+      responseId: first.portalResponse.id, quoteRequestItemId: quote.items[0].id,
+      unitPrice: 1, quantity: 1, totalPrice: 1,
+    } });
+    expect(legacy.isDangerousGood).toBe(false);
+    await prisma.supplierPortalResponseItem.delete({ where: { id: legacy.id } });
+
+    // Revisao: o snapshot guarda o DG da versao anterior; item indisponivel grava false mesmo com true.
+    const second = await SupplierPortalResponseService.submit(build([{ dg: true, unavailable: true }, { dg: true }]));
+    const revision = await prisma.supplierPortalResponseRevision.findFirst({ where: { portalTokenId: token.id } });
+    expect(dgOf(revision!.items as any[])).toEqual([true, false]);
+    expect(dgOf(await prisma.supplierPortalResponseItem.findMany({ where: { responseId: second.portalResponse.id } })))
+      .toEqual([false, true]);
+    expect(dgOf(await prisma.quoteResponseItem.findMany({
+      where: { quoteResponseId: second.quoteResponse.id, deletedAt: null },
+    }))).toEqual([false, true]);
+  });
+
   it('portal nao reutiliza cambio USD ao receber proposta em EUR sem taxa', async () => {
     const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
     const token = await prisma.supplierPortalToken.create({ data: {

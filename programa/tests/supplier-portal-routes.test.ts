@@ -825,7 +825,7 @@ describe('Portal - preco por incoterm e descricao', () => {
     expect(html).toContain('class="po-group-title"');
     expect(html).toContain('po-group-head');
     expect(html).toContain('${esc(group.label)}');
-    expect(html).toContain("data-portal-version', 'v59-20261008'");
+    expect(html).toContain("data-portal-version', 'v60-20261008'");
     expect(html).not.toContain('v58-20261007');
     expect(html).not.toContain('v55-20261006');
     expect(html).not.toContain('v57-20261007');
@@ -1145,7 +1145,7 @@ describe('Portal - porto de origem por item (informativo)', () => {
     expect(html).toContain('data-origin-inherit');
     expect(html).toContain('data-origin-initial-inherit');
     expect(html).toContain('Different from proposal origin');
-    expect(html).toContain('v59-');
+    expect(html).toContain('v60-');
     expect(html).not.toContain('v58-20261007');
   });
 });
@@ -1167,6 +1167,7 @@ describe('Portal - item temporariamente indisponivel', () => {
     incotermPrices: null,
     originPort: null,
     isUnavailable: false,
+    isDangerousGood: false,
     ...extra,
   });
   const unavailableRow = (id: number) =>
@@ -1517,6 +1518,173 @@ describe('Portal - item temporariamente indisponivel', () => {
     ]);
   });
 
+  describe('Dangerous Goods por item (checkbox simples)', () => {
+    it('DG marcado persiste no item do portal e e copiado para o QuoteResponseItem; desmarcado/ausente = false', async () => {
+      const token = mockEnv({
+        storedItems: [
+          itemRow(11, { isDangerousGood: true }),
+          unavailableRow(12),
+          itemRow(13),
+        ],
+      });
+      const res = await respond(token, {
+        items: [
+          baseItem(11, { isDangerousGood: true }),
+          unavailableItem(12),
+          baseItem(13, { isDangerousGood: false }),
+        ],
+      });
+      expect(res.status).toBe(201);
+      const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+      expect(created.data.items.create.map((i: { isDangerousGood: boolean }) => i.isDangerousGood)).toEqual([
+        true,
+        false,
+        false,
+      ]);
+      const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+      expect(upsert.create.items.create.map((i: { isDangerousGood: boolean }) => i.isDangerousGood)).toEqual([
+        true,
+        false,
+        false,
+      ]);
+      expect(upsert.update.items.create[0].isDangerousGood).toBe(true);
+    });
+
+    it('payload legado sem isDangerousGood (portal v59 em cache) grava false', async () => {
+      const token = mockEnv({ storedItems: [itemRow(11), itemRow(12), itemRow(13)] });
+      const res = await respond(token, { totalPrice: 300, items: [baseItem(11), baseItem(12), baseItem(13)] });
+      expect(res.status).toBe(201);
+      const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+      expect(created.data.items.create.every((i: { isDangerousGood: boolean }) => i.isDangerousGood === false)).toBe(
+        true,
+      );
+    });
+
+    it('item indisponivel com isDangerousGood true: servidor grava false (portal e QuoteResponseItem)', async () => {
+      // O valor armazenado simula um registro inconsistente: a copia tambem forca false.
+      const token = mockEnv({
+        storedItems: [itemRow(11), unavailableRow(12), itemRow(13)].map((row, idx) =>
+          idx === 1 ? { ...row, isDangerousGood: true } : row,
+        ),
+      });
+      const res = await respond(token, {
+        items: [baseItem(11), unavailableItem(12, { isDangerousGood: true }), baseItem(13)],
+      });
+      expect(res.status).toBe(201);
+      const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+      expect(created.data.items.create[1]).toMatchObject({ isUnavailable: true, isDangerousGood: false });
+      const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+      expect(upsert.create.items.create[1]).toMatchObject({ isUnavailable: true, isDangerousGood: false });
+    });
+
+    it('rejeita isDangerousGood que nao seja booleano', async () => {
+      const token = mockEnv();
+      const res = await respond(token, {
+        items: [baseItem(11, { isDangerousGood: 'sim' }), baseItem(12), baseItem(13)],
+      });
+      expect(res.status).toBe(400);
+      expect(prismaMock.__tx.supplierPortalResponse.create).not.toHaveBeenCalled();
+    });
+
+    it('revisao: o snapshot guarda isDangerousGood por item da versao anterior', async () => {
+      const token = mockEnv({
+        existing: {
+          id: 77,
+          portalTokenId: 3,
+          version: 1,
+          currency: 'USD',
+          incoterm: 'FOB',
+          paymentTermsDays: 30,
+          totalPrice: { toString: () => '200.00' },
+          totalPriceCurrency: 'USD',
+          validityDays: 30,
+          notes: null,
+          originPort: null,
+          submittedAt: new Date(),
+          items: [itemRow(11, { isDangerousGood: true }), unavailableRow(12), itemRow(13)],
+        },
+        storedItems: [itemRow(11), itemRow(12), itemRow(13)],
+      });
+      const res = await respond(token, {
+        totalPrice: 300,
+        items: [baseItem(11), baseItem(12), baseItem(13)],
+      });
+      expect(res.status).toBe(201);
+      const snapshot = prismaMock.__tx.supplierPortalResponseRevision.create.mock.calls[0][0].data;
+      expect(snapshot.items.map((i: { isDangerousGood: boolean }) => i.isDangerousGood)).toEqual([
+        true,
+        false,
+        false,
+      ]);
+    });
+
+    it('GET do portal devolve DG em response.items e NAO em quoteRequest.items (DG saiu do catalogo)', async () => {
+      counter += 1;
+      const rawToken = 'tok-dg-get-' + counter + '-' + 'd'.repeat(40);
+      prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+        id: 180 + counter,
+        tokenHash: hashToken(rawToken),
+        expiresAt: new Date(Date.now() + 86400000),
+        revokedAt: null,
+        respondedAt: new Date(),
+        accessCount: 1,
+        firstSeenAt: new Date(),
+        quoteRequestId: 5,
+        supplierId: 2,
+        supplierContactId: 9,
+        quoteRequest: {
+          id: 5,
+          requestCode: 'QR-DG',
+          productName: 'Acido',
+          description: null,
+          desiredIncoterm: [],
+          originPort: null,
+          currency: 'USD',
+          deadlineAt: null,
+          items: [
+            {
+              id: 11,
+              itemCode: 'A',
+              productName: 'A',
+              quantity: 10,
+              unit: 'UN',
+              description: null,
+              notes: null,
+              catalogItem: { marketName: 'A', isDangerousGood: true },
+            },
+            { id: 12, itemCode: 'B', productName: 'B', quantity: 10, unit: 'UN', description: null, notes: null },
+          ],
+        },
+        supplier: { id: 2, name: 'Acme' },
+        supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+      });
+      prismaMock.supplierPortalResponse.findUnique.mockResolvedValue({
+        id: 99,
+        version: 1,
+        currency: 'USD',
+        incoterm: 'FOB',
+        paymentTermsDays: 30,
+        totalPrice: { toString: () => '100.00' },
+        totalPriceCurrency: 'USD',
+        validityDays: 30,
+        notes: null,
+        originPort: null,
+        submittedAt: new Date(),
+        items: [itemRow(11, { isDangerousGood: true }), itemRow(12)],
+      });
+      prismaMock.supplierPortalResponseRevision.findMany.mockResolvedValue([]);
+      const res = await request(app).get('/api/portal/' + rawToken).set('User-Agent', uniqueAgent());
+      expect(res.status).toBe(200);
+      expect(res.body.response.items.map((i: { isDangerousGood: boolean }) => i.isDangerousGood)).toEqual([
+        true,
+        false,
+      ]);
+      for (const item of res.body.quoteRequest.items) {
+        expect(item).not.toHaveProperty('isDangerousGood');
+      }
+    });
+  });
+
   it('portal.html: checkbox por item, aviso de todos indisponiveis e payload sem preco (estatico)', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
@@ -1526,7 +1694,11 @@ describe('Portal - item temporariamente indisponivel', () => {
     expect(html).toContain('id="portal-all-unavailable"');
     expect(html).toContain('role="status"');
     expect(html).toContain('isUnavailable: true');
-    expect(html).toContain("data-portal-version', 'v59-20261008'");
+    expect(html).toContain("data-portal-version', 'v60-20261008'");
     expect(html).not.toContain('v58-20261007');
+    // DG: checkbox por item no portal, sem o badge antigo do catalogo
+    expect(html).toContain('name="itemDangerousGood"');
+    expect(html).toContain('Dangerous goods (DG)');
+    expect(html).not.toContain('dg-badge');
   });
 });

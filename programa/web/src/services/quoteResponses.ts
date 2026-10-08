@@ -33,6 +33,8 @@ export interface QuoteResponseItem {
   originPort?: string | null;
   // Fornecedor marcou "Temporarily unavailable": preco/quantidade chegam como 0 e nao valem nada.
   isUnavailable?: boolean;
+  // Fornecedor marcou o item como Dangerous Goods (checkbox simples; ausente/false = nao DG).
+  isDangerousGood?: boolean;
 }
 
 export interface QuoteResponse {
@@ -113,6 +115,12 @@ export interface ItemOrigin {
   overridden: boolean;
 }
 
+// Item que o fornecedor marcou como DG (informativo; nao entra em score nem landed cost).
+export interface DangerousGoodItem {
+  quoteRequestItemId: number;
+  productName: string;
+}
+
 export interface ComparisonResult {
   currency?: string;
   id?: number;
@@ -145,6 +153,7 @@ export interface ComparisonResult {
   leadTimeDays: number | null;
   originPort?: string | null;
   itemOrigins?: ItemOrigin[];
+  dgItems?: DangerousGoodItem[];
 }
 
 export interface ComparisonRecord {
@@ -273,6 +282,7 @@ export function normalizeResponse(raw: unknown): QuoteResponse {
           incotermPrices: Array.isArray(i.incotermPrices) ? i.incotermPrices : null,
           originPort: asOriginPort(i.originPort),
           isUnavailable: Boolean(i.isUnavailable),
+          isDangerousGood: Boolean(i.isDangerousGood) && !i.isUnavailable,
         }))
       : undefined,
     source,
@@ -369,6 +379,13 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
           productName: typeof entry?.productName === 'string' ? entry.productName : null,
           originPort: asOriginPort(entry?.originPort),
           overridden: Boolean(entry?.overridden),
+        }))
+      : undefined,
+    // Ausente (historico persistido) -> undefined: a UI nao mostra selo DG.
+    dgItems: Array.isArray(obj.dgItems)
+      ? obj.dgItems.map((entry: any) => ({
+          quoteRequestItemId: asNumber(entry?.quoteRequestItemId),
+          productName: typeof entry?.productName === 'string' ? entry.productName : '',
         }))
       : undefined,
   };
