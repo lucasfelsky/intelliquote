@@ -1132,6 +1132,7 @@ describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
     const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
 
     expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/ja respondeu/);
     expect(tx.supplierPortalToken.create).not.toHaveBeenCalled();
     expect(tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
   });
@@ -1143,6 +1144,7 @@ describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
     const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
 
     expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Token nao encontrado.');
   });
 
   it('POST regenerate com expiresInDays invalido retorna 400', async () => {
