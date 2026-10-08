@@ -6,6 +6,7 @@ import { SupplierResponseNotificationService } from '../services/SupplierRespons
 import { ExchangeRateService } from '../services/ExchangeRateService';
 import { supplierPortalResponseSubmitSchema } from '../validators/supplierPortal';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
+import { PortalHttpError } from '../utils/portalHttpError';
 import { formatIncoterms } from '../utils/incoterm';
 import { prisma } from '../lib/prisma';
 
@@ -71,7 +72,7 @@ const portalRateLimiter = rateLimit({
 function getTokenFromRequest(req: Request): string {
   const raw = req.params.token;
   if (typeof raw !== 'string' || raw.length < 16) {
-    throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+    throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
   }
   return raw;
 }
@@ -91,6 +92,23 @@ function portalFallbackMessage(status: number): string {
     default:
       return 'Something went wrong on our side. Please try again in a few minutes.';
   }
+}
+
+// Mensagens conhecidas (em portugues) de codigo compartilhado com o comprador
+// que podem chegar ao fornecedor: traduzidas aqui, so nas rotas do portal.
+const PORTAL_KNOWN_MESSAGES: Record<string, string> = {
+  'A proposta contem itens duplicados ou precos/quantidades invalidos.':
+    'The proposal contains duplicated items or invalid prices/quantities.',
+};
+
+// Corpo de resposta para um HttpError nas rotas do portal. So PortalHttpError
+// (mensagem ja em ingles) repassa message/code; o resto e traduzido pelo mapa
+// de mensagens conhecidas ou, se desconhecido, por status. Status sempre preservado.
+function portalErrorBody(error: HttpError): { message: string; code?: string } {
+  if (error instanceof PortalHttpError) {
+    return { message: error.message, ...(error.code ? { code: error.code } : {}) };
+  }
+  return { message: PORTAL_KNOWN_MESSAGES[error.message] ?? portalFallbackMessage(error.status) };
 }
 
 function getRequestMeta(req: Request) {
@@ -121,7 +139,7 @@ async function buildPortalView(tokenId: number) {
     },
   });
   if (!token) {
-    throw new HttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+    throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
   }
 
   const response = await SupplierPortalResponseService.getByTokenId(token.id);
@@ -252,7 +270,7 @@ portalRoutes.get('/api/portal/:token', portalRateLimiter, async (req, res) => {
     if (error.status === 404) {
       registerInvalidAttempt(key);
     }
-    res.status(error.status).json({ message: error.message });
+    res.status(error.status).json(portalErrorBody(error));
     return;
   }
   const handled = handleControllerError(error);
@@ -273,7 +291,7 @@ portalRoutes.get('/api/portal/:token/respond', portalRateLimiter, async (req, re
     res.status(200).json({ ...view, readOnly: true });
   } catch (error) {
     if (error instanceof HttpError) {
-      res.status(error.status).json({ message: error.message });
+      res.status(error.status).json(portalErrorBody(error));
       return;
     }
     const handled = handleControllerError(error);
@@ -338,9 +356,7 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
     });
   } catch (error) {
     if (error instanceof HttpError) {
-      res
-        .status(error.status)
-        .json({ message: error.message, ...(error.code ? { code: error.code } : {}) });
+      res.status(error.status).json(portalErrorBody(error));
       return;
     }
     const handled = handleControllerError(error);
