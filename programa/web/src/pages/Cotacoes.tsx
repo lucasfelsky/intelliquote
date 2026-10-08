@@ -1,9 +1,10 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { Pagination } from '@/components/Pagination';
 
 type QuoteStatus = 'open' | 'closed';
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
@@ -26,6 +27,15 @@ interface QuoteRequest {
 }
 
 const INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP'] as const;
+
+const PAGE_SIZE = 50;
+
+interface QuoteRequestsPagination {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
 
 type StatusFilter = 'todas' | 'abertas' | 'fechadas';
 
@@ -83,22 +93,32 @@ export default function Cotacoes() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
   const [incotermFilter, setIncotermFilter] = useState<Incoterm | 'todos'>('todos');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
   const canDelete = user?.role === 'admin' || user?.role === 'comprador';
 
   const list = useQuery({
-    queryKey: ['quote-requests', { search, status: statusFilter, incoterm: incotermFilter }],
+    queryKey: ['quote-requests', { search, status: statusFilter, incoterm: incotermFilter, page }],
     queryFn: async () => {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = { page: String(page), pageSize: String(PAGE_SIZE) };
       if (search.trim()) params.search = search.trim();
       if (statusFilter !== 'todas') params.status = statusFilter === 'abertas' ? 'open' : 'closed';
       if (incotermFilter !== 'todos') params.incoterm = incotermFilter;
       const data = await api.get<unknown>(`/v1/quote-requests`, params);
-      const items = unwrapList(data);
-      return items.map(normalize);
+      return { items: unwrapList(data).map(normalize), pagination: readPagination(data) };
     },
+    placeholderData: keepPreviousData,
   });
+
+  const rows = list.data?.items ?? [];
+  const totalItems = list.data?.pagination?.totalItems ?? rows.length;
+  const totalPages = list.data?.pagination?.totalPages ?? 1;
+
+  useEffect(() => {
+    const tp = list.data?.pagination?.totalPages;
+    if (tp && page > tp) setPage(tp);
+  }, [list.data, page]);
 
   const reopen = useMutation({
     mutationFn: (id: number) => api.post<unknown>(`/v1/quote-requests/${id}/reopen`, {}),
@@ -132,13 +152,19 @@ export default function Cotacoes() {
             className="input"
             placeholder="Buscar por código ou produto"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             style={{ maxWidth: 280 }}
           />
           <select
             className="select"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as StatusFilter);
+              setPage(1);
+            }}
             style={{ maxWidth: 160 }}
           >
             <option value="todas">Todas</option>
@@ -148,7 +174,10 @@ export default function Cotacoes() {
           <select
             className="select"
             value={incotermFilter}
-            onChange={(e) => setIncotermFilter(e.target.value as Incoterm | 'todos')}
+            onChange={(e) => {
+              setIncotermFilter(e.target.value as Incoterm | 'todos');
+              setPage(1);
+            }}
             style={{ maxWidth: 160 }}
           >
             <option value="todos">Incoterm: todos</option>
@@ -183,7 +212,7 @@ export default function Cotacoes() {
             <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
           </div>
         )}
-        {list.data && list.data.length === 0 && !list.isLoading && (
+        {list.data && rows.length === 0 && !list.isLoading && (
           <div className="empty-state">
             <strong>Nenhuma cotação encontrada</strong>
             <p>
@@ -193,7 +222,7 @@ export default function Cotacoes() {
             </p>
           </div>
         )}
-        {list.data && list.data.length > 0 && (
+        {list.data && rows.length > 0 && (
           <div className="table-wrapper">
             <table className="table">
             <thead>
@@ -210,7 +239,7 @@ export default function Cotacoes() {
               </tr>
             </thead>
             <tbody>
-              {list.data.map((qr) => (
+              {rows.map((qr) => (
                 <tr key={qr.id}>
                   <td>{qr.id}</td>
                   <td><strong>{qr.requestCode}</strong></td>
@@ -286,6 +315,14 @@ export default function Cotacoes() {
               ))}
             </tbody>
             </table>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              itemLabel={{ singular: 'cotação', plural: 'cotações' }}
+              onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            />
           </div>
         )}
       </section>
@@ -301,6 +338,22 @@ function unwrapList(data: unknown): unknown[] {
     if (Array.isArray(obj.items)) return obj.items;
   }
   return [];
+}
+
+function readPagination(data: unknown): QuoteRequestsPagination | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const p = (data as { pagination?: unknown }).pagination as Partial<QuoteRequestsPagination> | null | undefined;
+  if (!p || typeof p !== 'object') return null;
+  const { page, pageSize, totalItems, totalPages } = p;
+  if (
+    typeof page !== 'number' ||
+    typeof pageSize !== 'number' ||
+    typeof totalItems !== 'number' ||
+    typeof totalPages !== 'number'
+  ) {
+    return null;
+  }
+  return { page, pageSize, totalItems, totalPages };
 }
 
 function messageOf(err: unknown): string {
