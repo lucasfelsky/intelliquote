@@ -142,10 +142,15 @@ describe('portal.html - agrupamento por PO (jsdom)', () => {
     expect(sections.map((s) => itemIds(s))).toEqual([[3], [1, 4], [2]]);
 
     const title20 = itemsContainer.querySelector('[data-po-group="20"] .po-group-title') as HTMLElement;
-    expect(title20.textContent).toBe('PO <b>2</b>');
-    expect(title20.querySelector('b')).toBeNull();
+    const label20 = title20.querySelector('.po-group-label') as HTMLElement;
+    expect(label20.textContent).toBe('PO <b>2</b>');
+    expect(label20.querySelector('b')).toBeNull();
+    expect(title20.querySelector('.po-group-count')?.textContent).toBe('2 items');
+    expect(
+      itemsContainer.querySelector('[data-po-group="10"] .po-group-title .po-group-count')?.textContent,
+    ).toBe('1 item');
     const lastTitle = sections[sections.length - 1]?.querySelector('.po-group-title');
-    expect(lastTitle?.textContent).toBe('Other items');
+    expect(lastTitle?.querySelector('.po-group-label')?.textContent).toBe('Other items');
     expect(itemsContainer.querySelector('[data-po-group="30"]')).toBeNull();
 
     const table = document.querySelector('.items-table') as HTMLTableElement;
@@ -155,12 +160,15 @@ describe('portal.html - agrupamento por PO (jsdom)', () => {
     bodies.forEach((body) => {
       const th = body.querySelector('tr.po-group-head th') as HTMLTableCellElement;
       expect(th.getAttribute('colspan')).toBe(String(theadCols));
+      expect(th.getAttribute('scope')).toBe('rowgroup');
     });
-    const tableTitle20 = table.querySelector('tbody[data-po-group="20"] th') as HTMLElement;
-    expect(tableTitle20.textContent).toBe('PO <b>2</b>');
-    expect(tableTitle20.querySelector('b')).toBeNull();
+    const tableLabel20 = table.querySelector('tbody[data-po-group="20"] th .po-group-label') as HTMLElement;
+    expect(tableLabel20.textContent).toBe('PO <b>2</b>');
+    expect(tableLabel20.querySelector('b')).toBeNull();
+    expect(table.querySelector('tbody[data-po-group="20"] th .po-group-count')?.textContent).toBe('2 items');
+    expect(table.querySelector('tbody[data-po-group="10"] th .po-group-count')?.textContent).toBe('1 item');
     expect(bodies.map((b) => b.querySelectorAll('tr:not(.po-group-head)').length)).toEqual([1, 2, 1]);
-    expect(bodies[bodies.length - 1]?.querySelector('th')?.textContent).toBe('Other items');
+    expect(bodies[bodies.length - 1]?.querySelector('th .po-group-label')?.textContent).toBe('Other items');
   });
 
   it('sem PO: markup plano, sem grupos, .item-row filhos diretos de #portal-items', async () => {

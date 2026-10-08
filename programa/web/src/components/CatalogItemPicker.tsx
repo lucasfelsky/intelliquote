@@ -140,19 +140,24 @@ export function CatalogItemPicker({
   const selectedItem = selectedItemProp ?? null;
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+    <div className={disabled ? 'item-picker item-picker--readonly' : 'item-picker'}>
       {/* ESQUERDA: busca + resumo do item selecionado + children (campos do formulário) */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="item-picker__main">
         {disabled && selectedItem ? (
-          <div style={{
-            padding: '10px 12px',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
-            color: 'var(--ink-soft)',
-          }}>
-            {selectedItem.commercialName}
-            {selectedItem.isDangerousGood && ' (DG)'}
+          <div className="item-picker__current">
+            <span className="field-label" id="itemCurrentLabel">Item</span>
+            <span className="item-picker__current-name">
+              {selectedItem.commercialName}
+              {selectedItem.isDangerousGood && (
+                <>
+                  {' '}
+                  <span className="badge badge--danger">DG</span>
+                </>
+              )}
+            </span>
+            <span className="item-picker__current-hint">
+              O produto não muda na edição. Para trocar, remova este item e adicione outro.
+            </span>
           </div>
         ) : (
           <>
@@ -207,14 +212,7 @@ export function CatalogItemPicker({
 
       {/* DIREITA: modo busca (resultados agrupados, auto-expandidos) ou modo navegar (pastas lazy) */}
       {!disabled && (
-        <div style={{
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          background: 'var(--surface)',
-          maxHeight: 420,
-          overflowY: 'auto',
-          padding: 8,
-        }}>
+        <div className="item-picker__browser">
           {isSearching ? (
             searchGroups.length === 0 ? (
               <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>

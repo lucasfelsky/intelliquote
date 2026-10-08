@@ -377,6 +377,75 @@ describe('CotacaoDetalhe', () => {
     expect(catalogCalls).toHaveLength(0);
   });
 
+  describe('polish do modal de item (edição)', () => {
+    async function openEdit(patch: { quote?: Record<string, unknown>; item?: Record<string, unknown> } = {}) {
+      const fixture = {
+        ...quoteFixture,
+        ...patch.quote,
+        items: [{ ...quoteFixture.items[0], ...patch.item }],
+      };
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) => {
+        if (path.startsWith('/v1/quote-requests/')) return fixture;
+        return getImpl(path, params);
+      }) as unknown as typeof api.get);
+      const utils = renderPage();
+      await utils.findByRole('heading', { name: 'RFQ-001' });
+      fireEvent.click(utils.getByRole('tab', { name: 'Itens' }));
+      fireEvent.click(within(utils.getByRole('table')).getByRole('button', { name: 'Editar' }));
+      return { ...utils, dialog: dialogByTitle(utils.container, 'Editar item') };
+    }
+
+    it('3g. edição usa largura padrão, rótulo "Item" e ações como filhas diretas do form', async () => {
+      const { dialog } = await openEdit();
+      expect(dialog.className).not.toContain('modal-dialog--wide');
+      expect(dialog.querySelector('.item-picker__current')?.textContent).toContain('Item');
+      expect(dialog.querySelector('form > .modal-actions')).not.toBeNull();
+    });
+
+    it('3h. porto do item igual ao da cotação aparece como herdado (checkbox marcado, sem campo)', async () => {
+      const { dialog } = await openEdit({ item: { destinationPort: 'Santos' } });
+      const checkbox = within(dialog).getByLabelText('Usar o porto da cotação (Santos)') as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+      expect(dialog.querySelector('#itemPort')).toBeNull();
+    });
+
+    it('3i. comparação do porto ignora caixa e espaços nas pontas', async () => {
+      const { dialog } = await openEdit({ item: { destinationPort: ' santos ' } });
+      const checkbox = within(dialog).getByLabelText('Usar o porto da cotação (Santos)') as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+      expect(dialog.querySelector('#itemPort')).toBeNull();
+    });
+
+    it('3j. porto diferente do da cotação aparece como override (checkbox desmarcado, campo preenchido)', async () => {
+      const { dialog } = await openEdit({ item: { destinationPort: 'Paranaguá' } });
+      const checkbox = within(dialog).getByLabelText('Usar o porto da cotação (Santos)') as HTMLInputElement;
+      expect(checkbox.checked).toBe(false);
+      expect((dialog.querySelector('#itemPort') as HTMLInputElement).value).toBe('Paranaguá');
+    });
+
+    it('3k. salvar com porto herdado envia destinationPort null', async () => {
+      vi.mocked(api.put).mockResolvedValue({ id: 10 });
+      const { dialog } = await openEdit({ item: { destinationPort: 'Santos' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar alterações' }));
+      await waitFor(() =>
+        expect(api.put).toHaveBeenCalledWith(
+          '/v1/quote-request-items/10',
+          expect.objectContaining({ destinationPort: null }),
+        ),
+      );
+    });
+
+    it('3l. cotação com 2 incoterms usa o plural no rótulo do checkbox', async () => {
+      const { dialog } = await openEdit({ quote: { desiredIncoterm: ['FOB', 'CIF'] } });
+      expect(within(dialog).getByLabelText('Usar os INCOTERMS da cotação (FOB / CIF)')).toBeTruthy();
+    });
+
+    it('3m. foco inicial na edição vai para Quantidade', async () => {
+      await openEdit();
+      await waitFor(() => expect(document.activeElement?.id).toBe('itemQuantity'));
+    });
+  });
+
   it('4. Modal C cancela: fecha e não chama api.post', async () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });

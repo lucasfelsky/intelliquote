@@ -1,5 +1,5 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -70,6 +70,16 @@ export default function CotacaoNova() {
   const [selectedCatalogItem, setSelectedCatalogItem] = useState<PickerCatalogItem | null>(null);
 
   const picker = useCatalogItemPickerData(showItemModal);
+
+  // O Modal abre o <dialog> num efeito do pai (depois dos filhos): foca o campo útil
+  // (Quantidade na edição, busca no Novo item) só depois disso.
+  useEffect(() => {
+    if (!showItemModal) return;
+    const timer = setTimeout(() => {
+      document.getElementById(editingTempId !== null ? 'itemQuantity' : 'catalogItemSearch')?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [showItemModal, editingTempId]);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -467,7 +477,7 @@ export default function CotacaoNova() {
         isOpen={showItemModal}
         onClose={closeItemModal}
         title={editingTempId !== null ? 'Editar item' : 'Adicionar item do catálogo'}
-        size="wide"
+        size={editingTempId !== null ? undefined : 'wide'}
       >
         {/* Guard: search/expanded são liftados pro CotacaoNova e zeram em
             open/edit/close explicitamente. Modal renderiza children sempre,
@@ -492,7 +502,7 @@ export default function CotacaoNova() {
               selectedItem={selectedCatalogItem}
               disabled={editingTempId !== null}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-grid">
                 <div>
                   <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
                   <input
@@ -522,30 +532,30 @@ export default function CotacaoNova() {
                 </div>
               </div>
 
-              <label className="field-label" htmlFor="itemNotes" style={{ marginTop: 12 }}>
-                Notas
-              </label>
-              <textarea
-                id="itemNotes"
-                className="textarea"
-                rows={3}
-                value={itemForm.notes}
-                onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
-              />
-
-              {itemError && (
-                <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{itemError}</p>
-              )}
-
-              <div className="modal-actions">
-                <button type="button" className="ghost-button" onClick={closeItemModal}>
-                  Cancelar
-                </button>
-                <button type="submit" className="primary-button">
-                  {editingTempId !== null ? 'Salvar alterações' : 'Adicionar'}
-                </button>
+              <div>
+                <label className="field-label" htmlFor="itemNotes">Notas</label>
+                <textarea
+                  id="itemNotes"
+                  className="textarea"
+                  rows={3}
+                  value={itemForm.notes}
+                  onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
+                />
               </div>
             </CatalogItemPicker>
+
+            {itemError && (
+              <p className="alert alert--error item-form__error" role="alert">{itemError}</p>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="ghost-button" onClick={closeItemModal}>
+                Cancelar
+              </button>
+              <button type="submit" className="primary-button">
+                {editingTempId !== null ? 'Salvar alterações' : 'Adicionar'}
+              </button>
+            </div>
           </form>
         )}
       </Modal>
