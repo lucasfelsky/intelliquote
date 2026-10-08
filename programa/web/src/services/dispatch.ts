@@ -391,6 +391,8 @@ export interface QuotePurchaseOrderInput {
   subject?: string;
   message?: string;
   forwarderInfo?: string;
+  /** Rastreio do forwarder escolhido no cadastro; o texto do e-mail continua sendo forwarderInfo. */
+  forwarderId?: number;
   fileName: string;
   contentBase64: string;
   fileType: 'application/pdf';
@@ -411,6 +413,7 @@ export async function sendPurchaseOrder(
     subject: input.subject,
     message: input.message,
     forwarderInfo: input.forwarderInfo,
+    forwarderId: input.forwarderId,
     fileName: input.fileName,
     contentBase64: input.contentBase64,
     fileType: input.fileType,
