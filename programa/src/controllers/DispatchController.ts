@@ -21,7 +21,7 @@ import {
   DISPATCH_TEMPLATE_KEY,
   renderDispatchFromTemplate,
 } from '../mailer/renderQuoteDispatch';
-import { mailerEnv } from '../config/env';
+import { buildPortalLink } from '../utils/portalLink';
 
 interface DispatchRecipient {
   supplierContactId: number;
@@ -853,18 +853,6 @@ function injectCustomMessage(html: string, message: string): string {
       </tr>
     </table>`;
   return html.replace('<!--CUSTOM_MESSAGE_SLOT-->', block);
-}
-
-function buildPortalLink(rawToken: string): string {
-  const base = mailerEnv.portalUrl.replace(/\/$/, '');
-  // Cache-buster: garante que o navegador sempre busca a versao mais recente
-  // do portal.html quando o fornecedor clica no link do e-mail (Firebase
-  // Hosting e agressivo no cache desse asset).
-  const v = Date.now();
-  if (rawToken === '__preview__') {
-    return `${base}/portal/preview?token=PREVIEW&v=${v}`;
-  }
-  return `${base}/portal?token=${encodeURIComponent(rawToken)}&v=${v}`;
 }
 
 function buildTemplateVars(input: {

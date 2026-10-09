@@ -10,6 +10,7 @@ import {
   type QuoteComparisonWeights,
 } from '../services/QuoteComparisonService';
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
+import { SupplierPortalService } from '../services/SupplierPortalService';
 import { sendAndLog } from '../mailer/MailerService';
 import { renderReplyFromTemplate, type QuoteReplyItem } from '../mailer/renderQuoteReply';
 import { renderPoFromTemplate } from '../mailer/renderQuotePo';
@@ -23,6 +24,7 @@ import {
 import type { MailAttachment } from '../mailer/Mailer';
 import { logger } from '../lib/logger';
 import { formatIncoterms, mergeManualIncotermPrices } from '../utils/incoterm';
+import { buildPortalLink } from '../utils/portalLink';
 import {
   quoteComparisonWeightsSchema,
   quotePurchaseOrderSchema,
@@ -741,6 +743,9 @@ export class QuoteResponseController {
       itemTargets?: { quoteResponseItemId: number; targetPrice: number | null }[];
     },
     contactName: string,
+    // Link do portal (token cru dentro da URL): so' entra no HTML/texto do
+    // e-mail. Nunca vai para templateVars/AuditLog/logger.
+    portalLink?: string,
   ) {
     const { quoteRequest, supplier } = quoteResponse;
     const itemName = quoteRequest.productName || quoteRequest.requestCode;
@@ -831,6 +836,7 @@ export class QuoteResponseController {
         isWinner: quoteResponse.isWinner,
         items,
         message,
+        portalLink,
       },
       undefined,
       subjectOverride,
@@ -865,7 +871,13 @@ export class QuoteResponseController {
       const { quoteResponse, primaryContact } = context;
       const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
-      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data, primaryContact.name);
+      // Preview NUNCA emite nem rotaciona token: link ficticio do portal.
+      const rendered = await QuoteResponseController.renderReplyFor(
+        quoteResponse,
+        parsedBody.data,
+        primaryContact.name,
+        buildPortalLink('__preview__'),
+      );
 
       return res.status(200).json({
         to: primaryContact.email,
@@ -950,7 +962,68 @@ export class QuoteResponseController {
         });
       }
 
-      const rendered = await QuoteResponseController.renderReplyFor(quoteResponse, parsedBody.data, primaryContact.name);
+      // Botao "Review or adjust your proposal": token NOVO do portal para o
+      // destinatario, com a resposta (e revisoes) migrada e o link anterior
+      // revogado (SupplierPortalService.rotateTokenForReply). Rotaciona ANTES
+      // do envio, como o dispatch: se o SMTP falhar o reply devolve 502 e o
+      // reenvio rotaciona de novo. Cotacao fechada: sem token e sem botao
+      // (o portal bloquearia o submit). O raw token so' vive em `portalLink`
+      // (HTML/texto do e-mail): nunca em templateVars, AuditLog ou logger.
+      let portalLink: string | undefined;
+      let portalTokenId: number | null = null;
+      let replacedTokenId: number | null = null;
+      if (quoteResponse.quoteRequest.status !== QuoteRequestStatus.closed) {
+        const userId = req.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: 'Sessao expirada. Faca login novamente.' });
+        }
+        const rotated = await prisma.$transaction(async (tx) => {
+          const result = await SupplierPortalService.rotateTokenForReply({
+            quoteRequestId: quoteResponse.quoteRequest.id,
+            supplierId: quoteResponse.supplierId,
+            supplierContactId: primaryContact.id,
+            createdById: userId,
+            client: tx,
+          });
+          if (result.previous) {
+            await AuditLogService.log(
+              {
+                entityType: 'supplier_portal_token',
+                entityId: result.previous.id,
+                action: 'revoke',
+                performedById: userId,
+                metadata: { reason: 'reply', replacedById: result.created.id },
+              },
+              tx,
+            );
+          }
+          await AuditLogService.log(
+            {
+              entityType: 'supplier_portal_token',
+              entityId: result.created.id,
+              action: 'generate',
+              performedById: userId,
+              metadata: {
+                quoteRequestId: quoteResponse.quoteRequest.id,
+                replacesTokenId: result.previous?.id ?? null,
+                movedResponseId: result.previous?.responseId ?? null,
+              },
+            },
+            tx,
+          );
+          return result;
+        });
+        portalLink = buildPortalLink(rotated.rawToken);
+        portalTokenId = rotated.created.id;
+        replacedTokenId = rotated.previous?.id ?? null;
+      }
+
+      const rendered = await QuoteResponseController.renderReplyFor(
+        quoteResponse,
+        parsedBody.data,
+        primaryContact.name,
+        portalLink,
+      );
 
       const sendResult = await sendAndLog({
         to: { email: primaryContact.email, name: primaryContact.name },
@@ -965,6 +1038,7 @@ export class QuoteResponseController {
           supplierId: quoteResponse.supplier.id,
           supplierContactId: primaryContact.id,
           customMessage: parsedBody.data.message ?? null,
+          portalTokenId,
         },
         relatedEntityType: 'quote_response',
         relatedEntityId: String(id),
@@ -981,6 +1055,8 @@ export class QuoteResponseController {
           status: sendResult.status,
           subject: rendered.subject,
           hasCustomMessage: Boolean(parsedBody.data.message),
+          portalTokenId,
+          replacedTokenId,
         },
       });
 

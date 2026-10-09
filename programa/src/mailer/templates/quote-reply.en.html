@@ -77,6 +77,36 @@
               </tr>
             </table>
 
+            {{#portalLink}}
+            <!-- CTA: link do portal (VML button for Outlook + bulletproof button) -->
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+              <tr>
+                <td align="center" style="padding:8px 32px 0 32px;font-family:Arial,sans-serif;font-size:14px;line-height:20px;color:#1F2933;">
+                  You can review or adjust your proposal using your secure link:
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:12px 32px 8px 32px;">
+                  <!--[if mso]>
+                  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{portalLink}}" style="height:44px;v-text-anchor:middle;width:280px;" arcsize="50%" strokecolor="#184054" fillcolor="#184054">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Review or adjust your proposal</center>
+                  </v:roundrect>
+                  <![endif]-->
+                  <!--[if !mso]><!-- -->
+                  <a href="{{portalLink}}" style="display:inline-block;background-color:#184054;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:15px;padding:13px 32px;border:1px solid #184054;">Review or adjust your proposal</a>
+                  <!--<![endif]-->
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:8px 32px 16px 32px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;color:#4A5560;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{portalLink}}" style="color:#00AE91;word-break:break-all;">{{portalLink}}</a>
+                </td>
+              </tr>
+            </table>
+            {{/portalLink}}
+
             <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
               <tr>
                 <td style="padding:16px 32px 24px 32px;font-family:Arial,sans-serif;font-size:15px;line-height:22px;color:#1F2933;">

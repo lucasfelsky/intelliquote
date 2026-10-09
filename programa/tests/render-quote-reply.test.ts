@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  REPLY_PORTAL_CTA_HTML,
   buildReplyTextTemplateDraft,
   loadFileTemplate,
   renderReplyHtmlFromTemplate,
@@ -210,5 +211,144 @@ describe('renderQuoteReply — {{itemsText}} e {{itemsTextTable}}', () => {
     expect(text).toContain('Please find the items under discussion below:');
     expect(text).toContain('Unit Price\tTarget Price\tTotal');
     expect(text.endsWith('Best regards,')).toBe(true);
+  });
+});
+
+describe('renderQuoteReply — link do portal', () => {
+  const link = 'https://intelliquote.portal-comex.com/portal?token=abc_DEF-123&v=99';
+  const linkVars = () => makeVars({ portalLink: link });
+
+  function count(haystack: string, needle: string): number {
+    return haystack.split(needle).length - 1;
+  }
+
+  // Template do banco "legado" (fixture de quote-reply-template-db.test.ts): sem {{portalLink}}, com "Best regards".
+  const LEGACY_DB_HTML = [
+    '<html><body>',
+    '<p style="margin:0 0 12px 0;">Dear {{supplierContactName}},</p>',
+    '<p>{{introText}}</p>',
+    '<table>',
+    '<thead><tr><th>ITEM</th><th>INCOTERM</th><th>QUANTITY</th><th>UNIT PRICE</th><th>TOTAL</th></tr></thead>',
+    '<tbody>{{itemsRows}}</tbody>',
+    '</table>',
+    '{{#targetPriceStr}}<p><strong>Target Price:</strong> {{targetPriceStr}}</p>{{/targetPriceStr}}',
+    '<!--CUSTOM_MESSAGE_SLOT-->',
+    '<p>Best regards,</p>',
+    '</body></html>',
+  ].join('\n');
+
+  it('arquivo do repo: a secao {{#portalLink}} renderiza o botao com href escapado e sem placeholder sobrando', () => {
+    const html = renderReplyHtmlFromTemplate(loadFileTemplate(), linkVars());
+    expect(html).toContain('Review or adjust your proposal');
+    expect(html).toContain('href="https://intelliquote.portal-comex.com/portal?token=abc_DEF-123&amp;v=99"');
+    expect(html).not.toContain('token=abc_DEF-123&v=99');
+    expect(html).not.toContain('{{');
+    expect(html).not.toContain('{{/portalLink}}');
+    expect(html.indexOf('Review or adjust your proposal')).toBeGreaterThan(html.indexOf('</tbody>'));
+    expect(html.indexOf('Review or adjust your proposal')).toBeLessThan(html.indexOf('Best regards,'));
+  });
+
+  it('sem portalLink a secao colapsa e nada do botao aparece', () => {
+    const html = renderReplyHtmlFromTemplate(loadFileTemplate(), makeVars());
+    expect(html).not.toContain('Review or adjust');
+    expect(html).not.toContain('/portal');
+    expect(html).not.toContain('{{');
+    expect(renderReplyHtmlFromTemplate(loadFileTemplate(), makeVars({ portalLink: '' }))).not.toContain('Review or adjust');
+    // Template do banco sem o placeholder: sem link tambem nao injeta.
+    expect(renderReplyHtmlFromTemplate(LEGACY_DB_HTML, makeVars())).not.toContain('Review or adjust');
+  });
+
+  it('template do banco sem o placeholder + ancora: bloco injetado UMA vez antes de "Best regards"', () => {
+    const html = renderReplyHtmlFromTemplate(LEGACY_DB_HTML, linkVars());
+    expect(count(html, 'Review or adjust your proposal</a>')).toBe(1);
+    expect(count(html, 'You can review or adjust your proposal using your secure link:')).toBe(1);
+    expect(html).toContain('href="https://intelliquote.portal-comex.com/portal?token=abc_DEF-123&amp;v=99"');
+    expect(html.indexOf('Review or adjust your proposal')).toBeGreaterThan(html.indexOf('</table>'));
+    expect(html.indexOf('Review or adjust your proposal')).toBeLessThan(html.indexOf('<p>Best regards,</p>'));
+    expect(html).not.toContain('{{');
+    expect(html).not.toContain('<!--CUSTOM_MESSAGE_SLOT-->');
+  });
+
+  it('template do banco sem ancora "Best regards": bloco antes de </body>, sem duplicar', () => {
+    const template = '<html><body><p>Dear {{supplierContactName}},</p><table><tbody>{{itemsRows}}</tbody></table><p>Regards</p></body></html>';
+    const html = renderReplyHtmlFromTemplate(template, linkVars());
+    expect(count(html, 'Review or adjust your proposal</a>')).toBe(1);
+    expect(html.indexOf('Review or adjust your proposal')).toBeGreaterThan(html.indexOf('<p>Regards</p>'));
+    expect(html.indexOf('Review or adjust your proposal')).toBeLessThan(html.indexOf('</body>'));
+    expect(html).not.toContain('{{');
+    // Sem </body> nem ancora: vai pro fim.
+    const bare = renderReplyHtmlFromTemplate('<p>Dear {{supplierContactName}},</p>{{itemsRows}}', linkVars());
+    expect(count(bare, 'Review or adjust your proposal</a>')).toBe(1);
+    expect(bare.endsWith('</table>')).toBe(true);
+  });
+
+  it('template do banco COM {{portalLink}}: sem injecao, o admin controla a posicao', () => {
+    const template = '<p>Dear {{supplierContactName}},</p>{{itemsRows}}<p><a href="{{portalLink}}">Open</a> {{portalLink}}</p><p>Best regards,</p>';
+    const html = renderReplyHtmlFromTemplate(template, linkVars());
+    expect(count(html, 'https://intelliquote.portal-comex.com/portal?token=abc_DEF-123&amp;v=99')).toBe(2);
+    expect(html).not.toContain('Review or adjust');
+    // Com a secao (sem o placeholder simples fora dela) tambem nao injeta.
+    const withSection = '<p>Dear {{supplierContactName}},</p>{{#portalLink}}<a href="{{portalLink}}">Go</a>{{/portalLink}}<p>Best regards,</p>';
+    expect(count(renderReplyHtmlFromTemplate(withSection, linkVars()), 'abc_DEF-123')).toBe(1);
+    expect(renderReplyHtmlFromTemplate(withSection, linkVars())).not.toContain('Review or adjust');
+  });
+
+  it('bloco padrao usa o mesmo markup (VML + bulletproof) com {{portalLink}} no href', () => {
+    expect(REPLY_PORTAL_CTA_HTML).toContain('<v:roundrect');
+    expect(REPLY_PORTAL_CTA_HTML).toContain('href="{{portalLink}}"');
+    expect(REPLY_PORTAL_CTA_HTML).toContain('Or copy and paste this link into your browser:');
+    expect(loadFileTemplate()).toContain('{{#portalLink}}');
+    expect(loadFileTemplate()).toContain('{{/portalLink}}');
+  });
+
+  it('texto puro: renderReplyPlainText traz a linha do link (crua) antes de "Best regards,"', () => {
+    const text = renderReplyPlainText(linkVars());
+    expect(text).toContain(`Review or adjust your proposal: ${link}`);
+    expect(text).not.toContain('&amp;');
+    const lines = text.split('\r\n');
+    const idx = lines.indexOf(`Review or adjust your proposal: ${link}`);
+    expect(idx).toBeGreaterThan(0);
+    expect(lines[idx + 1]).toBe('');
+    expect(lines[idx + 2]).toBe('Best regards,');
+    expect(renderReplyPlainText(makeVars())).not.toContain('Review or adjust');
+  });
+
+  it('texto puro do banco: com {{portalLink}} sai cru; sem placeholder a linha e injetada antes de "Best regards"', () => {
+    const withPlaceholder = 'Dear {{supplierContactName}},\n\n{{itemsTextTable}}\n\nLink: {{portalLink}}\n\nBest regards,';
+    const text = renderReplyTextFromTemplate(withPlaceholder, linkVars());
+    expect(text).toContain(`Link: ${link}`);
+    expect(text).not.toContain('&amp;');
+    expect(text).not.toContain('Review or adjust');
+
+    const legacy = 'Dear {{supplierContactName}},\n\n{{itemsText}}\n\nBest regards,';
+    const injected = renderReplyTextFromTemplate(legacy, linkVars());
+    expect(injected).toContain(`\n\nReview or adjust your proposal: ${link}\n\nBest regards,`);
+    expect(injected).not.toContain('{{');
+    expect(injected).not.toContain('&amp;');
+    // Sem link, nada entra.
+    expect(renderReplyTextFromTemplate(legacy, makeVars())).not.toContain('Review or adjust');
+    // Sem ancora: append no fim. CRLF do template e' respeitado.
+    const noAnchor = 'Dear {{supplierContactName}},\r\n\r\n{{itemsText}}\r\n';
+    const appended = renderReplyTextFromTemplate(noAnchor, linkVars());
+    expect(appended.endsWith(`\r\n\r\nReview or adjust your proposal: ${link}`)).toBe(true);
+    expect(count(appended, 'Review or adjust')).toBe(1);
+  });
+
+  it('rascunho editavel do texto tem a secao {{#portalLink}} antes de "Best regards,"', () => {
+    const draft = buildReplyTextTemplateDraft();
+    expect(draft).toContain('{{#portalLink}}Review or adjust your proposal: {{portalLink}}{{/portalLink}}');
+    expect(draft.indexOf('{{#portalLink}}')).toBeLessThan(draft.indexOf('Best regards,'));
+    expect(draft.indexOf('{{#portalLink}}')).toBeGreaterThan(draft.indexOf('{{itemsTextTable}}'));
+    // Renderizado com e sem link.
+    expect(renderReplyTextFromTemplate(draft, linkVars())).toContain(`Review or adjust your proposal: ${link}`);
+    expect(renderReplyTextFromTemplate(draft, makeVars())).not.toContain('Review or adjust');
+  });
+
+  it('renderReplySections escapa o link no HTML e deixa cru no modo texto', () => {
+    expect(renderReplySections('{{portalLink}}', linkVars())).toBe(
+      'https://intelliquote.portal-comex.com/portal?token=abc_DEF-123&amp;v=99',
+    );
+    expect(renderReplySections('{{portalLink}}', linkVars(), true)).toBe(link);
+    expect(renderReplySections('{{#portalLink}}x{{/portalLink}}', makeVars())).toBe('');
   });
 });
