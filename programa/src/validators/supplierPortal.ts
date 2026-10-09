@@ -183,3 +183,30 @@ export const dispatchPreviewSchema = dispatchCreateSchema
   });
 
 export type DispatchCreateInput = z.infer<typeof dispatchCreateSchema>;
+
+// Portal do parceiro de credito (PR2b): ''/null/espacos em notes = ausente; max 2000.
+const creditPortalNotesField = z.preprocess(
+  (value) =>
+    value === undefined || value === null || (typeof value === 'string' && value.trim() === '')
+      ? undefined
+      : value,
+  z.string().trim().max(2000).optional(),
+);
+
+export const creditPortalSubmitSchema = z.object({
+  // Sem coerce: null/'' nao viram 0.
+  paymentTermsDays: z.number().int().min(0).max(720),
+  validityDays: z.number().int().min(1).max(365),
+  notes: creditPortalNotesField,
+  items: z
+    .array(
+      z.object({
+        quoteRequestItemId: positiveIntegerField,
+        unitPrice: positiveNumberField.max(999999999999.99),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
+export type CreditPortalSubmitInput = z.infer<typeof creditPortalSubmitSchema>;

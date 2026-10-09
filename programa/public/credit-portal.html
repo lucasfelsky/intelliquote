@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Credit Support Portal - IntelliQuote</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --portal-bg: #f3f7f5; --portal-bg-grad-1: #eaf3ef; --portal-bg-grad-2: #f6fbf9;
+        --portal-ink: #102a32; --portal-ink-soft: #4a5560; --portal-muted: #7a848c;
+        --portal-line: #d8e4e0; --portal-line-soft: #ecf1ef;
+        --portal-primary: #00ae91; --portal-primary-700: #048972; --portal-primary-50: #e6f8f3;
+        --portal-accent: #184054; --portal-accent-700: #133848;
+        --portal-warn-bg: #fff5dc; --portal-warn-fg: #8a6a0e; --portal-warn-line: #f0e2a8;
+        --portal-origin-bg-1: #fff4e0; --portal-origin-bg-2: #ffe1b8; --portal-origin-fg: #6b3f00; --portal-origin-line: #b05f00;
+        --portal-err-bg: #fdecec; --portal-err-fg: #9b1c1c; --portal-err-line: #f4b6b6;
+        --portal-ok-bg: #e9f8f1; --portal-ok-fg: #1d6f4a; --portal-ok-line: #b6e3c8;
+        --portal-radius: 18px; --portal-radius-sm: 12px;
+        --portal-shadow: 0 14px 40px rgba(15, 42, 50, 0.08); --portal-shadow-soft: 0 6px 18px rgba(15, 42, 50, 0.06);
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: 'Manrope', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        color: var(--portal-ink);
+        background:
+          radial-gradient(1200px 600px at 20% -10%, #dff1ea 0%, transparent 60%),
+          radial-gradient(800px 500px at 100% 10%, #e3edf3 0%, transparent 60%),
+          linear-gradient(180deg, var(--portal-bg-grad-1) 0%, var(--portal-bg-grad-2) 100%);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .portal-shell { max-width: 920px; margin: 0 auto; padding: 36px 20px 80px; }
+      .portal-card {
+        background: #ffffff; border-radius: var(--portal-radius); box-shadow: var(--portal-shadow);
+        border: 1px solid var(--portal-line); overflow: hidden;
+      }
+      .eyebrow {
+        text-transform: uppercase; letter-spacing: 2px; font-size: 11px;
+        color: var(--portal-primary-700); font-weight: 700; margin: 0 0 8px;
+      }
+      h1, h2, h3 { font-family: 'Space Grotesk', 'Manrope', sans-serif; color: var(--portal-ink); }
+      .portal-hero {
+        display: flex; align-items: center; gap: 16px; padding: 28px 32px; color: #ffffff; position: relative;
+        background:
+          linear-gradient(135deg, #184054 0%, #133848 100%),
+          radial-gradient(400px 200px at 80% 20%, rgba(0, 174, 145, 0.25), transparent 60%);
+      }
+      .portal-hero::after {
+        content: ""; position: absolute; inset: 0; pointer-events: none;
+        background:
+          radial-gradient(280px 140px at 90% 100%, rgba(0, 174, 145, 0.35), transparent 60%),
+          radial-gradient(220px 120px at 10% 0%, rgba(255, 255, 255, 0.08), transparent 60%);
+      }
+      .portal-hero > * { position: relative; z-index: 1; }
+      .portal-hero img {
+        width: 56px; height: 56px; border-radius: 14px; background: #ffffff; padding: 6px;
+        object-fit: cover; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); flex-shrink: 0;
+      }
+      .portal-hero h1 { margin: 0; font-size: 22px; color: #ffffff; line-height: 1.2; }
+      .portal-hero .eyebrow { color: #5fe0bf; margin: 0 0 4px; }
+      .portal-hero p { margin: 4px 0 0; color: #d6e6e2; font-size: 14px; line-height: 1.55; max-width: 56ch; }
+
+      .portal-main { padding: 28px 32px 32px; }
+      .portal-title-block h1 { margin: 4px 0 8px; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
+      .portal-title-block p { margin: 0 0 20px; color: var(--portal-ink-soft); font-size: 15px; line-height: 1.55; }
+
+      .supplier-card {
+        display: flex; align-items: center; gap: 14px; padding: 16px 20px; margin-bottom: 16px;
+        background: linear-gradient(180deg, #f8fbfa 0%, #f1f7f4 100%);
+        border: 1px solid var(--portal-line); border-radius: var(--portal-radius-sm);
+      }
+      .supplier-card .avatar {
+        width: 44px; height: 44px; border-radius: 12px; color: #ffffff; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--portal-primary) 0%, var(--portal-primary-700) 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px;
+      }
+      .supplier-card .supplier-info { flex: 1; min-width: 0; }
+      .supplier-card .supplier-info .label {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+        color: var(--portal-muted); font-weight: 600; margin: 0 0 2px;
+      }
+      .supplier-card .supplier-info .name { margin: 0; font-weight: 700; color: var(--portal-ink); font-size: 16px; overflow-wrap: anywhere; }
+      .supplier-card .supplier-info .contact { margin: 2px 0 0; font-size: 13px; color: var(--portal-ink-soft); overflow-wrap: anywhere; }
+      .supplier-card .supplier-info .contact strong { color: var(--portal-primary-700); }
+      .supplier-card .expires { text-align: right; font-size: 12px; color: var(--portal-muted); line-height: 1.4; white-space: nowrap; }
+      .supplier-card .expires strong { display: block; font-size: 13px; color: var(--portal-ink); font-weight: 700; }
+
+      .meta-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+      .chip {
+        display: inline-flex; align-items: center; background: var(--portal-primary-50); color: var(--portal-primary-700);
+        border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere;
+      }
+      .chip.chip-origin {
+        background: linear-gradient(135deg, var(--portal-origin-bg-1) 0%, var(--portal-origin-bg-2) 100%);
+        color: var(--portal-origin-fg); border: 1px solid rgba(176, 95, 0, 0.25);
+      }
+
+      .section-title { display: flex; align-items: center; gap: 10px; margin: 24px 0 12px; font-size: 18px; color: var(--portal-ink); }
+      .section-title::before { content: ""; width: 4px; height: 18px; border-radius: 4px; background: var(--portal-primary); display: inline-block; }
+
+      .item-row {
+        background: #ffffff; border: 1px solid var(--portal-line); border-radius: var(--portal-radius-sm);
+        padding: 18px; margin-bottom: 12px; box-shadow: var(--portal-shadow-soft);
+      }
+      .item-row h3 { margin: 0 0 6px; font-size: 16px; color: var(--portal-ink); overflow-wrap: anywhere; }
+      .item-row .item-meta { font-size: 12px; color: var(--portal-muted); margin: 0 0 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .item-row.is-unavailable { background: #fbfcfc; border-style: dashed; }
+      .item-row.is-unavailable h3 { color: var(--portal-ink-soft); }
+      .price-compare {
+        display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin: 0 0 12px; padding: 10px 12px;
+        border-radius: 10px; background: #f6f9f8; border: 1px solid var(--portal-line-soft); font-size: 13px; color: var(--portal-ink-soft);
+      }
+      .price-compare .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--portal-muted); font-weight: 700; }
+      .price-compare strong { color: var(--portal-ink); }
+      .price-compare .muted { color: var(--portal-muted); font-style: italic; }
+      .item-unavailable-hint { margin: 0; font-size: 13px; color: var(--portal-muted); line-height: 1.5; }
+
+      .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+      .form-grid label {
+        display: flex; flex-direction: column; font-size: 12px; color: var(--portal-ink-soft); font-weight: 600;
+        gap: 4px; text-transform: uppercase; letter-spacing: 0.8px; min-width: 0;
+      }
+      .form-grid input,
+      .form-grid textarea {
+        margin-top: 2px; padding: 10px 12px; border: 1px solid var(--portal-line); border-radius: 10px;
+        font-size: 14px; color: var(--portal-ink); font-family: inherit; background: #ffffff;
+        text-transform: none; letter-spacing: normal; font-weight: 500; width: 100%; min-width: 0;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+      }
+      .form-grid input:focus,
+      .form-grid textarea:focus { outline: none; border-color: var(--portal-primary); box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.18); }
+      .form-grid input:disabled,
+      .form-grid textarea:disabled { background: #f3f6f5; color: var(--portal-ink-soft); cursor: not-allowed; }
+      .form-grid textarea { resize: vertical; min-height: 70px; }
+      .form-grid .full { grid-column: 1 / -1; }
+
+      .your-total {
+        display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; min-width: 0; padding: 8px 12px;
+        border-radius: 10px; background: var(--portal-primary-50); border: 1px solid rgba(4, 137, 114, 0.18);
+      }
+      .your-total .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--portal-primary-700); font-weight: 700; }
+      .your-total strong { font-size: 15px; color: var(--portal-ink); overflow-wrap: anywhere; }
+      .markup { font-weight: 800; font-size: 13px; color: var(--portal-muted); }
+      .markup.up { color: var(--portal-err-fg); }
+      .markup.down { color: var(--portal-ok-fg); }
+      .markup.flat { color: var(--portal-ink-soft); }
+
+      .totals-card {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 8px; padding: 16px 18px;
+        border-radius: var(--portal-radius-sm); background: linear-gradient(180deg, #f8fbfa 0%, #f1f7f4 100%); border: 1px solid var(--portal-line);
+      }
+      .totals-card > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+      .totals-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--portal-muted); font-weight: 700; }
+      .totals-card strong { font-size: 18px; font-family: 'Space Grotesk', 'Manrope', sans-serif; color: var(--portal-ink); overflow-wrap: anywhere; }
+      .totals-card strong.markup { font-size: 18px; }
+
+      .actions {
+        display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end;
+        margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--portal-line-soft);
+      }
+      .actions button {
+        font-family: inherit; font-weight: 700; font-size: 14px; border-radius: 999px; padding: 12px 24px; border: none;
+        cursor: pointer; letter-spacing: 0.3px; transition: transform 80ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+      .actions .primary {
+        background: linear-gradient(135deg, var(--portal-primary) 0%, var(--portal-primary-700) 100%);
+        color: #ffffff; box-shadow: 0 8px 18px rgba(0, 174, 145, 0.28);
+      }
+      .actions .primary:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(0, 174, 145, 0.32); }
+      .actions .primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+
+      .status-banner {
+        padding: 14px 18px; border-radius: var(--portal-radius-sm); font-size: 14px; font-weight: 500;
+        margin-bottom: 18px; display: flex; gap: 10px; align-items: flex-start; overflow-wrap: anywhere;
+      }
+      .status-banner.error { background: var(--portal-err-bg); color: var(--portal-err-fg); border: 1px solid var(--portal-err-line); }
+      .status-banner.success { background: var(--portal-ok-bg); color: var(--portal-ok-fg); border: 1px solid var(--portal-ok-line); }
+      .status-banner.warn { background: var(--portal-warn-bg); color: var(--portal-warn-fg); border: 1px solid var(--portal-warn-line); }
+      .status-banner.info { background: #eef4f9; color: #1f3a4d; border: 1px solid #cddde7; }
+
+      .badge {
+        display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 999px;
+        font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 800;
+      }
+      .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+      .badge.read-only { background: var(--portal-warn-bg); color: var(--portal-warn-fg); }
+      .badge.ok { background: var(--portal-ok-bg); color: var(--portal-ok-fg); }
+      .badge.info { background: #eef4f9; color: #1f3a4d; }
+      .badge.dg { background: var(--portal-err-bg); color: var(--portal-err-fg); }
+
+      .portal-loading { display: flex; align-items: center; gap: 12px; color: var(--portal-ink-soft); font-size: 14px; }
+      .portal-loading .spinner {
+        width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--portal-line);
+        border-top-color: var(--portal-primary); animation: portal-spin 0.8s linear infinite;
+      }
+      @keyframes portal-spin { to { transform: rotate(360deg); } }
+
+      .footer-note { font-size: 12px; color: var(--portal-muted); text-align: center; margin-top: 24px; line-height: 1.6; }
+      .footer-note strong { color: var(--portal-ink-soft); }
+
+      @media (max-width: 640px) {
+        .portal-shell { padding: 20px 12px 60px; }
+        .portal-hero { padding: 22px 20px; }
+        .portal-main { padding: 22px 18px 24px; }
+        .portal-title-block h1 { font-size: 24px; }
+        .form-grid { grid-template-columns: 1fr; }
+        .supplier-card { flex-wrap: wrap; }
+        .supplier-card .expires { width: 100%; text-align: left; white-space: normal; }
+        .supplier-card .expires strong { display: inline; margin-left: 6px; }
+        .item-row { padding: 14px; }
+        .totals-card { grid-template-columns: 1fr; gap: 10px; }
+        .totals-card > div { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; }
+        .totals-card strong { font-size: 16px; text-align: right; }
+        .actions { justify-content: stretch; }
+        .actions button { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="portal-shell">
+      <header class="portal-card">
+        <div class="portal-hero">
+          <img src="/logo.png" alt="IntelliQuote" />
+          <div>
+            <p class="eyebrow">SQ Quimica &middot; Credit Support</p>
+            <h1>Credit support request</h1>
+            <p>
+              Welcome. This secure page shows a supplier proposal forwarded to you by
+              SQ Quimica. Please review the items, enter your unit prices and submit your
+              terms before the link expires.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main class="portal-card" style="margin-top: 16px;">
+        <div class="portal-main">
+          <div id="portal-status"></div>
+          <section id="portal-content">
+            <div class="portal-loading">
+              <span class="spinner"></span>
+              <span>Loading the request...</span>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <p class="footer-note" id="portal-footer">
+        <strong>IntelliQuote</strong> &middot; Secure portal powered by a private
+        magic link &middot; please do not share this URL with third parties.
+      </p>
+    </div>
+
+    <script>
+      (function () {
+        // Marca a versao no <html> pra ficar facil confirmar via DevTools
+        // qual copia do credit-portal.html esta em producao.
+        try {
+          const host = window.location.hostname;
+          const servedFrom = host.endsWith('.run.app')
+            ? 'cloud-run'
+            : host === 'localhost' || host === '127.0.0.1'
+            ? 'localhost'
+            : 'firebase-hosting';
+          document.documentElement.setAttribute('data-served-from', servedFrom);
+          document.documentElement.setAttribute('data-portal-version', 'credit-v1-20261009');
+        } catch (bootErr) {
+          /* swallow: nao e critico */
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+
+        const status = document.getElementById('portal-status');
+        const content = document.getElementById('portal-content');
+        const footer = document.getElementById('portal-footer');
+
+        // Mesma regra do portal.html: servido pelo Cloud Run direto (ou local) usa
+        // o proprio origin; em intelliquote.portal-comex.com (Firebase Hosting) o
+        // firebase.json do Portal COMEX nao tem rewrite /api/** -> Cloud Run, entao
+        // apontamos para o backend direto (CORS ja liberado).
+        const apiBase = (() => {
+          if (
+            window.location.hostname.endsWith('.run.app') ||
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1'
+          ) {
+            return `${window.location.origin}/api`;
+          }
+          return 'https://intelliquote-api-705697815580.southamerica-east1.run.app/api';
+        })();
+
+        const INVALID_LINK_MESSAGE =
+          'This link is invalid or has expired. Please contact your buyer to request a new one.';
+
+        // Escapa para uso seguro em texto e em atributos HTML.
+        function esc(value) {
+          return String(value === null || value === undefined ? '' : value).replace(
+            /[&<>"']/g,
+            (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
+          );
+        }
+
+        // Toda mensagem do banner e escapada (inclusive as vindas da API).
+        function setStatus(kind, message) {
+          if (!message) {
+            status.innerHTML = '';
+            return;
+          }
+          status.innerHTML = `<div class="status-banner ${esc(kind)}">${esc(message)}</div>`;
+        }
+
+        function formatDate(value) {
+          if (!value) return '-';
+          try {
+            return new Intl.DateTimeFormat('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }).format(new Date(value));
+          } catch (e) {
+            return String(value);
+          }
+        }
+
+        function formatMoney(value) {
+          if (value === null || value === undefined || value === '') return '-';
+          const n = Number(value);
+          if (!Number.isFinite(n)) return '-';
+          return n.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function round2(n) {
+          return Math.round((n + Number.EPSILON) * 100) / 100;
+        }
+
+        // (partner / original - 1) x 100 com 2 casas; null sem base. So exibicao:
+        // o servidor recalcula e e a fonte da verdade.
+        function markupOf(partner, original) {
+          const p = Number(partner);
+          const o = Number(original);
+          if (!Number.isFinite(p) || !Number.isFinite(o) || !(p > 0) || !(o > 0)) return null;
+          return Number(((p / o - 1) * 100).toFixed(2));
+        }
+
+        function formatMarkup(pct) {
+          if (pct === null || pct === undefined) return '-';
+          const n = Number(pct);
+          if (!Number.isFinite(n)) return '-';
+          if (n === 0) return '0.00%';
+          return (n > 0 ? '+' : '-') + Math.abs(n).toFixed(2) + '%';
+        }
+
+        function markupClass(pct) {
+          if (pct === null || pct === undefined) return 'markup';
+          return 'markup ' + (pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat');
+        }
+
+        function fallbackMessage(httpStatus) {
+          if (httpStatus === 404) return INVALID_LINK_MESSAGE;
+          if (httpStatus === 429) return 'Too many requests in a short time. Please wait a moment and try again.';
+          return 'Something went wrong on our side. Please try again in a few minutes.';
+        }
+
+        function initials(name) {
+          if (!name) return '?';
+          const parts = String(name).trim().split(/\s+/);
+          if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+          return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+
+        function scrollToTop() {
+          try {
+            if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0, behavior: 'smooth' });
+          } catch (e) {
+            /* jsdom / browsers antigos */
+          }
+        }
+
+        let state = { data: null, readOnly: false, hadResponse: false, currency: '' };
+
+        function renderItem(item, currency, readOnly) {
+          const unavailable = !!item.isUnavailable;
+          const meta = [
+            item.itemCode ? `<span class="chip">Code ${esc(item.itemCode)}</span>` : '',
+            `<span class="chip">${esc(item.quantity)} ${esc(item.unit)}</span>`,
+            item.originPort ? `<span class="chip chip-origin">Origin: ${esc(item.originPort)}</span>` : '',
+            item.isDangerousGood ? '<span class="badge dg">Dangerous goods</span>' : '',
+            unavailable ? '<span class="badge read-only">Temporarily unavailable</span>' : '',
+          ].join('');
+
+          const supplierPrice = unavailable
+            ? `<p class="price-compare"><span class="label">Supplier price</span><span class="muted">Not priced</span></p>`
+            : `<p class="price-compare">
+                 <span class="label">Supplier price</span>
+                 <span><strong>${esc(formatMoney(item.originalUnitPrice))}</strong> ${esc(currency)} / ${esc(item.unit)}</span>
+                 <span>&middot;</span>
+                 <span>Total <strong>${esc(formatMoney(item.originalTotalPrice))}</strong> ${esc(currency)}</span>
+               </p>`;
+
+          const pricing = unavailable
+            ? `<p class="item-unavailable-hint">The supplier marked this item as temporarily unavailable. It is not priced and is excluded from the totals.</p>`
+            : `<div class="form-grid">
+                 <label>
+                   Your unit price (${esc(currency)})
+                   <input type="number" name="unitPrice" step="0.01" min="0.01" inputmode="decimal" placeholder="0.00" value="${esc(item.partnerUnitPrice ?? '')}"${readOnly ? ' disabled' : ''} />
+                 </label>
+                 <div class="your-total">
+                   <span class="label">Your total</span>
+                   <strong data-total>-</strong>
+                   <span class="markup" data-markup>-</span>
+                 </div>
+               </div>`;
+
+          return `<article class="item-row${unavailable ? ' is-unavailable' : ''}" data-item-id="${esc(item.quoteRequestItemId)}" data-original-unit="${esc(item.originalUnitPrice)}" data-quantity="${esc(item.quantity)}">
+            <h3>${esc(item.productName)}</h3>
+            <div class="item-meta">${meta}</div>
+            ${supplierPrice}
+            ${pricing}
+          </article>`;
+        }
+
+        function render(data) {
+          const req = data.request || {};
+          const supplier = data.supplier || {};
+          const partner = data.partner || {};
+          const items = Array.isArray(data.items) ? data.items : [];
+          const totals = data.totals || {};
+          const readOnly = !!req.readOnly;
+          const response = data.response || null;
+          state = { data, readOnly, hadResponse: !!response, currency: req.currency || '' };
+
+          const dis = readOnly ? ' disabled' : '';
+          const country = supplier.country ? ` &middot; ${esc(supplier.country)}` : '';
+          const itemsHtml = items.map((item) => renderItem(item, req.currency, readOnly)).join('');
+
+          content.innerHTML = `
+            <div class="portal-title-block">
+              <p class="eyebrow">Request ${esc(req.requestCode)}</p>
+              <h1>Supplier proposal for your review</h1>
+              <p>
+                Review the supplier's prices below, enter your own unit price for each
+                available item and submit your payment terms. Your pricing is compared
+                with the supplier's proposal as you type.
+              </p>
+            </div>
+            <div class="supplier-card">
+              <div class="avatar">${esc(initials(supplier.name))}</div>
+              <div class="supplier-info">
+                <p class="label">Supplier</p>
+                <p class="name">${esc(supplier.name)}${country}</p>
+                <p class="contact">Prepared for <strong>${esc(partner.name)}</strong></p>
+              </div>
+              <div class="expires">Link expires<strong>${esc(formatDate(req.expiresAt))}</strong></div>
+            </div>
+            <div class="meta-chips">
+              <span class="chip">Incoterm ${esc(req.incoterm)}</span>
+              <span class="chip">Currency ${esc(req.currency)}</span>
+              ${req.originPort ? `<span class="chip chip-origin">Origin: ${esc(req.originPort)}</span>` : ''}
+            </div>
+            <form id="credit-form" novalidate>
+              <h2 class="section-title">Items</h2>
+              <div id="credit-items">${itemsHtml}</div>
+              <div class="totals-card">
+                <div>
+                  <span class="label">Supplier total</span>
+                  <strong>${esc(formatMoney(totals.original))} ${esc(req.currency)}</strong>
+                </div>
+                <div>
+                  <span class="label">Your total</span>
+                  <strong data-total-partner>-</strong>
+                </div>
+                <div>
+                  <span class="label">Difference</span>
+                  <strong class="markup" data-total-markup>-</strong>
+                </div>
+              </div>
+              <h2 class="section-title">Your terms</h2>
+              <div class="form-grid">
+                <label>
+                  Payment terms (days)
+                  <input type="number" name="paymentTermsDays" min="0" max="720" step="1" inputmode="numeric" placeholder="e.g. 90" value="${esc(response && response.paymentTermsDays !== null && response.paymentTermsDays !== undefined ? response.paymentTermsDays : '')}"${dis} />
+                </label>
+                <label>
+                  Validity (days)
+                  <input type="number" name="validityDays" min="1" max="365" step="1" inputmode="numeric" placeholder="e.g. 30" value="${esc(response && response.validityDays !== null && response.validityDays !== undefined ? response.validityDays : '')}"${dis} />
+                </label>
+                <label class="full">
+                  Notes (optional)
+                  <textarea name="notes" maxlength="2000" rows="3" placeholder="Conditions, remarks or anything the buyer should know."${dis}>${esc(response && response.notes ? response.notes : '')}</textarea>
+                </label>
+              </div>
+              ${readOnly ? '' : `<div class="actions"><button type="submit" class="primary" id="credit-submit">${response ? 'Update response' : 'Submit response'}</button></div>`}
+            </form>
+          `;
+
+          const form = document.getElementById('credit-form');
+          form.addEventListener('input', recompute);
+          form.addEventListener('submit', submit);
+          recompute();
+
+          if (readOnly) {
+            setStatus('warn', 'This quote has been closed. Responses are no longer accepted.');
+          } else if (response) {
+            setStatus(
+              'info',
+              `You responded on ${formatDate(response.respondedAt)} (v${Number(response.version) || 0}). You can update your response until the link expires.`,
+            );
+          } else {
+            setStatus('', '');
+          }
+        }
+
+        function readUnitPrice(row) {
+          const input = row.querySelector('input[name="unitPrice"]');
+          const raw = input ? String(input.value).trim() : '';
+          if (raw === '') return NaN;
+          return Number(raw);
+        }
+
+        // Atualiza "Your total" e % por item e os totais gerais (so exibicao).
+        function recompute() {
+          const form = document.getElementById('credit-form');
+          if (!form || !state.data) return;
+          const currency = state.currency;
+          let sum = 0;
+          let priced = 0;
+          let available = 0;
+
+          form.querySelectorAll('.item-row').forEach((row) => {
+            if (row.classList.contains('is-unavailable')) return;
+            available += 1;
+            const totalEl = row.querySelector('[data-total]');
+            const markupEl = row.querySelector('[data-markup]');
+            const qty = Number(row.getAttribute('data-quantity'));
+            const original = Number(row.getAttribute('data-original-unit'));
+            const unit = readUnitPrice(row);
+            if (!Number.isFinite(unit) || unit <= 0) {
+              if (totalEl) totalEl.textContent = '-';
+              if (markupEl) {
+                markupEl.textContent = '-';
+                markupEl.className = 'markup';
+              }
+              return;
+            }
+            const unitR = round2(unit);
+            const total = round2(unitR * qty);
+            sum = round2(sum + total);
+            priced += 1;
+            if (totalEl) totalEl.textContent = `${formatMoney(total)} ${currency}`;
+            if (markupEl) {
+              const pct = markupOf(unitR, original);
+              markupEl.textContent = formatMarkup(pct);
+              markupEl.className = markupClass(pct);
+            }
+          });
+
+          const totalPartnerEl = form.querySelector('[data-total-partner]');
+          const totalMarkupEl = form.querySelector('[data-total-markup]');
+          if (priced === 0) {
+            if (totalPartnerEl) totalPartnerEl.textContent = '-';
+            if (totalMarkupEl) {
+              totalMarkupEl.textContent = '-';
+              totalMarkupEl.className = 'markup';
+            }
+            return;
+          }
+          if (totalPartnerEl) totalPartnerEl.textContent = `${formatMoney(sum)} ${currency}`;
+          if (totalMarkupEl) {
+            // % do total so faz sentido com todos os itens disponiveis precificados.
+            const pct = priced === available ? markupOf(sum, Number(state.data.totals.original)) : null;
+            totalMarkupEl.textContent = priced === available ? formatMarkup(pct) : '-';
+            totalMarkupEl.className = markupClass(pct);
+          }
+        }
+
+        // Validacao no cliente antes do POST: falha -> { error }, sem fetch.
+        function collectPayload(form) {
+          const items = [];
+          const rows = form.querySelectorAll('.item-row:not(.is-unavailable)');
+          for (const row of rows) {
+            const unit = readUnitPrice(row);
+            if (!Number.isFinite(unit) || unit <= 0 || round2(unit) <= 0) {
+              return { error: 'Please enter a unit price greater than zero for every available item.' };
+            }
+            items.push({ quoteRequestItemId: Number(row.getAttribute('data-item-id')), unitPrice: unit });
+          }
+          if (items.length === 0) {
+            return { error: 'There are no available items to price in this request.' };
+          }
+
+          const termsRaw = String(form.elements.namedItem('paymentTermsDays').value).trim();
+          const terms = Number(termsRaw);
+          if (termsRaw === '' || !Number.isInteger(terms) || terms < 0 || terms > 720) {
+            return { error: 'Payment terms must be a whole number of days between 0 and 720.' };
+          }
+          const validityRaw = String(form.elements.namedItem('validityDays').value).trim();
+          const validity = Number(validityRaw);
+          if (validityRaw === '' || !Number.isInteger(validity) || validity < 1 || validity > 365) {
+            return { error: 'Validity must be a whole number of days between 1 and 365.' };
+          }
+          const notes = String(form.elements.namedItem('notes').value).trim();
+          if (notes.length > 2000) {
+            return { error: 'Notes must be 2000 characters or fewer.' };
+          }
+
+          return {
+            payload: {
+              paymentTermsDays: terms,
+              validityDays: validity,
+              notes: notes === '' ? null : notes,
+              items,
+            },
+          };
+        }
+
+        async function submit(ev) {
+          ev.preventDefault();
+          const form = ev.currentTarget;
+          if (state.readOnly) return;
+          const button = form.querySelector('button[type="submit"]');
+
+          const collected = collectPayload(form);
+          if (collected.error) {
+            setStatus('error', collected.error);
+            scrollToTop();
+            return;
+          }
+
+          if (button) button.disabled = true;
+          setStatus('info', 'Submitting your response...');
+          const wasRevision = state.hadResponse;
+
+          let res;
+          try {
+            res = await fetch(`${apiBase}/credit-portal/${encodeURIComponent(token)}/respond`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(collected.payload),
+            });
+          } catch (networkErr) {
+            setStatus('error', 'Network error while submitting your response. Please check your connection and try again.');
+            if (button) button.disabled = false;
+            return;
+          }
+
+          let body = null;
+          try {
+            body = await res.json();
+          } catch (parseErr) {
+            body = null;
+          }
+
+          if (!res.ok) {
+            if (res.status === 409 && body && body.code === 'QUOTE_CLOSED') {
+              // Cotacao fechada entre o carregamento e o envio: recarrega (vira so leitura).
+              await load();
+              scrollToTop();
+              return;
+            }
+            setStatus('error', (body && body.message) || fallbackMessage(res.status));
+            if (button) button.disabled = false;
+            scrollToTop();
+            return;
+          }
+
+          await load();
+          const version = body && body.version !== undefined ? Number(body.version) : null;
+          setStatus(
+            'success',
+            wasRevision ? `Response updated (v${version === null ? '?' : version}). Thank you!` : 'Response submitted. Thank you!',
+          );
+          scrollToTop();
+        }
+
+        async function load() {
+          const url = `${apiBase}/credit-portal/${encodeURIComponent(token)}`;
+          let res;
+          try {
+            res = await fetch(url, { headers: { Accept: 'application/json' } });
+          } catch (networkErr) {
+            content.innerHTML = '';
+            setStatus('error', 'Network error while loading the request. Please check your connection and try again.');
+            return;
+          }
+
+          let body = null;
+          try {
+            body = await res.json();
+          } catch (parseErr) {
+            body = null;
+          }
+
+          if (!res.ok) {
+            content.innerHTML = '';
+            setStatus('error', (body && body.message) || fallbackMessage(res.status));
+            if (res.status === 404 && footer) {
+              footer.innerHTML =
+                '<strong>Need a new link?</strong> Links expire for security reasons. Please contact the SQ Quimica buyer who forwarded this request to receive a fresh one.';
+            }
+            return;
+          }
+
+          try {
+            render(body || {});
+          } catch (renderErr) {
+            content.innerHTML = '';
+            setStatus('error', 'Unable to display this request. Please reload the page.');
+          }
+        }
+
+        if (!token) {
+          content.innerHTML = '';
+          setStatus('error', 'Missing access token. Please use the link from the email.');
+          return;
+        }
+
+        load();
+      })();
+    </script>
+  </body>
+</html>
