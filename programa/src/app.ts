@@ -11,6 +11,7 @@ import {
 import { router } from './routes';
 import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
+import { creditPortalRoutes } from './routes/CreditPortalRoutes';
 import { exchangeRateRoutes } from './routes/ExchangeRateRoutes';
 import { requireAuthBeforeBody } from './middlewares/auth';
 import { traceIdMiddleware } from './middlewares/traceId';
@@ -101,6 +102,7 @@ app.use(
 // Limite global de payload para os demais endpoints (proteção genérica)
 app.use(express.json({ limit: '1mb' }));
 app.use(portalRoutes);
+app.use(creditPortalRoutes);
 app.use(exchangeRateRoutes);
 app.use(router);
 app.use(express.static(publicPath));
@@ -146,6 +148,12 @@ app.get('/portal', (_req, res) => {
   // preso a uma versao antiga do portal.html em cache.
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.join(publicPath, 'portal.html'));
+});
+
+// Portal publico do parceiro de credito (link do e-mail: /portal/credit?token=...).
+app.get('/portal/credit', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(publicPath, 'credit-portal.html'));
 });
 
 export { app };

@@ -369,4 +369,4 @@ portalRoutes.post('/api/portal/:token/respond', portalRateLimiter, async (req, r
   }
 });
 
-export { portalRoutes };
+export { portalRoutes, portalRateLimiter, getClientKey, isLocked, registerInvalidAttempt, getTokenFromRequest, getRequestMeta, portalErrorBody, portalFallbackMessage, PORTAL_INVALID_PAYLOAD_MESSAGE };
