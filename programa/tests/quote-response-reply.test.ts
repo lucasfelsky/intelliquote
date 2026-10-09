@@ -10,6 +10,7 @@ import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 import { sendAndLog } from '../src/mailer/MailerService';
 import { hashPassword } from '../src/utils/password';
+import { hashToken } from '../src/utils/tokens';
 
 const sendAndLogMock = sendAndLog as unknown as ReturnType<typeof vi.fn>;
 
@@ -48,7 +49,24 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
     },
+    supplierPortalToken: {
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    supplierPortalResponse: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    supplierPortalResponseRevision: {
+      updateMany: vi.fn(),
+    },
+    $transaction: vi.fn(),
   };
+  // Mesmo padrao de dispatch-controller.test.ts: a "transacao" roda o callback com o proprio mock.
+  prisma.$transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(prisma));
   return { prisma };
 });
 
@@ -62,7 +80,45 @@ const prismaMock = prisma as unknown as {
   companyProfile: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   emailTemplate: { findUnique: ReturnType<typeof vi.fn> };
   auditLog: { create: ReturnType<typeof vi.fn> };
+  supplierPortalToken: {
+    findFirst: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+  };
+  supplierPortalResponse: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
+  supplierPortalResponseRevision: { updateMany: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 };
+
+// Id do token NOVO criado em cada envio (mock de supplierPortalToken.create).
+const CREATED_TOKEN_ID = 501;
+
+// Defaults do portal: nenhum token ativo anterior; create devolve a linha com
+// o que foi gravado (tokenHash incluso); update ecoa o `data`.
+function resetPortalTokenMocks() {
+  // Sem SupplierPortalResponse existente: o previous vem do token ativo (findFirst).
+  prismaMock.supplierPortalResponse.findFirst.mockResolvedValue(null);
+  prismaMock.supplierPortalToken.findUnique.mockResolvedValue(null);
+  prismaMock.supplierPortalToken.findFirst.mockResolvedValue(null);
+  prismaMock.supplierPortalToken.updateMany.mockResolvedValue({ count: 0 });
+  prismaMock.supplierPortalToken.create.mockImplementation(({ data }) =>
+    Promise.resolve({
+      id: CREATED_TOKEN_ID,
+      ...data,
+      revokedAt: null,
+      respondedAt: null,
+      responseId: null,
+      createdAt: new Date(),
+    }),
+  );
+  prismaMock.supplierPortalToken.update.mockImplementation(({ where, data }) =>
+    Promise.resolve({ id: where.id, ...data }),
+  );
+  prismaMock.supplierPortalResponse.update.mockResolvedValue({});
+  prismaMock.supplierPortalResponseRevision.updateMany.mockResolvedValue({ count: 0 });
+}
 
 // O rate limit de /auth/login do app (20 tentativas por janela) estoura com tantos
 // testes neste arquivo: faz o login HTTP uma vez e reaproveita o cookie.
@@ -196,6 +252,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       companyName: 'SQ Quimica',
       dispatchCc: JSON.stringify(['cc1@sqquimica.com', 'cc2@sqquimica.com']),
     });
+    resetPortalTokenMocks();
   });
 
   afterEach(() => {
@@ -254,8 +311,9 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(call.html).not.toContain('Target Price');
     expect(call.html).not.toContain('TARGET PRICE');
     
-    expect(prismaMock.auditLog.create).toHaveBeenCalledTimes(1);
-    const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
+    // Token do portal gerado no envio (sem anterior = sem 'revoke') + auditoria do reply.
+    expect(prismaMock.auditLog.create.mock.calls.map((c) => c[0].data.action)).toEqual(['generate', 'reply']);
+    const auditArgs = prismaMock.auditLog.create.mock.calls[1][0];
     expect(auditArgs.data.action).toBe('reply');
     expect(auditArgs.data.entityType).toBe('quote_response');
   });
@@ -1135,6 +1193,268 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       expect(call.html).not.toContain('<!--CUSTOM_MESSAGE_SLOT-->');
       expect(call.text.split('Mensagem unica')).toHaveLength(2);
       expect(call.text).toContain('Unit Price\tTarget Price\tTotal');
+    });
+  });
+
+  describe('link do portal no e-mail de resposta', () => {
+    const contact = { id: 9, name: 'John Supplier', email: 'john@acme.com', isPrimary: true };
+    const future = new Date(Date.now() + 5 * 86_400_000);
+
+    async function setup(quoteResponse: unknown) {
+      const cookieHeader = await loginAsComprador();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(structuredClone(quoteResponse));
+      prismaMock.supplierContact.findFirst.mockResolvedValue(contact);
+      sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-p' });
+      return cookieHeader;
+    }
+
+    async function send(cookieHeader: string, id: number, body: Record<string, unknown> = {}) {
+      const res = await request(app)
+        .post(`/api/v1/quote-responses/${id}/reply`)
+        .set('Cookie', cookieHeader)
+        .send(body);
+      expect(res.status).toBe(200);
+      return sendAndLogMock.mock.calls[sendAndLogMock.mock.calls.length - 1][0];
+    }
+
+    // Token cru = o que esta na URL do e-mail (unico lugar onde ele pode aparecer).
+    function rawTokenFromHtml(html: string): string {
+      const match = html.match(/\/portal\?token=([A-Za-z0-9_-]+)&amp;v=\d+/);
+      expect(match).not.toBeNull();
+      return match![1];
+    }
+
+    function previousToken(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 400,
+        quoteRequestId: 5,
+        supplierId: 2,
+        supplierContactId: 9,
+        tokenHash: 'hash-antigo',
+        expiresAt: future,
+        revokedAt: null,
+        respondedAt: new Date('2026-10-01T10:00:00Z'),
+        responseId: 900,
+        dispatchEventId: 77,
+        createdById: 1,
+        ...overrides,
+      };
+    }
+
+    it('envio cria token novo (hash SHA-256 do token cru da URL) e o HTML/texto trazem o botao', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+
+      const call = await send(cookieHeader, 77);
+
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMock.supplierPortalToken.create).toHaveBeenCalledTimes(1);
+      const createData = prismaMock.supplierPortalToken.create.mock.calls[0][0].data;
+      expect(createData).toMatchObject({ quoteRequestId: 5, supplierId: 2, supplierContactId: 9, createdById: 1 });
+      // Padrao do portal: so' o hash vai pro banco; o cru so' existe na URL do e-mail.
+      const raw = rawTokenFromHtml(call.html);
+      expect(raw.length).toBeGreaterThanOrEqual(40);
+      expect(createData.tokenHash).toBe(hashToken(raw));
+      expect(call.html).toContain('Review or adjust your proposal');
+      expect(call.html).toContain('You can review or adjust your proposal using your secure link:');
+      expect(call.html).not.toContain('{{');
+      // Texto puro: URL crua (sem &amp;).
+      expect(call.text).toContain(`Review or adjust your proposal: `);
+      expect(call.text).toContain(`/portal?token=${raw}&v=`);
+      expect(call.text).not.toContain('&amp;');
+      expect(call.text.indexOf('Review or adjust your proposal')).toBeLessThan(call.text.indexOf('Best regards,'));
+    });
+
+    it('ZONA VERMELHA: token cru e portalLink nunca entram em templateVars nem na auditoria', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+
+      const call = await send(cookieHeader, 77);
+      const raw = rawTokenFromHtml(call.html);
+
+      const templateVarsJson = JSON.stringify(call.templateVars);
+      expect(templateVarsJson).not.toContain(raw);
+      expect(templateVarsJson).not.toContain('portalLink');
+      expect(call.templateVars.portalTokenId).toBe(CREATED_TOKEN_ID);
+
+      const auditJson = JSON.stringify(prismaMock.auditLog.create.mock.calls);
+      expect(auditJson).not.toContain(raw);
+      expect(auditJson).not.toContain('portalLink');
+      const generate = prismaMock.auditLog.create.mock.calls.find((c) => c[0].data.action === 'generate')![0].data;
+      expect(generate.entityType).toBe('supplier_portal_token');
+      expect(generate.entityId).toBe(String(CREATED_TOKEN_ID));
+      expect(generate.metadata).toEqual({ quoteRequestId: 5, replacesTokenId: null, movedResponseId: null });
+      const reply = prismaMock.auditLog.create.mock.calls.find((c) => c[0].data.action === 'reply')![0].data;
+      expect(reply.metadata).toMatchObject({ portalTokenId: CREATED_TOKEN_ID, replacedTokenId: null });
+    });
+
+    it('token anterior respondido: resposta e revisoes migram pro token novo e o antigo e revogado', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+      prismaMock.supplierPortalToken.findFirst.mockResolvedValue(previousToken());
+
+      await send(cookieHeader, 77);
+
+      // Revoga os ativos do destinatario e libera o responseId (@unique) do anterior ANTES do create.
+      expect(prismaMock.supplierPortalToken.updateMany).toHaveBeenCalledWith({
+        where: { quoteRequestId: 5, supplierContactId: 9, revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+      const updates = prismaMock.supplierPortalToken.update.mock.calls.map((c) => c[0]);
+      expect(updates[0]).toEqual({ where: { id: 400 }, data: { revokedAt: expect.any(Date), responseId: null } });
+      expect(prismaMock.supplierPortalToken.update.mock.invocationCallOrder[0]).toBeLessThan(
+        prismaMock.supplierPortalToken.create.mock.invocationCallOrder[0],
+      );
+      // Resposta + historico migram; o novo token herda responseId/respondedAt e o dispatchEventId.
+      expect(prismaMock.supplierPortalResponse.update).toHaveBeenCalledWith({
+        where: { id: 900 },
+        data: { portalTokenId: CREATED_TOKEN_ID },
+      });
+      expect(prismaMock.supplierPortalResponseRevision.updateMany).toHaveBeenCalledWith({
+        where: { portalTokenId: 400 },
+        data: { portalTokenId: CREATED_TOKEN_ID },
+      });
+      expect(updates[1]).toEqual({
+        where: { id: CREATED_TOKEN_ID },
+        data: { responseId: 900, respondedAt: new Date('2026-10-01T10:00:00Z') },
+      });
+      expect(prismaMock.supplierPortalToken.create.mock.calls[0][0].data.dispatchEventId).toBe(77);
+      // Validade = max(expiresAt anterior, agora + 14d) -> aqui 14d (anterior vence em 5d).
+      const expiresAt = prismaMock.supplierPortalToken.create.mock.calls[0][0].data.expiresAt as Date;
+      expect(expiresAt.getTime() - Date.now()).toBeGreaterThan(13.9 * 86_400_000);
+
+      const actions = prismaMock.auditLog.create.mock.calls.map((c) => c[0].data);
+      expect(actions.map((a) => a.action)).toEqual(['revoke', 'generate', 'reply']);
+      expect(actions[0]).toMatchObject({
+        entityType: 'supplier_portal_token',
+        entityId: '400',
+        metadata: { reason: 'reply', replacedById: CREATED_TOKEN_ID },
+      });
+      expect(actions[1].metadata).toEqual({ quoteRequestId: 5, replacesTokenId: 400, movedResponseId: 900 });
+      expect(actions[2].metadata).toMatchObject({ portalTokenId: CREATED_TOKEN_ID, replacedTokenId: 400 });
+    });
+
+    it('resposta presa num token REVOGADO (cotacao reenviada): o revogado e o previous e a resposta migra', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+      const revokedAt = new Date('2026-10-02T08:00:00Z');
+      prismaMock.supplierPortalResponse.findFirst.mockResolvedValue({ portalTokenId: 300 });
+      prismaMock.supplierPortalToken.findUnique.mockResolvedValue(previousToken({ id: 300, revokedAt }));
+      prismaMock.supplierPortalToken.findFirst.mockResolvedValue(previousToken({ id: 400, respondedAt: null, responseId: null }));
+
+      await send(cookieHeader, 77);
+
+      expect(prismaMock.supplierPortalToken.findUnique).toHaveBeenCalledWith({ where: { id: 300 } });
+      expect(prismaMock.supplierPortalToken.update.mock.calls[0][0]).toEqual({
+        where: { id: 300 },
+        data: { revokedAt, responseId: null },
+      });
+      expect(prismaMock.supplierPortalResponse.update).toHaveBeenCalledWith({
+        where: { id: 900 },
+        data: { portalTokenId: CREATED_TOKEN_ID },
+      });
+      const actions = prismaMock.auditLog.create.mock.calls.map((c) => c[0].data);
+      expect(actions[0]).toMatchObject({ action: 'revoke', entityId: '300', metadata: { reason: 'reply' } });
+      expect(actions[1].metadata).toEqual({ quoteRequestId: 5, replacesTokenId: 300, movedResponseId: 900 });
+    });
+
+    it('token anterior de OUTRO contato tambem e revogado e a resposta migra pro destinatario', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+      prismaMock.supplierPortalToken.findFirst.mockResolvedValue(previousToken({ supplierContactId: 10 }));
+
+      await send(cookieHeader, 77);
+
+      expect(prismaMock.supplierPortalToken.update.mock.calls[0][0]).toEqual({
+        where: { id: 400 },
+        data: { revokedAt: expect.any(Date), responseId: null },
+      });
+      expect(prismaMock.supplierPortalToken.create.mock.calls[0][0].data.supplierContactId).toBe(9);
+      expect(prismaMock.supplierPortalResponse.update).toHaveBeenCalledWith({
+        where: { id: 900 },
+        data: { portalTokenId: CREATED_TOKEN_ID },
+      });
+    });
+
+    it('sem token anterior: cria sem mover resposta nem revogar', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+
+      await send(cookieHeader, 77);
+
+      expect(prismaMock.supplierPortalToken.create).toHaveBeenCalledTimes(1);
+      expect(prismaMock.supplierPortalToken.update).not.toHaveBeenCalled();
+      expect(prismaMock.supplierPortalResponse.update).not.toHaveBeenCalled();
+      expect(prismaMock.supplierPortalResponseRevision.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.supplierPortalToken.create.mock.calls[0][0].data.dispatchEventId).toBeNull();
+      expect(prismaMock.auditLog.create.mock.calls.map((c) => c[0].data.action)).not.toContain('revoke');
+    });
+
+    it('cotacao fechada: nao emite token e o e-mail sai sem botao', async () => {
+      const cookieHeader = await setup({
+        ...pristineBaseQuoteResponse,
+        quoteRequest: { ...pristineBaseQuoteResponse.quoteRequest, status: 'closed' },
+      });
+
+      const call = await send(cookieHeader, 77);
+
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.supplierPortalToken.create).not.toHaveBeenCalled();
+      expect(call.html).not.toContain('/portal?token=');
+      expect(call.html).not.toContain('Review or adjust');
+      expect(call.html).not.toContain('{{');
+      expect(call.text).not.toContain('Review or adjust');
+      expect(call.templateVars.portalTokenId).toBeNull();
+      expect(prismaMock.auditLog.create.mock.calls.map((c) => c[0].data.action)).toEqual(['reply']);
+    });
+
+    it('preview nao toca em token e usa link ficticio', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/reply/preview')
+        .set('Cookie', cookieHeader)
+        .send({});
+
+      expect(res.status).toBe(200);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.supplierPortalToken.create).not.toHaveBeenCalled();
+      expect(prismaMock.supplierPortalToken.updateMany).not.toHaveBeenCalled();
+      expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+      expect(res.body.html).toContain('/portal/preview?token=PREVIEW&amp;v=');
+      expect(res.body.html).toContain('Review or adjust your proposal');
+      expect(res.body.text).toContain('/portal/preview?token=PREVIEW&v=');
+      expect(sendAndLogMock).not.toHaveBeenCalled();
+    });
+
+    it('template do banco sem {{portalLink}}: o botao e injetado antes de "Best regards" (uma vez)', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+      prismaMock.emailTemplate.findUnique.mockResolvedValue(
+        dbReplyTemplate({
+          htmlBody: '<html><body><p>Dear {{supplierContactName}},</p>{{message}}<table><thead>{{itemsHeaderRow}}</thead><tbody>{{itemsRows}}</tbody></table><p style="margin:0;">Best regards,</p></body></html>',
+          textBody: 'Dear {{supplierContactName}},\n\n{{messageText}}{{itemsTextTable}}\n\nBest regards,',
+        }),
+      );
+
+      const call = await send(cookieHeader, 77);
+      const raw = rawTokenFromHtml(call.html);
+
+      expect(call.html.split('Review or adjust your proposal</a>')).toHaveLength(2);
+      expect(call.html.indexOf('Review or adjust your proposal')).toBeGreaterThan(call.html.indexOf('</table>'));
+      expect(call.html.indexOf('Review or adjust your proposal')).toBeLessThan(call.html.indexOf('Best regards,'));
+      expect(call.html).not.toContain('{{');
+      expect(call.text).toContain(`Review or adjust your proposal: `);
+      expect(call.text).toContain(`token=${raw}&v=`);
+      expect(call.text.indexOf('Review or adjust')).toBeLessThan(call.text.indexOf('Best regards,'));
+    });
+
+    it('falha de SMTP devolve 502 com o token ja rotacionado (reenviar rotaciona de novo)', async () => {
+      const cookieHeader = await setup(pristineBaseQuoteResponse);
+      sendAndLogMock.mockResolvedValue({ status: 'failed', error: 'SMTP indisponivel' });
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/reply')
+        .set('Cookie', cookieHeader)
+        .send({});
+
+      expect(res.status).toBe(502);
+      expect(prismaMock.supplierPortalToken.create).toHaveBeenCalledTimes(1);
+      const reply = prismaMock.auditLog.create.mock.calls.find((c) => c[0].data.action === 'reply')![0].data;
+      expect(reply.metadata).toMatchObject({ status: 'failed', portalTokenId: CREATED_TOKEN_ID });
     });
   });
 });

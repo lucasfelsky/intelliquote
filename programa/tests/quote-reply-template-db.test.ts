@@ -60,6 +60,9 @@ const LEGACY_TEXT = 'Dear {{supplierContactName}},\n\n{{introText}}\n\n{{itemsTe
 
 // Id de cotacao que nao colide com nada (MailLog nao tem FK: relatedEntityId e' texto).
 const DISPATCH_QUOTE_ID = '987654321';
+const ROTATE_SUPPLIER_NAME = 'Fornecedor Teste Rotate Reply';
+const ROTATE_REQUEST_CODE = 'QR-TEST-ROTATE-REPLY';
+const RESEND_REQUEST_CODE = 'QR-TEST-ROTATE-RESEND';
 
 function count(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
@@ -98,6 +101,9 @@ describe.skipIf(!run)('Migration do template quote_reply (mensagem + coluna Targ
       await prisma.emailTemplate.deleteMany({ where: { key: 'quote_reply', locale: 'zz' } });
       await prisma.mailLog.deleteMany({ where: { relatedEntityType: 'quote_request', relatedEntityId: DISPATCH_QUOTE_ID } });
       await prisma.supplier.deleteMany({ where: { name: 'Fornecedor Teste Assunto Dispatch' } });
+      await prisma.quoteRequest.deleteMany({ where: { requestCode: { in: [ROTATE_REQUEST_CODE, RESEND_REQUEST_CODE] } } });
+      await prisma.supplier.deleteMany({ where: { name: ROTATE_SUPPLIER_NAME } });
+      await prisma.user.deleteMany({ where: { email: 'rotate-reply@intelliquote.local' } });
     }
     await prisma?.$disconnect();
   });
@@ -256,5 +262,224 @@ describe.skipIf(!run)('Migration do template quote_reply (mensagem + coluna Targ
     });
     const byEmail = await (QuoteResponseController as any).findDispatchSubjectForSupplier(Number(DISPATCH_QUOTE_ID), supplier.id);
     expect(byEmail).toBe('Assunto por e-mail');
+  });
+
+  describe('rotateTokenForReply (DB real)', () => {
+    it('move a resposta e o historico pro token novo, revoga o antigo e respeita as constraints unicas', async () => {
+      const { SupplierPortalService } = await import('../src/services/SupplierPortalService');
+      const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
+
+      const role = await prisma.role.upsert({ where: { name: 'admin' }, update: {}, create: { name: 'admin' } });
+      const user = await prisma.user.create({
+        data: { name: 'Rotate Reply', email: 'rotate-reply@intelliquote.local', passwordHash: 'x', roleId: role.id },
+      });
+      const supplier = await prisma.supplier.create({
+        data: {
+          name: ROTATE_SUPPLIER_NAME,
+          contacts: {
+            create: [
+              { name: 'Principal', email: 'principal@rotate-reply.test', isPrimary: true },
+              { name: 'Secundario', email: 'secundario@rotate-reply.test' },
+            ],
+          },
+        },
+        include: { contacts: true },
+      });
+      const [primary, secondary] = supplier.contacts;
+      const quoteRequest = await prisma.quoteRequest.create({
+        data: {
+          requestCode: ROTATE_REQUEST_CODE,
+          productName: 'Produto Rotate',
+          quantity: 10,
+          desiredIncoterm: ['CIF'],
+          currency: 'USD',
+          createdById: user.id,
+          items: { create: [{ productName: 'Item Rotate', quantity: 10, unit: 'KG' }] },
+        },
+        include: { items: true },
+      });
+
+      // Token ORIGINAL (contato secundario) com resposta + 1 revisao, como o portal deixaria.
+      const original = (await SupplierPortalService.createToken({
+        quoteRequestId: quoteRequest.id,
+        supplierId: supplier.id,
+        supplierContactId: secondary.id,
+        createdById: user.id,
+        ttlDays: 3,
+      })) as { id: number; rawToken: string; expiresAt: Date };
+      const respondedAt = new Date('2026-10-01T10:00:00Z');
+      const response = await prisma.supplierPortalResponse.create({
+        data: {
+          portalTokenId: original.id,
+          quoteRequestId: quoteRequest.id,
+          supplierId: supplier.id,
+          supplierContactId: secondary.id,
+          incoterm: 'CIF',
+          totalPrice: 100,
+          version: 2,
+          submittedAt: respondedAt,
+          items: { create: [{ quoteRequestItemId: quoteRequest.items[0].id, unitPrice: 10, quantity: 10, totalPrice: 100 }] },
+        },
+      });
+      await prisma.supplierPortalResponseRevision.create({
+        data: {
+          portalTokenId: original.id,
+          version: 1,
+          currency: 'USD',
+          incoterm: 'CIF',
+          paymentTermsDays: 30,
+          totalPrice: 120,
+          totalPriceCurrency: 'USD',
+          validityDays: 30,
+          items: [],
+          submittedAt: new Date('2026-09-30T10:00:00Z'),
+        },
+      });
+      await prisma.supplierPortalToken.update({
+        where: { id: original.id },
+        data: { responseId: response.id, respondedAt },
+      });
+
+      const rotated = await SupplierPortalService.rotateTokenForReply({
+        quoteRequestId: quoteRequest.id,
+        supplierId: supplier.id,
+        supplierContactId: primary.id,
+        createdById: user.id,
+      });
+
+      expect(rotated.previous?.id).toBe(original.id);
+      expect(rotated.created.id).not.toBe(original.id);
+      expect(rotated.created.supplierContactId).toBe(primary.id);
+      expect(rotated.created.responseId).toBe(response.id);
+      expect(rotated.created.respondedAt).toEqual(respondedAt);
+      // max(expiresAt do anterior = 3d, agora + 14d) = ~14d
+      expect(rotated.created.expiresAt.getTime()).toBeGreaterThan(Date.now() + 13.9 * 86_400_000);
+
+      // Resposta e historico no token novo; token antigo revogado e sem resposta.
+      const moved = await SupplierPortalResponseService.getByTokenId(rotated.created.id);
+      expect(moved?.id).toBe(response.id);
+      expect(await SupplierPortalResponseService.getByTokenId(original.id)).toBeNull();
+      expect(await SupplierPortalResponseService.getHistoryByTokenId(rotated.created.id)).toHaveLength(1);
+      expect(await SupplierPortalResponseService.getHistoryByTokenId(original.id)).toHaveLength(0);
+      const previousRow = await prisma.supplierPortalToken.findUnique({ where: { id: original.id } });
+      expect(previousRow?.revokedAt).not.toBeNull();
+      expect(previousRow?.responseId).toBeNull();
+
+      // Link antigo morreu (revoked); o novo abre a proposta ja respondida.
+      await expect(SupplierPortalService.validate({ rawToken: original.rawToken })).rejects.toMatchObject({ status: 404 });
+      const invalidLog = await prisma.supplierPortalTokenLog.findFirst({
+        where: { tokenId: original.id, kind: 'INVALID' },
+        orderBy: { id: 'desc' },
+      });
+      expect(invalidLog?.meta).toEqual({ reason: 'revoked' });
+      const validated = await SupplierPortalService.validate({ rawToken: rotated.rawToken });
+      expect(validated.alreadyResponded).toBe(true);
+      expect(validated.token.id).toBe(rotated.created.id);
+
+      // Rotacionar de novo (mesmo contato) tambem respeita responseId @unique / portalTokenId @unique.
+      const again = await SupplierPortalService.rotateTokenForReply({
+        quoteRequestId: quoteRequest.id,
+        supplierId: supplier.id,
+        supplierContactId: primary.id,
+        createdById: user.id,
+      });
+      expect(again.previous?.id).toBe(rotated.created.id);
+      expect(again.created.responseId).toBe(response.id);
+      expect((await SupplierPortalResponseService.getByTokenId(again.created.id))?.id).toBe(response.id);
+      expect(await SupplierPortalResponseService.getHistoryByTokenId(again.created.id)).toHaveLength(1);
+      await expect(SupplierPortalService.validate({ rawToken: rotated.rawToken })).rejects.toMatchObject({ status: 404 });
+    });
+
+    // Caso do review: fornecedor respondeu pelo token A, a cotacao foi REENVIADA
+    // (dispatch revoga A e cria B, sem resposta). A resposta continua presa em A
+    // (revogado); o reply tem que leva-la pro token novo, nao abrir vazio.
+    it('resposta num token revogado por reenvio migra pro token novo (sem 2a resposta)', async () => {
+      const { SupplierPortalService } = await import('../src/services/SupplierPortalService');
+      const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
+
+      const role = await prisma.role.upsert({ where: { name: 'admin' }, update: {}, create: { name: 'admin' } });
+      const user = await prisma.user.upsert({
+        where: { email: 'rotate-reply@intelliquote.local' },
+        update: {},
+        create: { name: 'Rotate Reply', email: 'rotate-reply@intelliquote.local', passwordHash: 'x', roleId: role.id },
+      });
+      const supplier = await prisma.supplier.create({
+        data: {
+          name: ROTATE_SUPPLIER_NAME,
+          contacts: { create: [{ name: 'Principal', email: 'principal2@rotate-reply.test', isPrimary: true }] },
+        },
+        include: { contacts: true },
+      });
+      const [primary] = supplier.contacts;
+      const quoteRequest = await prisma.quoteRequest.create({
+        data: {
+          requestCode: RESEND_REQUEST_CODE,
+          productName: 'Produto Resend',
+          quantity: 10,
+          desiredIncoterm: ['CIF'],
+          currency: 'USD',
+          createdById: user.id,
+          items: { create: [{ productName: 'Item Resend', quantity: 10, unit: 'KG' }] },
+        },
+        include: { items: true },
+      });
+      const pair = { quoteRequestId: quoteRequest.id, supplierId: supplier.id };
+
+      // Token A + resposta do fornecedor.
+      const tokenA = (await SupplierPortalService.createToken({
+        ...pair,
+        supplierContactId: primary.id,
+        createdById: user.id,
+      })) as { id: number; rawToken: string };
+      const respondedAt = new Date('2026-10-03T09:00:00Z');
+      const response = await prisma.supplierPortalResponse.create({
+        data: {
+          portalTokenId: tokenA.id,
+          ...pair,
+          supplierContactId: primary.id,
+          incoterm: 'CIF',
+          totalPrice: 100,
+          submittedAt: respondedAt,
+          items: { create: [{ quoteRequestItemId: quoteRequest.items[0].id, unitPrice: 10, quantity: 10, totalPrice: 100 }] },
+        },
+      });
+      await prisma.supplierPortalToken.update({ where: { id: tokenA.id }, data: { responseId: response.id, respondedAt } });
+
+      // Reenvio (mesmo caminho do dispatch): revoga A, cria B vazio.
+      await SupplierPortalService.revokeTokensForContact({ quoteRequestId: quoteRequest.id, supplierContactId: primary.id });
+      const tokenB = (await SupplierPortalService.createToken({
+        ...pair,
+        supplierContactId: primary.id,
+        createdById: user.id,
+      })) as { id: number; rawToken: string };
+      const revokedA = await prisma.supplierPortalToken.findUnique({ where: { id: tokenA.id } });
+      expect(revokedA?.revokedAt).not.toBeNull();
+      expect(revokedA?.responseId).toBe(response.id);
+
+      const rotated = await SupplierPortalService.rotateTokenForReply({
+        ...pair,
+        supplierContactId: primary.id,
+        createdById: user.id,
+      });
+
+      // previous = A (revogado, dono da resposta), nao B (ativo, vazio).
+      expect(rotated.previous?.id).toBe(tokenA.id);
+      expect(rotated.created.responseId).toBe(response.id);
+      expect(rotated.created.respondedAt).toEqual(respondedAt);
+      const movedResponse = await prisma.supplierPortalResponse.findUnique({ where: { id: response.id } });
+      expect(movedResponse?.portalTokenId).toBe(rotated.created.id);
+      expect((await SupplierPortalResponseService.getByTokenId(rotated.created.id))?.id).toBe(response.id);
+      const validated = await SupplierPortalService.validate({ rawToken: rotated.rawToken });
+      expect(validated.alreadyResponded).toBe(true);
+      // Uma unica resposta para o par (cotacao, fornecedor); A mantem o revokedAt original; B revogado.
+      expect(await prisma.supplierPortalResponse.count({ where: { ...pair, deletedAt: null } })).toBe(1);
+      const afterA = await prisma.supplierPortalToken.findUnique({ where: { id: tokenA.id } });
+      expect(afterA?.revokedAt).toEqual(revokedA?.revokedAt);
+      expect(afterA?.responseId).toBeNull();
+      const afterB = await prisma.supplierPortalToken.findUnique({ where: { id: tokenB.id } });
+      expect(afterB?.revokedAt).not.toBeNull();
+      await expect(SupplierPortalService.validate({ rawToken: tokenA.rawToken })).rejects.toMatchObject({ status: 404 });
+      await expect(SupplierPortalService.validate({ rawToken: tokenB.rawToken })).rejects.toMatchObject({ status: 404 });
+    });
   });
 });
