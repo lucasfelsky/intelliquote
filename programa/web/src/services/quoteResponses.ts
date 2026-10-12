@@ -154,6 +154,27 @@ export interface ComparisonResult {
   originPort?: string | null;
   itemOrigins?: ItemOrigin[];
   dgItems?: DangerousGoodItem[];
+  // Quantidade divergente (todos os itens presentes): o preco do ranking ja e o unitario
+  // cotado x quantidade PEDIDA. Ausente (historico persistido) -> undefined.
+  quantityAdjusted?: boolean;
+  quantityMismatches?: QuantityMismatchInfo[];
+}
+
+export interface QuantityMismatchInfo {
+  quoteRequestItemId: number;
+  productName: string;
+  requested: number;
+  offered: number;
+}
+
+function normalizeQuantityMismatches(raw: unknown): QuantityMismatchInfo[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry: any) => ({
+    quoteRequestItemId: asNumber(entry?.quoteRequestItemId),
+    productName: String(entry?.productName ?? ''),
+    requested: asNumber(entry?.requested),
+    offered: asNumber(entry?.offered),
+  }));
 }
 
 export interface ComparisonRecord {
@@ -388,6 +409,10 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
           productName: typeof entry?.productName === 'string' ? entry.productName : '',
         }))
       : undefined,
+    quantityAdjusted: obj.quantityAdjusted === undefined ? undefined : Boolean(obj.quantityAdjusted),
+    quantityMismatches: obj.quantityMismatches === undefined
+      ? undefined
+      : normalizeQuantityMismatches(obj.quantityMismatches),
   };
 }
 
@@ -445,13 +470,34 @@ export async function deleteQuoteResponse(id: number): Promise<void> {
   await api.del<void>(`/v1/quote-responses/${id}`);
 }
 
-// Proposta que ficou FORA do ranking porque o fornecedor marcou item(ns) como
-// temporariamente indisponivel(is).
+// Proposta que ficou FORA do ranking: item(ns) temporariamente indisponivel(is)
+// ('unavailable') ou proposta parcial ('partial': item faltando, item que nao pertence
+// mais a cotacao ou duplicado). Backend antigo sem `reason` -> 'unavailable'.
+export interface ExcludedItemRef {
+  quoteRequestItemId: number;
+  productName: string;
+}
+
 export interface ExcludedComparisonResponse {
   quoteResponseId: number;
   supplierId: number;
   supplier: { id: number; name: string };
-  unavailableItems: { quoteRequestItemId: number; productName: string }[];
+  reason: 'unavailable' | 'partial';
+  unavailableItems: ExcludedItemRef[];
+  partial?: {
+    missingItems: ExcludedItemRef[];
+    quantityMismatches: QuantityMismatchInfo[];
+    extraItems: ExcludedItemRef[];
+    duplicateItems: ExcludedItemRef[];
+  };
+}
+
+function normalizeItemRefs(raw: unknown): ExcludedItemRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item: any) => ({
+    quoteRequestItemId: asNumber(item?.quoteRequestItemId),
+    productName: String(item?.productName ?? ''),
+  }));
 }
 
 function normalizeExcluded(raw: unknown): ExcludedComparisonResponse[] {
@@ -463,12 +509,16 @@ function normalizeExcluded(raw: unknown): ExcludedComparisonResponse[] {
       id: asNumber(entry?.supplier?.id ?? entry?.supplierId),
       name: String(entry?.supplier?.name ?? ''),
     },
-    unavailableItems: Array.isArray(entry?.unavailableItems)
-      ? entry.unavailableItems.map((item: any) => ({
-          quoteRequestItemId: asNumber(item?.quoteRequestItemId),
-          productName: String(item?.productName ?? ''),
-        }))
-      : [],
+    reason: entry?.reason === 'partial' ? 'partial' : 'unavailable',
+    unavailableItems: normalizeItemRefs(entry?.unavailableItems),
+    partial: entry?.partial && typeof entry.partial === 'object'
+      ? {
+          missingItems: normalizeItemRefs(entry.partial.missingItems),
+          quantityMismatches: normalizeQuantityMismatches(entry.partial.quantityMismatches),
+          extraItems: normalizeItemRefs(entry.partial.extraItems),
+          duplicateItems: normalizeItemRefs(entry.partial.duplicateItems),
+        }
+      : undefined,
   }));
 }
 
