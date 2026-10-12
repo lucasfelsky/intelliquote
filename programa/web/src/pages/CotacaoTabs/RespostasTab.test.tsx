@@ -1,10 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { RespostasTab } from './RespostasTab';
 
+let mockRole = 'admin';
 vi.mock('@/auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: 'admin' } }),
+  useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: mockRole } }),
+}));
+vi.mock('@/services/creditSupport', () => ({
+  listCreditSupport: vi.fn(async () => []),
+  previewCreditSupport: vi.fn(),
+  forwardCreditSupport: vi.fn(),
+  revokeCreditSupport: vi.fn(),
+  resendCreditSupport: vi.fn(),
+  creditSupportQueryKey: (id: number) => ['credit-support', id],
+  STATUS_LABELS: { sent: 'Enviado', responded: 'Respondido', expired: 'Expirado', revoked: 'Revogado' },
+}));
+vi.mock('@/services/creditPartners', () => ({
+  listCreditPartners: vi.fn(async () => []),
 }));
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => async () => true }));
 vi.mock('@/api/client', () => ({
@@ -66,18 +80,20 @@ const multiItemResponse = {
   ],
 };
 
-function renderTab() {
+function renderTab(quoteRequestStatus: 'open' | 'closed' = 'open') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={qc}>
-      <RespostasTab
-        quoteRequestId={99}
-        quoteRequestStatus="open"
-        quoteRequestCurrency="USD"
-        productName="Produto X"
-        requestCode="RFQ-001"
-      />
-    </QueryClientProvider>
+    <MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <RespostasTab
+          quoteRequestId={99}
+          quoteRequestStatus={quoteRequestStatus}
+          quoteRequestCurrency="USD"
+          productName="Produto X"
+          requestCode="RFQ-001"
+        />
+      </QueryClientProvider>
+    </MemoryRouter>
   );
 }
 
@@ -95,6 +111,7 @@ describe('RespostasTab', () => {
     vi.mocked(replyToQuoteResponse).mockReset();
     vi.mocked(getTargetPriceHistory).mockReset();
     vi.mocked(api.get).mockReset();
+    mockRole = 'admin';
 
     vi.mocked(listQuoteResponses).mockResolvedValue([response]);
     vi.mocked(api.get).mockResolvedValue([{ id: 7, name: 'ACME Ltda', status: 'active', country: 'BR' }]);
@@ -515,6 +532,64 @@ describe('RespostasTab', () => {
       expect(actual.isOriginOverride('Ningbo', null)).toBe(true);
       expect(actual.effectiveOriginPort(null, 'Shanghai')).toBe('Shanghai');
       expect(actual.effectiveOriginPort(' Ningbo ', 'Shanghai')).toBe('Ningbo');
+    });
+  });
+
+  describe('Credit Support (botao + modal condicional)', () => {
+    it('CS-a. admin + cotacao aberta: botao "Credit Support" na linha da resposta (habilitado com item disponivel)', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([multiItemResponse]);
+      const { findByText, getByRole, container } = renderTab();
+      await findByText('ACME Ltda');
+      const button = getByRole('button', { name: 'Credit Support' }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+      // Fechado: apenas os 3 dialogs de sempre (modal novo nao montado).
+      expect(container.querySelectorAll('dialog').length).toBe(3);
+    });
+
+    it('CS-b. cotacao fechada: botao ausente', async () => {
+      const { findByText, queryByRole } = renderTab('closed');
+      await findByText('ACME Ltda');
+      expect(queryByRole('button', { name: 'Credit Support' })).toBeNull();
+    });
+
+    it('CS-c. viewer: botao ausente', async () => {
+      mockRole = 'viewer';
+      const { findByText, queryByRole } = renderTab();
+      await findByText('ACME Ltda');
+      expect(queryByRole('button', { name: 'Credit Support' })).toBeNull();
+    });
+
+    it('CS-d. clicar abre o modal (4o dialog apenas enquanto aberto) com o titulo do fornecedor', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([multiItemResponse]);
+      const { findByText, findByRole, getByRole, container } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'Credit Support' }));
+      expect(await findByRole('heading', { name: 'Credit Support — ACME Ltda' })).toBeTruthy();
+      const dialogs = container.querySelectorAll('dialog');
+      expect(dialogs.length).toBe(4);
+      fireEvent.click(within(dialogs[3] as HTMLElement).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+    });
+
+    it('CS-e. resposta sem item disponivel (legada ou tudo indisponivel): botao desabilitado', async () => {
+      vi.mocked(listQuoteResponses).mockResolvedValue([
+        {
+          ...response,
+          id: 46,
+          items: [
+            {
+              id: 701, quoteResponseId: 46, quoteRequestItemId: 5,
+              unitPrice: 0, quantity: 0, totalPrice: 0, leadTimeDays: null,
+              notes: null, productName: 'Resina Epóxi', targetPrice: null, isUnavailable: true,
+            },
+          ],
+        },
+      ]);
+      const { findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      const button = getByRole('button', { name: 'Credit Support' }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Resposta sem itens disponíveis');
     });
   });
 });

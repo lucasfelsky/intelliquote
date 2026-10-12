@@ -22,6 +22,8 @@ import {
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
 import { Modal } from '@/components/Modal';
+import { CreditSupportModal } from './CreditSupportModal';
+import { CreditSupportPanel } from './CreditSupportPanel';
 
 interface SupplierSummary {
   id: number;
@@ -131,6 +133,7 @@ export function RespostasTab({
 
   // Modal de itens (pop-up ao clicar no fornecedor)
   const [itemsTarget, setItemsTarget] = useState<QuoteResponse | null>(null);
+  const [creditTarget, setCreditTarget] = useState<QuoteResponse | null>(null); // modal montado so' quando aberto
 
   const responsesQuery = useQuery({
     queryKey: ['quote-responses'],
@@ -495,6 +498,13 @@ export function RespostasTab({
                         Responder
                       </button>
                       {canEditThis && (
+                        <button type="button" className="ghost-button" onClick={() => setCreditTarget(r)}
+                          disabled={!(r.items ?? []).some((item) => !item.isUnavailable)}
+                          title={(r.items ?? []).some((item) => !item.isUnavailable) ? 'Encaminhar ao parceiro de crédito' : 'Resposta sem itens disponíveis'}>
+                          Credit Support
+                        </button>
+                      )}
+                      {canEditThis && (
                         <button
                           type="button"
                           className="ghost-button"
@@ -517,6 +527,8 @@ export function RespostasTab({
         </table>
         </div>
       )}
+
+      <CreditSupportPanel quoteRequestId={quoteRequestId} responses={responses} />
 
       {/* MODAL DE NOVA RESPOSTA */}
       <Modal
@@ -985,6 +997,10 @@ export function RespostasTab({
           );
         })()}
       </Modal>
+
+      {creditTarget && (
+        <CreditSupportModal response={creditTarget} quoteRequestId={quoteRequestId} requestCode={requestCode} onClose={() => setCreditTarget(null)} />
+      )}
     </div>
   );
 }
