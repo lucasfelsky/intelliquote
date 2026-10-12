@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
-import { classifyForComparison, priceForComparison } from '../utils/quoteBasket';
+import {
+  classifyForComparison,
+  describePartialBasket,
+  isInconsistentBasket,
+  priceAtRequestedQuantity,
+} from '../utils/quoteBasket';
 import { buildDangerousGoodItems } from '../utils/dangerousGoods';
 import { buildItemOrigins, normalizeItemOriginPort } from '../utils/originPort';
 import { prisma } from '../lib/prisma';
@@ -1308,7 +1313,7 @@ export class QuoteResponseController {
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
         where: { id: quoteRequestId, deletedAt: null },
-        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
+        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true, productName: true } } },
       });
 
       if (!quoteRequest) {
@@ -1366,15 +1371,18 @@ export class QuoteResponseController {
         });
       }
 
-      // Propostas com item "Temporarily unavailable" ficam FORA do ranking (nao entram
-      // no compareResponses nem no min(offeredPrice)); a formula do score nao muda.
+      // Propostas com item "Temporarily unavailable" ou parciais (item faltando, extra ou
+      // duplicado) ficam FORA do ranking (nao entram no compareResponses nem no
+      // min(offeredPrice)); a formula do score nao muda. Quantidade divergente ENTRA com o
+      // unitario cotado x quantidade pedida (sinalizada).
       const { complete, excluded } = partitionForComparison(quoteRequest.items ?? [], responses);
 
       if (complete.length < 2) {
         return res.status(400).json({
-          message: `Sao necessarias pelo menos duas propostas completas para comparar (${excluded.length} com item temporariamente indisponivel ficaram fora do ranking).`,
+          message: `Sao necessarias pelo menos duas propostas completas para comparar (${excluded.length} ficaram fora do ranking: item indisponivel ou proposta parcial).`,
         });
       }
+      const adjustmentById = new Map(complete.map((entry) => [entry.response.id, entry]));
 
       const supplierIds = Array.from(new Set(complete.map(({ response }) => response.supplierId)));
       const reviews = await prisma.supplierReview.groupBy({
@@ -1546,6 +1554,9 @@ export class QuoteResponseController {
           itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
           // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
           dgItems: buildDangerousGoodItems(sourceResponse?.items),
+          // Quantidade divergente: o preco do ranking ja e unitario x quantidade pedida.
+          quantityAdjusted: adjustmentById.get(result.id)?.quantityAdjusted ?? false,
+          quantityMismatches: adjustmentById.get(result.id)?.quantityMismatches ?? [],
         };
       });
 
@@ -1586,7 +1597,7 @@ export class QuoteResponseController {
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
         where: { id: quoteRequestId, deletedAt: null },
-        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
+        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true, productName: true } } },
       });
 
       if (!quoteRequest) {
@@ -1644,8 +1655,9 @@ export class QuoteResponseController {
         });
       }
 
-      // Mesma particao do compare: proposta com item indisponivel fica fora do ranking.
+      // Mesma particao do compare: proposta com item indisponivel ou parcial fica fora do ranking.
       const { complete, excluded } = partitionForComparison(quoteRequest.items ?? [], responses);
+      const adjustmentById = new Map(complete.map((entry) => [entry.response.id, entry]));
 
       if (complete.length === 0) {
         return res.status(200).json({
@@ -1739,6 +1751,9 @@ export class QuoteResponseController {
           itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
           // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
           dgItems: buildDangerousGoodItems(sourceResponse?.items),
+          // Quantidade divergente: o preco do ranking ja e unitario x quantidade pedida.
+          quantityAdjusted: adjustmentById.get(result.id)?.quantityAdjusted ?? false,
+          quantityMismatches: adjustmentById.get(result.id)?.quantityMismatches ?? [],
         };
       });
 
@@ -1888,16 +1903,41 @@ export class QuoteResponseController {
         });
       }
 
-      // O fornecedor pode ter revisado a proposta (portal/API) depois da comparacao e marcado item
-      // indisponivel: ela saiu do ranking e nao pode ser aprovada como vencedora.
+      // O fornecedor pode ter revisado a proposta (portal/API) depois da comparacao: item
+      // indisponivel ou cesta inconsistente (item extra/duplicado) nao pode ser aprovada como
+      // vencedora. Quantidade divergente e item faltando continuam aprovaveis (decisao 2026-10-12).
+      const awardQuoteRequest = await prisma.quoteRequest.findUnique({
+        where: { id: quoteRequestId, deletedAt: null },
+        select: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
+      });
       const winnerResponse = await prisma.quoteResponse.findFirst({
         where: { id: comparison.winnerQuoteResponseId, quoteRequestId, deletedAt: null },
-        select: { items: { where: { deletedAt: null }, select: { isUnavailable: true } } },
+        select: {
+          id: true,
+          offeredPrice: true,
+          items: {
+            where: { deletedAt: null },
+            select: { quoteRequestItemId: true, quantity: true, unitPrice: true, isUnavailable: true },
+          },
+        },
       });
-      if (winnerResponse?.items?.some((item) => item.isUnavailable)) {
-        return res.status(409).json({
-          message: 'A proposta vencedora mudou (itens indisponíveis). Refaça a comparação antes de aprovar.',
-        });
+      if (winnerResponse) {
+        const classification = classifyForComparison(awardQuoteRequest?.items ?? [], winnerResponse);
+        // Qualquer item indisponivel barra a aprovacao (inclusive quando a cesta tambem tem
+        // item faltando e a classificacao e 'partial').
+        if (
+          classification.kind === 'unavailable' ||
+          (classification.kind === 'partial' && classification.unavailableItemIds.length > 0)
+        ) {
+          return res.status(409).json({
+            message: 'A proposta vencedora mudou (itens indisponíveis). Refaça a comparação antes de aprovar.',
+          });
+        }
+        if (classification.kind === 'partial' && isInconsistentBasket(classification.details)) {
+          return res.status(409).json({
+            message: 'A proposta vencedora mudou (itens que não pertencem mais à cotação ou duplicados). Refaça a comparação antes de aprovar.',
+          });
+        }
       }
 
       await prisma.$transaction(async (tx) => {
@@ -1977,7 +2017,7 @@ export class QuoteResponseController {
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
         where: { id: quoteRequestId, deletedAt: null },
-        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
+        include: { items: { where: { deletedAt: null }, select: { id: true, quantity: true, productName: true } } },
       });
 
       if (!quoteRequest) {
@@ -1986,7 +2026,12 @@ export class QuoteResponseController {
 
       const chosenResponse = await prisma.quoteResponse.findFirst({
         where: { id: quoteResponseId, quoteRequestId, deletedAt: null },
-        include: { items: { where: { deletedAt: null } } },
+        include: {
+          items: {
+            where: { deletedAt: null },
+            include: { quoteRequestItem: { select: { productName: true } } },
+          },
+        },
       });
 
       if (!chosenResponse) {
@@ -1995,18 +2040,47 @@ export class QuoteResponseController {
         });
       }
 
+      const requestedItems = quoteRequest.items ?? [];
+      const chosenItems = chosenResponse.items ?? [];
       // Proposta com item "Temporarily unavailable" fica fora do ranking e nao pode vencer.
-      if ((chosenResponse.items ?? []).some((item) => item.isUnavailable)) {
+      if (chosenItems.some((item) => item.isUnavailable)) {
         throw new HttpError(
           400,
           'Proposta com item temporariamente indisponivel nao pode ser escolhida como vencedora.',
         );
       }
 
+      // Decisao 2026-10-12: quantidade divergente (ranking usa unitario x pedido) e item
+      // faltando PODEM ser escolhidas manualmente; item extra/duplicado (dado inconsistente) nao.
+      const classification = classifyForComparison(requestedItems, chosenResponse);
+      let comparablePrice: number;
+      if (classification.kind === 'partial') {
+        if (isInconsistentBasket(classification.details)) {
+          const requestedNames = new Map(requestedItems.map((item) => [item.id, item.productName]));
+          const responseNames = new Map(
+            chosenItems.map((item) => [item.quoteRequestItemId, item.quoteRequestItem?.productName]),
+          );
+          const nameOf = (id: number) => requestedNames.get(id) ?? responseNames.get(id) ?? `#${id}`;
+          throw new HttpError(
+            400,
+            `Proposta com itens inconsistentes nao pode ser escolhida como vencedora: ${describePartialBasket(classification.details, nameOf)}.`,
+          );
+        }
+        comparablePrice = priceAtRequestedQuantity(requestedItems, chosenItems);
+      } else if (classification.kind === 'unavailable') {
+        // Inalcancavel (ja tratado acima); mantido para o narrowing do tipo.
+        throw new HttpError(
+          400,
+          'Proposta com item temporariamente indisponivel nao pode ser escolhida como vencedora.',
+        );
+      } else {
+        comparablePrice = classification.price;
+      }
+
       const profile = await CompanyProfileService.get();
       const threshold = profile.awardApprovalThreshold == null ? null : Number(profile.awardApprovalThreshold);
       const exceedsThreshold = QuoteComparisonService.requiresAwardApproval({
-        offeredPrice: priceForComparison(quoteRequest.items ?? [], chosenResponse),
+        offeredPrice: comparablePrice,
         currency: chosenResponse.currency, exchangeRate: Number(chosenResponse.exchangeRate),
         freightCost: Number(chosenResponse.freightCost), insuranceCost: Number(chosenResponse.insuranceCost),
         otherFees: Number(chosenResponse.otherFees), importDutyRate: Number(chosenResponse.importDuty),
@@ -2114,36 +2188,85 @@ type ComparisonSourceResponse = {
   }[];
 };
 
-// Separa as propostas que entram no ranking (cobrem a cesta) das que ficam FORA por
-// terem item "Temporarily unavailable". Propostas parciais sem a flag continuam
-// lancando o 400 de sempre (priceForComparison).
+type ComparisonItemRef = { quoteRequestItemId: number; productName: string };
+
+type ExcludedComparisonEntry = {
+  quoteResponseId: number;
+  supplierId: number;
+  supplier: { id: number; name: string };
+  reason: 'unavailable' | 'partial';
+  unavailableItems: ComparisonItemRef[];
+  partial?: {
+    missingItems: ComparisonItemRef[];
+    quantityMismatches: (ComparisonItemRef & { requested: number; offered: number })[];
+    extraItems: ComparisonItemRef[];
+    duplicateItems: ComparisonItemRef[];
+  };
+};
+
+// Separa as propostas que entram no ranking das que ficam FORA, com o motivo:
+// - 'unavailable': item "Temporarily unavailable";
+// - 'partial': item faltando, item que nao pertence mais a cotacao ou duplicado.
+// Quantidade divergente (todos os itens presentes) ENTRA no ranking com o unitario cotado x
+// quantidade pedida e vem sinalizada (quantityAdjusted + quantityMismatches). Nenhum 400 novo:
+// o HttpError de sumQuoteItems (dado invalido) continua subindo.
 function partitionForComparison<T extends ComparisonSourceResponse>(
-  requestedItems: { id: number; quantity: number }[],
+  requestedItems: { id: number; quantity: number; productName?: string }[],
   responses: T[],
 ) {
-  const complete: { response: T; price: number }[] = [];
-  const excluded: {
-    quoteResponseId: number;
-    supplierId: number;
-    supplier: { id: number; name: string };
-    unavailableItems: { quoteRequestItemId: number; productName: string }[];
+  const complete: {
+    response: T;
+    price: number;
+    quantityAdjusted: boolean;
+    quantityMismatches: (ComparisonItemRef & { requested: number; offered: number })[];
   }[] = [];
+  const excluded: ExcludedComparisonEntry[] = [];
+  const requestedNames = new Map(requestedItems.map((item) => [item.id, item.productName]));
   for (const response of responses) {
     const classification = classifyForComparison(requestedItems, response);
+    const responseNames = new Map(
+      (response.items ?? []).map((item) => [item.quoteRequestItemId, item.quoteRequestItem?.productName]),
+    );
+    const nameOf = (id: number) => requestedNames.get(id) ?? responseNames.get(id) ?? `#${id}`;
+    const ref = (id: number): ComparisonItemRef => ({ quoteRequestItemId: id, productName: nameOf(id) });
     if (classification.kind === 'complete') {
-      complete.push({ response, price: classification.price });
+      complete.push({ response, price: classification.price, quantityAdjusted: false, quantityMismatches: [] });
       continue;
     }
-    excluded.push({
+    if (classification.kind === 'adjusted') {
+      complete.push({
+        response,
+        price: classification.price,
+        quantityAdjusted: true,
+        quantityMismatches: classification.quantityMismatches.map((m) => ({ ...ref(m.quoteRequestItemId), requested: m.requested, offered: m.offered })),
+      });
+      continue;
+    }
+    const base = {
       quoteResponseId: response.id,
       supplierId: response.supplierId,
       supplier: { id: response.supplier.id, name: response.supplier.name },
-      unavailableItems: response.items
+      unavailableItems: (response.items ?? [])
         .filter((item) => item.isUnavailable)
         .map((item) => ({
           quoteRequestItemId: item.quoteRequestItemId,
           productName: item.quoteRequestItem.productName,
         })),
+    };
+    if (classification.kind === 'unavailable') {
+      excluded.push({ ...base, reason: 'unavailable' });
+      continue;
+    }
+    const { details } = classification;
+    excluded.push({
+      ...base,
+      reason: 'partial',
+      partial: {
+        missingItems: details.missingItemIds.map(ref),
+        quantityMismatches: details.quantityMismatches.map((m) => ({ ...ref(m.quoteRequestItemId), requested: m.requested, offered: m.offered })),
+        extraItems: details.extraItemIds.map(ref),
+        duplicateItems: details.duplicateItemIds.map(ref),
+      },
     });
   }
   return { complete, excluded };

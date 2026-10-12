@@ -1204,12 +1204,12 @@ describe('Comparison routes', () => {
 });
 
 describe('Comparison routes - item temporariamente indisponivel (fora do ranking)', () => {
-  const requestedItems = [1, 2].map((id) => ({ id, quantity: 1 }));
+  const requestedItems = [1, 2].map((id) => ({ id, quantity: 1, productName: `Produto ${id}` }));
 
   const proposal = (
     id: number,
     supplierId: number,
-    items: Array<{ id: number; unitPrice: number; unavailable?: boolean }>,
+    items: Array<{ id: number; unitPrice: number; unavailable?: boolean; quantity?: number }>,
     extra: Record<string, unknown> = {},
   ) => {
     const offered = items
@@ -1234,7 +1234,7 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
       isWinner: false,
       items: items.map((item) => ({
         quoteRequestItemId: item.id,
-        quantity: item.unavailable ? 0 : 1,
+        quantity: item.unavailable ? 0 : item.quantity ?? 1,
         unitPrice: item.unavailable ? 0 : item.unitPrice,
         leadTimeDays: null,
         originPort: null,
@@ -1303,6 +1303,7 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
         quoteResponseId: 11,
         supplierId: 101,
         supplier: { id: 101, name: 'Fornecedor 101' },
+        reason: 'unavailable',
         unavailableItems: [{ quoteRequestItemId: 2, productName: 'Produto 2' }],
       },
     ]);
@@ -1401,27 +1402,221 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
 
     expect(response.status).toBe(400);
     expect(response.body.message).toBe(
-      'Sao necessarias pelo menos duas propostas completas para comparar (1 com item temporariamente indisponivel ficaram fora do ranking).',
+      'Sao necessarias pelo menos duas propostas completas para comparar (1 ficaram fora do ranking: item indisponivel ou proposta parcial).',
     );
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
   });
 
-  it('proposta parcial SEM flag continua dando o 400 de sempre (preview e compare)', async () => {
-    const cookies = await loginAs('comprador');
-    const partial = complete(11, 101, [10, 20]);
-    partial.items = partial.items.slice(0, 1);
-    mockEnv([partial, complete(12, 102, [10, 20])]);
+  describe('proposta parcial nao derruba a comparacao (cotacao 49)', () => {
+    const missingItem = (id: number, supplierId: number) => {
+      const partial = complete(id, supplierId, [10, 20]);
+      partial.items = partial.items.slice(0, 1);
+      return partial;
+    };
+    // Item 1 cotado com quantidade 3 (pedido 1): ranking usa 10 x 1 + 20 x 1 = 30.
+    const adjustedQuantity = (id: number, supplierId: number) =>
+      proposal(id, supplierId, [{ id: 1, unitPrice: 10, quantity: 3 }, { id: 2, unitPrice: 20 }], {
+        offeredPrice: 50,
+      });
+    const extraItem = (id: number, supplierId: number) =>
+      proposal(id, supplierId, [
+        { id: 1, unitPrice: 10 },
+        { id: 2, unitPrice: 20 },
+        { id: 99, unitPrice: 5 },
+      ]);
 
-    for (const suffix of ['/compare/preview', '/compare']) {
+    it('preview: quantidade divergente ENTRA no ranking com unitario x quantidade pedida, sinalizada', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([adjustedQuantity(11, 101), complete(12, 102, [15, 20]), complete(13, 103, [20, 30])]);
+
       const response = await request(app)
-        .post(`/api/v1/quote-requests/1${suffix}`)
+        .post('/api/v1/quote-requests/1/compare/preview')
         .set('Cookie', cookies)
         .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.responseCount).toBe(3);
+      expect(response.body.excluded).toEqual([]);
+      expect(response.body.results).toHaveLength(3);
+      const adjusted = response.body.results.find((r: { quoteResponseId: number }) => r.quoteResponseId === 11);
+      expect(adjusted.offeredPrice).toBe(30);
+      expect(adjusted.quantityAdjusted).toBe(true);
+      expect(adjusted.quantityMismatches).toEqual([
+        { quoteRequestItemId: 1, productName: 'Produto 1', requested: 1, offered: 3 },
+      ]);
+      // e a mais barata a quantidade pedida (30 < 35 < 50): pode vencer.
+      expect(adjusted.priceScore).toBe(100);
+      expect(response.body.winnerQuoteResponseId).toBe(11);
+      const plain = response.body.results.find((r: { quoteResponseId: number }) => r.quoteResponseId === 12);
+      expect(plain.quantityAdjusted).toBe(false);
+      expect(plain.quantityMismatches).toEqual([]);
+    });
+
+    it('compare: quantidade divergente e persistida no ranking com o preco ajustado e pode vencer', async () => {
+      const cookies = await loginAs('comprador');
+      mockEnv([adjustedQuantity(11, 101), complete(12, 102, [15, 20]), complete(13, 103, [20, 30])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.excluded).toEqual([]);
+      const adjusted = response.body.results.find((r: { id: number }) => r.id === 11);
+      expect(adjusted.quantityAdjusted).toBe(true);
+      expect(adjusted.offeredPrice).toBe(30);
+      const created = prismaMock.__tx.quoteComparison.create.mock.calls[0][0].data;
+      expect(created.winnerQuoteResponseId).toBe(11);
+      expect(created.results.create.find((r: { quoteResponseId: number }) => r.quoteResponseId === 11).offeredPrice).toBe(30);
+      expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { isWinner: true } });
+    });
+
+    it('preview: 2 completas + 1 com item faltando -> 200, parcial em `excluded` com o motivo', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([missingItem(11, 101), complete(12, 102, [10, 20]), complete(13, 103, [20, 30])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.responseCount).toBe(3);
+      expect(response.body.results.map((r: { quoteResponseId: number }) => r.quoteResponseId).sort()).toEqual([12, 13]);
+      expect(response.body.winnerQuoteResponseId).toBe(12);
+      expect(response.body.excluded).toEqual([
+        {
+          quoteResponseId: 11,
+          supplierId: 101,
+          supplier: { id: 101, name: 'Fornecedor 101' },
+          reason: 'partial',
+          unavailableItems: [],
+          partial: {
+            missingItems: [{ quoteRequestItemId: 2, productName: 'Produto 2' }],
+            quantityMismatches: [],
+            extraItems: [],
+            duplicateItems: [],
+          },
+        },
+      ]);
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('preview: item extra/duplicado vai para `excluded` com extraItems/duplicateItems (nome via relacao)', async () => {
+      const cookies = await loginAs('viewer');
+      const duplicated = complete(14, 104, [10, 20]);
+      duplicated.items = [...duplicated.items, duplicated.items[0]];
+      mockEnv([extraItem(11, 101), duplicated, complete(12, 102, [10, 20]), complete(13, 103, [20, 30])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.results).toHaveLength(2);
+      expect(response.body.excluded.map((e: { quoteResponseId: number }) => e.quoteResponseId)).toEqual([11, 14]);
+      expect(response.body.excluded[0].partial.extraItems).toEqual([{ quoteRequestItemId: 99, productName: 'Produto 99' }]);
+      expect(response.body.excluded[1].partial.duplicateItems).toEqual([{ quoteRequestItemId: 1, productName: 'Produto 1' }]);
+    });
+
+    it('compare: 2 completas + 1 parcial -> 200 e a parcial fica registrada em excludedQuoteResponseIds', async () => {
+      const cookies = await loginAs('comprador');
+      mockEnv([missingItem(11, 101), complete(12, 102, [10, 20]), complete(13, 103, [20, 30])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.results.map((r: { id: number }) => r.id).sort()).toEqual([12, 13]);
+      expect(response.body.excluded[0]).toMatchObject({ quoteResponseId: 11, reason: 'partial' });
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'compare',
+            metadata: expect.objectContaining({ excludedQuoteResponseIds: [11] }),
+          }),
+        }),
+      );
+    });
+
+    it('preview: 1 completa + 1 parcial -> 200 com 1 resultado (by-pass) e o motivo', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([missingItem(11, 101), complete(12, 102, [10, 20])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.responseCount).toBe(2);
+      expect(response.body.results).toHaveLength(1);
+      expect(response.body.results[0].quoteResponseId).toBe(12);
+      expect(response.body.excluded[0].partial.missingItems[0].productName).toBe('Produto 2');
+    });
+
+    it('compare: 1 completa + 1 parcial -> 400 com a mensagem nova e NAO cria comparison', async () => {
+      const cookies = await loginAs('comprador');
+      mockEnv([missingItem(11, 101), complete(12, 102, [10, 20])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare')
+        .set('Cookie', cookies)
+        .send(weights);
+
       expect(response.status).toBe(400);
-      expect(response.body.message).toContain('todos os itens');
-    }
-    expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
+      expect(response.body.message).toBe(
+        'Sao necessarias pelo menos duas propostas completas para comparar (1 ficaram fora do ranking: item indisponivel ou proposta parcial).',
+      );
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
+    });
+
+    it('winner (escolha manual): item extra/duplicado -> 400 "itens inconsistentes" e nada e gravado', async () => {
+      const cookies = await loginAs('comprador');
+      mockEnv([]);
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(extraItem(11, 101));
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/winner')
+        .set('Cookie', cookies)
+        .send({ quoteResponseId: 11, reason: 'preferencia' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe(
+        'Proposta com itens inconsistentes nao pode ser escolhida como vencedora: item nao pertence mais a cotacao: Produto 99.',
+      );
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteResponse.update).not.toHaveBeenCalled();
+    });
+
+    it('winner (escolha manual): item faltando PODE ser escolhida (200) e quantidade divergente tambem', async () => {
+      const cookies = await loginAs('comprador');
+      prismaMock.__tx.quoteComparisonResult.updateMany.mockResolvedValue({ count: 0 });
+
+      for (const chosen of [missingItem(11, 101), adjustedQuantity(11, 101)]) {
+        vi.clearAllMocks();
+        prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock.__tx));
+        mockEnv([]);
+        prismaMock.quoteComparison.findFirst.mockResolvedValue(null);
+        prismaMock.quoteResponse.findFirst.mockResolvedValue(chosen);
+
+        const response = await request(app)
+          .post('/api/v1/quote-requests/1/winner')
+          .set('Cookie', cookies)
+          .send({ quoteResponseId: 11, reason: 'preferencia' });
+
+        expect(response.status).toBe(200);
+        expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: 11, deletedAt: null }, data: { isWinner: true } }),
+        );
+      }
+    });
   });
 
   describe('approveAward revalida o vencedor da comparacao pendente', () => {
@@ -1439,9 +1634,15 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
 
     it('vencedor que virou item indisponivel apos a comparacao -> 409, nada e alterado', async () => {
       const cookies = await loginAs('admin');
+      mockEnv([]);
       mockPendingComparison();
       prismaMock.quoteResponse.findFirst.mockResolvedValue({
-        items: [{ isUnavailable: false }, { isUnavailable: true }],
+        id: 11,
+        offeredPrice: 10,
+        items: [
+          { quoteRequestItemId: 1, quantity: 1, unitPrice: 10, isUnavailable: false },
+          { quoteRequestItemId: 2, quantity: 0, unitPrice: 0, isUnavailable: true },
+        ],
       });
 
       const response = await request(app)
@@ -1460,9 +1661,15 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
 
     it('vencedor completo -> aprova como antes', async () => {
       const cookies = await loginAs('admin');
+      mockEnv([]);
       mockPendingComparison();
       prismaMock.quoteResponse.findFirst.mockResolvedValue({
-        items: [{ isUnavailable: false }, { isUnavailable: false }],
+        id: 11,
+        offeredPrice: 30,
+        items: [
+          { quoteRequestItemId: 1, quantity: 1, unitPrice: 10, isUnavailable: false },
+          { quoteRequestItemId: 2, quantity: 1, unitPrice: 20, isUnavailable: false },
+        ],
       });
 
       const response = await request(app)
@@ -1478,6 +1685,78 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
       expect(prismaMock.__tx.quoteResponse.update).toHaveBeenCalledWith(
         expect.objectContaining({ data: { isWinner: true } }),
       );
+    });
+
+    it('vencedor com item indisponivel E item faltando (partial) -> 409 de indisponivel, nada e alterado', async () => {
+      const cookies = await loginAs('admin');
+      mockEnv([]);
+      mockPendingComparison();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue({
+        id: 11,
+        offeredPrice: 0,
+        items: [{ quoteRequestItemId: 1, quantity: 0, unitPrice: 0, isUnavailable: true }],
+      });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toBe(
+        'A proposta vencedora mudou (itens indisponíveis). Refaça a comparação antes de aprovar.',
+      );
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteComparison.update).not.toHaveBeenCalled();
+    });
+
+    it('vencedor que ficou com item extra/duplicado -> 409, nada e alterado', async () => {
+      const cookies = await loginAs('admin');
+      mockEnv([]);
+      mockPendingComparison();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue({
+        id: 11,
+        offeredPrice: 30,
+        items: [
+          { quoteRequestItemId: 1, quantity: 1, unitPrice: 10, isUnavailable: false },
+          { quoteRequestItemId: 2, quantity: 1, unitPrice: 20, isUnavailable: false },
+          { quoteRequestItemId: 99, quantity: 1, unitPrice: 5, isUnavailable: false },
+        ],
+      });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toContain('não pertencem mais à cotação ou duplicados');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.quoteComparison.update).not.toHaveBeenCalled();
+    });
+
+    it('vencedor com item faltando ou quantidade divergente -> aprova (decisao 2026-10-12)', async () => {
+      const cookies = await loginAs('admin');
+      for (const items of [
+        [{ quoteRequestItemId: 1, quantity: 1, unitPrice: 10, isUnavailable: false }],
+        [
+          { quoteRequestItemId: 1, quantity: 3, unitPrice: 10, isUnavailable: false },
+          { quoteRequestItemId: 2, quantity: 1, unitPrice: 20, isUnavailable: false },
+        ],
+      ]) {
+        vi.clearAllMocks();
+        prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock.__tx));
+        mockEnv([]);
+        mockPendingComparison();
+        prismaMock.quoteResponse.findFirst.mockResolvedValue({ id: 11, offeredPrice: 30, items });
+
+        const response = await request(app)
+          .post('/api/v1/quote-requests/1/comparisons/999/approve')
+          .set('Cookie', cookies);
+
+        expect(response.status).toBe(200);
+        expect(prismaMock.__tx.quoteComparison.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ approvalStatus: 'approved' }) }),
+        );
+      }
     });
   });
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { classifyForComparison, priceForComparison, sumQuoteItems } from '../src/utils/quoteBasket';
+import {
+  classifyForComparison,
+  describePartialBasket,
+  isInconsistentBasket,
+  priceAtRequestedQuantity,
+  priceForComparison,
+  sumQuoteItems,
+} from '../src/utils/quoteBasket';
 import { QuoteComparisonService } from '../src/services/QuoteComparisonService';
 
 const requested = [{ id: 1, quantity: 10 }, { id: 2, quantity: 2 }];
@@ -84,21 +91,143 @@ describe('classifyForComparison (item temporariamente indisponivel)', () => {
     ).toEqual({ kind: 'unavailable', unavailableItemIds: [1, 2] });
   });
 
-  it.each([
-    ['item faltando', [unavailable(1)]],
-    ['item fora da cesta', [items[0], unavailable(99)]],
-    ['duplicata', [items[0], unavailable(1)]],
-    ['quantidade divergente no item disponivel', [{ ...items[0], quantity: 9 }, unavailable(2)]],
-    ['item extra', [items[0], items[1], unavailable(3)]],
-  ])('continua lancando o 400 de proposta parcial: %s', (_label, invalid) => {
+  const noDetails = { missingItemIds: [], quantityMismatches: [], extraItemIds: [], duplicateItemIds: [] };
+
+  it('item faltando (com flag em outro): partial com missingItemIds e os indisponiveis', () => {
+    expect(classifyForComparison(requested, { id: 5, offeredPrice: 1, items: [unavailable(1)] })).toEqual({
+      kind: 'partial',
+      details: { ...noDetails, missingItemIds: [2] },
+      unavailableItemIds: [1],
+    });
+  });
+
+  it('item fora da cesta: partial com extraItemIds (e o item pedido que ficou faltando)', () => {
+    expect(
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: [items[0], unavailable(99)] }),
+    ).toEqual({
+      kind: 'partial',
+      details: { ...noDetails, missingItemIds: [2], extraItemIds: [99] },
+      unavailableItemIds: [99],
+    });
+  });
+
+  it('duplicata: partial com duplicateItemIds', () => {
+    expect(
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: [items[0], unavailable(1)] }),
+    ).toEqual({
+      kind: 'partial',
+      details: { ...noDetails, missingItemIds: [2], duplicateItemIds: [1] },
+      unavailableItemIds: [1],
+    });
+  });
+
+  it('item extra alem da cesta completa: partial com extraItemIds', () => {
+    expect(
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: [items[0], items[1], unavailable(3)] }),
+    ).toEqual({
+      kind: 'partial',
+      details: { ...noDetails, extraItemIds: [3] },
+      unavailableItemIds: [3],
+    });
+  });
+
+  it('quantidade divergente no item disponivel + item indisponivel: segue unavailable (fora do ranking)', () => {
+    expect(
+      classifyForComparison(requested, {
+        id: 5,
+        offeredPrice: 1,
+        items: [{ ...items[0], quantity: 9 }, unavailable(2)],
+      }),
+    ).toEqual({ kind: 'unavailable', unavailableItemIds: [2] });
+  });
+
+  it('proposta parcial SEM flag: partial com missingItemIds e sem indisponiveis (nao lanca mais 400)', () => {
+    expect(
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: items.slice(0, 1) }),
+    ).toEqual({
+      kind: 'partial',
+      details: { ...noDetails, missingItemIds: [2] },
+      unavailableItemIds: [],
+    });
+  });
+
+  it('item faltando E quantidade divergente nos presentes: mesmo tratamento de item faltando', () => {
+    expect(
+      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: [{ ...items[0], quantity: 8 }] }),
+    ).toEqual({
+      kind: 'partial',
+      details: {
+        ...noDetails,
+        missingItemIds: [2],
+        quantityMismatches: [{ quoteRequestItemId: 1, requested: 10, offered: 8 }],
+      },
+      unavailableItemIds: [],
+    });
+  });
+
+  it('isInconsistentBasket: so item extra ou duplicado (item faltando pode ser escolhida manualmente)', () => {
+    expect(isInconsistentBasket({ ...noDetails, missingItemIds: [2] })).toBe(false);
+    expect(isInconsistentBasket({ ...noDetails, extraItemIds: [9] })).toBe(true);
+    expect(isInconsistentBasket({ ...noDetails, duplicateItemIds: [1] })).toBe(true);
+  });
+});
+
+describe('classifyForComparison (quantidade divergente entra no ranking)', () => {
+  it('todos os itens presentes com quantidade diferente: adjusted com unitario cotado x quantidade PEDIDA', () => {
+    // 3.25 x 10 (pedido, nao 8) + 10 x 2 (pedido, nao 3) = 52.5
+    expect(
+      classifyForComparison(requested, {
+        id: 5,
+        offeredPrice: 999,
+        items: [{ ...items[0], quantity: 8 }, { ...items[1], quantity: 3 }],
+      }),
+    ).toEqual({
+      kind: 'adjusted',
+      price: 52.5,
+      quantityMismatches: [
+        { quoteRequestItemId: 1, requested: 10, offered: 8 },
+        { quoteRequestItemId: 2, requested: 2, offered: 3 },
+      ],
+    });
+  });
+
+  it('priceAtRequestedQuantity ignora indisponiveis/fora da cesta e rejeita preco invalido', () => {
+    expect(priceAtRequestedQuantity(requested, [{ ...items[0], quantity: 1 }])).toBe(32.5);
+    expect(
+      priceAtRequestedQuantity(requested, [
+        { ...items[0], quantity: 1 },
+        { quoteRequestItemId: 2, quantity: 0, unitPrice: 0, isUnavailable: true },
+        { quoteRequestItemId: 99, quantity: 5, unitPrice: 100 },
+      ]),
+    ).toBe(32.5);
+    expect(() => priceAtRequestedQuantity(requested, [{ ...items[0], unitPrice: 0 }])).toThrow(/invalidos/);
+    // priceForComparison segue intacto: quantidade diferente continua 400 nele.
     expect(() =>
-      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: invalid }),
+      priceForComparison(requested, { id: 5, offeredPrice: 1, items: [{ ...items[0], quantity: 8 }, items[1]] }),
     ).toThrow(/informe todos os itens/);
   });
 
-  it('proposta parcial SEM flag continua lancando o 400 de sempre', () => {
-    expect(() =>
-      classifyForComparison(requested, { id: 5, offeredPrice: 1, items: items.slice(0, 1) }),
-    ).toThrow(/informe todos os itens/);
+  it('describePartialBasket monta so as partes presentes, em portugues, separadas por "; "', () => {
+    const names: Record<number, string> = { 1: 'Resina', 2: 'Catalisador', 3: 'Solvente' };
+    const nameOf = (id: number) => names[id] ?? `#${id}`;
+    expect(
+      describePartialBasket(
+        {
+          missingItemIds: [2],
+          quantityMismatches: [{ quoteRequestItemId: 1, requested: 10, offered: 8 }],
+          extraItemIds: [99],
+          duplicateItemIds: [3],
+        },
+        nameOf,
+      ),
+    ).toBe(
+      'faltam itens: Catalisador; quantidade diferente em Resina (pedido 10, cotado 8); item nao pertence mais a cotacao: #99; item duplicado: Solvente',
+    );
+    expect(
+      describePartialBasket(
+        { missingItemIds: [1, 2], quantityMismatches: [], extraItemIds: [], duplicateItemIds: [] },
+        nameOf,
+      ),
+    ).toBe('faltam itens: Resina, Catalisador');
   });
 });

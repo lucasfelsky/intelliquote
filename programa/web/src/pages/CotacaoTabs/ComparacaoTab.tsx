@@ -9,6 +9,7 @@ import {
   messageOf,
   previewComparison,
   setManualWinner,
+  type ExcludedComparisonResponse,
   type ComparisonResult,
   type ComparisonWeights,
   type SupplierReviewInput,
@@ -46,6 +47,55 @@ function formatOriginLine(r: ComparisonResult): string {
   );
   const rest = overrides.length - shown.length;
   return `Origem: ${r.originPort ?? '—'}${shown.join('')}${rest > 0 ? ` · +${rest}` : ''}`;
+}
+
+// O modal de vencedora manual so precisa destes campos; assim uma proposta fora do ranking
+// (item faltando) tambem pode ser escolhida.
+type WinnerTarget = Pick<ComparisonResult, 'quoteResponseId' | 'supplierId' | 'supplier'>;
+
+// Quantidade divergente (todos os itens presentes): entra no ranking com o unitario cotado x
+// quantidade PEDIDA; a linha avisa o comprador. Ausente (historico) ou vazio -> nada.
+function formatQuantityAdjustedLine(r: ComparisonResult): string | null {
+  const mismatches = r.quantityMismatches ?? [];
+  if (!r.quantityAdjusted || mismatches.length === 0) return null;
+  const parts = mismatches.map(
+    (m) => `${m.productName || `Item ${m.quoteRequestItemId}`}: pedido ${m.requested}, cotado ${m.offered}`,
+  );
+  return `Quantidade divergente: ${parts.join('; ')} — ranking usa o unitário × quantidade pedida`;
+}
+
+// Motivo de uma proposta ter ficado fora do ranking, em portugues, so com as partes presentes.
+function excludedReasonText(entry: ExcludedComparisonResponse): string {
+  const names = (items: { quoteRequestItemId: number; productName: string }[]) =>
+    items.map((item) => item.productName || `Item ${item.quoteRequestItemId}`).join(', ');
+  const unavailable = entry.unavailableItems.length
+    ? `temporariamente indisponível: ${names(entry.unavailableItems)}`
+    : null;
+  if (entry.reason !== 'partial') {
+    return `Temporariamente indisponível: ${names(entry.unavailableItems)}`;
+  }
+  const partial = entry.partial;
+  const parts: string[] = [];
+  if (partial?.missingItems.length) parts.push(`faltam itens: ${names(partial.missingItems)}`);
+  if (partial?.quantityMismatches.length) {
+    parts.push(
+      `quantidade diferente em ${partial.quantityMismatches
+        .map((m) => `${m.productName || `Item ${m.quoteRequestItemId}`} (pedido ${m.requested}, cotado ${m.offered})`)
+        .join(', ')}`,
+    );
+  }
+  if (partial?.extraItems.length) parts.push(`item não pertence mais à cotação: ${names(partial.extraItems)}`);
+  if (partial?.duplicateItems.length) parts.push(`item duplicado: ${names(partial.duplicateItems)}`);
+  if (unavailable) parts.push(unavailable);
+  return `Proposta incompleta: ${parts.join('; ')}`;
+}
+
+// Proposta parcial so por item faltando pode ser escolhida manualmente como vencedora
+// (decisao 2026-10-12); item extra/duplicado (dado inconsistente) nao.
+function canPickExcludedAsWinner(entry: ExcludedComparisonResponse): boolean {
+  if (entry.reason !== 'partial' || entry.unavailableItems.length > 0) return false;
+  const partial = entry.partial;
+  return !!partial && partial.extraItems.length === 0 && partial.duplicateItems.length === 0;
 }
 
 // Selo DG (informativo; nao entra em score/landed cost): itens que o fornecedor marcou como
@@ -267,7 +317,7 @@ export function ComparacaoTab({
 
   // Vencedor manual (override): permite escolher uma proposta diferente da
   // calculada pela comparação, exigindo motivo quando ela diverge.
-  const [winnerTarget, setWinnerTarget] = useState<ComparisonResult | null>(null);
+  const [winnerTarget, setWinnerTarget] = useState<WinnerTarget | null>(null);
   const [winnerReason, setWinnerReason] = useState('');
   const [winnerModalError, setWinnerModalError] = useState<string | null>(null);
 
@@ -284,7 +334,7 @@ export function ComparacaoTab({
     onError: (err) => setWinnerModalError(messageOf(err)),
   });
 
-  function openWinnerModal(r: ComparisonResult) {
+  function openWinnerModal(r: WinnerTarget) {
     setWinnerTarget(r);
     setWinnerReason('');
     setWinnerModalError(null);
@@ -416,7 +466,7 @@ export function ComparacaoTab({
         title: 'Concluir com uma só resposta?',
         message:
           excludedResponses.length > 0
-            ? 'Esta cotação tem menos de duas propostas completas (as demais têm item temporariamente indisponível e ficaram fora do ranking), então não há comparação. Tem certeza que deseja concluí-la?'
+            ? 'Esta cotação tem menos de duas propostas completas (as demais têm item indisponível ou estão incompletas e ficaram fora do ranking), então não há comparação. Tem certeza que deseja concluí-la?'
             : 'Esta cotação teve apenas uma resposta, então não há comparação. Tem certeza que deseja concluí-la?',
         confirmText: 'Concluir mesmo assim',
         cancelText: 'Voltar',
@@ -485,6 +535,11 @@ export function ComparacaoTab({
             </div>
             {contactLine && <span className="cmp-row__contact">{contactLine}</span>}
             <span className="cmp-row__contact">{formatOriginLine(r)}</span>
+            {formatQuantityAdjustedLine(r) && (
+              <span className="cmp-row__contact" data-testid="qty-adjusted" style={{ color: 'var(--warning, #b45309)' }}>
+                {formatQuantityAdjustedLine(r)}
+              </span>
+            )}
             <DgSeal result={r} />
           </div>
           <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>
@@ -736,7 +791,7 @@ export function ComparacaoTab({
               <div className="cmp-bypass-alert__text">
                 <strong>Nenhuma proposta completa para comparar.</strong>
                 <span>
-                  Todas as propostas têm item temporariamente indisponível e ficaram fora do ranking.
+                  Todas as propostas têm item indisponível ou estão incompletas e ficaram fora do ranking.
                 </span>
               </div>
             </div>
@@ -764,7 +819,7 @@ export function ComparacaoTab({
                   </strong>
                   <span>
                     {excludedResponses.length > 0
-                      ? 'As demais propostas têm item temporariamente indisponível e ficaram fora do ranking. '
+                      ? 'As demais propostas têm item indisponível ou estão incompletas e ficaram fora do ranking. '
                       : ''}
                     Não há como comparar sem uma segunda proposta. Você pode seguir com este
                     fornecedor enviando a Ordem de Compra diretamente.
@@ -835,7 +890,7 @@ export function ComparacaoTab({
         {previewQuery.data && excludedResponses.length > 0 && (
           <section aria-labelledby="cmp-excluded-title" style={{ marginTop: 16 }}>
             <h3 id="cmp-excluded-title" style={{ fontSize: 14, margin: '0 0 8px' }}>
-              Fora do ranking — itens indisponíveis
+              Fora do ranking
             </h3>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--ink-soft)' }}>
               {excludedResponses.map((entry) => (
@@ -843,8 +898,26 @@ export function ComparacaoTab({
                   <strong style={{ color: 'var(--ink)' }}>
                     {entry.supplier.name || `Fornecedor #${entry.supplierId}`}
                   </strong>
-                  {' — Temporariamente indisponível: '}
-                  {entry.unavailableItems.map((item) => item.productName).join(', ')}
+                  {' — '}
+                  {excludedReasonText(entry)}
+                  {canCompare && canPickExcludedAsWinner(entry) && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="cmp-btn cmp-btn--link"
+                        onClick={() =>
+                          openWinnerModal({
+                            quoteResponseId: entry.quoteResponseId,
+                            supplierId: entry.supplierId,
+                            supplier: entry.supplier,
+                          })
+                        }
+                      >
+                        Definir como vencedora mesmo assim
+                      </button>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>

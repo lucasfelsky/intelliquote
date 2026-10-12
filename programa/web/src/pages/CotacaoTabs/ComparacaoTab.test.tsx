@@ -714,6 +714,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     quoteResponseId: 44,
     supplierId: 9,
     supplier: { id: 9, name: 'Gamma SA' },
+    reason: 'unavailable' as const,
     unavailableItems: [
       { quoteRequestItemId: 5, productName: 'Resina Epóxi' },
       { quoteRequestItemId: 6, productName: 'Catalisador Y' },
@@ -730,7 +731,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
       excluded: [excludedGamma],
     });
     const { findByText, getByRole, queryByText } = renderTab();
-    const heading = await findByText('Fora do ranking — itens indisponíveis');
+    const heading = await findByText('Fora do ranking');
     expect(heading.tagName).toBe('H3');
     const section = heading.closest('section') as HTMLElement;
     expect(within(section).getByText('Gamma SA')).toBeTruthy();
@@ -755,7 +756,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
     const { findByText, queryByRole, queryByText } = renderTab();
     await findByText('Nenhuma proposta completa para comparar.');
-    const heading = await findByText('Fora do ranking — itens indisponíveis');
+    const heading = await findByText('Fora do ranking');
     const section = heading.closest('section') as HTMLElement;
     expect(within(section).getByText('Gamma SA')).toBeTruthy();
     expect(within(section).getByText('Delta Ltda')).toBeTruthy();
@@ -774,7 +775,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
     const { findByText } = renderTab();
     await findByText('Apenas uma proposta completa — sem comparação.');
-    await findByText('Fora do ranking — itens indisponíveis');
+    await findByText('Fora do ranking');
   });
 
   it('28. sem propostas excluidas nao existe a secao "Fora do ranking"', async () => {
@@ -785,7 +786,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
     const { findByText, queryByText } = renderTab();
     await findByText('ACME Ltda');
-    expect(queryByText('Fora do ranking — itens indisponíveis')).toBeNull();
+    expect(queryByText('Fora do ranking')).toBeNull();
   });
 
   it('29. concluir com 1 completa + excluida fecha direto (sem executeComparison, que daria 400)', async () => {
@@ -808,6 +809,93 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     await waitFor(() => expect(closeQuoteRequest).toHaveBeenCalledTimes(1));
     expect(executeComparison).not.toHaveBeenCalled();
   });
+
+  const excludedPartial = {
+    quoteResponseId: 46,
+    supplierId: 11,
+    supplier: { id: 11, name: 'Epsilon Ltda' },
+    reason: 'partial' as const,
+    unavailableItems: [],
+    partial: {
+      missingItems: [{ quoteRequestItemId: 5, productName: 'Resina Epóxi' }],
+      quantityMismatches: [{ quoteRequestItemId: 6, productName: 'Catalisador Y', requested: 100, offered: 80 }],
+      extraItems: [],
+      duplicateItems: [],
+    },
+  };
+
+  it('33. proposta parcial (item faltando) aparece em "Fora do ranking" com o motivo e pode ser escolhida', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      results: [winner, loser],
+      winnerQuoteResponseId: 42,
+      pendingApproval: false,
+      thresholdValue: null,
+      responseCount: 3,
+      excluded: [excludedPartial],
+    });
+    const { findByText, getAllByRole, getByRole, queryByText } = renderTab();
+    const heading = await findByText('Fora do ranking');
+    const section = heading.closest('section') as HTMLElement;
+    expect(within(section).getByText('Epsilon Ltda')).toBeTruthy();
+    expect(section.textContent).toContain(
+      'Proposta incompleta: faltam itens: Resina Epóxi; quantidade diferente em Catalisador Y (pedido 100, cotado 80)',
+    );
+    // o ranking segue com as completas e o header conta todas as respostas
+    expect(getAllByRole('button', { name: 'Definir como vencedora' }).length).toBeGreaterThan(0);
+    await findByText(/3 respostas/);
+    expect(queryByText('Apenas uma proposta completa — sem comparação.')).toBeNull();
+
+    // item faltando pode ser escolhida manualmente: abre o modal com o nome do fornecedor
+    fireEvent.click(getByRole('button', { name: 'Definir como vencedora mesmo assim' }));
+    await findByText('Definir Epsilon Ltda como vencedora');
+  });
+
+  it('34. proposta com item extra/duplicado fica fora do ranking SEM a opcao de vencer', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      results: [winner, loser],
+      winnerQuoteResponseId: 42,
+      pendingApproval: false,
+      thresholdValue: null,
+      responseCount: 3,
+      excluded: [
+        {
+          ...excludedPartial,
+          partial: {
+            missingItems: [],
+            quantityMismatches: [],
+            extraItems: [{ quoteRequestItemId: 99, productName: 'Item antigo' }],
+            duplicateItems: [],
+          },
+        },
+      ],
+    });
+    const { findByText, queryByRole } = renderTab();
+    const heading = await findByText('Fora do ranking');
+    const section = heading.closest('section') as HTMLElement;
+    expect(section.textContent).toContain('Proposta incompleta: item não pertence mais à cotação: Item antigo');
+    expect(queryByRole('button', { name: 'Definir como vencedora mesmo assim' })).toBeNull();
+  });
+
+  it('35. quantidade divergente entra no ranking com a linha de aviso', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...defaultPreview,
+      results: [
+        winner,
+        {
+          ...loser,
+          quantityAdjusted: true,
+          quantityMismatches: [{ quoteRequestItemId: 6, productName: 'Catalisador Y', requested: 100, offered: 80 }],
+        },
+      ],
+      excluded: [],
+    });
+    const { findByTestId, queryByText } = renderTab();
+    const line = await findByTestId('qty-adjusted');
+    expect(line.textContent).toBe(
+      'Quantidade divergente: Catalisador Y: pedido 100, cotado 80 — ranking usa o unitário × quantidade pedida',
+    );
+    expect(queryByText('Fora do ranking')).toBeNull();
+  });
 });
 
 describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', () => {
@@ -815,6 +903,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     quoteResponseId: 44,
     supplierId: 9,
     supplier: { id: 9, name: 'Gamma SA' },
+    reason: 'unavailable' as const,
     unavailableItems: [
       { quoteRequestItemId: 5, productName: 'Resina Epóxi' },
       { quoteRequestItemId: 6, productName: 'Catalisador Y' },
@@ -831,7 +920,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
       excluded: [excludedGamma],
     });
     const { findByText, getByRole, queryByText } = renderTab();
-    const heading = await findByText('Fora do ranking — itens indisponíveis');
+    const heading = await findByText('Fora do ranking');
     expect(heading.tagName).toBe('H3');
     const section = heading.closest('section') as HTMLElement;
     expect(within(section).getByText('Gamma SA')).toBeTruthy();
@@ -856,7 +945,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
     const { findByText, queryByRole, queryByText } = renderTab();
     await findByText('Nenhuma proposta completa para comparar.');
-    const heading = await findByText('Fora do ranking — itens indisponíveis');
+    const heading = await findByText('Fora do ranking');
     const section = heading.closest('section') as HTMLElement;
     expect(within(section).getByText('Gamma SA')).toBeTruthy();
     expect(within(section).getByText('Delta Ltda')).toBeTruthy();
@@ -875,7 +964,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
     const { findByText } = renderTab();
     await findByText('Apenas uma proposta completa — sem comparação.');
-    await findByText('Fora do ranking — itens indisponíveis');
+    await findByText('Fora do ranking');
   });
 
   it('28. sem propostas excluidas nao existe a secao "Fora do ranking"', async () => {
@@ -886,7 +975,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
     const { findByText, queryByText } = renderTab();
     await findByText('ACME Ltda');
-    expect(queryByText('Fora do ranking — itens indisponíveis')).toBeNull();
+    expect(queryByText('Fora do ranking')).toBeNull();
   });
 
   it('29. concluir com 1 completa + excluida fecha direto (sem executeComparison, que daria 400)', async () => {
