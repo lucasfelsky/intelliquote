@@ -29,6 +29,14 @@ export interface QuoteComparisonInput extends LandedCostInput {
   paymentTermsDays: number;
   avgQuality?: number;
   isWinner?: boolean;
+  // PR4a: alternativa via parceiro (Credit Support). `id` continua sendo a resposta de ORIGEM;
+  // a identidade do candidato passa a ser (id, creditSupportRequestId).
+  creditSupportRequestId?: number | null;
+}
+
+// Chave composta do candidato: resposta direta = `id`; via parceiro = `id:creditSupportRequestId`.
+export function comparisonCandidateKey(c: { id: number; creditSupportRequestId?: number | null }): string {
+  return c.creditSupportRequestId ? `${c.id}:${c.creditSupportRequestId}` : String(c.id);
 }
 
 export interface QuoteComparisonWeights {
@@ -207,7 +215,10 @@ export class QuoteComparisonService {
     //   2. maior paymentTermsDays (mais dias para pagar é melhor)
     //   3. maior nível de Incoterm (DDP=5 > EXW=1; repassa mais responsabilidade ao fornecedor)
     //   4. menor id (estabilidade final, ordem de cadastro)
-    const winnerId = rankedResponses
+    //   5. mesmo id (resposta direta x alternativa via parceiro, ou duas alternativas da
+    //      mesma resposta): direta antes da alternativa; entre alternativas, menor
+    //      creditSupportRequestId
+    const winnerKey = comparisonCandidateKey(rankedResponses
       .filter((response) => response.totalScore === highestScore)
       .reduce((best, current) => {
         if (current.offeredPrice !== best.offeredPrice) {
@@ -223,12 +234,17 @@ export class QuoteComparisonService {
         if (currentIncoterm !== bestIncoterm) {
           return currentIncoterm > bestIncoterm ? current : best;
         }
-        return current.id < best.id ? current : best;
-      }).id;
+        if (current.id !== best.id) {
+          return current.id < best.id ? current : best;
+        }
+        return (current.creditSupportRequestId ?? 0) < (best.creditSupportRequestId ?? 0)
+          ? current
+          : best;
+      }));
 
     return rankedResponses.map((response) => ({
       ...response,
-      isWinner: response.id === winnerId,
+      isWinner: comparisonCandidateKey(response) === winnerKey,
     }));
   }
 

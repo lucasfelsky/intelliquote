@@ -158,6 +158,22 @@ export interface ComparisonResult {
   // cotado x quantidade PEDIDA. Ausente (historico persistido) -> undefined.
   quantityAdjusted?: boolean;
   quantityMismatches?: QuantityMismatchInfo[];
+  // PR4a (Credit Support): linha = alternativa via parceiro. `quoteResponseId`/`supplierId`
+  // continuam os da resposta de ORIGEM; a identidade do candidato e `candidateKey`.
+  creditSupportRequestId?: number | null;
+  creditPartner?: { id: number; name: string } | null;
+  partnerContact?: { id: number; name: string; email: string } | null;
+  partnerValidityDays?: number | null;
+  validityExpired?: boolean;
+}
+
+// Chave composta do candidato na Comparacao (resposta direta x alternativa via parceiro).
+export function candidateKey(r: {
+  quoteResponseId?: number;
+  supplierId: number;
+  creditSupportRequestId?: number | null;
+}): string {
+  return `${r.quoteResponseId ?? 's' + r.supplierId}:${r.creditSupportRequestId ?? 0}`;
 }
 
 export interface QuantityMismatchInfo {
@@ -413,7 +429,31 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
     quantityMismatches: obj.quantityMismatches === undefined
       ? undefined
       : normalizeQuantityMismatches(obj.quantityMismatches),
+    // PR4a: ausente (backend antigo/historico) -> null/false, nunca undefined.
+    creditSupportRequestId:
+      obj.creditSupportRequestId === undefined || obj.creditSupportRequestId === null
+        ? null
+        : asNumber(obj.creditSupportRequestId),
+    creditPartner: normalizePartnerRef(obj.creditPartner),
+    partnerContact: normalizePartnerContact(obj.partnerContact),
+    partnerValidityDays:
+      obj.partnerValidityDays === undefined || obj.partnerValidityDays === null
+        ? null
+        : asNumber(obj.partnerValidityDays),
+    validityExpired: Boolean(obj.validityExpired),
   };
+}
+
+function normalizePartnerRef(raw: unknown): { id: number; name: string } | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  return { id: asNumber(obj.id), name: String(obj.name ?? '') };
+}
+
+function normalizePartnerContact(raw: unknown): { id: number; name: string; email: string } | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  return { id: asNumber(obj.id), name: String(obj.name ?? ''), email: String(obj.email ?? '') };
 }
 
 export function normalizeComparisonRecord(raw: unknown): ComparisonRecord {
@@ -482,7 +522,12 @@ export interface ExcludedComparisonResponse {
   quoteResponseId: number;
   supplierId: number;
   supplier: { id: number; name: string };
-  reason: 'unavailable' | 'partial';
+  // PR4a: alternativa via parceiro fora do ranking (null na resposta direta). Opcionais no
+  // tipo (fixtures antigas); o normalizador sempre preenche.
+  creditSupportRequestId?: number | null;
+  creditPartner?: { id: number; name: string } | null;
+  // 'stale' = so alternativas: a proposta do fornecedor mudou depois do encaminhamento.
+  reason: 'unavailable' | 'partial' | 'stale';
   unavailableItems: ExcludedItemRef[];
   partial?: {
     missingItems: ExcludedItemRef[];
@@ -509,7 +554,12 @@ function normalizeExcluded(raw: unknown): ExcludedComparisonResponse[] {
       id: asNumber(entry?.supplier?.id ?? entry?.supplierId),
       name: String(entry?.supplier?.name ?? ''),
     },
-    reason: entry?.reason === 'partial' ? 'partial' : 'unavailable',
+    creditSupportRequestId:
+      entry?.creditSupportRequestId === undefined || entry?.creditSupportRequestId === null
+        ? null
+        : asNumber(entry.creditSupportRequestId),
+    creditPartner: normalizePartnerRef(entry?.creditPartner),
+    reason: entry?.reason === 'partial' ? 'partial' : entry?.reason === 'stale' ? 'stale' : 'unavailable',
     unavailableItems: normalizeItemRefs(entry?.unavailableItems),
     partial: entry?.partial && typeof entry.partial === 'object'
       ? {
@@ -526,9 +576,18 @@ export interface ExecuteComparisonResult {
   results: ComparisonResult[];
   pendingApproval: boolean;
   winnerQuoteResponseId: number | null;
+  // PR4a: vencedor = alternativa via parceiro (null = direta ou sem vencedor). Opcional no
+  // tipo (fixtures antigas); o normalizador sempre preenche.
+  winnerCreditSupportRequestId?: number | null;
   thresholdValue: number | null;
   comparisonId: number;
+  // PR4a: candidatos ranqueados (diretas + alternativas). Ausente no backend antigo.
+  candidateCount?: number;
   excluded?: ExcludedComparisonResponse[];
+}
+
+function asOptionalCount(value: unknown): number | undefined {
+  return value === undefined || value === null ? undefined : asNumber(value);
 }
 
 export async function executeComparison(
@@ -548,8 +607,10 @@ export async function executeComparison(
     results: Array.isArray(obj.results) ? obj.results.map(normalizeComparisonResult) : [],
     pendingApproval: Boolean(obj.pendingApproval),
     winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
+    winnerCreditSupportRequestId: obj.winnerCreditSupportRequestId ? asNumber(obj.winnerCreditSupportRequestId) : null,
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     comparisonId: asNumber(obj.comparisonId),
+    candidateCount: asOptionalCount(obj.candidateCount),
     excluded: normalizeExcluded(obj.excluded),
   };
 }
@@ -557,9 +618,14 @@ export async function executeComparison(
 export interface PreviewComparisonResult {
   results: ComparisonResult[];
   winnerQuoteResponseId: number | null;
+  // PR4a: vencedor = alternativa via parceiro (null = direta ou sem vencedor). Opcional no
+  // tipo (fixtures antigas); o normalizador sempre preenche.
+  winnerCreditSupportRequestId?: number | null;
   pendingApproval: boolean;
   thresholdValue: number | null;
   responseCount: number;
+  // PR4a: candidatos ranqueados (diretas + alternativas). Ausente no backend antigo.
+  candidateCount?: number;
   excluded?: ExcludedComparisonResponse[];
 }
 
@@ -579,9 +645,11 @@ export async function previewComparison(
   return {
     results: Array.isArray(obj.results) ? obj.results.map(normalizeComparisonResult) : [],
     winnerQuoteResponseId: obj.winnerQuoteResponseId ? asNumber(obj.winnerQuoteResponseId) : null,
+    winnerCreditSupportRequestId: obj.winnerCreditSupportRequestId ? asNumber(obj.winnerCreditSupportRequestId) : null,
     pendingApproval: Boolean(obj.pendingApproval),
     thresholdValue: obj.thresholdValue ? asNumber(obj.thresholdValue) : null,
     responseCount: asNumber(obj.responseCount),
+    candidateCount: asOptionalCount(obj.candidateCount),
     excluded: normalizeExcluded(obj.excluded),
   };
 }
@@ -595,6 +663,8 @@ export async function approveAward(
 
 export interface SetManualWinnerPayload {
   quoteResponseId: number;
+  // PR4a: escolher a alternativa via parceiro da resposta `quoteResponseId` (ausente = direta).
+  creditSupportRequestId?: number;
   reason?: string | null;
 }
 

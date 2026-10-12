@@ -91,13 +91,26 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
   });
 
   it('nao elege uma resposta parcial como mais barata', async () => {
+    // Contrato do #126: a parcial (item faltando) sai do ranking em vez de derrubar a comparacao.
     await prisma.quoteResponseItem.updateMany({ where: { quoteResponseId: proposals[0].id, quoteRequestItemId: quote.items[1].id }, data: { deletedAt: new Date() } });
-    for (const suffix of ['/compare/preview', '/compare']) {
-      const res = await request(app).post(`/api/v1/quote-requests/${quote.id}${suffix}`).set('Cookie', cookies).send(weights);
-      expect(res.status).toBe(400);
-      expect(res.body.message).toContain('todos os itens');
-    }
+    const preview = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare/preview`).set('Cookie', cookies).send(weights);
+    expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+    expect(preview.body.results.map((r: any) => r.quoteResponseId)).toEqual([proposals[1].id]);
+    expect(preview.body.results.some((r: any) => r.quoteResponseId === proposals[0].id)).toBe(false);
+    expect(preview.body.winnerQuoteResponseId).toBe(proposals[1].id);
+    expect(preview.body.excluded).toHaveLength(1);
+    expect(preview.body.excluded[0]).toMatchObject({
+      quoteResponseId: proposals[0].id,
+      supplierId: suppliers[0].id,
+      reason: 'partial',
+      partial: { missingItems: [{ quoteRequestItemId: quote.items[1].id }] },
+    });
+    // Persistir exige 2 completas: 1 completa + 1 parcial -> 400 e nada gravado.
+    const compare = await request(app).post(`/api/v1/quote-requests/${quote.id}/compare`).set('Cookie', cookies).send(weights);
+    expect(compare.status).toBe(400);
+    expect(compare.body.message).toContain('pelo menos duas propostas completas');
     expect(await prisma.quoteComparison.count({ where: { quoteRequestId: quote.id } })).toBe(0);
+    expect(await prisma.quoteResponse.count({ where: { quoteRequestId: quote.id, isWinner: true } })).toBe(0);
   });
 
   it('preserva historico, oculta exclusao, revoga links e permite nova versao explicita', async () => {

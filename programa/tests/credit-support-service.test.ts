@@ -389,4 +389,10 @@ describe('serializeRequest', () => {
     expect(out.items[1]).toMatchObject({ partnerUnitPrice: null, markupPercent: null });
     expect(JSON.stringify(out)).not.toMatch(/tokenHash|abc/);
   });
+
+  it('PR4a: expoe isWinner (true/undefined -> false)', () => {
+    expect(serializeRequest(row, false).isWinner).toBe(false);
+    expect(serializeRequest({ ...row, isWinner: true }, false).isWinner).toBe(true);
+    expect(serializeRequest({ ...row, isWinner: false }, false).isWinner).toBe(false);
+  });
 });

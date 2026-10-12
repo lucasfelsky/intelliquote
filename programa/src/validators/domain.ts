@@ -386,6 +386,8 @@ export const quoteComparisonWeightsSchema = z.object({
 // difere do vencedor calculado) e' aplicada no controller, nao aqui.
 export const quoteWinnerOverrideSchema = z.object({
   quoteResponseId: positiveIntegerField,
+  // PR4a: vencedor = alternativa via parceiro (Credit Support) da resposta `quoteResponseId`.
+  creditSupportRequestId: positiveIntegerField.optional(),
   reason: z.preprocess(
     (value) =>
       value === undefined ? undefined : value === null || value === '' ? null : value,

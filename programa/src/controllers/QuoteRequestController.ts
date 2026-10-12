@@ -3,6 +3,7 @@ import { Incoterm, Prisma, QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import { lockQuoteRequestForPurchaseOrders } from '../services/QuotePurchaseOrderService';
+import { clearCreditWinners } from '../services/ComparisonCandidateService';
 import { SupplierRegretNotificationService } from '../services/SupplierRegretNotificationService';
 import {
   quoteRequestCloseSchema,
@@ -415,6 +416,8 @@ export class QuoteRequestController {
           where: { quoteRequestId: id },
           data: { isWinner: false },
         });
+        // PR4a: a alternativa via parceiro (Credit Support) tambem deixa de ser vencedora.
+        await clearCreditWinners(tx, { quoteRequestId: id });
 
         const reopenedQuoteRequest = await tx.quoteRequest.update({
           where: { id },

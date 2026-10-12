@@ -434,6 +434,8 @@ describe('/api/v1/credit-partners', () => {
     const args = tx.creditSupportRequest.updateMany.mock.calls[0][0];
     expect(args.where).toEqual({ creditPartnerId: 5, revokedAt: null });
     expect(args.data.revokedAt).toBeInstanceOf(Date);
+    // PR4a: encaminhamento revogado deixa de ser vencedor da Comparacao.
+    expect(args.data.isWinner).toBe(false);
     expect(tx.auditLog.create.mock.calls[0][0].data.metadata).toEqual({
       revokedCreditSupportRequests: 2,
     });

@@ -298,7 +298,8 @@ export class CreditPartnerController {
         // Credit Support: excluir o parceiro revoga os encaminhamentos ativos (links deixam de abrir).
         const revoked = await tx.creditSupportRequest.updateMany({
           where: { creditPartnerId: id, revokedAt: null },
-          data: { revokedAt: now },
+          // PR4a: encaminhamento revogado nao pode continuar como vencedor da Comparacao.
+          data: { revokedAt: now, isWinner: false },
         });
 
         await AuditLogService.log(

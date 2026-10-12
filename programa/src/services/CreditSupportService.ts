@@ -257,6 +257,8 @@ export interface CreditSupportRequestRow {
   partnerValidityDays: number | null;
   partnerNotes: string | null;
   partnerTotalPrice: DecimalLike | null;
+  /** PR4a: alternativa via parceiro vencedora da Comparacao. */
+  isWinner?: boolean;
   supplier: { id: number; name: string; country: string | null };
   creditPartner: { id: number; name: string };
   createdBy: { id: number; name: string };
@@ -290,6 +292,7 @@ export function serializeRequest(
     recipientEmails: parseRecipientEmails(row.recipientEmails),
     status: deriveStatus(row, now),
     isStale,
+    isWinner: row.isWinner === true,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,
     createdBy: { id: row.createdBy.id, name: row.createdBy.name },
@@ -844,7 +847,8 @@ export class CreditSupportService {
       // Condicional: duas revogacoes concorrentes gravam 1 so auditoria.
       const result = await tx.creditSupportRequest.updateMany({
         where: { id, revokedAt: null },
-        data: { revokedAt },
+        // PR4a: encaminhamento revogado nao pode continuar como vencedor da Comparacao.
+        data: { revokedAt, isWinner: false },
       });
       if (result.count === 0) {
         return { id, alreadyRevoked: true as const };

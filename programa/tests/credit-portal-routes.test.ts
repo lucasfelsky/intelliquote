@@ -448,6 +448,8 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       expect(String(updateMany.data.partnerTotalPrice)).toBe('83.5');
       expect(updateMany.data.submitterUserAgent).toBe(ua);
       expect(updateMany.data.respondedAt).toBeInstanceOf(Date);
+      // PR4a: nova oferta do parceiro zera a adjudicacao anterior desta alternativa.
+      expect(updateMany.data.isWinner).toBe(false);
 
       expect(db.creditSupportRequestItem.update).toHaveBeenCalledTimes(2);
 

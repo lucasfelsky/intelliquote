@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
 import {
   approveAward,
+  candidateKey,
   closeQuoteRequest,
   executeComparison,
   messageOf,
@@ -50,8 +51,19 @@ function formatOriginLine(r: ComparisonResult): string {
 }
 
 // O modal de vencedora manual so precisa destes campos; assim uma proposta fora do ranking
-// (item faltando) tambem pode ser escolhida.
-type WinnerTarget = Pick<ComparisonResult, 'quoteResponseId' | 'supplierId' | 'supplier'>;
+// (item faltando) tambem pode ser escolhida. PR4a: `creditSupportRequestId`/`creditPartner`
+// identificam a alternativa via parceiro (Credit Support) da mesma resposta.
+type WinnerTarget = Pick<
+  ComparisonResult,
+  'quoteResponseId' | 'supplierId' | 'supplier' | 'creditSupportRequestId' | 'creditPartner'
+>;
+
+// PR4a: linha "via Parceiro" (alternativa de Credit Support). A PO ao parceiro chega no PR4b;
+// ate la o botao fica desabilitado.
+const PO_PARTNER_SOON_TITLE = 'PO ao parceiro: em breve';
+function isViaPartner(r: { creditSupportRequestId?: number | null }): boolean {
+  return typeof r.creditSupportRequestId === 'number' && r.creditSupportRequestId > 0;
+}
 
 // Quantidade divergente (todos os itens presentes): entra no ranking com o unitario cotado x
 // quantidade PEDIDA; a linha avisa o comprador. Ausente (historico) ou vazio -> nada.
@@ -71,6 +83,10 @@ function excludedReasonText(entry: ExcludedComparisonResponse): string {
   const unavailable = entry.unavailableItems.length
     ? `temporariamente indisponível: ${names(entry.unavailableItems)}`
     : null;
+  // PR4a: so alternativas via parceiro ficam 'stale' (o painel de Credit Support mostra o mesmo aviso).
+  if (entry.reason === 'stale') {
+    return 'a proposta do fornecedor mudou depois do encaminhamento (revogue e encaminhe de novo)';
+  }
   if (entry.reason !== 'partial') {
     return `Temporariamente indisponível: ${names(entry.unavailableItems)}`;
   }
@@ -322,8 +338,13 @@ export function ComparacaoTab({
   const [winnerModalError, setWinnerModalError] = useState<string | null>(null);
 
   const setWinnerMut = useMutation({
-    mutationFn: (vars: { quoteResponseId: number; reason: string | null }) =>
-      setManualWinner(quoteRequestId, { quoteResponseId: vars.quoteResponseId, reason: vars.reason }),
+    mutationFn: (vars: { quoteResponseId: number; creditSupportRequestId?: number | null; reason: string | null }) =>
+      setManualWinner(quoteRequestId, {
+        quoteResponseId: vars.quoteResponseId,
+        // PR4a: alternativa via parceiro -> envia a identidade composta; direta -> chave ausente.
+        ...(vars.creditSupportRequestId ? { creditSupportRequestId: vars.creditSupportRequestId } : {}),
+        reason: vars.reason,
+      }),
     onSuccess: async () => {
       setFeedback({ kind: 'ok', text: 'Vencedora definida manualmente.' });
       closeWinnerModal();
@@ -509,10 +530,14 @@ export function ComparacaoTab({
   function renderRankingCards(results: ComparisonResult[]) {
     return results.map((r, idx) => {
       const name = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
-      const contactBits = [r.contact?.name, r.contact?.email].filter(Boolean) as string[];
+      const viaPartner = isViaPartner(r);
+      // PR4a: na linha via parceiro o contato exibido e o do parceiro (quem respondeu).
+      const contactSource = viaPartner ? r.partnerContact : r.contact;
+      const contactBits = [contactSource?.name, contactSource?.email].filter(Boolean) as string[];
       const contactLine = contactBits.length ? contactBits.join(' · ') : null;
       const percent = scorePercent(r.totalScore);
-      const rowKey = String(r.quoteResponseId ?? r.supplierId);
+      // Chave composta: a direta e a via parceiro compartilham o mesmo quoteResponseId.
+      const rowKey = candidateKey(r);
       return (
         <div
           key={rowKey}
@@ -526,6 +551,20 @@ export function ComparacaoTab({
           <div className="cmp-row__supplier">
             <div className="cmp-row__name-line">
               <span className="cmp-row__name">{name}</span>
+              {viaPartner && (
+                <span
+                  className="badge"
+                  data-testid="via-partner"
+                  title="Alternativa de Credit Support: preço e prazo cotados pelo parceiro sobre a proposta deste fornecedor."
+                >
+                  via {r.creditPartner?.name ?? 'parceiro'} · Credit Support
+                </span>
+              )}
+              {viaPartner && r.validityExpired && (
+                <span className="badge badge--warning" data-testid="partner-validity-expired">
+                  Validade do parceiro vencida
+                </span>
+              )}
               {r.isWinner && (
                 <span className="cmp-winner-badge">
                   <TrophyIcon />
@@ -560,26 +599,45 @@ export function ComparacaoTab({
           <div className={r.isWinner ? 'cmp-row__actions cmp-row__actions--stacked' : 'cmp-row__actions'}>
             {r.quoteResponseId ? (
               r.isWinner ? (
-                <>
-                  <button
-                    type="button"
-                    className="cmp-btn cmp-btn--primary"
-                    onClick={() => handleRowSendPo(r, true)}
-                    title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
-                  >
-                    <DocIcon />
-                    Enviar Ordem de Compra
-                  </button>
-                  <button
-                    type="button"
-                    className="cmp-btn cmp-btn--ghost"
-                    onClick={() => handleRowReply(r, true)}
-                    title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
-                  >
-                    <EnvelopeIcon />
-                    Responder
-                  </button>
-                </>
+                viaPartner ? (
+                  // PR4a: PO ao parceiro chega no PR4b. Sem "Responder" (o e-mail iria ao fornecedor).
+                  <>
+                    <button
+                      type="button"
+                      className="cmp-btn cmp-btn--primary"
+                      disabled
+                      title={PO_PARTNER_SOON_TITLE}
+                      data-testid="po-partner-soon"
+                    >
+                      <DocIcon />
+                      Enviar Ordem de Compra
+                    </button>
+                    <span className="cmp-row__contact" data-testid="po-partner-soon-hint">
+                      {PO_PARTNER_SOON_TITLE}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="cmp-btn cmp-btn--primary"
+                      onClick={() => handleRowSendPo(r, true)}
+                      title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
+                    >
+                      <DocIcon />
+                      Enviar Ordem de Compra
+                    </button>
+                    <button
+                      type="button"
+                      className="cmp-btn cmp-btn--ghost"
+                      onClick={() => handleRowReply(r, true)}
+                      title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
+                    >
+                      <EnvelopeIcon />
+                      Responder
+                    </button>
+                  </>
+                )
               ) : (
                 canCompare && (
                   <button
@@ -606,7 +664,9 @@ export function ComparacaoTab({
     ? replyTarget.supplier?.name ?? `Fornecedor #${replyTarget.supplierId}`
     : '';
   const winnerTargetName = winnerTarget
-    ? winnerTarget.supplier?.name ?? `Fornecedor #${winnerTarget.supplierId}`
+    ? `${winnerTarget.supplier?.name ?? `Fornecedor #${winnerTarget.supplierId}`}${
+        isViaPartner(winnerTarget) ? ` via ${winnerTarget.creditPartner?.name ?? 'parceiro'}` : ''
+      }`
     : '';
   const reviewTargetName = reviewTarget
     ? reviewTarget.supplier?.name ?? `Fornecedor #${reviewTarget.supplierId}`
@@ -624,13 +684,16 @@ export function ComparacaoTab({
   const responseCount = previewQuery.data?.responseCount ?? 0;
   // Propostas com item "Temporarily unavailable" ficam FORA do ranking (backend).
   const excludedResponses = previewQuery.data?.excluded ?? [];
-  // Propostas que realmente entram no ranking (as excluidas nao contam).
-  const comparableCount = responseCount - excludedResponses.length;
+  // Candidatos que realmente entram no ranking (as excluidas nao contam). PR4a: o backend
+  // devolve `candidateCount` (diretas + alternativas via parceiro); fallback = contrato antigo.
+  const comparableCount = previewQuery.data?.candidateCount ?? (responseCount - excludedResponses.length);
   const previewPendingApproval = previewQuery.data?.pendingApproval ?? false;
   const previewWinnerId = previewQuery.data?.winnerQuoteResponseId ?? null;
+  // PR4a: identidade composta (a direta e a via parceiro compartilham o quoteResponseId).
+  const previewWinnerKey = `${previewWinnerId}:${previewQuery.data?.winnerCreditSupportRequestId ?? 0}`;
   const rankedResults = previewResults.map((r) => ({
     ...r,
-    isWinner: r.quoteResponseId === previewWinnerId,
+    isWinner: candidateKey(r) === previewWinnerKey,
   })).sort((a, b) => Number(b.isWinner) - Number(a.isWinner) || b.totalScore - a.totalScore || a.offeredPrice - b.offeredPrice);
 
   // Animação de reordenação (FLIP leve, CSS puro, sem lib): guarda a posição
@@ -639,7 +702,7 @@ export function ComparacaoTab({
   // Desligado sob prefers-reduced-motion.
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
-  const rankOrderKey = rankedResults.map((r) => r.quoteResponseId ?? r.supplierId).join('|');
+  const rankOrderKey = rankedResults.map((r) => candidateKey(r)).join('|');
   useLayoutEffect(() => {
     const prevRects = prevRectsRef.current;
     const nextRects = new Map<string, DOMRect>();
@@ -671,15 +734,20 @@ export function ComparacaoTab({
 
   // By-pass de 1 fornecedor: sem comparação, marca vencedor manualmente e
   // abre direto o modal de Ordem de Compra (sem motivo, sem persistir comparação).
+  // PR4a: se o único candidato é via parceiro, marca a alternativa (identidade composta);
+  // o modal de PO não abre (PO ao parceiro chega no PR4b).
   async function handleBypassSendPo() {
     const only = previewResults[0];
     if (!only?.quoteResponseId) return;
     setBypassPending(true);
     try {
-      await setManualWinner(quoteRequestId, { quoteResponseId: only.quoteResponseId });
+      await setManualWinner(quoteRequestId, {
+        quoteResponseId: only.quoteResponseId,
+        ...(isViaPartner(only) ? { creditSupportRequestId: only.creditSupportRequestId ?? undefined } : {}),
+      });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
-      openPoModal(only);
+      if (!isViaPartner(only)) openPoModal(only);
     } catch (err) {
       setFeedback({ kind: 'err', text: messageOf(err) });
     } finally {
@@ -801,8 +869,10 @@ export function ComparacaoTab({
         {previewQuery.data && comparableCount === 1 && (() => {
           const only = previewResults[0];
           const bypassName = only?.supplier?.name ?? (only ? `Fornecedor #${only.supplierId}` : '—');
+          const bypassViaPartner = !!only && isViaPartner(only);
+          const bypassContactSource = bypassViaPartner ? only?.partnerContact : only?.contact;
           const bypassContactBits = only
-            ? ([only.contact?.name, only.contact?.email].filter(Boolean) as string[])
+            ? ([bypassContactSource?.name, bypassContactSource?.email].filter(Boolean) as string[])
             : [];
           const bypassContactLine = bypassContactBits.length ? bypassContactBits.join(' · ') : null;
           return (
@@ -832,7 +902,17 @@ export function ComparacaoTab({
                   <div className="cmp-bypass-supplier__info">
                     <div className="cmp-bypass-supplier__avatar">{initialsOf(bypassName)}</div>
                     <div className="cmp-bypass-supplier__name">
-                      <strong>{bypassName}</strong>
+                      <strong>
+                        {bypassName}
+                        {bypassViaPartner && (
+                          <>
+                            {' '}
+                            <span className="badge" data-testid="via-partner">
+                              via {only.creditPartner?.name ?? 'parceiro'} · Credit Support
+                            </span>
+                          </>
+                        )}
+                      </strong>
                       {bypassContactLine && <span>{bypassContactLine}</span>}
                       <span className="cmp-row__contact">{formatOriginLine(only)}</span>
                       <DgSeal result={only} />
@@ -852,15 +932,34 @@ export function ComparacaoTab({
               )}
 
               <div className="cmp-bypass-actions">
-                <button
-                  type="button"
-                  className="cmp-btn cmp-btn--primary"
-                  onClick={() => handleBypassSendPo()}
-                  disabled={bypassPending}
-                >
-                  <DocIcon />
-                  {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
-                </button>
+                {bypassViaPartner ? (
+                  // PR4a: PO ao parceiro chega no PR4b.
+                  <>
+                    <button
+                      type="button"
+                      className="cmp-btn cmp-btn--primary"
+                      disabled
+                      title={PO_PARTNER_SOON_TITLE}
+                      data-testid="po-partner-soon"
+                    >
+                      <DocIcon />
+                      Enviar Ordem de Compra
+                    </button>
+                    <span className="cmp-row__contact" data-testid="po-partner-soon-hint">
+                      {PO_PARTNER_SOON_TITLE}
+                    </span>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="cmp-btn cmp-btn--primary"
+                    onClick={() => handleBypassSendPo()}
+                    disabled={bypassPending}
+                  >
+                    <DocIcon />
+                    {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -894,10 +993,18 @@ export function ComparacaoTab({
             </h3>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--ink-soft)' }}>
               {excludedResponses.map((entry) => (
-                <li key={entry.quoteResponseId} style={{ marginBottom: 4 }}>
+                <li key={candidateKey(entry)} style={{ marginBottom: 4 }}>
                   <strong style={{ color: 'var(--ink)' }}>
                     {entry.supplier.name || `Fornecedor #${entry.supplierId}`}
                   </strong>
+                  {isViaPartner(entry) && (
+                    <>
+                      {' '}
+                      <span className="badge" data-testid="via-partner">
+                        via {entry.creditPartner?.name ?? 'parceiro'}
+                      </span>
+                    </>
+                  )}
                   {' — '}
                   {excludedReasonText(entry)}
                   {canCompare && canPickExcludedAsWinner(entry) && (
@@ -911,6 +1018,8 @@ export function ComparacaoTab({
                             quoteResponseId: entry.quoteResponseId,
                             supplierId: entry.supplierId,
                             supplier: entry.supplier,
+                            creditSupportRequestId: entry.creditSupportRequestId,
+                            creditPartner: entry.creditPartner,
                           })
                         }
                       >
@@ -1071,6 +1180,7 @@ export function ComparacaoTab({
                 winnerTarget.quoteResponseId &&
                 setWinnerMut.mutate({
                   quoteResponseId: winnerTarget.quoteResponseId,
+                  creditSupportRequestId: winnerTarget.creditSupportRequestId ?? null,
                   reason: winnerReason.trim() || null,
                 })
               }

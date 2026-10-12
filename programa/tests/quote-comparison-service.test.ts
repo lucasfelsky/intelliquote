@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { QuoteComparisonService } from '../src/services/QuoteComparisonService';
+import { comparisonCandidateKey } from '../src/services/QuoteComparisonService';
 
 describe('QuoteComparisonService', () => {
   const usdProposal = {
@@ -280,5 +281,64 @@ describe('QuoteComparisonService', () => {
     expect(results[1].qualityScore).toBe(50); // 5/5 * 50 = 50
     expect(results[0].qualityScore).toBe(20); // 2/5 * 50 = 20
     expect(results[1].totalScore).toBe(100); // 50 (price) + 50 (quality)
+  });
+
+  // PR4a (Credit Support): a alternativa via parceiro e um candidato proprio com o MESMO
+  // `id` da resposta de origem; a identidade passa a ser (id, creditSupportRequestId).
+  describe('candidato via parceiro', () => {
+    const brlProposal = {
+      id: 1, quoteRequestId: 10, supplierId: 100, offeredPrice: 100,
+      currency: 'BRL', exchangeRate: 1, freightCost: 10, insuranceCost: 5,
+      otherFees: 5, importDutyRate: 0, ipiRate: 0, pisRate: 0, cofinsRate: 0,
+      offeredIncoterm: 'FOB' as const, paymentTermsDays: 30,
+    };
+
+    it('direta id 1 + alternativa id 1 via parceiro 7 (preco menor, prazo maior): so a alternativa vence', () => {
+      const results = QuoteComparisonService.compareResponses([
+        brlProposal,
+        { ...brlProposal, offeredPrice: 90, paymentTermsDays: 60, creditSupportRequestId: 7 },
+      ]);
+      expect(results).toHaveLength(2);
+      expect(results.filter((r) => r.isWinner)).toHaveLength(1);
+      const winner = results.find((r) => r.isWinner)!;
+      expect(winner.id).toBe(1);
+      expect(winner.creditSupportRequestId).toBe(7);
+      expect(results.find((r) => !r.creditSupportRequestId)?.isWinner).toBe(false);
+    });
+
+    it('empate total direta x alternativa da mesma resposta: a direta vence', () => {
+      const results = QuoteComparisonService.compareResponses([
+        { ...brlProposal, creditSupportRequestId: 7 },
+        brlProposal,
+      ]);
+      expect(results[0].totalScore).toBe(results[1].totalScore);
+      expect(results.filter((r) => r.isWinner)).toHaveLength(1);
+      const winner = results.find((r) => r.isWinner)!;
+      expect(winner.creditSupportRequestId).toBeUndefined();
+    });
+
+    it('duas alternativas empatadas da mesma resposta: vence a de menor creditSupportRequestId', () => {
+      const results = QuoteComparisonService.compareResponses([
+        { ...brlProposal, creditSupportRequestId: 9 },
+        { ...brlProposal, creditSupportRequestId: 7 },
+      ]);
+      expect(results.filter((r) => r.isWinner)).toHaveLength(1);
+      expect(results.find((r) => r.isWinner)?.creditSupportRequestId).toBe(7);
+      expect(comparisonCandidateKey({ id: 1, creditSupportRequestId: 7 })).toBe('1:7');
+      expect(comparisonCandidateKey({ id: 1, creditSupportRequestId: null })).toBe('1');
+      expect(comparisonCandidateKey({ id: 1 })).toBe('1');
+    });
+
+    it('creditSupportRequestId null nao muda nada: resultado identico ao input sem a chave', () => {
+      const inputs = [brlProposal, { ...brlProposal, id: 2, supplierId: 200, offeredPrice: 120 }];
+      const withoutKey = QuoteComparisonService.compareResponses(inputs);
+      const withNullKey = QuoteComparisonService.compareResponses(
+        inputs.map((input) => ({ ...input, creditSupportRequestId: null })),
+      );
+      const strip = (rows: typeof withNullKey) =>
+        rows.map(({ creditSupportRequestId: _ignored, ...rest }) => rest);
+      expect(strip(withNullKey)).toEqual(strip(withoutKey));
+      expect(withNullKey.map((r) => r.isWinner)).toEqual(withoutKey.map((r) => r.isWinner));
+    });
   });
 });

@@ -348,15 +348,19 @@ model QuoteComparison {
   approvedById          Int?
   approvedAt            DateTime?
   createdAt             DateTime                @default(now())
+  // PR4a: vencedor = alternativa via parceiro (winnerQuoteResponseId continua = resposta de origem)
+  winnerCreditSupportRequestId Int?
   quoteRequest          QuoteRequest            @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   executedBy            User?                   @relation("QuoteComparisonExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
   approvedBy            User?                   @relation("QuoteComparisonApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
   winnerQuoteResponse   QuoteResponse?          @relation("ComparisonWinner", fields: [winnerQuoteResponseId], references: [id], onDelete: SetNull)
   results               QuoteComparisonResult[]
+  winnerCreditSupportRequest   CreditSupportRequest? @relation("ComparisonCreditWinner", fields: [winnerCreditSupportRequestId], references: [id], onDelete: SetNull)
 
   @@index([quoteRequestId])
   @@index([executedById])
   @@index([createdAt])
+  @@index([winnerCreditSupportRequestId])
 }
 
 model QuoteComparisonResult {
@@ -387,12 +391,16 @@ model QuoteComparisonResult {
   totalScore        Float
   isWinner          Boolean         @default(false)
   createdAt         DateTime        @default(now())
+  // PR4a: linha = alternativa via parceiro (quoteResponseId/supplierId = resposta de origem)
+  creditSupportRequestId Int?
   comparison        QuoteComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
   quoteResponse     QuoteResponse?  @relation(fields: [quoteResponseId], references: [id], onDelete: SetNull)
+  creditSupportRequest   CreditSupportRequest? @relation(fields: [creditSupportRequestId], references: [id], onDelete: SetNull)
 
   @@index([comparisonId])
   @@index([quoteResponseId])
   @@index([supplierId])
+  @@index([creditSupportRequestId])
 }
 
 model AuditLog {
@@ -786,6 +794,8 @@ model CreditSupportRequest {
   createdById              Int
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
+  // PR4a: alternativa via parceiro vencedora da Comparacao (exclusivo com QuoteResponse.isWinner)
+  isWinner                 Boolean   @default(false)
   quoteRequest             QuoteRequest             @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
   quoteResponse            QuoteResponse            @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
   supplier                 Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
@@ -794,6 +804,8 @@ model CreditSupportRequest {
   createdBy                User                     @relation("CreditSupportRequestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   items                    CreditSupportRequestItem[]
   logs                     SupplierPortalTokenLog[]
+  wonComparisons           QuoteComparison[]        @relation("ComparisonCreditWinner")
+  comparisonResults        QuoteComparisonResult[]
 
   @@index([quoteRequestId])
   @@index([quoteResponseId])
@@ -802,6 +814,7 @@ model CreditSupportRequest {
   @@index([createdById])
   @@index([expiresAt])
   @@index([revokedAt])
+  @@index([quoteRequestId, isWinner])
 }
 
 model CreditSupportRequestItem {

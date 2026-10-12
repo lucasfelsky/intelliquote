@@ -4,6 +4,7 @@ import { PortalHttpError } from '../utils/portalHttpError';
 import { sumQuoteItems } from '../utils/quoteBasket';
 import { normalizeItemOriginPort } from '../utils/originPort';
 import { QuoteComparisonService } from './QuoteComparisonService';
+import { clearCreditWinners } from './ComparisonCandidateService';
 import { ExchangeRateService } from './ExchangeRateService';
 import {
   isAvailablePortalItem,
@@ -333,7 +334,7 @@ async function syncQuoteResponseFromPortal(
     incotermPrices: (item.incotermPrices as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
   }));
 
-  return tx.quoteResponse.upsert({
+  const upserted = await tx.quoteResponse.upsert({
     where: {
       quoteRequestId_supplierId: {
         quoteRequestId: input.quoteRequestId,
@@ -357,6 +358,10 @@ async function syncQuoteResponseFromPortal(
       },
     },
   });
+  // PR4a: proposta revisada pelo portal -> a alternativa via parceiro (Credit Support) desta
+  // resposta tambem deixa de ser vencedora (o snapshot do parceiro ficou stale).
+  await clearCreditWinners(tx, { quoteResponseId: upserted.id });
+  return upserted;
 }
 
 type NormalizedIncotermPrice = { incoterm: string; unitPrice: number };
