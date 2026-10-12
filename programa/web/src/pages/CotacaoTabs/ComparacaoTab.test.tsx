@@ -8,7 +8,9 @@ vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: controls.role } }),
 }));
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => controls.confirm }));
-vi.mock('@/services/quoteResponses', () => ({
+vi.mock('@/services/quoteResponses', async (importOriginal) => ({
+  // PR4a: chave composta real (resposta direta x alternativa via parceiro).
+  candidateKey: (await importOriginal<typeof import('@/services/quoteResponses')>()).candidateKey,
   listComparisons: vi.fn(),
   executeComparison: vi.fn(),
   previewComparison: vi.fn(),
@@ -997,5 +999,214 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
 
     await waitFor(() => expect(closeQuoteRequest).toHaveBeenCalledTimes(1));
     expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  // PR4a (Credit Support): alternativa via parceiro como candidato proprio na Comparacao.
+  describe('alternativa via parceiro (Credit Support, PR4a)', () => {
+    beforeEach(() => {
+      controls.role = 'admin';
+      vi.mocked(setManualWinner).mockReset().mockResolvedValue(undefined);
+      vi.mocked(executeComparison).mockReset();
+      vi.mocked(listComparisons).mockResolvedValue({ quoteRequestId: 99, comparisons: [record] });
+    });
+
+    // Mesma resposta de origem (42) que `winner`, cotada pelo Banco Alfa: preco/prazo do parceiro.
+    const viaPartner = {
+      ...winner,
+      isWinner: false,
+      offeredPrice: 90,
+      paymentTermsDays: 90,
+      creditSupportRequestId: 7,
+      creditPartner: { id: 5, name: 'Banco Alfa' },
+      partnerContact: { id: 50, name: 'Ana Crédito', email: 'ana@alfa.example' },
+      partnerValidityDays: 30,
+      validityExpired: false,
+    };
+
+    it('40. duas linhas com o mesmo quoteResponseId: ambas renderizam, chip "via", e so a marcada pelo winnerCreditSupportRequestId tem o badge', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [{ ...winner, isWinner: false }, viaPartner, loser],
+        winnerQuoteResponseId: 42,
+        winnerCreditSupportRequestId: 7,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 2,
+        candidateCount: 3,
+      });
+      const { container, findAllByText, getByTestId, getAllByText, queryByText } = renderTab();
+      const names = await findAllByText('ACME Ltda');
+      expect(names).toHaveLength(2);
+      const chip = getByTestId('via-partner');
+      expect(chip.textContent).toBe('via Banco Alfa · Credit Support');
+      // Badge de vencedora UMA vez, na linha via parceiro (chave composta, nao quoteResponseId).
+      const badges = container.querySelectorAll('.cmp-winner-badge');
+      expect(badges).toHaveLength(1);
+      const winnerRow = badges[0]!.closest('.cmp-row') as HTMLElement;
+      expect(within(winnerRow).getByTestId('via-partner')).toBeTruthy();
+      expect(within(winnerRow).getByText('ana@alfa.example', { exact: false })).toBeTruthy();
+      expect(getAllByText('90 dias')).toHaveLength(1);
+      // candidateCount (3) e usado como comparableCount: ranking normal, sem by-pass.
+      expect(queryByText(/sem comparação/)).toBeNull();
+      // Ranking tem 3 linhas, chaves distintas.
+      expect(container.querySelectorAll('.cmp-rows .cmp-row')).toHaveLength(3);
+    });
+
+    it('41. "Definir como vencedora" na linha via parceiro chama setManualWinner com creditSupportRequestId e titulo "via"', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [winner, viaPartner],
+        winnerQuoteResponseId: 42,
+        winnerCreditSupportRequestId: null,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 1,
+        candidateCount: 2,
+      });
+      const { container, findByTestId, getByLabelText } = renderTab();
+      const chip = await findByTestId('via-partner');
+      const row = chip.closest('.cmp-row') as HTMLElement;
+      fireEvent.click(within(row).getByRole('button', { name: 'Definir como vencedora' }));
+      const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+      expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Definir ACME Ltda via Banco Alfa como vencedora');
+      fireEvent.change(getByLabelText('Motivo'), { target: { value: 'Prazo do parceiro' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Definir como vencedora' }));
+      await waitFor(() => expect(setManualWinner).toHaveBeenCalledTimes(1));
+      expect(setManualWinner).toHaveBeenCalledWith(99, {
+        quoteResponseId: 42,
+        creditSupportRequestId: 7,
+        reason: 'Prazo do parceiro',
+      });
+    });
+
+    it('42. vencedora via parceiro: botao de PO desabilitado ("PO ao parceiro: em breve") e sem "Responder"', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [{ ...winner, isWinner: false }, viaPartner, loser],
+        winnerQuoteResponseId: 42,
+        winnerCreditSupportRequestId: 7,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 2,
+        candidateCount: 3,
+      });
+      const { findByTestId, getByTestId, queryByRole, queryAllByRole } = renderTab();
+      const po = (await findByTestId('po-partner-soon')) as HTMLButtonElement;
+      expect(po.disabled).toBe(true);
+      expect(po.title).toBe('PO ao parceiro: em breve');
+      expect(po.textContent).toContain('Enviar Ordem de Compra');
+      // Texto visivel (nao so o title) explicando o botao desabilitado.
+      expect(getByTestId('po-partner-soon-hint').textContent).toBe('PO ao parceiro: em breve');
+      expect(queryByRole('button', { name: 'Responder' })).toBeNull();
+      // A direta da mesma origem (nao vencedora) e a Beta oferecem "Definir como vencedora".
+      expect(queryAllByRole('button', { name: 'Definir como vencedora' })).toHaveLength(2);
+    });
+
+    it('43. excluida `stale` via parceiro: texto proprio, prefixo "via" e SEM botao de escolha manual', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, loser],
+        excluded: [
+          {
+            quoteResponseId: 43,
+            supplierId: 8,
+            supplier: { id: 8, name: 'Beta Corp' },
+            creditSupportRequestId: 9,
+            creditPartner: { id: 6, name: 'Banco Beta' },
+            reason: 'stale',
+            unavailableItems: [],
+          },
+        ],
+      });
+      const { findByText, queryByRole } = renderTab();
+      const heading = await findByText('Fora do ranking');
+      const section = heading.closest('section') as HTMLElement;
+      expect(within(section).getByTestId('via-partner').textContent).toBe('via Banco Beta');
+      expect(section.textContent).toContain(
+        'a proposta do fornecedor mudou depois do encaminhamento (revogue e encaminhe de novo)',
+      );
+      expect(queryByRole('button', { name: 'Definir como vencedora mesmo assim' })).toBeNull();
+    });
+
+    it('44. excluida `partial` (item faltando) via parceiro pode ser escolhida e envia creditSupportRequestId', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, loser],
+        excluded: [
+          {
+            quoteResponseId: 43,
+            supplierId: 8,
+            supplier: { id: 8, name: 'Beta Corp' },
+            creditSupportRequestId: 9,
+            creditPartner: { id: 6, name: 'Banco Beta' },
+            reason: 'partial',
+            unavailableItems: [],
+            partial: {
+              missingItems: [{ quoteRequestItemId: 6, productName: 'Catalisador Y' }],
+              quantityMismatches: [],
+              extraItems: [],
+              duplicateItems: [],
+            },
+          },
+        ],
+      });
+      const { container, findByText, getByRole, getByLabelText } = renderTab();
+      await findByText('Fora do ranking');
+      fireEvent.click(getByRole('button', { name: 'Definir como vencedora mesmo assim' }));
+      const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Definir Beta Corp via Banco Beta como vencedora');
+      fireEvent.change(getByLabelText('Motivo'), { target: { value: 'ok' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Definir como vencedora' }));
+      await waitFor(() => expect(setManualWinner).toHaveBeenCalledTimes(1));
+      expect(setManualWinner).toHaveBeenCalledWith(99, { quoteResponseId: 43, creditSupportRequestId: 9, reason: 'ok' });
+    });
+
+    it('45. by-pass com o unico candidato via parceiro: chip, PO desabilitada e nenhuma chamada de PO', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        results: [viaPartner],
+        winnerQuoteResponseId: null,
+        winnerCreditSupportRequestId: null,
+        pendingApproval: false,
+        thresholdValue: null,
+        responseCount: 1,
+        candidateCount: 1,
+        excluded: [
+          {
+            quoteResponseId: 42,
+            supplierId: 7,
+            supplier: { id: 7, name: 'ACME Ltda' },
+            creditSupportRequestId: null,
+            creditPartner: null,
+            reason: 'unavailable',
+            unavailableItems: [{ quoteRequestItemId: 5, productName: 'Resina Epóxi' }],
+          },
+        ],
+      });
+      const { findByText, getByTestId, container } = renderTab();
+      await findByText('Apenas uma proposta completa — sem comparação.');
+      const bypass = container.querySelector('.cmp-bypass') as HTMLElement;
+      expect(within(bypass).getByTestId('via-partner').textContent).toBe('via Banco Alfa · Credit Support');
+      expect(bypass.textContent).toContain('ana@alfa.example');
+      const po = getByTestId('po-partner-soon') as HTMLButtonElement;
+      expect(po.disabled).toBe(true);
+      expect(po.title).toBe('PO ao parceiro: em breve');
+      expect(within(bypass).getByTestId('po-partner-soon-hint').textContent).toBe('PO ao parceiro: em breve');
+      expect(setManualWinner).not.toHaveBeenCalled();
+      expect(executeComparison).not.toHaveBeenCalled();
+    });
+
+    it('46. fixtures antigas (sem chaves PR4a): badge continua na vencedora por quoteResponseId e comparableCount cai no fallback', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [winner, loser],
+        responseCount: 3,
+        excluded: [excludedGamma],
+      });
+      const { container, findByText, queryByTestId } = renderTab();
+      await findByText('Fora do ranking');
+      const badges = container.querySelectorAll('.cmp-winner-badge');
+      expect(badges).toHaveLength(1);
+      expect(within(badges[0]!.closest('.cmp-row') as HTMLElement).getByText('ACME Ltda')).toBeTruthy();
+      expect(queryByTestId('via-partner')).toBeNull();
+      expect(queryByTestId('po-partner-soon')).toBeNull();
+    });
   });
 });

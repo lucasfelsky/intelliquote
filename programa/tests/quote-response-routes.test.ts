@@ -33,6 +33,9 @@ vi.mock('../src/lib/prisma', () => {
       findUnique: vi.fn(),
     },
     quoteComparison: {},
+    creditSupportRequest: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   return { prisma };
@@ -61,6 +64,7 @@ const prismaMock = prisma as unknown as {
   };
   quoteResponseItem: { findMany: ReturnType<typeof vi.fn> };
   supplierPortalToken: { findMany: ReturnType<typeof vi.fn> };
+  creditSupportRequest: { updateMany: ReturnType<typeof vi.fn> };
 };
 
 describe('Quote response routes', () => {
@@ -770,11 +774,18 @@ describe('Quote response manual - item temporariamente indisponivel', () => {
         { quoteRequestItemId: 12, isUnavailable: true },
       ]);
       expect(data.isWinner).toBe(false);
+      // PR4a: reset simetrico da alternativa via parceiro (Credit Support) desta proposta.
+      expect(prismaMock.creditSupportRequest.updateMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.creditSupportRequest.updateMany).toHaveBeenCalledWith({
+        where: { quoteResponseId: 55, isWinner: true },
+        data: { isWinner: false },
+      });
     });
 
     it('sem item indisponivel o PUT nao mexe em isWinner (chave ausente)', async () => {
       const data = await putOnWinner([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
       expect(data.isWinner).toBeUndefined();
+      expect(prismaMock.creditSupportRequest.updateMany).not.toHaveBeenCalled();
     });
   });
 

@@ -144,6 +144,7 @@ function CreditSupportCard({
         {showSupplier && <span style={{ color: 'var(--ink-soft)' }}>{row.supplier.name} ·</span>}
         <strong>{row.partner.name}</strong>
         <span className={STATUS_CLASS[row.status] ?? 'badge'}>{STATUS_LABELS[row.status] ?? row.status}</span>
+        {row.isWinner && <span className="badge badge--success">Vencedora</span>}
         {row.isStale && <span className="badge badge--warning">Proposta do fornecedor mudou</span>}
         <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Validade: {formatDate(row.expiresAt)}</span>
       </div>

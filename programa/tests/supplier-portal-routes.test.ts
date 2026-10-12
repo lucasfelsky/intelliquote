@@ -23,6 +23,9 @@ vi.mock('../src/lib/prisma', async () => {
       findFirst: vi.fn().mockResolvedValue(null),
       upsert: vi.fn(),
     },
+    creditSupportRequest: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     exchangeRate: {
       findFirst: vi.fn().mockResolvedValue(null),
     },
@@ -132,6 +135,9 @@ const prismaMock = prisma as unknown as {
     quoteResponse: {
       findFirst: ReturnType<typeof vi.fn>;
       upsert: ReturnType<typeof vi.fn>;
+    };
+    creditSupportRequest: {
+      updateMany: ReturnType<typeof vi.fn>;
     };
     exchangeRate: {
       findFirst: ReturnType<typeof vi.fn>;
@@ -310,6 +316,11 @@ describe('Portal routes (public, magic-link)', () => {
           expect.objectContaining({ quoteRequestItemId: 11, quantity: 1, leadTimeDays: null, notes: null })
         ])
       );
+      // PR4a: proposta (re)enviada pelo portal zera a alternativa via parceiro vencedora desta resposta.
+      expect(prismaMock.__tx.creditSupportRequest.updateMany).toHaveBeenCalledWith({
+        where: { quoteResponseId: 501, isWinner: true },
+        data: { isWinner: false },
+      });
     } else {
       // Debug help: when running in non-201, surface the response body.
       console.warn('Portal respond returned', res.status, res.body);

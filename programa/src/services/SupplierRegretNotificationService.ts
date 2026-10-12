@@ -34,8 +34,17 @@ export class SupplierRegretNotificationService {
         select: { supplierId: true, supplier: { select: { name: true } } },
       });
 
+      // PR4a: vencedor via parceiro (Credit Support) -> o fornecedor de ORIGEM do
+      // encaminhamento vencedor nao e perdedor (sua resposta direta tem isWinner=false).
+      const creditWinners = await prisma.creditSupportRequest.findMany({
+        where: { quoteRequestId, isWinner: true },
+        select: { supplierId: true },
+      });
+      const creditWinnerSupplierIds = new Set(creditWinners.map((row) => row.supplierId));
+
       // Dedup por fornecedor (pode haver varias respostas/versoes por supplier).
-      const loserSupplierIds = [...new Set(responses.map((response) => response.supplierId))];
+      const loserSupplierIds = [...new Set(responses.map((response) => response.supplierId))]
+        .filter((supplierId) => !creditWinnerSupplierIds.has(supplierId));
       result.losers = loserSupplierIds.length;
       if (loserSupplierIds.length === 0) return result;
 

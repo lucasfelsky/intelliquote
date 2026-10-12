@@ -639,6 +639,11 @@ describe('Credit Support (rotas autenticadas)', () => {
       const first = await request(app).post('/api/v1/credit-support-requests/9/revoke').set('Cookie', cookie);
       expect(first.status).toBe(200);
       expect(first.body).toEqual({ id: 9, status: 'revoked' });
+      // PR4a: revogar zera isWinner (encaminhamento revogado nao vence a Comparacao).
+      const revokeArgs = db.creditSupportRequest.updateMany.mock.calls[0][0];
+      expect(revokeArgs.where).toEqual({ id: 9, revokedAt: null });
+      expect(revokeArgs.data.revokedAt).toBeInstanceOf(Date);
+      expect(revokeArgs.data.isWinner).toBe(false);
       expect(db.auditLog.create.mock.calls[0][0].data).toMatchObject({ action: 'revoke', entityId: '9' });
       expect(JSON.stringify(db.auditLog.create.mock.calls[0][0])).not.toContain('a'.repeat(64));
 

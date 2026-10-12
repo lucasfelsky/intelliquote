@@ -11,9 +11,19 @@ import { buildItemOrigins, normalizeItemOriginPort } from '../utils/originPort';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
+  comparisonCandidateKey,
   QuoteComparisonService,
   type QuoteComparisonWeights,
 } from '../services/QuoteComparisonService';
+import {
+  clearCreditWinners,
+  CREDIT_OFFER_CHANGED_MESSAGE,
+  loadCreditAlternatives,
+  loadCreditCandidateForAward,
+  type CreditCandidateForAward,
+  type CreditPartnerRef,
+  type PartnerContactRef,
+} from '../services/ComparisonCandidateService';
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
 import { sendAndLog } from '../mailer/MailerService';
@@ -512,6 +522,15 @@ export class QuoteResponseController {
         },
       });
 
+      // PR4a: reset simetrico da alternativa via parceiro (mesma condicao do isWinner acima;
+      // sem transacao, idempotente).
+      if (itemsToUpdate?.some((item) => item.isUnavailable)) {
+        await prisma.creditSupportRequest.updateMany({
+          where: { quoteResponseId: id, isWinner: true },
+          data: { isWinner: false },
+        });
+      }
+
       await AuditLogService.log({
         entityType: 'quote_response',
         entityId: quoteResponse.id,
@@ -571,6 +590,8 @@ export class QuoteResponseController {
             items: { updateMany: { where: { deletedAt: null }, data: { deletedAt } } },
           },
         });
+        // PR4a: a alternativa via parceiro desta proposta tambem deixa de ser vencedora.
+        await clearCreditWinners(tx, { quoteResponseId: id });
         // Os links existentes nao podem reativar uma proposta removida.
         await tx.supplierPortalToken.updateMany({
           where: {
@@ -1365,7 +1386,12 @@ export class QuoteResponseController {
         });
       }
 
-      if (responses.length < 2) {
+      // PR4a: encaminhamentos de Credit Support respondidos entram como candidatos proprios
+      // ("via Parceiro"); os stale vao direto para `excluded`. Minimo = 2 candidatos.
+      const { virtual: creditAlternatives, stale: staleAlternatives } =
+        await loadCreditAlternatives(quoteRequestId);
+
+      if (responses.length + creditAlternatives.length + staleAlternatives.length < 2) {
         return res.status(400).json({
           message: 'Sao necessarias pelo menos duas propostas para comparar.',
         });
@@ -1375,14 +1401,26 @@ export class QuoteResponseController {
       // duplicado) ficam FORA do ranking (nao entram no compareResponses nem no
       // min(offeredPrice)); a formula do score nao muda. Quantidade divergente ENTRA com o
       // unitario cotado x quantidade pedida (sinalizada).
-      const { complete, excluded } = partitionForComparison(quoteRequest.items ?? [], responses);
+      const { complete, excluded: partitionExcluded } = partitionForComparison(
+        quoteRequest.items ?? [],
+        [...responses, ...creditAlternatives],
+      );
+      const excluded: ExcludedComparisonEntry[] = [...partitionExcluded, ...staleAlternatives];
 
       if (complete.length < 2) {
         return res.status(400).json({
-          message: `Sao necessarias pelo menos duas propostas completas para comparar (${excluded.length} ficaram fora do ranking: item indisponivel ou proposta parcial).`,
+          message: `Sao necessarias pelo menos duas propostas completas para comparar (${excluded.length} ficaram fora do ranking: item indisponivel, proposta parcial ou oferta do parceiro desatualizada).`,
         });
       }
-      const adjustmentById = new Map(complete.map((entry) => [entry.response.id, entry]));
+      const adjustmentById = new Map(
+        complete.map((entry) => [
+          comparisonCandidateKey({
+            id: entry.response.id,
+            creditSupportRequestId: creditMetaOf(entry.response).creditSupportRequestId,
+          }),
+          entry,
+        ]),
+      );
 
       const supplierIds = Array.from(new Set(complete.map(({ response }) => response.supplierId)));
       const reviews = await prisma.supplierReview.groupBy({
@@ -1412,6 +1450,7 @@ export class QuoteResponseController {
         paymentTermsDays: response.paymentTermsDays,
         isWinner: response.isWinner,
         avgQuality: qualityMap.get(response.supplierId) ?? undefined,
+        creditSupportRequestId: creditMetaOf(response).creditSupportRequestId,
       }));
       const comparisonValidationError =
         QuoteComparisonService.validateResponsesForComparison(comparisonInputs);
@@ -1428,6 +1467,7 @@ export class QuoteResponseController {
       );
 
       const winner = comparisonResults.find((response) => response.isWinner) ?? null;
+      const winnerCreditSupportRequestId = winner?.creditSupportRequestId ?? null;
 
       const companyProfile = await CompanyProfileService.get();
       const threshold = companyProfile.awardApprovalThreshold ? Number(companyProfile.awardApprovalThreshold) : null;
@@ -1442,13 +1482,23 @@ export class QuoteResponseController {
           where: { quoteRequestId, deletedAt: null },
           data: { isWinner: false },
         });
+        await clearCreditWinners(tx, { quoteRequestId });
 
         if (!requiresApproval) {
           for (const response of comparisonResults.filter((item) => item.isWinner)) {
-            await tx.quoteResponse.update({
-              where: { id: response.id },
-              data: { isWinner: true },
-            });
+            // Invariante: no maximo UMA entre QuoteResponse.isWinner e
+            // CreditSupportRequest.isWinner fica true por cotacao.
+            if (response.creditSupportRequestId) {
+              await tx.creditSupportRequest.update({
+                where: { id: response.creditSupportRequestId },
+                data: { isWinner: true },
+              });
+            } else {
+              await tx.quoteResponse.update({
+                where: { id: response.id },
+                data: { isWinner: true },
+              });
+            }
           }
         }
 
@@ -1461,10 +1511,12 @@ export class QuoteResponseController {
             incotermWeight: weights.incotermWeight,
             qualityWeight: weights.qualityWeight ?? 0,
             winnerQuoteResponseId: winner?.id ?? null,
+            winnerCreditSupportRequestId,
             approvalStatus: requiresApproval ? 'pending' : 'not_required',
             results: {
               create: comparisonResults.map((response) => ({
                 quoteResponseId: response.id,
+                creditSupportRequestId: response.creditSupportRequestId ?? null,
                 supplierId: response.supplierId,
                 offeredPrice: response.offeredPrice,
                 offeredIncoterm: response.offeredIncoterm,
@@ -1506,17 +1558,23 @@ export class QuoteResponseController {
             afterData: {
               status: quoteRequest.status,
               winnerQuoteResponseId: winner?.id ?? null,
+              winnerCreditSupportRequestId,
               comparisonId: comparisonRecord.id,
               approvalStatus: comparisonRecord.approvalStatus,
             },
             metadata: {
               comparisonId: comparisonRecord.id,
               winnerQuoteResponseId: winner?.id ?? null,
+              winnerCreditSupportRequestId,
               weights,
               requiresApproval,
               threshold,
               quoteResponseIds: responses.map((response) => response.id),
               excludedQuoteResponseIds: excluded.map((entry) => entry.quoteResponseId),
+              creditSupportRequestIds: creditAlternatives.map((entry) => entry.creditSupportRequestId),
+              excludedCreditSupportRequestIds: excluded
+                .map((entry) => entry.creditSupportRequestId)
+                .filter((id): id is number => id !== null),
             },
           },
           tx,
@@ -1532,9 +1590,10 @@ export class QuoteResponseController {
       );
       // Mapa por response.id (nao supplierId) porque comparisonResults nao
       // carrega items; usar id garante 1:1 mesmo se um fornecedor tiver mais
-      // de uma proposta.
+      // de uma proposta. A linha via parceiro le leadTime/origens/DG da resposta de ORIGEM.
       const responseById = new Map(responses.map((response) => [response.id, response]));
       const enrichedResults = comparisonResults.map((result) => {
+        const candidateKey = comparisonCandidateKey(result);
         const supplier = supplierById.get(result.supplierId);
         const primaryContact = supplier?.contacts?.[0] ?? null;
         const sourceResponse = responseById.get(result.id);
@@ -1542,8 +1601,10 @@ export class QuoteResponseController {
           sourceResponse?.items,
           sourceResponse?.leadTimeDays ?? null,
         );
+        const creditMeta = creditMetaOf(adjustmentById.get(candidateKey)?.response ?? { id: result.id });
         return {
           ...result,
+          creditSupportRequestId: creditMeta.creditSupportRequestId,
           supplier: supplier ? { id: supplier.id, name: supplier.name } : undefined,
           contact: primaryContact
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
@@ -1555,8 +1616,13 @@ export class QuoteResponseController {
           // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
           dgItems: buildDangerousGoodItems(sourceResponse?.items),
           // Quantidade divergente: o preco do ranking ja e unitario x quantidade pedida.
-          quantityAdjusted: adjustmentById.get(result.id)?.quantityAdjusted ?? false,
-          quantityMismatches: adjustmentById.get(result.id)?.quantityMismatches ?? [],
+          quantityAdjusted: adjustmentById.get(candidateKey)?.quantityAdjusted ?? false,
+          quantityMismatches: adjustmentById.get(candidateKey)?.quantityMismatches ?? [],
+          // PR4a: alternativa via parceiro (null/false na linha direta).
+          creditPartner: creditMeta.creditPartner,
+          partnerContact: creditMeta.partnerContact,
+          partnerValidityDays: creditMeta.partnerValidityDays,
+          validityExpired: creditMeta.validityExpired,
         };
       });
 
@@ -1564,8 +1630,10 @@ export class QuoteResponseController {
         results: enrichedResults,
         pendingApproval: requiresApproval,
         winnerQuoteResponseId: requiresApproval ? winner?.id : null,
+        winnerCreditSupportRequestId: requiresApproval ? winnerCreditSupportRequestId : null,
         thresholdValue: requiresApproval ? threshold : null,
         comparisonId: comparisonRecord.id,
+        candidateCount: comparisonResults.length,
         excluded,
       });
     } catch (error) {
@@ -1648,24 +1716,44 @@ export class QuoteResponseController {
         return res.status(200).json({
           results: [],
           winnerQuoteResponseId: null,
+          winnerCreditSupportRequestId: null,
           pendingApproval: false,
           thresholdValue: null,
           responseCount,
+          candidateCount: 0,
           excluded: [],
         });
       }
 
+      // PR4a: alternativas via parceiro (Credit Support) como candidatos; stale -> excluded.
+      const { virtual: creditAlternatives, stale: staleAlternatives } =
+        await loadCreditAlternatives(quoteRequestId);
+
       // Mesma particao do compare: proposta com item indisponivel ou parcial fica fora do ranking.
-      const { complete, excluded } = partitionForComparison(quoteRequest.items ?? [], responses);
-      const adjustmentById = new Map(complete.map((entry) => [entry.response.id, entry]));
+      const { complete, excluded: partitionExcluded } = partitionForComparison(
+        quoteRequest.items ?? [],
+        [...responses, ...creditAlternatives],
+      );
+      const excluded: ExcludedComparisonEntry[] = [...partitionExcluded, ...staleAlternatives];
+      const adjustmentById = new Map(
+        complete.map((entry) => [
+          comparisonCandidateKey({
+            id: entry.response.id,
+            creditSupportRequestId: creditMetaOf(entry.response).creditSupportRequestId,
+          }),
+          entry,
+        ]),
+      );
 
       if (complete.length === 0) {
         return res.status(200).json({
           results: [],
           winnerQuoteResponseId: null,
+          winnerCreditSupportRequestId: null,
           pendingApproval: false,
           thresholdValue: null,
           responseCount,
+          candidateCount: 0,
           excluded,
         });
       }
@@ -1698,6 +1786,7 @@ export class QuoteResponseController {
         paymentTermsDays: response.paymentTermsDays,
         isWinner: response.isWinner,
         avgQuality: qualityMap.get(response.supplierId) ?? undefined,
+        creditSupportRequestId: creditMetaOf(response).creditSupportRequestId,
       }));
       const comparisonValidationError =
         QuoteComparisonService.validateResponsesForComparison(comparisonInputs);
@@ -1728,9 +1817,10 @@ export class QuoteResponseController {
       );
       // Mapa por response.id (nao supplierId) porque comparisonResults nao
       // carrega items; usar id garante 1:1 mesmo se um fornecedor tiver mais
-      // de uma proposta.
+      // de uma proposta. A linha via parceiro le leadTime/origens/DG da resposta de ORIGEM.
       const responseById = new Map(responses.map((response) => [response.id, response]));
       const enrichedResults = comparisonResults.map((result) => {
+        const candidateKey = comparisonCandidateKey(result);
         const supplier = supplierById.get(result.supplierId);
         const primaryContact = supplier?.contacts?.[0] ?? null;
         const sourceResponse = responseById.get(result.id);
@@ -1738,9 +1828,11 @@ export class QuoteResponseController {
           sourceResponse?.items,
           sourceResponse?.leadTimeDays ?? null,
         );
+        const creditMeta = creditMetaOf(adjustmentById.get(candidateKey)?.response ?? { id: result.id });
         return {
           ...result,
           quoteResponseId: result.id,
+          creditSupportRequestId: creditMeta.creditSupportRequestId,
           supplier: supplier ? { id: supplier.id, name: supplier.name } : undefined,
           contact: primaryContact
             ? { id: primaryContact.id, name: primaryContact.name, email: primaryContact.email }
@@ -1752,17 +1844,24 @@ export class QuoteResponseController {
           // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
           dgItems: buildDangerousGoodItems(sourceResponse?.items),
           // Quantidade divergente: o preco do ranking ja e unitario x quantidade pedida.
-          quantityAdjusted: adjustmentById.get(result.id)?.quantityAdjusted ?? false,
-          quantityMismatches: adjustmentById.get(result.id)?.quantityMismatches ?? [],
+          quantityAdjusted: adjustmentById.get(candidateKey)?.quantityAdjusted ?? false,
+          quantityMismatches: adjustmentById.get(candidateKey)?.quantityMismatches ?? [],
+          // PR4a: alternativa via parceiro (null/false na linha direta).
+          creditPartner: creditMeta.creditPartner,
+          partnerContact: creditMeta.partnerContact,
+          partnerValidityDays: creditMeta.partnerValidityDays,
+          validityExpired: creditMeta.validityExpired,
         };
       });
 
       return res.status(200).json({
         results: enrichedResults,
         winnerQuoteResponseId: winner?.id ?? null,
+        winnerCreditSupportRequestId: winner?.creditSupportRequestId ?? null,
         pendingApproval: requiresApproval,
         thresholdValue: requiresApproval ? threshold : null,
         responseCount,
+        candidateCount: comparisonResults.length,
         excluded,
       });
     } catch (error) {
@@ -1823,6 +1922,10 @@ export class QuoteResponseController {
                     },
                   },
                 },
+              },
+              // PR4a (aditivo): linha via parceiro -> parceiro de credito.
+              creditSupportRequest: {
+                select: { id: true, creditPartner: { select: { id: true, name: true } } },
               },
             },
           },
@@ -1910,19 +2013,42 @@ export class QuoteResponseController {
         where: { id: quoteRequestId, deletedAt: null },
         select: { items: { where: { deletedAt: null }, select: { id: true, quantity: true } } },
       });
-      const winnerResponse = await prisma.quoteResponse.findFirst({
-        where: { id: comparison.winnerQuoteResponseId, quoteRequestId, deletedAt: null },
-        select: {
-          id: true,
-          offeredPrice: true,
-          items: {
-            where: { deletedAt: null },
-            select: { quoteRequestItemId: true, quantity: true, unitPrice: true, isUnavailable: true },
+      // PR4a: vencedor = alternativa via parceiro -> a cesta avaliada e a do parceiro.
+      const winnerCreditSupportRequestId = comparison.winnerCreditSupportRequestId ?? null;
+      let awardBasket: { id: number; offeredPrice: Prisma.Decimal; items: { quoteRequestItemId: number; quantity: number; unitPrice: Prisma.Decimal; isUnavailable: boolean }[] } | null = null;
+      if (winnerCreditSupportRequestId) {
+        let creditCandidate: CreditCandidateForAward;
+        try {
+          creditCandidate = await loadCreditCandidateForAward(prisma, {
+            creditSupportRequestId: winnerCreditSupportRequestId,
+            quoteRequestId,
+            quoteResponseId: comparison.winnerQuoteResponseId,
+          });
+        } catch (error) {
+          if (error instanceof HttpError && error.status === 404) {
+            return res.status(409).json({ message: CREDIT_OFFER_CHANGED_MESSAGE });
+          }
+          throw error;
+        }
+        if (creditCandidate.isStale) {
+          return res.status(409).json({ message: CREDIT_OFFER_CHANGED_MESSAGE });
+        }
+        awardBasket = creditCandidate.basket;
+      } else {
+        awardBasket = await prisma.quoteResponse.findFirst({
+          where: { id: comparison.winnerQuoteResponseId, quoteRequestId, deletedAt: null },
+          select: {
+            id: true,
+            offeredPrice: true,
+            items: {
+              where: { deletedAt: null },
+              select: { quoteRequestItemId: true, quantity: true, unitPrice: true, isUnavailable: true },
+            },
           },
-        },
-      });
-      if (winnerResponse) {
-        const classification = classifyForComparison(awardQuoteRequest?.items ?? [], winnerResponse);
+        });
+      }
+      if (awardBasket) {
+        const classification = classifyForComparison(awardQuoteRequest?.items ?? [], awardBasket);
         // Qualquer item indisponivel barra a aprovacao (inclusive quando a cesta tambem tem
         // item faltando e a classificacao e 'partial').
         if (
@@ -1946,6 +2072,7 @@ export class QuoteResponseController {
           where: { quoteRequestId, deletedAt: null },
           data: { isWinner: false },
         });
+        await clearCreditWinners(tx, { quoteRequestId });
         await tx.quoteComparison.update({
           where: { id: comparisonId },
           data: {
@@ -1955,16 +2082,30 @@ export class QuoteResponseController {
           },
         });
 
-        await tx.quoteResponse.update({
-          where: { id: comparison.winnerQuoteResponseId!, deletedAt: null, quoteRequest: { id: quoteRequestId, deletedAt: null } },
-          data: { isWinner: true },
-        });
+        // Invariante: UMA entre QuoteResponse.isWinner e CreditSupportRequest.isWinner.
+        if (winnerCreditSupportRequestId) {
+          await tx.creditSupportRequest.update({
+            where: { id: winnerCreditSupportRequestId },
+            data: { isWinner: true },
+          });
+        } else {
+          await tx.quoteResponse.update({
+            where: { id: comparison.winnerQuoteResponseId!, deletedAt: null, quoteRequest: { id: quoteRequestId, deletedAt: null } },
+            data: { isWinner: true },
+          });
+        }
         await tx.quoteComparisonResult.updateMany({
           where: { comparisonId },
           data: { isWinner: false },
         });
+        // `creditSupportRequestId` no where: a linha direta e a via parceiro compartilham o
+        // mesmo quoteResponseId; so uma delas vence.
         await tx.quoteComparisonResult.updateMany({
-          where: { comparisonId, quoteResponseId: comparison.winnerQuoteResponseId },
+          where: {
+            comparisonId,
+            quoteResponseId: comparison.winnerQuoteResponseId,
+            creditSupportRequestId: winnerCreditSupportRequestId,
+          },
           data: { isWinner: true },
         });
 
@@ -1982,8 +2123,9 @@ export class QuoteResponseController {
               comparisonId,
               approvalStatus: 'approved',
               winnerQuoteResponseId: comparison.winnerQuoteResponseId,
+              winnerCreditSupportRequestId,
             },
-            metadata: {},
+            metadata: { winnerCreditSupportRequestId },
           },
           tx,
         );
@@ -2014,6 +2156,8 @@ export class QuoteResponseController {
       }
 
       const { quoteResponseId, reason } = parsed.data;
+      // PR4a: escolher a alternativa via parceiro (Credit Support) da resposta `quoteResponseId`.
+      const creditSupportRequestId = parsed.data.creditSupportRequestId ?? null;
 
       const quoteRequest = await prisma.quoteRequest.findUnique({
         where: { id: quoteRequestId, deletedAt: null },
@@ -2040,8 +2184,23 @@ export class QuoteResponseController {
         });
       }
 
+      // Via parceiro: 404 se nao pertence/revogado/nao respondido (HttpError do service);
+      // 409 se a oferta do parceiro ficou stale. A cesta avaliada passa a ser a do parceiro.
+      let creditCandidate: CreditCandidateForAward | null = null;
+      if (creditSupportRequestId) {
+        creditCandidate = await loadCreditCandidateForAward(prisma, {
+          creditSupportRequestId,
+          quoteRequestId,
+          quoteResponseId,
+        });
+        if (creditCandidate.isStale) {
+          throw new HttpError(409, CREDIT_OFFER_CHANGED_MESSAGE);
+        }
+      }
+
       const requestedItems = quoteRequest.items ?? [];
-      const chosenItems = chosenResponse.items ?? [];
+      const chosenBasket = creditCandidate ? creditCandidate.basket : chosenResponse;
+      const chosenItems = chosenBasket.items ?? [];
       // Proposta com item "Temporarily unavailable" fica fora do ranking e nao pode vencer.
       if (chosenItems.some((item) => item.isUnavailable)) {
         throw new HttpError(
@@ -2052,7 +2211,7 @@ export class QuoteResponseController {
 
       // Decisao 2026-10-12: quantidade divergente (ranking usa unitario x pedido) e item
       // faltando PODEM ser escolhidas manualmente; item extra/duplicado (dado inconsistente) nao.
-      const classification = classifyForComparison(requestedItems, chosenResponse);
+      const classification = classifyForComparison(requestedItems, chosenBasket);
       let comparablePrice: number;
       if (classification.kind === 'partial') {
         if (isInconsistentBasket(classification.details)) {
@@ -2096,11 +2255,16 @@ export class QuoteResponseController {
       });
 
       const previousWinnerId = latestComparison?.winnerQuoteResponseId ?? null;
+      const previousWinnerCreditId = latestComparison?.winnerCreditSupportRequestId ?? null;
       const trimmedReason = reason?.trim() ?? null;
 
+      // Motivo obrigatorio quando a IDENTIDADE composta (resposta, encaminhamento) muda:
+      // trocar a direta pela mesma origem via parceiro (ou vice-versa) tambem exige motivo.
+      const previousWinnerKey = `${previousWinnerId}:${previousWinnerCreditId ?? 0}`;
+      const chosenWinnerKey = `${quoteResponseId}:${creditSupportRequestId ?? 0}`;
       if (
         latestComparison?.winnerQuoteResponseId &&
-        quoteResponseId !== previousWinnerId &&
+        chosenWinnerKey !== previousWinnerKey &&
         !trimmedReason
       ) {
         return res.status(400).json({
@@ -2113,11 +2277,20 @@ export class QuoteResponseController {
           where: { quoteRequestId, deletedAt: null },
           data: { isWinner: false },
         });
+        await clearCreditWinners(tx, { quoteRequestId });
 
-        await tx.quoteResponse.update({
-          where: { id: quoteResponseId, deletedAt: null },
-          data: { isWinner: true },
-        });
+        // Invariante: UMA entre QuoteResponse.isWinner e CreditSupportRequest.isWinner.
+        if (creditSupportRequestId) {
+          await tx.creditSupportRequest.update({
+            where: { id: creditSupportRequestId },
+            data: { isWinner: true },
+          });
+        } else {
+          await tx.quoteResponse.update({
+            where: { id: quoteResponseId, deletedAt: null },
+            data: { isWinner: true },
+          });
+        }
 
         if (latestComparison) {
           await tx.quoteComparisonResult.updateMany({
@@ -2126,7 +2299,7 @@ export class QuoteResponseController {
           });
 
           await tx.quoteComparisonResult.updateMany({
-            where: { comparisonId: latestComparison.id, quoteResponseId },
+            where: { comparisonId: latestComparison.id, quoteResponseId, creditSupportRequestId },
             data: { isWinner: true },
           });
 
@@ -2134,6 +2307,7 @@ export class QuoteResponseController {
             where: { id: latestComparison.id },
             data: {
               winnerQuoteResponseId: quoteResponseId,
+              winnerCreditSupportRequestId: creditSupportRequestId,
               approvalStatus: exceedsThreshold ? 'approved' : 'not_required',
               approvedById: exceedsThreshold ? req.user?.id : null,
               approvedAt: exceedsThreshold ? new Date() : null,
@@ -2147,14 +2321,22 @@ export class QuoteResponseController {
             entityId: quoteRequestId,
             action: 'manual_winner',
             performedById: req.user?.id ?? null,
-            beforeData: { winnerQuoteResponseId: previousWinnerId },
-            afterData: { winnerQuoteResponseId: quoteResponseId },
+            beforeData: {
+              winnerQuoteResponseId: previousWinnerId,
+              winnerCreditSupportRequestId: previousWinnerCreditId,
+            },
+            afterData: {
+              winnerQuoteResponseId: quoteResponseId,
+              winnerCreditSupportRequestId: creditSupportRequestId,
+            },
             metadata: {
               reason: trimmedReason,
               approvalRequired: exceedsThreshold,
               threshold,
               previousWinnerQuoteResponseId: previousWinnerId,
+              previousWinnerCreditSupportRequestId: previousWinnerCreditId,
               newWinnerQuoteResponseId: quoteResponseId,
+              winnerCreditSupportRequestId: creditSupportRequestId,
               comparisonId: latestComparison?.id ?? null,
             },
           },
@@ -2164,6 +2346,7 @@ export class QuoteResponseController {
 
       return res.status(200).json({
         winnerQuoteResponseId: quoteResponseId,
+        winnerCreditSupportRequestId: creditSupportRequestId,
         comparisonId: latestComparison?.id ?? null,
       });
     } catch (error) {
@@ -2186,7 +2369,36 @@ type ComparisonSourceResponse = {
     isDangerousGood?: boolean;
     quoteRequestItem: { productName: string };
   }[];
+  // PR4a: presentes so na "resposta virtual" (alternativa via parceiro).
+  creditSupportRequestId?: number | null;
+  creditPartner?: CreditPartnerRef | null;
 };
+
+// Metadados da alternativa via parceiro (resposta direta: tudo null/false).
+type CreditCandidateMeta = {
+  creditSupportRequestId: number | null;
+  creditPartner: CreditPartnerRef | null;
+  partnerContact: PartnerContactRef | null;
+  partnerValidityDays: number | null;
+  validityExpired: boolean;
+};
+
+function creditMetaOf(response: {
+  id: number;
+  creditSupportRequestId?: number | null;
+  creditPartner?: CreditPartnerRef | null;
+  partnerContact?: PartnerContactRef | null;
+  partnerValidityDays?: number | null;
+  validityExpired?: boolean;
+}): CreditCandidateMeta {
+  return {
+    creditSupportRequestId: response.creditSupportRequestId ?? null,
+    creditPartner: response.creditPartner ?? null,
+    partnerContact: response.partnerContact ?? null,
+    partnerValidityDays: response.partnerValidityDays ?? null,
+    validityExpired: response.validityExpired === true,
+  };
+}
 
 type ComparisonItemRef = { quoteRequestItemId: number; productName: string };
 
@@ -2194,7 +2406,9 @@ type ExcludedComparisonEntry = {
   quoteResponseId: number;
   supplierId: number;
   supplier: { id: number; name: string };
-  reason: 'unavailable' | 'partial';
+  creditSupportRequestId: number | null;
+  creditPartner: CreditPartnerRef | null;
+  reason: 'unavailable' | 'partial' | 'stale';
   unavailableItems: ComparisonItemRef[];
   partial?: {
     missingItems: ComparisonItemRef[];
@@ -2246,6 +2460,8 @@ function partitionForComparison<T extends ComparisonSourceResponse>(
       quoteResponseId: response.id,
       supplierId: response.supplierId,
       supplier: { id: response.supplier.id, name: response.supplier.name },
+      creditSupportRequestId: response.creditSupportRequestId ?? null,
+      creditPartner: response.creditPartner ?? null,
       unavailableItems: (response.items ?? [])
         .filter((item) => item.isUnavailable)
         .map((item) => ({

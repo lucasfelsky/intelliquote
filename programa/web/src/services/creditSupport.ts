@@ -39,6 +39,8 @@ export interface CreditSupportRequest {
   recipientEmails: string[];
   status: CreditSupportStatus;
   isStale: boolean;
+  // PR4a: alternativa via parceiro vencedora da Comparacao (ausente no backend antigo).
+  isWinner?: boolean;
   expiresAt: string;
   createdAt: string;
   createdBy: { id: number; name: string };

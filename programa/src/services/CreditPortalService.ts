@@ -350,6 +350,8 @@ export class CreditPortalService {
           respondedAt: previousRespondedAt ?? now,
           submitterIp: params.ip,
           submitterUserAgent: params.userAgent,
+          // PR4a: nova oferta do parceiro invalida a adjudicacao anterior desta alternativa.
+          isWinner: false,
         },
       });
       if (updated.count === 0) {

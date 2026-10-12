@@ -276,4 +276,14 @@ describe('CreditSupportPanel', () => {
     const alert = await within(card).findByText('Encaminhamento revogado');
     expect(alert.className).toContain('alert--error');
   });
+
+  it('12. PR4a: badge "Vencedora" so no encaminhamento com isWinner: true', async () => {
+    mockList([{ ...row, isWinner: true }, { ...row2, isWinner: false }, row3]);
+    const { findByRole, getByTestId } = renderPanel();
+    await findByRole('heading', { name: 'Credit Support — ACME Ltda' });
+    const badge = within(getByTestId('credit-support-request-1')).getByText('Vencedora');
+    expect(badge.className).toContain('badge--success');
+    expect(within(getByTestId('credit-support-request-2')).queryByText('Vencedora')).toBeNull();
+    expect(within(getByTestId('credit-support-request-3')).queryByText('Vencedora')).toBeNull();
+  });
 });

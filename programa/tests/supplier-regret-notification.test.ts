@@ -23,6 +23,7 @@ vi.mock('../src/lib/prisma', () => ({
   prisma: {
     quoteRequest: { findUnique: vi.fn() },
     quoteResponse: { findMany: vi.fn() },
+    creditSupportRequest: { findMany: vi.fn() },
     supplierContact: { findFirst: vi.fn() },
   },
 }));
@@ -34,10 +35,12 @@ import { SupplierRegretNotificationService } from '../src/services/SupplierRegre
 const sendAndLogMock = sendAndLog as unknown as ReturnType<typeof vi.fn>;
 const requestFindUnique = prisma.quoteRequest.findUnique as unknown as ReturnType<typeof vi.fn>;
 const responseFindMany = prisma.quoteResponse.findMany as unknown as ReturnType<typeof vi.fn>;
+const creditWinnersFindMany = prisma.creditSupportRequest.findMany as unknown as ReturnType<typeof vi.fn>;
 const contactFindFirst = prisma.supplierContact.findFirst as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  creditWinnersFindMany.mockResolvedValue([]);
   requestFindUnique.mockResolvedValue({ requestCode: 'QR-2026-042', productName: 'PI-TPO' });
   contactFindFirst.mockImplementation(({ where }: { where: { supplierId: number } }) =>
     Promise.resolve({
@@ -75,6 +78,27 @@ describe('SupplierRegretNotificationService.notifyLosers', () => {
     expect(first.subject).toContain('QR-2026-042');
     // Tom neutro — nao expoe preco vencedor.
     expect(first.text).not.toMatch(/\d+[.,]\d{2}/);
+  });
+
+  it('PR4a: fornecedor de origem do encaminhamento vencedor (via parceiro) NAO recebe; demais recebem', async () => {
+    // Alfa (supplierId 1) venceu VIA PARCEIRO: sua resposta direta tem isWinner=false e
+    // apareceria como perdedora; o encaminhamento vencedor a tira da lista.
+    responseFindMany.mockResolvedValue([
+      { supplierId: 1, supplier: { name: 'Alfa' } },
+      { supplierId: 2, supplier: { name: 'Beta' } },
+      { supplierId: 3, supplier: { name: 'Gamma' } },
+    ]);
+    creditWinnersFindMany.mockResolvedValue([{ supplierId: 1 }]);
+
+    const result = await SupplierRegretNotificationService.notifyLosers(5);
+
+    expect(result).toEqual({ losers: 2, sent: 2, failed: 0 });
+    expect(creditWinnersFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { quoteRequestId: 5, isWinner: true } }),
+    );
+    const emails = sendAndLogMock.mock.calls.map((c) => c[0].to.email);
+    expect(emails).not.toContain('c1@fornecedor.example');
+    expect(emails).toEqual(expect.arrayContaining(['c2@fornecedor.example', 'c3@fornecedor.example']));
   });
 
   it('fornecedor sem contato: failed parcial, nao derruba os demais', async () => {

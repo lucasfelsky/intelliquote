@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/utils/password';
@@ -16,12 +17,23 @@ vi.mock('../src/lib/prisma', () => {
     quoteRequest: {
       update: vi.fn(),
     },
+    creditSupportRequest: {
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
   };
 
   const prisma = {
     companyProfile: {
       findUnique: vi.fn(),
       create: vi.fn(),
+    },
+    // PR4a: alternativas via parceiro (default: nenhuma) — casos atuais seguem identicos.
+    creditSupportRequest: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     user: {
       findUnique: vi.fn(),
@@ -89,6 +101,12 @@ const prismaMock = prisma as unknown as {
   auditLog: {
     create: ReturnType<typeof vi.fn>;
   };
+  creditSupportRequest: {
+    findMany: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+  };
   $transaction: ReturnType<typeof vi.fn>;
   __tx: {
     quoteResponse: {
@@ -97,9 +115,17 @@ const prismaMock = prisma as unknown as {
     };
     quoteComparison: {
       create: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+    };
+    quoteComparisonResult: {
+      updateMany: ReturnType<typeof vi.fn>;
     };
     quoteRequest: {
       update: ReturnType<typeof vi.fn>;
+    };
+    creditSupportRequest: {
+      update: ReturnType<typeof vi.fn>;
+      updateMany: ReturnType<typeof vi.fn>;
     };
   };
 };
@@ -1303,6 +1329,8 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
         quoteResponseId: 11,
         supplierId: 101,
         supplier: { id: 101, name: 'Fornecedor 101' },
+        creditSupportRequestId: null,
+        creditPartner: null,
         reason: 'unavailable',
         unavailableItems: [{ quoteRequestItemId: 2, productName: 'Produto 2' }],
       },
@@ -1402,7 +1430,7 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
 
     expect(response.status).toBe(400);
     expect(response.body.message).toBe(
-      'Sao necessarias pelo menos duas propostas completas para comparar (1 ficaram fora do ranking: item indisponivel ou proposta parcial).',
+      'Sao necessarias pelo menos duas propostas completas para comparar (1 ficaram fora do ranking: item indisponivel, proposta parcial ou oferta do parceiro desatualizada).',
     );
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
@@ -1491,6 +1519,8 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
           quoteResponseId: 11,
           supplierId: 101,
           supplier: { id: 101, name: 'Fornecedor 101' },
+          creditSupportRequestId: null,
+          creditPartner: null,
           reason: 'partial',
           unavailableItems: [],
           partial: {
@@ -1571,7 +1601,7 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
 
       expect(response.status).toBe(400);
       expect(response.body.message).toBe(
-        'Sao necessarias pelo menos duas propostas completas para comparar (1 ficaram fora do ranking: item indisponivel ou proposta parcial).',
+        'Sao necessarias pelo menos duas propostas completas para comparar (1 ficaram fora do ranking: item indisponivel, proposta parcial ou oferta do parceiro desatualizada).',
       );
       expect(prismaMock.$transaction).not.toHaveBeenCalled();
       expect(prismaMock.__tx.quoteComparison.create).not.toHaveBeenCalled();
@@ -1779,6 +1809,506 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
     );
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.__tx.quoteResponse.update).not.toHaveBeenCalled();
+  });
+});
+
+// PR4a (Credit Support): encaminhamento `responded` entra na Comparacao como candidato
+// proprio ("Fornecedor X via Parceiro Y"), com a identidade (quoteResponseId, creditSupportRequestId).
+describe('Comparison routes - alternativa via parceiro (Credit Support, PR4a)', () => {
+  const requestedItems = (quantity = 1) =>
+    [1, 2].map((id) => ({ id, quantity, productName: `Produto ${id}` }));
+
+  // Resposta de origem com os campos que o computeIsStale/buildSnapshot le (version, totalPrice,
+  // quoteRequestItem.unit/quantity) alem dos usados pela comparacao.
+  const origin = (
+    id: number,
+    supplierId: number,
+    items: Array<{ id: number; unitPrice: number; quantity?: number; unavailable?: boolean }>,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const offered = items
+      .filter((item) => !item.unavailable)
+      .reduce((sum, item) => sum + item.unitPrice * (item.quantity ?? 1), 0);
+    return {
+      id,
+      quoteRequestId: 1,
+      supplierId,
+      version: 1,
+      deletedAt: null,
+      offeredPrice: offered,
+      currency: 'USD',
+      exchangeRate: 5,
+      freightCost: 0,
+      insuranceCost: 0,
+      otherFees: 0,
+      importDuty: 0,
+      ipi: 0,
+      pis: 0,
+      cofins: 0,
+      offeredIncoterm: 'FOB',
+      paymentTermsDays: 30,
+      leadTimeDays: 15,
+      originPort: 'Ningbo',
+      isWinner: false,
+      items: items.map((item) => ({
+        quoteRequestItemId: item.id,
+        quantity: item.unavailable ? 0 : item.quantity ?? 1,
+        unitPrice: item.unavailable ? 0 : item.unitPrice,
+        totalPrice: item.unavailable ? 0 : item.unitPrice * (item.quantity ?? 1),
+        leadTimeDays: null,
+        originPort: null,
+        deletedAt: null,
+        isUnavailable: Boolean(item.unavailable),
+        isDangerousGood: false,
+        quoteRequestItem: { productName: `Produto ${item.id}`, unit: 'KG', quantity: item.quantity ?? 1, deletedAt: null },
+      })),
+      supplier: {
+        id: supplierId,
+        name: `Fornecedor ${supplierId}`,
+        contacts: [{ id: supplierId * 10, name: `Contato ${supplierId}`, email: `c${supplierId}@f.example` }],
+      },
+      ...extra,
+    };
+  };
+
+  // Encaminhamento respondido da resposta 12 (Fornecedor 102) via Banco Alfa (parceiro 5).
+  const creditRow = (
+    items: Array<{ id: number; originalUnitPrice: number; partnerUnitPrice: number | null; quantity?: number; unavailable?: boolean }>,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const partnerTotal = items
+      .filter((item) => !item.unavailable && item.partnerUnitPrice !== null)
+      .reduce((sum, item) => sum + (item.partnerUnitPrice ?? 0) * (item.quantity ?? 1), 0);
+    return {
+      id: 7,
+      quoteRequestId: 1,
+      quoteResponseId: 12,
+      supplierId: 102,
+      creditPartnerId: 5,
+      creditPartnerContactId: 50,
+      currency: 'USD',
+      offeredIncoterm: 'FOB',
+      revokedAt: null,
+      respondedAt: new Date('2026-10-01T00:00:00.000Z'),
+      expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+      partnerPaymentTermsDays: 90,
+      partnerValidityDays: 30,
+      partnerTotalPrice: new Prisma.Decimal(partnerTotal),
+      isWinner: false,
+      supplier: { id: 102, name: 'Fornecedor 102' },
+      creditPartner: { id: 5, name: 'Banco Alfa' },
+      creditPartnerContact: { id: 50, name: 'Ana Credito', email: 'ana@alfa.example' },
+      items: items.map((item, index) => ({
+        id: 700 + index,
+        requestId: 7,
+        quoteRequestItemId: item.id,
+        position: index + 1,
+        productName: `Produto ${item.id}`,
+        quantity: item.quantity ?? 1,
+        isUnavailable: Boolean(item.unavailable),
+        originalUnitPrice: new Prisma.Decimal(item.unavailable ? 0 : item.originalUnitPrice),
+        partnerUnitPrice: item.unavailable || item.partnerUnitPrice === null ? null : new Prisma.Decimal(item.partnerUnitPrice),
+      })),
+      ...extra,
+    };
+  };
+
+  const weights = { priceWeight: 100, paymentTermsWeight: 0, incotermWeight: 0, qualityWeight: 0 };
+
+  function mockEnv(responses: unknown[], creditRows: unknown[], items = requestedItems()) {
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+      id: 1,
+      requestCode: 'QR-CS',
+      status: 'open',
+      currency: 'USD',
+      items,
+    });
+    // O mesmo findMany atende a carga das respostas e a carga das origens (filtrada por id).
+    prismaMock.quoteResponse.findMany.mockResolvedValue(responses);
+    prismaMock.creditSupportRequest.findMany.mockResolvedValue(creditRows);
+    prismaMock.companyProfile.findUnique.mockResolvedValue({ id: 1, awardApprovalThreshold: null });
+    prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+    prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+    prismaMock.__tx.creditSupportRequest.update.mockResolvedValue({});
+    prismaMock.__tx.creditSupportRequest.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999, approvalStatus: 'not_required' });
+  }
+
+  const twoDirect = () => [origin(12, 102, [{ id: 1, unitPrice: 10 }, { id: 2, unitPrice: 20 }]), origin(13, 103, [{ id: 1, unitPrice: 20 }, { id: 2, unitPrice: 30 }])];
+  const cheaperPartner = () => creditRow([{ id: 1, originalUnitPrice: 10, partnerUnitPrice: 9 }, { id: 2, originalUnitPrice: 20, partnerUnitPrice: 18 }]);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock.__tx));
+  });
+
+  it('preview: alternativa completa entra com preco/prazo do parceiro e incoterm/moeda/cambio/contato da origem', async () => {
+    const cookies = await loginAs('viewer');
+    mockEnv(twoDirect(), [cheaperPartner()]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.creditSupportRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { quoteRequestId: 1, revokedAt: null, respondedAt: { not: null } },
+      }),
+    );
+    expect(response.body.responseCount).toBe(2);
+    expect(response.body.candidateCount).toBe(3);
+    expect(response.body.results).toHaveLength(3);
+    const viaPartner = response.body.results.find((r: { creditSupportRequestId: number | null }) => r.creditSupportRequestId === 7);
+    expect(viaPartner).toMatchObject({
+      quoteResponseId: 12,
+      supplierId: 102,
+      supplier: { id: 102, name: 'Fornecedor 102' },
+      offeredPrice: 27,
+      paymentTermsDays: 90,
+      currency: 'USD',
+      exchangeRate: 5,
+      offeredIncoterm: 'FOB',
+      contact: { id: 1020, name: 'Contato 102', email: 'c102@f.example' },
+      leadTimeDays: 15,
+      originPort: 'Ningbo',
+      creditPartner: { id: 5, name: 'Banco Alfa' },
+      partnerContact: { id: 50, name: 'Ana Credito', email: 'ana@alfa.example' },
+      partnerValidityDays: 30,
+      validityExpired: false, // respondida em 2026-10-01 + 30d ainda vale
+      quantityAdjusted: false,
+      isWinner: true,
+    });
+    // Mesmo fornecedor, duas linhas: a direta continua e NAO e vencedora.
+    const direct = response.body.results.find((r: { quoteResponseId: number; creditSupportRequestId: number | null }) => r.quoteResponseId === 12 && r.creditSupportRequestId === null);
+    expect(direct).toMatchObject({ offeredPrice: 30, paymentTermsDays: 30, isWinner: false, creditPartner: null, partnerContact: null, partnerValidityDays: null, validityExpired: false });
+    expect(response.body.results.filter((r: { isWinner: boolean }) => r.isWinner)).toHaveLength(1);
+    expect(response.body.winnerQuoteResponseId).toBe(12);
+    expect(response.body.winnerCreditSupportRequestId).toBe(7);
+    // priceScore da mais barata (alternativa) = 100
+    expect(viaPartner.priceScore).toBe(100);
+    expect(response.body.excluded).toEqual([]);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('preview: validade do parceiro vencida NAO exclui, so sinaliza validityExpired (aprovacao 8)', async () => {
+    const cookies = await loginAs('viewer');
+    mockEnv(twoDirect(), [creditRow(
+      [{ id: 1, originalUnitPrice: 10, partnerUnitPrice: 9 }, { id: 2, originalUnitPrice: 20, partnerUnitPrice: 18 }],
+      { respondedAt: new Date('2026-01-01T00:00:00.000Z'), partnerValidityDays: 15 },
+    )]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    const viaPartner = response.body.results.find((r: { creditSupportRequestId: number | null }) => r.creditSupportRequestId === 7);
+    expect(viaPartner).toMatchObject({ validityExpired: true, partnerValidityDays: 15, isWinner: true });
+    expect(response.body.excluded).toEqual([]);
+  });
+
+  it('preview: alternativa `adjusted` (snapshot qtd 8, pedido 10) entra com partnerUnitPrice x 10 e quantityAdjusted', async () => {
+    const cookies = await loginAs('viewer');
+    const responses = [
+      origin(12, 102, [{ id: 1, unitPrice: 10, quantity: 8 }, { id: 2, unitPrice: 20, quantity: 8 }]),
+      origin(13, 103, [{ id: 1, unitPrice: 20, quantity: 10 }, { id: 2, unitPrice: 30, quantity: 10 }]),
+    ];
+    const row = creditRow([
+      { id: 1, originalUnitPrice: 10, partnerUnitPrice: 9, quantity: 8 },
+      { id: 2, originalUnitPrice: 20, partnerUnitPrice: 18, quantity: 8 },
+    ]);
+    mockEnv(responses, [row], requestedItems(10));
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    const viaPartner = response.body.results.find((r: { creditSupportRequestId: number | null }) => r.creditSupportRequestId === 7);
+    expect(viaPartner.offeredPrice).toBe(270); // (9 + 18) x 10
+    expect(viaPartner.quantityAdjusted).toBe(true);
+    expect(viaPartner.quantityMismatches).toEqual([
+      { quoteRequestItemId: 1, productName: 'Produto 1', requested: 10, offered: 8 },
+      { quoteRequestItemId: 2, productName: 'Produto 2', requested: 10, offered: 8 },
+    ]);
+    expect(viaPartner.isWinner).toBe(true);
+  });
+
+  it('preview: snapshot com item indisponivel -> `excluded` reason unavailable com creditSupportRequestId e creditPartner', async () => {
+    const cookies = await loginAs('viewer');
+    const responses = [
+      origin(12, 102, [{ id: 1, unitPrice: 10 }, { id: 2, unitPrice: 0, unavailable: true }]),
+      ...twoDirect().slice(1),
+      origin(14, 104, [{ id: 1, unitPrice: 25 }, { id: 2, unitPrice: 35 }]),
+    ];
+    const row = creditRow([
+      { id: 1, originalUnitPrice: 10, partnerUnitPrice: 9 },
+      { id: 2, originalUnitPrice: 0, partnerUnitPrice: null, unavailable: true },
+    ]);
+    mockEnv(responses, [row]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results.map((r: { quoteResponseId: number }) => r.quoteResponseId).sort()).toEqual([13, 14]);
+    expect(response.body.candidateCount).toBe(2);
+    expect(response.body.excluded).toEqual([
+      expect.objectContaining({ quoteResponseId: 12, creditSupportRequestId: null, creditPartner: null, reason: 'unavailable' }),
+      {
+        quoteResponseId: 12,
+        supplierId: 102,
+        supplier: { id: 102, name: 'Fornecedor 102' },
+        creditSupportRequestId: 7,
+        creditPartner: { id: 5, name: 'Banco Alfa' },
+        reason: 'unavailable',
+        unavailableItems: [{ quoteRequestItemId: 2, productName: 'Produto 2' }],
+      },
+    ]);
+  });
+
+  it('preview: origem mudou de preco depois do encaminhamento -> `excluded` reason stale (nao entra no ranking)', async () => {
+    const cookies = await loginAs('viewer');
+    // Snapshot congelou 10/20; a origem agora cota 11/20.
+    const responses = [origin(12, 102, [{ id: 1, unitPrice: 11 }, { id: 2, unitPrice: 20 }]), ...twoDirect().slice(1)];
+    mockEnv(responses, [cheaperPartner()]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results).toHaveLength(2);
+    expect(response.body.results.every((r: { creditSupportRequestId: number | null }) => r.creditSupportRequestId === null)).toBe(true);
+    expect(response.body.winnerCreditSupportRequestId).toBeNull();
+    expect(response.body.excluded).toEqual([
+      {
+        quoteResponseId: 12,
+        supplierId: 102,
+        supplier: { id: 102, name: 'Fornecedor 102' },
+        creditSupportRequestId: 7,
+        creditPartner: { id: 5, name: 'Banco Alfa' },
+        reason: 'stale',
+        unavailableItems: [],
+      },
+    ]);
+  });
+
+  it('preview: origem excluida (soft-delete) -> alternativa stale; revogada/nao respondida nunca chega (where do findMany)', async () => {
+    const cookies = await loginAs('viewer');
+    // A carga das respostas (deletedAt null) nao traz a 12; a carga das origens tambem nao.
+    mockEnv(twoDirect().slice(1).concat(origin(14, 104, [{ id: 1, unitPrice: 25 }, { id: 2, unitPrice: 35 }])), [cheaperPartner()]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results).toHaveLength(2);
+    expect(response.body.excluded).toEqual([
+      expect.objectContaining({ quoteResponseId: 12, creditSupportRequestId: 7, reason: 'stale' }),
+    ]);
+    expect(prismaMock.creditSupportRequest.findMany.mock.calls[0][0].where).toEqual({
+      quoteRequestId: 1,
+      revokedAt: null,
+      respondedAt: { not: null },
+    });
+  });
+
+  it('compare: 1 fornecedor + 1 alternativa respondida = 2 candidatos -> compara (aprovacao 7)', async () => {
+    const cookies = await loginAs('comprador');
+    mockEnv(twoDirect().slice(0, 1), [cheaperPartner()]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results).toHaveLength(2);
+    expect(response.body.candidateCount).toBe(2);
+    expect(response.body.comparisonId).toBe(999);
+  });
+
+  it('compare: parceiro vence -> CreditSupportRequest.isWinner true, resposta direta NAO marcada, comparison/result com a identidade', async () => {
+    const cookies = await loginAs('comprador');
+    mockEnv(twoDirect(), [cheaperPartner()]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(response.body.candidateCount).toBe(3);
+    expect(response.body.winnerQuoteResponseId).toBeNull(); // sem alcada: como antes
+    expect(response.body.winnerCreditSupportRequestId).toBeNull();
+    const tx = prismaMock.__tx;
+    expect(tx.quoteResponse.updateMany).toHaveBeenCalledWith({ where: { quoteRequestId: 1, deletedAt: null }, data: { isWinner: false } });
+    expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledWith({ where: { quoteRequestId: 1, isWinner: true }, data: { isWinner: false } });
+    expect(tx.creditSupportRequest.update).toHaveBeenCalledTimes(1);
+    expect(tx.creditSupportRequest.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { isWinner: true } });
+    expect(tx.quoteResponse.update).not.toHaveBeenCalled();
+    const created = tx.quoteComparison.create.mock.calls[0][0].data;
+    expect(created.winnerQuoteResponseId).toBe(12);
+    expect(created.winnerCreditSupportRequestId).toBe(7);
+    const rows = created.results.create as Array<{ quoteResponseId: number; creditSupportRequestId: number | null; isWinner: boolean }>;
+    expect(rows).toHaveLength(3);
+    expect(rows.find((r) => r.creditSupportRequestId === 7)).toMatchObject({ quoteResponseId: 12, isWinner: true });
+    expect(rows.filter((r) => r.creditSupportRequestId === null).map((r) => r.quoteResponseId).sort()).toEqual([12, 13]);
+    expect(rows.filter((r) => r.isWinner)).toHaveLength(1);
+    expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: 'compare',
+          afterData: expect.objectContaining({ winnerQuoteResponseId: 12, winnerCreditSupportRequestId: 7 }),
+          metadata: expect.objectContaining({ winnerCreditSupportRequestId: 7, creditSupportRequestIds: [7], excludedCreditSupportRequestIds: [] }),
+        }),
+      }),
+    );
+  });
+
+  it('compare: direta vence -> limpa as alternativas (updateMany false) e nao marca nenhuma', async () => {
+    const cookies = await loginAs('comprador');
+    // Parceiro mais caro que a origem.
+    const row = creditRow([{ id: 1, originalUnitPrice: 10, partnerUnitPrice: 12 }, { id: 2, originalUnitPrice: 20, partnerUnitPrice: 24 }]);
+    mockEnv(twoDirect(), [row]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    const tx = prismaMock.__tx;
+    expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledWith({ where: { quoteRequestId: 1, isWinner: true }, data: { isWinner: false } });
+    expect(tx.creditSupportRequest.update).not.toHaveBeenCalled();
+    expect(tx.quoteResponse.update).toHaveBeenCalledTimes(1);
+    expect(tx.quoteResponse.update).toHaveBeenCalledWith({ where: { id: 12 }, data: { isWinner: true } });
+    const created = tx.quoteComparison.create.mock.calls[0][0].data;
+    expect(created.winnerQuoteResponseId).toBe(12);
+    expect(created.winnerCreditSupportRequestId).toBeNull();
+  });
+
+  describe('approve com vencedor via parceiro', () => {
+    function mockPending(winnerCreditSupportRequestId: number | null) {
+      prismaMock.quoteComparison.findUnique.mockResolvedValue({
+        id: 999,
+        quoteRequestId: 1,
+        approvalStatus: 'pending',
+        winnerQuoteResponseId: 12,
+        winnerCreditSupportRequestId,
+      });
+      prismaMock.quoteComparison.findFirst.mockResolvedValue({ id: 999 });
+      prismaMock.__tx.quoteComparison.update.mockResolvedValue({});
+      prismaMock.__tx.quoteComparisonResult.updateMany.mockResolvedValue({ count: 1 });
+    }
+
+    it('credito vencedor valido -> 200, CreditSupportRequest.isWinner true e result com creditSupportRequestId', async () => {
+      const cookies = await loginAs('admin');
+      mockEnv(twoDirect(), []);
+      mockPending(7);
+      prismaMock.creditSupportRequest.findFirst.mockResolvedValue(cheaperPartner());
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(twoDirect()[0]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.creditSupportRequest.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 7, quoteRequestId: 1, quoteResponseId: 12, revokedAt: null, respondedAt: { not: null } },
+        }),
+      );
+      const tx = prismaMock.__tx;
+      expect(tx.quoteResponse.updateMany).toHaveBeenCalledWith({ where: { quoteRequestId: 1, deletedAt: null }, data: { isWinner: false } });
+      expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledWith({ where: { quoteRequestId: 1, isWinner: true }, data: { isWinner: false } });
+      expect(tx.creditSupportRequest.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { isWinner: true } });
+      expect(tx.quoteResponse.update).not.toHaveBeenCalled();
+      expect(tx.quoteComparisonResult.updateMany).toHaveBeenCalledWith({
+        where: { comparisonId: 999, quoteResponseId: 12, creditSupportRequestId: 7 },
+        data: { isWinner: true },
+      });
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'approve_award',
+            afterData: expect.objectContaining({ winnerQuoteResponseId: 12, winnerCreditSupportRequestId: 7 }),
+          }),
+        }),
+      );
+    });
+
+    it('vencedor direto -> result marcado com creditSupportRequestId null (a linha via parceiro do mesmo id nao vence)', async () => {
+      const cookies = await loginAs('admin');
+      mockEnv(twoDirect(), []);
+      mockPending(null);
+      prismaMock.quoteResponse.findFirst.mockResolvedValue({
+        id: 12,
+        offeredPrice: 30,
+        items: [
+          { quoteRequestItemId: 1, quantity: 1, unitPrice: 10, isUnavailable: false },
+          { quoteRequestItemId: 2, quantity: 1, unitPrice: 20, isUnavailable: false },
+        ],
+      });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.creditSupportRequest.findFirst).not.toHaveBeenCalled();
+      const tx = prismaMock.__tx;
+      expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledWith({ where: { quoteRequestId: 1, isWinner: true }, data: { isWinner: false } });
+      expect(tx.creditSupportRequest.update).not.toHaveBeenCalled();
+      expect(tx.quoteResponse.update).toHaveBeenCalledWith(expect.objectContaining({ data: { isWinner: true } }));
+      expect(tx.quoteComparisonResult.updateMany).toHaveBeenCalledWith({
+        where: { comparisonId: 999, quoteResponseId: 12, creditSupportRequestId: null },
+        data: { isWinner: true },
+      });
+    });
+
+    it('credito revogado/inexistente -> 409 e nada e alterado', async () => {
+      const cookies = await loginAs('admin');
+      mockEnv(twoDirect(), []);
+      mockPending(7);
+      prismaMock.creditSupportRequest.findFirst.mockResolvedValue(null);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toBe('A oferta do parceiro mudou ou foi revogada. Refaca a comparacao.');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('credito stale (origem mudou de preco) -> 409 e nada e alterado', async () => {
+      const cookies = await loginAs('admin');
+      mockEnv(twoDirect(), []);
+      mockPending(7);
+      prismaMock.creditSupportRequest.findFirst.mockResolvedValue(cheaperPartner());
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(origin(12, 102, [{ id: 1, unitPrice: 11 }, { id: 2, unitPrice: 20 }]));
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/comparisons/999/approve')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(409);
+      expect(response.body.message).toBe('A oferta do parceiro mudou ou foi revogada. Refaca a comparacao.');
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(prismaMock.__tx.creditSupportRequest.update).not.toHaveBeenCalled();
+    });
   });
 });
 

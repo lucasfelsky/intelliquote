@@ -13,6 +13,9 @@ vi.mock('../src/lib/prisma', () => {
     quoteResponse: {
       updateMany: vi.fn(),
     },
+    creditSupportRequest: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     quoteRequestItem: {
       updateMany: vi.fn(),
     },
@@ -129,6 +132,9 @@ const prismaMock = prisma as unknown as {
     quoteResponse: {
       updateMany: ReturnType<typeof vi.fn>;
     };
+    creditSupportRequest: {
+      updateMany: ReturnType<typeof vi.fn>;
+    };
     quoteRequestItem: {
       updateMany: ReturnType<typeof vi.fn>;
     };
@@ -204,6 +210,29 @@ describe('Quote workflow routes', () => {
     const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0];
     expect(lockOrder).toBeLessThan(tx.quoteResponse.updateMany.mock.invocationCallOrder[0]);
     expect(lockOrder).toBeLessThan(tx.quoteRequest.update.mock.invocationCallOrder[0]);
+  });
+
+  it('PR4a: reopen limpa a alternativa via parceiro vencedora (CreditSupportRequest.isWinner) depois do lock', async () => {
+    const cookies = await loginAs('gestor');
+
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ id: 5, status: 'closed' });
+    prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.__tx.quoteRequest.update.mockResolvedValue({ id: 5, status: 'open', closedAt: null });
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/5/reopen')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const tx = prismaMock.__tx;
+    expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledTimes(1);
+    expect(tx.creditSupportRequest.updateMany).toHaveBeenCalledWith({
+      where: { quoteRequestId: 5, isWinner: true },
+      data: { isWinner: false },
+    });
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.creditSupportRequest.updateMany.mock.invocationCallOrder[0],
+    );
   });
 
   it('bloqueia alteracao direta de status pela rota de update da cotacao', async () => {
