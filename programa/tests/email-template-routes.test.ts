@@ -142,6 +142,58 @@ describe('Email template routes — quote_reply', () => {
     );
   });
 
+  it('preview do quote_reply (fallback) traz o botao do portal com link ficticio, sem tocar em token', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_reply', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('fallback');
+    expect(res.body.html).toContain('Review or adjust your proposal');
+    expect(res.body.html).toContain('href="https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&amp;v=1"');
+    expect(res.body.html).not.toContain('{{');
+    expect(res.body.text).toContain('Review or adjust your proposal: https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&v=1');
+    // O rascunho editavel carrega a secao crua (nunca o link de exemplo).
+    const draft = res.body.draft as { htmlBody: string; textBody: string };
+    expect(draft.htmlBody).toContain('{{#portalLink}}');
+    expect(draft.textBody).toContain('{{#portalLink}}Review or adjust your proposal: {{portalLink}}{{/portalLink}}');
+    expect(draft.htmlBody).not.toContain('token=PREVIEW');
+    expect(draft.textBody).not.toContain('token=PREVIEW');
+  });
+
+  it('preview com template do banco SEM {{portalLink}} tambem traz o botao (injetado antes de "Best regards")', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue({
+      id: 1,
+      key: 'quote_reply',
+      locale: 'en',
+      subject: 'Custom subject {{requestCode}}',
+      htmlBody: '<html><body><p>Dear {{supplierContactName}},</p><table><tbody>{{itemsRows}}</tbody></table><p>Best regards,</p></body></html>',
+      textBody: 'Dear {{supplierContactName}},\n\n{{itemsText}}\n\nBest regards,',
+      isActive: true,
+      updatedAt: new Date(),
+      updatedById: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'quote_reply', locale: 'en' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('database');
+    expect(res.body.html.split('Review or adjust your proposal</a>')).toHaveLength(2);
+    expect(res.body.html).toContain('token=PREVIEW&amp;v=1');
+    expect(res.body.html.indexOf('Review or adjust your proposal')).toBeLessThan(res.body.html.indexOf('<p>Best regards,</p>'));
+    expect(res.body.html).not.toContain('{{');
+    expect(res.body.text).toContain('Review or adjust your proposal: https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&v=1');
+    expect(res.body.text.indexOf('Review or adjust')).toBeLessThan(res.body.text.indexOf('Best regards,'));
+  });
+
   it('preview do quote_reply usa o template salvo no banco quando existe', async () => {
     const cookieHeader = await loginAsAdmin();
     prismaMock.emailTemplate.findUnique.mockResolvedValue({

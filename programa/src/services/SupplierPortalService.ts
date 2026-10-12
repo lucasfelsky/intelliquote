@@ -154,6 +154,91 @@ export class SupplierPortalService {
     return defaultPrisma.$transaction(run);
   }
 
+  /**
+   * Botao "Responder" (e-mail quote_reply): emite um token NOVO para o
+   * destinatario do reply e migra a resposta do portal (e o historico de
+   * revisoes) do token ativo anterior para o novo, revogando o anterior.
+   * Diferente de regenerateToken, um token ja respondido NAO bloqueia: o
+   * fornecedor abre o link novo com a proposta preenchida e pode revisar.
+   * Validade = max(expiresAt do anterior, agora + DEFAULT_TOKEN_TTL_DAYS).
+   * O raw token so' existe no retorno (nunca em log/MailLog/AuditLog).
+   */
+  static async rotateTokenForReply(input: {
+    quoteRequestId: number;
+    supplierId: number;
+    supplierContactId: number;
+    createdById: number;
+    client?: Prisma.TransactionClient;
+  }): Promise<{
+    previous: SupplierPortalToken | null;
+    created: SupplierPortalToken;
+    rawToken: string;
+  }> {
+    const run = async (tx: Prisma.TransactionClient) => {
+      // Prioriza o token que carrega a resposta do portal, mesmo revogado
+      // (ex.: cotacao reenviada depois do submit): sem isso o link novo
+      // abriria vazio e o proximo submit criaria uma 2a resposta.
+      const existingResponse = await tx.supplierPortalResponse.findFirst({
+        where: { quoteRequestId: input.quoteRequestId, supplierId: input.supplierId, deletedAt: null },
+        orderBy: { id: 'desc' },
+        select: { portalTokenId: true },
+      });
+      const previous =
+        (existingResponse
+          ? await tx.supplierPortalToken.findUnique({ where: { id: existingResponse.portalTokenId } })
+          : null) ??
+        (await tx.supplierPortalToken.findFirst({
+          where: { quoteRequestId: input.quoteRequestId, supplierId: input.supplierId, revokedAt: null },
+          orderBy: [{ respondedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+        }));
+      const now = new Date();
+      const expiresAt = new Date(
+        Math.max(previous?.expiresAt.getTime() ?? 0, now.getTime() + DEFAULT_TOKEN_TTL_DAYS * 86_400_000),
+      );
+      await this.revokeTokensForContact({
+        quoteRequestId: input.quoteRequestId,
+        supplierContactId: input.supplierContactId,
+        client: tx,
+      });
+      if (previous) {
+        // responseId e' @unique: libera no anterior ANTES de criar o novo
+        // (tambem revoga quando o anterior pertence a outro contato).
+        await tx.supplierPortalToken.update({
+          where: { id: previous.id },
+          data: { revokedAt: previous.revokedAt ?? now, responseId: null },
+        });
+      }
+      const createdWithRaw = (await this.createToken({
+        quoteRequestId: input.quoteRequestId,
+        supplierId: input.supplierId,
+        supplierContactId: input.supplierContactId,
+        createdById: input.createdById,
+        dispatchEventId: previous?.dispatchEventId ?? null,
+        expiresAt,
+        client: tx,
+      })) as SupplierPortalToken & { rawToken: string };
+      const { rawToken, ...createdBase } = createdWithRaw;
+      let created = createdBase as SupplierPortalToken;
+      if (previous?.responseId) {
+        await tx.supplierPortalResponse.update({
+          where: { id: previous.responseId },
+          data: { portalTokenId: created.id },
+        });
+        await tx.supplierPortalResponseRevision.updateMany({
+          where: { portalTokenId: previous.id },
+          data: { portalTokenId: created.id },
+        });
+        created = await tx.supplierPortalToken.update({
+          where: { id: created.id },
+          data: { responseId: previous.responseId, respondedAt: previous.respondedAt },
+        });
+      }
+      return { previous, created, rawToken };
+    };
+    if (input.client) return run(input.client);
+    return defaultPrisma.$transaction(run);
+  }
+
   static async validate(input: ValidateTokenInput): Promise<ValidatedToken> {
     const client = getClient(input.client);
     const tokenHash = hashToken(input.rawToken);

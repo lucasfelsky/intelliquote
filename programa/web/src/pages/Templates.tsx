@@ -88,6 +88,7 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{message}}', label: 'Mensagem do modal (após “Dear …,”)' },
     { token: '{{itemsHeaderRow}}', label: 'Cabeçalho da tabela (coluna Target Price)' },
     { token: '{{itemsRows}}', label: 'Tabela de itens' },
+    { token: '{{portalLink}}', label: 'Link do portal' },
   ],
   quote_po: [
     { token: '{{subject}}', label: 'Assunto' },

@@ -69,6 +69,10 @@ export interface QuoteReplyVars {
   // Mensagem digitada no modal "Responder". Aparece logo apos "Dear <contato>,"
   // via {{message}} (HTML) / {{messageText}} (texto puro).
   message?: string;
+  // Link do portal do fornecedor (token NOVO emitido no envio real; link
+  // ficticio no preview). Vazio/ausente (cotacao fechada) = a secao
+  // {{#portalLink}}...{{/portalLink}} colapsa e nada e' injetado.
+  portalLink?: string;
 }
 
 function formatEnNumber(value: number): string {
@@ -280,11 +284,96 @@ function hasPlaceholder(template: string, key: string): boolean {
   return new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`).test(template);
 }
 
+function hasSection(template: string, key: string): boolean {
+  return new RegExp(`\\{\\{#\\s*${key}\\s*\\}\\}`).test(template);
+}
+
+// ---------------------------------------------------------------------------
+// Botao do portal (link para revisar/ajustar a proposta)
+// ---------------------------------------------------------------------------
+
+// Mesmo markup do botao de quote-dispatch.en.html (VML pro Outlook +
+// "bulletproof button"). Usado como bloco padrao quando o template do BANCO
+// nao tem {{portalLink}} nem {{#portalLink}} (ver renderReplyHtmlFromTemplate);
+// o arquivo quote-reply.en.html carrega o mesmo bloco dentro da secao.
+export const REPLY_PORTAL_CTA_HTML = `<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;">
+              <tr>
+                <td align="center" style="padding:8px 32px 0 32px;font-family:Arial,sans-serif;font-size:14px;line-height:20px;color:#1F2933;">
+                  You can review or adjust your proposal using your secure link:
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:12px 32px 8px 32px;">
+                  <!--[if mso]>
+                  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{portalLink}}" style="height:44px;v-text-anchor:middle;width:280px;" arcsize="50%" strokecolor="#184054" fillcolor="#184054">
+                    <w:anchorlock/>
+                    <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Review or adjust your proposal</center>
+                  </v:roundrect>
+                  <![endif]-->
+                  <!--[if !mso]><!-- -->
+                  <a href="{{portalLink}}" style="display:inline-block;background-color:#184054;color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:15px;padding:13px 32px;border:1px solid #184054;">Review or adjust your proposal</a>
+                  <!--<![endif]-->
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:8px 32px 16px 32px;font-family:Arial,sans-serif;font-size:11px;line-height:16px;color:#4A5560;">
+                  Or copy and paste this link into your browser:<br />
+                  <a href="{{portalLink}}" style="color:#00AE91;word-break:break-all;">{{portalLink}}</a>
+                </td>
+              </tr>
+            </table>`;
+
+export const REPLY_PORTAL_CTA_TEXT = 'Review or adjust your proposal: {{portalLink}}';
+
+const REPLY_PORTAL_SECTION_HTML = `{{#portalLink}}${REPLY_PORTAL_CTA_HTML}{{/portalLink}}`;
+const REPLY_PORTAL_SECTION_TEXT = `{{#portalLink}}${REPLY_PORTAL_CTA_TEXT}{{/portalLink}}`;
+
+// Ancora do fallback: 1o paragrafo "Best regards" (HTML) / 1a linha "Best regards" (texto).
+const BEST_REGARDS_HTML_RE = /<p[^>]*>\s*Best regards/;
+const BEST_REGARDS_TEXT_RE = /^[ \t]*Best regards/m;
+
+function templateNeedsPortalBlock(template: string, vars: QuoteReplyVars): boolean {
+  return (
+    typeof vars.portalLink === 'string' &&
+    vars.portalLink.trim().length > 0 &&
+    !hasPlaceholder(template, 'portalLink') &&
+    !hasSection(template, 'portalLink')
+  );
+}
+
+// Template do banco sem o placeholder: injeta a secao do botao antes do
+// "Best regards" (ou antes de </body> / no fim, com warn). Replacer em
+// funcao para o bloco nunca ser interpretado como padrao de substituicao.
+function injectPortalSectionHtml(template: string): string {
+  if (BEST_REGARDS_HTML_RE.test(template)) {
+    return template.replace(BEST_REGARDS_HTML_RE, (match) => `${REPLY_PORTAL_SECTION_HTML}\n${match}`);
+  }
+  logger.warn(
+    { templateKey: REPLY_TEMPLATE_KEY },
+    'Template quote_reply sem {{portalLink}} nem paragrafo "Best regards": o botao do portal foi inserido antes de </body>.',
+  );
+  if (/<\/body>/i.test(template)) {
+    return template.replace(/<\/body>/i, (match) => `${REPLY_PORTAL_SECTION_HTML}\n${match}`);
+  }
+  return `${template}\n${REPLY_PORTAL_SECTION_HTML}`;
+}
+
+function injectPortalSectionText(template: string): string {
+  const eol = template.includes('\r\n') ? '\r\n' : '\n';
+  if (BEST_REGARDS_TEXT_RE.test(template)) {
+    return template.replace(BEST_REGARDS_TEXT_RE, (match) => `${REPLY_PORTAL_SECTION_TEXT}${eol}${eol}${match}`);
+  }
+  return `${template.replace(/\s+$/, '')}${eol}${eol}${REPLY_PORTAL_SECTION_TEXT}`;
+}
+
 // ---------------------------------------------------------------------------
 // Secoes / placeholders
 // ---------------------------------------------------------------------------
 
-export function renderReplySections(template: string, vars: QuoteReplyVars): string {
+// `plainText`: corpo texto puro -- {{portalLink}} sai cru (URL com "&" nao
+// pode virar "&amp;" fora de HTML). Os demais placeholders mantem o
+// comportamento de sempre.
+export function renderReplySections(template: string, vars: QuoteReplyVars, plainText = false): string {
   const out = template.replace(/\{\{#([^}]+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (_, key, body) => {
     const value = (vars as unknown as Record<string, unknown>)[key];
     const hasValue = value !== undefined && value !== null && String(value).trim().length > 0;
@@ -310,6 +399,7 @@ export function renderReplySections(template: string, vars: QuoteReplyVars): str
       return vars.items.map((item) => renderItemsTextRow(item, vars.currency)).join('\n');
     }
     if (trimmed === 'itemsTextTable') return renderItemsTextTableLines(vars).join('\r\n');
+    if (plainText && trimmed === 'portalLink') return vars.portalLink ?? '';
     const value = (vars as unknown as Record<string, unknown>)[trimmed];
     if (value === undefined || value === null) return '';
     return escapeHtml(String(value));
@@ -356,6 +446,7 @@ export function renderReplyPlainText(vars: QuoteReplyVars): string {
     ...(!withTarget && vars.targetPrice !== undefined
       ? [`Target Price: ${formatMoney(vars.targetPrice, vars.currency).replace('&#8212;', '—')}`, '']
       : []),
+    ...(vars.portalLink ? [`Review or adjust your proposal: ${vars.portalLink}`, ''] : []),
     'Best regards,',
   ].join('\r\n');
 }
@@ -372,6 +463,8 @@ export function buildReplyTextTemplateDraft(): string {
     '{{itemsIntroText}}',
     '',
     '{{itemsTextTable}}',
+    '',
+    REPLY_PORTAL_SECTION_TEXT,
     '',
     'Best regards,',
   ].join('\r\n');
@@ -396,13 +489,18 @@ function withDerivedVars(vars: QuoteReplyVars, targetInTable: boolean): QuoteRep
 //  - sem {{message}} mas com <!--CUSTOM_MESSAGE_SLOT-->: a mensagem entra no slot
 //    (formato antigo, depois da tabela);
 //  - sem nenhum dos dois: a mensagem nao entra no HTML (logger.warn).
+//  - sem {{portalLink}}/{{#portalLink}} mas com link: o bloco padrao do botao
+//    do portal e' injetado antes de "Best regards" (fallback </body>/fim).
 export function renderReplyHtmlFromTemplate(htmlTemplate: string, vars: QuoteReplyVars): string {
   const columnMode = hasPlaceholder(htmlTemplate, 'itemsHeaderRow');
   const hasMessagePlaceholder = hasPlaceholder(htmlTemplate, 'message');
   const hasSlot = htmlTemplate.includes(REPLY_CUSTOM_MESSAGE_SLOT);
+  const template = templateNeedsPortalBlock(htmlTemplate, vars)
+    ? injectPortalSectionHtml(htmlTemplate)
+    : htmlTemplate;
 
   let html = renderReplySections(
-    htmlTemplate,
+    template,
     withDerivedVars(vars, columnMode && hasTargetColumn(vars.items)),
   );
 
@@ -421,10 +519,15 @@ export function renderReplyHtmlFromTemplate(htmlTemplate: string, vars: QuoteRep
 
 // Mesma regra de compatibilidade para o corpo texto puro: sem {{messageText}}
 // a mensagem e' prefixada (formato antigo).
+// Sem {{portalLink}}/{{#portalLink}} mas com link: a linha do portal entra
+// antes de "Best regards" (ou no fim).
 export function renderReplyTextFromTemplate(textTemplate: string, vars: QuoteReplyVars): string {
   const hasMessagePlaceholder = hasPlaceholder(textTemplate, 'messageText');
   const targetInTable = hasPlaceholder(textTemplate, 'itemsTextTable') && hasTargetColumn(vars.items);
-  const text = renderReplySections(textTemplate, withDerivedVars(vars, targetInTable));
+  const template = templateNeedsPortalBlock(textTemplate, vars)
+    ? injectPortalSectionText(textTemplate)
+    : textTemplate;
+  const text = renderReplySections(template, withDerivedVars(vars, targetInTable), true);
   return hasMessagePlaceholder ? text : withReplyCustomMessageText(text, trimmedMessage(vars));
 }
 

@@ -83,6 +83,8 @@ function renderReplySampleVars(): QuoteReplyVars {
     // Exemplo de preview: mensagem do modal + alvo por item (coluna TARGET PRICE).
     message: 'Thank you for the offer. Could you review the prices below?',
     hasItemTargets: true,
+    // Link ficticio: o preview nunca emite/rotaciona token.
+    portalLink: 'https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&v=1',
     items: [
       { name: 'PI-TPO', incoterm: 'CIF', quantity: 500, unit: 'KG', unitPrice: 4.99, targetPrice: 4.5 },
       { name: 'PI-DTX', incoterm: 'CIF', quantity: 1200, unit: 'KG', unitPrice: 4.99, targetPrice: 4.25 },
