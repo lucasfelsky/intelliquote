@@ -19,10 +19,12 @@ import {
   clearCreditWinners,
   clearStaleCreditWinners,
   CREDIT_OFFER_CHANGED_MESSAGE,
+  isManualWinnerActive,
   loadCreditAlternatives,
   loadCreditCandidateForAward,
   type CreditCandidateForAward,
   type CreditPartnerRef,
+  persistedWinnerOf,
   type PartnerContactRef,
 } from '../services/ComparisonCandidateService';
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
@@ -1597,6 +1599,18 @@ export class QuoteResponseController {
         ]),
       );
 
+      // Vencedora GRAVADA (isWinner) + se e uma escolha manual vigente. Chave aditiva: omitida
+      // quando nao ha vencedora gravada (contrato anterior preservado).
+      const persisted = persistedWinnerOf(responses, creditAlternatives);
+      const persistedWinnerPayload = persisted
+        ? {
+            persistedWinner: {
+              ...persisted,
+              manual: await isManualWinnerActive(prisma, quoteRequestId, persisted),
+            },
+          }
+        : {};
+
       if (complete.length === 0) {
         return res.status(200).json({
           results: [],
@@ -1607,6 +1621,7 @@ export class QuoteResponseController {
           responseCount,
           candidateCount: 0,
           excluded,
+          ...persistedWinnerPayload,
         });
       }
 
@@ -1715,6 +1730,7 @@ export class QuoteResponseController {
         responseCount,
         candidateCount: comparisonResults.length,
         excluded,
+        ...persistedWinnerPayload,
       });
     } catch (error) {
       const handled = handleControllerError(error);

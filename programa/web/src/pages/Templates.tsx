@@ -530,6 +530,7 @@ export default function Templates() {
               {preview.data && (
                 <div className="preview-frame">
                   <iframe
+                    sandbox=""
                     title="preview-email"
                     srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
                   />
@@ -561,6 +562,7 @@ export default function Templates() {
             {preview.data && (
               <div className="preview-popout__body">
                 <iframe
+                  sandbox=""
                   title="preview-email-popout"
                   srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
                 />

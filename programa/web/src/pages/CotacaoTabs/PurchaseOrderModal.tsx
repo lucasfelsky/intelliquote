@@ -16,12 +16,18 @@ const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 // Mesmo limite do Zod do backend (quotePurchaseOrderSchema.forwarderInfo).
 const MAX_FORWARDER_INFO_LENGTH = 2000;
 
+// Campos do candidato que o modal realmente le (linha do ranking OU entrada de "Fora do ranking").
+export type PurchaseOrderTarget = Pick<
+  ComparisonResult,
+  'quoteResponseId' | 'supplierId' | 'supplier' | 'creditSupportRequestId' | 'creditPartner' | 'partnerContact'
+>;
+
 interface PurchaseOrderModalProps {
-  target: ComparisonResult;
+  target: PurchaseOrderTarget;
   requestCode: string;
   productName: string | null;
   onClose: () => void;
-  onSent: (target: ComparisonResult) => void;
+  onSent: (target: PurchaseOrderTarget) => void;
 }
 
 // Modal "Enviar Ordem de Compra" -- so' aparece sobre a proposta vencedora

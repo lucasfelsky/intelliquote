@@ -184,6 +184,7 @@ describe('CreditSupportModal', () => {
       return el as HTMLIFrameElement;
     });
     expect(iframe.getAttribute('srcdoc')).toBe('<p>preview</p>');
+    expect(iframe.getAttribute('sandbox')).toBe('');
     expect(within(dialog).getByText('Credit Support RFQ-001')).toBeTruthy();
     expect(within(dialog).getByText(/CC: comex@sq.com/)).toBeTruthy();
   });

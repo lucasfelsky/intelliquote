@@ -295,6 +295,7 @@ export function CreditSupportModal({
                 Assunto: <strong>{preview.subject}</strong>
               </p>
               <iframe
+                sandbox=""
                 key={preview.html.length}
                 title="preview-credit-support-email"
                 className="preview-frame"
