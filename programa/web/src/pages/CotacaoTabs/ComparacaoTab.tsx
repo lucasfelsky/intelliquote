@@ -21,6 +21,7 @@ import {
   replyToQuoteResponse,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
+import { creditSupportQueryKey } from '@/services/creditSupport';
 import { Modal } from '@/components/Modal';
 import { PurchaseOrderModal } from './PurchaseOrderModal';
 
@@ -58,9 +59,8 @@ type WinnerTarget = Pick<
   'quoteResponseId' | 'supplierId' | 'supplier' | 'creditSupportRequestId' | 'creditPartner'
 >;
 
-// PR4a: linha "via Parceiro" (alternativa de Credit Support). A PO ao parceiro chega no PR4b;
-// ate la o botao fica desabilitado.
-const PO_PARTNER_SOON_TITLE = 'PO ao parceiro: em breve';
+// PR4a: linha "via Parceiro" (alternativa de Credit Support). PR4b: a vencedora via parceiro
+// recebe a Ordem de Compra (modal com alvo parceiro).
 function isViaPartner(r: { creditSupportRequestId?: number | null }): boolean {
   return typeof r.creditSupportRequestId === 'number' && r.creditSupportRequestId > 0;
 }
@@ -453,7 +453,15 @@ export function ComparacaoTab({
   }
 
   function handlePoSent(target: ComparisonResult) {
-    setFeedback({ kind: 'ok', text: 'Ordem de Compra enviada ao fornecedor.' });
+    const toPartner = isViaPartner(target);
+    setFeedback({
+      kind: 'ok',
+      text: toPartner
+        ? 'Ordem de Compra enviada ao parceiro de crédito.'
+        : 'Ordem de Compra enviada ao fornecedor.',
+    });
+    // O painel Credit Support mostra "PO enviada" (derivado do MailLog).
+    if (toPartner) void qc.invalidateQueries({ queryKey: creditSupportQueryKey(quoteRequestId) });
     setReviewTarget(target);
     setReviewOpen(true);
     setPoTarget(null);
@@ -600,22 +608,17 @@ export function ComparacaoTab({
             {r.quoteResponseId ? (
               r.isWinner ? (
                 viaPartner ? (
-                  // PR4a: PO ao parceiro chega no PR4b. Sem "Responder" (o e-mail iria ao fornecedor).
-                  <>
-                    <button
-                      type="button"
-                      className="cmp-btn cmp-btn--primary"
-                      disabled
-                      title={PO_PARTNER_SOON_TITLE}
-                      data-testid="po-partner-soon"
-                    >
-                      <DocIcon />
-                      Enviar Ordem de Compra
-                    </button>
-                    <span className="cmp-row__contact" data-testid="po-partner-soon-hint">
-                      {PO_PARTNER_SOON_TITLE}
-                    </span>
-                  </>
+                  // PR4b: PO ao parceiro. Sem "Responder" (o e-mail iria ao fornecedor).
+                  <button
+                    type="button"
+                    className="cmp-btn cmp-btn--primary"
+                    onClick={() => handleRowSendPo(r, true)}
+                    title={`Enviar Ordem de Compra ao parceiro ${r.creditPartner?.name ?? ''} (${r.partnerContact?.email ?? 'contato principal'})`}
+                    data-testid="po-partner"
+                  >
+                    <DocIcon />
+                    Enviar Ordem de Compra
+                  </button>
                 ) : (
                   <>
                     <button
@@ -735,7 +738,7 @@ export function ComparacaoTab({
   // By-pass de 1 fornecedor: sem comparação, marca vencedor manualmente e
   // abre direto o modal de Ordem de Compra (sem motivo, sem persistir comparação).
   // PR4a: se o único candidato é via parceiro, marca a alternativa (identidade composta);
-  // o modal de PO não abre (PO ao parceiro chega no PR4b).
+  // PR4b: o modal de PO abre com alvo parceiro.
   async function handleBypassSendPo() {
     const only = previewResults[0];
     if (!only?.quoteResponseId) return;
@@ -747,7 +750,7 @@ export function ComparacaoTab({
       });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
-      if (!isViaPartner(only)) openPoModal(only);
+      openPoModal(only);
     } catch (err) {
       setFeedback({ kind: 'err', text: messageOf(err) });
     } finally {
@@ -932,34 +935,21 @@ export function ComparacaoTab({
               )}
 
               <div className="cmp-bypass-actions">
-                {bypassViaPartner ? (
-                  // PR4a: PO ao parceiro chega no PR4b.
-                  <>
-                    <button
-                      type="button"
-                      className="cmp-btn cmp-btn--primary"
-                      disabled
-                      title={PO_PARTNER_SOON_TITLE}
-                      data-testid="po-partner-soon"
-                    >
-                      <DocIcon />
-                      Enviar Ordem de Compra
-                    </button>
-                    <span className="cmp-row__contact" data-testid="po-partner-soon-hint">
-                      {PO_PARTNER_SOON_TITLE}
-                    </span>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className="cmp-btn cmp-btn--primary"
-                    onClick={() => handleBypassSendPo()}
-                    disabled={bypassPending}
-                  >
-                    <DocIcon />
-                    {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="cmp-btn cmp-btn--primary"
+                  onClick={() => handleBypassSendPo()}
+                  disabled={bypassPending}
+                  title={
+                    bypassViaPartner
+                      ? `Enviar Ordem de Compra ao parceiro ${only?.creditPartner?.name ?? ''} (${only?.partnerContact?.email ?? 'contato principal'})`
+                      : undefined
+                  }
+                  data-testid={bypassViaPartner ? 'po-partner' : undefined}
+                >
+                  <DocIcon />
+                  {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
+                </button>
               </div>
             </div>
           );
@@ -1133,7 +1123,7 @@ export function ComparacaoTab({
 
       {poTarget && (
         <PurchaseOrderModal
-          key={poTarget.quoteResponseId}
+          key={candidateKey(poTarget)}
           target={poTarget}
           requestCode={requestCode}
           productName={productName}

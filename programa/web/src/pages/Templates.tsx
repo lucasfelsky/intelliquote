@@ -99,6 +99,8 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{message}}', label: 'Mensagem do modal (após “Dear all,”)' },
     { token: '{{senderSignature}}', label: 'Assinatura do usuário' },
     { token: '{{companyLogo}}', label: 'Logo da SQ' },
+    { token: '{{supplierName}}', label: 'Fornecedor de origem (PO via parceiro)' },
+    { token: '{{creditPartnerName}}', label: 'Parceiro de crédito (PO via parceiro)' },
   ],
   quote_reminder: [
     { token: '{{subject}}', label: 'Assunto' },

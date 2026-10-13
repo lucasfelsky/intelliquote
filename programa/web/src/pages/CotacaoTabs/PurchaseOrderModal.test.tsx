@@ -9,6 +9,7 @@ const controls = vi.hoisted(() => ({ confirm: vi.fn() }));
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => controls.confirm }));
 vi.mock('@/services/dispatch', () => ({
   sendPurchaseOrder: vi.fn(),
+  sendPurchaseOrderToPartner: vi.fn(),
 }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
@@ -16,6 +17,7 @@ vi.mock('@/services/forwarders', async (importOriginal) => ({
 }));
 
 import { sendPurchaseOrder } from '@/services/dispatch';
+import { sendPurchaseOrderToPartner } from '@/services/dispatch';
 import { listForwarders } from '@/services/forwarders';
 import { PurchaseOrderModal } from './PurchaseOrderModal';
 
@@ -250,5 +252,92 @@ describe('PurchaseOrderModal - seletor de forwarder', () => {
     fireEvent.change(textarea(scope), { target: { value: 'x'.repeat(2001) } });
     expect(scope.getByText('2001/2000')).toBeTruthy();
     expect(sendButton.disabled).toBe(true);
+  });
+});
+
+// PR4b: alvo = alternativa via parceiro (Credit Support).
+describe('PurchaseOrderModal - PO ao parceiro (PR4b)', () => {
+  const partnerTarget = {
+    supplierId: 7,
+    quoteResponseId: 42,
+    supplier: { id: 7, name: 'ACME Ltda' },
+    isWinner: true,
+    creditSupportRequestId: 7,
+    creditPartner: { id: 5, name: 'Banco Alfa' },
+    partnerContact: { id: 50, name: 'Ana Crédito', email: 'ana@alfa.example' },
+  } as unknown as ComparisonResult;
+
+  function renderPartnerModal(overrides: Partial<ComparisonResult> = {}) {
+    const onSent = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <PurchaseOrderModal
+          target={{ ...partnerTarget, ...overrides } as ComparisonResult}
+          requestCode="RFQ-001"
+          productName="Produto X"
+          onClose={vi.fn()}
+          onSent={onSent}
+        />
+      </QueryClientProvider>,
+    );
+    const dialog = view.container.querySelector('dialog') as HTMLDialogElement;
+    return { ...view, dialog, scope: within(dialog), onSent };
+  }
+
+  beforeEach(() => {
+    controls.confirm.mockReset();
+    vi.mocked(listForwarders).mockReset().mockResolvedValue([globalCargo]);
+    vi.mocked(sendPurchaseOrder).mockReset().mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+    vi.mocked(sendPurchaseOrderToPartner)
+      .mockReset()
+      .mockResolvedValue({ status: 'sent', to: 'ana@alfa.example', cc: [] });
+  });
+
+  it('titulo cita parceiro e fornecedor de origem; aviso do destinatario', async () => {
+    const { dialog, scope } = renderPartnerModal();
+    expect(dialog.querySelector('.modal-header h2')?.textContent).toBe(
+      'Enviar Ordem de Compra ao parceiro Banco Alfa — fornecedor ACME Ltda',
+    );
+    const notice = scope.getByTestId('po-partner-notice');
+    expect(notice.textContent).toBe('Destinatário: ana@alfa.example. O fornecedor de origem não é copiado.');
+    await waitFor(() => expect(listForwarders).toHaveBeenCalled());
+  });
+
+  it('sem contato no encaminhamento: aviso cai para o contato principal do parceiro', async () => {
+    const { scope } = renderPartnerModal({ partnerContact: null });
+    expect(scope.getByTestId('po-partner-notice').textContent).toContain('contato principal do parceiro');
+    await waitFor(() => expect(listForwarders).toHaveBeenCalled());
+  });
+
+  it('envio chama sendPurchaseOrderToPartner(7, ...) e NAO sendPurchaseOrder', async () => {
+    const { scope, onSent } = renderPartnerModal();
+    await waitFor(() => expect(select(scope).value).toBe('1'));
+    await attachPdf(scope);
+
+    fireEvent.click(scope.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+
+    await waitFor(() => expect(sendPurchaseOrderToPartner).toHaveBeenCalledTimes(1));
+    const [creditSupportRequestId, payload] = vi.mocked(sendPurchaseOrderToPartner).mock.calls[0] ?? [];
+    expect(creditSupportRequestId).toBe(7);
+    expect(payload?.forwarderId).toBe(1);
+    expect(payload?.forwarderInfo).toBe(GLOBAL_TEXT);
+    expect(payload?.fileType).toBe('application/pdf');
+    expect(sendPurchaseOrder).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSent).toHaveBeenCalled());
+  });
+
+  it('alvo fornecedor (sem creditSupportRequestId) continua chamando sendPurchaseOrder, sem aviso de parceiro', async () => {
+    const { scope, container } = renderModal();
+    const dialog = container.querySelector('dialog') as HTMLDialogElement;
+    await waitFor(() => expect(select(scope).value).toBe('1'));
+    expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Enviar Ordem de Compra — ACME Ltda');
+    expect(scope.queryByTestId('po-partner-notice')).toBeNull();
+    await attachPdf(scope);
+
+    fireEvent.click(scope.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+
+    await waitFor(() => expect(sendPurchaseOrder).toHaveBeenCalledTimes(1));
+    expect(sendPurchaseOrderToPartner).not.toHaveBeenCalled();
   });
 });

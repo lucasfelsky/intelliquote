@@ -208,6 +208,32 @@ export async function clearCreditWinners(
   });
 }
 
+/**
+ * PR4b: apos editar a resposta de ORIGEM, zera o vencedor-parceiro SO' dos encaminhamentos que
+ * ficaram stale de verdade (`computeIsStale`); re-salvar sem mudanca nao derruba a vencedora.
+ * Sem vencedor-parceiro => 1 query so'. Devolve os ids zerados. Idempotente.
+ */
+export async function clearStaleCreditWinners(client: Client, quoteResponseId: number): Promise<number[]> {
+  const winners = await client.creditSupportRequest.findMany({
+    where: { quoteResponseId, isWinner: true },
+    include: creditRequestInclude,
+  });
+  if (winners.length === 0) return [];
+
+  const origin = await client.quoteResponse.findFirst({
+    where: { id: quoteResponseId },
+    include: originResponseInclude,
+  });
+  const staleIds = winners.filter((row) => !origin || computeIsStale(row, origin)).map((row) => row.id);
+  if (staleIds.length === 0) return [];
+
+  await client.creditSupportRequest.updateMany({
+    where: { id: { in: staleIds }, isWinner: true },
+    data: { isWinner: false },
+  });
+  return staleIds;
+}
+
 export interface CreditCandidateForAward {
   row: CreditRequestRow;
   isStale: boolean;

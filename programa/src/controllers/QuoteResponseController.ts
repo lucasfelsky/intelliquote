@@ -17,6 +17,7 @@ import {
 } from '../services/QuoteComparisonService';
 import {
   clearCreditWinners,
+  clearStaleCreditWinners,
   CREDIT_OFFER_CHANGED_MESSAGE,
   loadCreditAlternatives,
   loadCreditCandidateForAward,
@@ -27,17 +28,9 @@ import {
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
 import { QuoteResponsePriceHistoryService } from '../services/QuoteResponsePriceHistoryService';
+import { sendPurchaseOrderEmail } from '../services/PurchaseOrderEmailService';
 import { sendAndLog } from '../mailer/MailerService';
 import { renderReplyFromTemplate, type QuoteReplyItem } from '../mailer/renderQuoteReply';
-import { renderPoFromTemplate } from '../mailer/renderQuotePo';
-import {
-  EMAIL_LOGO_CID,
-  EMAIL_SIGNATURE_CID,
-  emailLogoDisplaySize,
-  getEmailLogoAttachment,
-  isEmailLogoPlaceholder,
-} from '../mailer/emailLogo';
-import type { MailAttachment } from '../mailer/Mailer';
 import { logger } from '../lib/logger';
 import { formatIncoterms, mergeManualIncotermPrices } from '../utils/incoterm';
 import { buildPortalLink } from '../utils/portalLink';
@@ -541,6 +534,9 @@ export class QuoteResponseController {
           data: { isWinner: false },
         });
       }
+      // PR4b: preco/quantidade/moeda/incoterm mudou e o encaminhamento ficou stale => deixa de
+      // ser vencedor (so' os stale de verdade; re-salvar igual nao derruba). Fora da transacao.
+      const clearedCreditWinnerIds = await clearStaleCreditWinners(prisma, id);
 
       await AuditLogService.log({
         entityType: 'quote_response',
@@ -552,6 +548,7 @@ export class QuoteResponseController {
         metadata: {
           quoteRequestId: existingQuoteResponse.quoteRequestId,
           supplierId: existingQuoteResponse.supplierId,
+          ...(clearedCreditWinnerIds.length > 0 ? { clearedCreditWinnerIds } : {}),
         },
       });
 
@@ -1114,23 +1111,11 @@ export class QuoteResponseController {
     }
   }
 
-  // Limite do PDF anexado (base64 em JSON) -- ver override de body-parser em
-  // app.ts (10mb) e a TRAP do limite global de 1mb.
-  private static readonly PO_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-
-  private static decodePoAttachment(content: string): Buffer {
-    const normalized = content.includes(',') ? content.split(',').pop() ?? '' : content;
-    try {
-      return Buffer.from(normalized, 'base64');
-    } catch (_error) {
-      throw new HttpError(400, 'Conteudo base64 do PDF invalido.');
-    }
-  }
-
   // Envia (de verdade, via SMTP) o e-mail de "Ordem de Compra" ao contato
   // principal do fornecedor VENCEDOR, com o PDF (upload do usuario, so'-
   // envio) anexado. Botao na tela de Comparacao, so' habilitado quando
-  // `quoteResponse.isWinner === true`.
+  // `quoteResponse.isWinner === true`. O envio em si mora em
+  // PurchaseOrderEmailService (compartilhado com a PO ao parceiro, PR4b).
   static async sendPurchaseOrder(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseId(req.params.id);
@@ -1155,167 +1140,23 @@ export class QuoteResponseController {
         });
       }
 
-      if (parsedBody.data.fileSize > QuoteResponseController.PO_MAX_FILE_SIZE_BYTES) {
-        return res.status(400).json({ message: 'O PDF excede o limite de 10MB.' });
-      }
-
-      const buffer = QuoteResponseController.decodePoAttachment(parsedBody.data.contentBase64);
-      if (buffer.length === 0) {
-        return res.status(400).json({ message: 'Conteudo do PDF vazio.' });
-      }
-      if (buffer.length > QuoteResponseController.PO_MAX_FILE_SIZE_BYTES) {
-        return res.status(400).json({ message: 'O PDF excede o limite de 10MB.' });
-      }
-
-      // forwarderId e' so' rastreio (o texto do e-mail continua sendo forwarderInfo);
-      // inativo e' aceito, excluido nao.
-      const forwarderId = parsedBody.data.forwarderId ?? null;
-      if (forwarderId !== null) {
-        const forwarder = await prisma.forwarder.findFirst({
-          where: { id: forwarderId, deletedAt: null },
-          select: { id: true },
-        });
-        if (!forwarder) {
-          return res.status(400).json({ message: 'Forwarder nao encontrado.' });
-        }
-      }
-
-      const { quoteRequest } = quoteResponse;
-      const defaultSubject = `Purchase Order - ${quoteRequest.requestCode}`;
-      const message = parsedBody.data.message?.trim() ?? '';
-      const destinationPort =
-        quoteRequest.destinationPort?.trim() ||
-        quoteRequest.items?.[0]?.destinationPort?.trim() ||
-        'as agreed';
-
-      const subjectOverride = parsedBody.data.subject?.trim() || undefined;
-
-      if (isEmailLogoPlaceholder()) {
-        logger.warn(
-          { templateKey: 'quote_po' },
-          'Logo da SQ no e-mail da PO ainda e o PLACEHOLDER (src/mailer/assets/sqLogoPng.ts).',
-        );
-      }
-
-      // Assinatura do proprio usuario logado (Minha conta). Nome e e-mail vem
-      // de req.user; texto e imagem, da tabela UserEmailSignature.
-      const signature = req.user?.id
-        ? await prisma.userEmailSignature.findUnique({ where: { userId: req.user.id } })
-        : null;
-      const signatureImage =
-        signature?.imageData && signature.imageMimeType
-          ? { data: Buffer.from(signature.imageData), mimeType: signature.imageMimeType }
-          : null;
-
-      const rendered = await renderPoFromTemplate(
-        {
-          subject: subjectOverride || defaultSubject,
-          requestCode: quoteRequest.requestCode,
-          supplierContactName: primaryContact.name,
-          forwarderInfo: parsedBody.data.forwarderInfo?.trim() ?? '',
-          destinationPort,
-          message,
-          senderName: req.user?.name,
-          senderEmail: req.user?.email,
-          signatureText: signature?.text ?? null,
-          signatureImageSrc: signatureImage ? `cid:${EMAIL_SIGNATURE_CID}` : undefined,
-          signatureImageWidth: signature?.imageWidth ?? undefined,
-          signatureImageHeight: signature?.imageHeight ?? undefined,
-          companyLogoSrc: `cid:${EMAIL_LOGO_CID}`,
-          companyLogoWidth: emailLogoDisplaySize().width,
-        },
-        undefined,
-        subjectOverride,
-      );
-
-      const { html, text } = rendered;
-
-      const attachments: MailAttachment[] = [
-        {
-          filename: parsedBody.data.fileName,
-          content: buffer,
-          contentType: 'application/pdf',
-        },
-      ];
-      // Cada imagem inline so' e' anexada se o HTML final a referenciar
-      // (template customizado pode ter removido o placeholder).
-      if (html.includes(`cid:${EMAIL_LOGO_CID}`)) {
-        attachments.push(getEmailLogoAttachment());
-      }
-      if (signatureImage && html.includes(`cid:${EMAIL_SIGNATURE_CID}`)) {
-        attachments.push({
-          filename: signatureImage.mimeType === 'image/png' ? 'signature.png' : 'signature.jpg',
-          content: signatureImage.data,
-          contentType: signatureImage.mimeType,
-          cid: EMAIL_SIGNATURE_CID,
-        });
-      }
-
-      const sendResult = await sendAndLog({
-        to: { email: primaryContact.email, name: primaryContact.name },
+      const result = await sendPurchaseOrderEmail({
+        payload: parsedBody.data,
+        quoteRequest: quoteResponse.quoteRequest,
+        recipient: { name: primaryContact.name, email: primaryContact.email },
         cc: companyCc,
-        subject: rendered.subject,
-        html,
-        text,
-        templateId: 'quote-po',
+        user: req.user,
         templateVars: {
-          quoteRequestId: quoteRequest.id,
+          quoteRequestId: quoteResponse.quoteRequest.id,
           quoteResponseId: quoteResponse.id,
           supplierId: quoteResponse.supplier.id,
           supplierContactId: primaryContact.id,
-          forwarderInfo: parsedBody.data.forwarderInfo ?? null,
-          forwarderId,
-          hasCustomMessage: Boolean(message),
-          hasSignatureImage: Boolean(signatureImage),
         },
-        relatedEntityType: 'quote_response',
-        relatedEntityId: String(id),
-        attachments,
+        related: { type: 'quote_response', id: String(id) },
+        audit: { entityType: 'quote_response', entityId: id },
       });
 
-      await AuditLogService.log({
-        entityType: 'quote_response',
-        entityId: id,
-        action: 'purchase_order',
-        performedById: req.user?.id ?? null,
-        metadata: {
-          to: primaryContact.email,
-          cc: companyCc.map((c) => c.email),
-          status: sendResult.status,
-          subject: rendered.subject,
-          fileName: parsedBody.data.fileName,
-          fileSize: buffer.length,
-          forwarderId,
-        },
-      });
-
-      if (sendResult.status === 'failed') {
-        return res.status(502).json({
-          message: sendResult.error || 'Falha ao enviar a Ordem de Compra.',
-        });
-      }
-
-      // E-mail ja saiu: falha ao marcar "PO enviada" na cotacao nao vira 5xx.
-      try {
-        await prisma.quoteRequest.update({
-          where: { id: quoteRequest.id },
-          data: { purchaseOrderSentAt: new Date() },
-        });
-      } catch (error) {
-        logger.error(
-          {
-            quoteRequestId: quoteRequest.id,
-            reason: error instanceof Error ? error.message : String(error),
-          },
-          'Falha ao marcar PO enviada; e-mail ja enviado.',
-        );
-      }
-
-      return res.status(200).json({
-        status: sendResult.status,
-        to: primaryContact.email,
-        cc: companyCc.map((c) => c.email),
-      });
+      return res.status(200).json(result);
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

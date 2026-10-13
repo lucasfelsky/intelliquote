@@ -79,6 +79,14 @@ app.use('/api/v1/suppliers/import', requireAuthBeforeBody, express.json({ limit:
 // Rota interna autenticada (o portal do fornecedor usa /api/portal/:token, nao este prefixo).
 app.use('/api/v1/quote-responses', requireAuthBeforeBody, express.json({ limit: '10mb' }));
 
+// Idem para a Ordem de Compra ao PARCEIRO de Credit Support (PR4b): mesmo PDF em base64 no corpo.
+// So' este path ganha 10mb; revoke/resend do mesmo prefixo continuam no parser global de 1mb.
+app.use(
+  '/api/v1/credit-support-requests/:id/purchase-order',
+  requireAuthBeforeBody,
+  express.json({ limit: '10mb' }),
+);
+
 // /attachments recebe o arquivo em base64 no JSON (limite de negocio: 5MB).
 // Com o parser global de 1mb, qualquer anexo acima de ~740KB seria rejeitado
 // com 413 em HTML antes de chegar ao controller. Limite derivado do maximo de

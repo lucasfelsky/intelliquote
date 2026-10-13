@@ -23,6 +23,7 @@ vi.mock('@/services/dispatch', () => ({
   previewQuoteResponseReply: vi.fn(),
   replyToQuoteResponse: vi.fn(),
   sendPurchaseOrder: vi.fn(),
+  sendPurchaseOrderToPartner: vi.fn(),
 }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
@@ -1078,7 +1079,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
       });
     });
 
-    it('42. vencedora via parceiro: botao de PO desabilitado ("PO ao parceiro: em breve") e sem "Responder"', async () => {
+    it('42. vencedora via parceiro: botao de PO habilitado abre o modal do parceiro (com o fornecedor de origem) e sem "Responder"', async () => {
       vi.mocked(previewComparison).mockResolvedValue({
         results: [{ ...winner, isWinner: false }, viaPartner, loser],
         winnerQuoteResponseId: 42,
@@ -1088,16 +1089,32 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
         responseCount: 2,
         candidateCount: 3,
       });
-      const { findByTestId, getByTestId, queryByRole, queryAllByRole } = renderTab();
-      const po = (await findByTestId('po-partner-soon')) as HTMLButtonElement;
-      expect(po.disabled).toBe(true);
-      expect(po.title).toBe('PO ao parceiro: em breve');
+      // O botao da linha persiste a comparacao antes de abrir o modal (gated).
+      vi.mocked(executeComparison).mockResolvedValue({
+        results: [],
+        pendingApproval: false,
+        winnerQuoteResponseId: 42,
+        thresholdValue: null,
+        comparisonId: 5,
+      });
+      const { container, findByTestId, queryByRole, queryAllByRole, queryByTestId } = renderTab();
+      const po = (await findByTestId('po-partner')) as HTMLButtonElement;
+      expect(po.disabled).toBe(false);
+      expect(po.title).toContain('ana@alfa.example');
       expect(po.textContent).toContain('Enviar Ordem de Compra');
-      // Texto visivel (nao so o title) explicando o botao desabilitado.
-      expect(getByTestId('po-partner-soon-hint').textContent).toBe('PO ao parceiro: em breve');
+      expect(queryByTestId('po-partner-soon')).toBeNull();
       expect(queryByRole('button', { name: 'Responder' })).toBeNull();
       // A direta da mesma origem (nao vencedora) e a Beta oferecem "Definir como vencedora".
       expect(queryAllByRole('button', { name: 'Definir como vencedora' })).toHaveLength(2);
+
+      fireEvent.click(po);
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+      const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+      expect(dialog.querySelector('.modal-header h2')?.textContent).toBe(
+        'Enviar Ordem de Compra ao parceiro Banco Alfa — fornecedor ACME Ltda',
+      );
+      expect(within(dialog).getByTestId('po-partner-notice').textContent).toContain('ana@alfa.example');
     });
 
     it('43. excluida `stale` via parceiro: texto proprio, prefixo "via" e SEM botao de escolha manual', async () => {
@@ -1159,7 +1176,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
       expect(setManualWinner).toHaveBeenCalledWith(99, { quoteResponseId: 43, creditSupportRequestId: 9, reason: 'ok' });
     });
 
-    it('45. by-pass com o unico candidato via parceiro: chip, PO desabilitada e nenhuma chamada de PO', async () => {
+    it('45. by-pass com o unico candidato via parceiro: chip, PO habilitada marca a alternativa e abre o modal do parceiro', async () => {
       vi.mocked(previewComparison).mockResolvedValue({
         results: [viaPartner],
         winnerQuoteResponseId: null,
@@ -1180,17 +1197,25 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
           },
         ],
       });
-      const { findByText, getByTestId, container } = renderTab();
+      const { findByText, getByTestId, queryByTestId, container } = renderTab();
       await findByText('Apenas uma proposta completa — sem comparação.');
       const bypass = container.querySelector('.cmp-bypass') as HTMLElement;
       expect(within(bypass).getByTestId('via-partner').textContent).toBe('via Banco Alfa · Credit Support');
       expect(bypass.textContent).toContain('ana@alfa.example');
-      const po = getByTestId('po-partner-soon') as HTMLButtonElement;
-      expect(po.disabled).toBe(true);
-      expect(po.title).toBe('PO ao parceiro: em breve');
-      expect(within(bypass).getByTestId('po-partner-soon-hint').textContent).toBe('PO ao parceiro: em breve');
+      const po = getByTestId('po-partner') as HTMLButtonElement;
+      expect(po.disabled).toBe(false);
+      expect(queryByTestId('po-partner-soon')).toBeNull();
       expect(setManualWinner).not.toHaveBeenCalled();
+      fireEvent.click(po);
+      await waitFor(() => expect(setManualWinner).toHaveBeenCalledTimes(1));
+      expect(setManualWinner).toHaveBeenCalledWith(99, { quoteResponseId: 42, creditSupportRequestId: 7 });
       expect(executeComparison).not.toHaveBeenCalled();
+      await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+      const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+      expect(dialog.open).toBe(true);
+      expect(dialog.querySelector('.modal-header h2')?.textContent).toBe(
+        'Enviar Ordem de Compra ao parceiro Banco Alfa — fornecedor ACME Ltda',
+      );
     });
 
     it('46. fixtures antigas (sem chaves PR4a): badge continua na vencedora por quoteResponseId e comparableCount cai no fallback', async () => {

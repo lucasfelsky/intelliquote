@@ -17,6 +17,7 @@ vi.mock('../src/lib/prisma', () => {
     quoteResponse: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
     },
@@ -35,6 +36,7 @@ vi.mock('../src/lib/prisma', () => {
     quoteComparison: {},
     creditSupportRequest: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     // Historico de preco: create/update rodam em transacao e gravam o snapshot.
     quoteResponsePriceSnapshot: {
@@ -50,6 +52,7 @@ vi.mock('../src/lib/prisma', () => {
 import { Prisma } from '@prisma/client';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
+import { AuditLogService } from '../src/services/AuditLogService';
 
 const prismaMock = prisma as unknown as {
   user: {
@@ -65,6 +68,7 @@ const prismaMock = prisma as unknown as {
   quoteResponse: {
       create: ReturnType<typeof vi.fn>;
       findUnique: ReturnType<typeof vi.fn>;
+      findFirst: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
       findMany: ReturnType<typeof vi.fn>;
   };
@@ -791,6 +795,101 @@ describe('Quote response manual - item temporariamente indisponivel', () => {
     it('sem item indisponivel o PUT nao mexe em isWinner (chave ausente)', async () => {
       const data = await putOnWinner([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
       expect(data.isWinner).toBeUndefined();
+      expect(prismaMock.creditSupportRequest.updateMany).not.toHaveBeenCalled();
+    });
+
+    // PR4b (follow-up do review do PR4a): mudar preco/quantidade da origem deixa o encaminhamento
+    // vencedor stale -> deixa de ser vencedor; re-salvar igual nao derruba.
+    const creditFindMany = (
+      prisma as unknown as { creditSupportRequest: { findMany: ReturnType<typeof vi.fn> } }
+    ).creditSupportRequest.findMany;
+
+    function creditWinnerRow() {
+      return {
+        id: 9,
+        quoteRequestId: 1,
+        quoteResponseId: 55,
+        currency: 'USD',
+        offeredIncoterm: 'FOB',
+        items: [
+          {
+            quoteRequestItemId: 11,
+            quantity: 10,
+            originalUnitPrice: new Prisma.Decimal('10'),
+            isUnavailable: false,
+          },
+        ],
+      };
+    }
+
+    function currentOrigin(unitPrice: number) {
+      return {
+        id: 55,
+        version: 1,
+        currency: 'USD',
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        deletedAt: null,
+        items: [
+          {
+            quoteRequestItemId: 11,
+            quantity: 10,
+            unitPrice: new Prisma.Decimal(unitPrice),
+            totalPrice: new Prisma.Decimal(unitPrice * 10),
+            deletedAt: null,
+            isDangerousGood: false,
+            isUnavailable: false,
+            quoteRequestItem: {
+              productName: 'PI-TPO',
+              unit: 'KG',
+              quantity: 10,
+              itemCode: null,
+              deletedAt: null,
+              catalogItem: null,
+            },
+          },
+        ],
+      };
+    }
+
+    it('PR4b: preco do item mudou com parceiro vencedor -> updateMany isWinner:false + clearedCreditWinnerIds no audit', async () => {
+      const auditSpy = vi.spyOn(AuditLogService, 'log').mockResolvedValue(undefined);
+      creditFindMany.mockResolvedValueOnce([creditWinnerRow()]);
+      prismaMock.quoteResponse.findFirst.mockResolvedValueOnce(currentOrigin(12));
+
+      await putOnWinner([{ quoteRequestItemId: 11, unitPrice: 12, quantity: 10 }]);
+
+      expect(prismaMock.creditSupportRequest.updateMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.creditSupportRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: [9] }, isWinner: true },
+        data: { isWinner: false },
+      });
+      const updateAudit = auditSpy.mock.calls.find(([input]) => input.action === 'update');
+      expect(updateAudit?.[0].metadata).toMatchObject({ clearedCreditWinnerIds: [9] });
+      auditSpy.mockRestore();
+    });
+
+    it('PR4b: PUT com os mesmos valores nao derruba o vencedor-parceiro (sem updateMany, sem chave no audit)', async () => {
+      const auditSpy = vi.spyOn(AuditLogService, 'log').mockResolvedValue(undefined);
+      creditFindMany.mockResolvedValueOnce([creditWinnerRow()]);
+      prismaMock.quoteResponse.findFirst.mockResolvedValueOnce(currentOrigin(10));
+
+      await putOnWinner([{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10 }]);
+
+      expect(prismaMock.creditSupportRequest.updateMany).not.toHaveBeenCalled();
+      const updateAudit = auditSpy.mock.calls.find(([input]) => input.action === 'update');
+      expect(updateAudit?.[0].metadata).not.toHaveProperty('clearedCreditWinnerIds');
+      auditSpy.mockRestore();
+    });
+
+    it('PR4b: sem vencedor-parceiro faz so 1 findMany e nao consulta a origem', async () => {
+      creditFindMany.mockResolvedValueOnce([]);
+
+      await putOnWinner([{ quoteRequestItemId: 11, unitPrice: 12, quantity: 10 }]);
+
+      expect(creditFindMany).toHaveBeenCalledTimes(1);
+      expect(creditFindMany.mock.calls[0][0].where).toEqual({ quoteResponseId: 55, isWinner: true });
+      expect(prismaMock.quoteResponse.findFirst).not.toHaveBeenCalled();
       expect(prismaMock.creditSupportRequest.updateMany).not.toHaveBeenCalled();
     });
   });

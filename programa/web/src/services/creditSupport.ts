@@ -41,6 +41,8 @@ export interface CreditSupportRequest {
   isStale: boolean;
   // PR4a: alternativa via parceiro vencedora da Comparacao (ausente no backend antigo).
   isWinner?: boolean;
+  // PR4b: ISO do envio da Ordem de Compra ao parceiro (derivado do MailLog); null/ausente = nao enviada.
+  purchaseOrderSentAt?: string | null;
   expiresAt: string;
   createdAt: string;
   createdBy: { id: number; name: string };

@@ -11,6 +11,7 @@ import {
   buildPoSenderSignature,
   loadFileTemplate,
   renderPoFromTemplate,
+  renderPoHtmlFromTemplate,
   renderPoPlainText,
   renderPoSections,
   type QuotePoVars,
@@ -273,5 +274,149 @@ describe('renderQuotePo - e-mail da Ordem de Compra', () => {
     mockDbTemplate(seed.html, seed.text);
     const rendered = await renderPoFromTemplate({ ...baseVars, message: 'custa $& e $1' });
     expect(rendered.html).toContain('custa $&amp; e $1');
+  });
+});
+
+describe('renderQuotePo - PO via parceiro de Credit Support (PR4b)', () => {
+  const SECTION_RE = /\{\{#creditPartnerName\}\}[\s\S]*?\{\{\/creditPartnerName\}\}/;
+  const PHRASE = 'This purchase order refers to goods supplied by';
+  const partnerVars: QuotePoVars = {
+    ...baseVars,
+    supplierName: 'Acme Chemicals',
+    creditPartnerName: 'Banco Parceiro',
+  };
+
+  function countOf(haystack: string, needle: string): number {
+    return haystack.split(needle).length - 1;
+  }
+
+  // Template do banco ja migrado (com {{message}} e {{senderSignature}}), sem o paragrafo do parceiro.
+  function dbLikeHtml(): string {
+    return loadFileTemplate().replace(SECTION_RE, '');
+  }
+
+  beforeEach(() => {
+    templateGet.mockReset();
+    templateGet.mockResolvedValue(null);
+  });
+
+  it('(a) arquivo sem creditPartnerName: HTML do fornecedor identico ao do template sem o bloco', async () => {
+    const file = loadFileTemplate();
+    expect(file).toMatch(SECTION_RE);
+    const withMessage = { ...baseVars, message: 'Favor confirmar.' };
+    const rendered = await renderPoFromTemplate(withMessage);
+    expect(rendered.html).toBe(renderPoHtmlFromTemplate(file.replace(SECTION_RE, ''), withMessage));
+    expect(rendered.html).not.toContain('credit support');
+    expect(rendered.text).not.toContain('credit support');
+  });
+
+  it('(b) arquivo com parceiro: frase 1x entre "Dear all," e "Attached is our PO", nomes escapados', async () => {
+    const rendered = await renderPoFromTemplate({
+      ...partnerVars,
+      supplierName: 'Acme <script>x</script> & Co',
+      creditPartnerName: 'Banco <b>P</b> & Cia',
+      message: 'Favor confirmar.',
+    });
+    expect(countOf(rendered.html, PHRASE)).toBe(1);
+    const dear = rendered.html.indexOf('Dear all,');
+    const msg = rendered.html.indexOf('Favor confirmar.');
+    const phrase = rendered.html.indexOf(PHRASE);
+    const attached = rendered.html.indexOf('Attached is our PO');
+    expect(phrase).toBeGreaterThan(msg);
+    expect(msg).toBeGreaterThan(dear);
+    expect(attached).toBeGreaterThan(phrase);
+    expect(rendered.html).toContain('Acme &lt;script&gt;x&lt;/script&gt; &amp; Co');
+    expect(rendered.html).toContain('Banco &lt;b&gt;P&lt;/b&gt; &amp; Cia');
+    expect(rendered.html).not.toContain('<script>x</script>');
+    // Texto puro (sem linha no banco): linha literal antes de "Attached is our PO".
+    expect(countOf(rendered.text, PHRASE)).toBe(1);
+    expect(rendered.text.indexOf(PHRASE)).toBeLessThan(rendered.text.indexOf('Attached is our PO'));
+  });
+
+  it('(c) template do banco SEM o placeholder: frase injetada 1x logo apos a mensagem; texto puro antes de "Attached"', async () => {
+    mockDbTemplate(dbLikeHtml(), 'Dear all,\r\n\r\n{{messageText}}Attached is our PO.\r\n\r\n{{senderSignatureText}}');
+    const rendered = await renderPoFromTemplate({ ...partnerVars, message: 'Favor confirmar.' });
+    expect(rendered.source).toBe('database');
+    expect(countOf(rendered.html, PHRASE)).toBe(1);
+    expect(rendered.html).toContain(
+      'Favor confirmar.</p><p style="margin:0 0 12px 0;">This purchase order refers to goods supplied by Acme Chemicals, purchased through Banco Parceiro (credit support).</p>',
+    );
+    expect(countOf(rendered.text, PHRASE)).toBe(1);
+    expect(rendered.text).toContain(
+      'Favor confirmar.\r\n\r\nThis purchase order refers to goods supplied by Acme Chemicals, purchased through Banco Parceiro (credit support).\r\n\r\nAttached is our PO.',
+    );
+  });
+
+  it('(c2) seed legado (slot, sem {{message}}): frase injetada 1x antes de "Attached is our PO"', async () => {
+    const seed = loadSeedTemplate();
+    mockDbTemplate(seed.html, seed.text);
+    const rendered = await renderPoFromTemplate(partnerVars);
+    expect(countOf(rendered.html, PHRASE)).toBe(1);
+    expect(rendered.html.indexOf(PHRASE)).toBeLessThan(rendered.html.indexOf('Attached is our PO'));
+    expect(countOf(rendered.text, PHRASE)).toBe(1);
+    expect(rendered.text.indexOf(PHRASE)).toBeLessThan(rendered.text.indexOf('Attached is our PO'));
+  });
+
+  it('(d) template do banco COM {{#creditPartnerName}}: nao duplica', async () => {
+    mockDbTemplate(
+      `<p>Dear all,</p>{{message}}{{#creditPartnerName}}<p>Via {{creditPartnerName}} ({{supplierName}})</p>{{/creditPartnerName}}<p>Attached is our PO</p>{{senderSignature}}`,
+      'Dear all,\r\n{{messageText}}Attached is our PO.\r\n{{senderSignatureText}}',
+    );
+    const rendered = await renderPoFromTemplate(partnerVars);
+    expect(rendered.html).toContain('<p>Via Banco Parceiro (Acme Chemicals)</p>');
+    expect(countOf(rendered.html, PHRASE)).toBe(0);
+    expect(countOf(rendered.html, 'Banco Parceiro')).toBe(1);
+  });
+
+  it('(e) banco sem {{message}} nem "Attached is our PO": cai antes de </body> com logger.warn', async () => {
+    const { logger } = await import('../src/lib/logger');
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as never);
+    mockDbTemplate('<html><body><p>Custom body</p></body></html>', 'Custom text');
+    const rendered = await renderPoFromTemplate(partnerVars);
+    expect(countOf(rendered.html, PHRASE)).toBe(1);
+    expect(rendered.html.indexOf(PHRASE)).toBeLessThan(rendered.html.indexOf('</body>'));
+    expect(
+      warn.mock.calls.some((call) => String(call[1] ?? '').includes('parceiro de credito')),
+    ).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('(f) sem creditPartnerName o template do banco renderiza igual ao de hoje (nenhuma injecao)', async () => {
+    const html = dbLikeHtml();
+    mockDbTemplate(html, 'Dear all,\r\n\r\n{{messageText}}Attached is our PO.\r\n\r\n{{senderSignatureText}}');
+    const rendered = await renderPoFromTemplate({ ...baseVars, message: 'Oi.' });
+    expect(rendered.html).toBe(renderPoHtmlFromTemplate(html, { ...baseVars, message: 'Oi.', subject: rendered.subject }));
+    expect(rendered.html).not.toContain('credit support');
+    expect(rendered.text).not.toContain('credit support');
+    // supplierName sozinho (sem parceiro) tambem nao injeta.
+    const onlySupplier = await renderPoFromTemplate({ ...baseVars, supplierName: 'Acme' });
+    expect(onlySupplier.html).not.toContain('credit support');
+  });
+
+  it('(g) nomes/mensagem com "$&" nao quebram a injecao (HTML e texto)', async () => {
+    mockDbTemplate(dbLikeHtml(), 'Dear all,\r\n\r\n{{messageText}}Attached is our PO.\r\n\r\n{{senderSignatureText}}');
+    const rendered = await renderPoFromTemplate({
+      ...partnerVars,
+      supplierName: 'A$&B',
+      creditPartnerName: 'P$1$$',
+      message: 'custa $& e $1',
+    });
+    expect(countOf(rendered.html, PHRASE)).toBe(1);
+    expect(rendered.html).toContain('supplied by A$&amp;B, purchased through P$1$$ (credit support)');
+    expect(rendered.text).toContain('supplied by A$&B, purchased through P$1$$ (credit support)');
+    expect(rendered.html).toContain('custa $&amp; e $1');
+  });
+
+  it('renderPoPlainText: linha do parceiro so quando ha creditPartnerName', () => {
+    expect(renderPoPlainText(baseVars)).not.toContain('credit support');
+    const text = renderPoPlainText(partnerVars);
+    expect(text).toContain(
+      'This purchase order refers to goods supplied by Acme Chemicals, purchased through Banco Parceiro (credit support).',
+    );
+    expect(text.indexOf('credit support')).toBeLessThan(text.indexOf('Attached is our PO'));
+  });
+
+  it('o arquivo-fallback tem a secao condicional do parceiro', () => {
+    expect(loadFileTemplate()).toContain('{{#creditPartnerName}}');
   });
 });

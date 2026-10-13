@@ -61,11 +61,24 @@ export interface QuotePoVars {
   // exibicao (a altura e' fixa em 48px).
   companyLogoSrc?: string;
   companyLogoWidth?: number;
+  // PO via parceiro de Credit Support (PR4b): quando `creditPartnerName` esta preenchido, o
+  // e-mail cita o fornecedor de origem (`supplierName`) e o parceiro. Sem `creditPartnerName`
+  // (PO ao fornecedor) nada muda no render.
+  supplierName?: string;
+  creditPartnerName?: string;
 }
 
 export const PO_CUSTOM_MESSAGE_SLOT = '<!--CUSTOM_MESSAGE_SLOT-->';
 const PO_LOGO_DISPLAY_HEIGHT = 48;
 const PO_SIGNATURE_FALLBACK_GREETING = 'Best regards,';
+
+// Paragrafo condicional da PO via parceiro. Fica inline no quote-po.en.html e e injetado
+// (renderPoHtmlFromTemplate/renderPoTextFromTemplate) quando o template do BANCO -- que e
+// o que roda em producao -- nao tem o placeholder.
+export const PO_CREDIT_PARTNER_SECTION_HTML =
+  '{{#creditPartnerName}}<p style="margin:0 0 12px 0;">This purchase order refers to goods supplied by {{supplierName}}, purchased through {{creditPartnerName}} (credit support).</p>{{/creditPartnerName}}';
+// Marcador interno do texto puro (so' existe no template apos a injecao).
+const PO_CREDIT_PARTNER_TEXT_KEY = 'creditPartnerLineText';
 
 // Somente fontes inline seguras entram em <img src>. Qualquer outra coisa
 // (javascript:, http(s) externo, data: de outro tipo) e' descartada.
@@ -105,6 +118,17 @@ function renderMessageHtml(vars: QuotePoVars): string {
   if (!message) return '';
   const safe = escapeHtml(normalizeNewlines(message)).replace(/\n/g, '<br />');
   return `<p style="margin:0 0 12px 0;">${safe}</p>`;
+}
+
+function hasCreditPartner(vars: QuotePoVars): boolean {
+  return typeof vars.creditPartnerName === 'string' && vars.creditPartnerName.trim().length > 0;
+}
+
+// Linha de texto puro (literal: nomes crus, sem escape de HTML).
+function creditPartnerLine(vars: QuotePoVars): string {
+  if (!hasCreditPartner(vars)) return '';
+  const supplier = (vars.supplierName ?? '').trim() || 'the supplier';
+  return `This purchase order refers to goods supplied by ${supplier}, purchased through ${(vars.creditPartnerName ?? '').trim()} (credit support).`;
 }
 
 function renderMessageText(vars: QuotePoVars): string {
@@ -237,6 +261,9 @@ export function renderPoSections(template: string, vars: QuotePoVars): string {
     if (trimmed === 'messageText') return renderMessageText(vars);
     if (trimmed === 'senderSignature') return renderSenderSignatureHtml(vars);
     if (trimmed === 'senderSignatureText') return renderSenderSignatureText(vars);
+    if (trimmed === PO_CREDIT_PARTNER_TEXT_KEY) {
+      return hasCreditPartner(vars) ? `${creditPartnerLine(vars)}\r\n\r\n` : '';
+    }
     const value = (vars as unknown as Record<string, unknown>)[trimmed];
     if (value === undefined || value === null) return '';
     return escapeHtml(String(value));
@@ -249,6 +276,7 @@ export function renderPoPlainText(vars: QuotePoVars): string {
     'Dear all,',
     '',
     ...(message ? [normalizeNewlines(message).replace(/\n/g, '\r\n'), ''] : []),
+    ...(hasCreditPartner(vars) ? [creditPartnerLine(vars), ''] : []),
     ...poPlainTextBodyLines(vars.destinationPort || 'as agreed', vars.forwarderInfo || ''),
   ].join('\r\n');
   return `${body}\r\n\r\n${composeSignature(vars).signature.plainText}`;
@@ -317,6 +345,54 @@ function hasPlaceholder(template: string, key: string): boolean {
   return new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`).test(template);
 }
 
+function hasCreditPartnerPlaceholder(template: string): boolean {
+  return /\{\{\s*#?creditPartnerName\s*\}\}/.test(template);
+}
+
+// PO via parceiro + template (do banco) SEM o paragrafo: injeta a secao condicional. Posicao:
+// logo apos o 1o {{message}}; senao antes do paragrafo "Attached is our PO"; senao antes de
+// {{senderSignature}}; senao antes de </body> (logger.warn); senao no fim. Replacers em funcao
+// (o conteudo pode conter "$&").
+function injectCreditPartnerHtml(template: string, vars: QuotePoVars): string {
+  if (!hasCreditPartner(vars) || hasCreditPartnerPlaceholder(template)) return template;
+  const section = PO_CREDIT_PARTNER_SECTION_HTML;
+  const afterMessage = /\{\{\s*message\s*\}\}/;
+  if (afterMessage.test(template)) {
+    return template.replace(afterMessage, (match) => `${match}${section}`);
+  }
+  const beforeAttached = /<p[^>]*>\s*Attached is our PO/;
+  if (beforeAttached.test(template)) {
+    return template.replace(beforeAttached, (match) => `${section}${match}`);
+  }
+  const beforeSignature = /\{\{\s*senderSignature\s*\}\}/;
+  if (beforeSignature.test(template)) {
+    return template.replace(beforeSignature, (match) => `${section}${match}`);
+  }
+  const beforeBodyEnd = /<\/body>/i;
+  if (beforeBodyEnd.test(template)) {
+    logger.warn(
+      { templateKey: PO_TEMPLATE_KEY },
+      'Template quote_po sem ancora para o paragrafo do parceiro de credito: inserido antes de </body>.',
+    );
+    return template.replace(beforeBodyEnd, (match) => `${section}${match}`);
+  }
+  return `${template}${section}`;
+}
+
+function injectCreditPartnerText(template: string, vars: QuotePoVars): string {
+  if (!hasCreditPartner(vars) || hasCreditPartnerPlaceholder(template)) return template;
+  const marker = `{{${PO_CREDIT_PARTNER_TEXT_KEY}}}`;
+  const afterMessage = /\{\{\s*messageText\s*\}\}/;
+  if (afterMessage.test(template)) {
+    return template.replace(afterMessage, (match) => `${match}${marker}`);
+  }
+  const beforeAttached = /^Attached is our PO.*$/m;
+  if (beforeAttached.test(template)) {
+    return template.replace(beforeAttached, (match) => `${marker}${match}`);
+  }
+  return `${template}\r\n\r\n${marker}`;
+}
+
 // Renderiza o HTML de um template (arquivo ou banco) com a regra de
 // compatibilidade para templates antigos/customizados:
 //  - com {{message}} / {{senderSignature}}: o conteudo entra no placeholder;
@@ -328,7 +404,7 @@ export function renderPoHtmlFromTemplate(htmlTemplate: string, vars: QuotePoVars
   const hasSignaturePlaceholder = hasPlaceholder(htmlTemplate, 'senderSignature');
   const hasSlot = htmlTemplate.includes(PO_CUSTOM_MESSAGE_SLOT);
 
-  let html = renderPoSections(htmlTemplate, vars);
+  let html = renderPoSections(injectCreditPartnerHtml(htmlTemplate, vars), vars);
 
   if (hasSlot) {
     const slotContent =
@@ -360,7 +436,7 @@ export function renderPoTextFromTemplate(textTemplate: string, vars: QuotePoVars
   const hasMessagePlaceholder = hasPlaceholder(textTemplate, 'messageText');
   const hasSignaturePlaceholder = hasPlaceholder(textTemplate, 'senderSignatureText');
 
-  let text = renderPoSections(textTemplate, vars);
+  let text = renderPoSections(injectCreditPartnerText(textTemplate, vars), vars);
   if (!hasMessagePlaceholder) text = `${renderMessageText(vars)}${text}`;
   if (!hasSignaturePlaceholder) {
     text = `${text}\r\n\r\n${composeSignature(vars).signature.plainText}`;
