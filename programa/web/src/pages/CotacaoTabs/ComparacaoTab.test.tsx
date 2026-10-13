@@ -879,7 +879,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     expect(queryByRole('button', { name: 'Definir como vencedora mesmo assim' })).toBeNull();
   });
 
-  it('35. quantidade divergente entra no ranking com a linha de aviso', async () => {
+  it('35. quantidade divergente entra no ranking como chip que abre o popover com os itens', async () => {
     vi.mocked(previewComparison).mockResolvedValue({
       ...defaultPreview,
       results: [
@@ -892,12 +892,52 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
       ],
       excluded: [],
     });
-    const { findByTestId, queryByText } = renderTab();
-    const line = await findByTestId('qty-adjusted');
-    expect(line.textContent).toBe(
-      'Quantidade divergente: Catalisador Y: pedido 100, cotado 80 — ranking usa o unitário × quantidade pedida',
-    );
+    const { findByTestId, queryByText, queryByRole, getByRole } = renderTab();
+    const chip = await findByTestId('qty-adjusted');
+    expect(chip.tagName).toBe('BUTTON');
+    expect(chip.textContent).toBe('Qtd divergente');
+    expect(chip.getAttribute('aria-expanded')).toBe('false');
+    expect(queryByRole('tooltip')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/cotado 80/);
+    fireEvent.click(chip);
+    const tooltip = getByRole('tooltip');
+    expect(tooltip.textContent).toContain('Catalisador Y: pedido 100, cotado 80');
+    expect(tooltip.textContent).toContain('O ranking usa o unitário × quantidade pedida');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(queryByRole('tooltip')).toBeNull();
     expect(queryByText('Fora do ranking')).toBeNull();
+  });
+
+  it('35b. sem divergencia (ausente/false/lista vazia) nao mostra o chip', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...defaultPreview,
+      results: [
+        { ...winner, quantityAdjusted: false },
+        { ...loser, quantityAdjusted: true, quantityMismatches: [] },
+      ],
+      excluded: [],
+    });
+    const { findByText, queryByTestId } = renderTab();
+    await findByText(loser.supplier.name);
+    expect(queryByTestId('qty-adjusted')).toBeNull();
+  });
+
+  it('35c. quantidades no popover usam formato pt-BR', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...defaultPreview,
+      results: [
+        winner,
+        {
+          ...loser,
+          quantityAdjusted: true,
+          quantityMismatches: [{ quoteRequestItemId: 6, productName: 'Catalisador Y', requested: 10000, offered: 10400 }],
+        },
+      ],
+      excluded: [],
+    });
+    const { findByTestId, getByRole } = renderTab();
+    fireEvent.click(await findByTestId('qty-adjusted'));
+    expect(getByRole('tooltip').textContent).toContain('pedido 10.000, cotado 10.400');
   });
 });
 

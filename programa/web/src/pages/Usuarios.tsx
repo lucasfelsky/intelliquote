@@ -160,42 +160,44 @@ export default function Usuarios() {
           </div>
         )}
         {list.data && list.data.length > 0 && (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Nome</th>
-                <th>E-mail</th>
-                <th>Perfil</th>
-                <th>Status</th>
-                <th>Criado em</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.data.map((u) => (
-                <tr key={u.id}>
-                  <td><strong>{u.name}</strong></td>
-                  <td>{u.email}</td>
-                  <td><span className="badge">{u.role}</span></td>
-                  <td>
-                    <span className={`badge ${u.isActive ? '' : 'badge--muted'}`}>
-                      {u.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })}
-                    >
-                      {u.isActive ? 'Desativar' : 'Ativar'}
-                    </button>
-                  </td>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>E-mail</th>
+                  <th>Perfil</th>
+                  <th>Status</th>
+                  <th>Criado em</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {list.data.map((u) => (
+                  <tr key={u.id}>
+                    <td><strong>{u.name}</strong></td>
+                    <td>{u.email}</td>
+                    <td><span className="badge">{u.role}</span></td>
+                    <td>
+                      <span className={`badge ${u.isActive ? '' : 'badge--muted'}`}>
+                        {u.isActive ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
+                    <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })}
+                      >
+                        {u.isActive ? 'Desativar' : 'Ativar'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
 
