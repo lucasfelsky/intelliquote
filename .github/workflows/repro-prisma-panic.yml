@@ -61,3 +61,32 @@ jobs:
           done
           echo "### ${{ matrix.mode }} / ${{ matrix.target }}: $N iteracoes, $fails com exit != 0, $panics com panic da engine" >> "$GITHUB_STEP_SUMMARY"
           echo "RESULT mode=${{ matrix.mode }} target=${{ matrix.target }} iterations=$N fails=$fails panics=$panics"
+
+  direct:
+    name: direct / worker.terminate() durante new PrismaClient()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: programa/package-lock.json
+      - name: Install
+        working-directory: programa
+        run: npm ci && npx prisma generate
+      - name: Sweep
+        working-directory: programa
+        run: |
+          tot=0; panics=0; aborts=0
+          for r in $(seq 1 6); do
+            for d in $(seq 5 80); do
+              set +e; node ../.github/repro/term-repro.cjs $d > t.log 2>&1; c=$?; set -e
+              tot=$((tot+1))
+              if grep -q "panicked at query-engine" t.log; then panics=$((panics+1)); [ "$c" -eq 134 ] && aborts=$((aborts+1)); echo "d=${d}ms exit=$c"; cp t.log panic-sample.log; fi
+            done
+          done
+          [ -f panic-sample.log ] && cat panic-sample.log
+          echo "### direct: $tot encerramentos, $panics panics da engine ($aborts com exit 134)" >> "$GITHUB_STEP_SUMMARY"
+          echo "RESULT direct total=$tot panics=$panics aborts134=$aborts"
