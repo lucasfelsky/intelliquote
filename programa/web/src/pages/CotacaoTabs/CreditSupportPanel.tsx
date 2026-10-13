@@ -145,6 +145,15 @@ function CreditSupportCard({
         <strong>{row.partner.name}</strong>
         <span className={STATUS_CLASS[row.status] ?? 'badge'}>{STATUS_LABELS[row.status] ?? row.status}</span>
         {row.isWinner && <span className="badge badge--success">Vencedora</span>}
+        {row.purchaseOrderSentAt && (
+          <span
+            className="badge badge--success"
+            data-testid="po-sent-badge"
+            title={`Ordem de Compra enviada ao parceiro em ${formatDateTime(row.purchaseOrderSentAt)}`}
+          >
+            PO enviada
+          </span>
+        )}
         {row.isStale && <span className="badge badge--warning">Proposta do fornecedor mudou</span>}
         <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Validade: {formatDate(row.expiresAt)}</span>
       </div>

@@ -67,6 +67,7 @@ describe('Autenticacao antes do parser de corpo grande', () => {
     ['/api/v1/catalog-items/import', TEN_MB],
     ['/api/v1/suppliers/import', TEN_MB],
     ['/api/v1/quote-responses', TEN_MB],
+    ['/api/v1/credit-support-requests/1/purchase-order', TEN_MB],
   ];
 
   it.each(unauthenticatedCases)(

@@ -828,9 +828,29 @@ export class CreditSupportService {
     const responseById = new Map(responses.map((r) => [r.id, r]));
     const now = new Date();
 
-    return rows.map((row) =>
-      serializeRequest(row, computeIsStale(row, responseById.get(row.quoteResponseId)), now),
-    );
+    // PR4b: "PO enviada" derivada do MailLog (sem coluna/migration): mesma regra do backfill #117
+    // (`quote-po`, sent|queued), agora com relatedEntityType 'credit_support_request'.
+    const poLogs = await prisma.mailLog.findMany({
+      where: {
+        templateId: 'quote-po',
+        relatedEntityType: CREDIT_SUPPORT_ENTITY_TYPE,
+        relatedEntityId: { in: rows.map((row) => String(row.id)) },
+        status: { in: ['sent', 'queued'] },
+      },
+      select: { relatedEntityId: true, sentAt: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const poSentAtByRequest = new Map<string, Date>();
+    for (const log of poLogs) {
+      if (log.relatedEntityId && !poSentAtByRequest.has(log.relatedEntityId)) {
+        poSentAtByRequest.set(log.relatedEntityId, log.sentAt ?? log.createdAt);
+      }
+    }
+
+    return rows.map((row) => ({
+      ...serializeRequest(row, computeIsStale(row, responseById.get(row.quoteResponseId)), now),
+      purchaseOrderSentAt: poSentAtByRequest.get(String(row.id))?.toISOString() ?? null,
+    }));
   }
 
   static async revoke(id: number, userId: number) {

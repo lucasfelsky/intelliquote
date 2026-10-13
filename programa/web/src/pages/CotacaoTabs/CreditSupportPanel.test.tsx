@@ -286,4 +286,19 @@ describe('CreditSupportPanel', () => {
     expect(within(getByTestId('credit-support-request-2')).queryByText('Vencedora')).toBeNull();
     expect(within(getByTestId('credit-support-request-3')).queryByText('Vencedora')).toBeNull();
   });
+
+  it('13. PR4b: badge "PO enviada" so na linha com purchaseOrderSentAt', async () => {
+    mockList([
+      { ...row, isWinner: true, purchaseOrderSentAt: '2026-10-14T09:00:00.000Z' },
+      { ...row2, purchaseOrderSentAt: null },
+      row3,
+    ]);
+    const { findByRole, getByTestId } = renderPanel();
+    await findByRole('heading', { name: 'Credit Support — ACME Ltda' });
+    const badge = within(getByTestId('credit-support-request-1')).getByText('PO enviada');
+    expect(badge.className).toContain('badge--success');
+    expect(badge.getAttribute('title')).toContain('Ordem de Compra enviada ao parceiro em');
+    expect(within(getByTestId('credit-support-request-2')).queryByText('PO enviada')).toBeNull();
+    expect(within(getByTestId('credit-support-request-3')).queryByText('PO enviada')).toBeNull();
+  });
 });

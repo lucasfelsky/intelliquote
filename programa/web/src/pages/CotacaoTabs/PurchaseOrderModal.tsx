@@ -4,7 +4,7 @@ import {
   messageOf,
   type ComparisonResult,
 } from '@/services/quoteResponses';
-import { sendPurchaseOrder } from '@/services/dispatch';
+import { sendPurchaseOrder, sendPurchaseOrderToPartner } from '@/services/dispatch';
 import { formatForwarderInfo, listForwarders } from '@/services/forwarders';
 import { Modal } from '@/components/Modal';
 import { useConfirm } from '@/components/useConfirm';
@@ -45,6 +45,8 @@ export function PurchaseOrderModal({
   const [poModalError, setPoModalError] = useState<string | null>(null);
   const [forwarderId, setForwarderId] = useState<number | null>(null);
   const confirm = useConfirm();
+  const viaPartner = (target.creditSupportRequestId ?? 0) > 0;
+  const supplierName = target.supplier?.name ?? `Fornecedor #${target.supplierId}`;
 
   const forwardersQuery = useQuery({
     queryKey: ['forwarders', { active: true }],
@@ -101,17 +103,22 @@ export function PurchaseOrderModal({
 
   const poSendMutation = useMutation({
     mutationFn: () => {
-      if (!target.quoteResponseId) throw new Error('Proposta sem ID.');
-      return sendPurchaseOrder(target.quoteResponseId, {
+      const payload = {
         subject: poSubject,
         message: poMessage,
         forwarderInfo: poForwarderInfo,
         ...(forwarderId !== null ? { forwarderId } : {}),
         fileName: poFileName,
         contentBase64: poFileBase64,
-        fileType: 'application/pdf',
+        fileType: 'application/pdf' as const,
         fileSize: poFileSize,
-      });
+      };
+      // PR4b: vencedora via parceiro -> a PO vai ao parceiro (rota do encaminhamento).
+      if (viaPartner && target.creditSupportRequestId) {
+        return sendPurchaseOrderToPartner(target.creditSupportRequestId, payload);
+      }
+      if (!target.quoteResponseId) throw new Error('Proposta sem ID.');
+      return sendPurchaseOrder(target.quoteResponseId, payload);
     },
     onSuccess: () => onSent(target),
     onError: (err) => setPoModalError(messageOf(err)),
@@ -148,11 +155,24 @@ export function PurchaseOrderModal({
       isOpen
       onClose={onClose}
       size="wide"
-      title={`Enviar Ordem de Compra — ${target.supplier?.name ?? `Fornecedor #${target.supplierId}`}`}
+      title={
+        viaPartner
+          ? `Enviar Ordem de Compra ao parceiro ${target.creditPartner?.name ?? 'de crédito'} — fornecedor ${supplierName}`
+          : `Enviar Ordem de Compra — ${supplierName}`
+      }
     >
       <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
         {requestCode} · {productName}
       </p>
+      {viaPartner && (
+        <p
+          data-testid="po-partner-notice"
+          style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}
+        >
+          Destinatário: {target.partnerContact?.email ?? 'contato principal do parceiro'}. O
+          fornecedor de origem não é copiado.
+        </p>
+      )}
 
       <label className="field-label" htmlFor="poSubject" style={{ marginTop: 12 }}>
         Assunto

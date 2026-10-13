@@ -282,4 +282,101 @@ describe.skipIf(!run)('Credit Support x Comparacao (DB) em Postgres isolado', ()
     expect(previewAfter.body.excluded).toEqual([]);
     expect(previewAfter.body.winnerQuoteResponseId).toBe(responseBId);
   });
+
+  // PR4b: PO ao parceiro vencedor + "PO enviada" derivada do MailLog + template REAL do banco
+  // (sem o placeholder do parceiro) + follow-up do review do PR4a (editar a origem zera o vencedor).
+  it('PO ao parceiro vencedor: e-mail ao contato do parceiro, PO enviada, template do banco e PUT da origem', async () => {
+    const weights = { priceWeight: 100, paymentTermsWeight: 0, incotermWeight: 0, qualityWeight: 0 };
+    const listUrl = `/api/v1/quote-requests/${quoteId}/credit-support`;
+    const pdf = { fileName: 'po.pdf', contentBase64: 'JVBERi0xLjQK', fileType: 'application/pdf', fileSize: 12 };
+
+    const partnerRes = await request(app)
+      .post('/api/v1/credit-partners')
+      .set('Cookie', cookies)
+      .send({ name: `Banco PO ${runId}`, contacts: [{ name: 'Paula', email: `paula.${runId}@banco.test` }] });
+    expect(partnerRes.status, JSON.stringify(partnerRes.body)).toBe(201);
+    partnerIds.push(partnerRes.body.id);
+
+    const forward = await request(app)
+      .post(`/api/v1/quote-responses/${responseAId}/credit-support`)
+      .set('Cookie', cookies)
+      .send({ creditPartnerId: partnerRes.body.id, contactIds: [partnerRes.body.contacts[0].id] });
+    expect(forward.status, JSON.stringify(forward.body)).toBe(201);
+    const creditId: number = forward.body.id;
+    const quoteItems = await prisma.quoteRequestItem.findMany({ where: { quoteRequestId: quoteId }, orderBy: { id: 'asc' } });
+    const submit = await request(app)
+      .post(`/api/credit-portal/${tokenOf(forward.body.portalUrl)}/respond`)
+      .send({
+        paymentTermsDays: 90,
+        validityDays: 30,
+        items: quoteItems.map((item: any) => ({ quoteRequestItemId: item.id, unitPrice: 9 })),
+      });
+    expect(submit.status, JSON.stringify(submit.body)).toBe(201);
+
+    const compare = await request(app).post(`/api/v1/quote-requests/${quoteId}/compare`).set('Cookie', cookies).send(weights);
+    expect(compare.status, JSON.stringify(compare.body)).toBe(200);
+    expect((await prisma.creditSupportRequest.findUnique({ where: { id: creditId } })).isWinner).toBe(true);
+    expect((await prisma.quoteComparison.findUnique({ where: { id: compare.body.comparisonId } })).winnerCreditSupportRequestId).toBe(creditId);
+
+    // Antes da PO: painel sem "PO enviada".
+    const listBefore = await request(app).get(listUrl).set('Cookie', cookies);
+    expect(listBefore.body.find((row: any) => row.id === creditId).purchaseOrderSentAt).toBeNull();
+
+    // 1) PO ao parceiro: 200, e-mail ao contato do parceiro (fornecedor fora), marcas de "PO enviada".
+    const po = await request(app).post(`/api/v1/credit-support-requests/${creditId}/purchase-order`).set('Cookie', cookies).send(pdf);
+    expect(po.status, JSON.stringify(po.body)).toBe(200);
+    expect(po.body.to).toBe(`paula.${runId}@banco.test`);
+    const mail = await prisma.mailLog.findFirst({
+      where: { relatedEntityType: 'credit_support_request', relatedEntityId: String(creditId), templateId: 'quote-po' },
+    });
+    expect(mail).not.toBeNull();
+    expect(mail.toEmail).toBe(`paula.${runId}@banco.test`);
+    expect(mail.ccList ?? '').not.toContain(`${runId}.A@local.test`);
+    expect(mail.templateVars).toMatchObject({ creditSupportRequestId: creditId, creditPartnerId: partnerRes.body.id });
+    expect((await prisma.quoteRequest.findUnique({ where: { id: quoteId } })).purchaseOrderSentAt).not.toBeNull();
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: 'credit_support_request', entityId: String(creditId), action: 'purchase_order' },
+    });
+    expect(audit).not.toBeNull();
+    const listAfter = await request(app).get(listUrl).set('Cookie', cookies);
+    expect(typeof listAfter.body.find((row: any) => row.id === creditId).purchaseOrderSentAt).toBe('string');
+
+    // 2) Template REAL migrado (quote_po/en, sem placeholder do parceiro): a frase entra 1x via fallback;
+    //    sem creditPartnerName o render nao menciona o parceiro. Zero UPDATE no banco.
+    const { renderPoFromTemplate } = await import('../src/mailer/renderQuotePo');
+    const row = await prisma.emailTemplate.findUnique({ where: { key_locale: { key: 'quote_po', locale: 'en' } } });
+    expect(row).not.toBeNull();
+    expect(row.htmlBody).not.toContain('creditPartnerName');
+    const baseVars = { subject: 'PO', requestCode: 'QR', supplierContactName: 'X', forwarderInfo: '', destinationPort: 'Santos' };
+    const withPartner = await renderPoFromTemplate({ ...baseVars, supplierName: 'Forn A', creditPartnerName: 'Banco P' });
+    expect(withPartner.source).toBe('database');
+    expect(withPartner.html.split('purchased through Banco P (credit support)')).toHaveLength(2);
+    expect(withPartner.html).toContain('supplied by Forn A');
+    const plain = await renderPoFromTemplate(baseVars);
+    expect(plain.html).not.toContain('credit support');
+    expect(plain.text).not.toContain('credit support');
+
+    // 3) PUT da origem: mesmo payload continua vencedor; preco diferente zera o vencedor-parceiro.
+    const samePayload = { items: quoteItems.map((item: any) => ({ quoteRequestItemId: item.id, unitPrice: 12, quantity: item.quantity })) };
+    const putSame = await request(app).put(`/api/v1/quote-responses/${responseAId}`).set('Cookie', cookies).send(samePayload);
+    expect(putSame.status, JSON.stringify(putSame.body)).toBe(200);
+    expect((await prisma.creditSupportRequest.findUnique({ where: { id: creditId } })).isWinner).toBe(true);
+
+    const putChanged = await request(app)
+      .put(`/api/v1/quote-responses/${responseAId}`)
+      .set('Cookie', cookies)
+      .send({ items: quoteItems.map((item: any) => ({ quoteRequestItemId: item.id, unitPrice: 13, quantity: item.quantity })) });
+    expect(putChanged.status, JSON.stringify(putChanged.body)).toBe(200);
+    expect((await prisma.creditSupportRequest.findUnique({ where: { id: creditId } })).isWinner).toBe(false);
+    const comparison = await prisma.quoteComparison.findUnique({ where: { id: compare.body.comparisonId } });
+    expect(comparison.winnerCreditSupportRequestId).toBe(creditId);
+    const updateAudit = await prisma.auditLog.findFirst({
+      where: { entityType: 'quote_response', entityId: String(responseAId), action: 'update' },
+      orderBy: { id: 'desc' },
+    });
+    expect(updateAudit.metadata.clearedCreditWinnerIds).toEqual([creditId]);
+
+    const poAfter = await request(app).post(`/api/v1/credit-support-requests/${creditId}/purchase-order`).set('Cookie', cookies).send(pdf);
+    expect(poAfter.status).toBe(400);
+  });
 });

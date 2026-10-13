@@ -27,6 +27,7 @@ vi.mock('../src/lib/prisma', () => {
     companyProfile: { findUnique: vi.fn(), create: vi.fn() },
     emailTemplate: { findUnique: vi.fn() },
     auditLog: { create: vi.fn() },
+    mailLog: { findMany: vi.fn().mockResolvedValue([]) },
     supplier: {},
     $queryRaw: vi.fn(),
     $executeRaw: vi.fn(),
@@ -63,6 +64,7 @@ const db = prisma as unknown as {
   companyProfile: { findUnique: Mock };
   emailTemplate: { findUnique: Mock };
   auditLog: { create: Mock };
+  mailLog: { findMany: Mock };
   $queryRaw: Mock;
 };
 const sendMock = sendAndLog as unknown as Mock;
@@ -613,6 +615,29 @@ describe('Credit Support (rotas autenticadas)', () => {
         totals: { original: '100.00', partner: null, markupPercent: null },
       });
       expect(db.creditSupportRequest.findMany.mock.calls[0][0].orderBy).toEqual({ createdAt: 'desc' });
+    });
+
+    it('PR4b: purchaseOrderSentAt vem do MailLog da PO (quote-po, credit_support_request, sent|queued); sem log -> null', async () => {
+      const cookie = await loginAs('viewer');
+      const sentAt = new Date('2026-10-12T15:30:00.000Z');
+      db.mailLog.findMany.mockResolvedValueOnce([
+        { relatedEntityId: '9', sentAt, createdAt: new Date('2026-10-12T15:29:00.000Z') },
+        { relatedEntityId: '9', sentAt: null, createdAt: new Date('2026-10-11T10:00:00.000Z') },
+      ]);
+      const withPo = await request(app).get('/api/v1/quote-requests/3/credit-support').set('Cookie', cookie);
+      expect(withPo.status).toBe(200);
+      expect(withPo.body[0].purchaseOrderSentAt).toBe('2026-10-12T15:30:00.000Z');
+      expect(db.mailLog.findMany.mock.calls[0][0].where).toEqual({
+        templateId: 'quote-po',
+        relatedEntityType: 'credit_support_request',
+        relatedEntityId: { in: ['9'] },
+        status: { in: ['sent', 'queued'] },
+      });
+
+      // So `failed` (fora do filtro) => o banco nao devolve nada => null.
+      db.mailLog.findMany.mockResolvedValueOnce([]);
+      const without = await request(app).get('/api/v1/quote-requests/3/credit-support').set('Cookie', cookie);
+      expect(without.body[0].purchaseOrderSentAt).toBeNull();
     });
 
     it('isStale quando a proposta original mudou ou foi excluida; cotacao excluida -> 404', async () => {

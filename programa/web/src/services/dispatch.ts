@@ -421,4 +421,24 @@ export async function sendPurchaseOrder(
   });
 }
 
+// PR4b: Ordem de Compra ao PARCEIRO de Credit Support vencedor (mesmo corpo da PO ao fornecedor).
+export async function sendPurchaseOrderToPartner(
+  creditSupportRequestId: number,
+  input: QuotePurchaseOrderInput,
+): Promise<QuotePurchaseOrderResult> {
+  return api.post<QuotePurchaseOrderResult>(
+    `/v1/credit-support-requests/${creditSupportRequestId}/purchase-order`,
+    {
+      subject: input.subject,
+      message: input.message,
+      forwarderInfo: input.forwarderInfo,
+      forwarderId: input.forwarderId,
+      fileName: input.fileName,
+      contentBase64: input.contentBase64,
+      fileType: input.fileType,
+      fileSize: input.fileSize,
+    },
+  );
+}
+
 export { ApiError };
