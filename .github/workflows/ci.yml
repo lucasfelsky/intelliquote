@@ -4,6 +4,7 @@ name: CI
 # - Vitest unit (87 casos + 1 skip)
 # - tsc build do backend
 # - Vite build do web
+# - Vitest do web (programa/web, jsdom); typecheck do web ja roda dentro do build (tsc --noEmit)
 # - Playwright E2E com Postgres 16 + MailHog como services
 # - Upload de programa/dist/ + programa/web/dist/ como artifacts (10 dias)
 # - Upload de playwright-report/ em caso de falha (7 dias)
@@ -60,6 +61,10 @@ jobs:
       - name: Install web deps
         working-directory: programa/web
         run: npm ci
+
+      - name: Unit tests web (Vitest)
+        working-directory: programa/web
+        run: npm test
 
       - name: Build web (Vite)
         working-directory: programa/web
