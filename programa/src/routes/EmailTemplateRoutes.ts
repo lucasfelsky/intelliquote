@@ -49,10 +49,34 @@ import {
   SUPPLIER_RESPONSE_RECEIVED_DEFAULT_LOCALE,
   type SupplierResponseReceivedVars,
 } from '../mailer/renderSupplierResponseReceived';
+import {
+  renderSections as renderCreditNoticeSections,
+  renderPlainText as renderCreditNoticePlainText,
+  loadFileTemplate as loadCreditNoticeFileTemplate,
+  buildTextTemplateDraft as buildCreditNoticeTextDraft,
+  CREDIT_PARTNER_RESPONSE_RECEIVED_TEMPLATE_KEY,
+  CREDIT_PARTNER_RESPONSE_RECEIVED_DEFAULT_LOCALE,
+  type CreditPartnerResponseReceivedVars,
+} from '../mailer/renderCreditPartnerResponseReceived';
 import { prisma } from '../lib/prisma';
 import { CompanyProfileService } from '../services/CompanyProfileService';
 
 const emailTemplateRoutes = Router();
+
+// Rascunho de texto (placeholders crus) do aviso de resposta do fornecedor,
+// devolvido no fallback do preview para salvar nao gravar dados de exemplo.
+const SUPPLIER_RESPONSE_RECEIVED_TEXT_DRAFT = [
+  'Olá, {{buyerName}}.',
+  '',
+  'O fornecedor {{supplierName}} respondeu à cotação {{requestCode}}{{#productName}} — {{productName}}{{/productName}} pelo portal{{#revisionLabel}} ({{revisionLabel}}){{/revisionLabel}}.',
+  '',
+  'Contato: {{contactName}}',
+  'Total ofertado: {{totalPrice}} {{currency}}',
+  'Itens: {{itemsCount}}',
+  '',
+  'Veja a cotação no IntelliQuote:',
+  '{{responsesUrl}}',
+].join('\r\n');
 
 const templateKeySchema = z
   .string()
@@ -373,7 +397,7 @@ emailTemplateRoutes.get(
           EmailTemplateService.get(key, effectiveLocale),
           prisma.quoteRequest.findFirst({
             orderBy: { createdAt: 'desc' },
-            select: { requestCode: true, productName: true },
+            select: { id: true, requestCode: true, productName: true },
           }),
         ]);
 
@@ -388,7 +412,7 @@ emailTemplateRoutes.get(
           currency: 'USD',
           itemsCount: 3,
           revisionLabel: '',
-          responsesUrl: 'https://intelliquote.web.app/respostas',
+          responsesUrl: `https://intelliquote.web.app/cotacoes/${latestQuoteRequest?.id ?? 1}`,
         };
 
         if (!noticeTemplate) {
@@ -399,6 +423,13 @@ emailTemplateRoutes.get(
             isActive: false,
             source: 'fallback',
             locale: effectiveLocale,
+            // Rascunho editavel com placeholders crus. O html/text acima sao so'
+            // preview com dados de exemplo e NAO podem virar o corpo salvo.
+            draft: {
+              subject: '{{subject}}',
+              htmlBody: loadBuyerNoticeFileTemplate(),
+              textBody: SUPPLIER_RESPONSE_RECEIVED_TEXT_DRAFT,
+            },
           });
         }
 
@@ -409,6 +440,75 @@ emailTemplateRoutes.get(
           html: renderBuyerNoticeSections(noticeTemplate.htmlBody, noticeVars),
           text: renderBuyerNoticeSections(noticeTemplate.textBody, noticeVars),
           isActive: noticeTemplate.isActive,
+          source: 'database',
+          locale: effectiveLocale,
+        });
+      }
+
+      if (key === CREDIT_PARTNER_RESPONSE_RECEIVED_TEMPLATE_KEY) {
+        // PR5 (Credit Support): preview do aviso interno de resposta do parceiro
+        // de credito. Locale default 'pt' (e-mail interno).
+        const effectiveLocale =
+          typeof req.query.locale === 'string'
+            ? locale
+            : CREDIT_PARTNER_RESPONSE_RECEIVED_DEFAULT_LOCALE;
+        const [creditNoticeTemplate, latestQuoteRequestForCredit] = await Promise.all([
+          EmailTemplateService.get(key, effectiveLocale),
+          prisma.quoteRequest.findFirst({
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, requestCode: true, productName: true },
+          }),
+        ]);
+
+        const creditNoticeSample: CreditPartnerResponseReceivedVars = {
+          subject:
+            '[IntelliQuote] Banco Alfa respondeu ao pedido de crédito da cotação QR-2026-001',
+          buyerName: 'Comprador',
+          partnerName: 'Banco Alfa',
+          supplierName: 'Shanghai Chem Co.',
+          requestCode: latestQuoteRequestForCredit?.requestCode ?? 'QR-2026-001',
+          productName: latestQuoteRequestForCredit?.productName ?? 'PI-TPO',
+          currency: 'USD',
+          partnerTotal: '13,125.00',
+          originalTotal: '12,500.00',
+          markupLabel: '+5.00%',
+          partnerPaymentTermsDays: '120',
+          originalPaymentTermsDays: '60',
+          validityDays: '30',
+          itemsCount: '3',
+          notes: 'Condição válida mediante aprovação de crédito do importador.',
+          revisionLabel: '',
+          quoteUrl: `https://intelliquote.web.app/cotacoes/${latestQuoteRequestForCredit?.id ?? 1}`,
+        };
+
+        if (!creditNoticeTemplate) {
+          return res.status(200).json({
+            subject: creditNoticeSample.subject,
+            html: renderCreditNoticeSections(loadCreditNoticeFileTemplate(), creditNoticeSample),
+            text: renderCreditNoticePlainText(creditNoticeSample),
+            isActive: false,
+            source: 'fallback',
+            locale: effectiveLocale,
+            // Rascunho editavel com placeholders crus. O html/text acima sao so'
+            // preview com dados de exemplo e NAO podem virar o corpo salvo.
+            draft: {
+              subject: '{{subject}}',
+              htmlBody: loadCreditNoticeFileTemplate(),
+              textBody: buildCreditNoticeTextDraft(),
+            },
+          });
+        }
+
+        const creditNoticeSubject = renderCreditNoticeSections(
+          creditNoticeTemplate.subject,
+          creditNoticeSample,
+        );
+        const creditNoticeVars = { ...creditNoticeSample, subject: creditNoticeSubject };
+        return res.status(200).json({
+          subject: creditNoticeSubject,
+          html: renderCreditNoticeSections(creditNoticeTemplate.htmlBody, creditNoticeVars),
+          text: renderCreditNoticeSections(creditNoticeTemplate.textBody, creditNoticeVars),
+          isActive: creditNoticeTemplate.isActive,
           source: 'database',
           locale: effectiveLocale,
         });

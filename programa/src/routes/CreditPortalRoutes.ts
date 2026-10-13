@@ -3,6 +3,7 @@ import {
   CREDIT_PORTAL_QUOTE_CLOSED_MESSAGE,
   CreditPortalService,
 } from '../services/CreditPortalService';
+import { CreditPartnerResponseNotificationService } from '../services/CreditPartnerResponseNotificationService';
 import { creditPortalSubmitSchema } from '../validators/supplierPortal';
 import { handleControllerError, HttpError } from '../utils/http';
 import { PortalHttpError } from '../utils/portalHttpError';
@@ -98,6 +99,14 @@ creditPortalRoutes.post('/api/credit-portal/:token/respond', portalRateLimiter, 
       ip: meta.ip,
       userAgent: meta.userAgent,
     }).catch(() => undefined);
+
+    // Aviso ao comprador: aguardado (Cloud Run pode limitar CPU apos a resposta),
+    // mas nunca lanca e nunca altera o retorno ao parceiro.
+    await CreditPartnerResponseNotificationService.notifyBuyerOfPartnerResponse({
+      requestId: record.id,
+      version: result.version,
+      revised: result.version > 1,
+    });
 
     res.status(201).json(result);
   } catch (error) {

@@ -332,3 +332,134 @@ describe('Email template routes — quote_po (preview)', () => {
     expect(res.body.text).toContain('PO reference:');
   });
 });
+
+describe('Email template routes — avisos internos de resposta (preview)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.quoteRequest.findFirst.mockResolvedValue(null);
+  });
+
+  it('credit_partner_response_received sem customizacao: fallback pt com exemplo e rascunho cru', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'credit_partner_response_received' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('fallback');
+    expect(res.body.locale).toBe('pt');
+    expect(res.body.html).toContain('Banco Alfa');
+    expect(res.body.html).toContain('/cotacoes/');
+    expect(res.body.html).not.toContain('portal/credit');
+    expect(res.body.text).not.toContain('portal/credit');
+
+    const draft = res.body.draft as { subject: string; htmlBody: string; textBody: string };
+    expect(draft.subject).toBe('{{subject}}');
+    expect(draft.htmlBody).toContain('{{partnerName}}');
+    expect(draft.textBody).toContain('{{partnerTotal}}');
+    // Nada do preview de exemplo pode virar corpo salvo.
+    for (const body of [draft.htmlBody, draft.textBody]) {
+      expect(body).not.toContain('Banco Alfa');
+      expect(body).not.toContain('13,125.00');
+    }
+  });
+
+  it('credit_partner_response_received com template do banco: source database e placeholders renderizados', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 9,
+      requestCode: 'QR-2026-042',
+      productName: 'PI-TPO',
+    });
+    prismaMock.emailTemplate.findUnique.mockResolvedValue({
+      id: 7,
+      key: 'credit_partner_response_received',
+      locale: 'pt',
+      subject: 'Crédito {{partnerName}} - {{requestCode}}',
+      htmlBody: '<p>{{partnerName}} {{partnerTotal}} {{quoteUrl}}</p>',
+      textBody: 'Parceiro {{partnerName}} em {{quoteUrl}}',
+      isActive: true,
+      updatedAt: new Date(),
+      updatedById: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'credit_partner_response_received', locale: 'pt' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('database');
+    expect(res.body.subject).toBe('Crédito Banco Alfa - QR-2026-042');
+    expect(res.body.html).toBe('<p>Banco Alfa 13,125.00 https://intelliquote.web.app/cotacoes/9</p>');
+    expect(res.body.text).toBe('Parceiro Banco Alfa em https://intelliquote.web.app/cotacoes/9');
+    expect(res.body.draft).toBeUndefined();
+  });
+
+  it('supplier_response_received: link de exemplo aponta para a cotacao (nao /respostas)', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'supplier_response_received' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('fallback');
+    expect(res.body.html).toContain('/cotacoes/');
+    expect(res.body.html).not.toContain('/respostas');
+    expect(res.body.text).toContain('/cotacoes/');
+    expect(res.body.text).not.toContain('/respostas');
+  });
+
+  it('supplier_response_received fallback devolve rascunho cru (salvar nao grava dados de exemplo)', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'supplier_response_received' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    const draft = res.body.draft as { subject: string; htmlBody: string; textBody: string };
+    expect(draft.subject).toBe('{{subject}}');
+    expect(draft.htmlBody).toContain('{{supplierName}}');
+    expect(draft.htmlBody).toContain('{{responsesUrl}}');
+    expect(draft.textBody).toContain('{{totalPrice}}');
+    expect(draft.textBody).toContain('{{responsesUrl}}');
+    for (const body of [draft.htmlBody, draft.textBody]) {
+      expect(body).not.toContain('Shanghai Chem Co.');
+      expect(body).not.toContain('12,500.00');
+    }
+  });
+
+  it('supplier_response_received com template do banco: nao devolve rascunho', async () => {
+    const cookieHeader = await loginAsAdmin();
+    prismaMock.emailTemplate.findUnique.mockResolvedValue({
+      id: 8,
+      key: 'supplier_response_received',
+      locale: 'pt',
+      subject: 'Resposta {{supplierName}}',
+      htmlBody: '<p>{{responsesUrl}}</p>',
+      textBody: '{{responsesUrl}}',
+      isActive: true,
+      updatedAt: new Date(),
+      updatedById: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/v1/email-templates/preview')
+      .query({ key: 'supplier_response_received' })
+      .set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(200);
+    expect(res.body.source).toBe('database');
+    expect(res.body.html).toBe('<p>https://intelliquote.web.app/cotacoes/1</p>');
+    expect(res.body.draft).toBeUndefined();
+  });
+});

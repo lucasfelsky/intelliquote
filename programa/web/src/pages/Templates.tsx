@@ -59,6 +59,13 @@ const TEMPLATE_CARDS: Array<{
     icon: '✉',
     defaultLocale: 'pt',
   },
+  {
+    key: 'credit_partner_response_received',
+    title: 'Aviso de resposta do parceiro de crédito',
+    description: 'E-mail interno avisando quem encaminhou e quem criou a cotação quando o parceiro de crédito responde pelo portal.',
+    icon: '✉',
+    defaultLocale: 'pt',
+  },
 ];
 
 const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = {
@@ -131,7 +138,26 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{currency}}', label: 'Moeda' },
     { token: '{{itemsCount}}', label: 'Nº de itens' },
     { token: '{{revisionLabel}}', label: 'Marcador de revisão' },
-    { token: '{{responsesUrl}}', label: 'Link das respostas' },
+    { token: '{{responsesUrl}}', label: 'Link da cotação' },
+  ],
+  credit_partner_response_received: [
+    { token: '{{subject}}', label: 'Assunto' },
+    { token: '{{buyerName}}', label: 'Comprador' },
+    { token: '{{partnerName}}', label: 'Parceiro de crédito' },
+    { token: '{{supplierName}}', label: 'Fornecedor de origem' },
+    { token: '{{requestCode}}', label: 'Código' },
+    { token: '{{productName}}', label: 'Produto' },
+    { token: '{{currency}}', label: 'Moeda' },
+    { token: '{{partnerTotal}}', label: 'Total do parceiro' },
+    { token: '{{originalTotal}}', label: 'Total original' },
+    { token: '{{markupLabel}}', label: 'Diferença vs. fornecedor' },
+    { token: '{{partnerPaymentTermsDays}}', label: 'Prazo do parceiro (dias)' },
+    { token: '{{originalPaymentTermsDays}}', label: 'Prazo original (dias)' },
+    { token: '{{validityDays}}', label: 'Validade (dias)' },
+    { token: '{{itemsCount}}', label: 'Nº de itens' },
+    { token: '{{notes}}', label: 'Observações do parceiro' },
+    { token: '{{revisionLabel}}', label: 'Marcador de revisão' },
+    { token: '{{quoteUrl}}', label: 'Link da cotação' },
   ],
 };
 

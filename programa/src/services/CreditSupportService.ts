@@ -436,7 +436,7 @@ async function prepareForward(
 }
 
 /** Copia COMEX (env + CompanyProfile.dispatchCc) sem repeticao, mesma regra do envio de cotacao. */
-async function loadComexCc(): Promise<Array<{ email: string; name: string }>> {
+export async function loadComexCc(): Promise<Array<{ email: string; name: string }>> {
   const profile = await CompanyProfileService.get();
   const merged = [
     ...getComexCcList().map((c) => ({ email: c.email, name: c.name ?? '' })),
@@ -445,7 +445,7 @@ async function loadComexCc(): Promise<Array<{ email: string; name: string }>> {
   return dedupeCc(merged, null);
 }
 
-function dedupeCc(
+export function dedupeCc(
   list: Array<{ email: string; name: string }>,
   excludeEmail: string | null,
 ): Array<{ email: string; name: string }> {

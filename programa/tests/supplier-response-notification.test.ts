@@ -39,6 +39,7 @@ const findUniqueMock = prisma.supplierPortalToken.findUnique as unknown as Retur
 function tokenFixture(overrides: Record<string, unknown> = {}) {
   return {
     id: 42,
+    quoteRequestId: 7,
     createdBy: { name: 'Lucas Comprador', email: 'lucas@sqquimica.com', isActive: true },
     supplier: { name: 'Shanghai Chem Co.' },
     supplierContact: { name: 'Li Wei' },
@@ -79,6 +80,11 @@ describe('SupplierResponseNotificationService', () => {
     expect(args.text).toContain('QR-2026-042');
     // Sem revisao: a section nao aparece.
     expect(args.html).not.toContain('revisão');
+    // Link do aviso aponta direto para a cotacao (nao mais para /respostas).
+    expect(args.html).toContain('/cotacoes/7');
+    expect(args.text).toContain('/cotacoes/7');
+    expect(args.html).not.toContain('/respostas');
+    expect(args.text).not.toContain('/respostas');
   });
 
   it('revisao: assunto e corpo marcam a revisao vN', async () => {
