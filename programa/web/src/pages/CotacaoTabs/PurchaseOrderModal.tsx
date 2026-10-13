@@ -28,10 +28,12 @@ interface PurchaseOrderModalProps {
   productName: string | null;
   onClose: () => void;
   onSent: (target: PurchaseOrderTarget) => void;
+  // PO a uma proposta que nao e a vencedora (o usuario ja confirmou no ComparacaoTab).
+  nonWinner?: boolean;
 }
 
-// Modal "Enviar Ordem de Compra" -- so' aparece sobre a proposta vencedora
-// (r.isWinner). Anexo = upload de PDF em base64 (so'-envio, sem storage
+// Modal "Enviar Ordem de Compra" -- da proposta vencedora (r.isWinner) ou, apos confirmacao,
+// de qualquer proposta direta (nonWinner). Anexo = upload de PDF em base64 (so'-envio, sem storage
 // duravel). Forwarder = texto editavel que o seletor PREENCHE a partir do cadastro
 // (o e-mail leva so' o texto; forwarderId e' enviado apenas para rastreio).
 // O estado nasce a cada abertura (o pai usa key={quoteResponseId}).
@@ -41,6 +43,7 @@ export function PurchaseOrderModal({
   productName,
   onClose,
   onSent,
+  nonWinner = false,
 }: PurchaseOrderModalProps) {
   const [poSubject, setPoSubject] = useState(`Purchase Order - ${productName || requestCode}`);
   const [poForwarderInfo, setPoForwarderInfo] = useState('');
@@ -124,7 +127,7 @@ export function PurchaseOrderModal({
         return sendPurchaseOrderToPartner(target.creditSupportRequestId, payload);
       }
       if (!target.quoteResponseId) throw new Error('Proposta sem ID.');
-      return sendPurchaseOrder(target.quoteResponseId, payload);
+      return sendPurchaseOrder(target.quoteResponseId, nonWinner ? { ...payload, nonWinner: true } : payload);
     },
     onSuccess: () => onSent(target),
     onError: (err) => setPoModalError(messageOf(err)),
@@ -170,6 +173,11 @@ export function PurchaseOrderModal({
       <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
         {requestCode} · {productName}
       </p>
+      {nonWinner && (
+        <p className="cmp-po-nonwinner-notice" data-testid="po-nonwinner-notice">
+          Esta proposta não é a vencedora da cotação. A vencedora continua a mesma.
+        </p>
+      )}
       {viaPartner && (
         <p
           data-testid="po-partner-notice"

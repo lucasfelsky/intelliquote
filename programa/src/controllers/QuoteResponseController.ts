@@ -1136,7 +1136,10 @@ export class QuoteResponseController {
       if (!context) return res;
       const { quoteResponse, primaryContact, companyCc } = context;
 
-      if (quoteResponse.isWinner !== true) {
+      // Nao vencedora so com confirmacao explicita do usuario (nonWinner); a vencedora gravada
+      // nao muda e o envio fica marcado na auditoria.
+      const nonWinner = quoteResponse.isWinner !== true;
+      if (nonWinner && parsedBody.data.nonWinner !== true) {
         return res.status(400).json({
           message: 'Apenas o fornecedor vencedor pode receber a Ordem de Compra.',
         });
@@ -1155,7 +1158,11 @@ export class QuoteResponseController {
           supplierContactId: primaryContact.id,
         },
         related: { type: 'quote_response', id: String(id) },
-        audit: { entityType: 'quote_response', entityId: id },
+        audit: {
+          entityType: 'quote_response',
+          entityId: id,
+          ...(nonWinner ? { metadata: { nonWinner: true } } : {}),
+        },
       });
 
       return res.status(200).json(result);

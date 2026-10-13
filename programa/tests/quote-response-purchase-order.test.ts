@@ -205,6 +205,71 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
     expect(sendAndLogMock).not.toHaveBeenCalled();
   });
 
+  it('proposta nao vencedora com nonWinner: true envia a PO e marca a auditoria', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({ ...winnerQuoteResponse, isWinner: false });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-2' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/purchase-order')
+      .set('Cookie', cookieHeader)
+      .send({ ...basePoBody, nonWinner: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.to).toBe('john@acme.com');
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
+    expect(auditArgs.data.action).toBe('purchase_order');
+    expect(auditArgs.data.metadata.nonWinner).toBe(true);
+  });
+
+  it('nonWinner: false na proposta nao vencedora continua 400', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue({ ...winnerQuoteResponse, isWinner: false });
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/purchase-order')
+      .set('Cookie', cookieHeader)
+      .send({ ...basePoBody, nonWinner: false });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Apenas o fornecedor vencedor pode receber a Ordem de Compra.');
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+  });
+
+  it('vencedora com nonWinner: true envia normalmente e a auditoria nao marca nonWinner', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
+    prismaMock.supplierContact.findFirst.mockResolvedValue({
+      id: 9,
+      name: 'John Supplier',
+      email: 'john@acme.com',
+      isPrimary: true,
+    });
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-3' });
+
+    const res = await request(app)
+      .post('/api/v1/quote-responses/77/purchase-order')
+      .set('Cookie', cookieHeader)
+      .send({ ...basePoBody, nonWinner: true });
+
+    expect(res.status).toBe(200);
+    const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
+    expect(auditArgs.data.metadata.nonWinner).toBeUndefined();
+  });
+
   it('retorna 400 quando o fileType nao e application/pdf', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
