@@ -84,7 +84,7 @@ export class SupplierResponseNotificationService {
         currency: input.currency,
         itemsCount: formatItemsCount(input.itemsCount, input.unavailableCount ?? 0),
         revisionLabel,
-        responsesUrl: `${base}/respostas`,
+        responsesUrl: `${base}/cotacoes/${token.quoteRequestId}`,
       });
 
       await sendAndLog({

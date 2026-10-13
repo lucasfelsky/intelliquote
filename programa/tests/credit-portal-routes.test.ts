@@ -39,6 +39,7 @@ import { hashToken } from '../src/utils/tokens';
 import { HttpError } from '../src/utils/http';
 import { PORTAL_INVALID_LINK_MESSAGE } from '../src/services/SupplierPortalService';
 import { CreditPortalService } from '../src/services/CreditPortalService';
+import { CreditPartnerResponseNotificationService } from '../src/services/CreditPartnerResponseNotificationService';
 
 type Mock = ReturnType<typeof vi.fn>;
 const db = prisma as unknown as {
@@ -215,8 +216,14 @@ function logCalls() {
 }
 
 describe('Portal do parceiro de credito - /api/credit-portal', () => {
+  let notifySpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    notifySpy = vi
+      .spyOn(CreditPartnerResponseNotificationService, 'notifyBuyerOfPartnerResponse')
+      .mockReset()
+      .mockResolvedValue(undefined);
     db.supplierPortalToken.findUnique.mockReset().mockResolvedValue(null);
     db.supplierPortalResponseRevision.findMany.mockReset().mockResolvedValue([]);
     db.creditSupportRequest.findUnique.mockReset().mockResolvedValue(null);
@@ -282,6 +289,7 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       expect(res.status).toBe(404);
       expect(res.body.message).toBe(PORTAL_INVALID_LINK_MESSAGE);
       expect(logCalls()[0]).toMatchObject({ kind: 'INVALID', meta: { portal: 'credit', reason: 'not_found' } });
+      expect(notifySpy).not.toHaveBeenCalled();
     });
   });
 
@@ -410,6 +418,7 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       code: 'QUOTE_CLOSED',
     });
     expect(db.creditSupportRequest.updateMany).not.toHaveBeenCalled();
+    expect(notifySpy).not.toHaveBeenCalled();
   });
 
   describe('f. POST valido', () => {
@@ -473,6 +482,10 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       const logs = logCalls();
       expect(logs).toHaveLength(1);
       expect(logs[0]).toMatchObject({ kind: 'SUBMIT', creditSupportRequestId: 77, meta: { portal: 'credit' } });
+
+      // PR5: aviso ao comprador chamado 1x, so com o id do pedido (nunca token).
+      expect(notifySpy).toHaveBeenCalledTimes(1);
+      expect(notifySpy).toHaveBeenCalledWith({ requestId: 77, version: 1, revised: false });
     });
 
     it('com respondedAt previo vira revisao (partner_revise) e mantem respondedAt', async () => {
@@ -500,6 +513,9 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       expect(audit.data.action).toBe('partner_revise');
       expect(audit.data.performedById).toBeNull();
       expect(audit.data.beforeData).toMatchObject({ responseVersion: 1, partnerTotalPrice: '100.00' });
+
+      expect(notifySpy).toHaveBeenCalledTimes(1);
+      expect(notifySpy).toHaveBeenCalledWith({ requestId: 77, version: 2, revised: true });
     });
   });
 
@@ -545,6 +561,7 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       }
       expect(res.body.message).not.toMatch(PT_ANY_PATTERN);
       expect(db.creditSupportRequest.updateMany).not.toHaveBeenCalled();
+      expect(notifySpy).not.toHaveBeenCalled();
       expect(db.auditLog.create).not.toHaveBeenCalled();
     });
 
@@ -558,6 +575,7 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
         .send(validPayload());
       expect(res.status).toBe(400);
       expect(res.body.message).toBe('Item id=12 is temporarily unavailable and cannot be priced.');
+      expect(notifySpy).not.toHaveBeenCalled();
       expect(res.body.message).not.toMatch(PT_ANY_PATTERN);
     });
 
@@ -589,6 +607,7 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
     });
     expect(res.body.message).not.toMatch(PT_ANY_PATTERN);
     expect(db.auditLog.create).not.toHaveBeenCalled();
+    expect(notifySpy).not.toHaveBeenCalled();
   });
 
   it('i. HttpError em portugues de codigo compartilhado vira fallback em ingles, sem code', async () => {
@@ -632,6 +651,12 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
     expect(blob).not.toContain(LONG_TOKEN);
     expect(blob).not.toContain(hashToken(LONG_TOKEN));
     expect(blob).not.toContain('portal/credit');
+    // PR5: o aviso ao comprador recebe so o id do pedido (nunca token/hash/link).
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    const notifyBlob = JSON.stringify(notifySpy.mock.calls);
+    expect(notifyBlob).not.toContain(LONG_TOKEN);
+    expect(notifyBlob).not.toContain(hashToken(LONG_TOKEN));
+    expect(notifyBlob).not.toContain('portal/credit');
     // Logs de acesso nao carregam ip/UA na auditoria (so no SupplierPortalTokenLog).
     const audit = JSON.stringify(db.auditLog.create.mock.calls);
     expect(audit).not.toContain(ua);

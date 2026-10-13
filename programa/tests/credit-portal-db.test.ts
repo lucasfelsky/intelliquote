@@ -224,6 +224,17 @@ describe.skipIf(!run)('Credit Portal (DB) em Postgres isolado', () => {
     expect(submitLog).not.toBeNull();
     expect(submitLog.userAgent).toBe(submitUa);
 
+    // PR5: aviso ao comprador (quem encaminhou) registrado no MailLog, sem token.
+    const noticeWhere = {
+      templateId: 'credit_partner_response_received',
+      relatedEntityType: 'credit_support_request',
+      relatedEntityId: String(requestId),
+    };
+    const noticesAfterSubmit = await prisma.mailLog.findMany({ where: noticeWhere, orderBy: { id: 'asc' } });
+    expect(noticesAfterSubmit).toHaveLength(1);
+    expect(noticesAfterSubmit[0].toEmail).toBe(`${runId}@local.test`);
+    expect(noticesAfterSubmit[0].templateVars.revised).toBe(false);
+
     // 3) Revisao: versao 2, respondedAt inalterado, audit partner_revise
     const revise = await request(app)
       .post(`/api/credit-portal/${token}/respond`)
@@ -241,6 +252,16 @@ describe.skipIf(!run)('Credit Portal (DB) em Postgres isolado', () => {
     });
     expect(reviseAudit).not.toBeNull();
     expect(reviseAudit.performedById).toBeNull();
+
+    const notices = await prisma.mailLog.findMany({ where: noticeWhere, orderBy: { id: 'asc' } });
+    expect(notices).toHaveLength(2);
+    expect(notices.map((row: any) => row.toEmail)).toEqual([`${runId}@local.test`, `${runId}@local.test`]);
+    expect(notices[1].templateVars.revised).toBe(true);
+    expect(notices[1].templateVars.version).toBe(2);
+    expect(notices[1].subject).toContain('revisou');
+    const noticeBlob = JSON.stringify(notices.map((row: any) => [row.subject, row.templateVars]));
+    expect(noticeBlob).not.toContain(token);
+    expect(noticeBlob).not.toContain(tokenHash);
 
     // GET apos resposta: formulario pre-preenchido e contador segue contando
     const again = await request(app).get(`/api/credit-portal/${token}`).set('User-Agent', nextUa());

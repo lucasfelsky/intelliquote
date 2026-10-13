@@ -30,6 +30,7 @@
       "AuthService.ts",
       "CompanyProfileService.ts",
       "ComparisonCandidateService.ts",
+      "CreditPartnerResponseNotificationService.ts",
       "CreditPortalService.ts",
       "CreditSupportService.ts",
       "EmailTemplateService.ts",
@@ -136,6 +137,7 @@
     "migrations": 50
   },
   "emailTemplates": [
+    "credit_partner_response_received@pt",
     "credit_support_request@en",
     "quote_dispatch@en",
     "quote_po@en",
