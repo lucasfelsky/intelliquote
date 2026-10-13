@@ -5,7 +5,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  size?: 'default' | 'wide';
+  size?: 'default' | 'wide' | 'xl';
 }
 
 export function Modal({ isOpen, onClose, title, children, size }: ModalProps) {
@@ -60,7 +60,10 @@ export function Modal({ isOpen, onClose, title, children, size }: ModalProps) {
     };
   }, [onClose]);
 
-  const className = size === 'wide' ? 'modal-dialog modal-dialog--wide' : 'modal-dialog';
+  const className =
+    size === 'xl' ? 'modal-dialog modal-dialog--xl'
+    : size === 'wide' ? 'modal-dialog modal-dialog--wide'
+    : 'modal-dialog';
 
   return (
     <dialog ref={dialogRef} className={className}>

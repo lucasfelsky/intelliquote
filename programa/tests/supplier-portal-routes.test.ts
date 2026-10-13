@@ -22,6 +22,15 @@ vi.mock('../src/lib/prisma', async () => {
     quoteResponse: {
       findFirst: vi.fn().mockResolvedValue(null),
       upsert: vi.fn(),
+      // Historico de preco: le a resposta sincronizada (com itens ativos) para fotografar o estado.
+      findUnique: vi.fn().mockResolvedValue({ id: 501, currency: 'USD', offeredIncoterm: 'FOB', offeredPrice: '500.00', items: [] }),
+    },
+    quoteResponsePriceSnapshot: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
+    },
+    supplierContact: {
+      findUnique: vi.fn().mockResolvedValue(null),
     },
     creditSupportRequest: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),

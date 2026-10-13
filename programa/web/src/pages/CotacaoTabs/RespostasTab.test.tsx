@@ -793,3 +793,50 @@ describe('RespostasTab - DG informado pelo fornecedor', () => {
     expect(normalized.items?.map((item) => item.isDangerousGood)).toEqual([true, false, false]);
   });
 });
+
+describe('RespostasTab - botao "Historico" (modal de historico de precos, montado so quando aberto)', () => {
+  beforeEach(() => {
+    vi.mocked(listQuoteResponses).mockReset();
+    vi.mocked(getTargetPriceHistory).mockReset();
+    vi.mocked(api.get).mockReset();
+    mockRole = 'admin';
+    vi.mocked(listQuoteResponses).mockResolvedValue([response]);
+    // Fornecedores (GET /suppliers) e historico de preco (GET .../price-history) passam pelo mesmo api.get.
+    vi.mocked(api.get).mockImplementation((async (path: string) =>
+      path.includes('/price-history')
+        ? { columns: [], rows: [] }
+        : [{ id: 7, name: 'ACME Ltda', status: 'active', country: 'BR' }]) as typeof api.get);
+    vi.mocked(getTargetPriceHistory).mockResolvedValue([]);
+  });
+
+  it('H-a. viewer + cotacao fechada: botao "Histórico" presente (leitura, todos os papeis)', async () => {
+    mockRole = 'viewer';
+    const { findByText, getByRole, queryByRole } = renderTab('closed');
+    await findByText('ACME Ltda');
+    const button = getByRole('button', { name: 'Histórico' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.title).toBe('Histórico de preços desta resposta');
+    expect(queryByRole('button', { name: 'Credit Support' })).toBeNull();
+  });
+
+  it('H-b. clicar monta o 4o dialog com o titulo do fornecedor; fechar volta a 3', async () => {
+    const { findByText, findByRole, getByRole, container } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Histórico' }));
+    expect(await findByRole('heading', { name: 'Histórico de preços — ACME Ltda' })).toBeTruthy();
+    const dialogs = container.querySelectorAll('dialog');
+    expect(dialogs.length).toBe(4);
+    await within(dialogs[3] as HTMLElement).findByText('Histórico disponível a partir das próximas respostas ou edições.');
+    expect(vi.mocked(api.get)).toHaveBeenCalledWith('/v1/quote-responses/42/price-history');
+    const closeButtons = within(dialogs[3] as HTMLElement).getAllByRole('button', { name: 'Fechar' });
+    fireEvent.click(closeButtons[closeButtons.length - 1]!);
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+  });
+
+  it('H-c. sem clique continuam 3 dialogs', async () => {
+    const { findByText, container } = renderTab();
+    await findByText('ACME Ltda');
+    expect(container.querySelectorAll('dialog').length).toBe(3);
+    expect(vi.mocked(api.get)).not.toHaveBeenCalledWith('/v1/quote-responses/42/price-history');
+  });
+});

@@ -18,6 +18,7 @@
       "QuoteRequestController.ts",
       "QuoteRequestItemController.ts",
       "QuoteResponseController.ts",
+      "QuoteResponsePriceHistoryController.ts",
       "ReportController.ts",
       "SupplierContactController.ts",
       "SupplierController.ts",
@@ -36,6 +37,7 @@
       "HealthService.ts",
       "QuoteComparisonService.ts",
       "QuotePurchaseOrderService.ts",
+      "QuoteResponsePriceHistoryService.ts",
       "SupplierPortalReminderService.ts",
       "SupplierPortalResponseService.ts",
       "SupplierPortalService.ts",
@@ -109,6 +111,7 @@
       "QuoteRequestPurchaseOrder",
       "QuoteResponse",
       "QuoteResponseItem",
+      "QuoteResponsePriceSnapshot",
       "QuoteResponseTargetPriceHistory",
       "Role",
       "Session",
@@ -129,7 +132,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 49
+    "migrations": 50
   },
   "emailTemplates": [
     "credit_support_request@en",
@@ -184,6 +187,7 @@
     "GET /quote-requests/:quoteRequestId/comparisons",
     "GET /quote-responses",
     "GET /quote-responses/:id",
+    "GET /quote-responses/:id/price-history",
     "GET /quote-responses/:id/target-price-history",
     "GET /reports/award-rate",
     "GET /reports/lead-time",

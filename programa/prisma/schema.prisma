@@ -299,6 +299,7 @@ model QuoteResponse {
   wonComparisons    QuoteComparison[]       @relation("ComparisonWinner")
   targetPriceHistory QuoteResponseTargetPriceHistory[]
   creditSupportRequests CreditSupportRequest[]
+  priceSnapshots QuoteResponsePriceSnapshot[]
 
   @@unique([quoteRequestId, supplierId])
   @@index([quoteRequestId])
@@ -889,4 +890,29 @@ model QuoteResponseTargetPriceHistory {
 
   @@index([quoteResponseId])
   @@index([sentAt])
+}
+
+// Historico append-only de preco por resposta do fornecedor (botao "Historico" na aba Respostas).
+// Uma linha por versao em que algo de preco mudou (unitPrice, quantity, isUnavailable, currency,
+// offeredIncoterm, incotermPrices, offeredPrice). Gravada na MESMA transacao da escrita.
+// Sem soft-delete (cascade com a resposta). Autor denormalizado: nao referencia User/SupplierContact.
+model QuoteResponsePriceSnapshot {
+  id                Int           @id @default(autoincrement())
+  quoteResponseId   Int
+  // 'portal' | 'manual'
+  source            String
+  performedById     Int?
+  supplierContactId Int?
+  // Nome do usuario (manual) ou "Nome <email>" do contato (portal); null quando nao resolvido
+  actorName         String?
+  currency          String
+  offeredIncoterm   Incoterm
+  offeredPrice      Decimal       @db.Decimal(14, 2)
+  // [{ quoteRequestItemId, unitPrice: "10.00", quantity, totalPrice: "100.00", isUnavailable, incotermPrices }]
+  // ([] = resposta legada sem itens). Mesmo formato de SupplierPortalResponseRevision.items.
+  items             Json
+  recordedAt        DateTime      @default(now())
+  quoteResponse     QuoteResponse @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
+
+  @@index([quoteResponseId, recordedAt])
 }
