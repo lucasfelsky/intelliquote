@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import LoginGate from '@/pages/LoginGate';
 import AppShell from '@/components/AppShell';
+import NewVersionBanner from '@/components/NewVersionBanner';
 import Home from '@/pages/Home';
 import Fornecedores from '@/pages/Fornecedores';
 import Forwarders from '@/pages/Forwarders';
@@ -97,6 +98,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </BrowserRouter>
+          <NewVersionBanner />
         </AuthProvider>
       </ConfirmProvider>
     </QueryClientProvider>
