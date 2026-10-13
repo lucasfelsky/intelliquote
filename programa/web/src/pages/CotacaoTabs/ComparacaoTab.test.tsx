@@ -757,14 +757,16 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
         { ...excludedGamma, quoteResponseId: 45, supplierId: 10, supplier: { id: 10, name: 'Delta Ltda' } },
       ],
     });
-    const { findByText, queryByRole, queryByText } = renderTab();
+    const { findByText, queryByText } = renderTab();
     await findByText('Nenhuma proposta completa para comparar.');
     const heading = await findByText('Fora do ranking');
     const section = heading.closest('section') as HTMLElement;
     expect(within(section).getByText('Gamma SA')).toBeTruthy();
     expect(within(section).getByText('Delta Ltda')).toBeTruthy();
     expect(queryByText(/Apenas um/)).toBeNull();
-    expect(queryByRole('button', { name: 'Enviar Ordem de Compra' })).toBeNull();
+    // Sem by-pass/vencedora: nenhuma PO em destaque, so a discreta (com confirmacao) por proposta.
+    expect(section.querySelector('.cmp-btn--primary')).toBeNull();
+    expect(section.querySelectorAll('[data-testid="po-nonwinner"]')).toHaveLength(2);
   });
 
   it('27. so 1 completa + excluida: by-pass com texto proprio e a secao "Fora do ranking"', async () => {
@@ -986,14 +988,16 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
         { ...excludedGamma, quoteResponseId: 45, supplierId: 10, supplier: { id: 10, name: 'Delta Ltda' } },
       ],
     });
-    const { findByText, queryByRole, queryByText } = renderTab();
+    const { findByText, queryByText } = renderTab();
     await findByText('Nenhuma proposta completa para comparar.');
     const heading = await findByText('Fora do ranking');
     const section = heading.closest('section') as HTMLElement;
     expect(within(section).getByText('Gamma SA')).toBeTruthy();
     expect(within(section).getByText('Delta Ltda')).toBeTruthy();
     expect(queryByText(/Apenas um/)).toBeNull();
-    expect(queryByRole('button', { name: 'Enviar Ordem de Compra' })).toBeNull();
+    // Sem by-pass/vencedora: nenhuma PO em destaque, so a discreta (com confirmacao) por proposta.
+    expect(section.querySelector('.cmp-btn--primary')).toBeNull();
+    expect(section.querySelectorAll('[data-testid="po-nonwinner"]')).toHaveLength(2);
   });
 
   it('27. so 1 completa + excluida: by-pass com texto proprio e a secao "Fora do ranking"', async () => {
@@ -1433,7 +1437,7 @@ describe('ComparacaoTab - vencedora gravada (escolha manual)', () => {
     const section = (await findByText('Fora do ranking')).closest('section') as HTMLElement;
     expect(within(section).queryByRole('button', { name: 'Definir como vencedora mesmo assim' })).toBeNull();
     // as demais linhas seguem com "Definir como vencedora"
-    expect(container.querySelectorAll('.cmp-rows .cmp-btn--link')).toHaveLength(2);
+    expect(container.querySelectorAll('.cmp-rows .cmp-btn--link:not(.cmp-btn--subtle)')).toHaveLength(2);
 
     fireEvent.click(within(section).getByRole('button', { name: 'Responder' }));
     await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledWith(45, { subject: '', message: '' }));
@@ -1584,5 +1588,141 @@ describe('ComparacaoTab - vencedora gravada (escolha manual)', () => {
     await findByText('Beta Corp');
     expect(container.querySelector('.alert--warning')).toBeNull();
     expect(container.textContent).not.toContain('Recomendada · requer aprovação');
+  });
+});
+
+// PO para proposta NAO vencedora (ex.: parte dos itens fechada com outro fornecedor): botao discreto,
+// confirmacao antes do modal, envio com nonWinner e sem regravar a comparacao nem abrir a avaliacao.
+describe('ComparacaoTab - Ordem de Compra para proposta nao vencedora', () => {
+  const preview = {
+    results: [winner, loser],
+    winnerQuoteResponseId: 42,
+    pendingApproval: false,
+    thresholdValue: null,
+    responseCount: 3,
+    candidateCount: 2,
+    excluded: [
+      {
+        quoteResponseId: 45,
+        supplierId: 11,
+        supplier: { id: 11, name: 'Delta Ltda' },
+        reason: 'unavailable' as const,
+        unavailableItems: [{ quoteRequestItemId: 5, productName: 'Resina Epóxi' }],
+      },
+      {
+        quoteResponseId: 46,
+        supplierId: 12,
+        supplier: { id: 12, name: 'Epsilon SA' },
+        reason: 'stale' as const,
+        unavailableItems: [],
+        creditSupportRequestId: 9,
+        creditPartner: { id: 6, name: 'Banco Beta' },
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    controls.role = 'comprador';
+    controls.confirm.mockReset().mockResolvedValue(true);
+    vi.mocked(listComparisons).mockReset().mockResolvedValue({ quoteRequestId: 99, comparisons: [record] });
+    vi.mocked(previewComparison).mockReset().mockResolvedValue(preview);
+    // A PO da vencedora pelo score regrava a comparacao antes (gate); a nao vencedora nunca.
+    vi.mocked(executeComparison).mockReset().mockResolvedValue({
+      results: [],
+      pendingApproval: false,
+      winnerQuoteResponseId: 42,
+      thresholdValue: null,
+      comparisonId: 1,
+    });
+    vi.mocked(sendPurchaseOrder).mockReset().mockResolvedValue({ status: 'sent', to: 'x@beta.com', cc: [] });
+  });
+
+  async function sendFromOpenModal(container: HTMLElement) {
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+    const poDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    const poScope = within(poDialog);
+    const file = new File(['%PDF-1.4 fake'], 'po.pdf', { type: 'application/pdf' });
+    fireEvent.change(poScope.getByLabelText('PDF da Ordem de Compra'), { target: { files: [file] } });
+    await poScope.findByText(/Selecionado: po\.pdf/);
+    fireEvent.change(poScope.getByLabelText('Contato do despachante (forwarder)'), {
+      target: { value: 'Forwarder Ltda' },
+    });
+    fireEvent.click(poScope.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    return poDialog;
+  }
+
+  it('linha nao vencedora tem o botao discreto abaixo de "Definir como vencedora"; a vencedora nao', async () => {
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    const rows = Array.from(container.querySelectorAll('.cmp-rows .cmp-row')) as HTMLElement[];
+    const winnerRow = rows.find((r) => within(r).queryByText('ACME Ltda')) as HTMLElement;
+    const loserRow = rows.find((r) => within(r).queryByText('Beta Corp')) as HTMLElement;
+    expect(winnerRow.querySelector('[data-testid="po-nonwinner"]')).toBeNull();
+    const buttons = Array.from(loserRow.querySelectorAll('.cmp-row__secondary-actions button')).map((b) => b.textContent);
+    expect(buttons).toEqual(['Definir como vencedora', 'Enviar Ordem de Compra']);
+    expect(loserRow.querySelector('[data-testid="po-nonwinner"]')!.className).toContain('cmp-btn--subtle');
+  });
+
+  it('cancelar a confirmacao nao abre o modal', async () => {
+    controls.confirm.mockResolvedValue(false);
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    const loserRow = (await findByText('Beta Corp')).closest('.cmp-row') as HTMLElement;
+    fireEvent.click(within(loserRow).getByTestId('po-nonwinner'));
+    await waitFor(() => expect(controls.confirm).toHaveBeenCalledTimes(1));
+    const opts = controls.confirm.mock.calls[0]![0] as { title: string; message: string };
+    expect(opts.title).toBe('Enviar Ordem de Compra para proposta não vencedora?');
+    expect(opts.message).toContain('Beta Corp não é a vencedora desta cotação');
+    expect(container.querySelectorAll('dialog').length).toBe(2);
+  });
+
+  it('confirmado: modal com aviso, envia com nonWinner, sem executeComparison e sem modal de avaliacao', async () => {
+    const { container, findByText, findByTestId } = renderOpenTab();
+    const loserRow = (await findByText('Beta Corp')).closest('.cmp-row') as HTMLElement;
+    fireEvent.click(within(loserRow).getByTestId('po-nonwinner'));
+    expect(await findByTestId('po-nonwinner-notice')).toBeTruthy();
+    await sendFromOpenModal(container);
+
+    await waitFor(() => expect(sendPurchaseOrder).toHaveBeenCalledTimes(1));
+    const [quoteResponseId, payload] = vi.mocked(sendPurchaseOrder).mock.calls[0]!;
+    expect(quoteResponseId).toBe(43);
+    expect(payload.nonWinner).toBe(true);
+    expect(executeComparison).not.toHaveBeenCalled();
+
+    expect(await findByText('Ordem de Compra enviada ao fornecedor (proposta não vencedora).')).toBeTruthy();
+    // PO desmonta; o modal de avaliacao (sempre montado) continua fechado.
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(2));
+    const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    expect(reviewDialog.open).toBe(false);
+  });
+
+  it('PO pela vencedora continua sem nonWinner', async () => {
+    const { container, findByText } = renderOpenTab();
+    const winnerRow = (await findByText('ACME Ltda')).closest('.cmp-row') as HTMLElement;
+    fireEvent.click(within(winnerRow).getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await sendFromOpenModal(container);
+    await waitFor(() => expect(sendPurchaseOrder).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(sendPurchaseOrder).mock.calls[0]![1].nonWinner).toBeUndefined();
+    expect(controls.confirm).not.toHaveBeenCalled();
+  });
+
+  it('"Fora do ranking": proposta direta tem o botao discreto; via parceiro nao', async () => {
+    const { findByText } = renderOpenTab();
+    const section = (await findByText('Fora do ranking')).closest('section') as HTMLElement;
+    const items = Array.from(section.querySelectorAll('li')) as HTMLElement[];
+    const delta = items.find((li) => within(li).queryByText('Delta Ltda')) as HTMLElement;
+    const epsilon = items.find((li) => within(li).queryByText('Epsilon SA')) as HTMLElement;
+    fireEvent.click(within(delta).getByTestId('po-nonwinner'));
+    await findByText(/Esta proposta não é a vencedora da cotação/);
+    expect(within(epsilon).queryByTestId('po-nonwinner')).toBeNull();
+  });
+
+  it('gestor (sem permissao de envio de PO) nao ve o botao', async () => {
+    controls.role = 'gestor';
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    expect(container.querySelector('[data-testid="po-nonwinner"]')).toBeNull();
+    // gestor continua podendo definir a vencedora
+    expect(container.querySelector('.cmp-rows .cmp-btn--link')?.textContent).toBe('Definir como vencedora');
   });
 });

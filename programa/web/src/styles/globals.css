@@ -1939,6 +1939,18 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   border-radius: 999px;
 }
 .cmp-btn--link:hover { color: var(--primary-700); }
+/* Acao secundaria discreta (PO para proposta nao vencedora). */
+.cmp-btn--subtle { font-weight: 500; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+.cmp-row__secondary-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+.cmp-po-nonwinner-notice {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  border: 1px solid #f0d58a;
+  border-radius: var(--radius-sm);
+  background: #fff4dc;
+  color: var(--warning);
+  font-size: 13px;
+}
 
 .cmp-bypass-alert {
   display: flex;
@@ -2070,6 +2082,7 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
     align-items: stretch;
     justify-content: flex-start;
   }
+  .cmp-row__secondary-actions { align-items: center; }
 }
 
 /* Desliga as animações de reordenação (FLIP via transform inline, injetado

@@ -373,6 +373,9 @@ export const quotePurchaseOrderSchema = z.object({
     'Apenas arquivos PDF sao aceitos para a Ordem de Compra.',
   ),
   fileSize: z.coerce.number().int().nonnegative(),
+  // PO a uma proposta que NAO e a vencedora (ex.: parte dos itens fechada com outro
+  // fornecedor). So a rota da proposta direta le; sem a confirmacao o backend recusa.
+  nonWinner: z.boolean().optional(),
 });
 
 export const quoteComparisonWeightsSchema = z.object({

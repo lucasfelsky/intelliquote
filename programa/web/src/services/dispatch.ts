@@ -397,6 +397,8 @@ export interface QuotePurchaseOrderInput {
   contentBase64: string;
   fileType: 'application/pdf';
   fileSize: number;
+  /** Proposta que nao e a vencedora: o usuario confirmou o envio (sem isso o backend recusa). */
+  nonWinner?: boolean;
 }
 
 export interface QuotePurchaseOrderResult {
@@ -418,6 +420,7 @@ export async function sendPurchaseOrder(
     contentBase64: input.contentBase64,
     fileType: input.fileType,
     fileSize: input.fileSize,
+    ...(input.nonWinner ? { nonWinner: true } : {}),
   });
 }
 

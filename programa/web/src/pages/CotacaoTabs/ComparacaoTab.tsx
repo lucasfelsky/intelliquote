@@ -276,6 +276,8 @@ export function ComparacaoTab({
   const role = user?.role;
   const canCompare = role === 'admin' || role === 'comprador' || role === 'gestor';
   const canConclude = role === 'admin' || role === 'gestor';
+  // Mesmos papeis da rota POST /quote-responses/:id/purchase-order.
+  const canSendPo = role === 'admin' || role === 'comprador';
 
   const [criteria, setCriteria] = useState<Criterion[]>(['price']);
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
@@ -472,16 +474,38 @@ export function ComparacaoTab({
     setReplyModalError(null);
   }
 
-  // Botao "Enviar Ordem de Compra" -- so' aparece sobre a proposta vencedora
-  // (r.isWinner). O modal (PDF, forwarder, mensagem) vive em PurchaseOrderModal.
+  // Botao "Enviar Ordem de Compra" -- destacado na proposta vencedora (r.isWinner) e discreto,
+  // com confirmacao, nas demais propostas diretas (parte dos itens fechada com outro fornecedor).
+  // O modal (PDF, forwarder, mensagem) vive em PurchaseOrderModal.
   const [poTarget, setPoTarget] = useState<PurchaseOrderTarget | null>(null);
+  const [poNonWinner, setPoNonWinner] = useState(false);
 
-  function openPoModal(r: PurchaseOrderTarget) {
+  function openPoModal(r: PurchaseOrderTarget, nonWinner = false) {
     if (!r.quoteResponseId) return;
+    setPoNonWinner(nonWinner);
     setPoTarget(r);
   }
 
+  // PO a uma proposta nao vencedora: nao regrava a comparacao nem mexe na vencedora.
+  async function handleNonWinnerPo(r: PurchaseOrderTarget) {
+    const name = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
+    const ok = await confirm({
+      title: 'Enviar Ordem de Compra para proposta não vencedora?',
+      message: `${name} não é a vencedora desta cotação. Use quando parte dos itens for fechada com este fornecedor. A vencedora continua a mesma.`,
+      confirmText: 'Continuar',
+    });
+    if (!ok) return;
+    openPoModal(r, true);
+  }
+
   function handlePoSent(target: PurchaseOrderTarget) {
+    if (poNonWinner) {
+      // Sem modal de avaliacao/conclusao: a cotacao segue com a vencedora atual.
+      setFeedback({ kind: 'ok', text: 'Ordem de Compra enviada ao fornecedor (proposta não vencedora).' });
+      setPoTarget(null);
+      setPoNonWinner(false);
+      return;
+    }
     const toPartner = isViaPartner(target);
     setFeedback({
       kind: 'ok',
@@ -699,15 +723,27 @@ export function ComparacaoTab({
                   </>
                 )
               ) : (
-                canCompare && (
-                  <button
-                    type="button"
-                    className="cmp-btn cmp-btn--link"
-                    onClick={() => openWinnerModal(r)}
-                  >
-                    Definir como vencedora
-                  </button>
-                )
+                <div className="cmp-row__secondary-actions">
+                  {canCompare && (
+                    <button
+                      type="button"
+                      className="cmp-btn cmp-btn--link"
+                      onClick={() => openWinnerModal(r)}
+                    >
+                      Definir como vencedora
+                    </button>
+                  )}
+                  {canSendPo && !viaPartner && (
+                    <button
+                      type="button"
+                      className="cmp-btn cmp-btn--link cmp-btn--subtle"
+                      onClick={() => void handleNonWinnerPo(r)}
+                      data-testid="po-nonwinner"
+                    >
+                      Enviar Ordem de Compra
+                    </button>
+                  )}
+                </div>
               )
             ) : (
               <span className="cmp-row__no-email" title="Sem proposta vinculada para responder.">
@@ -1162,6 +1198,19 @@ export function ComparacaoTab({
                       </button>
                     </>
                   )}
+                  {!isExcludedWinner && !entryViaPartner && canSendPo && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="cmp-btn cmp-btn--link cmp-btn--subtle"
+                        onClick={() => void handleNonWinnerPo(entryTarget)}
+                        data-testid="po-nonwinner"
+                      >
+                        Enviar Ordem de Compra
+                      </button>
+                    </>
+                  )}
                 </li>
                 );
               })}
@@ -1276,6 +1325,7 @@ export function ComparacaoTab({
           productName={productName}
           onClose={() => setPoTarget(null)}
           onSent={handlePoSent}
+          nonWinner={poNonWinner}
         />
       )}
 
