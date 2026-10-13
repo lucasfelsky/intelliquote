@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -152,5 +152,87 @@ describe('Cotacoes (lista)', () => {
         expect.objectContaining({ poSent: 'true', page: '1', pageSize: '50' }),
       ),
     );
+  });
+});
+
+describe('Cotacoes - filtro de mês', () => {
+  beforeEach(() => {
+    // Só o Date é falso: 01/10/2026 02:00Z ainda é 30/09 em São Paulo (independe do fuso da máquina).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T02:00:00.000Z'));
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockImplementation((async (_url: string, params?: Record<string, string>) => {
+      const page = Number(params?.page ?? 1);
+      return {
+        data: page === 1 ? [quote(1, 'QR-001', null)] : [quote(55, 'QR-055', null)],
+        pagination: { page, pageSize: 50, totalItems: 60, totalPages: 2 },
+      };
+    }) as unknown as typeof api.get);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lista "todos" + os últimos 12 meses no fuso de São Paulo, mês atual primeiro', async () => {
+    renderPage();
+    await screen.findByText('QR-001');
+
+    const select = screen.getByLabelText('Filtro de mês') as HTMLSelectElement;
+    const options = Array.from(select.options).map((o) => [o.value, o.textContent]);
+
+    expect(options).toEqual([
+      ['todos', 'Mês: todos'],
+      ['2026-09', 'Mês: set/2026'],
+      ['2026-08', 'Mês: ago/2026'],
+      ['2026-07', 'Mês: jul/2026'],
+      ['2026-06', 'Mês: jun/2026'],
+      ['2026-05', 'Mês: mai/2026'],
+      ['2026-04', 'Mês: abr/2026'],
+      ['2026-03', 'Mês: mar/2026'],
+      ['2026-02', 'Mês: fev/2026'],
+      ['2026-01', 'Mês: jan/2026'],
+      ['2025-12', 'Mês: dez/2025'],
+      ['2025-11', 'Mês: nov/2025'],
+      ['2025-10', 'Mês: out/2025'],
+    ]);
+    expect(select.value).toBe('todos');
+    expect(vi.mocked(api.get).mock.calls[0]?.[1]).not.toHaveProperty('month');
+  });
+
+  it('escolher um mês na página 2 envia month=AAAA-MM e volta para page 1', async () => {
+    renderPage();
+    await screen.findByText('QR-001');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
+    await screen.findByText('QR-055');
+    expect(vi.mocked(api.get)).toHaveBeenLastCalledWith(
+      '/v1/quote-requests',
+      expect.objectContaining({ page: '2' }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Filtro de mês'), { target: { value: '2025-12' } });
+
+    await waitFor(() =>
+      expect(vi.mocked(api.get)).toHaveBeenLastCalledWith('/v1/quote-requests', {
+        page: '1',
+        pageSize: '50',
+        month: '2025-12',
+      }),
+    );
+  });
+
+  it('sem resultados com filtro ativo sugere ajustar os filtros', async () => {
+    vi.mocked(api.get).mockImplementation((async (_url: string, params?: Record<string, string>) => ({
+      data: params?.month ? [] : [quote(1, 'QR-001', null)],
+      pagination: { page: 1, pageSize: 50, totalItems: params?.month ? 0 : 1, totalPages: 1 },
+    })) as unknown as typeof api.get);
+    renderPage();
+    await screen.findByText('QR-001');
+
+    fireEvent.change(screen.getByLabelText('Filtro de mês'), { target: { value: '2026-09' } });
+
+    expect(await screen.findByText('Ajuste ou limpe os filtros para ver outras cotações.')).toBeTruthy();
+    expect(screen.queryByText('Use o botão “Nova cotação” para começar.')).toBeNull();
   });
 });

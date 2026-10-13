@@ -39,6 +39,32 @@ interface QuoteRequestsPagination {
 type StatusFilter = 'todas' | 'abertas' | 'fechadas';
 type PoFilter = 'todas' | 'enviada' | 'nao-enviada';
 
+const MONTH_LABELS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+// Mês atual + 11 anteriores no fuso de São Paulo (valor AAAA-MM, igual ao `month` da API).
+function lastMonthsSaoPaulo(now: Date, count = 12): { value: string; label: string }[] {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(now);
+  let year = Number(parts.find((p) => p.type === 'year')?.value);
+  let month = Number(parts.find((p) => p.type === 'month')?.value);
+  const out: { value: string; label: string }[] = [];
+  for (let i = 0; i < count; i += 1) {
+    out.push({
+      value: `${year}-${String(month).padStart(2, '0')}`,
+      label: `${MONTH_LABELS[month - 1]}/${year}`,
+    });
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return out;
+}
+
 // Data local dd/mm/aaaa (formatacao local; nunca converter para UTC, que vira o dia anterior em BRT).
 function formatPoSentDate(iso: string): string {
   return new Date(iso).toLocaleDateString('pt-BR', {
@@ -101,6 +127,8 @@ export default function Cotacoes() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
   const [incotermFilter, setIncotermFilter] = useState<Incoterm | 'todos'>('todos');
   const [poFilter, setPoFilter] = useState<PoFilter>('todas');
+  const [monthFilter, setMonthFilter] = useState<string>('todos');
+  const [monthOptions] = useState(() => lastMonthsSaoPaulo(new Date()));
   const [actionError, setActionError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
@@ -110,7 +138,14 @@ export default function Cotacoes() {
   const list = useQuery({
     queryKey: [
       'quote-requests',
-      { search, status: statusFilter, incoterm: incotermFilter, poSent: poFilter, page },
+      {
+        search,
+        status: statusFilter,
+        incoterm: incotermFilter,
+        poSent: poFilter,
+        month: monthFilter,
+        page,
+      },
     ],
     // Volta atualizada (PO enviada no detalhe) sem invalidar de dentro do modal.
     refetchOnMount: 'always',
@@ -120,6 +155,7 @@ export default function Cotacoes() {
       if (statusFilter !== 'todas') params.status = statusFilter === 'abertas' ? 'open' : 'closed';
       if (incotermFilter !== 'todos') params.incoterm = incotermFilter;
       if (poFilter !== 'todas') params.poSent = poFilter === 'enviada' ? 'true' : 'false';
+      if (monthFilter !== 'todos') params.month = monthFilter;
       const data = await api.get<unknown>(`/v1/quote-requests`, params);
       return { items: unwrapList(data).map(normalize), pagination: readPagination(data) };
     },
@@ -127,6 +163,12 @@ export default function Cotacoes() {
   });
 
   const rows = list.data?.items ?? [];
+  const hasFilters =
+    search.trim() !== '' ||
+    statusFilter !== 'todas' ||
+    incotermFilter !== 'todos' ||
+    poFilter !== 'todas' ||
+    monthFilter !== 'todos';
   const totalItems = list.data?.pagination?.totalItems ?? rows.length;
   const totalPages = list.data?.pagination?.totalPages ?? 1;
 
@@ -214,6 +256,21 @@ export default function Cotacoes() {
             <option value="enviada">PO enviada</option>
             <option value="nao-enviada">PO não enviada</option>
           </select>
+          <select
+            className="select"
+            aria-label="Filtro de mês"
+            value={monthFilter}
+            onChange={(e) => {
+              setMonthFilter(e.target.value);
+              setPage(1);
+            }}
+            style={{ maxWidth: 170 }}
+          >
+            <option value="todos">Mês: todos</option>
+            {monthOptions.map((m) => (
+              <option key={m.value} value={m.value}>Mês: {m.label}</option>
+            ))}
+          </select>
           {canCreate && (
             <button
               type="button"
@@ -245,9 +302,11 @@ export default function Cotacoes() {
           <div className="empty-state">
             <strong>Nenhuma cotação encontrada</strong>
             <p>
-              {canCreate
-                ? 'Use o botão “Nova cotação” para começar.'
-                : 'Aguarde o cadastro de novas cotações.'}
+              {hasFilters
+                ? 'Ajuste ou limpe os filtros para ver outras cotações.'
+                : canCreate
+                  ? 'Use o botão “Nova cotação” para começar.'
+                  : 'Aguarde o cadastro de novas cotações.'}
             </p>
           </div>
         )}

@@ -8,6 +8,7 @@ import { SupplierRegretNotificationService } from '../services/SupplierRegretNot
 import {
   quoteRequestCloseSchema,
   quoteRequestCreateSchema,
+  quoteRequestMonthQuerySchema,
   quoteRequestPoSentQuerySchema,
   quoteRequestUpdateSchema,
 } from '../validators/domain';
@@ -575,6 +576,9 @@ function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
   const poSent = quoteRequestPoSentQuerySchema.parse(
     parseOptionalQueryString(req.query.poSent) ?? undefined,
   );
+  const month = quoteRequestMonthQuerySchema.parse(
+    parseOptionalQueryString(req.query.month) ?? undefined,
+  );
   const where: Prisma.QuoteRequestWhereInput = {};
 
   if (!includeDeleted) {
@@ -603,5 +607,18 @@ function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
     where.purchaseOrderSentAt = null;
   }
 
+  if (month) {
+    where.createdAt = buildSaoPauloMonthRange(month);
+  }
+
   return where;
+}
+
+// Mes AAAA-MM no fuso de Sao Paulo (UTC-3 fixo, sem horario de verao desde 2019):
+// [dia 1 03:00Z, dia 1 do mes seguinte 03:00Z).
+function buildSaoPauloMonthRange(month: string): { gte: Date; lt: Date } {
+  const gte = new Date(`${month}-01T03:00:00.000Z`);
+  const lt = new Date(gte);
+  lt.setUTCMonth(lt.getUTCMonth() + 1);
+  return { gte, lt };
 }
