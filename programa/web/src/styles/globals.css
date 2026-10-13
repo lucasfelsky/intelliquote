@@ -152,6 +152,44 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .badge--danger { background: #fde2d3; color: var(--danger); }
 .badge--info { background: #def0fb; color: var(--info); }
 
+/* Chip (botao) que abre um popover informativo (components/InfoPopover.tsx). */
+.info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.info-chip--warning { background: #fff4dc; color: var(--warning); border-color: #f0d58a; }
+.info-chip--info { background: #def0fb; color: var(--info); border-color: #b9dcf2; }
+.info-chip:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(0, 174, 145, 0.22); }
+@media (pointer: coarse) {
+  .info-chip { min-height: 32px; }
+}
+.info-popover {
+  position: fixed;
+  z-index: 300;
+  max-width: min(360px, calc(100vw - 16px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.info-popover--warning { border-color: #f0e2a8; }
+.info-popover__list { margin: 6px 0; padding-left: 16px; }
+
 .weight-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
@@ -388,6 +426,8 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 
 .table-wrapper {
   overflow-x: auto;
+  /* bloco de contencao de filhos absolutos (.sr-only das colunas de acoes) */
+  position: relative;
 }
 
 .table {
@@ -423,6 +463,18 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   padding: 5px 10px;
   font-size: 13px;
 }
+/* Grupos de acao: rotulo de botao nunca quebra em 2 linhas (o grupo quebra entre botoes). */
+.row-actions > button,
+.row-actions > a,
+.page-header__actions > button,
+.page-header__actions > a,
+.modal-actions > button,
+.topbar__user > .ghost-button {
+  white-space: nowrap;
+}
+.link-button { text-align: left; }
+.table .badge { white-space: nowrap; }
+.table .cell-nowrap { white-space: nowrap; }
 
 /* Variante opt-in de .row-actions para tabelas onde a quebra de linha e pior que o
    scroll horizontal (Cotacoes: 3 botoes de ~180px numa tabela de 9 colunas).
@@ -600,6 +652,7 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 }
 .topbar__title { display: flex; align-items: center; gap: 8px; }
 .topbar__user { display: flex; align-items: center; gap: 12px; }
+.topbar__user > .ghost-button { font-size: 13px; }
 .topbar__user-info { display: flex; flex-direction: column; text-align: right; }
 .topbar__user-info strong { font-size: 13px; }
 .topbar__user-info small { color: var(--ink-soft); font-size: 11px; }
@@ -641,9 +694,11 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 
 @media (max-width: 880px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+  .sidebar { border-right: 0; border-bottom: 1px solid var(--border); position: static; height: auto; }
   .app-shell__content { padding: 16px; }
-  .topbar { padding: 12px 16px; }
+  .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+  .topbar__user { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .topbar .badge { white-space: nowrap; }
   .app-shell__admin { display: none; }
 }
 
@@ -848,6 +903,7 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 
 .dispatcher-suppliers__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -858,13 +914,22 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   max-height: 280px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
 }
 .dispatcher-row {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 12px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px;
   padding: 8px 10px; align-items: center;
   border-bottom: 1px solid var(--border);
 }
 .dispatcher-row:last-child { border-bottom: none; }
-.dispatcher-row__title { font-weight: 600; color: var(--ink); }
-.dispatcher-row__meta { font-size: 12px; color: var(--ink-soft); }
+.dispatcher-row__title { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.dispatcher-row__meta { font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .dispatcher-master-detail { grid-template-columns: 1fr; }
+  .dispatcher-folders { border-right: 0; border-bottom: 1px solid var(--border); max-height: 220px; }
+}
+.cc-list__item { gap: 8px; }
+.cc-list__item > span { min-width: 0; overflow-wrap: anywhere; }
+/* fieldset tem min-width:min-content por padrao: sem isto, e-mail longo alarga o card (Empresa). */
+.cc-users { min-width: 0; }
+.cc-users label { min-width: 0; overflow-wrap: anywhere; }
 
 .dispatcher-row--nested {
   background: var(--surface);
@@ -1723,14 +1788,15 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 }
 .cmp-toggle--active:hover { background: #00563f; }
 
-.cmp-body { padding: 22px 28px 26px; display: flex; flex-direction: column; gap: 16px; }
+.cmp-body { padding: 22px 28px 26px; display: flex; flex-direction: column; gap: 16px; container: cmp / inline-size; }
 
+/* Layout A (container >= 1000px): uma linha, coluna de acoes fixa. Os layouts B (<= 999px)
+   e C (<= 720px) ficam no fim do bloco .cmp-*, via @container cmp. */
 .cmp-rankgrid {
   display: grid;
-  grid-template-columns:
-    44px minmax(140px, 1.4fr) 92px 76px 84px 96px minmax(110px, 1fr) minmax(150px, 1.4fr);
+  grid-template-columns: 36px minmax(0, 1fr) 112px 64px 76px 80px 104px 216px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 .cmp-rankgrid--head {
   padding: 0 24px;
@@ -1779,9 +1845,11 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 
 .cmp-row__supplier { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .cmp-row__name-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cmp-row__name { font-weight: 700; font-size: 15px; }
+.cmp-row__name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
 .cmp-row--winner .cmp-row__name { font-weight: 800; }
 .cmp-row__contact { font-size: 12px; color: var(--ink-soft); }
+.cmp-row__contact-name { white-space: nowrap; }
+.cmp-row__email { overflow-wrap: anywhere; }
 
 .cmp-winner-badge {
   display: inline-flex;
@@ -1795,7 +1863,7 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   font-weight: 700;
 }
 
-.cmp-row__price { font-weight: 700; font-size: 14px; min-width: 0; }
+.cmp-row__price { font-weight: 700; font-size: 14px; min-width: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cmp-row__payment { font-size: 13px; min-width: 0; }
 .cmp-row__leadtime { font-weight: 700; font-size: 14px; min-width: 0; }
 .cmp-row--winner .cmp-row__leadtime { font-weight: 800; }
@@ -1834,7 +1902,7 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   align-items: center;
   justify-content: center;
   gap: 7px;
-  white-space: normal;
+  white-space: nowrap;
   line-height: 1.15;
   text-align: center;
   max-width: 100%;
@@ -1953,11 +2021,37 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   margin-top: 14px;
 }
 
-@media (max-width: 860px) {
+/* "Definir como vencedora mesmo assim" (Fora do ranking) pode quebrar em telas estreitas. */
+.cmp-excluded .cmp-btn--link { white-space: normal; text-align: left; }
+
+/* Layout B: container < 1000px (telas 1280/1366 com sidebar). Metricas numa linha e os botoes
+   descem para uma 2a linha alinhada a direita. */
+@container cmp (max-width: 999px) {
+  .cmp-rankgrid { grid-template-columns: 36px minmax(0, 1fr) 112px 64px 76px 80px 104px; }
+  .cmp-rankgrid--head > :last-child { display: none; }
+  .cmp-row__actions,
+  .cmp-row__actions--stacked {
+    grid-column: 2 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+/* Layout C: container < 721px (celular/tablet). Card empilhado. */
+@container cmp (max-width: 720px) {
   .cmp-rankgrid { grid-template-columns: 1fr; gap: 8px; }
   .cmp-rankgrid--head { display: none; }
   .cmp-row { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
-  .cmp-row__actions { justify-content: flex-start; }
+  .cmp-row__actions,
+  .cmp-row__actions--stacked {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+  }
 }
 
 /* Desliga as animações de reordenação (FLIP via transform inline, injetado

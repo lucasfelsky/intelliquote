@@ -128,34 +128,36 @@ export default function Home() {
           </div>
         )}
         {topSuppliers.data && topItems.length > 0 ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Fornecedor</th>
-                <th>País</th>
-                <th>Respostas</th>
-                <th>Vitórias</th>
-                <th>Taxa</th>
-                <th>Score médio</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topItems.map((s) => (
-                <tr key={s.supplierId}>
-                  <td><strong>{s.supplierName}</strong></td>
-                  <td>{s.country ?? '—'}</td>
-                  <td>{s.responses}</td>
-                  <td>{s.wins}</td>
-                  <td>
-                    <span className={`badge ${s.winRate >= 50 ? '' : 'badge--muted'}`}>
-                      {s.winRate}%
-                    </span>
-                  </td>
-                  <td>{s.averageScore.toFixed(1)}</td>
+          <div className="table-wrapper">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fornecedor</th>
+                  <th>País</th>
+                  <th>Respostas</th>
+                  <th>Vitórias</th>
+                  <th>Taxa</th>
+                  <th>Score médio</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {topItems.map((s) => (
+                  <tr key={s.supplierId}>
+                    <td><strong>{s.supplierName}</strong></td>
+                    <td>{s.country ?? '—'}</td>
+                    <td>{s.responses}</td>
+                    <td>{s.wins}</td>
+                    <td>
+                      <span className={`badge ${s.winRate >= 50 ? '' : 'badge--muted'}`}>
+                        {s.winRate}%
+                      </span>
+                    </td>
+                    <td>{s.averageScore.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
           !topSuppliers.isLoading && !topSuppliers.isError && (
             <p className="empty-state">Nenhuma resposta de fornecedor registrada ainda.</p>

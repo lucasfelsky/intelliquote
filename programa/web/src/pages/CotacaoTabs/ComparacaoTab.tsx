@@ -11,6 +11,7 @@ import {
   previewComparison,
   setManualWinner,
   type ExcludedComparisonResponse,
+  type QuantityMismatchInfo,
   type ComparisonResult,
   type ComparisonWeights,
   type SupplierReviewInput,
@@ -23,6 +24,7 @@ import {
 } from '@/services/dispatch';
 import { creditSupportQueryKey } from '@/services/creditSupport';
 import { Modal } from '@/components/Modal';
+import { InfoPopover } from '@/components/InfoPopover';
 import { PurchaseOrderModal } from './PurchaseOrderModal';
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
@@ -66,14 +68,25 @@ function isViaPartner(r: { creditSupportRequestId?: number | null }): boolean {
 }
 
 // Quantidade divergente (todos os itens presentes): entra no ranking com o unitario cotado x
-// quantidade PEDIDA; a linha avisa o comprador. Ausente (historico) ou vazio -> nada.
-function formatQuantityAdjustedLine(r: ComparisonResult): string | null {
+// quantidade PEDIDA; a linha mostra um chip que abre o detalhe. Ausente (historico) ou vazio -> null.
+function quantityMismatchList(r: ComparisonResult): QuantityMismatchInfo[] | null {
   const mismatches = r.quantityMismatches ?? [];
   if (!r.quantityAdjusted || mismatches.length === 0) return null;
-  const parts = mismatches.map(
-    (m) => `${m.productName || `Item ${m.quoteRequestItemId}`}: pedido ${m.requested}, cotado ${m.offered}`,
+  return mismatches;
+}
+
+const formatQty = (value: number): string => value.toLocaleString('pt-BR');
+
+// Contato (nome · e-mail) em spans separados: o nome nao quebra e o e-mail pode quebrar em qualquer ponto.
+function ContactLine({ name, email }: { name?: string | null; email?: string | null }) {
+  if (!name && !email) return null;
+  return (
+    <span className="cmp-row__contact">
+      {name && <span className="cmp-row__contact-name">{name}</span>}
+      {name && email ? ' · ' : ''}
+      {email && <span className="cmp-row__email">{email}</span>}
+    </span>
   );
-  return `Quantidade divergente: ${parts.join('; ')} — ranking usa o unitário × quantidade pedida`;
 }
 
 // Motivo de uma proposta ter ficado fora do ranking, em portugues, so com as partes presentes.
@@ -190,6 +203,16 @@ function TrophyIcon() {
       <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
       <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
       <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
   );
 }
@@ -541,8 +564,7 @@ export function ComparacaoTab({
       const viaPartner = isViaPartner(r);
       // PR4a: na linha via parceiro o contato exibido e o do parceiro (quem respondeu).
       const contactSource = viaPartner ? r.partnerContact : r.contact;
-      const contactBits = [contactSource?.name, contactSource?.email].filter(Boolean) as string[];
-      const contactLine = contactBits.length ? contactBits.join(' · ') : null;
+      const qtyMismatches = quantityMismatchList(r);
       const percent = scorePercent(r.totalScore);
       // Chave composta: a direta e a via parceiro compartilham o mesmo quoteResponseId.
       const rowKey = candidateKey(r);
@@ -579,14 +601,32 @@ export function ComparacaoTab({
                   {previewPendingApproval ? 'Recomendada · requer aprovação' : 'Vencedora'}
                 </span>
               )}
+              {qtyMismatches && (
+                <InfoPopover
+                  testId="qty-adjusted"
+                  contentTestId="qty-adjusted-details"
+                  label="Qtd divergente: ver itens com quantidade diferente da pedida"
+                  trigger={
+                    <>
+                      <WarningIcon />
+                      Qtd divergente
+                    </>
+                  }
+                >
+                  <strong>Quantidade divergente</strong>
+                  <ul className="info-popover__list">
+                    {qtyMismatches.map((m) => (
+                      <li key={m.quoteRequestItemId}>
+                        <strong>{m.productName || `Item ${m.quoteRequestItemId}`}</strong>: pedido {formatQty(m.requested)}, cotado {formatQty(m.offered)}
+                      </li>
+                    ))}
+                  </ul>
+                  <span>O ranking usa o unitário × quantidade pedida.</span>
+                </InfoPopover>
+              )}
             </div>
-            {contactLine && <span className="cmp-row__contact">{contactLine}</span>}
+            <ContactLine name={contactSource?.name} email={contactSource?.email} />
             <span className="cmp-row__contact">{formatOriginLine(r)}</span>
-            {formatQuantityAdjustedLine(r) && (
-              <span className="cmp-row__contact" data-testid="qty-adjusted" style={{ color: 'var(--warning, #b45309)' }}>
-                {formatQuantityAdjustedLine(r)}
-              </span>
-            )}
             <DgSeal result={r} />
           </div>
           <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>
@@ -874,10 +914,6 @@ export function ComparacaoTab({
           const bypassName = only?.supplier?.name ?? (only ? `Fornecedor #${only.supplierId}` : '—');
           const bypassViaPartner = !!only && isViaPartner(only);
           const bypassContactSource = bypassViaPartner ? only?.partnerContact : only?.contact;
-          const bypassContactBits = only
-            ? ([bypassContactSource?.name, bypassContactSource?.email].filter(Boolean) as string[])
-            : [];
-          const bypassContactLine = bypassContactBits.length ? bypassContactBits.join(' · ') : null;
           return (
             <div className="cmp-bypass">
               <div className="cmp-bypass-alert">
@@ -916,7 +952,7 @@ export function ComparacaoTab({
                           </>
                         )}
                       </strong>
-                      {bypassContactLine && <span>{bypassContactLine}</span>}
+                      <ContactLine name={bypassContactSource?.name} email={bypassContactSource?.email} />
                       <span className="cmp-row__contact">{formatOriginLine(only)}</span>
                       <DgSeal result={only} />
                     </div>
@@ -977,7 +1013,7 @@ export function ComparacaoTab({
         )}
 
         {previewQuery.data && excludedResponses.length > 0 && (
-          <section aria-labelledby="cmp-excluded-title" style={{ marginTop: 16 }}>
+          <section className="cmp-excluded" aria-labelledby="cmp-excluded-title" style={{ marginTop: 16 }}>
             <h3 id="cmp-excluded-title" style={{ fontSize: 14, margin: '0 0 8px' }}>
               Fora do ranking
             </h3>

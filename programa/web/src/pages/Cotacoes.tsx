@@ -270,7 +270,7 @@ export default function Cotacoes() {
               {rows.map((qr) => (
                 <tr key={qr.id}>
                   <td>{qr.id}</td>
-                  <td><strong>{qr.requestCode}</strong></td>
+                  <td className="cell-nowrap"><strong>{qr.requestCode}</strong></td>
                   <td>
                     <div className="chip-row">
                       {qr.desiredIncoterm.map((t) => (
