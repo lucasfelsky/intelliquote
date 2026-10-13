@@ -1,12 +1,33 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+
+// Identidade do build: vai no bundle (VITE_APP_BUILD_ID) e em dist/version.json. A aba aberta
+// compara as duas para avisar que saiu deploy novo. No CI usa o commit (redeploy do mesmo commit
+// nao gera aviso); build local usa o horario.
+function resolveBuildId(mode: string): string {
+  if (mode === 'development') return 'dev';
+  const sha = process.env.GITHUB_SHA?.trim();
+  return sha ? sha.slice(0, 12) : `local-${Date.now()}`;
+}
+
+function versionFilePlugin(buildId: string): Plugin {
+  return {
+    name: 'intelliquote-version-file',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: `${JSON.stringify({ buildId })}
+` });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiBase = env.VITE_INTELLIQUOTE_API_BASE ?? '/api';
+  const buildId = resolveBuildId(mode);
   return {
-    plugins: [react()],
+    plugins: [react(), versionFilePlugin(buildId)],
     resolve: {
       alias: { '@': resolve(__dirname, 'src') },
     },
@@ -43,6 +64,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_FIREBASE_APP_ID': JSON.stringify(env.VITE_FIREBASE_APP_ID ?? ''),
       'import.meta.env.VITE_INTELLIQUOTE_API_BASE': JSON.stringify(apiBase),
       'import.meta.env.VITE_PORTAL_URL': JSON.stringify(env.VITE_PORTAL_URL ?? 'https://portal-comex.com'),
+      'import.meta.env.VITE_APP_BUILD_ID': JSON.stringify(buildId),
     },
   };
 });
