@@ -24,6 +24,7 @@ import {
 import { Modal } from '@/components/Modal';
 import { CreditSupportModal } from './CreditSupportModal';
 import { CreditSupportPanel } from './CreditSupportPanel';
+import { PriceHistoryModal } from './PriceHistoryModal';
 
 interface SupplierSummary {
   id: number;
@@ -134,6 +135,7 @@ export function RespostasTab({
   // Modal de itens (pop-up ao clicar no fornecedor)
   const [itemsTarget, setItemsTarget] = useState<QuoteResponse | null>(null);
   const [creditTarget, setCreditTarget] = useState<QuoteResponse | null>(null); // modal montado so' quando aberto
+  const [historyTarget, setHistoryTarget] = useState<QuoteResponse | null>(null); // idem: historico de precos
 
   const responsesQuery = useQuery({
     queryKey: ['quote-responses'],
@@ -496,6 +498,14 @@ export function RespostasTab({
                         title="Responder (enviar e-mail ao fornecedor)"
                       >
                         Responder
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => setHistoryTarget(r)}
+                        title="Histórico de preços desta resposta"
+                      >
+                        Histórico
                       </button>
                       {canEditThis && (
                         <button type="button" className="ghost-button" onClick={() => setCreditTarget(r)}
@@ -1000,6 +1010,9 @@ export function RespostasTab({
 
       {creditTarget && (
         <CreditSupportModal response={creditTarget} quoteRequestId={quoteRequestId} requestCode={requestCode} onClose={() => setCreditTarget(null)} />
+      )}
+      {historyTarget && (
+        <PriceHistoryModal response={historyTarget} onClose={() => setHistoryTarget(null)} />
       )}
     </div>
   );

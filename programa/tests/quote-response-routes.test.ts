@@ -36,6 +36,12 @@ vi.mock('../src/lib/prisma', () => {
     creditSupportRequest: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    // Historico de preco: create/update rodam em transacao e gravam o snapshot.
+    quoteResponsePriceSnapshot: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({}),
+    },
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
   };
 
   return { prisma };

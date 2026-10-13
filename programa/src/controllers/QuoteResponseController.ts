@@ -26,6 +26,7 @@ import {
 } from '../services/ComparisonCandidateService';
 import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
+import { QuoteResponsePriceHistoryService } from '../services/QuoteResponsePriceHistoryService';
 import { sendAndLog } from '../mailer/MailerService';
 import { renderReplyFromTemplate, type QuoteReplyItem } from '../mailer/renderQuoteReply';
 import { renderPoFromTemplate } from '../mailer/renderQuotePo';
@@ -193,14 +194,19 @@ export class QuoteResponseController {
       };
       // Reenvio explicito apos exclusao inicia outra versao do mesmo vinculo.
       // Itens antigos e snapshots continuam disponiveis para auditoria.
-      const quoteResponse = existing
-        ? await prisma.quoteResponse.update({
-            where: { id: existing.id, deletedAt: { not: null } },
-            data: { ...data, deletedAt: null, isWinner: false, version: { increment: 1 },
-              items: { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToCreate },
-            },
-          })
-        : await prisma.quoteResponse.create({ data });
+      // Transacao: o snapshot de preco (historico) e gravado junto com a resposta.
+      const quoteResponse = await prisma.$transaction(async (tx) => {
+        const saved = existing
+          ? await tx.quoteResponse.update({
+              where: { id: existing.id, deletedAt: { not: null } },
+              data: { ...data, deletedAt: null, isWinner: false, version: { increment: 1 },
+                items: { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToCreate },
+              },
+            })
+          : await tx.quoteResponse.create({ data });
+        await QuoteResponsePriceHistoryService.record(tx, saved.id, { source: 'manual', performedById: req.user?.id ?? null });
+        return saved;
+      });
 
       await AuditLogService.log({
         entityType: 'quote_response',
@@ -494,32 +500,37 @@ export class QuoteResponseController {
             : Number(existingQuoteResponse.cofins),
       });
 
-      const quoteResponse = await prisma.quoteResponse.update({
-        where: { id, deletedAt: null },
-        data: {
-          offeredPrice: finalOfferedPrice,
-          targetPrice: payload.targetPrice !== undefined ? payload.targetPrice : undefined,
-          currency: nextCurrency,
-          exchangeRate: landedCost.exchangeRate,
-          freightCost: landedCost.freightCost,
-          insuranceCost: landedCost.insuranceCost,
-          otherFees: landedCost.otherFees,
-          importDuty: landedCost.importDutyRate,
-          ipi: landedCost.ipiRate,
-          pis: landedCost.pisRate,
-          cofins: landedCost.cofinsRate,
-          totalLandedCost: landedCost.totalLandedCost,
-          offeredIncoterm: payload.offeredIncoterm as Incoterm | undefined,
-          paymentTermsDays: payload.paymentTermsDays,
-          leadTimeDays: payload.leadTimeDays,
-          notes: payload.notes,
-          originPort: payload.originPort,
-          submittedAt: payload.submittedAt,
-          version: shouldIncrementVersion(payload) ? { increment: 1 } : undefined,
-          // Proposta com item indisponivel sai do ranking e nao pode ser vencedora (como no sync do portal).
-          isWinner: itemsToUpdate?.some((item) => item.isUnavailable) ? false : undefined,
-          items: itemsToUpdate !== undefined ? { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToUpdate } : undefined,
-        },
+      // Transacao: o snapshot de preco (historico) e gravado junto com a resposta.
+      const quoteResponse = await prisma.$transaction(async (tx) => {
+        const saved = await tx.quoteResponse.update({
+          where: { id, deletedAt: null },
+          data: {
+            offeredPrice: finalOfferedPrice,
+            targetPrice: payload.targetPrice !== undefined ? payload.targetPrice : undefined,
+            currency: nextCurrency,
+            exchangeRate: landedCost.exchangeRate,
+            freightCost: landedCost.freightCost,
+            insuranceCost: landedCost.insuranceCost,
+            otherFees: landedCost.otherFees,
+            importDuty: landedCost.importDutyRate,
+            ipi: landedCost.ipiRate,
+            pis: landedCost.pisRate,
+            cofins: landedCost.cofinsRate,
+            totalLandedCost: landedCost.totalLandedCost,
+            offeredIncoterm: payload.offeredIncoterm as Incoterm | undefined,
+            paymentTermsDays: payload.paymentTermsDays,
+            leadTimeDays: payload.leadTimeDays,
+            notes: payload.notes,
+            originPort: payload.originPort,
+            submittedAt: payload.submittedAt,
+            version: shouldIncrementVersion(payload) ? { increment: 1 } : undefined,
+            // Proposta com item indisponivel sai do ranking e nao pode ser vencedora (como no sync do portal).
+            isWinner: itemsToUpdate?.some((item) => item.isUnavailable) ? false : undefined,
+            items: itemsToUpdate !== undefined ? { updateMany: { where: { deletedAt: null }, data: { deletedAt: new Date() } }, create: itemsToUpdate } : undefined,
+          },
+        });
+        await QuoteResponsePriceHistoryService.record(tx, saved.id, { source: 'manual', performedById: req.user?.id ?? null });
+        return saved;
       });
 
       // PR4a: reset simetrico da alternativa via parceiro (mesma condicao do isWinner acima;

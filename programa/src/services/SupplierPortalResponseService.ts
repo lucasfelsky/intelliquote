@@ -6,6 +6,7 @@ import { normalizeItemOriginPort } from '../utils/originPort';
 import { QuoteComparisonService } from './QuoteComparisonService';
 import { clearCreditWinners } from './ComparisonCandidateService';
 import { ExchangeRateService } from './ExchangeRateService';
+import { QuoteResponsePriceHistoryService } from './QuoteResponsePriceHistoryService';
 import {
   isAvailablePortalItem,
   type SupplierPortalResponseItemInput,
@@ -224,6 +225,7 @@ export class SupplierPortalResponseService {
         portalResponse: response,
         providedExchangeRate: input.payload.exchangeRate ?? null,
       });
+      await QuoteResponsePriceHistoryService.record(tx, quoteResponse.id, { source: 'portal', supplierContactId: input.supplierContactId });
 
       await tx.supplierPortalToken.update({
         where: {
