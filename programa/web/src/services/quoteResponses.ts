@@ -627,6 +627,27 @@ export interface PreviewComparisonResult {
   // PR4a: candidatos ranqueados (diretas + alternativas). Ausente no backend antigo.
   candidateCount?: number;
   excluded?: ExcludedComparisonResponse[];
+  // Vencedora GRAVADA (isWinner) e se foi uma ESCOLHA MANUAL vigente. Ausente/null = nenhuma
+  // vencedora gravada (ou backend antigo): a tela segue a vencedora do score.
+  persistedWinner?: PersistedWinnerInfo | null;
+}
+
+export interface PersistedWinnerInfo {
+  quoteResponseId: number;
+  creditSupportRequestId: number | null;
+  manual: boolean;
+}
+
+function normalizePersistedWinner(raw: unknown): PersistedWinnerInfo | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const obj = raw as Record<string, unknown>;
+  const quoteResponseId = asNumber(obj.quoteResponseId);
+  if (!(quoteResponseId > 0)) return null;
+  const creditSupportRequestId =
+    obj.creditSupportRequestId === undefined || obj.creditSupportRequestId === null
+      ? null
+      : asNumber(obj.creditSupportRequestId);
+  return { quoteResponseId, creditSupportRequestId, manual: obj.manual === true };
 }
 
 export async function previewComparison(
@@ -651,6 +672,7 @@ export async function previewComparison(
     responseCount: asNumber(obj.responseCount),
     candidateCount: asOptionalCount(obj.candidateCount),
     excluded: normalizeExcluded(obj.excluded),
+    persistedWinner: normalizePersistedWinner(obj.persistedWinner),
   };
 }
 

@@ -25,7 +25,7 @@ import {
 import { creditSupportQueryKey } from '@/services/creditSupport';
 import { Modal } from '@/components/Modal';
 import { InfoPopover } from '@/components/InfoPopover';
-import { PurchaseOrderModal } from './PurchaseOrderModal';
+import { PurchaseOrderModal, type PurchaseOrderTarget } from './PurchaseOrderModal';
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -63,6 +63,9 @@ type WinnerTarget = Pick<
 
 // PR4a: linha "via Parceiro" (alternativa de Credit Support). PR4b: a vencedora via parceiro
 // recebe a Ordem de Compra (modal com alvo parceiro).
+// Alvo do "Responder": linha do ranking ou entrada de "Fora do ranking" (contatos so' na linha).
+type ReplyTargetInfo = WinnerTarget & Partial<Pick<ComparisonResult, 'contact' | 'partnerContact'>>;
+
 function isViaPartner(r: { creditSupportRequestId?: number | null }): boolean {
   return typeof r.creditSupportRequestId === 'number' && r.creditSupportRequestId > 0;
 }
@@ -325,6 +328,7 @@ export function ComparacaoTab({
   async function persistBeforeAction(): Promise<boolean> {
     try {
       const data = await executeComparison(quoteRequestId, weights);
+      await qc.invalidateQueries({ queryKey: ['comparison-preview', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
@@ -337,6 +341,7 @@ export function ComparacaoTab({
           });
           if (!approved) return false;
           await approveAward(quoteRequestId, data.comparisonId);
+          await qc.invalidateQueries({ queryKey: ['comparison-preview', quoteRequestId] });
           await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
           await qc.invalidateQueries({ queryKey: ['quote-responses'] });
           return true;
@@ -371,6 +376,7 @@ export function ComparacaoTab({
     onSuccess: async () => {
       setFeedback({ kind: 'ok', text: 'Vencedora definida manualmente.' });
       closeWinnerModal();
+      await qc.invalidateQueries({ queryKey: ['comparison-preview', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['comparisons', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
@@ -408,14 +414,14 @@ export function ComparacaoTab({
     onError: (err) => setFeedback({ kind: 'err', text: messageOf(err) }),
   });
 
-  const [replyTarget, setReplyTarget] = useState<ComparisonResult | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ReplyTargetInfo | null>(null);
   const [notifyLosers, setNotifyLosers] = useState(false);
   const [priceRating, setPriceRating] = useState(0);
   const [leadTimeRating, setLeadTimeRating] = useState(0);
   const [qualityRating, setQualityRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewTarget, setReviewTarget] = useState<ComparisonResult | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<WinnerTarget | null>(null);
   const [replySubject, setReplySubject] = useState('');
   const [replyMessage, setReplyMessage] = useState('');
   const [replyPreviewData, setReplyPreviewData] = useState<QuoteResponseReplyPreview | null>(null);
@@ -449,7 +455,7 @@ export function ComparacaoTab({
     onError: (err) => setReplyModalError(messageOf(err)),
   });
 
-  function openReplyModal(r: ComparisonResult) {
+  function openReplyModal(r: ReplyTargetInfo) {
     if (!r.quoteResponseId) return;
     setReplyTarget(r);
     // Assunto padrao vem do backend (mesmo do envio inicial); ver onSuccess do preview.
@@ -468,14 +474,14 @@ export function ComparacaoTab({
 
   // Botao "Enviar Ordem de Compra" -- so' aparece sobre a proposta vencedora
   // (r.isWinner). O modal (PDF, forwarder, mensagem) vive em PurchaseOrderModal.
-  const [poTarget, setPoTarget] = useState<ComparisonResult | null>(null);
+  const [poTarget, setPoTarget] = useState<PurchaseOrderTarget | null>(null);
 
-  function openPoModal(r: ComparisonResult) {
+  function openPoModal(r: PurchaseOrderTarget) {
     if (!r.quoteResponseId) return;
     setPoTarget(r);
   }
 
-  function handlePoSent(target: ComparisonResult) {
+  function handlePoSent(target: PurchaseOrderTarget) {
     const toPartner = isViaPartner(target);
     setFeedback({
       kind: 'ok',
@@ -531,6 +537,12 @@ export function ComparacaoTab({
       ? 'Concluir esta cotação? Ela será fechada e os fornecedores não selecionados receberão um e-mail.'
       : 'Concluir esta cotação? Ela será fechada.';
     if (await confirm(msg)) {
+      // Escolha manual vigente: persistBeforeAction regravaria o isWinner pelo score e
+      // desfaria a escolha; a vencedora ja esta gravada, entao so' fecha.
+      if (manualWinner) {
+        closeMut.mutate({ notifyLosers, review });
+        return;
+      }
       const ok = await persistBeforeAction();
       if (!ok) return;
       closeMut.mutate({ notifyLosers, review });
@@ -539,7 +551,7 @@ export function ComparacaoTab({
 
   // Botão só reage ao gate na tabela do preview (ao vivo, não persistido);
   // no histórico (comparações já persistidas) o clique abre o modal direto.
-  async function handleRowReply(r: ComparisonResult, gated: boolean) {
+  async function handleRowReply(r: ReplyTargetInfo, gated: boolean) {
     if (!r.quoteResponseId) return;
     if (gated) {
       const ok = await persistBeforeAction();
@@ -548,7 +560,7 @@ export function ComparacaoTab({
     openReplyModal(r);
   }
 
-  async function handleRowSendPo(r: ComparisonResult, gated: boolean) {
+  async function handleRowSendPo(r: PurchaseOrderTarget, gated: boolean) {
     if (!r.quoteResponseId) return;
     if (gated) {
       const ok = await persistBeforeAction();
@@ -557,7 +569,8 @@ export function ComparacaoTab({
     openPoModal(r);
   }
 
-  // Linhas-card do ranking do PREVIEW (ao vivo, gated=true sempre).
+  // Linhas-card do ranking do PREVIEW (ao vivo). Vencedora = do score (gated: regrava antes de agir)
+  // ou a escolha manual vigente (sem gate: executeComparison desfaria a escolha).
   function renderRankingCards(results: ComparisonResult[]) {
     return results.map((r, idx) => {
       const name = r.supplier?.name ?? `Fornecedor #${r.supplierId}`;
@@ -598,7 +611,11 @@ export function ComparacaoTab({
               {r.isWinner && (
                 <span className="cmp-winner-badge">
                   <TrophyIcon />
-                  {previewPendingApproval ? 'Recomendada · requer aprovação' : 'Vencedora'}
+                  {manualWinner
+                    ? 'Vencedora (escolha manual)'
+                    : previewPendingApproval
+                      ? 'Recomendada · requer aprovação'
+                      : 'Vencedora'}
                 </span>
               )}
               {qtyMismatches && (
@@ -652,7 +669,7 @@ export function ComparacaoTab({
                   <button
                     type="button"
                     className="cmp-btn cmp-btn--primary"
-                    onClick={() => handleRowSendPo(r, true)}
+                    onClick={() => handleRowSendPo(r, !manualWinner)}
                     title={`Enviar Ordem de Compra ao parceiro ${r.creditPartner?.name ?? ''} (${r.partnerContact?.email ?? 'contato principal'})`}
                     data-testid="po-partner"
                   >
@@ -664,7 +681,7 @@ export function ComparacaoTab({
                     <button
                       type="button"
                       className="cmp-btn cmp-btn--primary"
-                      onClick={() => handleRowSendPo(r, true)}
+                      onClick={() => handleRowSendPo(r, !manualWinner)}
                       title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
                     >
                       <DocIcon />
@@ -673,7 +690,7 @@ export function ComparacaoTab({
                     <button
                       type="button"
                       className="cmp-btn cmp-btn--ghost"
-                      onClick={() => handleRowReply(r, true)}
+                      onClick={() => handleRowReply(r, !manualWinner)}
                       title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
                     >
                       <EnvelopeIcon />
@@ -734,9 +751,19 @@ export function ComparacaoTab({
   const previewWinnerId = previewQuery.data?.winnerQuoteResponseId ?? null;
   // PR4a: identidade composta (a direta e a via parceiro compartilham o quoteResponseId).
   const previewWinnerKey = `${previewWinnerId}:${previewQuery.data?.winnerCreditSupportRequestId ?? 0}`;
+  // Escolha manual vigente (vencedora gravada via setManualWinner): a tela mostra ESSA vencedora,
+  // esteja ela no ranking ou em "Fora do ranking". Gravada automatica => segue o score atual.
+  const persistedWinner = previewQuery.data?.persistedWinner ?? null;
+  const manualWinner = persistedWinner?.manual ? persistedWinner : null;
+  const manualKey = manualWinner
+    ? `${manualWinner.quoteResponseId}:${manualWinner.creditSupportRequestId ?? 0}`
+    : null;
+  const excludedWinner = manualKey
+    ? excludedResponses.find((entry) => candidateKey(entry) === manualKey) ?? null
+    : null;
   const rankedResults = previewResults.map((r) => ({
     ...r,
-    isWinner: candidateKey(r) === previewWinnerKey,
+    isWinner: manualKey ? candidateKey(r) === manualKey : candidateKey(r) === previewWinnerKey,
   })).sort((a, b) => Number(b.isWinner) - Number(a.isWinner) || b.totalScore - a.totalScore || a.offeredPrice - b.offeredPrice);
 
   // Animação de reordenação (FLIP leve, CSS puro, sem lib): guarda a posição
@@ -773,6 +800,20 @@ export function ComparacaoTab({
     prevRectsRef.current = nextRects;
   }, [rankOrderKey]);
 
+  // Desfaz a escolha manual: regrava a vencedora pelo score dos criterios ATUAIS (mesmo
+  // executeComparison das demais acoes, com o fluxo de alcada/aprovacao do persistBeforeAction).
+  async function handleUseScoreWinner() {
+    const ok = await confirm({
+      title: 'Usar vencedora pelo score?',
+      message: 'A escolha manual será descartada e a vencedora passa a ser a 1ª do ranking com os critérios atuais.',
+      confirmText: 'Usar vencedora pelo score',
+    });
+    if (!ok) return;
+    const persisted = await persistBeforeAction();
+    if (!persisted) return;
+    setFeedback({ kind: 'ok', text: 'Vencedora definida pelo score dos critérios atuais.' });
+  }
+
   const [bypassPending, setBypassPending] = useState(false);
 
   // By-pass de 1 fornecedor: sem comparação, marca vencedor manualmente e
@@ -788,6 +829,7 @@ export function ComparacaoTab({
         quoteResponseId: only.quoteResponseId,
         ...(isViaPartner(only) ? { creditSupportRequestId: only.creditSupportRequestId ?? undefined } : {}),
       });
+      await qc.invalidateQueries({ queryKey: ['comparison-preview', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-request', quoteRequestId] });
       await qc.invalidateQueries({ queryKey: ['quote-responses'] });
       openPoModal(only);
@@ -825,7 +867,7 @@ export function ComparacaoTab({
                 type="button"
                 className="cmp-btn cmp-btn--ghost"
                 onClick={() => {
-                  setReviewTarget(rankedResults.find((r) => r.isWinner) ?? null);
+                  setReviewTarget(rankedResults.find((r) => r.isWinner) ?? excludedWinner ?? null);
                   setReviewOpen(true);
                 }}
                 title="Avalia a vencedora (opcional) e fecha a cotação."
@@ -993,10 +1035,23 @@ export function ComparacaoTab({
 
         {previewQuery.data && comparableCount >= 2 && (
           <>
-            {previewPendingApproval && (
+            {previewPendingApproval && !manualWinner && (
               <p className="alert alert--warning" style={{ marginBottom: 12 }}>
                 A adjudicação exige aprovação de gestor/admin pela alçada de R$ {formatNumber(previewQuery.data?.thresholdValue ?? null)} ou pela ausência de câmbio para verificar esse limite. Essa verificação é separada do ranking dos itens.
               </p>
+            )}
+            {manualWinner && canCompare && quoteRequestStatus === 'open' && (
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  type="button"
+                  className="cmp-btn cmp-btn--ghost"
+                  onClick={() => void handleUseScoreWinner()}
+                  data-testid="use-score-winner"
+                  title="Descarta a escolha manual e usa a 1ª do ranking com os critérios atuais."
+                >
+                  Usar vencedora pelo score
+                </button>
+              </div>
             )}
             <div className="cmp-rankgrid cmp-rankgrid--head">
               <div>#</div>
@@ -1018,12 +1073,22 @@ export function ComparacaoTab({
               Fora do ranking
             </h3>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--ink-soft)' }}>
-              {excludedResponses.map((entry) => (
+              {excludedResponses.map((entry) => {
+                const isExcludedWinner = entry === excludedWinner;
+                const entryViaPartner = isViaPartner(entry);
+                const entryTarget: PurchaseOrderTarget & ReplyTargetInfo = {
+                  quoteResponseId: entry.quoteResponseId,
+                  supplierId: entry.supplierId,
+                  supplier: entry.supplier,
+                  creditSupportRequestId: entry.creditSupportRequestId,
+                  creditPartner: entry.creditPartner,
+                };
+                return (
                 <li key={candidateKey(entry)} style={{ marginBottom: 4 }}>
                   <strong style={{ color: 'var(--ink)' }}>
                     {entry.supplier.name || `Fornecedor #${entry.supplierId}`}
                   </strong>
-                  {isViaPartner(entry) && (
+                  {entryViaPartner && (
                     <>
                       {' '}
                       <span className="badge" data-testid="via-partner">
@@ -1031,9 +1096,53 @@ export function ComparacaoTab({
                       </span>
                     </>
                   )}
+                  {isExcludedWinner && (
+                    <>
+                      {' '}
+                      <span className="cmp-winner-badge" data-testid="excluded-winner">
+                        <TrophyIcon />
+                        Vencedora (escolha manual)
+                      </span>
+                    </>
+                  )}
                   {' — '}
                   {excludedReasonText(entry)}
-                  {canCompare && canPickExcludedAsWinner(entry) && (
+                  {isExcludedWinner && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                      {entryViaPartner ? (
+                        <button
+                          type="button"
+                          className="cmp-btn cmp-btn--primary"
+                          onClick={() => handleRowSendPo(entryTarget, false)}
+                          title={`Enviar Ordem de Compra ao parceiro ${entry.creditPartner?.name ?? ''}`}
+                          data-testid="po-partner"
+                        >
+                          <DocIcon />
+                          Enviar Ordem de Compra
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="cmp-btn cmp-btn--primary"
+                            onClick={() => handleRowSendPo(entryTarget, false)}
+                          >
+                            <DocIcon />
+                            Enviar Ordem de Compra
+                          </button>
+                          <button
+                            type="button"
+                            className="cmp-btn cmp-btn--ghost"
+                            onClick={() => handleRowReply(entryTarget, false)}
+                          >
+                            <EnvelopeIcon />
+                            Responder
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {!isExcludedWinner && canCompare && canPickExcludedAsWinner(entry) && (
                     <>
                       {' '}
                       <button
@@ -1054,7 +1163,8 @@ export function ComparacaoTab({
                     </>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         )}
@@ -1124,6 +1234,7 @@ export function ComparacaoTab({
                   Assunto: <strong>{replyPreviewData.subject}</strong>
                 </p>
                 <iframe
+                  sandbox=""
                   key={replyPreviewData.html.length}
                   title="preview-reply-email"
                   className="preview-frame"

@@ -839,6 +839,7 @@ describe('CotacaoDetalhe', () => {
       await findByRole('heading', { name: 'RFQ-001' });
       const dialog = await openDispatchToPreview(container, getByRole);
       expect(frameOf(dialog).getAttribute('srcdoc')).toContain('antigo');
+      expect(frameOf(dialog).getAttribute('sandbox')).toBe('');
 
       fireEvent.change(within(dialog).getByLabelText('Mensagem adicional para o fornecedor'), {
         target: { value: 'Nova msg' },

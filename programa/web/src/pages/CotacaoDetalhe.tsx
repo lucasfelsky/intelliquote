@@ -1603,6 +1603,7 @@ export default function CotacaoDetalhe() {
                 </h3>
                 {dispatchPreview?.preview ? (
                   <iframe
+                                    sandbox=""
                                     title="preview-email"
                                     className="preview-frame"
                                     srcDoc={dispatchPreview.preview.html}

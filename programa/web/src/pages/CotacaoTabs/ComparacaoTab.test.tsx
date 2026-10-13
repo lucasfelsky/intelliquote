@@ -1275,3 +1275,314 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
     });
   });
 });
+
+// Vencedora GRAVADA como ESCOLHA MANUAL: a aba mostra ESSA vencedora (no ranking ou em "Fora do
+// ranking"), PO/Responder/Concluir vao para ela SEM executeComparison (que regravaria pelo score).
+describe('ComparacaoTab - vencedora gravada (escolha manual)', () => {
+  // `winner` (42) lidera o score; `betaLower` (43) e a escolhida manualmente.
+  const topScore = { ...winner, isWinner: false, totalScore: 100 };
+  const betaLower = { ...loser, totalScore: 80 };
+  const viaPartner = {
+    ...winner,
+    isWinner: false,
+    totalScore: 90,
+    offeredPrice: 90,
+    paymentTermsDays: 90,
+    creditSupportRequestId: 7,
+    creditPartner: { id: 5, name: 'Banco Alfa' },
+    partnerContact: { id: 50, name: 'Ana Crédito', email: 'ana@alfa.example' },
+    partnerValidityDays: 30,
+    validityExpired: false,
+  };
+  const excludedDirect = {
+    quoteResponseId: 45,
+    supplierId: 11,
+    supplier: { id: 11, name: 'Delta Ltda' },
+    reason: 'partial' as const,
+    unavailableItems: [],
+    partial: {
+      missingItems: [{ quoteRequestItemId: 5, productName: 'Resina Epóxi' }],
+      quantityMismatches: [],
+      extraItems: [],
+      duplicateItems: [],
+    },
+  };
+  const excludedViaPartner = {
+    ...excludedDirect,
+    quoteResponseId: 46,
+    supplierId: 12,
+    supplier: { id: 12, name: 'Epsilon SA' },
+    creditSupportRequestId: 9,
+    creditPartner: { id: 6, name: 'Banco Beta' },
+  };
+  const basePreview = {
+    winnerQuoteResponseId: 42,
+    pendingApproval: false,
+    thresholdValue: null,
+    responseCount: 3,
+  };
+  const manual = (quoteResponseId: number, creditSupportRequestId: number | null = null) => ({
+    quoteResponseId,
+    creditSupportRequestId,
+    manual: true,
+  });
+
+  beforeEach(() => {
+    controls.role = 'admin';
+    controls.confirm.mockReset().mockResolvedValue(true);
+    vi.mocked(approveAward).mockReset().mockResolvedValue(undefined);
+    vi.mocked(listComparisons).mockReset().mockResolvedValue({ quoteRequestId: 99, comparisons: [record] });
+    vi.mocked(previewComparison).mockReset();
+    vi.mocked(executeComparison).mockReset().mockResolvedValue({
+      results: [],
+      pendingApproval: false,
+      winnerQuoteResponseId: null,
+      thresholdValue: null,
+      comparisonId: 1,
+    });
+    vi.mocked(previewQuoteResponseReply).mockReset().mockResolvedValue({
+      to: 'x@acme.com',
+      cc: [],
+      subject: 's',
+      html: '<p>oi</p>',
+      text: 'oi',
+    });
+    vi.mocked(setManualWinner).mockReset().mockResolvedValue(undefined);
+    vi.mocked(sendPurchaseOrder).mockReset().mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+    vi.mocked(closeQuoteRequest).mockReset().mockResolvedValue(undefined);
+  });
+
+  it('(i) manual em linha ranqueada que nao e a 1a do score: badge "Vencedora (escolha manual)" nela e a 1a do score sem badge', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    const badges = container.querySelectorAll('.cmp-rows .cmp-winner-badge');
+    expect(badges).toHaveLength(1);
+    expect(badges[0]!.textContent).toBe('Vencedora (escolha manual)');
+    const row = badges[0]!.closest('.cmp-row') as HTMLElement;
+    expect(within(row).getByText('Beta Corp')).toBeTruthy();
+    const rows = Array.from(container.querySelectorAll('.cmp-rows .cmp-row')) as HTMLElement[];
+    const acmeRow = rows.find((r) => within(r).queryByText('ACME Ltda')) as HTMLElement;
+    expect(acmeRow.querySelector('.cmp-winner-badge')).toBeNull();
+    // a 1a do score continua podendo ser escolhida
+    expect(within(acmeRow).getByRole('button', { name: 'Definir como vencedora' })).toBeTruthy();
+  });
+
+  it('(ii) PO na linha da escolha manual abre o modal sem chamar executeComparison', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    const row = container.querySelector('.cmp-rows .cmp-winner-badge')!.closest('.cmp-row') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await findByText('PDF da Ordem de Compra');
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  it('(iii) "Responder" na linha da escolha manual abre o preview sem executeComparison', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    const row = container.querySelector('.cmp-rows .cmp-winner-badge')!.closest('.cmp-row') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Responder' }));
+    await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledWith(43, { subject: '', message: '' }));
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  it('(iv) manual via parceiro ranqueada: so "Enviar Ordem de Compra" ao parceiro (sem Responder) e sem executeComparison', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      winnerCreditSupportRequestId: null,
+      results: [topScore, viaPartner, betaLower],
+      candidateCount: 3,
+      persistedWinner: manual(42, 7),
+    });
+    const { container, findByTestId, queryByRole } = renderOpenTab();
+    const po = await findByTestId('po-partner');
+    const badges = container.querySelectorAll('.cmp-rows .cmp-winner-badge');
+    expect(badges).toHaveLength(1);
+    expect((badges[0]!.closest('.cmp-row') as HTMLElement).contains(po)).toBe(true);
+    expect(queryByRole('button', { name: 'Responder' })).toBeNull();
+    fireEvent.click(po);
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  it('(v) manual "Fora do ranking" direta: badge propria, PO + Responder sem executeComparison e sem "mesmo assim" nela', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      excluded: [excludedDirect],
+      persistedWinner: manual(45),
+    });
+    const { container, findByTestId, findByText } = renderOpenTab();
+    const badge = await findByTestId('excluded-winner');
+    expect(badge.textContent).toBe('Vencedora (escolha manual)');
+    expect(container.querySelectorAll('.cmp-rows .cmp-winner-badge')).toHaveLength(0);
+    const section = (await findByText('Fora do ranking')).closest('section') as HTMLElement;
+    expect(within(section).queryByRole('button', { name: 'Definir como vencedora mesmo assim' })).toBeNull();
+    // as demais linhas seguem com "Definir como vencedora"
+    expect(container.querySelectorAll('.cmp-rows .cmp-btn--link')).toHaveLength(2);
+
+    fireEvent.click(within(section).getByRole('button', { name: 'Responder' }));
+    await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledWith(45, { subject: '', message: '' }));
+    fireEvent.click(within(section).getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await findByText('PDF da Ordem de Compra');
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  it('(vi) manual "Fora do ranking" via parceiro: so PO ao parceiro (po-partner), sem Responder', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      candidateCount: 2,
+      excluded: [excludedViaPartner],
+      persistedWinner: manual(46, 9),
+    });
+    const { container, findByTestId, queryByRole } = renderOpenTab();
+    const po = await findByTestId('po-partner');
+    expect((await findByTestId('excluded-winner')).textContent).toBe('Vencedora (escolha manual)');
+    expect(po.closest('section')).not.toBeNull();
+    expect(queryByRole('button', { name: 'Responder' })).toBeNull();
+    fireEvent.click(po);
+    await waitFor(() => expect(container.querySelectorAll('dialog').length).toBe(3));
+    const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    expect(dialog.querySelector('.modal-header h2')?.textContent).toBe(
+      'Enviar Ordem de Compra ao parceiro Banco Beta — fornecedor Epsilon SA',
+    );
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  it('(vii) "Usar vencedora pelo score": confirma, chama executeComparison com os pesos atuais e recarrega o preview', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const { findByTestId, findByText } = renderOpenTab();
+    fireEvent.click(await findByTestId('use-score-winner'));
+    await waitFor(() =>
+      expect(controls.confirm).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Usar vencedora pelo score?', confirmText: 'Usar vencedora pelo score' }),
+      ),
+    );
+    await waitFor(() =>
+      expect(executeComparison).toHaveBeenCalledWith(99, {
+        priceWeight: 1,
+        paymentTermsWeight: 0,
+        incotermWeight: 0,
+        qualityWeight: 0,
+      }),
+    );
+    await findByText('Vencedora definida pelo score dos critérios atuais.');
+    await waitFor(() => expect(vi.mocked(previewComparison).mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('(vii-b) "Usar vencedora pelo score" some sem escolha manual, com menos de 2 comparaveis e em cotacao fechada', async () => {
+    // sem manual (gravada automatica)
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: { quoteResponseId: 43, creditSupportRequestId: null, manual: false },
+    });
+    const auto = renderOpenTab();
+    await auto.findByText('Beta Corp');
+    expect(auto.queryByTestId('use-score-winner')).toBeNull();
+    auto.unmount();
+
+    // manual, mas so' 1 comparavel (+ manual fora do ranking)
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore],
+      candidateCount: 1,
+      excluded: [excludedDirect],
+      persistedWinner: manual(45),
+    });
+    const single = renderOpenTab();
+    await single.findByText(/sem comparação/);
+    expect(single.queryByTestId('use-score-winner')).toBeNull();
+    single.unmount();
+
+    // manual com 2 comparaveis, mas cotacao fechada
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const closed = renderTab();
+    await closed.findByText('Beta Corp');
+    expect(closed.queryByTestId('use-score-winner')).toBeNull();
+  });
+
+  it('(viii) "Concluir cotacao" com escolha manual fecha sem executeComparison e avalia a escolhida', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const { container, findByText, getByRole } = renderOpenTab();
+    await findByText('Beta Corp');
+    fireEvent.click(getByRole('button', { name: 'Concluir cotação' }));
+    const reviewDialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    await waitFor(() => expect(reviewDialog.open).toBe(true));
+    expect(reviewDialog.querySelector('.modal-header h2')?.textContent).toBe('Avaliar Beta Corp');
+    fireEvent.click(within(reviewDialog).getByRole('button', { name: 'Concluir cotação' }));
+    await waitFor(() => expect(closeQuoteRequest).toHaveBeenCalledWith(99, { notifyLosers: false, review: null }));
+    expect(executeComparison).not.toHaveBeenCalled();
+  });
+
+  it('(ix) gravada automatica (manual false) diferente do score: o trofeu segue o score e o PO regrava via executeComparison', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      results: [topScore, betaLower],
+      persistedWinner: { quoteResponseId: 43, creditSupportRequestId: null, manual: false },
+    });
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    const badges = container.querySelectorAll('.cmp-rows .cmp-winner-badge');
+    expect(badges).toHaveLength(1);
+    expect(badges[0]!.textContent).toBe('Vencedora');
+    const row = badges[0]!.closest('.cmp-row') as HTMLElement;
+    expect(within(row).getByText('ACME Ltda')).toBeTruthy();
+    fireEvent.click(within(row).getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(executeComparison).toHaveBeenCalledTimes(1));
+  });
+
+  it('(x) definir a vencedora manualmente recarrega o preview', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({ ...basePreview, results: [topScore, betaLower] });
+    const { container, findByText, getAllByRole, getByLabelText } = renderOpenTab();
+    await findByText('Beta Corp');
+    expect(vi.mocked(previewComparison)).toHaveBeenCalledTimes(1);
+    fireEvent.click(getAllByRole('button', { name: 'Definir como vencedora' })[0]!);
+    const dialog = container.querySelectorAll('dialog')[1] as HTMLDialogElement;
+    fireEvent.change(getByLabelText('Motivo'), { target: { value: 'Prazo' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Definir como vencedora' }));
+    await waitFor(() => expect(setManualWinner).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(vi.mocked(previewComparison).mock.calls.length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('(xi) o alerta de alcada nao aparece com escolha manual vigente', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...basePreview,
+      pendingApproval: true,
+      thresholdValue: 50,
+      results: [topScore, betaLower],
+      persistedWinner: manual(43),
+    });
+    const { container, findByText } = renderOpenTab();
+    await findByText('Beta Corp');
+    expect(container.querySelector('.alert--warning')).toBeNull();
+    expect(container.textContent).not.toContain('Recomendada · requer aprovação');
+  });
+});

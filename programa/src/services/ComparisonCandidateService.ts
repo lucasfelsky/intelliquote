@@ -279,3 +279,64 @@ export async function loadCreditCandidateForAward(
 
 export const CREDIT_OFFER_CHANGED_MESSAGE =
   'A oferta do parceiro mudou ou foi revogada. Refaca a comparacao.';
+
+export interface PersistedWinner {
+  quoteResponseId: number;
+  creditSupportRequestId: number | null;
+}
+
+/**
+ * Vencedora GRAVADA (`isWinner`) entre as respostas diretas e as alternativas via parceiro.
+ * A alternativa tem precedencia (identidade composta); sem nenhuma => `null`. Funcao pura.
+ */
+export function persistedWinnerOf(
+  responses: { id: number; isWinner: boolean }[],
+  alternatives: { id: number; creditSupportRequestId: number; isWinner: boolean }[],
+): PersistedWinner | null {
+  const alternative = alternatives.find((entry) => entry.isWinner);
+  if (alternative) {
+    return { quoteResponseId: alternative.id, creditSupportRequestId: alternative.creditSupportRequestId };
+  }
+  const direct = responses.find((entry) => entry.isWinner);
+  return direct ? { quoteResponseId: direct.id, creditSupportRequestId: null } : null;
+}
+
+/** Acoes de AuditLog (`entityType: 'quote_request'`) que decidem/alteram a vencedora gravada. */
+export const WINNER_DECIDING_ACTIONS = ['compare', 'manual_winner', 'approve_award', 'reopen'] as const;
+
+function numberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * A vencedora gravada e uma ESCOLHA MANUAL vigente quando o AuditLog mais recente entre as acoes
+ * decisorias e `manual_winner` apontando para a MESMA identidade (resposta + parceiro).
+ * Sem coluna nova: o audit e gravado na mesma transacao do `isWinner`.
+ */
+export async function isManualWinnerActive(
+  client: Client,
+  quoteRequestId: number,
+  winner: PersistedWinner,
+): Promise<boolean> {
+  const latest = await client.auditLog.findFirst({
+    where: {
+      entityType: 'quote_request',
+      entityId: String(quoteRequestId),
+      action: { in: [...WINNER_DECIDING_ACTIONS] },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { action: true, afterData: true },
+  });
+  if (!latest || latest.action !== 'manual_winner') return false;
+
+  const after = latest.afterData;
+  const record = after && typeof after === 'object' && !Array.isArray(after)
+    ? (after as Record<string, unknown>)
+    : {};
+  return (
+    numberOrNull(record.winnerQuoteResponseId) === winner.quoteResponseId &&
+    numberOrNull(record.winnerCreditSupportRequestId) === winner.creditSupportRequestId
+  );
+}

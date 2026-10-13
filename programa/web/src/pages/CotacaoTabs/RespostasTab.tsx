@@ -871,6 +871,7 @@ export function RespostasTab({
                   Assunto: <strong>{replyPreviewData.subject}</strong>
                 </p>
                 <iframe
+                  sandbox=""
                   key={replyPreviewData.html.length}
                   title="preview-reply-email"
                   className="preview-frame"

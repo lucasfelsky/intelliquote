@@ -51,6 +51,7 @@ vi.mock('../src/lib/prisma', () => {
     },
     auditLog: {
       create: vi.fn(),
+      findFirst: vi.fn(),
     },
     quoteRequest: {
       findUnique: vi.fn(),
@@ -100,6 +101,7 @@ const prismaMock = prisma as unknown as {
   };
   auditLog: {
     create: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
   };
   creditSupportRequest: {
     findMany: ReturnType<typeof vi.fn>;
@@ -133,6 +135,7 @@ const prismaMock = prisma as unknown as {
 describe('Comparison routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.auditLog.findFirst.mockResolvedValue(null);
     prismaMock.$transaction.mockImplementation(async (callback) =>
       callback(prismaMock.__tx),
     );
@@ -1304,6 +1307,7 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.auditLog.findFirst.mockResolvedValue(null);
     prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock.__tx));
   });
 
@@ -1810,6 +1814,98 @@ describe('Comparison routes - item temporariamente indisponivel (fora do ranking
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.__tx.quoteResponse.update).not.toHaveBeenCalled();
   });
+  describe('preview: vencedora gravada (escolha manual) em `persistedWinner`', () => {
+    const manualAudit = (winnerQuoteResponseId: number, winnerCreditSupportRequestId: number | null = null) => ({
+      action: 'manual_winner',
+      afterData: { winnerQuoteResponseId, winnerCreditSupportRequestId },
+    });
+    const partialWith = (id: number, supplierId: number, extra: Record<string, unknown> = {}) =>
+      proposal(id, supplierId, [{ id: 1, unitPrice: 1 }, { id: 2, unitPrice: 0, unavailable: true }], extra);
+
+    it('(a) parcial gravada como vencedora + ultimo audit manual_winner => manual true; vencedor do score intacto', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([partialWith(11, 101, { isWinner: true }), complete(12, 102, [10, 20]), complete(13, 103, [20, 30])]);
+      prismaMock.auditLog.findFirst.mockResolvedValue(manualAudit(11));
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.persistedWinner).toEqual({ quoteResponseId: 11, creditSupportRequestId: null, manual: true });
+      expect(response.body.winnerQuoteResponseId).toBe(12);
+      expect(prismaMock.auditLog.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            entityType: 'quote_request',
+            entityId: '1',
+            action: { in: ['compare', 'manual_winner', 'approve_award', 'reopen'] },
+          }),
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        }),
+      );
+      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('(b) ranqueada gravada + ultimo audit compare => manual false', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([complete(12, 102, [10, 20]), { ...complete(13, 103, [20, 30]), isWinner: true }]);
+      prismaMock.auditLog.findFirst.mockResolvedValue({ action: 'compare', afterData: null });
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.persistedWinner).toEqual({ quoteResponseId: 13, creditSupportRequestId: null, manual: false });
+      expect(response.body.winnerQuoteResponseId).toBe(12);
+    });
+
+    it('(c) audit manual_winner apontando para OUTRO id => manual false', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([partialWith(11, 101, { isWinner: true }), complete(12, 102, [10, 20]), complete(13, 103, [20, 30])]);
+      prismaMock.auditLog.findFirst.mockResolvedValue(manualAudit(13));
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.persistedWinner).toEqual({ quoteResponseId: 11, creditSupportRequestId: null, manual: false });
+    });
+
+    it('(d) sem nenhuma isWinner => chave omitida e auditLog.findFirst nao e chamado', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([complete(12, 102, [10, 20]), complete(13, 103, [20, 30])]);
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect('persistedWinner' in response.body).toBe(false);
+      expect(prismaMock.auditLog.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('(e) sem nenhuma completa e parcial manual => persistedWinner com manual true', async () => {
+      const cookies = await loginAs('viewer');
+      mockEnv([partialWith(11, 101, { isWinner: true }), allUnavailable(12, 102)]);
+      prismaMock.auditLog.findFirst.mockResolvedValue(manualAudit(11));
+
+      const response = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(response.status).toBe(200);
+      expect(response.body.results).toEqual([]);
+      expect(response.body.persistedWinner).toEqual({ quoteResponseId: 11, creditSupportRequestId: null, manual: true });
+    });
+  });
 });
 
 // PR4a (Credit Support): encaminhamento `responded` entra na Comparacao como candidato
@@ -1940,6 +2036,7 @@ describe('Comparison routes - alternativa via parceiro (Credit Support, PR4a)', 
 
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.auditLog.findFirst.mockResolvedValue(null);
     prismaMock.$transaction.mockImplementation(async (callback) => callback(prismaMock.__tx));
   });
 
@@ -2199,6 +2296,23 @@ describe('Comparison routes - alternativa via parceiro (Credit Support, PR4a)', 
     expect(created.winnerCreditSupportRequestId).toBeNull();
   });
 
+  it('preview: alternativa via parceiro gravada como vencedora + audit manual_winner => persistedWinner com o parceiro e manual true', async () => {
+    const cookies = await loginAs('viewer');
+    mockEnv(twoDirect(), [{ ...cheaperPartner(), isWinner: true }]);
+    prismaMock.auditLog.findFirst.mockResolvedValue({
+      action: 'manual_winner',
+      afterData: { winnerQuoteResponseId: 12, winnerCreditSupportRequestId: 7 },
+    });
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare/preview')
+      .set('Cookie', cookies)
+      .send(weights);
+
+    expect(response.status).toBe(200);
+    expect(response.body.persistedWinner).toEqual({ quoteResponseId: 12, creditSupportRequestId: 7, manual: true });
+  });
+
   describe('approve com vencedor via parceiro', () => {
     function mockPending(winnerCreditSupportRequestId: number | null) {
       prismaMock.quoteComparison.findUnique.mockResolvedValue({
@@ -2361,3 +2475,35 @@ async function loginAs(role: 'admin' | 'comprador' | 'gestor' | 'viewer') {
   }
   return cookies;
 }
+
+describe('ComparisonCandidateService - vencedora gravada', () => {
+  it('(f) persistedWinnerOf: alternativa vencedora tem identidade composta; direta => null no parceiro; nenhuma => null', async () => {
+    const { persistedWinnerOf } = await import('../src/services/ComparisonCandidateService');
+
+    expect(
+      persistedWinnerOf(
+        [{ id: 12, isWinner: false }],
+        [{ id: 12, creditSupportRequestId: 7, isWinner: true }],
+      ),
+    ).toEqual({ quoteResponseId: 12, creditSupportRequestId: 7 });
+    expect(
+      persistedWinnerOf([{ id: 11, isWinner: false }, { id: 13, isWinner: true }], []),
+    ).toEqual({ quoteResponseId: 13, creditSupportRequestId: null });
+    expect(
+      persistedWinnerOf([{ id: 11, isWinner: false }], [{ id: 12, creditSupportRequestId: 7, isWinner: false }]),
+    ).toBeNull();
+  });
+
+  it('(g) isManualWinnerActive: creditSupportRequestId divergente => false; igual => true; audit nao manual => false', async () => {
+    const { isManualWinnerActive } = await import('../src/services/ComparisonCandidateService');
+    const clientWith = (latest: unknown) =>
+      ({ auditLog: { findFirst: vi.fn().mockResolvedValue(latest) } }) as unknown as Parameters<typeof isManualWinnerActive>[0];
+    const manual = { action: 'manual_winner', afterData: { winnerQuoteResponseId: 12, winnerCreditSupportRequestId: 7 } };
+
+    expect(await isManualWinnerActive(clientWith(manual), 1, { quoteResponseId: 12, creditSupportRequestId: 7 })).toBe(true);
+    expect(await isManualWinnerActive(clientWith(manual), 1, { quoteResponseId: 12, creditSupportRequestId: 8 })).toBe(false);
+    expect(await isManualWinnerActive(clientWith(manual), 1, { quoteResponseId: 12, creditSupportRequestId: null })).toBe(false);
+    expect(await isManualWinnerActive(clientWith({ action: 'compare', afterData: null }), 1, { quoteResponseId: 12, creditSupportRequestId: 7 })).toBe(false);
+    expect(await isManualWinnerActive(clientWith(null), 1, { quoteResponseId: 12, creditSupportRequestId: 7 })).toBe(false);
+  });
+});
