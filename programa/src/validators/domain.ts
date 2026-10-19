@@ -224,7 +224,56 @@ export const quoteRequestCloseSchema = z.object({
   review: supplierReviewInputSchema.optional(),
 });
 
-export const quoteRequestCreateSchema = z.object({
+// Unidades aceitas em solicitacoes do comercial (e nos itens inline da cotacao criada a partir delas).
+export const COMMERCIAL_REQUEST_UNITS = ['KG', 'UN', 'M3', 'L', 'TON', 'BOX'] as const;
+
+// Limite do tipo Int do Postgres: id maior viraria erro 500 no banco; aqui vira 400.
+const MAX_DB_INT = 2147483647;
+
+// PR2 (solicitacoes do comercial): itens inline + vinculo, SO aceitos juntos.
+const quoteRequestLinkedItemSchema = z.object({
+  catalogItemId: z
+    .number({ error: 'Item invalido.' })
+    .int('Item invalido.')
+    .positive('Item invalido.')
+    .max(MAX_DB_INT, 'Item invalido.'),
+  quantity: z
+    .number({ error: 'Quantidade invalida.' })
+    .int('A quantidade deve ser um numero inteiro.')
+    .positive('A quantidade deve ser maior que zero.')
+    .max(2147483647, 'A quantidade excede o limite permitido.'),
+  unit: z.enum(COMMERCIAL_REQUEST_UNITS, { error: 'Unidade invalida.' }),
+  targetPrice: z
+    .number({ error: 'Preco-alvo invalido.' })
+    .positive('O preco-alvo deve ser maior que zero.')
+    .max(9999999999.99, 'O preco-alvo excede o limite permitido.')
+    // Coluna Decimal(12,2): mais casas seriam arredondadas em silencio.
+    .refine((v) => /^\d+(\.\d{1,2})?$/.test(String(v)), {
+      message: 'O preco-alvo aceita no maximo 2 casas decimais.',
+    })
+    .nullable()
+    .optional(),
+  notes: z.string().trim().max(2000, 'As observacoes do item excedem o limite.').nullable().optional(),
+});
+
+export const quoteRequestCreateSchema = z
+  .object({
+  commercialRequestIds: z
+    .array(
+      z
+        .number({ error: 'Solicitacao invalida.' })
+        .int('Solicitacao invalida.')
+        .positive('Solicitacao invalida.')
+        .max(MAX_DB_INT, 'Solicitacao invalida.'),
+    )
+    .min(1, 'Informe ao menos uma solicitacao.')
+    .max(20, 'Limite de 20 solicitacoes por cotacao.')
+    .optional(),
+  items: z
+    .array(quoteRequestLinkedItemSchema)
+    .min(1, 'Informe ao menos um item.')
+    .max(50, 'Limite de 50 itens por cotacao.')
+    .optional(),
   requestCode: optionalUppercaseTrimmedStringField,
   productName: nullableTrimmedStringField.optional(),
   quantity: optionalPositiveIntegerField,
@@ -235,7 +284,45 @@ export const quoteRequestCreateSchema = z.object({
   currency: optionalCurrencyCodeField,
   deadlineAt: nullableDateField.optional(),
   status: z.nativeEnum(QuoteRequestStatus).optional(),
-});
+})
+  .superRefine((value, ctx) => {
+    const hasIds = value.commercialRequestIds !== undefined;
+    const hasItems = value.items !== undefined;
+    if (hasIds !== hasItems) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [hasIds ? 'items' : 'commercialRequestIds'],
+        message: 'Informe commercialRequestIds e items juntos.',
+      });
+      return;
+    }
+    if (value.commercialRequestIds) {
+      const seenRequests = new Set<number>();
+      value.commercialRequestIds.forEach((id, index) => {
+        if (seenRequests.has(id)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['commercialRequestIds', index],
+            message: 'Ha solicitacoes repetidas na cotacao.',
+          });
+        }
+        seenRequests.add(id);
+      });
+    }
+    if (value.items) {
+      const seenItems = new Set<number>();
+      value.items.forEach((item, index) => {
+        if (seenItems.has(item.catalogItemId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['items', index, 'catalogItemId'],
+            message: 'Ha itens repetidos na cotacao.',
+          });
+        }
+        seenItems.add(item.catalogItemId);
+      });
+    }
+  });
 
 export const quoteRequestUpdateSchema = z.object({
   requestCode: optionalUppercaseTrimmedStringField,
@@ -805,8 +892,7 @@ export type CreditSupportForwardInput = z.infer<typeof creditSupportForwardSchem
 
 // Solicitacoes do comercial (PR1). Quantidade inteira positiva (mesmo tipo de
 // QuoteRequestItem.quantity); unidades = lista de CotacaoNova.
-export const COMMERCIAL_REQUEST_UNITS = ['KG', 'UN', 'M3', 'L', 'TON', 'BOX'] as const;
-
+// (COMMERCIAL_REQUEST_UNITS sobe para antes de quoteRequestCreateSchema no PR2.)
 const commercialRequestStatusEnum = z.enum(['pending', 'quoting', 'fulfilled', 'rejected']);
 
 function nullableTrimmedText(max: number, message: string) {
@@ -890,3 +976,50 @@ export const commercialCatalogSearchQuerySchema = z.object({
 });
 
 export type CommercialRequestCreateInput = z.infer<typeof commercialRequestCreateSchema>;
+
+// PR2 (solicitacoes do comercial): acoes do COMEX.
+export const commercialRequestLinkQuoteSchema = z.object({
+  quoteRequestId: z
+    .number({ error: 'Cotacao invalida.' })
+    .int('Cotacao invalida.')
+    .positive('Cotacao invalida.')
+    .max(2147483647, 'Cotacao invalida.'),
+});
+
+export const commercialRequestRejectSchema = z.object({
+  reason: z
+    .string({ error: 'Informe o motivo da recusa.' })
+    .trim()
+    .min(3, 'O motivo da recusa deve ter ao menos 3 caracteres.')
+    .max(500, 'O motivo da recusa deve ter no maximo 500 caracteres.'),
+});
+
+export const commercialRequestFulfillSchema = z
+  .object({
+    force: z.boolean({ error: 'force invalido.' }).optional(),
+    note: z
+      .string({ error: 'Nota invalida.' })
+      .trim()
+      .min(3, 'A nota deve ter ao menos 3 caracteres.')
+      .max(500, 'A nota deve ter no maximo 500 caracteres.')
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.force === true && value.note === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: 'Informe o motivo para atender sem preco.',
+      });
+    }
+    if (value.note !== undefined && value.force !== true) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['note'],
+        message: 'A nota so e aceita junto com force.',
+      });
+    }
+  });
+
+export type CommercialRequestFulfillInput = z.infer<typeof commercialRequestFulfillSchema>;
+export type QuoteRequestCreateInput = z.infer<typeof quoteRequestCreateSchema>;

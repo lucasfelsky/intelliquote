@@ -18,7 +18,7 @@ export interface CommercialCatalogItem {
   familyName: string | null;
 }
 
-export interface CommercialRequestItemForCommercial {
+interface CommercialRequestItemBase {
   id: number;
   catalogItemId: number;
   commercialName: string;
@@ -28,6 +28,19 @@ export interface CommercialRequestItemForCommercial {
   targetCurrency: string | null;
 }
 
+/** Preco final ao comercial (so em solicitacao atendida): sem fornecedor/parceiro. */
+export interface CommercialFinalPrice {
+  unitPrice: string;
+  currency: string;
+  incoterm: string;
+  /** Unidade do item da cotacao a que o preco se refere (pode diferir da solicitada). */
+  unit: string;
+}
+
+export interface CommercialRequestItemForCommercial extends CommercialRequestItemBase {
+  finalPrice: CommercialFinalPrice | null;
+}
+
 /** Projecao do comercial: sem nome de mercado, codigo DBCorp, fornecedor ou solicitante. */
 export interface CommercialRequestForCommercial {
   id: number;
@@ -35,15 +48,18 @@ export interface CommercialRequestForCommercial {
   customerName: string | null;
   notes: string | null;
   rejectionReason: string | null;
+  fulfillmentNote: string | null;
   createdAt: string;
   statusChangedAt: string | null;
   quote: { requestCode: string } | null;
   items: CommercialRequestItemForCommercial[];
 }
 
-export interface CommercialRequestItemForComex extends CommercialRequestItemForCommercial {
+export interface CommercialRequestItemForComex extends CommercialRequestItemBase {
   marketName: string;
   dbcorpCode: string | null;
+  /** Item da cotacao a que este item esta vinculado (null = nao entrou na cotacao). */
+  quoteRequestItemId: number | null;
 }
 
 export interface CommercialRequestForComex {
@@ -52,6 +68,7 @@ export interface CommercialRequestForComex {
   customerName: string | null;
   notes: string | null;
   rejectionReason: string | null;
+  fulfillmentNote: string | null;
   createdAt: string;
   statusChangedAt: string | null;
   requestedBy: { id: number; name: string; email: string };
@@ -95,6 +112,12 @@ export function formatCommercialPrice(price: string | null, currency: string | n
   return `${formatted} ${currency ?? ''}`.trim();
 }
 
+/** 'Sem preco' quando nao ha preco final; senao "1,72 USD/KG CIF" (pt-BR). */
+export function formatFinalPrice(finalPrice: CommercialFinalPrice | null): string {
+  if (!finalPrice) return 'Sem preço';
+  return `${formatCommercialPrice(finalPrice.unitPrice, finalPrice.currency)}/${finalPrice.unit} ${finalPrice.incoterm}`.trim();
+}
+
 export function searchCommercialCatalog(search: string): Promise<CommercialCatalogItem[]> {
   return api.get<CommercialCatalogItem[]>('/api/v1/commercial-requests/catalog-items', { search });
 }
@@ -136,4 +159,56 @@ export function getCommercialRequestsPendingCount(): Promise<{ count: number }> 
 
 export function listCommercialRequesters(): Promise<Array<{ id: number; name: string }>> {
   return api.get<Array<{ id: number; name: string }>>('/api/v1/commercial-requests/requesters');
+}
+
+export function getCommercialRequest(id: number): Promise<CommercialRequestForComex> {
+  return api.get<CommercialRequestForComex>(`/api/v1/commercial-requests/${id}`);
+}
+
+export function linkCommercialRequestToQuote(
+  id: number,
+  quoteRequestId: number,
+): Promise<CommercialRequestForComex> {
+  return api.post<CommercialRequestForComex>(`/api/v1/commercial-requests/${id}/link-quote`, {
+    quoteRequestId,
+  });
+}
+
+export function rejectCommercialRequest(
+  id: number,
+  reason: string,
+): Promise<CommercialRequestForComex> {
+  return api.post<CommercialRequestForComex>(`/api/v1/commercial-requests/${id}/reject`, {
+    reason,
+  });
+}
+
+export function fulfillCommercialRequest(
+  id: number,
+  input?: { force: true; note: string },
+): Promise<CommercialRequestForComex> {
+  return api.post<CommercialRequestForComex>(
+    `/api/v1/commercial-requests/${id}/fulfill`,
+    input ? { force: input.force, note: input.note } : {},
+  );
+}
+
+export interface OpenQuoteOption {
+  id: number;
+  requestCode: string;
+  description: string | null;
+  createdAt: string;
+}
+
+/** Cotacoes abertas para o seletor do vinculo (endpoint existente de Cotacoes). */
+export async function searchOpenQuoteRequests(search: string): Promise<OpenQuoteOption[]> {
+  const response = await api.get<{
+    data: Array<{ id: number; requestCode: string; description?: string | null; createdAt: string }>;
+  }>('/api/v1/quote-requests', { status: 'open', search, page: 1, pageSize: 10 });
+  return (response.data ?? []).map((quote) => ({
+    id: quote.id,
+    requestCode: quote.requestCode,
+    description: quote.description ?? null,
+    createdAt: quote.createdAt,
+  }));
 }

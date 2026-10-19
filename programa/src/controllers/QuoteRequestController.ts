@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import { Incoterm, Prisma, QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
 import { AuditLogService } from '../services/AuditLogService';
 import { lockQuoteRequestForPurchaseOrders } from '../services/QuotePurchaseOrderService';
 import { clearCreditWinners } from '../services/ComparisonCandidateService';
+import { CommercialRequestNotificationService } from '../services/CommercialRequestNotificationService';
+import { CommercialRequestWorkflowService } from '../services/CommercialRequestWorkflowService';
 import { SupplierRegretNotificationService } from '../services/SupplierRegretNotificationService';
 import {
   quoteRequestCloseSchema,
@@ -33,13 +36,50 @@ export class QuoteRequestController {
         !parsedBody.success ||
         (status !== undefined && status !== QuoteRequestStatus.open)
       ) {
+        // Com commercialRequestIds/items no corpo, devolve a mensagem especifica do 1o problema.
+        const body = (req.body ?? {}) as Record<string, unknown>;
+        const hasLinkFields = body.commercialRequestIds !== undefined || body.items !== undefined;
+        const specific =
+          hasLinkFields && !parsedBody.success ? parsedBody.error.issues[0]?.message : undefined;
         return res.status(400).json({
           message:
+            specific ??
             'Informe desiredIncoterm e demais dados operacionais validos. Produto e quantidade passam a ser definidos pelos itens do catalogo.',
         });
       }
 
       const payload = parsedBody.data;
+
+      // PR2 (solicitacoes do comercial): cotacao + itens + vinculo na MESMA transacao.
+      // Sem commercialRequestIds o caminho abaixo e exatamente o de sempre.
+      if (payload.commercialRequestIds !== undefined) {
+        if (!req.user) {
+          throw new HttpError(401, 'Utilizador nao autenticado.');
+        }
+        const { quoteRequest: linked, changes } =
+          await CommercialRequestWorkflowService.createQuoteWithLinks(payload, req.user.id);
+
+        // Aviso ao solicitante: APOS o commit; nunca derruba a criacao.
+        for (const change of changes) {
+          try {
+            await CommercialRequestNotificationService.notifyRequesterOfStatusChange(change.id, {
+              status: change.status,
+              quoteCode: change.quoteCode,
+              rejectionReason: change.rejectionReason,
+            });
+          } catch (notifyError) {
+            logger.error(
+              {
+                requestId: change.id,
+                reason: notifyError instanceof Error ? notifyError.message : String(notifyError),
+              },
+              'Falha ao avisar o solicitante sobre a mudanca de status da solicitacao.',
+            );
+          }
+        }
+
+        return res.status(201).json(linked);
+      }
 
       const quoteRequest = await prisma.quoteRequest.create({
         data: {

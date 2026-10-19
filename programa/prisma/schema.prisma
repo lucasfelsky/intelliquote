@@ -974,6 +974,7 @@ model CommercialRequest {
   notes             String?
   status            CommercialRequestStatus @default(pending)
   rejectionReason   String?
+  fulfillmentNote   String?
   statusChangedById Int?
   statusChangedAt   DateTime?
   quoteRequestId    Int?

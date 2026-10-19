@@ -3,7 +3,11 @@ import { render, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import CotacaoNova from './CotacaoNova';
 
-vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+const routerState = vi.hoisted(() => ({ search: '', navigate: vi.fn() }));
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => routerState.navigate,
+  useSearchParams: () => [new URLSearchParams(routerState.search)],
+}));
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 1, name: 'Admin', email: 'a@b.c', role: 'admin' } }),
 }));
@@ -101,6 +105,8 @@ async function goToStep2(getByRole: any) {
 
 describe('CotacaoNova', () => {
   beforeEach(() => {
+    routerState.search = '';
+    routerState.navigate.mockReset();
     vi.mocked(api.get).mockReset();
     vi.mocked(api.post).mockReset();
     vi.mocked(api.get).mockImplementation(mockApiGet as any);
@@ -308,5 +314,187 @@ describe('CotacaoNova', () => {
     expect(dialog.open).toBe(true);
     fireEvent.click(getByLabelText('Fechar'));
     expect(dialog.open).toBe(false);
+  });
+});
+
+// Cotacao criada a partir de uma solicitacao do comercial (PR2): ?fromCommercialRequest=ID
+describe('CotacaoNova a partir de solicitacao do comercial', () => {
+  const COMMERCIAL_REQUEST = {
+    id: 9,
+    status: 'pending',
+    customerName: 'ACME Ltda',
+    notes: null,
+    rejectionReason: null,
+    fulfillmentNote: null,
+    createdAt: '2026-10-19T12:00:00.000Z',
+    statusChangedAt: null,
+    requestedBy: { id: 3, name: 'Ana', email: 'ana@x.com' },
+    statusChangedBy: null,
+    quoteRequest: null,
+    items: [
+      {
+        id: 91,
+        catalogItemId: 10,
+        commercialName: 'Resina X',
+        marketName: 'RX-100',
+        dbcorpCode: null,
+        quantity: 5,
+        unit: 'KG',
+        targetPrice: '10.50',
+        targetCurrency: 'EUR',
+        quoteRequestItemId: null,
+      },
+      {
+        id: 92,
+        catalogItemId: 11,
+        commercialName: 'Solvente Y',
+        marketName: 'SY-1',
+        dbcorpCode: null,
+        quantity: 2,
+        unit: 'TON',
+        targetPrice: null,
+        targetCurrency: null,
+        quoteRequestItemId: null,
+      },
+    ],
+  };
+
+  function mockCommercialRequest(row: unknown | Error) {
+    vi.mocked(api.get).mockImplementation(((url: string, params?: Record<string, unknown>) => {
+      if (url === '/api/v1/commercial-requests/9') {
+        return row instanceof Error ? Promise.reject(row) : Promise.resolve(row);
+      }
+      return mockApiGet(url, params);
+    }) as any);
+  }
+
+  beforeEach(() => {
+    routerState.search = 'fromCommercialRequest=9';
+    routerState.navigate.mockReset();
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+  });
+
+  it('pre-preenche itens, moeda e descricao e mostra o banner de vinculo', async () => {
+    mockCommercialRequest(COMMERCIAL_REQUEST);
+    const { findByText, getByRole, getByLabelText, getByText } = renderPage();
+
+    expect(await findByText('Vinculada à solicitação #9 do comercial')).toBeTruthy();
+    expect(api.get).toHaveBeenCalledWith('/api/v1/commercial-requests/9');
+    // moeda comum dos itens com alvo (EUR)
+    expect((getByLabelText('Moeda *') as HTMLInputElement).value).toBe('EUR');
+    // R3: o nome do cliente (ACME Ltda) NUNCA vai para a descricao: chegaria ao fornecedor.
+    const descriptionValue = (getByLabelText('Descrição') as HTMLTextAreaElement).value;
+    expect(descriptionValue).toBe('Solicitação do comercial #9');
+    expect(descriptionValue).not.toContain('ACME');
+
+    await goToStep2(getByRole);
+    expect(getByText('Resina X')).toBeTruthy();
+    expect(getByText('Solvente Y')).toBeTruthy();
+    expect(getByRole('columnheader', { name: 'Preço-alvo' })).toBeTruthy();
+    expect(getByText('10,50 EUR')).toBeTruthy();
+  });
+
+  it('POST /v1/quote-requests leva commercialRequestIds e items e nao faz POST em /items', async () => {
+    mockCommercialRequest(COMMERCIAL_REQUEST);
+    vi.mocked(api.post).mockResolvedValue({ id: 50, requestCode: 'QR-50' });
+    const { findByText, getByRole } = renderPage();
+    await findByText('Vinculada à solicitação #9 do comercial');
+    await goToStep2(getByRole);
+
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    const [path, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, any>];
+    expect(path).toBe('/v1/quote-requests');
+    expect(body.commercialRequestIds).toEqual([9]);
+    expect(body.currency).toBe('EUR');
+    expect(body.items).toEqual([
+      { catalogItemId: 10, quantity: 5, unit: 'KG', targetPrice: 10.5, notes: null },
+      { catalogItemId: 11, quantity: 2, unit: 'TON', targetPrice: null, notes: null },
+    ]);
+    await waitFor(() => expect(routerState.navigate).toHaveBeenCalledWith('/cotacoes/50'));
+    expect(
+      vi.mocked(api.post).mock.calls.some(([url]) => String(url).includes('/items')),
+    ).toBe(false);
+  });
+
+  it('A3: editar a linha (mesmo item) mantem o preco-alvo', async () => {
+    mockCommercialRequest(COMMERCIAL_REQUEST);
+    vi.mocked(api.post).mockResolvedValue({ id: 50 });
+    const { findByText, getByRole, getAllByRole, getByLabelText, getByText } = renderPage();
+    await findByText('Vinculada à solicitação #9 do comercial');
+    await goToStep2(getByRole);
+
+    fireEvent.click(getAllByRole('button', { name: 'Editar' })[0] as HTMLElement);
+    fireEvent.change(getByLabelText('Quantidade *'), { target: { value: '8' } });
+    fireEvent.click(getByRole('button', { name: 'Salvar alterações' }));
+
+    expect(getByText('10,50 EUR')).toBeTruthy();
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, any>];
+    expect(body.items[0]).toMatchObject({ catalogItemId: 10, quantity: 8, targetPrice: 10.5 });
+  });
+
+  it('alvo so vai junto quando a moeda do alvo e a da cotacao', async () => {
+    mockCommercialRequest(COMMERCIAL_REQUEST);
+    vi.mocked(api.post).mockResolvedValue({ id: 50 });
+    const { findByText, getByRole, getByLabelText } = renderPage();
+    await findByText('Vinculada à solicitação #9 do comercial');
+
+    fireEvent.change(getByLabelText('Moeda *'), { target: { value: 'USD' } });
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, any>];
+    expect(body.items[0].targetPrice).toBeNull();
+  });
+
+  it('solicitacao que nao esta mais pendente: alerta e cotacao comum, sem commercialRequestIds', async () => {
+    mockCommercialRequest({ ...COMMERCIAL_REQUEST, status: 'quoting' });
+    vi.mocked(api.post).mockResolvedValue({ id: 51 });
+    const { findByRole, getByRole, queryByText } = renderPage();
+
+    const alert = await findByRole('alert');
+    expect(alert.textContent).toBe('Solicitação #9 não pode mais ser vinculada (status Em cotação).');
+    expect(queryByText(/Vinculada à solicitação/)).toBeNull();
+
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, any>];
+    expect(body).not.toHaveProperty('commercialRequestIds');
+    expect(body).not.toHaveProperty('items');
+  });
+
+  it('solicitacao inexistente (404): alerta e segue como Nova cotacao comum', async () => {
+    mockCommercialRequest(new Error('HTTP 404'));
+    const { findByRole } = renderPage();
+
+    const alert = await findByRole('alert');
+    expect(alert.textContent).toContain('Solicitação #9 não pode mais ser vinculada');
+  });
+
+  it('sem a query, nada e consultado e os testes de sempre seguem valendo', async () => {
+    routerState.search = '';
+    vi.mocked(api.get).mockImplementation(mockApiGet as any);
+    const { findByText } = renderPage();
+    await findByText('Crie uma cotação e, opcionalmente, adicione itens iniciais.');
+    expect(
+      vi.mocked(api.get).mock.calls.some(([url]) => String(url).includes('commercial-requests')),
+    ).toBe(false);
+  });
+
+  it('com vinculo e sem itens: nao envia e pede ao menos um item', async () => {
+    mockCommercialRequest({ ...COMMERCIAL_REQUEST, items: [] });
+    const { findByText, getByRole } = renderPage();
+    await findByText('Vinculada à solicitação #9 do comercial');
+    await goToStep2(getByRole);
+
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+    expect(await findByText('Inclua ao menos um item para vincular a solicitação.')).toBeTruthy();
+    expect(api.post).not.toHaveBeenCalled();
   });
 });

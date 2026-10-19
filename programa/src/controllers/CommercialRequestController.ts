@@ -5,9 +5,17 @@ import { logger } from '../lib/logger';
 import { AuditLogService } from '../services/AuditLogService';
 import { CommercialRequestNotificationService } from '../services/CommercialRequestNotificationService';
 import {
+  CommercialRequestWorkflowService,
+  StatusChange,
+} from '../services/CommercialRequestWorkflowService';
+import { computeFinalPrices, FinalPrice } from '../services/CommercialRequestPriceService';
+import {
   commercialCatalogSearchQuerySchema,
   commercialRequestCreateSchema,
+  commercialRequestFulfillSchema,
+  commercialRequestLinkQuoteSchema,
   commercialRequestListQuerySchema,
+  commercialRequestRejectSchema,
 } from '../validators/domain';
 import {
   buildPaginatedResponse,
@@ -20,18 +28,23 @@ import {
 const ENTITY_TYPE = 'commercial_request';
 const DEFAULT_TARGET_CURRENCY = 'USD';
 const CATALOG_SEARCH_LIMIT = 20;
+const MAX_DB_INT = 2147483647;
 
 // Projecao do COMERCIAL: select explicito, nunca `include` do catalogItem inteiro.
-// Proibido expor marketName/dbcorpCode/ncm/notes do catalogo, fornecedor, preco de
+// Proibido expor marketName/dbcorpCode/ncm/notes do catalogo, fornecedor, parceiro, preco de
 // fornecedor ou dados de outros solicitantes.
+// `quoteRequestId` e `items.quoteRequestItemId` sao lidos SO para calcular o preco final;
+// o serializer NUNCA os emite.
 const commercialSelect = {
   id: true,
   status: true,
   customerName: true,
   notes: true,
   rejectionReason: true,
+  fulfillmentNote: true,
   createdAt: true,
   statusChangedAt: true,
+  quoteRequestId: true,
   quoteRequest: { select: { requestCode: true, deletedAt: true } },
   items: {
     orderBy: { id: 'asc' as const },
@@ -42,18 +55,20 @@ const commercialSelect = {
       unit: true,
       targetPrice: true,
       targetCurrency: true,
+      quoteRequestItemId: true,
       catalogItem: { select: { commercialName: true } },
     },
   },
 } satisfies Prisma.CommercialRequestSelect;
 
-// Projecao do COMEX (somente leitura no PR1).
+// Projecao do COMEX.
 const comexSelect = {
   id: true,
   status: true,
   customerName: true,
   notes: true,
   rejectionReason: true,
+  fulfillmentNote: true,
   createdAt: true,
   statusChangedAt: true,
   requestedBy: { select: { id: true, name: true, email: true } },
@@ -68,6 +83,7 @@ const comexSelect = {
       unit: true,
       targetPrice: true,
       targetCurrency: true,
+      quoteRequestItemId: true,
       catalogItem: {
         select: { commercialName: true, marketName: true, dbcorpCode: true },
       },
@@ -86,28 +102,41 @@ function serializePrice(
   return String(value);
 }
 
-function serializeForCommercial(row: CommercialRow) {
+// Shape ESTRITO do comercial (nada de IDs internos nem fornecedor/parceiro).
+function serializeForCommercial(row: CommercialRow, prices: Map<number, FinalPrice | null>) {
   return {
     id: row.id,
     status: row.status,
     customerName: row.customerName,
     notes: row.notes,
     rejectionReason: row.rejectionReason,
+    fulfillmentNote: row.fulfillmentNote,
     createdAt: row.createdAt,
     statusChangedAt: row.statusChangedAt,
     quote:
       row.quoteRequest && row.quoteRequest.deletedAt === null
         ? { requestCode: row.quoteRequest.requestCode }
         : null,
-    items: row.items.map((item) => ({
-      id: item.id,
-      catalogItemId: item.catalogItemId,
-      commercialName: item.catalogItem.commercialName,
-      quantity: item.quantity,
-      unit: item.unit,
-      targetPrice: serializePrice(item.targetPrice),
-      targetCurrency: item.targetCurrency,
-    })),
+    items: row.items.map((item) => {
+      const price = prices.get(item.id) ?? null;
+      return {
+        id: item.id,
+        catalogItemId: item.catalogItemId,
+        commercialName: item.catalogItem.commercialName,
+        quantity: item.quantity,
+        unit: item.unit,
+        targetPrice: serializePrice(item.targetPrice),
+        targetCurrency: item.targetCurrency,
+        finalPrice: price
+          ? {
+              unitPrice: price.unitPrice,
+              currency: price.currency,
+              incoterm: price.incoterm,
+              unit: price.unit,
+            }
+          : null,
+      };
+    }),
   };
 }
 
@@ -118,6 +147,7 @@ function serializeForComex(row: ComexRow) {
     customerName: row.customerName,
     notes: row.notes,
     rejectionReason: row.rejectionReason,
+    fulfillmentNote: row.fulfillmentNote,
     createdAt: row.createdAt,
     statusChangedAt: row.statusChangedAt,
     requestedBy: row.requestedBy,
@@ -140,6 +170,7 @@ function serializeForComex(row: ComexRow) {
       unit: item.unit,
       targetPrice: serializePrice(item.targetPrice),
       targetCurrency: item.targetCurrency,
+      quoteRequestItemId: item.quoteRequestItemId,
     })),
   };
 }
@@ -149,6 +180,55 @@ function requireUserId(req: Request): number {
     throw new HttpError(401, 'Utilizador nao autenticado.');
   }
   return req.user.id;
+}
+
+// Avisa o solicitante APOS o commit; nunca derruba a acao.
+async function notifyRequesters(changes: StatusChange[]): Promise<void> {
+  for (const change of changes) {
+    try {
+      await CommercialRequestNotificationService.notifyRequesterOfStatusChange(change.id, {
+        status: change.status,
+        quoteCode: change.quoteCode,
+        rejectionReason: change.rejectionReason,
+      });
+    } catch (notifyError) {
+      logger.error(
+        {
+          requestId: change.id,
+          reason: notifyError instanceof Error ? notifyError.message : String(notifyError),
+        },
+        'Falha ao avisar o solicitante sobre a mudanca de status da solicitacao.',
+      );
+    }
+  }
+}
+
+// Resposta 200 das acoes do COMEX = projecao COMEX atualizada.
+async function respondWithComexRow(
+  res: Response,
+  requestId: number,
+  changes: StatusChange[],
+): Promise<Response> {
+  // Avisa ANTES de reler: a mudanca ja esta commitada, entao falha na releitura nao pode
+  // perder o aviso (a notificacao nunca lanca).
+  await notifyRequesters(changes);
+  const row = await prisma.commercialRequest.findUnique({
+    where: { id: requestId },
+    select: comexSelect,
+  });
+  if (!row) {
+    throw new HttpError(404, 'Solicitacao nao encontrada.');
+  }
+  return res.status(200).json(serializeForComex(row));
+}
+
+function requireRequestId(req: Request): number {
+  const id = parseId(req.params.id);
+  // > Int do Postgres viraria 500 no banco.
+  if (!id || id > MAX_DB_INT) {
+    throw new HttpError(400, 'Identificador invalido.');
+  }
+  return id;
 }
 
 export class CommercialRequestController {
@@ -258,7 +338,8 @@ export class CommercialRequestController {
         );
       }
 
-      return res.status(201).json(serializeForCommercial(created));
+      // Recem-criada = sempre `pending`: sem preco final, nada a consultar.
+      return res.status(201).json(serializeForCommercial(created, new Map()));
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -287,9 +368,16 @@ export class CommercialRequestController {
         prisma.commercialRequest.count({ where }),
       ]);
 
-      return res
-        .status(200)
-        .json(buildPaginatedResponse(rows.map(serializeForCommercial), total, pagination));
+      // Preco final so em `fulfilled`, calculado na leitura em lote (zero queries sem fulfilled).
+      const prices = await computeFinalPrices(prisma, rows);
+
+      return res.status(200).json(
+        buildPaginatedResponse(
+          rows.map((row) => serializeForCommercial(row, prices)),
+          total,
+          pagination,
+        ),
+      );
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -365,6 +453,62 @@ export class CommercialRequestController {
       }
 
       return res.status(200).json(serializeForComex(row));
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // (b) Vincula a uma cotacao aberta existente.
+  static async linkQuote(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = requireRequestId(req);
+      const userId = requireUserId(req);
+      const { quoteRequestId } = commercialRequestLinkQuoteSchema.parse(req.body ?? {});
+
+      const changes = await CommercialRequestWorkflowService.linkToExistingQuote(
+        id,
+        quoteRequestId,
+        userId,
+      );
+      return await respondWithComexRow(res, id, changes);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // (c) Recusa com motivo.
+  static async reject(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = requireRequestId(req);
+      const userId = requireUserId(req);
+      const { reason } = commercialRequestRejectSchema.parse(req.body ?? {});
+
+      const changes = await CommercialRequestWorkflowService.reject(id, reason, userId);
+      return await respondWithComexRow(res, id, changes);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // (d) Marca atendida (exige vencedor; so admin forca sem preco, com motivo).
+  static async fulfill(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = requireRequestId(req);
+      const userId = requireUserId(req);
+      // 403 antes da validacao: so admin forca sem preco.
+      if ((req.body as { force?: unknown } | undefined)?.force === true && req.user?.role !== 'admin') {
+        throw new HttpError(403, 'Somente administradores podem atender sem preco.');
+      }
+      const input = commercialRequestFulfillSchema.parse(req.body ?? {});
+
+      const changes = await CommercialRequestWorkflowService.fulfill(id, input, {
+        id: userId,
+        role: req.user?.role ?? '',
+      });
+      return await respondWithComexRow(res, id, changes);
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

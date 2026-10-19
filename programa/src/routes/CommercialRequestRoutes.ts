@@ -7,6 +7,7 @@ const commercialRequestRoutes = Router();
 
 const comercialOnly = [requireAuth, allowRoles(['comercial'])] as const;
 const comexRead = [requireAuth, allowRoles(COMEX_ROLES)] as const;
+const comexAct = [requireAuth, allowRoles(['admin', 'comprador'])] as const;
 
 // Rotas fixas SEMPRE antes de /:id.
 commercialRequestRoutes.get(
@@ -43,6 +44,23 @@ commercialRequestRoutes.get(
   '/commercial-requests/:id',
   ...comexRead,
   CommercialRequestController.getById,
+);
+
+// Acoes do COMEX (PR2): admin e comprador. gestor/viewer so leem.
+commercialRequestRoutes.post(
+  '/commercial-requests/:id/link-quote',
+  ...comexAct,
+  CommercialRequestController.linkQuote,
+);
+commercialRequestRoutes.post(
+  '/commercial-requests/:id/reject',
+  ...comexAct,
+  CommercialRequestController.reject,
+);
+commercialRequestRoutes.post(
+  '/commercial-requests/:id/fulfill',
+  ...comexAct,
+  CommercialRequestController.fulfill,
 );
 
 export { commercialRequestRoutes };
