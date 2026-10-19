@@ -41,6 +41,7 @@ vi.mock('../src/services/SupplierPortalService', () => ({
   },
 }));
 
+import { logger } from '../src/lib/logger';
 import { prisma } from '../src/lib/prisma';
 import { sendAndLog } from '../src/mailer/MailerService';
 import { SupplierPortalService } from '../src/services/SupplierPortalService';
@@ -176,6 +177,19 @@ describe('SupplierPortalReminderService.runReminderSweep', () => {
 
     expect(result).toEqual({ due: 0, sent: 0, skipped: 0, failed: 0 });
     expect(updateManyMock).not.toHaveBeenCalled();
+  });
+
+  it('sem tokens na janela: loga o sweep zerado (sinal de que o job rodou)', async () => {
+    findManyMock.mockResolvedValue([]);
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+
+    await SupplierPortalReminderService.runReminderSweep(NOW, 48);
+
+    expect(info).toHaveBeenCalledWith(
+      { due: 0, sent: 0, skipped: 0, failed: 0 },
+      'Sweep de lembretes pre-deadline concluido.',
+    );
+    info.mockRestore();
   });
 
   it('a query da janela usa os filtros certos (sem respondido/revogado/ja-lembrado)', async () => {
