@@ -1,0 +1,192 @@
+/* Tela de login: fundo "Rotas de fornecimento" + contraste AA do card.
+   Este arquivo entra no bundle ANTES de globals.css: seletores com especificidade
+   maior que a regra global equivalente. */
+
+/* Empilhamento */
+.auth-gate.auth-gate--routes {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.auth-gate--routes .auth-card {
+  position: relative;
+  z-index: 1;
+}
+
+/* Backdrop */
+.login-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.login-backdrop__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.login-backdrop__svg--mobile {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .login-backdrop__svg--desktop {
+    display: none;
+  }
+
+  .login-backdrop__svg--mobile {
+    display: block;
+  }
+}
+
+/* Cores (somente tokens) */
+.login-backdrop__dot,
+.login-backdrop__star,
+.login-backdrop__labels,
+.login-backdrop__dest-core {
+  fill: var(--primary-700);
+}
+
+.login-backdrop__globe {
+  fill: var(--primary);
+  stroke: var(--primary-700);
+}
+
+.login-backdrop__graticule,
+.login-backdrop__route {
+  stroke: var(--primary-700);
+}
+
+.login-backdrop__pulse,
+.login-backdrop__node-ring,
+.login-backdrop__dest-ring,
+.login-backdrop__dest-halo {
+  stroke: var(--primary);
+}
+
+.login-backdrop__node {
+  fill: var(--primary);
+}
+
+.login-backdrop__label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+}
+
+/* Pulsos */
+@keyframes iq-login-pulse {
+  from {
+    stroke-dashoffset: var(--iq-dash-from);
+  }
+
+  to {
+    stroke-dashoffset: var(--iq-dash-to);
+  }
+}
+
+.login-backdrop__pulse {
+  animation: iq-login-pulse linear infinite;
+}
+
+.login-backdrop__svg--desktop .login-backdrop__pulse--deham {
+  --iq-dash-from: 0px;
+  --iq-dash-to: -1400px;
+  animation-duration: 14s;
+}
+
+.login-backdrop__svg--desktop .login-backdrop__pulse--ushou {
+  --iq-dash-from: -300px;
+  --iq-dash-to: -1700px;
+  animation-duration: 16s;
+}
+
+.login-backdrop__svg--desktop .login-backdrop__pulse--cnsha {
+  --iq-dash-from: 200px;
+  --iq-dash-to: -1200px;
+  animation-duration: 12s;
+}
+
+.login-backdrop__svg--desktop .login-backdrop__pulse--innsa {
+  --iq-dash-from: 500px;
+  --iq-dash-to: -900px;
+  animation-duration: 13s;
+}
+
+.login-backdrop__svg--mobile .login-backdrop__pulse--deham {
+  --iq-dash-from: 0px;
+  --iq-dash-to: -900px;
+  animation-duration: 11s;
+}
+
+.login-backdrop__svg--mobile .login-backdrop__pulse--cnsha {
+  --iq-dash-from: 200px;
+  --iq-dash-to: -700px;
+  animation-duration: 12s;
+}
+
+.login-backdrop__svg--mobile .login-backdrop__pulse--ushou {
+  --iq-dash-from: 0px;
+  --iq-dash-to: -900px;
+  animation-duration: 9s;
+}
+
+/* Anel do destino */
+@keyframes iq-login-dest-ring {
+  from {
+    transform: scale(1);
+    stroke-opacity: 0.6;
+  }
+
+  to {
+    transform: scale(var(--iq-ring-scale));
+    stroke-opacity: 0;
+  }
+}
+
+.login-backdrop__dest-ring {
+  stroke-opacity: 0.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  vector-effect: non-scaling-stroke;
+  animation: iq-login-dest-ring 3.2s linear infinite;
+}
+
+.login-backdrop__svg--desktop .login-backdrop__dest-ring {
+  --iq-ring-scale: 3.75;
+}
+
+.login-backdrop__svg--mobile .login-backdrop__dest-ring {
+  --iq-ring-scale: 3.43;
+}
+
+/* Card: contraste AA (somente no login) */
+.auth-card .auth-card__eyebrow {
+  color: var(--primary-700);
+}
+
+.auth-card .auth-card__submit:not(:disabled) {
+  background: var(--primary-strong, #00735c);
+  color: var(--on-strong, #fff);
+}
+
+.auth-card .auth-card__submit:not(:disabled):hover {
+  background: var(--primary-strong-hover, #00563f);
+}
+
+/* Movimento reduzido */
+@media (prefers-reduced-motion: reduce) {
+  .login-backdrop__pulse {
+    animation: none;
+    opacity: 0;
+  }
+
+  .login-backdrop__dest-ring {
+    animation: none;
+  }
+}
