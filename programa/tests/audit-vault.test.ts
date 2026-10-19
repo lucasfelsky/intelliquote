@@ -64,14 +64,14 @@ describe('audit-vault (IntelliQuote)', () => {
 
   it('reporta as familias de check no happy path', () => {
     const result = runScript();
-    expect(result.stdout).toMatch(/prisma models = 37/);
-    expect(result.stdout).toMatch(/prisma migrations = 50/);
-    expect(result.stdout).toMatch(/email templates \(chave@locale\) = 8/);
-    expect(result.stdout).toMatch(/backend routes = 126/);
-    expect(result.stdout).toMatch(/web pages = 17/);
+    expect(result.stdout).toMatch(/prisma models = 41/);
+    expect(result.stdout).toMatch(/prisma migrations = 52/);
+    expect(result.stdout).toMatch(/email templates \(chave@locale\) = 9/);
+    expect(result.stdout).toMatch(/backend routes = 140/);
+    expect(result.stdout).toMatch(/web pages = 18/);
     expect(result.stdout).toMatch(/web AuthContextValue = 7/);
     expect(result.stdout).toMatch(/web tokenStore = 8/);
-    expect(result.stdout).toMatch(/web routes = 19/);
+    expect(result.stdout).toMatch(/web routes = 20/);
   });
 
   describe('deteccao de drift', () => {
@@ -113,7 +113,7 @@ describe('audit-vault (IntelliQuote)', () => {
 
       const result = runScript();
       expect(isFailure(result)).toBe(true);
-      expect(result.stderr).toMatch(/prisma migrations: esperado 21, obtido 50/);
+      expect(result.stderr).toMatch(/prisma migrations: esperado 21, obtido 52/);
     });
 
     // Vault documentava 2 de 5 templates. O locale importa:

@@ -7,7 +7,7 @@ interface User {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'comprador' | 'gestor' | 'viewer';
+  role: 'admin' | 'comprador' | 'gestor' | 'viewer' | 'comercial';
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -136,6 +136,7 @@ export default function Usuarios() {
             <option value="comprador">Comprador</option>
             <option value="gestor">Gestor</option>
             <option value="viewer">Viewer</option>
+            <option value="comercial">Comercial</option>
           </select>
           <button type="button" className="primary-button" onClick={() => setShowForm(true)}>
             + Novo usuário
@@ -233,6 +234,7 @@ export default function Usuarios() {
             <option value="comprador">Comprador</option>
             <option value="gestor">Gestor</option>
             <option value="viewer">Viewer</option>
+            <option value="comercial">Comercial</option>
           </select>
 
           <label className="field-label" htmlFor="user-password" style={{ marginTop: 12 }}>Senha inicial</label>

@@ -8,6 +8,10 @@ import {
   ATTACHMENT_JSON_BODY_LIMIT_BYTES,
   ATTACHMENT_TOO_LARGE_MESSAGE,
 } from './constants/attachments';
+import {
+  SUPPLIER_DOCUMENT_JSON_BODY_LIMIT_BYTES,
+  SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE,
+} from './constants/supplierDocuments';
 import { router } from './routes';
 import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
@@ -106,6 +110,24 @@ app.use(
   (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err?.type === 'entity.too.large') {
       res.status(413).json({ message: ATTACHMENT_TOO_LARGE_MESSAGE });
+      return;
+    }
+    next(err);
+  },
+);
+
+// /supplier-documents recebe o arquivo (PDF/PNG/JPEG ate 10MB) em base64 no JSON. Mesmo
+// padrao de /attachments: parser maior so neste prefixo e 413 em JSON com mensagem amigavel.
+app.use(
+  '/api/v1/supplier-documents',
+  requireAuthBeforeBody,
+  express.json({ limit: SUPPLIER_DOCUMENT_JSON_BODY_LIMIT_BYTES }),
+);
+app.use(
+  '/api/v1/supplier-documents',
+  (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      res.status(413).json({ message: SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE });
       return;
     }
     next(err);

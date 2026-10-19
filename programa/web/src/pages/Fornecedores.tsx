@@ -1,10 +1,12 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import StarRating from '@/components/StarRating';
 import { Modal } from '@/components/Modal';
 import SupplierImportModal from '@/components/SupplierImportModal';
+import { SupplierDocumentsSection } from '@/components/SupplierDocumentsSection';
+import { getSupplierDocumentsSummary } from '@/services/supplierDocuments';
 import {
   createSupplierContact,
   deleteSupplierContact,
@@ -211,6 +213,36 @@ export default function Fornecedores() {
     queryFn: () => listSupplierContacts(expandedSupplierId as number),
     enabled: expandedSupplierId !== null,
   });
+
+  // Resumo de documentos por fornecedor (indicador na lista). Defensivo: qualquer forma
+  // diferente de `{ bySupplier }` vira mapa vazio.
+  const documentsSummary = useQuery({
+    queryKey: ['supplier-documents-summary'],
+    queryFn: getSupplierDocumentsSummary,
+  });
+  const documentsSummaryBySupplier = documentsSummary.data ?? {};
+
+  // Deep link `/fornecedores?supplier=<id>` (link do e-mail de aviso): le o parametro uma
+  // vez, expande a linha quando a lista traz o id e rola ate ela.
+  const deepLinkHandledRef = useRef(false);
+  const pendingScrollRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (deepLinkHandledRef.current || !list.data) return;
+    deepLinkHandledRef.current = true;
+    const raw = new URLSearchParams(window.location.search).get('supplier');
+    const id = raw !== null && /^\d+$/.test(raw) ? Number(raw) : null;
+    if (id !== null && list.data.some((s) => s.id === id)) {
+      pendingScrollRef.current = id;
+      setExpandedSupplierId(id);
+    }
+  }, [list.data]);
+  useEffect(() => {
+    if (expandedSupplierId === null || pendingScrollRef.current !== expandedSupplierId) return;
+    pendingScrollRef.current = null;
+    document.getElementById(`supplier-row-${expandedSupplierId}`)?.scrollIntoView?.({
+      block: 'start',
+    });
+  }, [expandedSupplierId]);
 
   const create = useMutation({
     mutationFn: async (payload: SupplierFormState) => {
@@ -545,9 +577,10 @@ export default function Fornecedores() {
                 const supplierContacts = contactsForSupplier(s.id);
                 const primary = supplierContacts.find((c) => c.isPrimary);
                 const isExpanded = expandedSupplierId === s.id;
+                const docSummary = documentsSummaryBySupplier[String(s.id)];
                 return (
                   <>
-                    <tr key={s.id}>
+                    <tr key={s.id} id={`supplier-row-${s.id}`}>
                       <td style={{ width: 32 }}>
                         <button
                           type="button"
@@ -562,6 +595,17 @@ export default function Fornecedores() {
                       </td>
                       <td>
                         <strong>{s.name}</strong>
+                        {docSummary && docSummary.expired > 0 ? (
+                          <span className="badge badge--danger" style={{ marginLeft: 8, fontSize: 11 }}>
+                            Doc. vencido
+                          </span>
+                        ) : docSummary && docSummary.expiring > 0 ? (
+                          <span className="badge badge--warning" style={{ marginLeft: 8, fontSize: 11 }}>
+                            {typeof docSummary.nextDaysLeft === 'number'
+                              ? `Doc. vence em ${docSummary.nextDaysLeft} d`
+                              : 'Doc. a vencer'}
+                          </span>
+                        ) : null}
                         {s.tags.length > 0 && (
                           <div className="chip-row" style={{ marginTop: 4 }}>
                             {s.tags.map((tag) => (
@@ -717,6 +761,7 @@ export default function Fornecedores() {
                                       ))}
                                     </div>
                                   )}
+                                  <SupplierDocumentsSection supplierId={s.id} supplierName={s.name} />
                                 </td>
                               </tr>
                             )}

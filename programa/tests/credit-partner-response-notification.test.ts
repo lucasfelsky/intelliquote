@@ -26,6 +26,9 @@ vi.mock('../src/lib/prisma', () => ({
     companyProfile: {
       findUnique: vi.fn(),
     },
+    user: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
 }));
 
@@ -143,6 +146,56 @@ describe('CreditPartnerResponseNotificationService', () => {
     expect(args.text).toContain('Olá, Lucas Comprador.');
     expect(args.text).toContain('/cotacoes/9');
     expect(args.html).not.toContain('revisão');
+  });
+
+  it('criador do pedido comercial + criador da cotacao comprador: To = comprador, comercial fora', async () => {
+    findUniqueMock.mockResolvedValue(
+      requestFixture({ createdBy: { ...FORWARDER, role: { name: 'comercial' } } }, {
+        createdBy: { ...QUOTE_OWNER, role: { name: 'comprador' } },
+      }),
+    );
+
+    await notify();
+
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    const args = sendAndLogMock.mock.calls[0][0];
+    expect(args.to).toEqual({ email: 'maria@sqquimica.com', name: 'Maria Criadora' });
+    expect(ccEmails(args)).not.toContain('lucas@sqquimica.com');
+  });
+
+  it('criador da cotacao comercial + criador do pedido comprador: comercial nao entra no CC', async () => {
+    findUniqueMock.mockResolvedValue(
+      requestFixture({ createdBy: { ...FORWARDER, role: { name: 'comprador' } } }, {
+        createdBy: { ...QUOTE_OWNER, role: { name: 'comercial' } },
+      }),
+    );
+
+    await notify();
+
+    const args = sendAndLogMock.mock.calls[0][0];
+    expect(args.to.email).toBe('lucas@sqquimica.com');
+    expect(ccEmails(args)).not.toContain('maria@sqquimica.com');
+  });
+
+  it('ambos comercial: nao envia (COMEX sozinha nao dispara) e nao lanca', async () => {
+    findUniqueMock.mockResolvedValue(
+      requestFixture({ createdBy: { ...FORWARDER, role: { name: 'comercial' } } }, {
+        createdBy: { ...QUOTE_OWNER, role: { name: 'comercial' } },
+      }),
+    );
+
+    await expect(notify()).resolves.toBeUndefined();
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+  });
+
+  it('o findUnique pede o papel dos dois criadores', async () => {
+    findUniqueMock.mockResolvedValue(requestFixture());
+
+    await notify();
+
+    const select = findUniqueMock.mock.calls[0][0].select;
+    expect(select.createdBy.select.role).toEqual({ select: { name: true } });
+    expect(select.quoteRequest.select.createdBy.select.role).toEqual({ select: { name: true } });
   });
 
   it('(b) mesma pessoa encaminhou e criou a cotacao: CC so com a COMEX', async () => {

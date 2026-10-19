@@ -19,6 +19,7 @@ vi.mock('../src/lib/prisma', () => {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     session: {
       create: vi.fn(),
@@ -460,6 +461,30 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     expect(res.body.message).toBe('SMTP indisponivel');
   });
 
+  it.each(['skipped_comercial_recipient', 'skipped_comercial_lookup_failed'])(
+    'erro %s do funil vira mensagem amigavel em pt (502), sem o codigo cru',
+    async (code) => {
+      const cookieHeader = await loginAsComprador();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+      prismaMock.supplierContact.findFirst.mockResolvedValue({
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      });
+      sendAndLogMock.mockResolvedValue({ status: 'failed', providerMessageId: '', error: code });
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/reply')
+        .set('Cookie', cookieHeader)
+        .send({});
+
+      expect(res.status).toBe(502);
+      expect(res.body.message).toBe('Envio bloqueado: o destinatário é um usuário do Comercial.');
+      expect(JSON.stringify(res.body)).not.toContain('skipped_comercial');
+    },
+  );
+
   it('aceita subject e message editados na hora, e injeta a mensagem no HTML/texto', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
@@ -571,6 +596,79 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
     // texto da mensagem continua exatamente como digitado
     expect(call.html).toContain('@comex2@sqquimica.com Please issue the PO');
   });
+  describe('usuario comercial nunca entra em CC (mencao e dispatchCc)', () => {
+    const userFindMany = prismaMock.user.findMany as ReturnType<typeof vi.fn>;
+
+    afterEach(() => {
+      userFindMany.mockResolvedValue([]);
+    });
+
+    async function arrange() {
+      const cookieHeader = await loginAsComprador();
+      prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);
+      prismaMock.supplierContact.findFirst.mockResolvedValue({
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      });
+      sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-c' });
+      return cookieHeader;
+    }
+
+    it('envio: @mencao a usuario comercial (caixa diferente) nao vai no cc do sendAndLog', async () => {
+      const cookieHeader = await arrange();
+      userFindMany.mockResolvedValue([{ email: 'Vendas@SQQuimica.com' }]);
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/reply')
+        .set('Cookie', cookieHeader)
+        .send({ message: '@vendas@sqquimica.com @comex2@sqquimica.com favor emitir a PO' });
+
+      expect(res.status).toBe(200);
+      const ccEmails = sendAndLogMock.mock.calls[0][0].cc.map((c: { email: string }) => c.email);
+      expect(ccEmails).not.toContain('vendas@sqquimica.com');
+      expect(ccEmails).toContain('comex2@sqquimica.com');
+      expect(res.body.cc).not.toContain('vendas@sqquimica.com');
+    });
+
+    it('preview: @mencao a usuario comercial nao aparece no cc', async () => {
+      const cookieHeader = await arrange();
+      userFindMany.mockResolvedValue([{ email: 'vendas@sqquimica.com' }]);
+
+      const res = await request(app)
+        .post('/api/v1/quote-responses/77/reply/preview')
+        .set('Cookie', cookieHeader)
+        .send({ message: '@vendas@sqquimica.com @comex2@sqquimica.com favor emitir a PO' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.cc).not.toContain('vendas@sqquimica.com');
+      expect(res.body.cc).toContain('comex2@sqquimica.com');
+      expect(sendAndLogMock).not.toHaveBeenCalled();
+    });
+
+    it('loadReplyContext: e-mail do dispatchCc que virou comercial fica fora do cc (envio e preview)', async () => {
+      const cookieHeader = await arrange();
+      userFindMany.mockResolvedValue([{ email: 'CC2@sqquimica.com' }]);
+
+      const preview = await request(app)
+        .post('/api/v1/quote-responses/77/reply/preview')
+        .set('Cookie', cookieHeader)
+        .send({});
+      expect(preview.status).toBe(200);
+      expect(preview.body.cc).toEqual(['cc1@sqquimica.com']);
+
+      const sent = await request(app)
+        .post('/api/v1/quote-responses/77/reply')
+        .set('Cookie', cookieHeader)
+        .send({});
+      expect(sent.status).toBe(200);
+      expect(
+        sendAndLogMock.mock.calls[0][0].cc.map((c: { email: string }) => c.email),
+      ).toEqual(['cc1@sqquimica.com']);
+    });
+  });
+
   it('atualiza o targetPrice se enviado na resposta', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(baseQuoteResponse);

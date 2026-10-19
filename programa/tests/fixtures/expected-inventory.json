@@ -6,6 +6,7 @@
       "AuthController.ts",
       "CatalogItemController.ts",
       "CatalogItemImportController.ts",
+      "CommercialRequestController.ts",
       "CreditPartnerController.ts",
       "CreditSupportController.ts",
       "DispatchController.ts",
@@ -22,12 +23,14 @@
       "ReportController.ts",
       "SupplierContactController.ts",
       "SupplierController.ts",
+      "SupplierDocumentController.ts",
       "SupplierImportController.ts",
       "UserController.ts"
     ],
     "services": [
       "AuditLogService.ts",
       "AuthService.ts",
+      "CommercialRequestNotificationService.ts",
       "CompanyProfileService.ts",
       "ComparisonCandidateService.ts",
       "CreditPartnerResponseNotificationService.ts",
@@ -40,6 +43,7 @@
       "QuoteComparisonService.ts",
       "QuotePurchaseOrderService.ts",
       "QuoteResponsePriceHistoryService.ts",
+      "SupplierDocumentService.ts",
       "SupplierPortalReminderService.ts",
       "SupplierPortalResponseService.ts",
       "SupplierPortalService.ts",
@@ -54,6 +58,7 @@
     ],
     "validators": [
       "domain.ts",
+      "supplierDocuments.ts",
       "supplierPortal.ts"
     ],
     "lib": [
@@ -67,6 +72,7 @@
       "AuditRoutes.ts",
       "AuthRoutes.ts",
       "CatalogItemRoutes.ts",
+      "CommercialRequestRoutes.ts",
       "CompanyProfileRoutes.ts",
       "CreditPartnerRoutes.ts",
       "CreditPortalRoutes.ts",
@@ -84,6 +90,7 @@
       "QuoteResponseRoutes.ts",
       "ReportRoutes.ts",
       "SupplierContactRoutes.ts",
+      "SupplierDocumentRoutes.ts",
       "SupplierRoutes.ts",
       "UserRoutes.ts",
       "index.ts"
@@ -94,6 +101,8 @@
       "Attachment",
       "AuditLog",
       "CatalogItem",
+      "CommercialRequest",
+      "CommercialRequestItem",
       "CompanyProfile",
       "CreditPartner",
       "CreditPartnerContact",
@@ -120,6 +129,8 @@
       "Session",
       "Supplier",
       "SupplierContact",
+      "SupplierDocument",
+      "SupplierDocumentFile",
       "SupplierPortalResponse",
       "SupplierPortalResponseItem",
       "SupplierPortalResponseRevision",
@@ -130,14 +141,16 @@
       "UserEmailSignature"
     ],
     "enums": [
+      "CommercialRequestStatus",
       "Incoterm",
       "MailLogStatus",
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 50
+    "migrations": 52
   },
   "emailTemplates": [
+    "commercial_request_created@pt",
     "credit_partner_response_received@pt",
     "credit_support_request@en",
     "quote_dispatch@en",
@@ -159,6 +172,7 @@
     "DELETE /quote-requests/:id",
     "DELETE /quote-responses/:id",
     "DELETE /supplier-contacts/:id",
+    "DELETE /supplier-documents/:id",
     "DELETE /suppliers/:id",
     "DELETE /suppliers/:supplierId/contacts/:id",
     "GET /",
@@ -176,6 +190,12 @@
     "GET /auth/password-recovery/tokens",
     "GET /catalog-items",
     "GET /catalog-items/:id",
+    "GET /commercial-requests",
+    "GET /commercial-requests/:id",
+    "GET /commercial-requests/catalog-items",
+    "GET /commercial-requests/mine",
+    "GET /commercial-requests/pending-count",
+    "GET /commercial-requests/requesters",
     "GET /credit-partners",
     "GET /forwarders",
     "GET /help/articles",
@@ -201,6 +221,9 @@
     "GET /reports/supplier-engagement",
     "GET /reports/top-suppliers",
     "GET /supplier-contacts",
+    "GET /supplier-documents",
+    "GET /supplier-documents/:id/download",
+    "GET /supplier-documents/summary",
     "GET /suppliers",
     "GET /suppliers/:id",
     "GET /suppliers/:supplierId/contacts",
@@ -210,6 +233,7 @@
     "GET /users/:id",
     "PATCH /quote-request-items/:id/purchase-order",
     "PATCH /quote-request-purchase-orders/:id",
+    "PATCH /supplier-documents/:id",
     "POST /api/credit-portal/:token/respond",
     "POST /api/exchange-rates/refresh",
     "POST /api/internal/jobs/exchange-rates",
@@ -225,6 +249,7 @@
     "POST /catalog-items",
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
+    "POST /commercial-requests",
     "POST /credit-partners",
     "POST /credit-support-requests/:id/purchase-order",
     "POST /credit-support-requests/:id/resend",
@@ -252,6 +277,7 @@
     "POST /quote-responses/:id/reply",
     "POST /quote-responses/:id/reply/preview",
     "POST /supplier-contacts",
+    "POST /supplier-documents",
     "POST /suppliers",
     "POST /suppliers/:supplierId/contacts",
     "POST /suppliers/import",
@@ -271,6 +297,7 @@
     "PUT /quote-requests/:quoteRequestId/purchase-orders/order",
     "PUT /quote-responses/:id",
     "PUT /supplier-contacts/:id",
+    "PUT /supplier-documents/:id/file",
     "PUT /suppliers/:id",
     "PUT /suppliers/:supplierId/contacts/:id",
     "PUT /users/:id"
@@ -292,6 +319,7 @@
       "MinhaConta.tsx",
       "PlaceholderPage.tsx",
       "Relatorios.tsx",
+      "Solicitacoes.tsx",
       "Templates.tsx",
       "Usuarios.tsx"
     ],
@@ -332,6 +360,7 @@
       "/minha-conta",
       "/relatorios",
       "/respostas",
+      "/solicitacoes",
       "/templates",
       "/usuarios"
     ]

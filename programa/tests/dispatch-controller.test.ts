@@ -58,6 +58,7 @@ vi.mock('../src/lib/prisma', () => {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     session: {
       create: vi.fn(),
@@ -132,7 +133,7 @@ vi.mock('../src/lib/prisma', () => {
 });
 
 const prismaMock = prisma as unknown as {
-  user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
+  user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   session: { create: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
   quoteRequest: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   supplier: { findMany: ReturnType<typeof vi.fn> };
@@ -860,6 +861,29 @@ describe('comexCcFirstOnly - equipe COMEX so no primeiro e-mail', () => {
       comexCcFirstOnly: true,
       comexCcContactId: 10,
     });
+  });
+
+  it('usuario que estava no dispatchCc e virou comercial nao recebe o envio (filtro no envio, case-insensitive)', async () => {
+    const cookie = await setup();
+    prismaMock.user.findMany.mockResolvedValue([{ email: FIXO.toUpperCase() }]);
+    try {
+      const res = await request(app)
+        .post('/api/v1/quote-requests/9/dispatch')
+        .set('Cookie', cookie)
+        .send({ recipientContactIds: [10, 20, 30], expiresInDays: 7 });
+
+      expect(res.status).toBe(201);
+      expect(sendAndLogMock).toHaveBeenCalledTimes(3);
+      for (let i = 0; i < 3; i += 1) {
+        expect(ccOf(i)).not.toContain(FIXO);
+        expect(ccOf(i)).toContain(COMEX);
+      }
+      expect(prismaMock.user.findMany.mock.calls[0][0].where).toEqual({
+        role: { name: 'comercial' },
+      });
+    } finally {
+      prismaMock.user.findMany.mockResolvedValue([]);
+    }
   });
 
   it('b) 1o envio falha (status failed): a copia passa para o proximo', async () => {

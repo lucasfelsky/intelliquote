@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import LoginGate from '@/pages/LoginGate';
 import AppShell from '@/components/AppShell';
+import ComercialRouteGuard from '@/components/ComercialRouteGuard';
 import NewVersionBanner from '@/components/NewVersionBanner';
 import Home from '@/pages/Home';
 import Fornecedores from '@/pages/Fornecedores';
@@ -20,6 +21,7 @@ import Ajuda from '@/pages/Ajuda';
 import Auditoria from '@/pages/Auditoria';
 import Templates from '@/pages/Templates';
 import MinhaConta from '@/pages/MinhaConta';
+import Solicitacoes from '@/pages/Solicitacoes';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +77,7 @@ export default function App() {
                 <Route path="/login" element={<LoginGate />} />
               </Route>
               <Route element={<RequireAuth />}>
+                <Route element={<ComercialRouteGuard />}>
                 <Route element={<AppShell />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/fornecedores" element={<Fornecedores />} />
@@ -84,6 +87,7 @@ export default function App() {
                   <Route path="/cotacoes" element={<Cotacoes />} />
                                   <Route path="/cotacoes/nova" element={<CotacaoNova />} />
                                   <Route path="/cotacoes/:id" element={<CotacaoDetalhe />} />
+                  <Route path="/solicitacoes" element={<Solicitacoes />} />
                   <Route path="/itens" element={<Itens />} />
                   <Route path="/familias" element={<Familias />} />
                   <Route path="/respostas" element={<Navigate to="/cotacoes" replace />} />
@@ -93,6 +97,7 @@ export default function App() {
                   <Route path="/auditoria" element={<Auditoria />} />
                   <Route path="/templates" element={<Templates />} />
                   <Route path="/minha-conta" element={<MinhaConta />} />
+                </Route>
                 </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

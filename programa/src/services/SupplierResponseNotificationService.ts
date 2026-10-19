@@ -43,7 +43,9 @@ export class SupplierResponseNotificationService {
       const token = await prisma.supplierPortalToken.findUnique({
         where: { id: input.tokenId },
         include: {
-          createdBy: { select: { name: true, email: true, isActive: true } },
+          createdBy: {
+            select: { name: true, email: true, isActive: true, role: { select: { name: true } } },
+          },
           supplier: { select: { name: true } },
           supplierContact: { select: { name: true } },
           quoteRequest: { select: { requestCode: true, productName: true } },
@@ -54,6 +56,15 @@ export class SupplierResponseNotificationService {
         logger.warn(
           { tokenId: input.tokenId },
           'Aviso de resposta do fornecedor sem comprador para notificar.',
+        );
+        return;
+      }
+
+      // Comprador que dispatchou e depois virou `comercial` nao recebe preco/fornecedor.
+      if (token.createdBy.role?.name === 'comercial') {
+        logger.info(
+          { tokenId: input.tokenId },
+          'Criador da cotacao e usuario comercial; aviso de resposta do fornecedor nao enviado.',
         );
         return;
       }
