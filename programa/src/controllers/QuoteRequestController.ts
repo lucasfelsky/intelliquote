@@ -92,7 +92,7 @@ export class QuoteRequestController {
         },
         quoteResponses: { where: { deletedAt: null } },
       };
-      const orderBy = { createdAt: 'desc' } as const;
+      const orderBy: Prisma.QuoteRequestOrderByWithRelationInput[] = [{ listedAt: 'desc' }, { id: 'desc' }];
 
       if (!hasListQuery(req)) {
         const quoteRequests = await prisma.quoteRequest.findMany({
@@ -420,11 +420,14 @@ export class QuoteRequestController {
         // PR4a: a alternativa via parceiro (Credit Support) tambem deixa de ser vencedora.
         await clearCreditWinners(tx, { quoteRequestId: id });
 
+        const reopenedAt = new Date();
         const reopenedQuoteRequest = await tx.quoteRequest.update({
           where: { id },
           data: {
             status: QuoteRequestStatus.open,
             closedAt: null,
+            reopenedAt,
+            listedAt: reopenedAt,
           },
         });
 
@@ -608,7 +611,7 @@ function buildQuoteRequestWhere(req: Request): Prisma.QuoteRequestWhereInput {
   }
 
   if (month) {
-    where.createdAt = buildSaoPauloMonthRange(month);
+    where.listedAt = buildSaoPauloMonthRange(month);
   }
 
   return where;

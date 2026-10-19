@@ -20,6 +20,7 @@ interface QuoteRequest {
   createdAt: string;
   updatedAt: string;
   closedAt: string | null;
+  reopenedAt: string | null;
   purchaseOrderSentAt: string | null;
   createdById: number | null;
   _count?: { quoteResponses?: number; items?: number };
@@ -74,6 +75,16 @@ function formatPoSentDate(iso: string): string {
   });
 }
 
+// Data dd/mm/aaaa no fuso de Sao Paulo, independente do fuso do navegador.
+function formatSaoPauloDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
 function formatNumber(value: number | undefined | null): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
   return value.toLocaleString('pt-BR');
@@ -107,6 +118,7 @@ function normalize(qr: unknown): QuoteRequest {
     createdAt: String(obj.createdAt ?? ''),
     updatedAt: String(obj.updatedAt ?? ''),
     closedAt: (obj.closedAt as string | null) ?? null,
+    reopenedAt: (obj.reopenedAt as string | null) ?? null,
     purchaseOrderSentAt: (obj.purchaseOrderSentAt as string | null) ?? null,
     createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
     _count: countObj
@@ -356,6 +368,18 @@ export default function Cotacoes() {
                     <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
                       {qr.status === 'open' ? 'Aberta' : 'Fechada'}
                     </span>
+                    {qr.status === 'open' && qr.reopenedAt && (
+                      <>
+                        {' '}
+                        <span
+                          className="badge badge--warning"
+                          title={`Reaberta em ${formatSaoPauloDate(qr.reopenedAt)}`}
+                        >
+                          Reaberta
+                          <span className="sr-only"> em {formatSaoPauloDate(qr.reopenedAt)}</span>
+                        </span>
+                      </>
+                    )}
                   </td>
                   <td>
                     <div className="row-actions row-actions--nowrap">
