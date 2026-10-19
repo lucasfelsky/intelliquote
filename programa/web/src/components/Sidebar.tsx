@@ -5,9 +5,16 @@ interface SidebarProps {
   items: NavItem[];
   adminItems?: NavItem[];
   adminHeader?: boolean;
+  /** Contadores por rota (ex.: `{ '/solicitacoes': 3 }`); so renderiza quando > 0. */
+  badges?: Record<string, number>;
 }
 
-export default function Sidebar({ items, adminItems = [], adminHeader = false }: SidebarProps) {
+export default function Sidebar({
+  items,
+  adminItems = [],
+  adminHeader = false,
+  badges = {},
+}: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
@@ -30,6 +37,11 @@ export default function Sidebar({ items, adminItems = [], adminHeader = false }:
               >
                 <span className="sidebar__icon" aria-hidden="true">{item.icon}</span>
                 <span>{item.label}</span>
+                {(badges[item.to] ?? 0) > 0 && (
+                  <span className="sidebar__badge" aria-label={`${badges[item.to]} pendentes`}>
+                    {badges[item.to]}
+                  </span>
+                )}
               </NavLink>
             </li>
           ))}

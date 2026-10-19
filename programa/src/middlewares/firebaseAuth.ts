@@ -28,7 +28,7 @@ import { prisma } from '../lib/prisma';
 import { hashPassword } from '../utils/password';
 import { handleControllerError, HttpError } from '../utils/http';
 import type { AuthenticatedUser } from '../types/auth';
-import { isUserRole, DEFAULT_INTERNAL_ROLE } from '../constants/roles';
+import { isUserRole, DEFAULT_INTERNAL_ROLE, resolveFirebaseLoginRole } from '../constants/roles';
 
 let firebaseApp: App | null = null;
 
@@ -73,17 +73,20 @@ async function provisionInternalUser(decoded: DecodedIdToken): Promise<Authentic
   const uid = decoded.uid;
   const email = (decoded.email ?? `${uid}@firebase.local`).toLowerCase();
   const name = (decoded.name as string | undefined) ?? email.split('@')[0];
-  const roleName = mapFirebaseRoleToInternal((decoded as { role?: unknown }).role);
-
-  const role = await prisma.role.findUnique({ where: { name: roleName } });
-  if (!role) {
-    throw new HttpError(500, `Role interna '${roleName}' nao foi encontrada.`);
-  }
+  const claimRole = mapFirebaseRoleToInternal((decoded as { role?: unknown }).role);
 
   const existing = await prisma.user.findFirst({
     where: { email },
     include: { role: true },
   });
+
+  const roleName = existing
+    ? resolveFirebaseLoginRole({ claimRole, currentRole: existing.role.name })
+    : claimRole;
+  const role = await prisma.role.findUnique({ where: { name: roleName } });
+  if (!role) {
+    throw new HttpError(500, `Role interna '${roleName}' nao foi encontrada.`);
+  }
 
   if (existing) {
     if (!existing.isActive) {

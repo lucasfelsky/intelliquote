@@ -5,6 +5,7 @@ import { logger } from '../lib/logger';
 import { ConsoleMailer } from './ConsoleMailer';
 import { SmtpMailer } from './SmtpMailer';
 import type { Mailer, MailAttachment, MailMessage, MailSendResult } from './Mailer';
+import { loadComercialEmails } from '../services/CompanyProfileService';
 
 let singleton: Mailer | null = null;
 
@@ -40,13 +41,111 @@ export interface SendAndLogInput {
   // caller) -- efemero no processo do Cloud Run.
   // `cid` marca imagem inline (logo/assinatura do e-mail da PO).
   attachments?: MailAttachment[];
+  // DEFESA CENTRAL: por padrao, sendAndLog REMOVE de to/cc qualquer endereco que
+  // pertenca a usuario com papel `comercial` (o comercial nunca pode receber
+  // e-mail com dados de fornecedor, preco ou magic link). Passe `true` SOMENTE em
+  // e-mails que DEVEM ir ao comercial (ex.: aviso ao solicitante, previsto no PR2).
+  // Nenhum chamador do PR1 usa o opt-out.
+  allowComercialRecipients?: boolean;
+}
+
+export const SKIPPED_COMERCIAL_RECIPIENT = 'skipped_comercial_recipient';
+export const SKIPPED_COMERCIAL_LOOKUP_FAILED = 'skipped_comercial_lookup_failed';
+
+type MailRecipient = { email: string; name?: string };
+
+/**
+ * Aplica a defesa central. Devolve os destinatarios finais, ou `null` quando o envio
+ * deve ser suprimido. Se o `to` for comercial, suprime o envio INTEIRO (o cc nao e
+ * promovido: o conteudo foi escrito para o destinatario original).
+ * Erro ao consultar os papeis propaga (o chamador faz fail-closed: nao envia).
+ */
+async function applyComercialGuard(
+  to: MailRecipient,
+  cc: MailRecipient[] | undefined,
+): Promise<{ to: MailRecipient; cc: MailRecipient[] | undefined; removed: string[] } | null> {
+  const comercial = await loadComercialEmails();
+  if (comercial.size === 0) return { to, cc, removed: [] };
+
+  const isComercial = (r: MailRecipient) => comercial.has((r.email ?? '').trim().toLowerCase());
+  const removed: string[] = [];
+  const keptCc = (cc ?? []).filter((r) => {
+    if (!isComercial(r)) return true;
+    removed.push(r.email);
+    return false;
+  });
+
+  if (!isComercial(to)) return { to, cc: keptCc, removed };
+
+  return null;
 }
 
 export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult> {
   const mailer = getMailer();
-  const ccList = input.cc && input.cc.length > 0 ? input.cc : undefined;
+
+  let finalTo = input.to;
+  let finalCc = input.cc;
+  if (!input.allowComercialRecipients) {
+    let guarded: Awaited<ReturnType<typeof applyComercialGuard>>;
+    try {
+      guarded = await applyComercialGuard(input.to, input.cc);
+    } catch (error) {
+      // Fail-closed: sem conseguir consultar os papeis, nao envia.
+      logger.error(
+        {
+          templateId: input.templateId,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        'Falha ao consultar usuarios comercial; e-mail NAO enviado (fail-closed).',
+      );
+      return { providerMessageId: '', status: 'failed', error: SKIPPED_COMERCIAL_LOOKUP_FAILED };
+    }
+
+    if (guarded === null) {
+      logger.warn(
+        { templateId: input.templateId, relatedEntityType: input.relatedEntityType },
+        'Todos os destinatarios sao usuarios comercial; e-mail NAO enviado.',
+      );
+      try {
+        await prisma.mailLog.create({
+          data: {
+            provider: mailerEnv.provider,
+            providerMessageId: null,
+            fromAddress: mailerEnv.smtp.from || mailerEnv.smtp.user || 'intelliquote@localhost',
+            toEmail: input.to.email,
+            toName: input.to.name ?? null,
+            ccList: null,
+            subject: input.subject,
+            templateId: input.templateId,
+            templateVars: input.templateVars as Prisma.InputJsonValue,
+            status: 'suppressed',
+            errorMessage: SKIPPED_COMERCIAL_RECIPIENT,
+            relatedEntityType: input.relatedEntityType ?? null,
+            relatedEntityId: input.relatedEntityId ?? null,
+          },
+        });
+      } catch (error) {
+        logger.error(
+          { templateId: input.templateId, reason: error instanceof Error ? error.message : String(error) },
+          'Falha ao registrar o MailLog do e-mail suprimido (comercial).',
+        );
+      }
+      return { providerMessageId: '', status: 'failed', error: SKIPPED_COMERCIAL_RECIPIENT };
+    }
+
+    if (guarded.removed.length > 0) {
+      logger.warn(
+        { templateId: input.templateId, removedCount: guarded.removed.length },
+        'Destinatarios comercial removidos do e-mail (defesa central).',
+      );
+    }
+    finalTo = guarded.to;
+    finalCc = guarded.cc;
+  }
+
+  const ccList = finalCc && finalCc.length > 0 ? finalCc : undefined;
   const msg: MailMessage = {
-    to: [input.to],
+    to: [finalTo],
     cc: ccList,
     subject: input.subject,
     html: input.html,
@@ -59,8 +158,8 @@ export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult
       provider: mailerEnv.provider,
       providerMessageId: null,
       fromAddress: mailerEnv.smtp.from || mailerEnv.smtp.user || 'intelliquote@localhost',
-      toEmail: input.to.email,
-      toName: input.to.name ?? null,
+      toEmail: finalTo.email,
+      toName: finalTo.name ?? null,
       ccList: ccList
         ? ccList
             .map((c) => (c.name ? `${c.name} <${c.email}>` : c.email))

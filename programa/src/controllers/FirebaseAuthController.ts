@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { getAuth } from 'firebase-admin/auth';
 import { authEnv } from '../config/env';
 import { prisma } from '../lib/prisma';
-import { isUserRole, type UserRole } from '../constants/roles';
+import { isUserRole, resolveFirebaseLoginRole, type UserRole } from '../constants/roles';
 import { handleControllerError, HttpError } from '../utils/http';
 import {
   ACCESS_TOKEN_COOKIE_NAME,
@@ -56,16 +56,20 @@ export class FirebaseAuthController {
         throw new HttpError(400, 'Firebase ID Token sem e-mail.');
       }
 
-      const roleName = mapFirebaseRoleToInternal((decoded as { role?: unknown }).role);
-      const role = await prisma.role.findUnique({ where: { name: roleName } });
-      if (!role) {
-        throw new HttpError(500, `Role interna '${roleName}' nao foi encontrada.`);
-      }
+      const claimRole = mapFirebaseRoleToInternal((decoded as { role?: unknown }).role);
 
       const existing = await prisma.user.findUnique({
         where: { email },
         include: { role: true },
       });
+
+      const roleName = existing
+        ? resolveFirebaseLoginRole({ claimRole, currentRole: existing.role.name })
+        : claimRole;
+      const role = await prisma.role.findUnique({ where: { name: roleName } });
+      if (!role) {
+        throw new HttpError(500, `Role interna '${roleName}' nao foi encontrada.`);
+      }
 
       let userRecord: {
         id: number;
