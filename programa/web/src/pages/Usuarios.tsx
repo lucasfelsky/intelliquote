@@ -214,7 +214,7 @@ export default function Usuarios() {
                     </td>
                     <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
                     <td>
-                      <div className="row-actions">
+                      <div className="row-actions row-actions--nowrap">
                         <button
                           type="button"
                           className="ghost-button"
@@ -260,6 +260,9 @@ export default function Usuarios() {
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             // O e-mail liga o usuário ao login do Portal COMEX: não muda na edição.
             disabled={editing !== null}
+            style={
+              editing ? { background: 'var(--surface-alt)', color: 'var(--ink-soft)' } : undefined
+            }
             required
           />
 
