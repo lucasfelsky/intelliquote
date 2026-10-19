@@ -244,6 +244,25 @@ describe('POST /commercial-requests', () => {
     expect(response.status).toBe(201);
   });
 
+  it.each([1.999, 1500.255])('preco-alvo %s com mais de 2 casas -> 400 (nao arredonda)', async (price) => {
+    const response = await request(app)
+      .post('/api/v1/commercial-requests')
+      .set('Cookie', cookies)
+      .send({ items: [{ catalogItemId: 10, quantity: 1, unit: 'KG', targetPrice: price }] });
+
+    expect(response.status).toBe(400);
+    expect(txMock.commercialRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('preco-alvo com 2 casas (1.85) e aceito', async () => {
+    const response = await request(app)
+      .post('/api/v1/commercial-requests')
+      .set('Cookie', cookies)
+      .send({ items: [{ catalogItemId: 10, quantity: 1, unit: 'KG', targetPrice: 1.85 }] });
+
+    expect(response.status).toBe(201);
+  });
+
   it('unidade fora da lista -> 400', async () => {
     const response = await request(app)
       .post('/api/v1/commercial-requests')

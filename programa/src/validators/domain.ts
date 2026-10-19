@@ -845,6 +845,10 @@ export const commercialRequestCreateSchema = z
             .number({ error: 'Preco-alvo invalido.' })
             .positive('O preco-alvo deve ser maior que zero.')
             .max(9999999999.99, 'O preco-alvo excede o limite permitido.')
+            // Coluna Decimal(12,2): mais casas seriam arredondadas em silencio.
+            .refine((v) => /^\d+(\.\d{1,2})?$/.test(String(v)), {
+              message: 'O preco-alvo aceita no maximo 2 casas decimais.',
+            })
             .nullable()
             .optional(),
           targetCurrency: optionalCurrencyCodeField,

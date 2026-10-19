@@ -8,7 +8,8 @@ import { handleControllerError } from '../utils/http';
 const userRoutes = Router();
 
 const adminOnly = [requireAuth, allowRoles(['admin'])] as const;
-const anyAuthenticated = [requireAuth] as const;
+// Papeis COMEX (sem `comercial`, que so' acessa Solicitacoes).
+const comexAuthenticated = [requireAuth, allowRoles(COMEX_ROLES)] as const;
 
 userRoutes.post('/users', ...adminOnly, UserController.create);
 userRoutes.get('/users', ...adminOnly, UserController.getAll);
@@ -17,22 +18,22 @@ userRoutes.put('/users/:id', ...adminOnly, UserController.update);
 userRoutes.post('/users/:id/reset-password', ...adminOnly, UserController.resetPassword);
 
 // Assinatura de e-mail do PROPRIO usuario logado (usada no e-mail da Ordem de
-// Compra). Qualquer papel autenticado (inclusive viewer); sem :id -- tudo
+// Compra). Qualquer papel COMEX (inclusive viewer; nao o comercial); sem :id -- tudo
 // opera sobre req.user.id.
-userRoutes.get('/account/email-signature', ...anyAuthenticated, UserController.getEmailSignature);
+userRoutes.get('/account/email-signature', ...comexAuthenticated, UserController.getEmailSignature);
 userRoutes.put(
   '/account/email-signature/text',
-  ...anyAuthenticated,
+  ...comexAuthenticated,
   UserController.updateEmailSignatureText,
 );
 userRoutes.put(
   '/account/email-signature/image',
-  ...anyAuthenticated,
+  ...comexAuthenticated,
   UserController.updateEmailSignatureImage,
 );
 userRoutes.delete(
   '/account/email-signature/image',
-  ...anyAuthenticated,
+  ...comexAuthenticated,
   UserController.deleteEmailSignatureImage,
 );
 

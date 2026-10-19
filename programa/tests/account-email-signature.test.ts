@@ -418,6 +418,29 @@ describe('/api/v1/account/email-signature', () => {
     expect(del.status).toBe(204);
   });
 
+  it('usuario comercial recebe 403 nas quatro rotas', async () => {
+    const cookie = await loginAs('comercial', 13);
+    const png = imageBody(pngBuffer(100, 50), 'image/png');
+
+    const get = await request(app).get('/api/v1/account/email-signature').set('Cookie', cookie);
+    const text = await request(app)
+      .put('/api/v1/account/email-signature/text')
+      .set('Cookie', cookie)
+      .send({ text: 'x' });
+    const image = await request(app)
+      .put('/api/v1/account/email-signature/image')
+      .set('Cookie', cookie)
+      .send(png);
+    const del = await request(app)
+      .delete('/api/v1/account/email-signature/image')
+      .set('Cookie', cookie);
+
+    expect([get.status, text.status, image.status, del.status]).toEqual([403, 403, 403, 403]);
+    expect(prismaMock.userEmailSignature.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.userEmailSignature.upsert).not.toHaveBeenCalled();
+    expect(prismaMock.userEmailSignature.updateMany).not.toHaveBeenCalled();
+  });
+
   it('nenhuma rota /account recebe :id (so req.user.id e usado)', () => {
     const paths = (userRoutes as unknown as { stack: Array<{ route?: { path: string } }> }).stack
       .map((layer) => layer.route?.path)

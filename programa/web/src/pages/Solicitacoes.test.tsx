@@ -257,6 +257,20 @@ describe('Solicitacoes - comercial', () => {
     expect(api.post).not.toHaveBeenCalled();
   });
 
+  it.each(['1,999', '1.500,255'])(
+    'preco-alvo "%s" com mais de 2 casas decimais e rejeitado e nao envia',
+    async (raw) => {
+      await openFormWithItem();
+      fireEvent.change(screen.getByLabelText('Preço-alvo'), { target: { value: raw } });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toContain('Use vírgula para decimais (ex.: 1.234,50)');
+      expect(api.post).not.toHaveBeenCalled();
+    },
+  );
+
   it('lista do comercial formata quantidade e preco-alvo em pt-BR e deixa o codigo da cotacao sem quebra', async () => {
     mockApi({
       '/api/v1/commercial-requests/mine': page([

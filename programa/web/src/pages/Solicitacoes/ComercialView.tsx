@@ -89,6 +89,8 @@ function parsePrice(raw: string): number | null {
   } else {
     normalized = trimmed;
   }
+  // O banco guarda 2 casas (Decimal(12,2)); mais que isso seria arredondado em silencio.
+  if (/\.\d{3,}$/.test(normalized)) return Number.NaN;
   const value = Number(normalized);
   return Number.isFinite(value) && value > 0 ? value : Number.NaN;
 }
