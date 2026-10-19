@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { ApiError } from '@/api/client';
+import LoginBackdrop from '@/components/LoginBackdrop';
+import '../styles/login.css';
 
 export default function LoginGate() {
   const { login, status, exchangeError } = useAuth();
@@ -46,10 +48,11 @@ export default function LoginGate() {
   };
 
   return (
-    <div className="auth-gate">
+    <div className="auth-gate auth-gate--routes">
+      <LoginBackdrop />
       <form className="auth-card" onSubmit={handleSubmit}>
         <img src="/logo.png" alt="IntelliQuote" className="auth-card__logo" />
-        <p className="eyebrow">IntelliQuote</p>
+        <p className="eyebrow auth-card__eyebrow">IntelliQuote</p>
         <h1>Entrar</h1>
         <p>Use a mesma conta do Portal COMEX. Acesso via Firebase Authentication.</p>
 
@@ -84,7 +87,7 @@ export default function LoginGate() {
         )}
 
         <div className="auth-card__actions">
-          <button type="submit" className="primary-button" disabled={submitting}>
+          <button type="submit" className="primary-button auth-card__submit" disabled={submitting}>
             {submitting ? 'Entrando…' : 'Entrar'}
           </button>
           <a
