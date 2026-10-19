@@ -236,3 +236,46 @@ describe('Cotacoes - filtro de mês', () => {
     expect(screen.queryByText('Use o botão “Nova cotação” para começar.')).toBeNull();
   });
 });
+
+describe('Cotacoes - selo Reaberta', () => {
+  function mockList(rows: Array<Record<string, unknown>>) {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get).mockImplementation((async () => rows) as typeof api.get);
+  }
+
+  it('aberta com reopenedAt mostra "Reaberta" com a data no fuso de São Paulo', async () => {
+    // 19/10 02:30Z = 18/10 23:30 em SP (independe do fuso da máquina).
+    mockList([{ ...quote(1, 'QR-001', null), reopenedAt: '2026-10-19T02:30:00.000Z' }]);
+    renderPage();
+    const row = (await screen.findByText('QR-001')).closest('tr') as HTMLElement;
+
+    const badge = within(row).getByText('Reaberta');
+    expect(badge.getAttribute('title')).toBe('Reaberta em 18/10/2026');
+    expect(badge.textContent?.replace(/\s+/g, ' ').trim()).toBe('Reaberta em 18/10/2026');
+    expect(within(row).getByText('Aberta')).toBeTruthy();
+  });
+
+  it('fechada com reopenedAt preenchido não mostra "Reaberta"', async () => {
+    mockList([
+      { ...quote(1, 'QR-001', null), status: 'closed', reopenedAt: '2026-10-19T02:30:00.000Z' },
+    ]);
+    renderPage();
+    const row = (await screen.findByText('QR-001')).closest('tr') as HTMLElement;
+
+    expect(within(row).queryByText('Reaberta')).toBeNull();
+    expect(within(row).getByText('Fechada')).toBeTruthy();
+  });
+
+  it('aberta com reopenedAt nulo ou ausente não mostra "Reaberta"', async () => {
+    mockList([
+      { ...quote(1, 'QR-001', null), reopenedAt: null },
+      quote(2, 'QR-002', null),
+    ]);
+    renderPage();
+    const row1 = (await screen.findByText('QR-001')).closest('tr') as HTMLElement;
+    const row2 = (await screen.findByText('QR-002')).closest('tr') as HTMLElement;
+
+    expect(within(row1).queryByText('Reaberta')).toBeNull();
+    expect(within(row2).queryByText('Reaberta')).toBeNull();
+  });
+});

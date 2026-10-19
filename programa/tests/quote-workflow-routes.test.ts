@@ -184,9 +184,46 @@ describe('Quote workflow routes', () => {
         data: {
           status: 'open',
           closedAt: null,
+          reopenedAt: expect.any(Date),
+          listedAt: expect.any(Date),
         },
       }),
     );
+    const reopenData = prismaMock.__tx.quoteRequest.update.mock.calls[0][0].data;
+    expect(reopenData.listedAt.getTime()).toBe(reopenData.reopenedAt.getTime());
+  });
+
+  it('close nao mexe em listedAt/reopenedAt', async () => {
+    const cookies = await loginAs('gestor');
+
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ id: 5, status: 'open' });
+    prismaMock.__tx.quoteRequest.update.mockResolvedValue({ id: 5, status: 'closed' });
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/5/close')
+      .set('Cookie', cookies)
+      .send({});
+
+    expect(response.status).toBe(200);
+    const closeData = prismaMock.__tx.quoteRequest.update.mock.calls[0][0].data;
+    expect(Object.keys(closeData).sort()).toEqual(['closedAt', 'status']);
+  });
+
+  it('update (PUT) nao mexe em listedAt/reopenedAt', async () => {
+    const cookies = await loginAs('comprador');
+
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ id: 5, status: 'open' });
+    prismaMock.quoteRequest.update.mockResolvedValue({ id: 5 });
+
+    const response = await request(app)
+      .put('/api/v1/quote-requests/5')
+      .set('Cookie', cookies)
+      .send({ description: 'Nova descricao' });
+
+    expect(response.status).toBe(200);
+    const updateData = prismaMock.quoteRequest.update.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('listedAt');
+    expect(updateData).not.toHaveProperty('reopenedAt');
   });
 
   it('reopen trava a linha QuoteRequest (FOR NO KEY UPDATE) antes de limpar vencedoras e atualizar o pai', async () => {

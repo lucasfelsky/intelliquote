@@ -170,7 +170,9 @@ model QuoteRequest {
   deadlineAt      DateTime?
   status          QuoteRequestStatus       @default(open)
   closedAt        DateTime?
+  reopenedAt      DateTime?
   purchaseOrderSentAt DateTime?
+  listedAt        DateTime                 @default(now()) // chave de ordenacao da lista; muda so no reopen
   createdById     Int?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
@@ -189,6 +191,7 @@ model QuoteRequest {
 
   @@index([createdById])
   @@index([deletedAt])
+  @@index([listedAt])
 }
 
 model QuoteRequestItem {
