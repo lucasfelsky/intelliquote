@@ -72,7 +72,15 @@ export class SupplierPortalReminderService {
     });
 
     result.due = dueTokens.length;
-    if (dueTokens.length === 0) return result;
+    if (dueTokens.length === 0) {
+      // Loga mesmo sem token devido: e' o unico sinal nos logs do Cloud Run de
+      // que o job diario do Cloud Scheduler rodou.
+      logger.info(
+        { due: 0, sent: 0, skipped: 0, failed: 0 },
+        'Sweep de lembretes pre-deadline concluido.',
+      );
+      return result;
+    }
 
     const profile = await CompanyProfileService.get();
 

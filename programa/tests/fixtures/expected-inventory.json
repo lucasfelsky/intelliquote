@@ -402,7 +402,8 @@
     "supplier_response_received",
     "users-directory",
     "traceId",
-    "reminderScheduler"
+    "InternalJobRoutes",
+    "googleOidc"
   ],
   "vaultMustNotMention": [
     "DispatchRoutes",
