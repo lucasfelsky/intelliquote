@@ -339,7 +339,7 @@ export const quoteRequestUpdateSchema = z.object({
 // Filtro da lista de Cotacoes: PO enviada (true) / nao enviada (false); ausente = sem filtro.
 export const quoteRequestPoSentQuerySchema = z.enum(['true', 'false']).optional();
 
-// Filtro da lista de Cotacoes por mes de criacao (AAAA-MM, fuso de Sao Paulo); ausente = sem filtro.
+// Filtro da lista de Cotacoes por mes de listagem (listedAt: criacao ou ultima reabertura; AAAA-MM, fuso de Sao Paulo); ausente = sem filtro.
 export const quoteRequestMonthQuerySchema = z
   .string()
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Informe o mes no formato AAAA-MM.')

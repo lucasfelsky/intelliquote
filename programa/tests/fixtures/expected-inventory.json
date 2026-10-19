@@ -152,7 +152,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 54
+    "migrations": 56
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -409,7 +409,8 @@
     "supplier_response_received",
     "users-directory",
     "traceId",
-    "reminderScheduler"
+    "InternalJobRoutes",
+    "googleOidc"
   ],
   "vaultMustNotMention": [
     "DispatchRoutes",

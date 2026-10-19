@@ -77,8 +77,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('GET /api/v1/quote-requests?month (filtro mes de criacao, BRT)', () => {
-  it('month=2026-10 filtra createdAt de 01/10 03:00Z ate 01/11 03:00Z (exclusivo)', async () => {
+describe('GET /api/v1/quote-requests?month (filtro mes de listagem (listedAt), BRT)', () => {
+  it('month=2026-10 filtra listedAt de 01/10 03:00Z ate 01/11 03:00Z (exclusivo)', async () => {
     const cookieHeader = await loginAsComprador();
 
     const res = await request(app)
@@ -87,7 +87,7 @@ describe('GET /api/v1/quote-requests?month (filtro mes de criacao, BRT)', () => 
 
     expect(res.status).toBe(200);
     const { where } = prismaMock.quoteRequest.findMany.mock.calls[0][0];
-    expect(where.createdAt).toEqual({
+    expect(where.listedAt).toEqual({
       gte: new Date('2026-10-01T03:00:00.000Z'),
       lt: new Date('2026-11-01T03:00:00.000Z'),
     });
@@ -105,7 +105,7 @@ describe('GET /api/v1/quote-requests?month (filtro mes de criacao, BRT)', () => 
 
     expect(res.status).toBe(200);
     const { where } = prismaMock.quoteRequest.findMany.mock.calls[0][0];
-    expect(where.createdAt).toEqual({
+    expect(where.listedAt).toEqual({
       gte: new Date('2026-12-01T03:00:00.000Z'),
       lt: new Date('2027-01-01T03:00:00.000Z'),
     });
@@ -120,7 +120,7 @@ describe('GET /api/v1/quote-requests?month (filtro mes de criacao, BRT)', () => 
 
     expect(res.status).toBe(200);
     const { where } = prismaMock.quoteRequest.findMany.mock.calls[0][0];
-    expect(where.createdAt).toEqual({
+    expect(where.listedAt).toEqual({
       gte: new Date('2026-01-01T03:00:00.000Z'),
       lt: new Date('2026-02-01T03:00:00.000Z'),
     });
@@ -144,7 +144,7 @@ describe('GET /api/v1/quote-requests?month (filtro mes de criacao, BRT)', () => 
     },
   );
 
-  it('sem month nao filtra por createdAt', async () => {
+  it('sem month nao filtra por listedAt nem createdAt', async () => {
     const cookieHeader = await loginAsComprador();
 
     const res = await request(app)
@@ -153,6 +153,7 @@ describe('GET /api/v1/quote-requests?month (filtro mes de criacao, BRT)', () => 
 
     expect(res.status).toBe(200);
     const { where } = prismaMock.quoteRequest.findMany.mock.calls[0][0];
+    expect('listedAt' in where).toBe(false);
     expect('createdAt' in where).toBe(false);
   });
 });

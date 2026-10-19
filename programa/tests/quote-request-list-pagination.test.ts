@@ -71,6 +71,7 @@ describe('GET /api/v1/quote-requests - contrato de listagem e paginacao', () => 
     const args = prismaMock.quoteRequest.findMany.mock.calls[0][0];
     expect(args).not.toHaveProperty('skip');
     expect(args).not.toHaveProperty('take');
+    expect(args.orderBy).toEqual([{ listedAt: 'desc' }, { id: 'desc' }]);
     expect(prismaMock.quoteRequest.count).not.toHaveBeenCalled();
   });
 
@@ -95,6 +96,7 @@ describe('GET /api/v1/quote-requests - contrato de listagem e paginacao', () => 
     expect(args.take).toBe(20);
     expect(args.where.status).toBe('open');
     expect(args.where.deletedAt).toBeNull();
+    expect(args.orderBy).toEqual([{ listedAt: 'desc' }, { id: 'desc' }]);
   });
 
   it('combina search + status + incoterm + page/pageSize e conta com o mesmo where', async () => {
