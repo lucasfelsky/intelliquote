@@ -1,21 +1,26 @@
-import cron from 'node-cron';
-
 import { ExchangeRateService } from '../services/ExchangeRateService';
 import { logger } from './logger';
 
-let scheduled = false;
+let started = false;
 
 /**
- * Agenda a sincronizacao diaria de taxas PTAX (BCB) as 06:00 BRT (UTC-3)
- * e dispara um refresh inicial no startup.
+ * Refresh de taxas PTAX no boot, SOMENTE fora de producao (dev/local continuam
+ * com taxa no banco sem depender do Cloud Scheduler).
  *
- * Em ambientes com varias instancias (Cloud Run), o agendamento roda em
- * cada replica. Como a tabela tem constraint UNIQUE (currency, referenceDate)
- * o upsert eh idempotente.
+ * Em producao a atualizacao diaria vem do Cloud Scheduler
+ * (POST /api/internal/jobs/exchange-rates), nao de cron dentro do processo:
+ * o Cloud Run escala a zero e um cron em memoria so dispara se houver
+ * instancia viva no minuto exato. Tambem evita disputar o pool do Prisma
+ * durante o cold start.
  */
 export function startExchangeRateScheduler(): void {
-  if (scheduled) return;
-  scheduled = true;
+  if (started) return;
+  started = true;
+
+  if (process.env.NODE_ENV === 'production') {
+    logger.info({}, 'Refresh PTAX no boot desligado em producao (job via Cloud Scheduler).');
+    return;
+  }
 
   // Refresh inicial nao bloqueante.
   void ExchangeRateService.refresh().catch((error: unknown) => {
@@ -23,20 +28,5 @@ export function startExchangeRateScheduler(): void {
     logger.error({ error: message }, 'Falha no refresh inicial de taxas PTAX.');
   });
 
-  // Cron diario 06:00 horario de Brasilia. Expressao cron usa o fuso
-  // da maquina; no Cloud Run definimos TZ=America/Sao_Paulo no ambiente.
-  const task = cron.schedule('0 6 * * *', () => {
-    void ExchangeRateService.refresh().catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error({ error: message }, 'Falha no refresh diario de taxas PTAX.');
-    });
-  });
-
-  // Impede que o cron mantenha o processo vivo em ambientes onde isso
-  // atrapalhe (vitest, scripts de migracao, etc).
-  if (typeof task.start === 'function') {
-    // ja esta rodando apos schedule().
-  }
-
-  logger.info({ schedule: '0 6 * * * America/Sao_Paulo' }, 'Scheduler de cambio iniciado.');
+  logger.info({}, 'Refresh inicial de taxas PTAX disparado (ambiente nao produtivo).');
 }

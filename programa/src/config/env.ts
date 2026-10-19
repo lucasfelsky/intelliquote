@@ -195,3 +195,18 @@ export const reminderEnv = {
   enabled: parseBooleanOptional(parsedMailerEnv.REMINDER_ENABLED) ?? true,
   windowHours: parsePositiveInteger(parsedMailerEnv.REMINDER_WINDOW_HOURS, 48),
 } as const;
+
+// Jobs internos (Cloud Scheduler -> /api/internal/jobs/*). A chamada vem com
+// um ID token OIDC da service account abaixo; sem as duas envs as rotas
+// internas respondem 503 (fail-closed).
+const internalJobsEnvSchema = z.object({
+  INTERNAL_JOBS_OIDC_AUDIENCE: z.string().optional(),
+  INTERNAL_JOBS_INVOKER_EMAIL: z.string().optional(),
+});
+
+const parsedInternalJobsEnv = internalJobsEnvSchema.parse(process.env);
+
+export const internalJobsEnv = {
+  audience: parsedInternalJobsEnv.INTERNAL_JOBS_OIDC_AUDIENCE?.trim() || undefined,
+  invokerEmail: parsedInternalJobsEnv.INTERNAL_JOBS_INVOKER_EMAIL?.trim().toLowerCase() || undefined,
+} as const;

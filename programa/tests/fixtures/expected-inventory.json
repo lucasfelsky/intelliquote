@@ -49,6 +49,7 @@
     "middlewares": [
       "auth.ts",
       "firebaseAuth.ts",
+      "googleOidc.ts",
       "traceId.ts"
     ],
     "validators": [
@@ -58,7 +59,6 @@
     "lib": [
       "logger.ts",
       "prisma.ts",
-      "reminderScheduler.ts",
       "scheduler.ts",
       "traceContext.ts"
     ],
@@ -74,6 +74,7 @@
       "EmailTemplateRoutes.ts",
       "ExchangeRateRoutes.ts",
       "ForwarderRoutes.ts",
+      "InternalJobRoutes.ts",
       "ItemFamilyRoutes.ts",
       "PortalIntegrationsRoutes.ts",
       "PortalRoutes.ts",
@@ -211,6 +212,8 @@
     "PATCH /quote-request-purchase-orders/:id",
     "POST /api/credit-portal/:token/respond",
     "POST /api/exchange-rates/refresh",
+    "POST /api/internal/jobs/exchange-rates",
+    "POST /api/internal/jobs/supplier-reminders",
     "POST /api/portal/:token/respond",
     "POST /attachments",
     "POST /auth/firebase",

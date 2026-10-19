@@ -13,6 +13,7 @@ import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
 import { creditPortalRoutes } from './routes/CreditPortalRoutes';
 import { exchangeRateRoutes } from './routes/ExchangeRateRoutes';
+import { internalJobRoutes } from './routes/InternalJobRoutes';
 import { requireAuthBeforeBody } from './middlewares/auth';
 import { traceIdMiddleware } from './middlewares/traceId';
 
@@ -63,6 +64,10 @@ app.use((err: Error & { status?: number }, _req: express.Request, res: express.R
 
 // A autenticacao antecipada precisa dos cookies (nao le o corpo).
 app.use(cookieParser());
+
+// Jobs internos (Cloud Scheduler, OIDC): antes de qualquer parser global e das
+// rotas autenticadas; a rota tem parser proprio (16kb) e nao usa auth de usuario.
+app.use(internalJobRoutes);
 
 // Nos prefixos com parser grande, sem login responde 401 antes de bufferizar/parsear
 // o corpo; o corpo e drenado para o cliente receber o 401 (nao ECONNRESET), como o
