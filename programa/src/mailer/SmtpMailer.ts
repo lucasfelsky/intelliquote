@@ -4,6 +4,17 @@ import { mailerEnv } from '../config/env';
 
 let cachedTransport: Transporter | null = null;
 
+// Timeouts explícitos do transport. Orçamento de pior caso por send(): 85 s por tentativa
+// (5+20+15+45) x 3 tentativas + backoff máx ~2,5 s = 257,5 s < 300 s (attempt-deadline do
+// Scheduler / --timeout=300 do Cloud Run). O DNS roda antes de armar o connectionTimeout,
+// então as fases somam. socketTimeout é de INATIVIDADE. Vale p/ SMTP_RETRY_ATTEMPTS padrão (3).
+export const SMTP_TIMEOUTS = {
+  dnsTimeout: 5_000,
+  connectionTimeout: 20_000,
+  greetingTimeout: 15_000,
+  socketTimeout: 45_000,
+} as const;
+
 function getTransport(): Transporter {
   if (cachedTransport) return cachedTransport;
   const { host, port, user, pass, secure } = mailerEnv.smtp;
@@ -20,6 +31,7 @@ function getTransport(): Transporter {
     pool: true,
     maxConnections: 5,
     maxMessages: 50,
+    ...SMTP_TIMEOUTS,
   });
   return cachedTransport;
 }
