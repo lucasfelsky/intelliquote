@@ -48,6 +48,8 @@ function normalize(value: unknown): User {
 export default function Usuarios() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  // null = cadastro novo; preenchido = edição de nome/perfil desse usuário.
+  const [editing, setEditing] = useState<User | null>(null);
   const [form, setForm] = useState<UserFormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -83,6 +85,16 @@ export default function Usuarios() {
     onError: (err) => setFormError(messageOf(err)),
   });
 
+  const update = useMutation({
+    mutationFn: ({ id, name, role }: { id: number; name: string; role: User['role'] }) =>
+      api.put<unknown>(`/api/v1/users/${id}`, { name, role }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      closeForm();
+    },
+    onError: (err) => setFormError(messageOf(err)),
+  });
+
   const toggleActive = useMutation({
     mutationFn: ({ id, isActive }: { id: number; isActive: boolean }) =>
       api.put<unknown>(`/api/v1/users/${id}`, { isActive }),
@@ -91,13 +103,29 @@ export default function Usuarios() {
 
   function closeForm() {
     setShowForm(false);
+    setEditing(null);
     setForm(emptyForm);
     setFormError(null);
+  }
+
+  function openEdit(user: User) {
+    setEditing(user);
+    setForm({ ...emptyForm, name: user.name, email: user.email, role: user.role });
+    setFormError(null);
+    setShowForm(true);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    if (editing) {
+      if (!form.name.trim()) {
+        setFormError('Informe o nome.');
+        return;
+      }
+      update.mutate({ id: editing.id, name: form.name.trim(), role: form.role });
+      return;
+    }
     if (!form.name.trim() || !form.email.trim()) {
       setFormError('Informe nome e e-mail.');
       return;
@@ -186,13 +214,23 @@ export default function Usuarios() {
                     </td>
                     <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
                     <td>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })}
-                      >
-                        {u.isActive ? 'Desativar' : 'Ativar'}
-                      </button>
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          aria-label={`Editar ${u.name}`}
+                          onClick={() => openEdit(u)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button"
+                          onClick={() => toggleActive.mutate({ id: u.id, isActive: !u.isActive })}
+                        >
+                          {u.isActive ? 'Desativar' : 'Ativar'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -202,7 +240,7 @@ export default function Usuarios() {
         )}
       </section>
 
-      <Modal isOpen={showForm} onClose={closeForm} title="Novo usuário">
+      <Modal isOpen={showForm} onClose={closeForm} title={editing ? 'Editar usuário' : 'Novo usuário'}>
         <form onSubmit={handleSubmit}>
           <label className="field-label" htmlFor="user-name">Nome</label>
           <input
@@ -220,6 +258,8 @@ export default function Usuarios() {
             type="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
+            // O e-mail liga o usuário ao login do Portal COMEX: não muda na edição.
+            disabled={editing !== null}
             required
           />
 
@@ -236,17 +276,27 @@ export default function Usuarios() {
             <option value="viewer">Viewer</option>
             <option value="comercial">Comercial</option>
           </select>
+          {editing && (
+            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>
+              Para quem entra pelo Portal COMEX, só o perfil Comercial fica fixo; os demais são
+              reajustados pelo perfil do Portal a cada login.
+            </p>
+          )}
 
-          <label className="field-label" htmlFor="user-password" style={{ marginTop: 12 }}>Senha inicial</label>
-          <input
-            id="user-password"
-            className="input"
-            type="password"
-            minLength={8}
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            required
-          />
+          {!editing && (
+            <>
+              <label className="field-label" htmlFor="user-password" style={{ marginTop: 12 }}>Senha inicial</label>
+              <input
+                id="user-password"
+                className="input"
+                type="password"
+                minLength={8}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+              />
+            </>
+          )}
 
           {formError && (
             <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>
@@ -259,9 +309,9 @@ export default function Usuarios() {
             <button
               type="submit"
               className="primary-button"
-              disabled={create.isPending}
+              disabled={create.isPending || update.isPending}
             >
-              Cadastrar
+              {editing ? 'Salvar' : 'Cadastrar'}
             </button>
           </div>
         </form>
