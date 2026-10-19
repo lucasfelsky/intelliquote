@@ -18,7 +18,8 @@
 // (util durante desenvolvimento local).
 //
 // A role interna vem do custom claim `role` do Firebase (nome fixo). Ausente ou
-// desconhecida -> `DEFAULT_INTERNAL_ROLE` (`comprador`).
+// desconhecida -> `DEFAULT_INTERNAL_ROLE` (`comprador`). Claim `user` + Area Comercial do
+// Portal (Firestore `users/{uid}.area`) -> `comercial` (ver PortalAreaService).
 
 import type { NextFunction, Request, Response } from 'express';
 import { cert, getApp, initializeApp, type App } from 'firebase-admin/app';
@@ -28,7 +29,8 @@ import { prisma } from '../lib/prisma';
 import { hashPassword } from '../utils/password';
 import { handleControllerError, HttpError } from '../utils/http';
 import type { AuthenticatedUser } from '../types/auth';
-import { isUserRole, DEFAULT_INTERNAL_ROLE, resolveFirebaseLoginRole } from '../constants/roles';
+import { isUserRole, DEFAULT_INTERNAL_ROLE } from '../constants/roles';
+import { resolveFirebaseLoginRoleWithArea } from '../services/PortalAreaService';
 
 let firebaseApp: App | null = null;
 
@@ -73,16 +75,21 @@ async function provisionInternalUser(decoded: DecodedIdToken): Promise<Authentic
   const uid = decoded.uid;
   const email = (decoded.email ?? `${uid}@firebase.local`).toLowerCase();
   const name = (decoded.name as string | undefined) ?? email.split('@')[0];
-  const claimRole = mapFirebaseRoleToInternal((decoded as { role?: unknown }).role);
+  const rawClaim = (decoded as { role?: unknown }).role;
+  const claimRole = mapFirebaseRoleToInternal(rawClaim);
 
   const existing = await prisma.user.findFirst({
     where: { email },
     include: { role: true },
   });
 
-  const roleName = existing
-    ? resolveFirebaseLoginRole({ claimRole, currentRole: existing.role.name })
-    : claimRole;
+  const roleName = await resolveFirebaseLoginRoleWithArea({
+    app: getFirebaseApp(),
+    uid,
+    rawClaim,
+    claimRole,
+    currentRole: existing?.role.name ?? null,
+  });
   const role = await prisma.role.findUnique({ where: { name: roleName } });
   if (!role) {
     throw new HttpError(500, `Role interna '${roleName}' nao foi encontrada.`);
@@ -93,12 +100,23 @@ async function provisionInternalUser(decoded: DecodedIdToken): Promise<Authentic
       throw new HttpError(403, 'Usuario desativado no IntelliQuote.');
     }
     if (existing.roleId !== role.id) {
-      const updated = await prisma.user.update({
-        where: { id: existing.id },
+      // Update condicional: se um admin mudou o papel durante a leitura da Area (count=0),
+      // vale o valor do banco.
+      await prisma.user.updateMany({
+        where: { id: existing.id, roleId: existing.roleId },
         data: { roleId: role.id },
+      });
+      const fresh = await prisma.user.findUnique({
+        where: { id: existing.id },
         include: { role: true },
       });
-      return serializeUser(updated);
+      if (!fresh) {
+        throw new HttpError(401, 'Usuario nao encontrado no IntelliQuote.');
+      }
+      if (!fresh.isActive) {
+        throw new HttpError(403, 'Usuario desativado no IntelliQuote.');
+      }
+      return serializeUser(fresh);
     }
     return serializeUser(existing);
   }

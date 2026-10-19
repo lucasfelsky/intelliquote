@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto';
 import { getAuth } from 'firebase-admin/auth';
 import { authEnv } from '../config/env';
 import { prisma } from '../lib/prisma';
-import { isUserRole, resolveFirebaseLoginRole, type UserRole } from '../constants/roles';
+import { isUserRole, type UserRole } from '../constants/roles';
+import { resolveFirebaseLoginRoleWithArea } from '../services/PortalAreaService';
 import { handleControllerError, HttpError } from '../utils/http';
 import {
   ACCESS_TOKEN_COOKIE_NAME,
@@ -32,6 +33,7 @@ const baseCookieOptions: CookieOptions = {
  *
  * Auto-provisiona um usuario interno com a role indicada no custom claim
  * `role` do Firebase. Se ausente, usa a role padrao `DEFAULT_INTERNAL_ROLE`.
+ * Claim `user` + Area Comercial do Portal (Firestore `users/{uid}.area`) -> `comercial`.
  */
 export class FirebaseAuthController {
   static async exchange(req: Request, res: Response): Promise<Response> {
@@ -56,16 +58,27 @@ export class FirebaseAuthController {
         throw new HttpError(400, 'Firebase ID Token sem e-mail.');
       }
 
-      const claimRole = mapFirebaseRoleToInternal((decoded as { role?: unknown }).role);
+      const rawClaim = (decoded as { role?: unknown }).role;
+      const claimRole = mapFirebaseRoleToInternal(rawClaim);
 
       const existing = await prisma.user.findUnique({
         where: { email },
         include: { role: true },
       });
 
-      const roleName = existing
-        ? resolveFirebaseLoginRole({ claimRole, currentRole: existing.role.name })
-        : claimRole;
+      // O tryFirebaseAuth global roda antes e ja aplicou a Area neste request (mesmo e-mail):
+      // nao le o Firestore de novo.
+      const skipAreaLookup =
+        typeof req.user?.email === 'string' && req.user.email.toLowerCase() === email;
+
+      const roleName = await resolveFirebaseLoginRoleWithArea({
+        app,
+        uid: decoded.uid,
+        rawClaim,
+        claimRole,
+        currentRole: existing?.role.name ?? null,
+        skipAreaLookup,
+      });
       const role = await prisma.role.findUnique({ where: { name: roleName } });
       if (!role) {
         throw new HttpError(500, `Role interna '${roleName}' nao foi encontrada.`);
@@ -84,13 +97,24 @@ export class FirebaseAuthController {
           throw new HttpError(403, 'Usuario desativado no IntelliQuote.');
         }
 
-        // Se a role mudou no Firebase, atualiza no IntelliQuote.
+        // Se a role mudou no Firebase, atualiza no IntelliQuote. Update condicional: se um admin
+        // mudou o papel durante a leitura da Area (count=0), vale o valor do banco.
         if (existing.roleId !== role.id) {
-          userRecord = await prisma.user.update({
-            where: { id: existing.id },
+          await prisma.user.updateMany({
+            where: { id: existing.id, roleId: existing.roleId },
             data: { roleId: role.id },
+          });
+          const fresh = await prisma.user.findUnique({
+            where: { id: existing.id },
             include: { role: true },
           });
+          if (!fresh) {
+            throw new HttpError(401, 'Usuario nao encontrado no IntelliQuote.');
+          }
+          if (!fresh.isActive) {
+            throw new HttpError(403, 'Usuario desativado no IntelliQuote.');
+          }
+          userRecord = fresh;
         } else {
           userRecord = existing;
         }

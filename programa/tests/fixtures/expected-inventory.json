@@ -41,6 +41,7 @@
       "EmailTemplateService.ts",
       "ExchangeRateService.ts",
       "HealthService.ts",
+      "PortalAreaService.ts",
       "PurchaseOrderEmailService.ts",
       "QuoteComparisonService.ts",
       "QuotePurchaseOrderService.ts",
