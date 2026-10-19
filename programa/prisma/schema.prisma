@@ -67,6 +67,7 @@ model User {
   createdCreditPartners  CreditPartner[]       @relation("CreditPartnerCreatedBy")
   createdCreditSupportRequests CreditSupportRequest[] @relation("CreditSupportRequestCreatedBy")
   createdForwarders      Forwarder[]           @relation("ForwarderCreatedBy")
+  createdSupplierDocuments SupplierDocument[]  @relation("SupplierDocumentCreatedBy")
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -120,6 +121,7 @@ model Supplier {
   reviews           SupplierReview[]
   families          ItemFamily[]
   creditSupportRequests CreditSupportRequest[]
+  documents         SupplierDocument[]
   createdBy         User?                    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -915,4 +917,40 @@ model QuoteResponsePriceSnapshot {
   quoteResponse     QuoteResponse @relation(fields: [quoteResponseId], references: [id], onDelete: Cascade)
 
   @@index([quoteResponseId, recordedAt])
+}
+
+// Documentos do fornecedor com data de vencimento (licencas, certificados, etc.).
+// expiresOn e o ULTIMO dia valido (@db.Date, meia-noite UTC). Soft-delete via deletedAt
+// (os bytes ficam guardados). alertCycle e incrementado sempre que expiresOn muda de fato
+// (renovacao) e reinicia os marcos de aviso do PR2.
+model SupplierDocument {
+  id          Int                   @id @default(autoincrement())
+  supplierId  Int
+  name        String
+  expiresOn   DateTime              @db.Date
+  notes       String?
+  fileName    String
+  mimeType    String
+  fileSize    Int
+  alertCycle  Int                   @default(1)
+  createdById Int?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  deletedAt   DateTime?
+  supplier    Supplier              @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  createdBy   User?                 @relation("SupplierDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  file        SupplierDocumentFile?
+
+  @@index([supplierId])
+  @@index([expiresOn])
+  @@index([createdById])
+  @@index([deletedAt])
+}
+
+// Binario em tabela separada para nao carregar bytea em toda leitura (mesma ideia de
+// UserEmailSignature.imageData).
+model SupplierDocumentFile {
+  documentId Int              @id
+  data       Bytes
+  document   SupplierDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 }

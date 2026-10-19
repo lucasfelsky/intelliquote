@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Fornecedores from './Fornecedores';
 
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => async () => true }));
+vi.mock('@/auth/AuthProvider', () => ({
+  useAuth: () => ({ user: { id: 1, name: 'U', email: 'u@b.c', role: 'comprador' } }),
+}));
 vi.mock('@/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
   ApiError: class ApiError extends Error {},
@@ -557,5 +560,70 @@ describe('Fornecedores — importação de planilha', () => {
     );
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalled());
+  });
+});
+
+describe('Fornecedores — documentos com vencimento', () => {
+  function mockApi(summary: unknown) {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v1/suppliers') return Promise.resolve(suppliers);
+      if (url === '/api/v1/supplier-contacts') {
+        return Promise.resolve({ bySupplier: { 10: contacts } });
+      }
+      if (url === '/api/v1/item-families') return Promise.resolve({ data: families });
+      if (url === '/api/v1/supplier-documents/summary') return Promise.resolve(summary);
+      return Promise.resolve([]);
+    });
+  }
+
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset();
+    vi.mocked(listSupplierContacts).mockReset();
+    vi.mocked(listSupplierContacts).mockResolvedValue(contacts);
+    window.history.pushState({}, '', '/');
+  });
+
+  it('k. badge "Doc. vencido" aparece com o resumo { bySupplier: { 10: { expired: 1 } } }', async () => {
+    mockApi({ bySupplier: { 10: { expired: 1, expiring: 0 } } });
+    const { findByText } = renderPage();
+
+    const badge = await findByText('Doc. vencido');
+    expect(badge.className).toContain('badge--danger');
+  });
+
+  it('l. so a vencer mostra "Doc. vence em N d" e sem pendencia nao mostra badge', async () => {
+    mockApi({ bySupplier: { 10: { expired: 0, expiring: 2, nextDaysLeft: 6 } } });
+    const first = renderPage();
+    const badge = await first.findByText('Doc. vence em 6 d');
+    expect(badge.className).toContain('badge--warning');
+    first.unmount();
+
+    mockApi({ bySupplier: {} });
+    const second = renderPage();
+    await second.findByText('ACME Ltda');
+    expect(second.queryByText(/^Doc\. /)).toBeNull();
+  });
+
+  it('m. resumo em formato inesperado (array) e ignorado sem quebrar a lista', async () => {
+    mockApi([]);
+    const { findByText, queryByText } = renderPage();
+    await findByText('ACME Ltda');
+    expect(queryByText(/^Doc\. /)).toBeNull();
+  });
+
+  it('n. deep link ?supplier=10 abre a linha expandida com a secao Documentos', async () => {
+    mockApi({ bySupplier: {} });
+    window.history.pushState({}, '', '/fornecedores?supplier=10');
+    const { findByLabelText, findByText } = renderPage();
+
+    expect(await findByLabelText('Ocultar contatos')).toBeTruthy();
+    expect(await findByText('Documentos')).toBeTruthy();
+  });
+
+  it('o. sem o parametro, a linha continua recolhida', async () => {
+    mockApi({ bySupplier: {} });
+    const { findByText, queryByLabelText } = renderPage();
+    await findByText('ACME Ltda');
+    expect(queryByLabelText('Ocultar contatos')).toBeNull();
   });
 });

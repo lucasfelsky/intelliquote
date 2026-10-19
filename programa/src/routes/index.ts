@@ -16,6 +16,7 @@ import { quotePurchaseOrderRoutes } from './QuotePurchaseOrderRoutes';
 import { quoteResponseRoutes } from './QuoteResponseRoutes';
 import { reportRoutes } from './ReportRoutes';
 import { supplierContactRoutes } from './SupplierContactRoutes';
+import { supplierDocumentRoutes } from './SupplierDocumentRoutes';
 import { supplierRoutes } from './SupplierRoutes';
 import { userRoutes } from './UserRoutes';
 
@@ -33,6 +34,7 @@ router.use('/api/v1', catalogItemRoutes);
 router.use('/api/v1', itemFamilyRoutes);
 router.use('/api/v1', supplierRoutes);
 router.use('/api/v1', supplierContactRoutes);
+router.use('/api/v1', supplierDocumentRoutes);
 router.use('/api/v1', creditPartnerRoutes);
 router.use('/api/v1', creditSupportRoutes);
 router.use('/api/v1', forwarderRoutes);
