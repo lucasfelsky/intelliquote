@@ -20,6 +20,9 @@ export interface CompanyProfileInput {
   // cotacao desta empresa. Cada item ja deve estar normalizado
   // (lowercase, trim). Persistido como JSON array de strings.
   dispatchCc?: string[] | null;
+  // Destinatarios do aviso "nova solicitacao do comercial". undefined = nao
+  // altera o valor gravado; [] = limpa (volta ao fallback env + dispatchCc).
+  commercialRequestNotifyEmails?: string[] | null;
   awardApprovalThreshold?: number | null;
   updatedById?: number | null;
 }
@@ -47,6 +50,17 @@ export class CompanyProfileService {
       await excludeComercialEmails(normalizeDispatchCc(input.dispatchCc), client),
     );
 
+    // Mesma regra do dispatchCc: normaliza/dedup e descarta usuarios `comercial`.
+    const notifyEmailsJson =
+      input.commercialRequestNotifyEmails === undefined
+        ? undefined
+        : JSON.stringify(
+            await excludeComercialEmails(
+              normalizeDispatchCc(input.commercialRequestNotifyEmails),
+              client,
+            ),
+          );
+
     const existing = await client.companyProfile.findUnique({ where: { id: 1 } });
     if (!existing) {
       return client.companyProfile.create({
@@ -67,6 +81,7 @@ export class CompanyProfileService {
           logoUrl: input.logoUrl ?? null,
           awardApprovalThreshold: input.awardApprovalThreshold ?? null,
           dispatchCc: dispatchCcJson,
+          ...(notifyEmailsJson !== undefined ? { commercialRequestNotifyEmails: notifyEmailsJson } : {}),
           updatedById: input.updatedById ?? null,
         },
       });
@@ -90,6 +105,7 @@ export class CompanyProfileService {
         logoUrl: input.logoUrl ?? null,
         awardApprovalThreshold: input.awardApprovalThreshold,
         dispatchCc: dispatchCcJson,
+        commercialRequestNotifyEmails: notifyEmailsJson,
         updatedById: input.updatedById ?? null,
       },
     });
@@ -195,9 +211,22 @@ export async function normalizeDispatchCcWithUsers(input: {
  * mal-formado (devolve array vazio em vez de quebrar).
  */
 export function readDispatchCc(profile: { dispatchCc: string | null } | null | undefined): string[] {
-  if (!profile || !profile.dispatchCc) return [];
+  return parseEmailListJson(profile?.dispatchCc);
+}
+
+/**
+ * Le commercialRequestNotifyEmails (JSON) com o mesmo fallback seguro do dispatchCc.
+ */
+export function readCommercialRequestNotifyEmails(
+  profile: { commercialRequestNotifyEmails?: string | null } | null | undefined,
+): string[] {
+  return parseEmailListJson(profile?.commercialRequestNotifyEmails);
+}
+
+function parseEmailListJson(raw: string | null | undefined): string[] {
+  if (!raw) return [];
   try {
-    const parsed = JSON.parse(profile.dispatchCc);
+    const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((s): s is string => typeof s === 'string');
   } catch {

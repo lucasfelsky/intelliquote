@@ -1,5 +1,7 @@
 // Aviso a Equipe COMEX de nova solicitacao do comercial (PR1).
 //   - destinatarios: INTELLIQUOTE_COMEX_CC_LIST + dispatchCc do perfil, dedup case-insensitive
+//   - lista propria commercialRequestNotifyEmails preenchida: vai SO para ela (sem env/dispatchCc);
+//     vazia: fallback acima; usuario comercial e removido nos dois casos
 //   - lista vazia: nao envia e nao lanca
 //   - sendAndLog falhando: servico engole (nunca falha a criacao)
 //   - sem linha no banco: fallback de arquivo renderiza solicitante e itens; HTML escapa observacoes
@@ -115,6 +117,72 @@ describe('CommercialRequestNotificationService', () => {
     const args = sendAndLogMock.mock.calls[0][0];
     const all = [args.to, ...args.cc].map((r: { email: string }) => r.email.toLowerCase());
     expect(all).toEqual(['comex1@sqquimica.com', 'comex2@sqquimica.com']);
+  });
+
+  it('lista propria preenchida: vai SO para ela (sem env nem dispatchCc), to = 1o, cc = resto, dedup', async () => {
+    companyProfileGetMock.mockResolvedValue({
+      dispatchCc: JSON.stringify(['COMEX1@sqquimica.com', 'financeiro@sqquimica.com']),
+      commercialRequestNotifyEmails: JSON.stringify([
+        'gestor@sqquimica.com',
+        'Compras@sqquimica.com',
+        'GESTOR@sqquimica.com',
+      ]),
+    });
+
+    await CommercialRequestNotificationService.notifyComexOfNewRequest(7);
+
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    const args = sendAndLogMock.mock.calls[0][0];
+    expect(args.to).toEqual({ email: 'gestor@sqquimica.com' });
+    expect(args.cc).toEqual([{ email: 'Compras@sqquimica.com' }]);
+    const all = [args.to, ...args.cc].map((r: { email: string }) => r.email.toLowerCase());
+    expect(all).not.toContain('comex1@sqquimica.com');
+    expect(all).not.toContain('comex2@sqquimica.com');
+    expect(all).not.toContain('financeiro@sqquimica.com');
+    expect(getComexCcListMock).not.toHaveBeenCalled();
+  });
+
+  it('lista propria vazia ([]): cai no comportamento atual (env + dispatchCc)', async () => {
+    companyProfileGetMock.mockResolvedValue({
+      dispatchCc: JSON.stringify(['financeiro@sqquimica.com']),
+      commercialRequestNotifyEmails: '[]',
+    });
+
+    await CommercialRequestNotificationService.notifyComexOfNewRequest(7);
+
+    const args = sendAndLogMock.mock.calls[0][0];
+    const all = [args.to, ...args.cc].map((r: { email: string }) => r.email.toLowerCase());
+    expect(all).toEqual([
+      'comex1@sqquimica.com',
+      'comex2@sqquimica.com',
+      'financeiro@sqquimica.com',
+    ]);
+  });
+
+  it('lista propria com e-mail de usuario comercial: o comercial e removido (case-insensitive)', async () => {
+    companyProfileGetMock.mockResolvedValue({
+      dispatchCc: '[]',
+      commercialRequestNotifyEmails: JSON.stringify(['vendas@sqquimica.com', 'gestor@sqquimica.com']),
+    });
+    comercialUsersMock.mockResolvedValue([{ email: 'Vendas@SQQuimica.com' }]);
+
+    await CommercialRequestNotificationService.notifyComexOfNewRequest(7);
+
+    const args = sendAndLogMock.mock.calls[0][0];
+    expect(args.to).toEqual({ email: 'gestor@sqquimica.com' });
+    expect(args.cc).toEqual([]);
+  });
+
+  it('lista propria so com comercial: nao envia e NAO cai no fallback (nao amplia o publico)', async () => {
+    companyProfileGetMock.mockResolvedValue({
+      dispatchCc: JSON.stringify(['financeiro@sqquimica.com']),
+      commercialRequestNotifyEmails: JSON.stringify(['vendas@sqquimica.com']),
+    });
+    comercialUsersMock.mockResolvedValue([{ email: 'vendas@sqquimica.com' }]);
+
+    await CommercialRequestNotificationService.notifyComexOfNewRequest(7);
+
+    expect(sendAndLogMock).not.toHaveBeenCalled();
   });
 
   it('se todos os destinatarios forem comercial: nao envia', async () => {
