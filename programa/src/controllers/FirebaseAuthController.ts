@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { getAuth } from 'firebase-admin/auth';
 import { authEnv } from '../config/env';
 import { prisma } from '../lib/prisma';
-import { isUserRole, type UserRole } from '../constants/roles';
+import { isUserRole, mapFirebaseRoleToInternal } from '../constants/roles';
 import { resolveFirebaseLoginRoleWithArea } from '../services/PortalAreaService';
 import { handleControllerError, HttpError } from '../utils/http';
 import {
@@ -32,7 +32,8 @@ const baseCookieOptions: CookieOptions = {
  * para uso via Cloud Run direto).
  *
  * Auto-provisiona um usuario interno com a role indicada no custom claim
- * `role` do Firebase. Se ausente, usa a role padrao `DEFAULT_INTERNAL_ROLE`.
+ * `role` do Firebase. Ausente ou desconhecida -> `DEFAULT_INTERNAL_ROLE` (mesmo mapeamento do
+ * middleware: `mapFirebaseRoleToInternal`).
  * Claim `user` + Area Comercial do Portal (Firestore `users/{uid}.area`) -> `comercial`.
  */
 export class FirebaseAuthController {
@@ -182,15 +183,4 @@ export class FirebaseAuthController {
       return res.status(handled.status).json({ message: handled.message });
     }
   }
-}
-
-function mapFirebaseRoleToInternal(claimRole: unknown): UserRole {
-  if (typeof claimRole !== 'string') {
-    return 'comprador';
-  }
-  const normalized = claimRole.toLowerCase();
-  if (isUserRole(normalized)) {
-    return normalized;
-  }
-  return 'comprador';
 }
