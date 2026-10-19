@@ -87,6 +87,50 @@ describe('SupplierResponseNotificationService', () => {
     expect(args.text).not.toContain('/respostas');
   });
 
+  it('createdBy com papel comercial: nao envia (preco/fornecedor nao vao ao comercial) e nao lanca', async () => {
+    findUniqueMock.mockResolvedValue(
+      tokenFixture({
+        createdBy: {
+          name: 'Ex Comprador',
+          email: 'ex@sqquimica.com',
+          isActive: true,
+          role: { name: 'comercial' },
+        },
+      }),
+    );
+
+    await expect(
+      SupplierResponseNotificationService.notifyBuyerOfSupplierResponse(BASE_INPUT),
+    ).resolves.toBeUndefined();
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+  });
+
+  it('o findUnique pede o papel do criador (select do role)', async () => {
+    findUniqueMock.mockResolvedValue(tokenFixture());
+
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse(BASE_INPUT);
+
+    const select = findUniqueMock.mock.calls[0][0].include.createdBy.select;
+    expect(select.role).toEqual({ select: { name: true } });
+  });
+
+  it('createdBy comprador (role comprador) segue recebendo', async () => {
+    findUniqueMock.mockResolvedValue(
+      tokenFixture({
+        createdBy: {
+          name: 'Lucas Comprador',
+          email: 'lucas@sqquimica.com',
+          isActive: true,
+          role: { name: 'comprador' },
+        },
+      }),
+    );
+
+    await SupplierResponseNotificationService.notifyBuyerOfSupplierResponse(BASE_INPUT);
+
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+  });
+
   it('revisao: assunto e corpo marcam a revisao vN', async () => {
     findUniqueMock.mockResolvedValue(tokenFixture());
 

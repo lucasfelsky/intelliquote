@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
   CompanyProfileService,
+  excludeComercialEmails,
+  excludeComercialRecipients,
   readDispatchCc,
   requireCompanyProfileFields,
 } from '../services/CompanyProfileService';
@@ -108,11 +110,11 @@ export class DispatchController {
           ? { subject: rendered.subject, html: rendered.html, text: rendered.text }
           : null,
         templateSource: rendered?.source ?? 'fallback',
-        cc: getComexCcList(),
+        cc: await excludeComercialRecipients(getComexCcList()),
         // E-mails fixos configurados no perfil da empresa que serao
         // adicionados automaticamente como copia em todos os envios
         // (mesclados com os recipients do modal; nunca substituem).
-        companyCc: readDispatchCc(await CompanyProfileService.get()),
+        companyCc: await excludeComercialEmails(readDispatchCc(await CompanyProfileService.get())),
         template: { key: DISPATCH_TEMPLATE_KEY, locale: DISPATCH_DEFAULT_LOCALE, source: rendered?.source ?? 'fallback' },
       });
     } catch (error) {
@@ -191,8 +193,11 @@ export class DispatchController {
             ...profileRecord,
             purchasingEmail: fallbackEmail,
           });
-            const globalCc = getComexCcList();
-            const companyCc = readDispatchCc(profileRecord).map((email) => ({ email, name: '' }));
+            // Filtro no envio: usuario que entrou no CC e depois virou `comercial` nao recebe.
+            const globalCc = await excludeComercialRecipients(getComexCcList());
+            const companyCc = await excludeComercialRecipients(
+              readDispatchCc(profileRecord).map((email) => ({ email, name: '' })),
+            );
             const comexCcFirstOnly = parsed.data.comexCcFirstOnly === true;
             const hasComexCc = globalCc.length + companyCc.length > 0;
             let comexCcDelivered = false;

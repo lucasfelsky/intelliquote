@@ -38,6 +38,11 @@ async function main(): Promise<void> {
       update: {},
       create: { name: 'viewer' },
     }),
+    prisma.role.upsert({
+      where: { name: 'comercial' },
+      update: {},
+      create: { name: 'comercial' },
+    }),
   ]);
 
   const adminRole = roles.find((role) => role.name === 'admin');

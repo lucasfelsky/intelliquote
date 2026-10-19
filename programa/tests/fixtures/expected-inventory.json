@@ -6,6 +6,7 @@
       "AuthController.ts",
       "CatalogItemController.ts",
       "CatalogItemImportController.ts",
+      "CommercialRequestController.ts",
       "CreditPartnerController.ts",
       "CreditSupportController.ts",
       "DispatchController.ts",
@@ -29,6 +30,7 @@
     "services": [
       "AuditLogService.ts",
       "AuthService.ts",
+      "CommercialRequestNotificationService.ts",
       "CompanyProfileService.ts",
       "ComparisonCandidateService.ts",
       "CreditPartnerResponseNotificationService.ts",
@@ -70,6 +72,7 @@
       "AuditRoutes.ts",
       "AuthRoutes.ts",
       "CatalogItemRoutes.ts",
+      "CommercialRequestRoutes.ts",
       "CompanyProfileRoutes.ts",
       "CreditPartnerRoutes.ts",
       "CreditPortalRoutes.ts",
@@ -97,6 +100,8 @@
       "Attachment",
       "AuditLog",
       "CatalogItem",
+      "CommercialRequest",
+      "CommercialRequestItem",
       "CompanyProfile",
       "CreditPartner",
       "CreditPartnerContact",
@@ -135,14 +140,16 @@
       "UserEmailSignature"
     ],
     "enums": [
+      "CommercialRequestStatus",
       "Incoterm",
       "MailLogStatus",
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 51
+    "migrations": 52
   },
   "emailTemplates": [
+    "commercial_request_created@pt",
     "credit_partner_response_received@pt",
     "credit_support_request@en",
     "quote_dispatch@en",
@@ -182,6 +189,12 @@
     "GET /auth/password-recovery/tokens",
     "GET /catalog-items",
     "GET /catalog-items/:id",
+    "GET /commercial-requests",
+    "GET /commercial-requests/:id",
+    "GET /commercial-requests/catalog-items",
+    "GET /commercial-requests/mine",
+    "GET /commercial-requests/pending-count",
+    "GET /commercial-requests/requesters",
     "GET /credit-partners",
     "GET /forwarders",
     "GET /help/articles",
@@ -233,6 +246,7 @@
     "POST /catalog-items",
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
+    "POST /commercial-requests",
     "POST /credit-partners",
     "POST /credit-support-requests/:id/purchase-order",
     "POST /credit-support-requests/:id/resend",
@@ -302,6 +316,7 @@
       "MinhaConta.tsx",
       "PlaceholderPage.tsx",
       "Relatorios.tsx",
+      "Solicitacoes.tsx",
       "Templates.tsx",
       "Usuarios.tsx"
     ],
@@ -342,6 +357,7 @@
       "/minha-conta",
       "/relatorios",
       "/respostas",
+      "/solicitacoes",
       "/templates",
       "/usuarios"
     ]

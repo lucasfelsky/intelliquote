@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { allowRoles, requireAuth } from '../middlewares/auth';
+import { COMEX_ROLES } from '../constants/roles';
 import { prisma } from '../lib/prisma';
 import { handleControllerError } from '../utils/http';
 
 const userRoutes = Router();
 
 const adminOnly = [requireAuth, allowRoles(['admin'])] as const;
-const anyAuthenticated = [requireAuth] as const;
+// Papeis COMEX (sem `comercial`, que so' acessa Solicitacoes).
+const comexAuthenticated = [requireAuth, allowRoles(COMEX_ROLES)] as const;
 
 userRoutes.post('/users', ...adminOnly, UserController.create);
 userRoutes.get('/users', ...adminOnly, UserController.getAll);
@@ -16,22 +18,22 @@ userRoutes.put('/users/:id', ...adminOnly, UserController.update);
 userRoutes.post('/users/:id/reset-password', ...adminOnly, UserController.resetPassword);
 
 // Assinatura de e-mail do PROPRIO usuario logado (usada no e-mail da Ordem de
-// Compra). Qualquer papel autenticado (inclusive viewer); sem :id -- tudo
+// Compra). Qualquer papel COMEX (inclusive viewer; nao o comercial); sem :id -- tudo
 // opera sobre req.user.id.
-userRoutes.get('/account/email-signature', ...anyAuthenticated, UserController.getEmailSignature);
+userRoutes.get('/account/email-signature', ...comexAuthenticated, UserController.getEmailSignature);
 userRoutes.put(
   '/account/email-signature/text',
-  ...anyAuthenticated,
+  ...comexAuthenticated,
   UserController.updateEmailSignatureText,
 );
 userRoutes.put(
   '/account/email-signature/image',
-  ...anyAuthenticated,
+  ...comexAuthenticated,
   UserController.updateEmailSignatureImage,
 );
 userRoutes.delete(
   '/account/email-signature/image',
-  ...anyAuthenticated,
+  ...comexAuthenticated,
   UserController.deleteEmailSignatureImage,
 );
 
@@ -39,10 +41,13 @@ userRoutes.delete(
 // mencoes em envios etc). Retorna apenas dados de identificacao — sem
 // hash de senha, sem contadores. Restringimos a usuarios ativos por
 // padrao; aceita ?status=inactive|all explicito para auditoria.
-userRoutes.get('/users-directory', ...anyAuthenticated, async (req, res) => {
+userRoutes.get('/users-directory', requireAuth, allowRoles(COMEX_ROLES), async (req, res) => {
   try {
     const status = typeof req.query.status === 'string' ? req.query.status : 'active';
-    const where: { isActive?: boolean } = {};
+    // Usuarios `comercial` nao entram no diretorio interno (picker de CC etc.).
+    const where: { isActive?: boolean; role: { name: { not: string } } } = {
+      role: { name: { not: 'comercial' } },
+    };
     if (status === 'active') where.isActive = true;
     else if (status === 'inactive') where.isActive = false;
     // status=all => sem filtro

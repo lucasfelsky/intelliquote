@@ -8,15 +8,23 @@ export interface NavItem {
   roles?: string[];   // se vazio/ausente, todos os papeis veem
 }
 
+// Papeis da equipe COMEX (acesso interno). `comercial` fica de fora: so ve /solicitacoes.
+export const COMEX_ROLES = ['admin', 'comprador', 'gestor', 'viewer'];
+
+export function isComercialRole(role?: string | null): boolean {
+  return role === 'comercial';
+}
+
 export const PRIMARY_NAV: NavItem[] = [
-  { to: '/',          label: 'Overview',           icon: '◎', end: true,  group: 'main' },
-  { to: '/cotacoes',  label: 'Cotações',           icon: '✦',             group: 'main' },
-  { to: '/itens',     label: 'Itens',              icon: '◇',             group: 'main' },
-  { to: '/fornecedores', label: 'Fornecedores',    icon: '⬢',             group: 'main' },
-  { to: '/forwarders', label: 'Forwarders',       icon: '⇄',             group: 'main' },
-  { to: '/familias',  label: 'Famílias',           icon: '⬡',             group: 'main' },
-  { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main' },
-  { to: '/ajuda',     label: 'Ajuda',              icon: '?',             group: 'main' },
+  { to: '/',          label: 'Overview',           icon: '◎', end: true,  group: 'main', roles: COMEX_ROLES },
+  { to: '/cotacoes',  label: 'Cotações',           icon: '✦',             group: 'main', roles: COMEX_ROLES },
+  { to: '/solicitacoes', label: 'Solicitações',    icon: '✎',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
+  { to: '/itens',     label: 'Itens',              icon: '◇',             group: 'main', roles: COMEX_ROLES },
+  { to: '/fornecedores', label: 'Fornecedores',    icon: '⬢',             group: 'main', roles: COMEX_ROLES },
+  { to: '/forwarders', label: 'Forwarders',       icon: '⇄',             group: 'main', roles: COMEX_ROLES },
+  { to: '/familias',  label: 'Famílias',           icon: '⬡',             group: 'main', roles: COMEX_ROLES },
+  { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main', roles: COMEX_ROLES },
+  { to: '/ajuda',     label: 'Ajuda',              icon: '?',             group: 'main', roles: COMEX_ROLES },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

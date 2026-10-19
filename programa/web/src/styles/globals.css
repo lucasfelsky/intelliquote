@@ -2335,3 +2335,81 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   .item-form__check { min-height: 40px; }
 }
 .item-form__error { margin: 12px 0 0; }
+
+/* ===== Solicitacoes do comercial (PR1). Classes novas; nada existente foi alterado. ===== */
+
+/* Contador de pendentes no menu: cor de alerta legivel no link ativo (fundo primary-50) e no inativo. */
+.sidebar__badge {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.sol-items-list { margin: 0; padding-left: 16px; }
+.sol-added { font-weight: 700; color: var(--primary-700); }
+.sol-filter { max-width: 220px; }
+
+@media (max-width: 540px) {
+  .sol-filters { width: 100%; }
+  .sol-filters .sol-filter { width: 100%; max-width: none; }
+}
+
+/* Abaixo de 720px a tabela vira lista de cards (status em destaque no topo). */
+@media (max-width: 720px) {
+  .table.sol-table,
+  .table.sol-table tbody,
+  .table.sol-table tr,
+  .table.sol-table td { display: block; width: 100%; }
+  .table.sol-table thead { display: none; }
+  .table.sol-table tr {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+    padding: 4px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .table.sol-table tr:hover td { background: transparent; }
+  .table.sol-table td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 12px;
+    border-bottom: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+  .table.sol-table td::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-align: left;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .table.sol-table td.col-status {
+    order: -1;
+    align-items: center;
+    padding-bottom: 8px;
+    margin-bottom: 2px;
+    text-align: right;
+    background: var(--surface-alt);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  }
+  .table.sol-table td .sol-items-list { text-align: left; }
+  .table.sol-table td.sol-cell-actions { justify-content: flex-end; }
+  .table.sol-table td.sol-cell-actions::before { display: none; }
+  .table.sol-table td.sol-cell-detail { display: block; text-align: left; }
+  .table.sol-table td.sol-cell-detail::before { display: none; }
+}

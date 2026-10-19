@@ -10,6 +10,7 @@ vi.mock('../src/lib/prisma', () => {
       update: vi.fn(),
     },
     auditLog: { create: vi.fn() },
+    user: { findMany: vi.fn().mockResolvedValue([]) },
   };
   const prisma = {
     user: { findUnique: vi.fn(), findFirst: vi.fn() },
@@ -40,6 +41,7 @@ const prismaMock = prisma as unknown as {
       update: ReturnType<typeof vi.fn>;
     };
     auditLog: { create: ReturnType<typeof vi.fn> };
+    user: { findMany: ReturnType<typeof vi.fn> };
   };
 };
 
@@ -82,6 +84,27 @@ describe('PUT /api/v1/company-profile', () => {
       Promise.resolve({ ...existingProfile, ...data }),
     );
     tx.auditLog.create.mockResolvedValue({});
+  });
+
+  it('e-mail de usuario comercial no dispatchCc (extras) nao persiste; os demais seguem', async () => {
+    const cookie = await loginAs('admin');
+    tx.user.findMany.mockResolvedValue([{ email: 'Vendas@SQQuimica.com' }]);
+    try {
+      const res = await request(app)
+        .put('/api/v1/company-profile')
+        .set('Cookie', cookie)
+        .send({
+          companyName: 'Nova',
+          dispatchCc: ['vendas@sqquimica.com', 'financeiro@sqquimica.com'],
+        });
+
+      expect(res.status).toBe(200);
+      expect(tx.user.findMany.mock.calls[0][0].where).toEqual({ role: { name: 'comercial' } });
+      const saved = tx.companyProfile.update.mock.calls[0][0].data.dispatchCc;
+      expect(JSON.parse(saved)).toEqual(['financeiro@sqquimica.com']);
+    } finally {
+      tx.user.findMany.mockResolvedValue([]);
+    }
   });
 
   it('viewer recebe 403 e nada e gravado', async () => {

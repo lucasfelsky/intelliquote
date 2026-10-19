@@ -18,6 +18,7 @@ vi.mock('../src/lib/prisma', () => {
     user: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([]),
     },
     session: {
       create: vi.fn(),
