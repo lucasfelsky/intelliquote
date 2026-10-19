@@ -570,6 +570,10 @@ model CompanyProfile {
   // lista com os recipients selecionados no modal (nunca substitui,
   // dedup case-insensitive). Persistido como JSON array de strings.
   dispatchCc      String   @default("[]")
+  // Destinatarios do aviso "nova solicitacao do comercial". Preenchida: o aviso
+  // vai SO para ela. Vazia: cai em INTELLIQUOTE_COMEX_CC_LIST + dispatchCc.
+  // Persistido como JSON array de strings (mesmo formato do dispatchCc).
+  commercialRequestNotifyEmails String @default("[]")
   updatedAt       DateTime @updatedAt
   updatedById     Int?
   updatedBy       User?    @relation("CompanyProfileUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)

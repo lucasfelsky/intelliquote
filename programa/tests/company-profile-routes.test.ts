@@ -20,6 +20,8 @@ vi.mock('../src/lib/prisma', () => {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    // GET /company-profile le o perfil direto do prisma (sem transacao).
+    companyProfile: { findUnique: vi.fn(), create: vi.fn() },
     supplier: {},
     quoteRequest: {},
     quoteResponse: {},
@@ -35,6 +37,7 @@ import { prisma } from '../src/lib/prisma';
 const prismaMock = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   session: { create: ReturnType<typeof vi.fn> };
+  companyProfile: { findUnique: ReturnType<typeof vi.fn> };
   __tx: {
     companyProfile: {
       findUnique: ReturnType<typeof vi.fn>;
@@ -74,6 +77,36 @@ async function loginAs(role: string): Promise<string> {
   return ((res.headers['set-cookie'] as string[]) ?? []).map((c) => c.split(';')[0]).join('; ');
 }
 
+describe('GET /api/v1/company-profile', () => {
+  it('devolve commercialRequestNotifyEmails e dispatchCc como arrays', async () => {
+    const cookie = await loginAs('viewer');
+    prismaMock.companyProfile.findUnique.mockResolvedValue({
+      ...existingProfile,
+      dispatchCc: JSON.stringify(['a@sqquimica.com']),
+      commercialRequestNotifyEmails: JSON.stringify(['gestor@sqquimica.com']),
+    });
+
+    const res = await request(app).get('/api/v1/company-profile').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.commercialRequestNotifyEmails).toEqual(['gestor@sqquimica.com']);
+    expect(res.body.dispatchCc).toEqual(['a@sqquimica.com']);
+  });
+
+  it('perfil sem o campo (ou JSON invalido): devolve []', async () => {
+    const cookie = await loginAs('admin');
+    prismaMock.companyProfile.findUnique.mockResolvedValue({
+      ...existingProfile,
+      commercialRequestNotifyEmails: '{nao-e-json',
+    });
+
+    const res = await request(app).get('/api/v1/company-profile').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.commercialRequestNotifyEmails).toEqual([]);
+  });
+});
+
 describe('PUT /api/v1/company-profile', () => {
   const tx = prismaMock.__tx;
 
@@ -107,13 +140,74 @@ describe('PUT /api/v1/company-profile', () => {
     }
   });
 
+  it('commercialRequestNotifyEmails: normaliza, deduplica e descarta usuario comercial', async () => {
+    const cookie = await loginAs('comprador');
+    tx.user.findMany.mockResolvedValue([{ email: 'Vendas@SQQuimica.com' }]);
+    try {
+      const res = await request(app)
+        .put('/api/v1/company-profile')
+        .set('Cookie', cookie)
+        .send({
+          companyName: 'Nova',
+          commercialRequestNotifyEmails: [
+            '  Gestor@SQQuimica.com ',
+            'gestor@sqquimica.com',
+            'vendas@sqquimica.com',
+            'compras@sqquimica.com',
+          ],
+        });
+
+      expect(res.status).toBe(200);
+      const saved = tx.companyProfile.update.mock.calls[0][0].data.commercialRequestNotifyEmails;
+      expect(JSON.parse(saved)).toEqual(['gestor@sqquimica.com', 'compras@sqquimica.com']);
+      expect(res.body.commercialRequestNotifyEmails).toEqual([
+        'gestor@sqquimica.com',
+        'compras@sqquimica.com',
+      ]);
+      const audit = tx.auditLog.create.mock.calls[0][0].data;
+      expect(audit.afterData.commercialRequestNotifyEmails).toEqual([
+        'gestor@sqquimica.com',
+        'compras@sqquimica.com',
+      ]);
+    } finally {
+      tx.user.findMany.mockResolvedValue([]);
+    }
+  });
+
+  it('commercialRequestNotifyEmails ausente: nao altera o valor gravado; [] limpa', async () => {
+    const cookie = await loginAs('admin');
+
+    await request(app).put('/api/v1/company-profile').set('Cookie', cookie).send({ companyName: 'Nova' });
+    expect(tx.companyProfile.update.mock.calls[0][0].data.commercialRequestNotifyEmails).toBeUndefined();
+
+    tx.companyProfile.update.mockClear();
+    const res = await request(app)
+      .put('/api/v1/company-profile')
+      .set('Cookie', cookie)
+      .send({ companyName: 'Nova', commercialRequestNotifyEmails: [] });
+    expect(res.status).toBe(200);
+    expect(tx.companyProfile.update.mock.calls[0][0].data.commercialRequestNotifyEmails).toBe('[]');
+  });
+
+  it('commercialRequestNotifyEmails com e-mail invalido: 400 e nada e gravado', async () => {
+    const cookie = await loginAs('admin');
+
+    const res = await request(app)
+      .put('/api/v1/company-profile')
+      .set('Cookie', cookie)
+      .send({ companyName: 'Nova', commercialRequestNotifyEmails: ['sem-arroba'] });
+
+    expect(res.status).toBe(400);
+    expect(tx.companyProfile.update).not.toHaveBeenCalled();
+  });
+
   it('viewer recebe 403 e nada e gravado', async () => {
     const cookie = await loginAs('viewer');
 
     const res = await request(app)
       .put('/api/v1/company-profile')
       .set('Cookie', cookie)
-      .send({ companyName: 'Nova' });
+      .send({ companyName: 'Nova', commercialRequestNotifyEmails: ['x@sqquimica.com'] });
 
     expect(res.status).toBe(403);
     expect(tx.companyProfile.update).not.toHaveBeenCalled();

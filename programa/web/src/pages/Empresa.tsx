@@ -31,6 +31,9 @@ interface CompanyProfile {
   // envios de cotacao desta empresa. O backend sempre deduplica
   // case-insensitive e descarta entradas invalidas.
   dispatchCc?: string[] | null;
+  // Destinatarios do aviso "nova solicitacao do comercial". Preenchida, o aviso
+  // vai so para ela; vazia, vai para a Equipe COMEX em copia (env + dispatchCc).
+  commercialRequestNotifyEmails?: string[] | null;
   awardApprovalThreshold?: number | null;
 }
 
@@ -85,6 +88,8 @@ export default function Empresa() {
   const [formError, setFormError] = useState<string | null>(null);
   const [ccDraft, setCcDraft] = useState('');
   const [ccError, setCcError] = useState<string | null>(null);
+  const [notifyDraft, setNotifyDraft] = useState('');
+  const [notifyError, setNotifyError] = useState<string | null>(null);
   // Quando ligado, o backend adiciona todos os perfis ativos do sistema
   // (admin / comprador / gestor) como copia automatica, alem dos e-mails
   // externos manuais. O admin usa isso para garantir que a equipe toda
@@ -209,6 +214,9 @@ export default function Empresa() {
           includeUserProfiles: payload.includeUserProfiles,
           extras: payload.dispatchCc,
         },
+        commercialRequestNotifyEmails: normalizeCcList(
+          payload.profile.commercialRequestNotifyEmails ?? [],
+        ),
       }),
     onSuccess: (data) => {
       qc.setQueryData(['company-profile'], data);
@@ -320,6 +328,50 @@ export default function Empresa() {
     });
   }
 
+  // Lista propria do aviso "nova solicitacao do comercial": mesmo padrao do CC
+  // externo (entrada + Adicionar + Remover), mas sem perfis do sistema.
+  function addNotifyEmail() {
+    setNotifyError(null);
+    const candidate = notifyDraft.trim();
+    if (!candidate) {
+      setNotifyError('Digite um e-mail antes de adicionar.');
+      return;
+    }
+    if (!isLikelyEmail(candidate)) {
+      setNotifyError('Formato de e-mail invalido.');
+      return;
+    }
+    setDraft((current) => {
+      if (!current) return current;
+      const existing = normalizeCcList(current.commercialRequestNotifyEmails ?? []);
+      return {
+        ...current,
+        commercialRequestNotifyEmails: normalizeCcList([...existing, candidate]),
+      };
+    });
+    setNotifyDraft('');
+  }
+
+  function removeNotifyEmail(email: string) {
+    setDraft((current) => {
+      if (!current) return current;
+      const target = email.trim().toLowerCase();
+      return {
+        ...current,
+        commercialRequestNotifyEmails: normalizeCcList(
+          current.commercialRequestNotifyEmails ?? [],
+        ).filter((e) => e !== target),
+      };
+    });
+  }
+
+  function handleNotifyKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addNotifyEmail();
+    }
+  }
+
   function handleCcKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
@@ -359,6 +411,7 @@ export default function Empresa() {
     });
   }
 
+  const notifyEmails = normalizeCcList(draft.commercialRequestNotifyEmails ?? []);
   const activeUsers = (directory.data ?? []).filter((u) => u.isActive);
   const inactiveUsers = (directory.data ?? []).filter((u) => !u.isActive);
 
@@ -792,6 +845,71 @@ export default function Empresa() {
                   externalEmails.length === 1 ? '' : 's'
                 }).`}
           </p>
+        </div>
+
+        <div className="form-grid__full" style={{ marginTop: 28 }}>
+          <label className="field-label" htmlFor="notify-email-input">
+            Avisos de nova solicitação (Comercial)
+          </label>
+          <p className="field-hint">
+            Quem recebe o e-mail quando o Comercial cria uma solicitação. Se ficar vazio, vai para a
+            Equipe COMEX em cópia.
+          </p>
+          <div className="cc-input-row" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <input
+              id="notify-email-input"
+              className="input"
+              type="email"
+              value={notifyDraft}
+              onChange={(e) => {
+                setNotifyDraft(e.target.value);
+                if (notifyError) setNotifyError(null);
+              }}
+              onKeyDown={handleNotifyKeyDown}
+              onBlur={() => {
+                if (notifyDraft.trim().length > 0) addNotifyEmail();
+              }}
+              placeholder="ex.: gestor@sqquimica.com"
+            />
+            <button type="button" className="ghost-button" onClick={addNotifyEmail}>
+              Adicionar aviso
+            </button>
+          </div>
+          {notifyError && (
+            <p style={{ color: 'var(--danger)', marginTop: 6 }} className="text-sm">{notifyError}</p>
+          )}
+          {notifyEmails.length > 0 && (
+            <ul className="cc-list" style={{ marginTop: 12, padding: 0, listStyle: 'none' }}>
+              {notifyEmails.map((email) => (
+                <li
+                  key={email}
+                  className="cc-list__item"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    marginBottom: 6,
+                    background: 'var(--surface-alt)',
+                    fontSize: 14,
+                  }}
+                >
+                  <span>{email}</span>
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => removeNotifyEmail(email)}
+                    aria-label={`Remover ${email} dos avisos de nova solicitação`}
+                    style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
+                  >
+                    Remover
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {formError && (
