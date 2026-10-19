@@ -87,4 +87,14 @@ describe('Usuarios', () => {
     fireEvent.click(getByLabelText('Fechar'));
     expect(dialog.open).toBe(false);
   });
+
+  it('7. perfil Comercial disponível no formulário e no filtro', async () => {
+    const { container, findByText, getByRole, getByLabelText } = renderPage();
+    await findByText('Nenhum usuário encontrado');
+    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    const formSelect = getByLabelText('Perfil') as HTMLSelectElement;
+    expect(Array.from(formSelect.options).map((o) => o.value)).toContain('comercial');
+    const filterSelect = container.querySelector('.page-header__actions select') as HTMLSelectElement;
+    expect(Array.from(filterSelect.options).map((o) => o.textContent)).toContain('Comercial');
+  });
 });

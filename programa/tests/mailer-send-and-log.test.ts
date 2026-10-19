@@ -5,6 +5,7 @@ const h = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   loggerError: vi.fn(),
+  findMany: vi.fn(),
 }));
 
 vi.mock('../src/mailer/ConsoleMailer', () => ({
@@ -18,7 +19,7 @@ vi.mock('../src/mailer/SmtpMailer', () => ({
   },
 }));
 vi.mock('../src/lib/prisma', () => ({
-  prisma: { mailLog: { create: h.create, update: h.update } },
+  prisma: { mailLog: { create: h.create, update: h.update }, user: { findMany: h.findMany } },
 }));
 vi.mock('../src/lib/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: h.loggerError },
@@ -39,6 +40,7 @@ describe('sendAndLog - falha pos-envio no mailLog', () => {
     vi.clearAllMocks();
     h.create.mockResolvedValue({ id: 7 });
     h.update.mockResolvedValue({});
+    h.findMany.mockResolvedValue([]);
   });
 
   it('a) send ok + mailLog.update lanca: retorna o result do provedor e loga o erro', async () => {

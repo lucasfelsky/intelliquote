@@ -17,6 +17,7 @@ interface InternalUser {
   name: string;
   email: string;
   isActive: boolean;
+  role?: { name: string } | null;
 }
 
 interface Recipient {
@@ -69,13 +70,22 @@ export class CreditPartnerResponseNotificationService {
           partnerValidityDays: true,
           partnerNotes: true,
           partnerTotalPrice: true,
-          createdBy: { select: { name: true, email: true, isActive: true } },
+          createdBy: {
+            select: { name: true, email: true, isActive: true, role: { select: { name: true } } },
+          },
           quoteRequest: {
             select: {
               id: true,
               requestCode: true,
               productName: true,
-              createdBy: { select: { name: true, email: true, isActive: true } },
+              createdBy: {
+                select: {
+                  name: true,
+                  email: true,
+                  isActive: true,
+                  role: { select: { name: true } },
+                },
+              },
             },
           },
           creditPartner: { select: { name: true } },
@@ -101,6 +111,8 @@ export class CreditPartnerResponseNotificationService {
       for (const user of usersInOrder) {
         const email = user?.email?.trim();
         if (!user || user.isActive === false || !email) continue;
+        // Usuario `comercial` nunca recebe dados de parceiro/fornecedor/preco.
+        if (user.role?.name === 'comercial') continue;
         const lower = email.toLowerCase();
         if (seen.has(lower)) continue;
         seen.add(lower);

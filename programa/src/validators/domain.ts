@@ -1,5 +1,6 @@
 import { Incoterm, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
 import { z } from 'zod';
+import { USER_ROLES } from '../constants/roles';
 import { normalizeAcceptedIncoterms } from '../utils/incoterm';
 import { ORIGIN_PORT_MAX_LENGTH } from '../utils/originPort';
 
@@ -408,13 +409,13 @@ export const userCreateSchema = z.object({
   name: requiredTrimmedStringField,
   email: lowercasedEmailField,
   password: z.string().min(8, 'A palavra-passe deve ter pelo menos 8 caracteres.'),
-  role: z.enum(['admin', 'comprador', 'gestor', 'viewer']),
+  role: z.enum(USER_ROLES),
 });
 
 export const userUpdateSchema = z.object({
   name: optionalTrimmedStringField,
   email: optionalEmailField,
-  role: z.enum(['admin', 'comprador', 'gestor', 'viewer']).optional(),
+  role: z.enum(USER_ROLES).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -801,3 +802,87 @@ export const creditSupportResendSchema = z.object({
 });
 
 export type CreditSupportForwardInput = z.infer<typeof creditSupportForwardSchema>;
+
+// Solicitacoes do comercial (PR1). Quantidade inteira positiva (mesmo tipo de
+// QuoteRequestItem.quantity); unidades = lista de CotacaoNova.
+export const COMMERCIAL_REQUEST_UNITS = ['KG', 'UN', 'M3', 'L', 'TON', 'BOX'] as const;
+
+const commercialRequestStatusEnum = z.enum(['pending', 'quoting', 'fulfilled', 'rejected']);
+
+function nullableTrimmedText(max: number, message: string) {
+  return z.preprocess(
+    (value) => {
+      if (value === undefined) return undefined;
+      if (value === null) return null;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed === '' ? null : trimmed;
+      }
+      return value;
+    },
+    z.string({ error: message }).max(max, message).nullable().optional(),
+  );
+}
+
+export const commercialRequestCreateSchema = z
+  .object({
+    customerName: nullableTrimmedText(200, 'O cliente deve ter no maximo 200 caracteres.'),
+    notes: nullableTrimmedText(2000, 'As observacoes devem ter no maximo 2000 caracteres.'),
+    items: z
+      .array(
+        z.object({
+          catalogItemId: z
+            .number({ error: 'Item invalido.' })
+            .int('Item invalido.')
+            .positive('Item invalido.'),
+          quantity: z
+            .number({ error: 'Quantidade invalida.' })
+            .int('A quantidade deve ser um numero inteiro.')
+            .positive('A quantidade deve ser maior que zero.')
+            .max(2147483647, 'A quantidade excede o limite permitido.'),
+          unit: z.enum(COMMERCIAL_REQUEST_UNITS, { error: 'Unidade invalida.' }),
+          targetPrice: z
+            .number({ error: 'Preco-alvo invalido.' })
+            .positive('O preco-alvo deve ser maior que zero.')
+            .max(9999999999.99, 'O preco-alvo excede o limite permitido.')
+            .nullable()
+            .optional(),
+          targetCurrency: optionalCurrencyCodeField,
+        }),
+      )
+      .min(1, 'Informe ao menos um item.')
+      .max(50, 'Limite de 50 itens por solicitacao.'),
+  })
+  .superRefine((value, ctx) => {
+    const seen = new Set<number>();
+    value.items.forEach((item, index) => {
+      if (seen.has(item.catalogItemId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['items', index, 'catalogItemId'],
+          message: 'Ha itens repetidos na solicitacao.',
+        });
+      }
+      seen.add(item.catalogItemId);
+    });
+  });
+
+export const commercialRequestListQuerySchema = z.object({
+  status: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    commercialRequestStatusEnum.optional(),
+  ),
+  requestedById: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.coerce.number().int().positive().optional(),
+  ),
+});
+
+export const commercialCatalogSearchQuerySchema = z.object({
+  search: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().max(100, 'A busca deve ter no maximo 100 caracteres.').optional(),
+  ),
+});
+
+export type CommercialRequestCreateInput = z.infer<typeof commercialRequestCreateSchema>;

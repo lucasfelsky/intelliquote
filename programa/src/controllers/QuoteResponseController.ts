@@ -27,7 +27,11 @@ import {
   persistedWinnerOf,
   type PartnerContactRef,
 } from '../services/ComparisonCandidateService';
-import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
+import {
+  CompanyProfileService,
+  excludeComercialRecipients,
+  readDispatchCc,
+} from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
 import { QuoteResponsePriceHistoryService } from '../services/QuoteResponsePriceHistoryService';
 import { sendPurchaseOrderEmail } from '../services/PurchaseOrderEmailService';
@@ -664,7 +668,9 @@ export class QuoteResponseController {
     }
 
     const profile = await CompanyProfileService.get();
-    const companyCc = readDispatchCc(profile).map((email) => ({ email, name: '' }));
+    const companyCc = await excludeComercialRecipients(
+      readDispatchCc(profile).map((email) => ({ email, name: '' })),
+    );
 
     return { quoteResponse, primaryContact, companyCc };
   }
@@ -675,10 +681,10 @@ export class QuoteResponseController {
   // avisa a pessoa. O texto da mensagem continua exatamente como digitado.
   private static readonly MENTION_EMAIL_REGEX = /@([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
 
-  private static mergeMentionedCc(
+  private static async mergeMentionedCc(
     companyCc: Array<{ email: string; name: string }>,
     message: string | undefined,
-  ): Array<{ email: string; name: string }> {
+  ): Promise<Array<{ email: string; name: string }>> {
     if (!message) return companyCc;
     const mentioned = new Set<string>();
     for (const match of message.matchAll(QuoteResponseController.MENTION_EMAIL_REGEX)) {
@@ -693,7 +699,8 @@ export class QuoteResponseController {
         seen.add(email);
       }
     }
-    return merged;
+    // A mencao e' digitada: nao pode contornar o invariante "comercial nunca recebe".
+    return excludeComercialRecipients(merged);
   }
 
   private static findReplyQuoteResponse(id: number) {
@@ -905,7 +912,7 @@ export class QuoteResponseController {
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
       const { quoteResponse, primaryContact } = context;
-      const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+      const companyCc = await QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
       // Preview NUNCA emite nem rotaciona token: link ficticio do portal.
       const rendered = await QuoteResponseController.renderReplyFor(
@@ -952,7 +959,7 @@ export class QuoteResponseController {
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
       const { quoteResponse, primaryContact } = context;
-      const companyCc = QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+      const companyCc = await QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
 
       if (parsedBody.data.targetPrice !== undefined) {
         if (parsedBody.data.targetPrice !== null) {
@@ -1097,9 +1104,11 @@ export class QuoteResponseController {
       });
 
       if (sendResult.status === 'failed') {
-        return res.status(502).json({
-          message: sendResult.error || 'Falha ao enviar o e-mail de resposta.',
-        });
+        // Codigos internos da defesa central -> mensagem amigavel em pt.
+        const message = sendResult.error?.startsWith('skipped_comercial_')
+          ? 'Envio bloqueado: o destinatário é um usuário do Comercial.'
+          : sendResult.error || 'Falha ao enviar o e-mail de resposta.';
+        return res.status(502).json({ message });
       }
 
       return res.status(200).json({

@@ -13,7 +13,11 @@ import { HttpError } from '../utils/http';
 import { effectiveOriginPort } from '../utils/originPort';
 import type { CreditSupportForwardInput } from '../validators/domain';
 import { AuditLogService } from './AuditLogService';
-import { CompanyProfileService, readDispatchCc } from './CompanyProfileService';
+import {
+  CompanyProfileService,
+  excludeComercialRecipients,
+  readDispatchCc,
+} from './CompanyProfileService';
 import { lockQuoteRequestForPurchaseOrders } from './QuotePurchaseOrderService';
 import { DEFAULT_TOKEN_TTL_DAYS, generateToken } from './SupplierPortalService';
 
@@ -442,7 +446,7 @@ export async function loadComexCc(): Promise<Array<{ email: string; name: string
     ...getComexCcList().map((c) => ({ email: c.email, name: c.name ?? '' })),
     ...readDispatchCc(profile).map((email) => ({ email, name: '' })),
   ];
-  return dedupeCc(merged, null);
+  return dedupeCc(await excludeComercialRecipients(merged), null);
 }
 
 export function dedupeCc(

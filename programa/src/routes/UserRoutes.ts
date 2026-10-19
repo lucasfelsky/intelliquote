@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { allowRoles, requireAuth } from '../middlewares/auth';
+import { COMEX_ROLES } from '../constants/roles';
 import { prisma } from '../lib/prisma';
 import { handleControllerError } from '../utils/http';
 
@@ -39,10 +40,13 @@ userRoutes.delete(
 // mencoes em envios etc). Retorna apenas dados de identificacao — sem
 // hash de senha, sem contadores. Restringimos a usuarios ativos por
 // padrao; aceita ?status=inactive|all explicito para auditoria.
-userRoutes.get('/users-directory', ...anyAuthenticated, async (req, res) => {
+userRoutes.get('/users-directory', requireAuth, allowRoles(COMEX_ROLES), async (req, res) => {
   try {
     const status = typeof req.query.status === 'string' ? req.query.status : 'active';
-    const where: { isActive?: boolean } = {};
+    // Usuarios `comercial` nao entram no diretorio interno (picker de CC etc.).
+    const where: { isActive?: boolean; role: { name: { not: string } } } = {
+      role: { name: { not: 'comercial' } },
+    };
     if (status === 'active') where.isActive = true;
     else if (status === 'inactive') where.isActive = false;
     // status=all => sem filtro

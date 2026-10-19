@@ -6,7 +6,7 @@ import { hashToken } from '../src/utils/tokens';
 
 vi.mock('../src/lib/prisma', () => {
   const prisma = {
-    user: { findUnique: vi.fn(), findFirst: vi.fn() },
+    user: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     session: {
       create: vi.fn(),
       findUnique: vi.fn(),

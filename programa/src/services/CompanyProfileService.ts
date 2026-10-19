@@ -42,7 +42,10 @@ export class CompanyProfileService {
     input: CompanyProfileInput,
     client: PrismaClient | Prisma.TransactionClient = defaultPrisma,
   ) {
-    const dispatchCcJson = JSON.stringify(normalizeDispatchCc(input.dispatchCc));
+    // E-mail de usuario `comercial` nunca persiste no CC (mesmo vindo como "extra" manual).
+    const dispatchCcJson = JSON.stringify(
+      await excludeComercialEmails(normalizeDispatchCc(input.dispatchCc), client),
+    );
 
     const existing = await client.companyProfile.findUnique({ where: { id: 1 } });
     if (!existing) {
@@ -100,6 +103,50 @@ export class CompanyProfileService {
 }
 
 /**
+ * E-mails (lowercase) de todos os usuarios com papel `comercial`, ativos ou nao.
+ * O comercial nunca pode receber e-mail com dados de fornecedor/preco/magic link.
+ */
+export async function loadComercialEmails(
+  client: PrismaClient | Prisma.TransactionClient = defaultPrisma,
+): Promise<Set<string>> {
+  const users = await client.user.findMany({
+    where: { role: { name: 'comercial' } },
+    select: { email: true },
+  });
+  return new Set(
+    users
+      .map((u) => u.email?.trim().toLowerCase())
+      .filter((e): e is string => Boolean(e)),
+  );
+}
+
+/**
+ * Remove destinatarios (to/cc) que pertencem a usuarios `comercial`, comparando
+ * e-mail case-insensitive. Filtra NO MOMENTO DO ENVIO: o dispatchCc e' uma lista
+ * gravada, entao quem estava nela e depois virou comercial continuaria recebendo.
+ */
+export async function excludeComercialRecipients<T extends { email: string }>(
+  items: T[],
+  client: PrismaClient | Prisma.TransactionClient = defaultPrisma,
+): Promise<T[]> {
+  if (items.length === 0) return items;
+  const comercial = await loadComercialEmails(client);
+  if (comercial.size === 0) return items;
+  return items.filter((item) => !comercial.has((item.email ?? '').trim().toLowerCase()));
+}
+
+export async function excludeComercialEmails(
+  emails: string[],
+  client: PrismaClient | Prisma.TransactionClient = defaultPrisma,
+): Promise<string[]> {
+  const kept = await excludeComercialRecipients(
+    emails.map((email) => ({ email })),
+    client,
+  );
+  return kept.map((item) => item.email);
+}
+
+/**
  * Normaliza a lista de e-mails em copia automatica:
  *  - remove espacos nas pontas
  *  - converte para lowercase
@@ -133,7 +180,8 @@ export async function normalizeDispatchCcWithUsers(input: {
 }): Promise<string[]> {
   const userClient = input.client ?? defaultPrisma;
   const users = await userClient.user.findMany({
-    where: { isActive: true },
+    // `comercial` fica fora: o CC dos envios a fornecedor carrega dados de preco/fornecedor.
+    where: { isActive: true, role: { name: { not: 'comercial' } } },
     select: { email: true },
   });
   const userEmails = users

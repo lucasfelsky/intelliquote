@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { CompanyProfileService, readDispatchCc } from '../services/CompanyProfileService';
+import {
+  CompanyProfileService,
+  excludeComercialRecipients,
+  readDispatchCc,
+} from '../services/CompanyProfileService';
 import {
   CREDIT_OFFER_CHANGED_MESSAGE,
   loadCreditCandidateForAward,
@@ -189,7 +193,9 @@ export class CreditSupportController {
       }
 
       const profile = await CompanyProfileService.get();
-      const companyCc = readDispatchCc(profile).map((email) => ({ email, name: '' }));
+      const companyCc = await excludeComercialRecipients(
+        readDispatchCc(profile).map((email) => ({ email, name: '' })),
+      );
 
       const result = await sendPurchaseOrderEmail({
         payload: parsedBody.data,

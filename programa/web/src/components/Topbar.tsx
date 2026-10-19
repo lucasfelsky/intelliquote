@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
+import { isComercialRole } from './navConfig';
 
 export default function Topbar() {
   const { user, logout } = useAuth();
@@ -16,9 +17,11 @@ export default function Topbar() {
           <small>{user?.email}</small>
         </div>
         <span className="badge">{user?.role}</span>
-        <Link to="/minha-conta" className="ghost-button">
-          Minha conta
-        </Link>
+        {!isComercialRole(user?.role) && (
+          <Link to="/minha-conta" className="ghost-button">
+            Minha conta
+          </Link>
+        )}
         <button type="button" className="ghost-button" onClick={() => void logout()}>
           Sair
         </button>
