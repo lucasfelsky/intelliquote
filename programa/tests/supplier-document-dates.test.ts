@@ -6,6 +6,7 @@ import {
   daysUntil,
   documentStatus,
   isValidDateKey,
+  resolveMilestone,
   todayKeyInSaoPaulo,
 } from '../src/utils/supplierDocumentDates';
 
@@ -69,5 +70,18 @@ describe('supplierDocumentDates', () => {
     expect(addDaysToKey('2026-12-31', 30)).toBe('2027-01-30');
     expect(addDaysToKey('2028-01-30', 30)).toBe('2028-02-29');
     expect(addDaysToKey('2027-01-01', -1)).toBe('2026-12-31');
+  });
+
+  it('resolveMilestone devolve o marco mais urgente ja atingido', () => {
+    expect(resolveMilestone(31)).toBeNull();
+    expect(resolveMilestone(30)).toBe('D30');
+    expect(resolveMilestone(16)).toBe('D30');
+    expect(resolveMilestone(15)).toBe('D15');
+    expect(resolveMilestone(8)).toBe('D15');
+    expect(resolveMilestone(7)).toBe('D7');
+    expect(resolveMilestone(1)).toBe('D7');
+    expect(resolveMilestone(0)).toBe('D0');
+    expect(resolveMilestone(-1)).toBe('EXPIRED');
+    expect(resolveMilestone(-40)).toBe('EXPIRED');
   });
 });

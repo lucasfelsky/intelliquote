@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   verifyIdToken: vi.fn(),
   refresh: vi.fn(),
   runReminderSweep: vi.fn(),
+  runExpiryAlertSweep: vi.fn(),
+  jobsEnv: {
+    audience: 'intelliquote-internal-jobs' as string | undefined,
+    invokerEmail: 'iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com' as string | undefined,
+  },
   reminder: { enabled: true, windowHours: 48 },
 }));
 
@@ -19,10 +24,7 @@ vi.mock('../src/config/env', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/config/env')>();
   return {
     ...actual,
-    internalJobsEnv: {
-      audience: 'intelliquote-internal-jobs',
-      invokerEmail: 'iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com',
-    },
+    internalJobsEnv: mocks.jobsEnv,
     reminderEnv: mocks.reminder,
   };
 });
@@ -46,6 +48,10 @@ vi.mock('../src/services/SupplierPortalReminderService', () => ({
   SupplierPortalReminderService: { runReminderSweep: mocks.runReminderSweep },
 }));
 
+vi.mock('../src/services/SupplierDocumentAlertService', () => ({
+  SupplierDocumentAlertService: { runExpiryAlertSweep: mocks.runExpiryAlertSweep },
+}));
+
 import { app } from '../src/app';
 
 const INVOKER = 'iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com';
@@ -60,7 +66,10 @@ beforeEach(() => {
   mocks.verifyIdToken.mockReset();
   mocks.refresh.mockReset();
   mocks.runReminderSweep.mockReset();
+  mocks.runExpiryAlertSweep.mockReset();
   mocks.reminder.enabled = true;
+  mocks.jobsEnv.audience = 'intelliquote-internal-jobs';
+  mocks.jobsEnv.invokerEmail = INVOKER;
 });
 
 describe('POST /api/internal/jobs/exchange-rates', () => {
@@ -194,5 +203,133 @@ describe('POST /api/internal/jobs/supplier-reminders', () => {
       .post('/api/internal/jobs/supplier-reminders')
       .set('Authorization', 'Bearer token-valido');
     expect(res.status).toBe(500);
+  });
+});
+
+describe('POST /api/internal/jobs/supplier-document-alerts', () => {
+  const URL = '/api/internal/jobs/supplier-document-alerts';
+
+  it('503 sem audience configurada, sem chamar o service', async () => {
+    mocks.jobsEnv.audience = undefined;
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(503);
+    expect(mocks.runExpiryAlertSweep).not.toHaveBeenCalled();
+  });
+
+  it('401 sem Bearer, sem chamar o service', async () => {
+    const res = await request(app).post(URL);
+    expect(res.status).toBe(401);
+    expect(mocks.runExpiryAlertSweep).not.toHaveBeenCalled();
+  });
+
+  it('401 quando o e-mail do token e de outra conta, sem chamar o service', async () => {
+    mocks.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({ email: 'outra@sq-comex-updates-3d22f.iam.gserviceaccount.com', email_verified: true }),
+    });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(401);
+    expect(mocks.runExpiryAlertSweep).not.toHaveBeenCalled();
+  });
+
+  it('200 com OIDC valido: chama o sweep 1x com Date e devolve o resumo', async () => {
+    authorizeOidc();
+    mocks.runExpiryAlertSweep.mockResolvedValue({
+      outcome: 'sent',
+      documents: 2,
+      releasedOrphans: 0,
+      recoveredOrphans: 0,
+      inFlight: 0,
+    });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ sent: 1, documents: 2, releasedOrphans: 0, recoveredOrphans: 0, inFlight: 0 });
+    expect(mocks.runExpiryAlertSweep).toHaveBeenCalledTimes(1);
+    expect(mocks.runExpiryAlertSweep.mock.calls[0][0]).toBeInstanceOf(Date);
+  });
+
+  it('200 com reason no_recipients (sem e-mail)', async () => {
+    authorizeOidc();
+    mocks.runExpiryAlertSweep.mockResolvedValue({
+      outcome: 'no_recipients',
+      documents: 0,
+      releasedOrphans: 1,
+      recoveredOrphans: 0,
+      inFlight: 0,
+    });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      sent: 0,
+      documents: 0,
+      reason: 'no_recipients',
+      releasedOrphans: 1,
+      recoveredOrphans: 0,
+      inFlight: 0,
+    });
+  });
+
+  it('200 com reason nothing_due e already_claimed', async () => {
+    authorizeOidc();
+    for (const outcome of ['nothing_due', 'already_claimed']) {
+      mocks.runExpiryAlertSweep.mockResolvedValueOnce({
+        outcome,
+        documents: 0,
+        releasedOrphans: 0,
+        recoveredOrphans: 0,
+        inFlight: 0,
+      });
+      const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ sent: 0, documents: 0, reason: outcome });
+    }
+  });
+
+  it('200 sent com inFlight > 0 inclui inFlight no body (sem forcar 503)', async () => {
+    authorizeOidc();
+    mocks.runExpiryAlertSweep.mockResolvedValue({
+      outcome: 'sent',
+      documents: 1,
+      releasedOrphans: 0,
+      recoveredOrphans: 0,
+      inFlight: 2,
+    });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ sent: 1, documents: 1, inFlight: 2 });
+  });
+
+  it('503 quando outra execucao esta em andamento (in_progress), para o Scheduler repetir', async () => {
+    authorizeOidc();
+    mocks.runExpiryAlertSweep.mockResolvedValue({
+      outcome: 'in_progress',
+      documents: 0,
+      releasedOrphans: 0,
+      recoveredOrphans: 0,
+      inFlight: 3,
+    });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ message: 'Outra execucao em andamento; tente de novo.', inFlight: 3 });
+  });
+
+  it('500 quando o envio falha (send_failed), para o Scheduler repetir', async () => {
+    authorizeOidc();
+    mocks.runExpiryAlertSweep.mockResolvedValue({
+      outcome: 'send_failed',
+      documents: 2,
+      releasedOrphans: 0,
+      recoveredOrphans: 0,
+    });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: 'Falha ao enviar o aviso de documentos.', documents: 2 });
+  });
+
+  it('500 quando o service lanca', async () => {
+    authorizeOidc();
+    mocks.runExpiryAlertSweep.mockRejectedValue(new Error('db fora'));
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: 'Falha no job de avisos de documentos.' });
   });
 });
