@@ -365,20 +365,19 @@ export default function Cotacoes() {
                     )}
                   </td>
                   <td className="col-status">
-                    <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
-                      {qr.status === 'open' ? 'Aberta' : 'Fechada'}
-                    </span>
-                    {qr.status === 'open' && qr.reopenedAt && (
-                      <>
-                        {' '}
-                        <span
-                          className="badge badge--warning"
-                          title={`Reaberta em ${formatSaoPauloDate(qr.reopenedAt)}`}
-                        >
-                          Reaberta
-                          <span className="sr-only"> em {formatSaoPauloDate(qr.reopenedAt)}</span>
-                        </span>
-                      </>
+                    {/* Reaberta substitui o "Aberta" (ela tambem esta aberta). */}
+                    {qr.status === 'open' && qr.reopenedAt ? (
+                      <span
+                        className="badge badge--warning"
+                        title={`Reaberta em ${formatSaoPauloDate(qr.reopenedAt)}`}
+                      >
+                        Reaberta
+                        <span className="sr-only"> em {formatSaoPauloDate(qr.reopenedAt)}</span>
+                      </span>
+                    ) : (
+                      <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
+                        {qr.status === 'open' ? 'Aberta' : 'Fechada'}
+                      </span>
                     )}
                   </td>
                   <td>
