@@ -26,6 +26,18 @@ export function isPortalUserClaim(rawClaim: unknown): boolean {
 }
 
 /**
+ * Claim bruto `role` do Firebase -> papel interno. So toLowerCase (sem trim, como isPortalUserClaim).
+ * Papel interno exato -> ele mesmo; qualquer outra coisa (ausente, nao-string, `user`, `logistica`,
+ * `compras`, desconhecido) -> DEFAULT_INTERNAL_ROLE. Nunca devolve nome fora de USER_ROLES.
+ * Usada pelos dois caminhos de login (tryFirebaseAuth e POST /auth/firebase).
+ */
+export function mapFirebaseRoleToInternal(rawClaim: unknown): UserRole {
+  if (typeof rawClaim !== 'string') return DEFAULT_INTERNAL_ROLE;
+  const normalized = rawClaim.toLowerCase();
+  return isUserRole(normalized) ? normalized : DEFAULT_INTERNAL_ROLE;
+}
+
+/**
  * Vale ler a Area do Portal no Firestore? So quando pode mudar o resultado:
  * claim `user` e o papel atual nao e um papel fixo do banco.
  */

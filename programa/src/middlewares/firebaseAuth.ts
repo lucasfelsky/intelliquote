@@ -19,7 +19,8 @@
 //
 // A role interna vem do custom claim `role` do Firebase (nome fixo). Ausente ou
 // desconhecida -> `DEFAULT_INTERNAL_ROLE` (`comprador`). Claim `user` + Area Comercial do
-// Portal (Firestore `users/{uid}.area`) -> `comercial` (ver PortalAreaService).
+// Portal (Firestore `users/{uid}.area`) -> `comercial` (ver PortalAreaService). O mapeamento do claim e
+// `mapFirebaseRoleToInternal` (`constants/roles.ts`), compartilhado com `FirebaseAuthController`.
 
 import type { NextFunction, Request, Response } from 'express';
 import { cert, getApp, initializeApp, type App } from 'firebase-admin/app';
@@ -29,7 +30,7 @@ import { prisma } from '../lib/prisma';
 import { hashPassword } from '../utils/password';
 import { handleControllerError, HttpError } from '../utils/http';
 import type { AuthenticatedUser } from '../types/auth';
-import { isUserRole, DEFAULT_INTERNAL_ROLE } from '../constants/roles';
+import { isUserRole, mapFirebaseRoleToInternal } from '../constants/roles';
 import { resolveFirebaseLoginRoleWithArea } from '../services/PortalAreaService';
 
 let firebaseApp: App | null = null;
@@ -58,17 +59,6 @@ function extractBearerToken(req: Request): string | null {
   if (!header) return null;
   if (!header.startsWith('Bearer ')) return null;
   return header.slice(7).trim();
-}
-
-function mapFirebaseRoleToInternal(claimRole: unknown): typeof DEFAULT_INTERNAL_ROLE {
-  if (typeof claimRole !== 'string') return DEFAULT_INTERNAL_ROLE;
-  const normalized = claimRole.toLowerCase();
-  if (isUserRole(normalized)) return normalized;
-  // Fallback para roles conhecidas do Portal COMEX
-  if (normalized === 'comex' || normalized === 'admin' || normalized === 'viewer') {
-    return normalized as typeof DEFAULT_INTERNAL_ROLE;
-  }
-  return DEFAULT_INTERNAL_ROLE;
 }
 
 async function provisionInternalUser(decoded: DecodedIdToken): Promise<AuthenticatedUser> {
