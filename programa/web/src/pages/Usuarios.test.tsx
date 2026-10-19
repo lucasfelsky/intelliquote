@@ -141,6 +141,28 @@ describe('Usuarios', () => {
     expect(getDialog(container).open).toBe(true);
   });
 
+  it('12. enquanto o PUT está pendente o modal não fecha (Cancelar, × e Esc) e só fecha no sucesso', async () => {
+    vi.mocked(api.get).mockResolvedValue([USER_ROW]);
+    let resolvePut: (v: unknown) => void = () => {};
+    vi.mocked(api.put).mockReturnValue(new Promise((r) => { resolvePut = r; }) as never);
+    const { container, findByRole, getByLabelText, getByRole } = renderPage();
+    fireEvent.click(await findByRole('button', { name: 'Editar Ana Vendas' }));
+    fireEvent.change(getByLabelText('Perfil'), { target: { value: 'comercial' } });
+    fireEvent.click(getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+
+    const dialog = getDialog(container);
+    const cancel = getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement;
+    await waitFor(() => expect(cancel.disabled).toBe(true));
+    fireEvent.click(getByLabelText('Fechar'));
+    dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Editar usuário');
+
+    resolvePut({ ...USER_ROW, role: 'comercial' });
+    await waitFor(() => expect(dialog.open).toBe(false));
+  });
+
   it('11. depois de editar, "+ Novo usuário" volta ao formulário de cadastro limpo', async () => {
     vi.mocked(api.get).mockResolvedValue([USER_ROW]);
     const { container, findByRole, getByLabelText, getByRole } = renderPage();

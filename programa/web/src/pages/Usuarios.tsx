@@ -108,6 +108,15 @@ export default function Usuarios() {
     setFormError(null);
   }
 
+  const saving = create.isPending || update.isPending;
+
+  // Fechar pelo usuario (Cancelar/×/Esc) fica bloqueado enquanto salva: assim os
+  // callbacks da mutation sempre agem sobre o mesmo formulario que foi enviado.
+  function requestClose() {
+    if (saving) return;
+    closeForm();
+  }
+
   function openEdit(user: User) {
     setEditing(user);
     setForm({ ...emptyForm, name: user.name, email: user.email, role: user.role });
@@ -240,7 +249,7 @@ export default function Usuarios() {
         )}
       </section>
 
-      <Modal isOpen={showForm} onClose={closeForm} title={editing ? 'Editar usuário' : 'Novo usuário'}>
+      <Modal isOpen={showForm} onClose={requestClose} title={editing ? 'Editar usuário' : 'Novo usuário'}>
         <form onSubmit={handleSubmit}>
           <label className="field-label" htmlFor="user-name">Nome</label>
           <input
@@ -306,13 +315,13 @@ export default function Usuarios() {
           )}
 
           <div className="modal-actions">
-            <button type="button" className="ghost-button" onClick={closeForm}>
+            <button type="button" className="ghost-button" onClick={requestClose} disabled={saving}>
               Cancelar
             </button>
             <button
               type="submit"
               className="primary-button"
-              disabled={create.isPending || update.isPending}
+              disabled={saving}
             >
               {editing ? 'Salvar' : 'Cadastrar'}
             </button>
