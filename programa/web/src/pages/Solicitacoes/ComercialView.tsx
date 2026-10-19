@@ -110,11 +110,33 @@ export default function ComercialView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedTerm, setDebouncedTerm] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  // A busca fecha ao escolher um item (o foco vai para a quantidade dele) e
+  // reabre pelo "+ Adicionar outro item". Sem itens, ela fica sempre aberta.
+  const [searchOpen, setSearchOpen] = useState(true);
+  const [focusQtyId, setFocusQtyId] = useState<number | null>(null);
+  const [focusAfterRemove, setFocusAfterRemove] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedTerm(searchTerm.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  useEffect(() => {
+    if (focusQtyId === null) return;
+    const input = document.getElementById(`cr-qty-${focusQtyId}`) as HTMLInputElement | null;
+    input?.focus();
+    input?.select();
+    setFocusQtyId(null);
+  }, [focusQtyId, lines]);
+
+  useEffect(() => {
+    if (!focusAfterRemove) return;
+    const target =
+      (document.getElementById('cr-search') as HTMLElement | null) ??
+      (document.getElementById('cr-add-more') as HTMLElement | null);
+    target?.focus();
+    setFocusAfterRemove(false);
+  }, [focusAfterRemove, lines]);
 
   const mine = useQuery({
     queryKey: [...MINE_KEY, page],
@@ -149,6 +171,7 @@ export default function ComercialView() {
     setSearchTerm('');
     setDebouncedTerm('');
     setFormError(null);
+    setSearchOpen(true);
     setModalOpen(true);
   }
 
@@ -158,6 +181,11 @@ export default function ComercialView() {
   }
 
   function addItem(item: CommercialCatalogItem) {
+    if (lines.length >= MAX_ITEMS || lines.some((line) => line.catalogItemId === item.id)) return;
+    setSearchTerm('');
+    setDebouncedTerm('');
+    setSearchOpen(false);
+    setFocusQtyId(item.id);
     setLines((current) => {
       if (current.length >= MAX_ITEMS) return current;
       if (current.some((line) => line.catalogItemId === item.id)) return current;
@@ -184,6 +212,8 @@ export default function ComercialView() {
 
   function removeLine(catalogItemId: number) {
     setLines((current) => current.filter((line) => line.catalogItemId !== catalogItemId));
+    // O botão clicado some: devolve o foco para a busca (se reaparecer) ou para "+ Adicionar outro item".
+    setFocusAfterRemove(true);
   }
 
   function handleSubmit(event: FormEvent) {
@@ -226,6 +256,7 @@ export default function ComercialView() {
 
   const results = search.data ?? [];
   const showSearchHint = searchTerm.trim().length > 0 && searchTerm.trim().length < MIN_SEARCH_LENGTH;
+  const showSearch = searchOpen || lines.length === 0;
 
   return (
     <div className="page">
@@ -353,56 +384,12 @@ export default function ComercialView() {
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
-            <div className="form-grid__full">
-              <label className="field-label" htmlFor="cr-search">Buscar item</label>
-              <input
-                id="cr-search"
-                className="input"
-                placeholder="Digite ao menos 2 letras do nome comercial"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                autoComplete="off"
-              />
-              {showSearchHint && (
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
-                  Digite ao menos {MIN_SEARCH_LENGTH} caracteres.
-                </p>
-              )}
-              {search.isError && (
-                <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
-                  {messageOf(search.error)}
-                </p>
-              )}
-              {debouncedTerm.length >= MIN_SEARCH_LENGTH && search.isSuccess && results.length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
-                  Nenhum item encontrado.
-                </p>
-              )}
-              {results.length > 0 && (
-                <ul aria-label="Resultados da busca" style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
-                  {results.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => addItem(item)}
-                        disabled={lines.some((line) => line.catalogItemId === item.id)}
-                      >
-                        {lines.some((line) => line.catalogItemId === item.id)
-                          ? <>{labelOf(item)} <span className="sol-added">Adicionado ✓</span></>
-                          : <>+ {labelOf(item)}</>}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
 
           <h3 style={{ margin: '18px 0 8px', fontSize: 15 }}>Itens da solicitação</h3>
           {lines.length === 0 && (
             <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
-              Nenhum item adicionado. Busque acima e clique no item para incluí-lo.
+              Nenhum item adicionado. Busque abaixo e clique no item para incluí-lo.
             </p>
           )}
           {lines.map((line) => (
@@ -481,6 +468,78 @@ export default function ComercialView() {
               </div>
             </fieldset>
           ))}
+
+          {showSearch ? (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                <label className="field-label" htmlFor="cr-search">Buscar item</label>
+                {lines.length > 0 && (
+                  <button
+                    type="button"
+                    className="link-button text-sm"
+                    style={{ background: 'none', border: 'none', padding: 0, color: 'var(--ink-soft)', cursor: 'pointer' }}
+                    onClick={() => {
+                      setSearchTerm('');
+                      setDebouncedTerm('');
+                      setSearchOpen(false);
+                    }}
+                  >
+                    Fechar busca
+                  </button>
+                )}
+              </div>
+              <input
+                id="cr-search"
+                className="input"
+                placeholder="Digite ao menos 2 letras do nome comercial"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                autoComplete="off"
+                // Reaberta pelo "+ Adicionar outro item": já vem com o cursor.
+                autoFocus={lines.length > 0}
+              />
+              {showSearchHint && (
+                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                  Digite ao menos {MIN_SEARCH_LENGTH} caracteres.
+                </p>
+              )}
+              {search.isError && (
+                <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+                  {messageOf(search.error)}
+                </p>
+              )}
+              {debouncedTerm.length >= MIN_SEARCH_LENGTH && search.isSuccess && results.length === 0 && (
+                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                  Nenhum item encontrado.
+                </p>
+              )}
+              {debouncedTerm.length >= MIN_SEARCH_LENGTH && results.length > 0 && (
+                <ul aria-label="Resultados da busca" style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
+                  {results.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        style={{ width: '100%', textAlign: 'left', marginBottom: 4 }}
+                        onClick={() => addItem(item)}
+                        disabled={lines.some((line) => line.catalogItemId === item.id)}
+                      >
+                        {lines.some((line) => line.catalogItemId === item.id)
+                          ? <>{labelOf(item)} <span className="sol-added">Adicionado ✓</span></>
+                          : <>+ {labelOf(item)}</>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : (
+            lines.length < MAX_ITEMS && (
+              <button id="cr-add-more" type="button" className="ghost-button" onClick={() => setSearchOpen(true)}>
+                + Adicionar outro item
+              </button>
+            )
+          )}
 
           {formError && (
             <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">

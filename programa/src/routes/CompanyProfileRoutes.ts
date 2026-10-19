@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { CompanyProfileService, normalizeDispatchCc, readDispatchCc } from '../services/CompanyProfileService';
+import {
+  CompanyProfileService,
+  normalizeDispatchCc,
+  readCommercialRequestNotifyEmails,
+  readDispatchCc,
+} from '../services/CompanyProfileService';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 import { handleControllerError, HttpError } from '../utils/http';
 import { prisma } from '../lib/prisma';
@@ -39,7 +44,25 @@ const companyProfileUpdateSchema = z.object({
     .array(emailShape)
     .max(50, 'Limite de 50 enderecos em copia automatica.')
     .optional(),
+  // Destinatarios do aviso "nova solicitacao do comercial". Ausente = nao altera;
+  // [] = limpa (aviso volta a usar env + dispatchCc).
+  commercialRequestNotifyEmails: z
+    .array(emailShape)
+    .max(50, 'Limite de 50 enderecos nos avisos de nova solicitacao.')
+    .optional(),
 });
+
+// dispatchCc e commercialRequestNotifyEmails sao persistidos como JSON string;
+// a API sempre expoe ambos como array de strings.
+function hydrateProfile<
+  T extends { dispatchCc: string | null; commercialRequestNotifyEmails?: string | null },
+>(profile: T) {
+  return {
+    ...profile,
+    dispatchCc: readDispatchCc(profile),
+    commercialRequestNotifyEmails: readCommercialRequestNotifyEmails(profile),
+  };
+}
 
 companyProfileRoutes.get(
   '/',
@@ -51,11 +74,7 @@ companyProfileRoutes.get(
       // dispatchCc e persistido como JSON string para manter compatibilidade
       // com schemas que nao tem tipo nativo de array. Hidratamos para o
       // formato que o frontend espera (array de strings) na resposta.
-      const { dispatchCc, ...rest } = profile;
-      return res.status(200).json({
-        ...rest,
-        dispatchCc: readDispatchCc(profile),
-      });
+      return res.status(200).json(hydrateProfile(profile));
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -137,20 +156,16 @@ companyProfileRoutes.put(
             entityId: 1,
             action: 'update',
             performedById: req.user?.id ?? null,
-            beforeData: before ? { ...before, dispatchCc: readDispatchCc(before) } : null,
-            afterData: { ...result, dispatchCc: readDispatchCc(result) },
+            beforeData: before ? hydrateProfile(before) : null,
+            afterData: hydrateProfile(result),
             metadata: { thresholdIgnored },
           },
           tx,
         );
         return result;
       });
-      // Hidrata dispatchCc para array de strings antes de devolver.
-      const { dispatchCc, ...rest } = updated;
-      return res.status(200).json({
-        ...rest,
-        dispatchCc: readDispatchCc(updated),
-      });
+      // Hidrata os campos JSON para array de strings antes de devolver.
+      return res.status(200).json(hydrateProfile(updated));
     } catch (error) {
       if (error instanceof HttpError) {
         return res.status(error.status).json({ message: error.message });

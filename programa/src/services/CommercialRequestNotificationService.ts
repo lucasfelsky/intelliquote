@@ -13,6 +13,7 @@ import {
 import {
   CompanyProfileService,
   excludeComercialRecipients,
+  readCommercialRequestNotifyEmails,
   readDispatchCc,
 } from './CompanyProfileService';
 
@@ -21,16 +22,19 @@ interface Recipient {
   name?: string;
 }
 
-// Destinatarios = lista COMEX do ambiente + CC padrao do perfil da empresa,
-// dedup case-insensitive. Primeiro vira `to`; o resto vai em `cc`.
+// Destinatarios: se o perfil da empresa tem a lista propria do aviso
+// (commercialRequestNotifyEmails), vai SO para ela. Vazia: lista COMEX do
+// ambiente + CC padrao do perfil (comportamento anterior). Em ambos os casos,
+// dedup case-insensitive e sem usuarios `comercial`. Primeiro vira `to`; o resto, `cc`.
 async function resolveRecipients(): Promise<Recipient[]> {
   const profile = await CompanyProfileService.get();
-  const candidates: Recipient[] = [
-    ...getComexCcList(),
-    ...readDispatchCc(profile).map((email) => ({ email })),
-  ];
+  const notifyEmails = readCommercialRequestNotifyEmails(profile);
+  const candidates: Recipient[] =
+    notifyEmails.length > 0
+      ? notifyEmails.map((email) => ({ email }))
+      : [...getComexCcList(), ...readDispatchCc(profile).map((email) => ({ email }))];
 
-  // Quem estava no dispatchCc e depois virou `comercial` nao recebe o aviso interno.
+  // Quem estava na lista (dispatchCc ou lista propria) e depois virou `comercial` nao recebe o aviso interno.
   const eligible = await excludeComercialRecipients(candidates);
 
   const seen = new Set<string>();
