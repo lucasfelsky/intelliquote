@@ -12,3 +12,8 @@ COOKIE_SECURE: "true"
 # (veja .github/workflows/deploy-intelliquote-api.yml), porque --env-vars-file
 # e --update-env-vars sao mutuamente exclusivos.
 BACKEND_BUILD_TAG: "placeholder"
+
+# Jobs internos (Cloud Scheduler -> /api/internal/jobs/*). O --env-vars-file sobrescreve
+# todas as envs a cada deploy, entao estes valores precisam estar aqui.
+INTERNAL_JOBS_OIDC_AUDIENCE: "intelliquote-internal-jobs"
+INTERNAL_JOBS_INVOKER_EMAIL: "iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com"
