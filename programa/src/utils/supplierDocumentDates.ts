@@ -87,3 +87,29 @@ export function documentStatus(daysLeft: number): SupplierDocumentStatus {
 export function addDaysToKey(key: string, days: number): string {
   return new Date(keyToUtcMs(key) + days * MS_PER_DAY).toISOString().slice(0, 10);
 }
+
+// Marcos dos avisos de vencimento por e-mail (PR2). D0 = vence hoje; EXPIRED = ja vencido.
+export const SUPPLIER_DOCUMENT_ALERT_MILESTONES = ['D30', 'D15', 'D7', 'D0', 'EXPIRED'] as const;
+
+export type SupplierDocumentAlertMilestone = (typeof SUPPLIER_DOCUMENT_ALERT_MILESTONES)[number];
+
+// Marco mais urgente ja atingido para `daysLeft` (null = ainda fora da janela de 30 dias).
+// Catch-up: um documento vencido ha muito tempo cai direto em EXPIRED.
+export function resolveMilestone(daysLeft: number): SupplierDocumentAlertMilestone | null {
+  if (daysLeft < 0) {
+    return 'EXPIRED';
+  }
+  if (daysLeft === 0) {
+    return 'D0';
+  }
+  if (daysLeft <= 7) {
+    return 'D7';
+  }
+  if (daysLeft <= 15) {
+    return 'D15';
+  }
+  if (daysLeft <= SUPPLIER_DOCUMENT_EXPIRING_WINDOW_DAYS) {
+    return 'D30';
+  }
+  return null;
+}

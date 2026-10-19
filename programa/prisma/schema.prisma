@@ -945,6 +945,7 @@ model SupplierDocument {
   supplier    Supplier              @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   createdBy   User?                 @relation("SupplierDocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   file        SupplierDocumentFile?
+  alerts      SupplierDocumentAlert[]
 
   @@index([supplierId])
   @@index([expiresOn])
@@ -958,6 +959,26 @@ model SupplierDocumentFile {
   documentId Int              @id
   data       Bytes
   document   SupplierDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+// PR2 documentos: idempotencia dos avisos de vencimento. 1 linha por
+// (documento, ciclo, marco); claim por create (P2002 = outra execucao ja pegou).
+// milestone: D30 | D15 | D7 | D0 | EXPIRED. status: claimed | sent.
+// runId liga os claims de uma execucao ao MailLog (relatedEntityId).
+model SupplierDocumentAlert {
+  id         Int              @id @default(autoincrement())
+  documentId Int
+  alertCycle Int
+  milestone  String
+  status     String           @default("claimed")
+  runId      String
+  claimedAt  DateTime         @default(now())
+  sentAt     DateTime?
+  document   SupplierDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, alertCycle, milestone])
+  @@index([status, claimedAt])
+  @@index([runId])
 }
 
 enum CommercialRequestStatus {

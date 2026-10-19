@@ -5,12 +5,18 @@ import { logger } from '../lib/logger';
 
 // API oficial PTAX do Banco Central do Brasil (Olinda OData).
 // Documentacao: https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/documentacao
-// Aqui ja filtramos cotacaoCompra (taxa de compra) e escolhemos o boletim mais recente.
+// Consultamos uma janela de dias (CotacaoMoedaPeriodo) e escolhemos o boletim de
+// Fechamento mais recente; cotacaoCompra eh a taxa de compra.
 const PTAX_BASE_URL = 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata';
 const REQUEST_TIMEOUT_MS = 8000;
+// Janela de busca (dias corridos para tras, a partir de hoje em BRT). Cobre fim de
+// semana e feriados prolongados: segunda de manha pega o Fechamento de sexta.
+const LOOKBACK_DAYS = 7;
+const PTAX_TIME_ZONE = 'America/Sao_Paulo';
 
 // Moedas que vamos rastrear. Podem ser expandidas sem alterar o servico.
-const TRACKED_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CNY'] as const;
+// Somente moedas existentes na PTAX (CNY nao existe no BCB e nao eh rastreada).
+const TRACKED_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CHF'] as const;
 type TrackedCurrency = (typeof TRACKED_CURRENCIES)[number];
 
 interface PtaxEntry {
@@ -19,6 +25,7 @@ interface PtaxEntry {
   cotacaoCompra: number;
   cotacaoVenda: number;
   dataHoraCotacao: string;
+  tipoBoletim?: string;
 }
 
 interface PtaxResponse {
@@ -35,11 +42,39 @@ function parseBcbDate(value: string): Date {
   return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
 }
 
-async function fetchPtaxFor(currency: TrackedCurrency, signal: AbortSignal): Promise<PtaxEntry[]> {
+// Data civil de Brasilia (yyyy-MM-dd) de um instante, independente do TZ do processo.
+function brtDateKey(instant: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: PTAX_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
+}
+
+// "yyyy-MM-dd" -> "MM-dd-yyyy" (formato dos parametros do OData do BCB).
+function toBcbDateParam(dateKey: string): string {
+  const [year, month, day] = dateKey.split('-');
+  return `${month}-${day}-${year}`;
+}
+
+function shiftDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return shifted.toISOString().slice(0, 10);
+}
+
+async function fetchPtaxFor(
+  currency: TrackedCurrency,
+  signal: AbortSignal,
+  now: Date,
+): Promise<PtaxEntry[]> {
+  const today = brtDateKey(now);
+  const start = shiftDateKey(today, -LOOKBACK_DAYS);
   const url =
-    `${PTAX_BASE_URL}/CotacaoMoedaDia(moeda=@moeda,dataCotacao=@dataCotacao)` +
-    `?@moeda='${currency}'&@dataCotacao='${formatDateParam(new Date())}'` +
-    `&$format=json&$select=paridadeCompra,paridadeVenda,cotacaoCompra,cotacaoVenda,dataHoraCotacao`;
+    `${PTAX_BASE_URL}/CotacaoMoedaPeriodo(moeda=@moeda,dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)` +
+    `?@moeda='${currency}'&@dataInicial='${toBcbDateParam(start)}'&@dataFinalCotacao='${toBcbDateParam(today)}'` +
+    `&$format=json&$select=paridadeCompra,paridadeVenda,cotacaoCompra,cotacaoVenda,dataHoraCotacao,tipoBoletim`;
   const response = await fetch(url, {
     signal,
     headers: { Accept: 'application/json', 'User-Agent': 'IntelliQuote-Backend/1.0' },
@@ -54,11 +89,21 @@ async function fetchPtaxFor(currency: TrackedCurrency, signal: AbortSignal): Pro
   return payload.value;
 }
 
-function formatDateParam(date: Date): string {
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const year = date.getUTCFullYear();
-  return `${month}-${day}-${year}`;
+// Escolhe o boletim de Fechamento mais recente da janela. Sem nenhum Fechamento,
+// cai no ultimo boletim (com aviso). Ordena localmente por dataHoraCotacao
+// ("yyyy-MM-dd HH:mm:ss...") para nao depender da ordem da resposta.
+function pickBulletin(currency: TrackedCurrency, entries: PtaxEntry[]): PtaxEntry | null {
+  const sorted = [...entries].sort((a, b) => a.dataHoraCotacao.localeCompare(b.dataHoraCotacao));
+  const closings = sorted.filter((entry) => entry.tipoBoletim?.trim().toLowerCase() === 'fechamento');
+  if (closings.length > 0) return closings[closings.length - 1];
+  const latest = sorted[sorted.length - 1] ?? null;
+  if (latest) {
+    logger.warn(
+      { currency, tipoBoletim: latest.tipoBoletim ?? null, dataHoraCotacao: latest.dataHoraCotacao },
+      'Nenhum boletim de Fechamento PTAX na janela; usando o ultimo boletim disponivel.',
+    );
+  }
+  return latest;
 }
 
 export interface ExchangeRateSnapshot {
@@ -72,10 +117,10 @@ export interface ExchangeRateSnapshot {
 async function fetchOne(
   currency: TrackedCurrency,
   signal: AbortSignal,
+  now: Date,
 ): Promise<ExchangeRateSnapshot | null> {
-  const entries = await fetchPtaxFor(currency, signal);
-  // Pegamos o boletim mais recente (ultimo item ja vem ordenado pela API).
-  const latest = entries[entries.length - 1];
+  const entries = await fetchPtaxFor(currency, signal, now);
+  const latest = pickBulletin(currency, entries);
   if (!latest) return null;
   const rateToBrl = Number(latest.cotacaoCompra);
   if (!Number.isFinite(rateToBrl) || rateToBrl <= 0) {
@@ -86,7 +131,7 @@ async function fetchOne(
     currency,
     rateToBrl,
     referenceDate: referenceDate.toISOString().slice(0, 10),
-    fetchedAt: new Date(),
+    fetchedAt: now,
     source: 'BCB_PTAX',
   };
 }
@@ -94,9 +139,13 @@ async function fetchOne(
 export class ExchangeRateService {
   /**
    * Atualiza o cache local de taxas a partir do BCB PTAX.
-   * Roda no startup e diariamente via cron.
+   * Disparado pelo Cloud Scheduler (POST /api/internal/jobs/exchange-rates) e,
+   * fora de producao, no boot. Grava o Fechamento mais recente da janela.
    */
-  static async refresh(client: PrismaClient = prisma): Promise<ExchangeRateSnapshot[]> {
+  static async refresh(
+    client: PrismaClient = prisma,
+    now: Date = new Date(),
+  ): Promise<ExchangeRateSnapshot[]> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     const collected: ExchangeRateSnapshot[] = [];
@@ -105,7 +154,7 @@ export class ExchangeRateService {
     try {
       for (const currency of TRACKED_CURRENCIES) {
         try {
-          const snapshot = await fetchOne(currency, controller.signal);
+          const snapshot = await fetchOne(currency, controller.signal, now);
           if (!snapshot) continue;
           collected.push(snapshot);
         } catch (error) {
