@@ -132,7 +132,8 @@ describe.skipIf(!run)('QuoteRequest.listedAt/reopenedAt em Postgres isolado', ()
     );
     expect(diff.status, diff.stderr).toBe(0);
     expect(diff.stdout).not.toMatch(/listedAt|reopenedAt/);
-  });
+    // `prisma migrate diff` sobe a engine de schema: passa dos 5s padrao com a maquina carregada.
+  }, 60_000);
 
   it('backfill: reopenedAt vem do ultimo AuditLog reopen, listedAt = GREATEST e e idempotente', async () => {
     const a = await createQuote('bf-a');
