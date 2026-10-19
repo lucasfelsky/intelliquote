@@ -243,7 +243,7 @@ describe('Cotacoes - selo Reaberta', () => {
     vi.mocked(api.get).mockImplementation((async () => rows) as typeof api.get);
   }
 
-  it('aberta com reopenedAt mostra "Reaberta" com a data no fuso de São Paulo', async () => {
+  it('aberta com reopenedAt mostra só "Reaberta" (sem "Aberta") com a data no fuso de São Paulo', async () => {
     // 19/10 02:30Z = 18/10 23:30 em SP (independe do fuso da máquina).
     mockList([{ ...quote(1, 'QR-001', null), reopenedAt: '2026-10-19T02:30:00.000Z' }]);
     renderPage();
@@ -252,7 +252,7 @@ describe('Cotacoes - selo Reaberta', () => {
     const badge = within(row).getByText('Reaberta');
     expect(badge.getAttribute('title')).toBe('Reaberta em 18/10/2026');
     expect(badge.textContent?.replace(/\s+/g, ' ').trim()).toBe('Reaberta em 18/10/2026');
-    expect(within(row).getByText('Aberta')).toBeTruthy();
+    expect(within(row).queryByText('Aberta')).toBeNull();
   });
 
   it('fechada com reopenedAt preenchido não mostra "Reaberta"', async () => {
@@ -277,5 +277,7 @@ describe('Cotacoes - selo Reaberta', () => {
 
     expect(within(row1).queryByText('Reaberta')).toBeNull();
     expect(within(row2).queryByText('Reaberta')).toBeNull();
+    expect(within(row1).getByText('Aberta')).toBeTruthy();
+    expect(within(row2).getByText('Aberta')).toBeTruthy();
   });
 });

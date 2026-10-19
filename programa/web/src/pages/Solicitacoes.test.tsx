@@ -197,12 +197,58 @@ describe('Solicitacoes - comercial', () => {
     ]);
   });
 
+  it('escolher um item fecha a busca e coloca o foco na quantidade dele', async () => {
+    renderPage();
+    await screen.findByText('Pendente');
+    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
+    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+
+    expect(screen.queryByLabelText('Buscar item')).toBeNull();
+    expect(screen.queryByRole('list', { name: 'Resultados da busca' })).toBeNull();
+    const qty = screen.getByLabelText('Quantidade *');
+    await waitFor(() => expect(document.activeElement).toBe(qty));
+    expect(screen.getByRole('button', { name: '+ Adicionar outro item' })).toBeTruthy();
+  });
+
+  it('"+ Adicionar outro item" reabre a busca vazia e "Fechar busca" volta ao botao', async () => {
+    renderPage();
+    await screen.findByText('Pendente');
+    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
+    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar outro item' }));
+    const search = screen.getByLabelText('Buscar item') as HTMLInputElement;
+    expect(search.value).toBe('');
+    expect(document.activeElement).toBe(search);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar busca' }));
+    expect(screen.queryByLabelText('Buscar item')).toBeNull();
+    expect(screen.getByRole('button', { name: '+ Adicionar outro item' })).toBeTruthy();
+  });
+
+  it('remover o unico item volta a mostrar a busca', async () => {
+    renderPage();
+    await screen.findByText('Pendente');
+    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
+    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover item' }));
+    const search = screen.getByLabelText('Buscar item');
+    expect(screen.queryByRole('button', { name: '+ Adicionar outro item' })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
   it('item ja adicionado aparece como "Adicionado ✓" nos resultados', async () => {
     renderPage();
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar outro item' }));
+    fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
 
     const added = await screen.findByRole('button', { name: /Resina X · Resinas\s+Adicionado ✓/ });
     expect((added as HTMLButtonElement).disabled).toBe(true);
