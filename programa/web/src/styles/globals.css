@@ -882,8 +882,8 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .theme-toggle__option {
   display: inline-grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 29px;
+  height: 29px;
   padding: 0;
   border: 0;
   border-radius: 999px;
