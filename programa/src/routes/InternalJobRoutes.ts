@@ -4,6 +4,7 @@ import { reminderEnv } from '../config/env';
 import { logger } from '../lib/logger';
 import { requireGoogleOidc } from '../middlewares/googleOidc';
 import { ExchangeRateService } from '../services/ExchangeRateService';
+import { SupplierDocumentAlertService } from '../services/SupplierDocumentAlertService';
 import { SupplierPortalReminderService } from '../services/SupplierPortalReminderService';
 
 const router = Router();
@@ -11,8 +12,9 @@ const router = Router();
 // Jobs internos chamados pelo Cloud Scheduler com ID token OIDC. Montado
 // ANTES do parser global e das rotas autenticadas (portal/router), por isso
 // tem parser proprio (16kb, depois do OIDC) e nao passa por tryFirebaseAuth/requireAuth.
-// Os dois jobs sao idempotentes (upsert por moeda+data; claim atomico
-// reminderSentAt), entao 5xx -> retry do Scheduler e seguro.
+// Os jobs sao idempotentes (upsert por moeda+data; claim atomico
+// reminderSentAt; claim unico por documento/ciclo/marco em SupplierDocumentAlert),
+// entao 5xx -> retry do Scheduler e seguro.
 router.use('/api/internal/jobs', requireGoogleOidc(), express.json({ limit: '16kb' }));
 
 const BRT_TIME_ZONE = 'America/Sao_Paulo';
@@ -80,6 +82,47 @@ router.post('/api/internal/jobs/supplier-reminders', async (_req, res) => {
     const message = error instanceof Error ? error.message : String(error);
     logger.error({ error: message }, 'Falha no job interno de lembretes pre-deadline.');
     res.status(500).json({ message: 'Falha no sweep de lembretes.' });
+  }
+});
+
+// Avisos de vencimento de documentos de fornecedor (1 e-mail agrupado para a equipe COMEX).
+router.post('/api/internal/jobs/supplier-document-alerts', async (_req, res) => {
+  try {
+    const result = await SupplierDocumentAlertService.runExpiryAlertSweep(new Date());
+    if (result.outcome === 'send_failed') {
+      res.status(500).json({
+        message: 'Falha ao enviar o aviso de documentos.',
+        documents: result.documents,
+      });
+      return;
+    }
+    if (result.outcome === 'in_progress') {
+      // Outra execucao segura o claim: 503 para o Scheduler repetir (o orfao e recuperado em 15 min).
+      res.status(503).json({ message: 'Outra execucao em andamento; tente de novo.', inFlight: result.inFlight });
+      return;
+    }
+    if (result.outcome === 'sent') {
+      res.status(200).json({
+        sent: 1,
+        documents: result.documents,
+        releasedOrphans: result.releasedOrphans,
+        recoveredOrphans: result.recoveredOrphans,
+        inFlight: result.inFlight,
+      });
+      return;
+    }
+    res.status(200).json({
+      sent: 0,
+      documents: 0,
+      reason: result.outcome,
+      releasedOrphans: result.releasedOrphans,
+      recoveredOrphans: result.recoveredOrphans,
+      inFlight: result.inFlight,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error({ error: message }, 'Falha no job interno de avisos de documentos de fornecedor.');
+    res.status(500).json({ message: 'Falha no job de avisos de documentos.' });
   }
 });
 

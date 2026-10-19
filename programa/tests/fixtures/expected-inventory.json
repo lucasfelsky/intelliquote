@@ -43,6 +43,7 @@
       "QuoteComparisonService.ts",
       "QuotePurchaseOrderService.ts",
       "QuoteResponsePriceHistoryService.ts",
+      "SupplierDocumentAlertService.ts",
       "SupplierDocumentService.ts",
       "SupplierPortalReminderService.ts",
       "SupplierPortalResponseService.ts",
@@ -130,6 +131,7 @@
       "Supplier",
       "SupplierContact",
       "SupplierDocument",
+      "SupplierDocumentAlert",
       "SupplierDocumentFile",
       "SupplierPortalResponse",
       "SupplierPortalResponseItem",
@@ -147,7 +149,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 52
+    "migrations": 53
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -237,6 +239,7 @@
     "POST /api/credit-portal/:token/respond",
     "POST /api/exchange-rates/refresh",
     "POST /api/internal/jobs/exchange-rates",
+    "POST /api/internal/jobs/supplier-document-alerts",
     "POST /api/internal/jobs/supplier-reminders",
     "POST /api/portal/:token/respond",
     "POST /attachments",
