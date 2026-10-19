@@ -481,7 +481,7 @@ export function RespostasTab({
                       </div>
                     )}
                     {r.source === 'portal' && (
-                      <span className="badge" style={{ marginTop: 4, background: 'rgba(0, 174, 145, 0.15)', color: 'var(--primary-700)' }}>
+                      <span className="badge" style={{ marginTop: 4, background: 'var(--primary-tint)', color: 'var(--primary-700)' }}>
                         via portal
                       </span>
                     )}

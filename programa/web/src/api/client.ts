@@ -4,6 +4,8 @@
 // - auto-refresh em 401 (uma única tentativa)
 // - tipagem genérica
 
+import { THEME_STORAGE_KEY } from '@/theme/theme';
+
 const BASE = (import.meta.env.VITE_INTELLIQUOTE_API_BASE ?? '/api').replace(/\/$/, '');
 
 // Endpoints que NAO devem ser interceptados pelo rewrite do Firebase Hosting
@@ -131,7 +133,13 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       return request<T>(path, { ...opts, _isRetry: true });
     } catch {
       // refresh failed → força logout via reload (AuthProvider limpa estado)
+      // A preferencia de tema (iq-theme) nao e dado de sessao: sobrevive ao clear.
+      let savedTheme: string | null = null;
+      try { savedTheme = localStorage.getItem(THEME_STORAGE_KEY); } catch { /* noop */ }
       localStorage.clear();
+      if (savedTheme !== null) {
+        try { localStorage.setItem(THEME_STORAGE_KEY, savedTheme); } catch { /* noop */ }
+      }
       window.location.assign('/');
       throw new ApiError(401, null, 'session expired');
     }
