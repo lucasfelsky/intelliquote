@@ -44,8 +44,8 @@ export interface SendAndLogInput {
   // DEFESA CENTRAL: por padrao, sendAndLog REMOVE de to/cc qualquer endereco que
   // pertenca a usuario com papel `comercial` (o comercial nunca pode receber
   // e-mail com dados de fornecedor, preco ou magic link). Passe `true` SOMENTE em
-  // e-mails que DEVEM ir ao comercial (ex.: aviso ao solicitante, previsto no PR2).
-  // Nenhum chamador do PR1 usa o opt-out.
+  // e-mails que DEVEM ir ao comercial (aviso ao solicitante).
+  // Unico chamador: CommercialRequestNotificationService.notifyRequesterOfStatusChange.
   allowComercialRecipients?: boolean;
 }
 

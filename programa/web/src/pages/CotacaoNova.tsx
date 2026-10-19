@@ -1,12 +1,17 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { CatalogItemPicker, type PickerCatalogItem } from '@/components/CatalogItemPicker';
 import { Modal } from '@/components/Modal';
 import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
+import {
+  COMMERCIAL_REQUEST_STATUS_LABELS,
+  formatCommercialPrice,
+  getCommercialRequest,
+} from '@/services/commercialRequests';
 
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
 
@@ -18,6 +23,9 @@ interface DraftItem {
   quantity: number;
   unit: string;
   notes: string;
+  // Preenchidos so quando a cotacao nasce de uma solicitacao do comercial.
+  targetPrice?: number | null;
+  targetCurrency?: string | null;
 }
 
 interface ItemFormState {
@@ -84,6 +92,71 @@ export default function CotacaoNova() {
 
   const canCreate = user?.role === 'admin' || user?.role === 'comprador';
 
+  // Pre-preenchimento a partir de uma solicitacao do comercial (?fromCommercialRequest=ID).
+  // Busca a solicitacao fresca (sobrevive a refresh/nova aba) e roda uma unica vez.
+  const [searchParams] = useSearchParams();
+  const fromRaw = searchParams.get('fromCommercialRequest');
+  const fromRequestId =
+    fromRaw !== null && /^[0-9]+$/.test(fromRaw) && Number(fromRaw) > 0 ? Number(fromRaw) : null;
+  const [linkedRequestId, setLinkedRequestId] = useState<number | null>(null);
+  const [linkWarning, setLinkWarning] = useState<string | null>(null);
+  const prefilledRef = useRef(false);
+
+  const linkedRequest = useQuery({
+    queryKey: ['commercial-requests', 'detail', fromRequestId],
+    queryFn: () => getCommercialRequest(fromRequestId as number),
+    enabled: fromRequestId !== null && canCreate,
+  });
+
+  useEffect(() => {
+    if (prefilledRef.current || fromRequestId === null) return;
+    if (linkedRequest.isError) {
+      prefilledRef.current = true;
+      setLinkWarning('Solicitação #' + fromRequestId + ' não pode mais ser vinculada (não encontrada).');
+      return;
+    }
+    const data = linkedRequest.data;
+    if (!data) return;
+    prefilledRef.current = true;
+    if (data.status !== 'pending') {
+      setLinkWarning(
+        'Solicitação #' +
+          data.id +
+          ' não pode mais ser vinculada (status ' +
+          COMMERCIAL_REQUEST_STATUS_LABELS[data.status] +
+          ').',
+      );
+      return;
+    }
+    setLinkedRequestId(data.id);
+    setItems(
+      data.items.map((item) => ({
+        tempId: tempIdCounter++,
+        catalogItemId: item.catalogItemId,
+        commercialName: item.commercialName,
+        marketName: item.marketName,
+        quantity: item.quantity,
+        unit: item.unit,
+        notes: '',
+        targetPrice: item.targetPrice !== null ? Number(item.targetPrice) : null,
+        targetCurrency: item.targetPrice !== null ? item.targetCurrency : null,
+      })),
+    );
+    const currencies = new Set(
+      data.items
+        .filter((item) => item.targetPrice !== null && item.targetCurrency)
+        .map((item) => item.targetCurrency as string),
+    );
+    const [onlyCurrency] = [...currencies];
+    if (currencies.size === 1 && onlyCurrency) setCurrency(onlyCurrency);
+    setDescription((current) =>
+      current.trim()
+        ? current
+        : // So o numero: o nome do cliente da SQ nao pode chegar ao fornecedor.
+          'Solicitação do comercial #' + data.id,
+    );
+  }, [fromRequestId, linkedRequest.data, linkedRequest.isError]);
+
   const createQuote = useMutation({
     mutationFn: async () => {
       const body: Record<string, unknown> = {
@@ -95,10 +168,33 @@ export default function CotacaoNova() {
             description: description.trim() || null,
           };
       if (requestCode.trim()) body.requestCode = requestCode.trim();
+      if (linkedRequestId !== null) {
+        // Cotacao + itens + vinculo na MESMA transacao do backend.
+        const quoteCurrency = currency.trim().toUpperCase() || 'USD';
+        body.commercialRequestIds = [linkedRequestId];
+        body.items = items.map((it) => ({
+          catalogItemId: it.catalogItemId,
+          quantity: it.quantity,
+          unit: it.unit,
+          // Alvo so vai junto se a moeda do alvo for a da cotacao.
+          targetPrice:
+            it.targetPrice != null && it.targetCurrency === quoteCurrency ? it.targetPrice : null,
+          notes: it.notes || null,
+        }));
+      }
       const created = await api.post<{ id: number; requestCode?: string }>(`/v1/quote-requests`, body);
       return created;
     },
     onSuccess: async (created) => {
+      void qc.invalidateQueries({ queryKey: ['commercial-requests'] });
+      if (linkedRequestId !== null) {
+        // Itens e vinculo ja foram gravados pelo backend no mesmo request.
+        qc.invalidateQueries({ queryKey: ['quote-requests'] });
+        qc.invalidateQueries({ queryKey: ['quote-request', created.id] });
+        qc.invalidateQueries({ queryKey: ['quote-request-items'] });
+        navigate('/cotacoes/' + created.id);
+        return;
+      }
       try {
         for (const it of items) {
           await api.post<unknown>(`/v1/quote-requests/${created.id}/items`, {
@@ -190,7 +286,15 @@ export default function CotacaoNova() {
       notes: itemForm.notes.trim(),
     };
     if (editingTempId !== null) {
-      setItems((current) => current.map((it) => (it.tempId === editingTempId ? draft : it)));
+      setItems((current) =>
+        current.map((it) =>
+          it.tempId === editingTempId
+            ? it.catalogItemId === draft.catalogItemId
+              ? { ...draft, targetPrice: it.targetPrice, targetCurrency: it.targetCurrency }
+              : { ...draft, targetPrice: null, targetCurrency: null }
+            : it,
+        ),
+      );
     } else {
       setItems((current) => [...current, draft]);
     }
@@ -219,6 +323,10 @@ export default function CotacaoNova() {
   function handleCreate() {
     setSubmitError(null);
     if (createQuote.isPending) return;
+    if (linkedRequestId !== null && items.length === 0) {
+      setSubmitError('Inclua ao menos um item para vincular a solicitação.');
+      return;
+    }
     createQuote.mutate();
   }
 
@@ -250,6 +358,17 @@ export default function CotacaoNova() {
           </button>
         </div>
       </div>
+
+      {linkedRequestId !== null && (
+        <p className="banner banner--ok" style={{ marginBottom: 16 }}>
+          Vinculada à solicitação #{linkedRequestId} do comercial
+        </p>
+      )}
+      {linkWarning && (
+        <p className="banner banner--warning" role="alert" style={{ marginBottom: 16 }}>
+          {linkWarning}
+        </p>
+      )}
 
       <section className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -403,6 +522,7 @@ export default function CotacaoNova() {
                   <th>Nome de mercado</th>
                   <th>Qtd</th>
                   <th>Unidade</th>
+                  {linkedRequestId !== null && <th>Preço-alvo</th>}
                   <th>Notas</th>
                   <th>Ações</th>
                 </tr>
@@ -414,6 +534,13 @@ export default function CotacaoNova() {
                     <td>{it.marketName}</td>
                     <td>{formatNumber(it.quantity)}</td>
                     <td>{it.unit}</td>
+                    {linkedRequestId !== null && (
+                      <td>
+                        {it.targetPrice != null
+                          ? formatCommercialPrice(String(it.targetPrice), it.targetCurrency ?? null)
+                          : '—'}
+                      </td>
+                    )}
                     <td>{it.notes || '—'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>

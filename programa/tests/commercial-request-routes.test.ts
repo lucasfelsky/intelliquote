@@ -19,6 +19,8 @@ vi.mock('../src/lib/prisma', () => {
       findUnique: vi.fn(),
       count: vi.fn(),
     },
+    quoteResponse: { findMany: vi.fn() },
+    creditSupportRequest: { findMany: vi.fn() },
     $transaction: vi.fn(),
   };
   return { prisma };
@@ -46,6 +48,8 @@ const prismaMock = prisma as unknown as {
     findUnique: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
   };
+  quoteResponse: { findMany: ReturnType<typeof vi.fn> };
+  creditSupportRequest: { findMany: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -388,6 +392,7 @@ describe('POST /commercial-requests', () => {
       unit: 'KG',
       targetPrice: null,
       targetCurrency: null,
+      finalPrice: null,
     });
   });
 });
@@ -453,6 +458,135 @@ describe('GET /commercial-requests/mine', () => {
       .set('Cookie', cookies);
 
     expect(response.body.data[0].quote).toBeNull();
+  });
+});
+
+describe('GET /commercial-requests/mine - preco final (PR2)', () => {
+  function fulfilledRow(overrides: Record<string, unknown> = {}) {
+    return createdRow({
+      status: 'fulfilled',
+      fulfillmentNote: null,
+      quoteRequestId: 50,
+      quoteRequest: { requestCode: 'QR-50', deletedAt: null },
+      items: [
+        {
+          id: 1,
+          catalogItemId: 10,
+          quantity: 5,
+          unit: 'KG',
+          targetPrice: null,
+          targetCurrency: null,
+          quoteRequestItemId: 501,
+          catalogItem: { commercialName: 'Resina X' },
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it('linha fulfilled: shape estrito (so as chaves permitidas) e nada de IDs internos', async () => {
+    prismaMock.commercialRequest.findMany.mockResolvedValue([fulfilledRow()]);
+    prismaMock.commercialRequest.count.mockResolvedValue(1);
+    prismaMock.quoteResponse.findMany.mockResolvedValue([
+      {
+        quoteRequestId: 50,
+        currency: 'EUR',
+        offeredIncoterm: 'CIF',
+        items: [
+          {
+            quoteRequestItemId: 501,
+            unitPrice: { toFixed: () => '1.85' },
+            isUnavailable: false,
+            quoteRequestItem: { unit: 'KG' },
+          },
+        ],
+      },
+    ]);
+
+    const response = await request(app)
+      .get('/api/v1/commercial-requests/mine')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const row = response.body.data[0];
+    expect(Object.keys(row).sort()).toEqual(
+      [
+        'createdAt',
+        'customerName',
+        'fulfillmentNote',
+        'id',
+        'items',
+        'notes',
+        'quote',
+        'rejectionReason',
+        'status',
+        'statusChangedAt',
+      ].sort(),
+    );
+    const item = row.items[0];
+    expect(Object.keys(item).sort()).toEqual(
+      [
+        'catalogItemId',
+        'commercialName',
+        'finalPrice',
+        'id',
+        'quantity',
+        'targetCurrency',
+        'targetPrice',
+        'unit',
+      ].sort(),
+    );
+    expect(Object.keys(item.finalPrice).sort()).toEqual(['currency', 'incoterm', 'unit', 'unitPrice']);
+    expect(item.finalPrice).toEqual({
+      unitPrice: '1.85',
+      currency: 'EUR',
+      incoterm: 'CIF',
+      unit: 'KG',
+    });
+    expect(row.quote).toEqual({ requestCode: 'QR-50' });
+
+    const json = JSON.stringify(response.body);
+    expect(json).not.toContain('supplier');
+    expect(json).not.toContain('Partner');
+    expect(json).not.toContain('quoteRequestItemId');
+    expect(json).not.toContain('quoteRequestId');
+    expect(prismaMock.quoteResponse.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('linha fulfilled sem vencedor: finalPrice null', async () => {
+    prismaMock.commercialRequest.findMany.mockResolvedValue([fulfilledRow()]);
+    prismaMock.quoteResponse.findMany.mockResolvedValue([]);
+    prismaMock.creditSupportRequest.findMany.mockResolvedValue([]);
+
+    const response = await request(app)
+      .get('/api/v1/commercial-requests/mine')
+      .set('Cookie', cookies);
+
+    expect(response.body.data[0].items[0].finalPrice).toBeNull();
+  });
+
+  it('linha quoting: preco nao e consultado nem exposto', async () => {
+    prismaMock.commercialRequest.findMany.mockResolvedValue([
+      fulfilledRow({ status: 'quoting' }),
+    ]);
+
+    const response = await request(app)
+      .get('/api/v1/commercial-requests/mine')
+      .set('Cookie', cookies);
+
+    expect(response.body.data[0].items[0].finalPrice).toBeNull();
+    expect(prismaMock.quoteResponse.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.creditSupportRequest.findMany).not.toHaveBeenCalled();
+  });
+
+  it('select do comercial le os IDs so para o calculo e o serializer nao os emite', async () => {
+    await request(app).get('/api/v1/commercial-requests/mine').set('Cookie', cookies);
+
+    const select = prismaMock.commercialRequest.findMany.mock.calls[0][0].select;
+    expect(select.quoteRequestId).toBe(true);
+    expect(select.items.select.quoteRequestItemId).toBe(true);
+    expect(select.fulfillmentNote).toBe(true);
+    expect(select.requestedBy).toBeUndefined();
   });
 });
 

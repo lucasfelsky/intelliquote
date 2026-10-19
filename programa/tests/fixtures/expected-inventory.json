@@ -31,6 +31,8 @@
       "AuditLogService.ts",
       "AuthService.ts",
       "CommercialRequestNotificationService.ts",
+      "CommercialRequestPriceService.ts",
+      "CommercialRequestWorkflowService.ts",
       "CompanyProfileService.ts",
       "ComparisonCandidateService.ts",
       "CreditPartnerResponseNotificationService.ts",
@@ -42,6 +44,7 @@
       "PurchaseOrderEmailService.ts",
       "QuoteComparisonService.ts",
       "QuotePurchaseOrderService.ts",
+      "QuoteRequestItemFactory.ts",
       "QuoteResponsePriceHistoryService.ts",
       "SupplierDocumentAlertService.ts",
       "SupplierDocumentService.ts",
@@ -149,10 +152,11 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 55
+    "migrations": 56
   },
   "emailTemplates": [
     "commercial_request_created@pt",
+    "commercial_request_status_changed@pt",
     "credit_partner_response_received@pt",
     "credit_support_request@en",
     "quote_dispatch@en",
@@ -253,6 +257,9 @@
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
     "POST /commercial-requests",
+    "POST /commercial-requests/:id/fulfill",
+    "POST /commercial-requests/:id/link-quote",
+    "POST /commercial-requests/:id/reject",
     "POST /credit-partners",
     "POST /credit-support-requests/:id/purchase-order",
     "POST /credit-support-requests/:id/resend",

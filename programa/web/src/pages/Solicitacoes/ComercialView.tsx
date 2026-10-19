@@ -13,6 +13,7 @@ import {
   createCommercialRequest,
   formatCommercialPrice,
   formatCommercialQuantity,
+  formatFinalPrice,
   listMyCommercialRequests,
   searchCommercialCatalog,
 } from '@/services/commercialRequests';
@@ -287,6 +288,11 @@ export default function ComercialView() {
                             {item.targetPrice
                               ? ` — alvo ${formatCommercialPrice(item.targetPrice, item.targetCurrency)}`
                               : ''}
+                            {request.status === 'fulfilled'
+                              ? item.finalPrice
+                                ? ` — preço final ${formatFinalPrice(item.finalPrice)}`
+                                : ' — sem preço final'
+                              : ''}
                           </li>
                         ))}
                       </ul>
@@ -300,7 +306,9 @@ export default function ComercialView() {
                     <td data-label="Observação do COMEX">
                       {request.status === 'rejected' && request.rejectionReason
                         ? `Motivo: ${request.rejectionReason}`
-                        : '—'}
+                        : request.status === 'fulfilled' && request.fulfillmentNote
+                          ? request.fulfillmentNote
+                          : '—'}
                     </td>
                   </tr>
                 ))}

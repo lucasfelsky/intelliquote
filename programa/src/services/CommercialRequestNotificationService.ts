@@ -7,6 +7,10 @@ import {
   renderCommercialRequestCreatedFromTemplate,
 } from '../mailer/renderCommercialRequestCreated';
 import {
+  COMMERCIAL_REQUEST_STATUS_CHANGED_TEMPLATE_KEY,
+  renderCommercialRequestStatusChangedFromTemplate,
+} from '../mailer/renderCommercialRequestStatusChanged';
+import {
   CompanyProfileService,
   excludeComercialRecipients,
   readDispatchCc,
@@ -131,7 +135,110 @@ export class CommercialRequestNotificationService {
       );
     }
   }
+
+  // Aviso ao SOLICITANTE (comercial) a cada mudanca de status feita pelo COMEX.
+  // Nunca lanca (mesma regra do aviso ao COMEX); chamado APOS o commit.
+  // Conteudo: status, codigo da cotacao e motivo da recusa. NUNCA preco, fornecedor,
+  // parceiro, fulfillmentNote nem nome de mercado.
+  //
+  // `change` = o que a acao acabou de gravar (status, codigo da cotacao, motivo). Quando vem,
+  // o e-mail usa estes valores e NAO o estado atual do banco: duas mudancas rapidas nao geram
+  // dois e-mails do mesmo status. Sem `change`, le o estado atual.
+  static async notifyRequesterOfStatusChange(
+    requestId: number,
+    change?: {
+      status: string;
+      quoteCode?: string | null;
+      rejectionReason?: string | null;
+    },
+  ): Promise<void> {
+    try {
+      const request = await prisma.commercialRequest.findUnique({
+        where: { id: requestId },
+        select: {
+          id: true,
+          status: true,
+          rejectionReason: true,
+          requestedBy: { select: { name: true, email: true, isActive: true } },
+          quoteRequest: { select: { requestCode: true, deletedAt: true } },
+        },
+      });
+
+      if (!request) {
+        logger.warn({ requestId }, 'Solicitacao do comercial nao encontrada para o aviso de status.');
+        return;
+      }
+
+      const effectiveStatus = change?.status ?? request.status;
+      const status = STATUS_COPY[effectiveStatus];
+      if (!status) return; // pending: nada a avisar.
+
+      const email = request.requestedBy.email?.trim();
+      if (!request.requestedBy.isActive || !email || !email.includes('@')) {
+        logger.warn(
+          { requestId },
+          'Solicitante inativo ou sem e-mail; aviso de status da solicitacao nao enviado.',
+        );
+        return;
+      }
+
+      const quoteCode =
+        change !== undefined
+          ? (change.quoteCode ?? '')
+          : request.quoteRequest && request.quoteRequest.deletedAt === null
+            ? request.quoteRequest.requestCode
+            : '';
+      const rejectionReason =
+        effectiveStatus === 'rejected'
+          ? ((change !== undefined ? change.rejectionReason : request.rejectionReason) ?? '')
+          : '';
+      const base = mailerEnv.portalUrl.replace(/\/$/, '');
+      const statusMessage = status.message(request.id);
+
+      const rendered = await renderCommercialRequestStatusChangedFromTemplate({
+        subject: `[IntelliQuote] Solicitação #${request.id} — ${status.label}`,
+        requestId: request.id,
+        statusLabel: status.label,
+        statusMessage,
+        quoteCode,
+        rejectionReason,
+        requestsUrl: `${base}/solicitacoes`,
+      });
+
+      // ATENCAO: este e o UNICO uso permitido do opt-out allowComercialRecipients. O opt-out
+      // pula o applyComercialGuard INTEIRO; a garantia de que ninguem indevido recebe e
+      // estrutural: so o solicitante vai em `to` e NUNCA se passa `cc`.
+      await sendAndLog({
+        to: { email, name: request.requestedBy.name },
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
+        templateId: COMMERCIAL_REQUEST_STATUS_CHANGED_TEMPLATE_KEY,
+        templateVars: { requestId: request.id, status: effectiveStatus, quoteCode },
+        relatedEntityType: 'commercial_request',
+        relatedEntityId: String(request.id),
+        allowComercialRecipients: true,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          requestId,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        'Falha ao avisar o solicitante sobre a mudanca de status da solicitacao.',
+      );
+    }
+  }
 }
+
+const STATUS_COPY: Record<string, { label: string; message: (id: number) => string }> = {
+  quoting: { label: 'Em cotação', message: (id) => `Sua solicitação #${id} entrou em cotação.` },
+  fulfilled: {
+    label: 'Atendida',
+    message: (id) => `Sua solicitação #${id} foi atendida. Consulte o resultado no IntelliQuote.`,
+  },
+  rejected: { label: 'Recusada', message: (id) => `Sua solicitação #${id} foi recusada.` },
+};
 
 function formatPrice(value: unknown): string {
   if (value && typeof value === 'object' && 'toFixed' in value) {

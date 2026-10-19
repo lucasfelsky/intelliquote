@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import { lockQuoteRequestForPurchaseOrders } from '../services/QuotePurchaseOrderService';
+import { buildQuoteRequestItemCreateData } from '../services/QuoteRequestItemFactory';
 import {
   itemCreatePurchaseOrderIdSchema,
   itemMovePurchaseOrderSchema,
@@ -119,30 +120,24 @@ export class QuoteRequestItemController {
         resolvedProductName = (productName as string).trim();
       }
 
-      // Se o item nao trouxe incoterm proprio, fica null -- a exibicao
-      // (portal, e-mails, telas) resolve o fallback exibindo os incoterms
-      // aceitos pela cotacao. Nao ha um unico valor "herdavel" agora que a
-      // cotacao aceita varios incoterms.
-      // Porto: se o item nao trouxe porto proprio, herda da cotacao para
-      // manter consistencia visual com o portal do fornecedor.
+      // Dados do item: regra unica em buildQuoteRequestItemCreateData (incoterm null,
+      // porto herdado da cotacao, normalizacoes de codigo/unidade).
       const item = await prisma.quoteRequestItem.create({
-        data: {
+        data: buildQuoteRequestItemCreateData({
           quoteRequestId,
           catalogItemId: resolvedCatalogItemId,
-          itemCode: isNonEmptyString(itemCode) ? itemCode.trim().toUpperCase() : null,
           productName: resolvedProductName,
-          description: isNonEmptyString(description) ? description.trim() : null,
+          itemCode: isNonEmptyString(itemCode) ? itemCode : null,
+          description: isNonEmptyString(description) ? description : null,
           quantity: Number(quantity),
-          unit: unit.trim().toUpperCase(),
-          desiredIncoterm: desiredIncoterm ? (String(desiredIncoterm) as Incoterm) : null,
-          destinationPort: isNonEmptyString(destinationPort)
-            ? (destinationPort as string).trim()
-            : quoteRequest.destinationPort ?? null,
-          targetPrice:
-            targetPrice !== undefined && targetPrice !== null ? Number(targetPrice) : null,
-          notes: isNonEmptyString(notes) ? notes.trim() : null,
+          unit,
+          desiredIncoterm: desiredIncoterm ? String(desiredIncoterm) : null,
+          destinationPort: isNonEmptyString(destinationPort) ? (destinationPort as string) : null,
+          quoteDestinationPort: quoteRequest.destinationPort ?? null,
+          targetPrice,
+          notes: isNonEmptyString(notes) ? notes : null,
           purchaseOrderId: resolvedPurchaseOrderId,
-        },
+        }),
         include: {
           quoteRequest: true,
           catalogItem: true,

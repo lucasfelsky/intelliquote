@@ -1,6 +1,8 @@
 import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { ApiError } from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
 import { Pagination } from '@/components/Pagination';
 import {
   COMMERCIAL_REQUEST_STATUS_LABELS,
@@ -10,6 +12,7 @@ import {
   listCommercialRequesters,
   listCommercialRequests,
 } from '@/services/commercialRequests';
+import { CommercialRequestActions } from './ComexActions';
 
 const STATUS_OPTIONS: CommercialRequestStatus[] = ['pending', 'quoting', 'fulfilled', 'rejected'];
 
@@ -41,8 +44,12 @@ function formatDate(value: string | null): string {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('pt-BR');
 }
 
-// Visao do COMEX (admin/comprador/gestor/viewer): SOMENTE leitura no PR1 -- sem botoes de acao.
+// Visao do COMEX. Acoes (criar/vincular cotacao, recusar, atender) so para admin e comprador;
+// gestor e viewer so leem.
 export default function ComexView() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const canAct = user?.role === 'admin' || user?.role === 'comprador';
   const [status, setStatus] = useState<CommercialRequestStatus | ''>('');
   const [requestedById, setRequestedById] = useState<number | ''>('');
   const [page, setPage] = useState(1);
@@ -67,7 +74,7 @@ export default function ComexView() {
         <div>
           <p className="eyebrow">Comercial</p>
           <h1>Solicitações</h1>
-          <p className="page-subtitle">Pedidos de cotação registrados pelo time comercial (somente leitura).</p>
+          <p className="page-subtitle">Pedidos de cotação registrados pelo time comercial{canAct ? '.' : ' (somente leitura).'}</p>
         </div>
         <div className="page-header__actions sol-filters">
           <select
@@ -133,6 +140,7 @@ export default function ComexView() {
                   <th>Itens</th>
                   <th className="col-status">Status</th>
                   <th>Cotação</th>
+                  {canAct && <th>Ações</th>}
                   <th>
                     <span className="sr-only">Detalhes</span>
                   </th>
@@ -154,7 +162,24 @@ export default function ComexView() {
                             {COMMERCIAL_REQUEST_STATUS_LABELS[request.status]}
                           </span>
                         </td>
-                        <td className="cell-nowrap" data-label="Cotação">{request.quoteRequest?.requestCode ?? '—'}</td>
+                        <td className="cell-nowrap" data-label="Cotação">
+                          {request.quoteRequest ? (
+                            <button
+                              type="button"
+                              className="ghost-button ghost-button--sm"
+                              onClick={() => navigate('/cotacoes/' + request.quoteRequest!.id)}
+                            >
+                              {request.quoteRequest.requestCode}
+                            </button>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        {canAct && (
+                          <td className="sol-cell-actions" data-label="Ações">
+                            <CommercialRequestActions request={request} role={user?.role} />
+                          </td>
+                        )}
                         <td className="sol-cell-actions">
                           <button
                             type="button"
@@ -168,7 +193,7 @@ export default function ComexView() {
                       </tr>
                       {expanded && (
                         <tr>
-                          <td colSpan={8} className="sol-cell-detail">
+                          <td colSpan={canAct ? 9 : 8} className="sol-cell-detail">
                             {request.notes && (
                               <p className="text-sm" style={{ marginTop: 0 }}>
                                 <strong>Observações:</strong> {request.notes}
@@ -179,6 +204,11 @@ export default function ComexView() {
                                 <strong>Motivo da recusa:</strong> {request.rejectionReason}
                               </p>
                             )}
+                            {request.status === 'fulfilled' && request.fulfillmentNote && (
+                              <p className="text-sm" style={{ marginTop: 0 }}>
+                                <strong>Atendida sem preço:</strong> {request.fulfillmentNote}
+                              </p>
+                            )}
                             <table className="table table--dense sol-table">
                               <thead>
                                 <tr>
@@ -187,6 +217,7 @@ export default function ComexView() {
                                   <th>Código DBCorp</th>
                                   <th>Quantidade</th>
                                   <th>Preço-alvo</th>
+                                  <th>Na cotação</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -198,6 +229,9 @@ export default function ComexView() {
                                     <td data-label="Quantidade">{formatCommercialQuantity(item.quantity)} {item.unit}</td>
                                     <td data-label="Preço-alvo">
                                       {formatCommercialPrice(item.targetPrice, item.targetCurrency)}
+                                    </td>
+                                    <td data-label="Na cotação">
+                                      {item.quoteRequestItemId !== null ? 'Sim' : 'Não'}
                                     </td>
                                   </tr>
                                 ))}
