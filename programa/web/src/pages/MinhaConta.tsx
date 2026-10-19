@@ -277,6 +277,7 @@ export default function MinhaConta() {
       <section className="card" aria-labelledby="sig-preview-title">
         <h2 id="sig-preview-title" style={{ marginTop: 0 }}>Como sai no e-mail</h2>
         <div
+          className="paper-surface"
           data-testid="signature-preview"
           style={{
             background: '#fff',

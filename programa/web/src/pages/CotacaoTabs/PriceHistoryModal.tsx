@@ -12,11 +12,11 @@ import {
 // mudou (portal ou edição manual); colunas = itens; destaque do que mudou vs a
 // linha anterior (calculado no servidor). CSS: .table/.badge/.table-wrapper + dialog.modal-dialog--xl.
 
-const CHANGED_STYLE = { fontWeight: 700, background: 'rgba(0, 174, 145, 0.15)' } as const;
+const CHANGED_STYLE = { fontWeight: 700, background: 'var(--primary-tint)' } as const;
 const STICKY_STYLE = { position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 2 } as const;
 const STICKY_HEADER_STYLE = { ...STICKY_STYLE, background: 'var(--surface-alt)' } as const;
-const PORTAL_BADGE_STYLE = { background: 'rgba(0, 174, 145, 0.15)', color: 'var(--primary-700)' } as const;
-const CHANGED_BADGE_STYLE = { fontWeight: 700, background: 'var(--primary-700)', color: '#fff' } as const;
+const PORTAL_BADGE_STYLE = { background: 'var(--primary-tint)', color: 'var(--primary-700)' } as const;
+const CHANGED_BADGE_STYLE = { fontWeight: 700, background: 'var(--primary-strong)', color: 'var(--on-strong)' } as const;
 
 export const EMPTY_HISTORY_MESSAGE = 'Histórico disponível a partir das próximas respostas ou edições.';
 

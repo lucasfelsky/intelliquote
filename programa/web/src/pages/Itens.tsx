@@ -402,7 +402,7 @@ export default function Itens() {
                         {item.isActive ? 'Ativo' : 'Inativo'}
                       </span>
                       {item.family && (
-                        <span className="itens-card__badge" style={{ backgroundColor: '#e2e8f0', color: '#475569' }}>
+                        <span className="itens-card__badge" style={{ backgroundColor: 'var(--tone-neutral-bg)', color: 'var(--tone-neutral-fg)' }}>
                           {item.family.name}
                         </span>
                       )}

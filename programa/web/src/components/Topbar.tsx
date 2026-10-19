@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { isComercialRole } from './navConfig';
+import ThemeToggle from './ThemeToggle';
 
 export default function Topbar() {
   const { user, logout } = useAuth();
@@ -17,6 +18,7 @@ export default function Topbar() {
           <small>{user?.email}</small>
         </div>
         <span className="badge">{user?.role}</span>
+        <ThemeToggle />
         {!isComercialRole(user?.role) && (
           <Link to="/minha-conta" className="ghost-button">
             Minha conta

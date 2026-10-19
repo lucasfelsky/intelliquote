@@ -35,7 +35,7 @@ export default function StarRating({
 
         if (readOnly) {
           return (
-            <span key={star} aria-hidden="true" style={{ color: filled ? '#f5a623' : '#c9c9c9' }}>
+            <span key={star} aria-hidden="true" style={{ color: filled ? 'var(--star-on)' : 'var(--star-off)' }}>
               {starChar}
             </span>
           );
@@ -56,7 +56,7 @@ export default function StarRating({
               padding: 0,
               fontSize: '1.15rem',
               lineHeight: 1,
-              color: filled ? '#f5a623' : '#c9c9c9',
+              color: filled ? 'var(--star-on)' : 'var(--star-off)',
             }}
           >
             {starChar}
