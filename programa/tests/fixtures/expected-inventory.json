@@ -137,6 +137,8 @@
       "SupplierDocument",
       "SupplierDocumentAlert",
       "SupplierDocumentFile",
+      "SupplierPortalReminder",
+      "SupplierPortalReminderAddress",
       "SupplierPortalResponse",
       "SupplierPortalResponseItem",
       "SupplierPortalResponseRevision",
@@ -153,7 +155,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 57
+    "migrations": 58
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -164,6 +166,7 @@
     "quote_po@en",
     "quote_regret@en",
     "quote_reminder@en",
+    "quote_reminder_digest@en",
     "quote_reply@en",
     "supplier_response_received@pt"
   ],

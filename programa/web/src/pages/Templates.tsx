@@ -43,7 +43,7 @@ const TEMPLATE_CARDS: Array<{
   {
     key: 'quote_reminder',
     title: 'Lembrete de cotação pendente',
-    description: 'E-mail automático ao fornecedor que não respondeu, perto do prazo (com link novo).',
+    description: 'E-mail automático diário (seg a sex) ao fornecedor que ainda não respondeu (com link novo). Com 2 ou mais cotações pendentes no mesmo e-mail, vai um resumo único (modelo fixo, em inglês).',
     icon: '⏰',
   },
   {
