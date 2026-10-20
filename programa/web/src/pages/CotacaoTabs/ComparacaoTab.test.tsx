@@ -710,6 +710,28 @@ describe('ComparacaoTab', () => {
       expect((await findByTestId('dg-seal')).textContent).toBe('DG · 2');
     });
   });
+
+  describe('Observacoes do fornecedor (informativo)', () => {
+    it('33. ranking mostra a nota so na proposta que tem notes', async () => {
+      vi.mocked(previewComparison).mockResolvedValue({
+        ...defaultPreview,
+        results: [{ ...winner, notes: 'SM6104' }, loser],
+      });
+      const { findByTestId, getAllByTestId } = renderTab();
+      const notes = await findByTestId('cmp-notes');
+      expect(notes.textContent).toContain('SM6104');
+      expect(getAllByTestId('cmp-notes')).toHaveLength(1);
+    });
+
+    it('34. normalizeComparisonResult: notes presente, ausente e em branco', async () => {
+      const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+        '@/services/quoteResponses',
+      );
+      expect(actual.normalizeComparisonResult({ ...winner, notes: 'SM6104' }).notes).toBe('SM6104');
+      expect(actual.normalizeComparisonResult({ ...winner }).notes).toBeNull();
+      expect(actual.normalizeComparisonResult({ ...winner, notes: '  ' }).notes).toBeNull();
+    });
+  });
 });
 
 describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', () => {

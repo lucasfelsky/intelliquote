@@ -25,6 +25,7 @@ import {
 import { creditSupportQueryKey } from '@/services/creditSupport';
 import { Modal } from '@/components/Modal';
 import { InfoPopover } from '@/components/InfoPopover';
+import { SupplierNotes } from '@/components/SupplierNotes';
 import { PurchaseOrderModal, type PurchaseOrderTarget } from './PurchaseOrderModal';
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
@@ -668,6 +669,7 @@ export function ComparacaoTab({
             </div>
             <ContactLine name={contactSource?.name} email={contactSource?.email} />
             <span className="cmp-row__contact">{formatOriginLine(r)}</span>
+            <SupplierNotes notes={r.notes} testId="cmp-notes" />
             <DgSeal result={r} />
           </div>
           <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>

@@ -1203,6 +1203,7 @@ describe('Portal - item temporariamente indisponivel', () => {
       desiredIncoterm?: string[];
       existing?: Record<string, unknown> | null;
       storedItems?: Record<string, unknown>[];
+      storedNotes?: string | null;
     } = {},
   ) {
     counter += 1;
@@ -1235,7 +1236,7 @@ describe('Portal - item temporariamente indisponivel', () => {
       currency: 'USD',
       incoterm: 'FOB',
       paymentTermsDays: 30,
-      notes: null,
+      notes: opts.storedNotes ?? null,
       originPort: null,
       submittedAt: new Date(),
       items: opts.storedItems ?? [itemRow(11), unavailableRow(12), itemRow(13)],
@@ -1482,6 +1483,67 @@ describe('Portal - item temporariamente indisponivel', () => {
       true,
       false,
     ]);
+  });
+
+  it('copia as notes do portal para o QuoteResponse (resposta e itens), no create e no update do upsert', async () => {
+    const token = mockEnv({
+      storedNotes: 'SM6104',
+      storedItems: [
+        itemRow(11, { notes: 'Lote X' }),
+        { ...unavailableRow(12), notes: 'Back in 30 days' },
+        itemRow(13),
+      ],
+    });
+    const res = await respond(token, {
+      notes: 'SM6104',
+      items: [
+        baseItem(11, { notes: 'Lote X' }),
+        unavailableItem(12, { notes: 'Back in 30 days' }),
+        baseItem(13),
+      ],
+    });
+    expect(res.status).toBe(201);
+    const created = prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0];
+    expect(created.data.notes).toBe('SM6104');
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(upsert.create.notes).toBe('SM6104');
+    expect(upsert.update.notes).toBe('SM6104');
+    expect(upsert.create.items.create[0].notes).toBe('Lote X');
+    expect(upsert.update.items.create[0].notes).toBe('Lote X');
+    expect(upsert.create.items.create[1].notes).toBe('Back in 30 days');
+  });
+
+  it('revisao: a nova nota do portal sobrescreve a do QuoteResponse (update do upsert)', async () => {
+    const token = mockEnv({
+      existing: {
+        id: 77,
+        portalTokenId: 3,
+        version: 1,
+        currency: 'USD',
+        incoterm: 'FOB',
+        paymentTermsDays: 30,
+        totalPrice: { toString: () => '200.00' },
+        totalPriceCurrency: 'USD',
+        validityDays: 30,
+        notes: 'SM6104',
+        originPort: null,
+        submittedAt: new Date(),
+        items: [itemRow(11), unavailableRow(12), itemRow(13)],
+      },
+      storedNotes: 'SM6104 rev2',
+      storedItems: [itemRow(11), itemRow(12), itemRow(13)],
+    });
+    const res = await respond(token, {
+      notes: 'SM6104 rev2',
+      totalPrice: 300,
+      items: [baseItem(11), baseItem(12), baseItem(13)],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.revised).toBe(true);
+    const updated = prismaMock.__tx.supplierPortalResponse.update.mock.calls[0][0];
+    expect(updated.data.notes).toBe('SM6104 rev2');
+    const upsert = prismaMock.__tx.quoteResponse.upsert.mock.calls[0][0];
+    expect(upsert.update.notes).toBe('SM6104 rev2');
   });
 
   it('GET do portal devolve isUnavailable nos itens da resposta', async () => {

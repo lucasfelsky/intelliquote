@@ -22,6 +22,7 @@ import {
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
 import { Modal } from '@/components/Modal';
+import { SupplierNotes } from '@/components/SupplierNotes';
 import { CreditSupportModal } from './CreditSupportModal';
 import { CreditSupportPanel } from './CreditSupportPanel';
 import { PriceHistoryModal } from './PriceHistoryModal';
@@ -437,6 +438,7 @@ export function RespostasTab({
                     </button>
                     {r.supplier?.country && <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{r.supplier.country}</div>}
                     <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Origem: {r.originPort ?? '—'}</div>
+                    <SupplierNotes notes={r.notes} />
                     {(() => {
                       const overrides = (r.items ?? []).filter((item) =>
                         isOriginOverride(item.originPort, r.originPort),
@@ -933,6 +935,7 @@ export function RespostasTab({
                         .map((p) => `${p.incoterm}: ${formatCurrency(Number(p.unitPrice), currency)}`)
                         .join(' · ')
                     : '—',
+                notes: item.notes ?? null,
               }))
             : [{
                 key: 'fallback',
@@ -946,6 +949,7 @@ export function RespostasTab({
                 origin: itemsTarget.originPort ?? '—',
                 originOverride: false,
                 incotermPrices: '—',
+                notes: null,
               }];
           const showDg = (itemsTarget.items ?? []).some(
             (item) => item.isDangerousGood && !item.isUnavailable,
@@ -958,8 +962,11 @@ export function RespostasTab({
               !item.isUnavailable &&
               effectiveOriginPort(item.originPort, itemsTarget.originPort) !== null,
           );
+          const showNotes = (itemsTarget.items ?? []).some((item) => (item.notes ?? '').trim() !== '');
           return (
-            <div className="table-wrapper">
+            <>
+            <SupplierNotes notes={itemsTarget.notes} collapsible={false} testId="items-modal-notes" />
+            <div className="table-wrapper" style={itemsTarget.notes?.trim() ? { marginTop: 12 } : undefined}>
               <table className="table">
                 <thead>
                   <tr>
@@ -971,6 +978,7 @@ export function RespostasTab({
                     {showDg && <th>DG</th>}
                     {showOrigin && <th>Origem</th>}
                     {showIncotermPrices && <th>Preços por incoterm</th>}
+                    {showNotes && <th>Obs.</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1000,11 +1008,13 @@ export function RespostasTab({
                         </td>
                       )}
                       {showIncotermPrices && <td>{row.incotermPrices}</td>}
+                      {showNotes && <td><SupplierNotes notes={row.notes} label={null} testId="item-notes" /></td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            </>
           );
         })()}
       </Modal>

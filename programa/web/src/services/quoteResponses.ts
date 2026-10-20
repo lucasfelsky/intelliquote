@@ -154,6 +154,8 @@ export interface ComparisonResult {
   originPort?: string | null;
   itemOrigins?: ItemOrigin[];
   dgItems?: DangerousGoodItem[];
+  // Informativo: observacoes da resposta (portal ou manual). Ausente (historico) -> null.
+  notes?: string | null;
   // Quantidade divergente (todos os itens presentes): o preco do ranking ja e o unitario
   // cotado x quantidade PEDIDA. Ausente (historico persistido) -> undefined.
   quantityAdjusted?: boolean;
@@ -425,6 +427,7 @@ export function normalizeComparisonResult(raw: unknown): ComparisonResult {
           productName: typeof entry?.productName === 'string' ? entry.productName : '',
         }))
       : undefined,
+    notes: typeof obj.notes === 'string' && obj.notes.trim() ? obj.notes : null,
     quantityAdjusted: obj.quantityAdjusted === undefined ? undefined : Boolean(obj.quantityAdjusted),
     quantityMismatches: obj.quantityMismatches === undefined
       ? undefined
