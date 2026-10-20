@@ -131,7 +131,6 @@ const smtpEnvSchema = z.object({
   MAILGUN_DOMAIN: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   REMINDER_ENABLED: z.string().optional(),
-  REMINDER_WINDOW_HOURS: z.string().optional(),
 });
 
 const parsedMailerEnv = smtpEnvSchema.parse(process.env);
@@ -189,11 +188,10 @@ export const mailerEnv = {
   resendApiKey: parsedMailerEnv.RESEND_API_KEY ?? '',
 } as const;
 
-// F5: lembrete pre-deadline do portal do fornecedor. Desligavel via env
+// Lembrete diario (seg-sex, BRT) do portal do fornecedor. Desligavel via env
 // (REMINDER_ENABLED=false) sem novo deploy de codigo.
 export const reminderEnv = {
   enabled: parseBooleanOptional(parsedMailerEnv.REMINDER_ENABLED) ?? true,
-  windowHours: parsePositiveInteger(parsedMailerEnv.REMINDER_WINDOW_HOURS, 48),
 } as const;
 
 // Jobs internos (Cloud Scheduler -> /api/internal/jobs/*). A chamada vem com

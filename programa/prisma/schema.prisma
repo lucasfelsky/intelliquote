@@ -182,6 +182,7 @@ model QuoteRequest {
   quoteResponses  QuoteResponse[]
   comparisons     QuoteComparison[]
   portalTokens    SupplierPortalToken[]
+  portalReminders SupplierPortalReminder[]
   portalResponses SupplierPortalResponse[]
   dispatchEvents  DispatchEvent[]
   review          SupplierReview?
@@ -446,6 +447,7 @@ model SupplierContact {
   updatedAt       DateTime                 @updatedAt
   supplier        Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   portalTokens    SupplierPortalToken[]
+  portalReminders SupplierPortalReminder[]
   portalResponses SupplierPortalResponse[]
 
   @@index([supplierId])
@@ -641,8 +643,8 @@ model SupplierPortalToken {
   lastSeenAt        DateTime?
   accessCount       Int                              @default(0)
   respondedAt       DateTime?
-  // F5: setado quando o lembrete pre-deadline foi disparado para este token
-  // (claim atomico — evita lembrete duplicado entre replicas do Cloud Run).
+  // Setado no token emitido por um lembrete; informativo, nao participa da
+  // selecao (a idempotencia do lembrete diario e' SupplierPortalReminder).
   reminderSentAt    DateTime?
   responseId        Int?                             @unique
   createdById       Int
@@ -771,6 +773,39 @@ model SupplierPortalTokenLog {
   @@index([occurredAt])
   @@index([kind])
   @@index([creditSupportRequestId])
+}
+
+// Lembrete diario ao fornecedor (claim unico por cotacao/contato/dia BRT).
+model SupplierPortalReminder {
+  id                Int             @id @default(autoincrement())
+  quoteRequestId    Int
+  supplierContactId Int
+  reminderDate      String          // YYYY-MM-DD no calendario de America/Sao_Paulo
+  tokenId           Int             // token ativo de origem (sem FK: historico)
+  freshTokenId      Int?            // token emitido para o e-mail (sem FK: historico)
+  status            String          @default("claimed") // claimed | sent | failed | suppressed | skipped
+  errorMessage      String?
+  createdAt         DateTime        @default(now())
+  sentAt            DateTime?
+  quoteRequest      QuoteRequest    @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+  supplierContact   SupplierContact @relation(fields: [supplierContactId], references: [id], onDelete: Cascade)
+
+  @@unique([quoteRequestId, supplierContactId, reminderDate], map: "SupplierPortalReminder_qr_contact_date_key")
+  @@index([reminderDate])
+  @@index([supplierContactId])
+}
+
+// Lembrete diario: claim por ENDERECO de e-mail/dia (garante 1 e-mail por endereco por dia
+// util mesmo com sweeps concorrentes). So o sha256 de lower(trim(email)): nunca o e-mail cru.
+model SupplierPortalReminderAddress {
+  id           Int      @id @default(autoincrement())
+  addressHash  String   // sha256 hex de lower(trim(email))
+  reminderDate String   // YYYY-MM-DD no calendario de America/Sao_Paulo
+  status       String   @default("claimed") // claimed | sent | failed | skipped
+  createdAt    DateTime @default(now())
+
+  @@unique([addressHash, reminderDate])
+  @@index([reminderDate])
 }
 
 // Credit Support (PR2a): encaminhamento da proposta do fornecedor a um parceiro de credito.

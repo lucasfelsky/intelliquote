@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
     audience: 'intelliquote-internal-jobs' as string | undefined,
     invokerEmail: 'iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com' as string | undefined,
   },
-  reminder: { enabled: true, windowHours: 48 },
+  reminder: { enabled: true },
 }));
 
 vi.mock('google-auth-library', () => ({

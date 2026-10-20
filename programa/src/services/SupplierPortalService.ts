@@ -28,8 +28,9 @@ export interface CreateTokenInput {
   createdById: number;
   dispatchEventId?: number | null;
   ttlDays?: number;
-  // F5: o token de lembrete preserva o deadline ORIGINAL (nao estende o
-  // prazo) e ja nasce com reminderSentAt pra nunca gerar novo lembrete.
+  // Lembrete diario: o token de lembrete preserva o deadline ORIGINAL (nao
+  // estende o prazo) e nasce com reminderSentAt (informativo; nao impede
+  // novos lembretes nos dias seguintes).
   expiresAt?: Date;
   reminderSentAt?: Date | null;
   client?: PrismaClient | Prisma.TransactionClient;

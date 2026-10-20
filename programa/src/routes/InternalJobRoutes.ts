@@ -12,8 +12,9 @@ const router = Router();
 // Jobs internos chamados pelo Cloud Scheduler com ID token OIDC. Montado
 // ANTES do parser global e das rotas autenticadas (portal/router), por isso
 // tem parser proprio (16kb, depois do OIDC) e nao passa por tryFirebaseAuth/requireAuth.
-// Os jobs sao idempotentes (upsert por moeda+data; claim atomico
-// reminderSentAt; claim unico por documento/ciclo/marco em SupplierDocumentAlert),
+// Os jobs sao idempotentes (upsert por moeda+data; claim unico por
+// cotacao/contato/dia em SupplierPortalReminder; claim unico por documento/ciclo/marco
+// em SupplierDocumentAlert),
 // entao 5xx -> retry do Scheduler e seguro.
 router.use('/api/internal/jobs', requireGoogleOidc(), express.json({ limit: '16kb' }));
 
@@ -71,7 +72,7 @@ router.post('/api/internal/jobs/exchange-rates', async (_req, res) => {
 
 router.post('/api/internal/jobs/supplier-reminders', async (_req, res) => {
   if (!reminderEnv.enabled) {
-    logger.info({}, 'Job de lembretes pre-deadline DESLIGADO (REMINDER_ENABLED=false).');
+    logger.info({}, 'Job de lembretes diarios DESLIGADO (REMINDER_ENABLED=false).');
     res.status(200).json({ skipped: 'disabled' });
     return;
   }
@@ -80,7 +81,7 @@ router.post('/api/internal/jobs/supplier-reminders', async (_req, res) => {
     res.status(200).json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error({ error: message }, 'Falha no job interno de lembretes pre-deadline.');
+    logger.error({ error: message }, 'Falha no job interno de lembretes diarios.');
     res.status(500).json({ message: 'Falha no sweep de lembretes.' });
   }
 });
