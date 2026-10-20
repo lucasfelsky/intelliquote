@@ -98,6 +98,8 @@ const ADDITIVE_ROW_KEYS = [
   'partnerContact',
   'partnerValidityDays',
   'validityExpired',
+  // aditivo informativo (#notas-fornecedor)
+  'notes',
 ];
 
 function stripAdditive(body: Record<string, unknown>) {

@@ -13,7 +13,7 @@ vi.mock('../src/lib/prisma', () => {
     user: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
     session: { create: vi.fn() },
     creditSupportRequest: { findFirst: vi.fn() },
-    creditPartnerContact: { findFirst: vi.fn() },
+    creditPartnerContact: { findMany: vi.fn() },
     quoteResponse: { findFirst: vi.fn() },
     quoteRequest: { update: vi.fn() },
     forwarder: { findFirst: vi.fn() },
@@ -35,7 +35,7 @@ const db = prisma as unknown as {
   user: { findUnique: Mock; findFirst: Mock };
   session: { create: Mock };
   creditSupportRequest: { findFirst: Mock };
-  creditPartnerContact: { findFirst: Mock };
+  creditPartnerContact: { findMany: Mock };
   quoteResponse: { findFirst: Mock };
   quoteRequest: { update: Mock };
   forwarder: { findFirst: Mock };
@@ -45,6 +45,10 @@ const db = prisma as unknown as {
   auditLog: { create: Mock };
 };
 const sendMock = sendAndLog as unknown as Mock;
+
+// O rate limit de /auth/login do app (20 tentativas por janela) estoura com tantos testes
+// neste arquivo: faz o login HTTP uma vez por papel e reaproveita o cookie.
+const cachedCookies = new Map<string, string>();
 
 async function loginAs(role: string): Promise<string> {
   const passwordHash = await hashPassword('ChangeMe123!');
@@ -61,12 +65,16 @@ async function loginAs(role: string): Promise<string> {
   db.session.create.mockImplementation(({ data }: { data: { id: string } }) =>
     Promise.resolve({ id: data.id }),
   );
+  const cached = cachedCookies.get(role);
+  if (cached) return cached;
   const res = await request(app)
     .post('/api/v1/auth/login')
     .send({ email: user.email, password: 'ChangeMe123!' });
   if (res.status !== 200) throw new Error(`login failed: ${res.status}`);
   const cookies = (res.headers['set-cookie'] as string[] | undefined) ?? [];
-  return cookies.map((c) => c.split(';')[0]).join('; ');
+  const cookie = cookies.map((c) => c.split(';')[0]).join('; ');
+  cachedCookies.set(role, cookie);
+  return cookie;
 }
 
 const URL = '/api/v1/credit-support-requests/5/purchase-order';
@@ -167,7 +175,9 @@ describe('POST /api/v1/credit-support-requests/:id/purchase-order (PR4b)', () =>
     });
     db.creditSupportRequest.findFirst.mockResolvedValue(winnerRow());
     db.quoteResponse.findFirst.mockResolvedValue(originResponse());
-    db.creditPartnerContact.findFirst.mockResolvedValue(null);
+    db.creditPartnerContact.findMany.mockResolvedValue([
+      { id: 21, name: 'Paula Parceira', email: 'paula@parceiro.com' },
+    ]);
     sendMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-partner' });
   });
 
@@ -231,17 +241,15 @@ describe('POST /api/v1/credit-support-requests/:id/purchase-order (PR4b)', () =>
     db.creditSupportRequest.findFirst.mockResolvedValue(
       winnerRow({ creditPartnerContactId: null, creditPartnerContact: null }),
     );
-    db.creditPartnerContact.findFirst.mockResolvedValue({
-      id: 30,
-      name: 'Principal Parceiro',
-      email: 'principal@parceiro.com',
-    });
+    db.creditPartnerContact.findMany.mockResolvedValue([
+      { id: 30, name: 'Principal Parceiro', email: 'principal@parceiro.com' },
+    ]);
 
     const res = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
 
     expect(res.status).toBe(200);
     expect(res.body.to).toBe('principal@parceiro.com');
-    expect(db.creditPartnerContact.findFirst).toHaveBeenCalledWith({
+    expect(db.creditPartnerContact.findMany).toHaveBeenCalledWith({
       where: { creditPartnerId: 4 },
       orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
       select: { id: true, name: true, email: true },
@@ -254,7 +262,7 @@ describe('POST /api/v1/credit-support-requests/:id/purchase-order (PR4b)', () =>
     db.creditSupportRequest.findFirst.mockResolvedValue(
       winnerRow({ creditPartnerContactId: null, creditPartnerContact: null }),
     );
-    db.creditPartnerContact.findFirst.mockResolvedValue(null);
+    db.creditPartnerContact.findMany.mockResolvedValue([]);
 
     const res = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
 
@@ -414,5 +422,157 @@ describe('POST /api/v1/credit-support-requests/:id/purchase-order (PR4b)', () =>
     const res = await request(app).post(URL).send(baseBody);
     expect(res.status).toBe(401);
     expect(sendMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('PO ao parceiro: todos os contatos do parceiro (Para + Cc) e GET da lista', () => {
+  const RECIPIENTS_URL = '/api/v1/credit-support-requests/5/purchase-order/recipients';
+  const principal = { id: 30, name: 'Principal Parceiro', email: 'principal@parceiro.com', isPrimary: true };
+  const paula = { id: 21, name: 'Paula Parceira', email: 'paula@parceiro.com', isPrimary: false };
+  const other = { id: 22, name: 'Outro Parceiro', email: 'Outro@Parceiro.com', isPrimary: false };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.emailTemplate.findUnique.mockResolvedValue(null);
+    db.userEmailSignature.findUnique.mockResolvedValue(null);
+    db.auditLog.create.mockResolvedValue({});
+    db.quoteRequest.update.mockResolvedValue({});
+    db.forwarder.findFirst.mockResolvedValue(null);
+    db.companyProfile.findUnique.mockResolvedValue({
+      id: 1,
+      companyName: 'SQ Quimica',
+      dispatchCc: JSON.stringify(['cc1@sqquimica.com', 'cc2@sqquimica.com']),
+    });
+    db.creditSupportRequest.findFirst.mockResolvedValue(winnerRow());
+    db.quoteResponse.findFirst.mockResolvedValue(originResponse());
+    db.creditPartnerContact.findMany.mockResolvedValue([principal, paula, other]);
+    sendMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-partner-multi' });
+  });
+
+  it('to = contato do encaminhamento (mesmo nao sendo isPrimary); demais contatos do parceiro + COMEX em cc', async () => {
+    const cookie = await loginAs('comprador');
+
+    const res = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
+
+    const expectedCc = [
+      'principal@parceiro.com',
+      'outro@parceiro.com',
+      'cc1@sqquimica.com',
+      'cc2@sqquimica.com',
+    ];
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: 'sent', to: 'paula@parceiro.com', cc: expectedCc });
+    expect(db.creditPartnerContact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { creditPartnerId: 4 },
+        orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+      }),
+    );
+    const call = sendMock.mock.calls[0][0];
+    expect(call.to).toEqual({ email: 'paula@parceiro.com', name: 'Paula Parceira' });
+    expect(call.cc.map((c: { email: string }) => c.email)).toEqual(expectedCc);
+    expect(call.templateVars.creditPartnerContactId).toBe(21);
+    expect(call.templateVars.ccCreditPartnerContactIds).toEqual([30, 22]);
+    expect(db.auditLog.create.mock.calls[0][0].data.metadata.cc).toEqual(expectedCc);
+    // Fornecedor de origem continua fora: nenhum e-mail dele no destinatario.
+    expect(JSON.stringify([call.to, call.cc])).not.toContain('acme');
+  });
+
+  it('sem contato no encaminhamento: to = isPrimary e os demais em cc', async () => {
+    const cookie = await loginAs('admin');
+    db.creditSupportRequest.findFirst.mockResolvedValue(
+      winnerRow({ creditPartnerContactId: null, creditPartnerContact: null }),
+    );
+
+    const res = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.to).toBe('principal@parceiro.com');
+    expect(res.body.cc).toEqual([
+      'paula@parceiro.com',
+      'outro@parceiro.com',
+      'cc1@sqquimica.com',
+      'cc2@sqquimica.com',
+    ]);
+  });
+
+  it('contato do encaminhamento ausente da lista do parceiro: cai na ordem isPrimary', async () => {
+    const cookie = await loginAs('comprador');
+    db.creditPartnerContact.findMany.mockResolvedValue([principal, other]);
+
+    const res = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.to).toBe('principal@parceiro.com');
+  });
+
+  it('0 contatos no parceiro: 400 com a mensagem atual', async () => {
+    const cookie = await loginAs('comprador');
+    db.creditPartnerContact.findMany.mockResolvedValue([]);
+
+    const res = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'Parceiro de credito nao possui contato cadastrado para receber a Ordem de Compra.',
+    );
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('GET recipients devolve exatamente o to e o cc usados pelo POST', async () => {
+    const cookie = await loginAs('comprador');
+
+    const get = await request(app).get(RECIPIENTS_URL).set('Cookie', cookie);
+    const post = await request(app).post(URL).set('Cookie', cookie).send(baseBody);
+
+    expect(get.status).toBe(200);
+    expect(get.body.to).toEqual({ name: 'Paula Parceira', email: 'paula@parceiro.com' });
+    expect(get.body.contactCc).toEqual([
+      { name: 'Principal Parceiro', email: 'principal@parceiro.com' },
+      { name: 'Outro Parceiro', email: 'outro@parceiro.com' },
+    ]);
+    expect(get.body.comexCc).toEqual(['cc1@sqquimica.com', 'cc2@sqquimica.com']);
+    const call = sendMock.mock.calls[0][0];
+    expect(get.body.to.email).toBe(call.to.email);
+    expect(get.body.cc).toEqual(call.cc.map((c: { email: string }) => c.email));
+    expect(post.body.cc).toEqual(get.body.cc);
+    expect(db.creditSupportRequest.findFirst.mock.calls[0][0].where).toEqual({
+      id: 5,
+      quoteRequest: { deletedAt: null },
+    });
+    // GET e so leitura: so o POST envia e grava auditoria.
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(db.auditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('GET recipients: encaminhamento inexistente = 404', async () => {
+    const cookie = await loginAs('comprador');
+    db.creditSupportRequest.findFirst.mockResolvedValue(null);
+
+    const res = await request(app).get(RECIPIENTS_URL).set('Cookie', cookie);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('GET recipients: parceiro sem contato = 400 igual ao envio', async () => {
+    const cookie = await loginAs('comprador');
+    db.creditPartnerContact.findMany.mockResolvedValue([]);
+
+    const res = await request(app).get(RECIPIENTS_URL).set('Cookie', cookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'Parceiro de credito nao possui contato cadastrado para receber a Ordem de Compra.',
+    );
+  });
+
+  it('GET recipients: gestor e viewer = 403; sem login = 401', async () => {
+    for (const role of ['gestor', 'viewer']) {
+      const cookie = await loginAs(role);
+      const res = await request(app).get(RECIPIENTS_URL).set('Cookie', cookie);
+      expect(res.status).toBe(403);
+    }
+    const anon = await request(app).get(RECIPIENTS_URL);
+    expect(anon.status).toBe(401);
   });
 });

@@ -10,6 +10,8 @@ vi.mock('@/components/useConfirm', () => ({ useConfirm: () => controls.confirm }
 vi.mock('@/services/dispatch', () => ({
   sendPurchaseOrder: vi.fn(),
   sendPurchaseOrderToPartner: vi.fn(),
+  getPurchaseOrderRecipients: vi.fn(),
+  getPartnerPurchaseOrderRecipients: vi.fn(),
 }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
@@ -18,6 +20,7 @@ vi.mock('@/services/forwarders', async (importOriginal) => ({
 
 import { sendPurchaseOrder } from '@/services/dispatch';
 import { sendPurchaseOrderToPartner } from '@/services/dispatch';
+import { getPartnerPurchaseOrderRecipients, getPurchaseOrderRecipients } from '@/services/dispatch';
 import { listForwarders } from '@/services/forwarders';
 import { PurchaseOrderModal } from './PurchaseOrderModal';
 
@@ -90,9 +93,26 @@ async function attachPdf(scope: Scope) {
   await scope.findByText(/Selecionado: po\.pdf/);
 }
 
+// Lista de destinatarios padrao pros describes que nao testam a lista em si.
+function mockDefaultRecipients() {
+  vi.mocked(getPurchaseOrderRecipients).mockReset().mockResolvedValue({
+    to: { name: 'John Supplier', email: 'john@acme.com' },
+    contactCc: [],
+    comexCc: [],
+    cc: [],
+  });
+  vi.mocked(getPartnerPurchaseOrderRecipients).mockReset().mockResolvedValue({
+    to: { name: 'Ana Crédito', email: 'ana@alfa.example' },
+    contactCc: [],
+    comexCc: [],
+    cc: [],
+  });
+}
+
 describe('PurchaseOrderModal - seletor de forwarder', () => {
   beforeEach(() => {
     controls.confirm.mockReset();
+    mockDefaultRecipients();
     vi.mocked(listForwarders).mockReset().mockResolvedValue([globalCargo, seaLink]);
     vi.mocked(sendPurchaseOrder)
       .mockReset()
@@ -287,6 +307,7 @@ describe('PurchaseOrderModal - PO ao parceiro (PR4b)', () => {
 
   beforeEach(() => {
     controls.confirm.mockReset();
+    mockDefaultRecipients();
     vi.mocked(listForwarders).mockReset().mockResolvedValue([globalCargo]);
     vi.mocked(sendPurchaseOrder).mockReset().mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
     vi.mocked(sendPurchaseOrderToPartner)
@@ -294,19 +315,31 @@ describe('PurchaseOrderModal - PO ao parceiro (PR4b)', () => {
       .mockResolvedValue({ status: 'sent', to: 'ana@alfa.example', cc: [] });
   });
 
-  it('titulo cita parceiro e fornecedor de origem; aviso do destinatario', async () => {
+  it('titulo cita parceiro e fornecedor de origem; aviso so cita o fornecedor de origem', async () => {
     const { dialog, scope } = renderPartnerModal();
     expect(dialog.querySelector('.modal-header h2')?.textContent).toBe(
       'Enviar Ordem de Compra ao parceiro Banco Alfa — fornecedor ACME Ltda',
     );
     const notice = scope.getByTestId('po-partner-notice');
-    expect(notice.textContent).toBe('Destinatário: ana@alfa.example. O fornecedor de origem não é copiado.');
+    expect(notice.textContent).toBe('O fornecedor de origem não é copiado.');
     await waitFor(() => expect(listForwarders).toHaveBeenCalled());
   });
 
-  it('sem contato no encaminhamento: aviso cai para o contato principal do parceiro', async () => {
+  it('sem contato no encaminhamento: o Para vem da lista do backend (contato principal do parceiro)', async () => {
+    vi.mocked(getPartnerPurchaseOrderRecipients).mockResolvedValue({
+      to: { name: 'Principal Parceiro', email: 'principal@alfa.example' },
+      contactCc: [],
+      comexCc: [],
+      cc: [],
+    });
     const { scope } = renderPartnerModal({ partnerContact: null });
-    expect(scope.getByTestId('po-partner-notice').textContent).toContain('contato principal do parceiro');
+    const box = await scope.findByTestId('po-recipients');
+    await waitFor(() =>
+      expect(box.textContent).toContain('Para: Principal Parceiro <principal@alfa.example>'),
+    );
+    expect(scope.getByTestId('po-partner-notice').textContent).toBe(
+      'O fornecedor de origem não é copiado.',
+    );
     await waitFor(() => expect(listForwarders).toHaveBeenCalled());
   });
 
@@ -339,5 +372,125 @@ describe('PurchaseOrderModal - PO ao parceiro (PR4b)', () => {
 
     await waitFor(() => expect(sendPurchaseOrder).toHaveBeenCalledTimes(1));
     expect(sendPurchaseOrderToPartner).not.toHaveBeenCalled();
+  });
+});
+
+// Lista informativa de destinatarios (Para/Cc): vem do backend (a MESMA lista que o envio usa).
+describe('PurchaseOrderModal - destinatarios (Para/Cc)', () => {
+  const partnerTarget = {
+    supplierId: 7,
+    quoteResponseId: 42,
+    supplier: { id: 7, name: 'ACME Ltda' },
+    isWinner: true,
+    creditSupportRequestId: 7,
+    creditPartner: { id: 5, name: 'Banco Alfa' },
+    partnerContact: { id: 50, name: 'Ana Crédito', email: 'ana@alfa.example' },
+  } as unknown as ComparisonResult;
+
+  function renderWith(modalTarget: ComparisonResult) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={qc}>
+        <PurchaseOrderModal
+          target={modalTarget}
+          requestCode="RFQ-001"
+          productName="Produto X"
+          onClose={vi.fn()}
+          onSent={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    const dialog = view.container.querySelector('dialog') as HTMLDialogElement;
+    return { ...view, scope: within(dialog) };
+  }
+
+  beforeEach(() => {
+    controls.confirm.mockReset();
+    vi.mocked(listForwarders).mockReset().mockResolvedValue([globalCargo]);
+    vi.mocked(sendPurchaseOrder).mockReset().mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+    vi.mocked(getPurchaseOrderRecipients).mockReset().mockResolvedValue({
+      to: { name: 'John Supplier', email: 'john@acme.com' },
+      contactCc: [
+        { name: 'Jane Supplier', email: 'jane@acme.com' },
+        { name: '', email: 'jack@acme.com' },
+      ],
+      comexCc: [],
+      cc: ['jane@acme.com', 'jack@acme.com'],
+    });
+    vi.mocked(getPartnerPurchaseOrderRecipients).mockReset().mockResolvedValue({
+      to: { name: 'Ana Crédito', email: 'ana@alfa.example' },
+      contactCc: [{ name: 'Beto Crédito', email: 'beto@alfa.example' }],
+      comexCc: ['cc1@sqquimica.com', 'cc2@sqquimica.com'],
+      cc: ['beto@alfa.example', 'cc1@sqquimica.com', 'cc2@sqquimica.com'],
+    });
+  });
+
+  it('fornecedor com 3 contatos: Para com o principal e Cc com os outros 2', async () => {
+    const { scope } = renderWith(target);
+
+    const box = await scope.findByTestId('po-recipients');
+    await waitFor(() => expect(box.textContent).toContain('Para: John Supplier <john@acme.com>'));
+    expect(box.textContent).toContain('Cc: Jane Supplier <jane@acme.com>, jack@acme.com');
+    expect(getPurchaseOrderRecipients).toHaveBeenCalledWith(42);
+    expect(getPartnerPurchaseOrderRecipients).not.toHaveBeenCalled();
+  });
+
+  it('1 contato: sem linha Cc', async () => {
+    vi.mocked(getPurchaseOrderRecipients).mockResolvedValue({
+      to: { name: 'John Supplier', email: 'john@acme.com' },
+      contactCc: [],
+      comexCc: [],
+      cc: [],
+    });
+    const { scope } = renderWith(target);
+
+    const box = await scope.findByTestId('po-recipients');
+    await waitFor(() => expect(box.textContent).toContain('Para: John Supplier <john@acme.com>'));
+    expect(box.textContent).not.toContain('Cc:');
+    expect(box.textContent).not.toContain('Equipe COMEX');
+  });
+
+  it('comexCc nao vazio: mostra a contagem da Equipe COMEX em copia', async () => {
+    vi.mocked(getPurchaseOrderRecipients).mockResolvedValue({
+      to: { name: 'John Supplier', email: 'john@acme.com' },
+      contactCc: [],
+      comexCc: ['cc1@sqquimica.com', 'cc2@sqquimica.com'],
+      cc: ['cc1@sqquimica.com', 'cc2@sqquimica.com'],
+    });
+    const { scope } = renderWith(target);
+
+    await scope.findByText('Equipe COMEX em cópia (2).');
+  });
+
+  it('parceiro chama a lista do parceiro (7) e nao a do fornecedor; aviso so cita o fornecedor de origem', async () => {
+    const { scope } = renderWith(partnerTarget);
+
+    const box = await scope.findByTestId('po-recipients');
+    await waitFor(() => expect(box.textContent).toContain('Para: Ana Crédito <ana@alfa.example>'));
+    expect(box.textContent).toContain('Cc: Beto Crédito <beto@alfa.example>');
+    expect(box.textContent).toContain('Equipe COMEX em cópia (2).');
+    expect(getPartnerPurchaseOrderRecipients).toHaveBeenCalledWith(7);
+    expect(getPurchaseOrderRecipients).not.toHaveBeenCalled();
+    expect(scope.getByTestId('po-partner-notice').textContent).toBe(
+      'O fornecedor de origem não é copiado.',
+    );
+  });
+
+  it('carregando: mostra "Carregando destinatários…"', async () => {
+    vi.mocked(getPurchaseOrderRecipients).mockReturnValue(new Promise(() => {}));
+    const { scope } = renderWith(target);
+
+    await scope.findByText('Carregando destinatários…');
+  });
+
+  it('erro na lista: avisa e o botao de envio continua habilitado', async () => {
+    vi.mocked(getPurchaseOrderRecipients).mockRejectedValue(new Error('falha de rede'));
+    const { scope } = renderWith(target);
+
+    await scope.findByText(/Não foi possível carregar os destinatários/);
+    await waitFor(() => expect(select(scope).value).toBe('1'));
+    await attachPdf(scope);
+    const sendButton = scope.getByRole('button', { name: 'Enviar Ordem de Compra' }) as HTMLButtonElement;
+    expect(sendButton.disabled).toBe(false);
   });
 });

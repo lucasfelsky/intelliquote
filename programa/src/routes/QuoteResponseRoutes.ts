@@ -53,6 +53,12 @@ quoteResponseRoutes.post(
   allowRoles(['admin', 'comprador']),
   QuoteResponseController.sendPurchaseOrder,
 );
+quoteResponseRoutes.get(
+  '/quote-responses/:id/purchase-order/recipients',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  QuoteResponseController.purchaseOrderRecipients,
+);
 quoteResponseRoutes.post(
   '/quote-requests/:quoteRequestId/compare',
   requireAuth,

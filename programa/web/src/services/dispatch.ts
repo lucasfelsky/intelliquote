@@ -444,4 +444,28 @@ export async function sendPurchaseOrderToPartner(
   );
 }
 
+// Destinatarios da PO (so leitura): a MESMA lista que o envio usa. Informativo no modal.
+export interface PurchaseOrderRecipients {
+  to: { name: string; email: string };
+  contactCc: Array<{ name: string; email: string }>;
+  comexCc: string[];
+  cc: string[];
+}
+
+export async function getPurchaseOrderRecipients(
+  quoteResponseId: number,
+): Promise<PurchaseOrderRecipients> {
+  return api.get<PurchaseOrderRecipients>(
+    `/v1/quote-responses/${quoteResponseId}/purchase-order/recipients`,
+  );
+}
+
+export async function getPartnerPurchaseOrderRecipients(
+  creditSupportRequestId: number,
+): Promise<PurchaseOrderRecipients> {
+  return api.get<PurchaseOrderRecipients>(
+    `/v1/credit-support-requests/${creditSupportRequestId}/purchase-order/recipients`,
+  );
+}
+
 export { ApiError };

@@ -40,5 +40,11 @@ creditSupportRoutes.post(
   allowRoles(['admin', 'comprador']),
   CreditSupportController.sendPurchaseOrder,
 );
+creditSupportRoutes.get(
+  '/credit-support-requests/:id/purchase-order/recipients',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  CreditSupportController.purchaseOrderRecipients,
+);
 
 export { creditSupportRoutes };
