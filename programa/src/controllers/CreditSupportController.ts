@@ -1,16 +1,14 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import {
-  CompanyProfileService,
-  excludeComercialRecipients,
-  readDispatchCc,
-} from '../services/CompanyProfileService';
-import {
   CREDIT_OFFER_CHANGED_MESSAGE,
   loadCreditCandidateForAward,
 } from '../services/ComparisonCandidateService';
 import { CREDIT_SUPPORT_ENTITY_TYPE, CreditSupportService } from '../services/CreditSupportService';
-import { sendPurchaseOrderEmail } from '../services/PurchaseOrderEmailService';
+import {
+  loadCreditPartnerEmailRecipients,
+  sendPurchaseOrderEmail,
+} from '../services/PurchaseOrderEmailService';
 import {
   creditSupportForwardSchema,
   creditSupportResendSchema,
@@ -124,7 +122,8 @@ export class CreditSupportController {
 
   // PR4b: Ordem de Compra ao PARCEIRO vencedor (alternativa via Credit Support). Mesmo e-mail
   // `quote_po` da PO ao fornecedor, com o paragrafo citando o fornecedor de origem. To = contato
-  // do encaminhamento (fallback: principal do parceiro); CC = dispatchCc; fornecedor NAO em copia.
+  // do encaminhamento (fallback: principal do parceiro); CC = demais contatos do parceiro + dispatchCc;
+  // fornecedor NAO em copia.
   static async sendPurchaseOrder(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseId(req.params.id);
@@ -178,30 +177,24 @@ export class CreditSupportController {
         throw new HttpError(409, CREDIT_OFFER_CHANGED_MESSAGE);
       }
 
-      const recipient =
-        row.creditPartnerContact ??
-        (await prisma.creditPartnerContact.findFirst({
-          where: { creditPartnerId: row.creditPartnerId },
-          orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
-          select: { id: true, name: true, email: true },
-        }));
-      if (!recipient) {
+      const recipients = await loadCreditPartnerEmailRecipients({
+        creditPartnerId: row.creditPartnerId,
+        preferredContactId: row.creditPartnerContact?.id ?? null,
+      });
+      if (!recipients) {
         throw new HttpError(
           400,
           'Parceiro de credito nao possui contato cadastrado para receber a Ordem de Compra.',
         );
       }
 
-      const profile = await CompanyProfileService.get();
-      const companyCc = await excludeComercialRecipients(
-        readDispatchCc(profile).map((email) => ({ email, name: '' })),
-      );
+      const recipient = recipients.to;
 
       const result = await sendPurchaseOrderEmail({
         payload: parsedBody.data,
         quoteRequest: row.quoteRequest,
         recipient: { name: recipient.name, email: recipient.email },
-        cc: companyCc,
+        cc: recipients.cc,
         user: req.user,
         extraVars: { supplierName: row.supplier.name, creditPartnerName: row.creditPartner.name },
         templateVars: {
@@ -211,6 +204,7 @@ export class CreditSupportController {
           creditSupportRequestId: row.id,
           creditPartnerId: row.creditPartnerId,
           creditPartnerContactId: recipient.id,
+          ccCreditPartnerContactIds: recipients.contactCc.map((c) => c.id),
         },
         related: { type: CREDIT_SUPPORT_ENTITY_TYPE, id: String(row.id) },
         audit: {
@@ -226,6 +220,46 @@ export class CreditSupportController {
       });
 
       return res.status(200).json(result);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Lista (so leitura) de quem recebe a PO ao parceiro: a MESMA que o envio usa. Nao repete
+  // as checagens de vencedor/stale/revogado (sao do envio).
+  static async purchaseOrderRecipients(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID do encaminhamento invalido.' });
+      }
+
+      const row = await prisma.creditSupportRequest.findFirst({
+        where: { id, quoteRequest: { deletedAt: null } },
+        select: { id: true, creditPartnerId: true, creditPartnerContactId: true },
+      });
+      if (!row) {
+        throw new HttpError(404, 'Encaminhamento nao encontrado.');
+      }
+
+      const recipients = await loadCreditPartnerEmailRecipients({
+        creditPartnerId: row.creditPartnerId,
+        preferredContactId: row.creditPartnerContactId,
+      });
+      if (!recipients) {
+        throw new HttpError(
+          400,
+          'Parceiro de credito nao possui contato cadastrado para receber a Ordem de Compra.',
+        );
+      }
+
+      return res.status(200).json({
+        to: { name: recipients.to.name, email: recipients.to.email },
+        contactCc: recipients.contactCc.map((c) => ({ name: c.name, email: c.email })),
+        comexCc: recipients.comexCc.map((c) => c.email),
+        cc: recipients.cc.map((c) => c.email),
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

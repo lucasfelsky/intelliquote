@@ -30,11 +30,14 @@ import {
 import {
   CompanyProfileService,
   excludeComercialRecipients,
-  readDispatchCc,
 } from '../services/CompanyProfileService';
 import { SupplierPortalService } from '../services/SupplierPortalService';
 import { QuoteResponsePriceHistoryService } from '../services/QuoteResponsePriceHistoryService';
-import { sendPurchaseOrderEmail } from '../services/PurchaseOrderEmailService';
+import {
+  loadSupplierEmailRecipients,
+  sendPurchaseOrderEmail,
+} from '../services/PurchaseOrderEmailService';
+import { mergeCc } from '../utils/contactRecipients';
 import { sendAndLog } from '../mailer/MailerService';
 import { renderReplyFromTemplate, type QuoteReplyItem } from '../mailer/renderQuoteReply';
 import { logger } from '../lib/logger';
@@ -637,8 +640,8 @@ export class QuoteResponseController {
   }
 
   // Monta o contexto comum ao preview e ao envio de verdade do botao
-  // "Responder": proposta + cotacao + itens + contato principal do
-  // fornecedor + CC da empresa. Devolve `null` com a resposta ja escrita
+  // "Responder": proposta + cotacao + itens + contatos do fornecedor (principal
+  // no To, demais em Cc) + CC da empresa. Devolve `null` com a resposta ja escrita
   // quando algo impede a resposta de ser montada (404/400), pra reply() e
   // replyPreview() nao duplicarem essa checagem.
   private static async loadReplyContext(
@@ -647,6 +650,7 @@ export class QuoteResponseController {
   ): Promise<{
     quoteResponse: NonNullable<Awaited<ReturnType<typeof QuoteResponseController.findReplyQuoteResponse>>>;
     primaryContact: { id: number; email: string; name: string };
+    contactCc: Array<{ id: number; email: string; name: string }>;
     companyCc: Array<{ email: string; name: string }>;
   } | null> {
     const quoteResponse = await QuoteResponseController.findReplyQuoteResponse(id);
@@ -655,24 +659,31 @@ export class QuoteResponseController {
       return null;
     }
 
-    const primaryContact = await prisma.supplierContact.findFirst({
-      where: { supplierId: quoteResponse.supplierId },
-      orderBy: { isPrimary: 'desc' },
-    });
+    const recipients = await loadSupplierEmailRecipients(quoteResponse.supplierId);
 
-    if (!primaryContact) {
+    if (!recipients) {
       res.status(400).json({
         message: 'Fornecedor nao possui contato cadastrado para receber a resposta.',
       });
       return null;
     }
 
-    const profile = await CompanyProfileService.get();
-    const companyCc = await excludeComercialRecipients(
-      readDispatchCc(profile).map((email) => ({ email, name: '' })),
-    );
+    return {
+      quoteResponse,
+      primaryContact: recipients.to,
+      contactCc: recipients.contactCc,
+      companyCc: recipients.comexCc,
+    };
+  }
 
-    return { quoteResponse, primaryContact, companyCc };
+  // Cc final da PO ao fornecedor (contatos + COMEX, sem o To). Usado pelo envio e pela
+  // lista informativa do modal, pra as duas serem sempre iguais.
+  private static buildPoCc(context: {
+    primaryContact: { email: string };
+    contactCc: Array<{ email: string; name: string }>;
+    companyCc: Array<{ email: string; name: string }>;
+  }): Array<{ email: string; name: string }> {
+    return mergeCc(context.primaryContact.email, context.contactCc, context.companyCc);
   }
 
   // "@fulano@sqquimica.com" na mensagem da modal de "Responder" adiciona
@@ -912,7 +923,8 @@ export class QuoteResponseController {
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
       const { quoteResponse, primaryContact } = context;
-      const companyCc = await QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+      const mentioned = await QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+      const companyCc = mergeCc(primaryContact.email, context.contactCc, mentioned);
 
       // Preview NUNCA emite nem rotaciona token: link ficticio do portal.
       const rendered = await QuoteResponseController.renderReplyFor(
@@ -959,7 +971,8 @@ export class QuoteResponseController {
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
       const { quoteResponse, primaryContact } = context;
-      const companyCc = await QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+      const mentioned = await QuoteResponseController.mergeMentionedCc(context.companyCc, parsedBody.data.message);
+      const companyCc = mergeCc(primaryContact.email, context.contactCc, mentioned);
 
       if (parsedBody.data.targetPrice !== undefined) {
         if (parsedBody.data.targetPrice !== null) {
@@ -1080,6 +1093,7 @@ export class QuoteResponseController {
           quoteResponseId: quoteResponse.id,
           supplierId: quoteResponse.supplier.id,
           supplierContactId: primaryContact.id,
+          ccSupplierContactIds: context.contactCc.map((c) => c.id),
           customMessage: parsedBody.data.message ?? null,
           portalTokenId,
         },
@@ -1122,8 +1136,8 @@ export class QuoteResponseController {
     }
   }
 
-  // Envia (de verdade, via SMTP) o e-mail de "Ordem de Compra" ao contato
-  // principal do fornecedor VENCEDOR, com o PDF (upload do usuario, so'-
+  // Envia (de verdade, via SMTP) o e-mail de "Ordem de Compra" ao fornecedor
+  // VENCEDOR (contato principal no To, demais contatos + COMEX em Cc), com o PDF (upload do usuario, so'-
   // envio) anexado. Botao na tela de Comparacao, so' habilitado quando
   // `quoteResponse.isWinner === true`. O envio em si mora em
   // PurchaseOrderEmailService (compartilhado com a PO ao parceiro, PR4b).
@@ -1143,7 +1157,7 @@ export class QuoteResponseController {
 
       const context = await QuoteResponseController.loadReplyContext(id, res);
       if (!context) return res;
-      const { quoteResponse, primaryContact, companyCc } = context;
+      const { quoteResponse, primaryContact } = context;
 
       // Nao vencedora so com confirmacao explicita do usuario (nonWinner); a vencedora gravada
       // nao muda e o envio fica marcado na auditoria.
@@ -1158,13 +1172,14 @@ export class QuoteResponseController {
         payload: parsedBody.data,
         quoteRequest: quoteResponse.quoteRequest,
         recipient: { name: primaryContact.name, email: primaryContact.email },
-        cc: companyCc,
+        cc: QuoteResponseController.buildPoCc(context),
         user: req.user,
         templateVars: {
           quoteRequestId: quoteResponse.quoteRequest.id,
           quoteResponseId: quoteResponse.id,
           supplierId: quoteResponse.supplier.id,
           supplierContactId: primaryContact.id,
+          ccSupplierContactIds: context.contactCc.map((c) => c.id),
         },
         related: { type: 'quote_response', id: String(id) },
         audit: {
@@ -1175,6 +1190,30 @@ export class QuoteResponseController {
       });
 
       return res.status(200).json(result);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Lista (so leitura) de quem recebe a PO ao fornecedor: a MESMA que o envio usa.
+  static async purchaseOrderRecipients(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID da proposta invalido.' });
+      }
+
+      const context = await QuoteResponseController.loadReplyContext(id, res);
+      if (!context) return res;
+      const { primaryContact } = context;
+
+      return res.status(200).json({
+        to: { name: primaryContact.name, email: primaryContact.email },
+        contactCc: context.contactCc.map((c) => ({ name: c.name, email: c.email })),
+        comexCc: context.companyCc.map((c) => c.email),
+        cc: QuoteResponseController.buildPoCc(context).map((c) => c.email),
+      });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

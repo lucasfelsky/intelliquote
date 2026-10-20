@@ -32,7 +32,7 @@ vi.mock('../src/lib/prisma', () => {
       findFirst: vi.fn(),
     },
     supplierContact: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     companyProfile: {
       findUnique: vi.fn(),
@@ -58,7 +58,7 @@ const prismaMock = prisma as unknown as {
   session: { create: Fn };
   quoteRequest: { findMany: Fn; count: Fn; update: Fn };
   quoteResponse: { findFirst: Fn };
-  supplierContact: { findFirst: Fn };
+  supplierContact: { findMany: Fn };
   companyProfile: { findUnique: Fn; create: Fn };
   emailTemplate: { findUnique: Fn };
   userEmailSignature: { findUnique: Fn };
@@ -208,12 +208,14 @@ describe('GET /api/v1/quote-requests?poSent (filtro PO enviada)', () => {
 describe('POST /api/v1/quote-responses/:id/purchase-order grava purchaseOrderSentAt', () => {
   function arrangeSend(): void {
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
   }
 
   it('envio com sucesso marca a cotacao como PO enviada', async () => {
