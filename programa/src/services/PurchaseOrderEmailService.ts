@@ -14,6 +14,12 @@ import {
 import type { MailAttachment } from '../mailer/Mailer';
 import { quotePurchaseOrderSchema } from '../validators/domain';
 import { HttpError } from '../utils/http';
+import { mergeCc, resolveContactRecipients } from '../utils/contactRecipients';
+import {
+  CompanyProfileService,
+  loadComercialEmails,
+  readDispatchCc,
+} from './CompanyProfileService';
 
 // Envio do e-mail de "Ordem de Compra" (SMTP real, com o PDF do usuario anexado).
 // Trecho comum da PO ao fornecedor vencedor (QuoteResponseController.sendPurchaseOrder)
@@ -46,6 +52,7 @@ export interface PurchaseOrderEmailInput {
   };
   // Destinatario unico (To). `name` tambem alimenta "supplierContactName" do template.
   recipient: { name: string; email: string };
+  // Lista final (contatos + COMEX), ja filtrada e sem o destinatario.
   cc: Array<{ email: string; name: string }>;
   user?: { id?: number; name?: string; email?: string } | null;
   // PO via parceiro: nomes citados no paragrafo condicional do template.
@@ -61,6 +68,63 @@ export interface PurchaseOrderEmailResult {
   status: 'sent' | 'queued';
   to: string;
   cc: string[];
+}
+
+// Destinatarios da PO: principal/preferido no To, demais contatos em Cc, Equipe COMEX
+// (dispatchCc) em Cc. Comerciais saem ANTES de escolher o To.
+export interface EmailRecipients {
+  to: { id: number; name: string; email: string };
+  contactCc: Array<{ id: number; name: string; email: string }>;
+  comexCc: Array<{ email: string; name: string }>;
+  cc: Array<{ email: string; name: string }>;
+}
+
+async function buildEmailRecipients(
+  contacts: Array<{ id: number; name: string; email: string }>,
+  preferredContactId: number | null,
+): Promise<EmailRecipients | null> {
+  const blocked = await loadComercialEmails();
+  const resolved = resolveContactRecipients(contacts, {
+    preferredContactId,
+    blockedEmails: blocked,
+  });
+  if (!resolved) return null;
+
+  const profile = await CompanyProfileService.get();
+  const comexRaw = readDispatchCc(profile)
+    .filter((email) => !blocked.has((email ?? '').trim().toLowerCase()))
+    .map((email) => ({ email, name: '' }));
+
+  const cc = mergeCc(resolved.to.email, resolved.contactCc, comexRaw);
+  const contactEmails = new Set(resolved.contactCc.map((c) => c.email.toLowerCase()));
+  const comexCc = cc.filter((item) => !contactEmails.has(item.email));
+  return { to: resolved.to, contactCc: resolved.contactCc, comexCc, cc };
+}
+
+export async function loadSupplierEmailRecipients(
+  supplierId: number,
+): Promise<EmailRecipients | null> {
+  // SupplierContact nao tem deletedAt; o status do Supplier nao e filtrado (PO/Responder
+  // nunca filtraram).
+  const contacts = await prisma.supplierContact.findMany({
+    where: { supplierId },
+    orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+    select: { id: true, name: true, email: true },
+  });
+  return buildEmailRecipients(contacts, null);
+}
+
+export async function loadCreditPartnerEmailRecipients(input: {
+  creditPartnerId: number;
+  preferredContactId?: number | null;
+}): Promise<EmailRecipients | null> {
+  // CreditPartnerContact nao tem deletedAt.
+  const contacts = await prisma.creditPartnerContact.findMany({
+    where: { creditPartnerId: input.creditPartnerId },
+    orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+    select: { id: true, name: true, email: true },
+  });
+  return buildEmailRecipients(contacts, input.preferredContactId ?? null);
 }
 
 export async function sendPurchaseOrderEmail(

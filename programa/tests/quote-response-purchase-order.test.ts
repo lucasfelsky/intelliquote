@@ -27,7 +27,7 @@ vi.mock('../src/lib/prisma', () => {
       findFirst: vi.fn(),
     },
     supplierContact: {
-      findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     forwarder: {
       findFirst: vi.fn(),
@@ -50,16 +50,24 @@ vi.mock('../src/lib/prisma', () => {
 });
 
 const prismaMock = prisma as unknown as {
-  user: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
+  user: {
+    findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
+  };
   session: { create: ReturnType<typeof vi.fn> };
   quoteResponse: { findFirst: ReturnType<typeof vi.fn> };
-  supplierContact: { findFirst: ReturnType<typeof vi.fn> };
+  supplierContact: { findMany: ReturnType<typeof vi.fn> };
   forwarder: { findFirst: ReturnType<typeof vi.fn> };
   companyProfile: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   emailTemplate: { findUnique: ReturnType<typeof vi.fn> };
   userEmailSignature: { findUnique: ReturnType<typeof vi.fn> };
   auditLog: { create: ReturnType<typeof vi.fn> };
 };
+
+// O rate limit de /auth/login do app (20 tentativas por janela) estoura com tantos testes
+// neste arquivo: faz o login HTTP uma vez e reaproveita o cookie.
+let cachedLoginCookie: string | null = null;
 
 async function loginAsComprador(): Promise<string> {
   const passwordHash = await hashPassword('ChangeMe123!');
@@ -79,6 +87,7 @@ async function loginAsComprador(): Promise<string> {
     role: { name: 'comprador' },
   });
   prismaMock.session.create.mockImplementation(({ data }) => Promise.resolve({ id: data.id }));
+  if (cachedLoginCookie) return cachedLoginCookie;
   const res = await request(app).post('/api/v1/auth/login').send({
     email: 'comprador@intelliquote.local',
     password: 'ChangeMe123!',
@@ -87,7 +96,8 @@ async function loginAsComprador(): Promise<string> {
     throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
   }
   const cookies = (res.headers['set-cookie'] as string[] | undefined) ?? [];
-  return cookies.map((c) => c.split(';')[0]).join('; ');
+  cachedLoginCookie = cookies.map((c) => c.split(';')[0]).join('; ');
+  return cachedLoginCookie;
 }
 
 const PDF_BASE64 = Buffer.from('%PDF-1.4 fake purchase order content').toString('base64');
@@ -144,12 +154,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('envia a Ordem de Compra com o PDF anexado quando a proposta e vencedora', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-1' });
 
     const res = await request(app)
@@ -189,12 +201,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('retorna 400 quando a proposta nao e a vencedora', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue({ ...winnerQuoteResponse, isWinner: false });
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
 
     const res = await request(app)
       .post('/api/v1/quote-responses/77/purchase-order')
@@ -209,12 +223,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('proposta nao vencedora com nonWinner: true envia a PO e marca a auditoria', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue({ ...winnerQuoteResponse, isWinner: false });
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-2' });
 
     const res = await request(app)
@@ -233,12 +249,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('nonWinner: false na proposta nao vencedora continua 400', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue({ ...winnerQuoteResponse, isWinner: false });
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
 
     const res = await request(app)
       .post('/api/v1/quote-responses/77/purchase-order')
@@ -253,12 +271,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('vencedora com nonWinner: true envia normalmente e a auditoria nao marca nonWinner', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-3' });
 
     const res = await request(app)
@@ -274,12 +294,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('retorna 400 quando o fileType nao e application/pdf', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
 
     const res = await request(app)
       .post('/api/v1/quote-responses/77/purchase-order')
@@ -293,12 +315,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('retorna 400 quando o arquivo excede o limite de 10MB', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
 
     const res = await request(app)
       .post('/api/v1/quote-responses/77/purchase-order')
@@ -326,7 +350,7 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('retorna 400 quando o fornecedor nao possui contato cadastrado', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue(null);
+    prismaMock.supplierContact.findMany.mockResolvedValue([]);
 
     const res = await request(app)
       .post('/api/v1/quote-responses/77/purchase-order')
@@ -340,12 +364,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('retorna 502 quando o envio de e-mail falha', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     sendAndLogMock.mockResolvedValue({ status: 'failed', error: 'SMTP indisponivel' });
 
     const res = await request(app)
@@ -360,12 +386,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('injeta subject e message editados na hora', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-2' });
 
     const res = await request(app)
@@ -387,12 +415,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('forwarderId valido vai para templateVars e para o metadata do audit', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     prismaMock.forwarder.findFirst.mockResolvedValue({ id: 7, companyName: 'Global' });
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-fw' });
 
@@ -417,12 +447,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('retorna 400 quando o forwarderId nao existe ou foi excluido', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     prismaMock.forwarder.findFirst.mockResolvedValue(null);
 
     const res = await request(app)
@@ -438,12 +470,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
   it('sem forwarderId nao consulta o cadastro e grava forwarderId null', async () => {
     const cookieHeader = await loginAsComprador();
     prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-    prismaMock.supplierContact.findFirst.mockResolvedValue({
-      id: 9,
-      name: 'John Supplier',
-      email: 'john@acme.com',
-      isPrimary: true,
-    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      {
+        id: 9,
+        name: 'John Supplier',
+        email: 'john@acme.com',
+        isPrimary: true,
+      },
+    ]);
     sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-nofw' });
 
     const res = await request(app)
@@ -476,12 +510,14 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
     async function arrangeSendable(): Promise<string> {
       const cookieHeader = await loginAsComprador();
       prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
-      prismaMock.supplierContact.findFirst.mockResolvedValue({
-        id: 9,
-        name: 'John Supplier',
-        email: 'john@acme.com',
-        isPrimary: true,
-      });
+      prismaMock.supplierContact.findMany.mockResolvedValue([
+        {
+          id: 9,
+          name: 'John Supplier',
+          email: 'john@acme.com',
+          isPrimary: true,
+        },
+      ]);
       sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-x' });
       return cookieHeader;
     }
@@ -605,5 +641,172 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
       expect(call.attachments).toHaveLength(1);
       expect(call.html).not.toContain('cid:sq-logo@intelliquote');
     });
+  });
+});
+
+describe('PO ao fornecedor: todos os contatos (principal no Para, demais em Cc)', () => {
+  const PO_URL = '/api/v1/quote-responses/77/purchase-order';
+  const RECIPIENTS_URL = '/api/v1/quote-responses/77/purchase-order/recipients';
+  const principal = { id: 9, name: 'John Supplier', email: 'john@acme.com', isPrimary: true };
+  const second = { id: 10, name: 'Jane Supplier', email: 'Jane@Acme.com', isPrimary: false };
+  const third = { id: 11, name: 'Jack Supplier', email: 'jack@acme.com', isPrimary: false };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.user.findMany.mockResolvedValue([]);
+    prismaMock.emailTemplate.findUnique.mockResolvedValue(null);
+    prismaMock.userEmailSignature.findUnique.mockResolvedValue(null);
+    prismaMock.companyProfile.findUnique.mockResolvedValue({
+      id: 1,
+      companyName: 'SQ Quimica',
+      dispatchCc: JSON.stringify(['cc1@sqquimica.com', 'cc2@sqquimica.com']),
+    });
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(winnerQuoteResponse);
+    sendAndLogMock.mockResolvedValue({ status: 'sent', providerMessageId: 'msg-po-multi' });
+  });
+
+  afterEach(() => {
+    prismaMock.user.findMany.mockResolvedValue([]);
+    vi.clearAllMocks();
+  });
+
+  function mockComercial(emails: string[]): void {
+    prismaMock.user.findMany.mockImplementation((args: { where?: { role?: { name?: string } } }) =>
+      Promise.resolve(args?.where?.role?.name === 'comercial' ? emails.map((email) => ({ email })) : []),
+    );
+  }
+
+  it('consulta os contatos do fornecedor com where e orderBy corretos', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([principal]);
+
+    const res = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    expect(res.status).toBe(200);
+    expect(prismaMock.supplierContact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { supplierId: 2 },
+        orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+      }),
+    );
+  });
+
+  it('1 contato: cc = so a Equipe COMEX', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([principal]);
+
+    const res = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    expect(res.status).toBe(200);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.to).toEqual({ email: 'john@acme.com', name: 'John Supplier' });
+    expect(call.cc.map((c: { email: string }) => c.email)).toEqual([
+      'cc1@sqquimica.com',
+      'cc2@sqquimica.com',
+    ]);
+  });
+
+  it('3 contatos: to = principal e cc = 2 contatos + 2 COMEX; resposta e templateVars refletem', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([principal, second, third]);
+
+    const res = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    const expectedCc = ['jane@acme.com', 'jack@acme.com', 'cc1@sqquimica.com', 'cc2@sqquimica.com'];
+    expect(res.status).toBe(200);
+    expect(res.body.to).toBe('john@acme.com');
+    expect(res.body.cc).toEqual(expectedCc);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.to).toEqual({ email: 'john@acme.com', name: 'John Supplier' });
+    expect(call.cc.map((c: { email: string }) => c.email)).toEqual(expectedCc);
+    expect(call.templateVars.supplierContactId).toBe(9);
+    expect(call.templateVars.ccSupplierContactIds).toEqual([10, 11]);
+    const auditArgs = prismaMock.auditLog.create.mock.calls[0][0];
+    expect(auditArgs.data.metadata.cc).toEqual(expectedCc);
+  });
+
+  it('0 contatos: 400 com a mensagem atual e nada e enviado', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([]);
+
+    const res = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Fornecedor nao possui contato cadastrado para receber a resposta.');
+    expect(sendAndLogMock).not.toHaveBeenCalled();
+  });
+
+  it('contato comercial e filtrado e o proximo e promovido a to', async () => {
+    const cookieHeader = await loginAsComprador();
+    mockComercial(['Vendas@SQquimica.com']);
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      { id: 8, name: 'Vendas', email: 'vendas@sqquimica.com', isPrimary: true },
+      second,
+      third,
+    ]);
+
+    const res = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    expect(res.status).toBe(200);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(call.to.email).toBe('Jane@Acme.com');
+    const ccEmails = call.cc.map((c: { email: string }) => c.email);
+    expect(ccEmails).toEqual(['jack@acme.com', 'cc1@sqquimica.com', 'cc2@sqquimica.com']);
+    expect(ccEmails).not.toContain('vendas@sqquimica.com');
+  });
+
+  it('Equipe COMEX igual a um contato aparece 1x', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      principal,
+      { id: 12, name: 'Interno', email: 'CC1@sqquimica.com', isPrimary: false },
+    ]);
+
+    const res = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.cc).toEqual(['cc1@sqquimica.com', 'cc2@sqquimica.com']);
+  });
+
+  it('GET recipients devolve exatamente o to e o cc usados pelo POST', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([principal, second, third]);
+
+    const get = await request(app).get(RECIPIENTS_URL).set('Cookie', cookieHeader);
+    const post = await request(app).post(PO_URL).set('Cookie', cookieHeader).send(basePoBody);
+
+    expect(get.status).toBe(200);
+    expect(get.body.to).toEqual({ name: 'John Supplier', email: 'john@acme.com' });
+    expect(get.body.contactCc).toEqual([
+      { name: 'Jane Supplier', email: 'jane@acme.com' },
+      { name: 'Jack Supplier', email: 'jack@acme.com' },
+    ]);
+    expect(get.body.comexCc).toEqual(['cc1@sqquimica.com', 'cc2@sqquimica.com']);
+    const call = sendAndLogMock.mock.calls[0][0];
+    expect(get.body.to.email).toBe(call.to.email);
+    expect(get.body.cc).toEqual(call.cc.map((c: { email: string }) => c.email));
+    expect(post.body.cc).toEqual(get.body.cc);
+    // O GET e so leitura: so o POST envia e grava auditoria.
+    expect(sendAndLogMock).toHaveBeenCalledTimes(1);
+    expect(prismaMock.auditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('GET recipients de proposta inexistente: 404', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(null);
+
+    const res = await request(app).get(RECIPIENTS_URL).set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('GET recipients sem contato: 400 igual ao envio', async () => {
+    const cookieHeader = await loginAsComprador();
+    prismaMock.supplierContact.findMany.mockResolvedValue([]);
+
+    const res = await request(app).get(RECIPIENTS_URL).set('Cookie', cookieHeader);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Fornecedor nao possui contato cadastrado para receber a resposta.');
   });
 });

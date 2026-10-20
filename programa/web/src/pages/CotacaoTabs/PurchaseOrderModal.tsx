@@ -4,7 +4,12 @@ import {
   messageOf,
   type ComparisonResult,
 } from '@/services/quoteResponses';
-import { sendPurchaseOrder, sendPurchaseOrderToPartner } from '@/services/dispatch';
+import {
+  getPartnerPurchaseOrderRecipients,
+  getPurchaseOrderRecipients,
+  sendPurchaseOrder,
+  sendPurchaseOrderToPartner,
+} from '@/services/dispatch';
 import { formatForwarderInfo, listForwarders } from '@/services/forwarders';
 import { Modal } from '@/components/Modal';
 import { useConfirm } from '@/components/useConfirm';
@@ -15,6 +20,10 @@ const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
 // Mesmo limite do Zod do backend (quotePurchaseOrderSchema.forwarderInfo).
 const MAX_FORWARDER_INFO_LENGTH = 2000;
+
+function formatRecipient(contact: { name: string; email: string }): string {
+  return contact.name.trim() ? `${contact.name} <${contact.email}>` : contact.email;
+}
 
 // Campos do candidato que o modal realmente le (linha do ranking OU entrada de "Fora do ranking").
 export type PurchaseOrderTarget = Pick<
@@ -62,6 +71,20 @@ export function PurchaseOrderModal({
     queryFn: () => listForwarders({ active: true }),
   });
   const forwarders = forwardersQuery.data ?? [];
+
+  // Lista informativa de quem recebe a PO (Para/Cc); o backend resolve os mesmos destinatarios
+  // sozinho no envio, entao um erro aqui NAO bloqueia o botao.
+  const recipientsId = viaPartner ? (target.creditSupportRequestId ?? 0) : (target.quoteResponseId ?? 0);
+  const recipientsQuery = useQuery({
+    queryKey: ['purchase-order-recipients', viaPartner ? 'partner' : 'supplier', recipientsId],
+    queryFn: () =>
+      viaPartner
+        ? getPartnerPurchaseOrderRecipients(recipientsId)
+        : getPurchaseOrderRecipients(recipientsId),
+    enabled: recipientsId > 0,
+    retry: false,
+  });
+  const recipients = recipientsQuery.data;
 
   // Ultimo texto escrito pelo seletor: enquanto o textarea ainda for igual a ele, trocar de
   // forwarder sobrescreve sem perguntar. userTouched impede a pre-selecao de pisar no que o
@@ -183,10 +206,38 @@ export function PurchaseOrderModal({
           data-testid="po-partner-notice"
           style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}
         >
-          Destinatário: {target.partnerContact?.email ?? 'contato principal do parceiro'}. O
-          fornecedor de origem não é copiado.
+          O fornecedor de origem não é copiado.
         </p>
       )}
+      <div
+        data-testid="po-recipients"
+        style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 8, overflowWrap: 'anywhere' }}
+      >
+        {recipientsQuery.isLoading && <p style={{ margin: 0 }}>Carregando destinatários…</p>}
+        {recipientsQuery.isError && (
+          <p style={{ margin: 0 }}>
+            Não foi possível carregar os destinatários: {messageOf(recipientsQuery.error)}
+          </p>
+        )}
+        {recipients && (
+          <>
+            <p style={{ margin: 0 }}>
+              <strong style={{ color: 'var(--ink)' }}>Para:</strong> {formatRecipient(recipients.to)}
+            </p>
+            {recipients.contactCc.length > 0 && (
+              <p style={{ margin: '2px 0 0' }}>
+                <strong style={{ color: 'var(--ink)' }}>Cc:</strong>{' '}
+                {recipients.contactCc.map(formatRecipient).join(', ')}
+              </p>
+            )}
+            {recipients.comexCc.length > 0 && (
+              <p style={{ margin: '2px 0 0' }}>
+                Equipe COMEX em cópia ({recipients.comexCc.length}).
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       <label className="field-label" htmlFor="poSubject" style={{ marginTop: 12 }}>
         Assunto

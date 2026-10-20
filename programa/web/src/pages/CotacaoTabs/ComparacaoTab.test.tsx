@@ -24,6 +24,18 @@ vi.mock('@/services/dispatch', () => ({
   replyToQuoteResponse: vi.fn(),
   sendPurchaseOrder: vi.fn(),
   sendPurchaseOrderToPartner: vi.fn(),
+  getPurchaseOrderRecipients: vi.fn().mockResolvedValue({
+    to: { name: 'John Supplier', email: 'john@acme.com' },
+    contactCc: [],
+    comexCc: [],
+    cc: [],
+  }),
+  getPartnerPurchaseOrderRecipients: vi.fn().mockResolvedValue({
+    to: { name: 'Ana Crédito', email: 'ana@alfa.example' },
+    contactCc: [],
+    comexCc: [],
+    cc: [],
+  }),
 }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
@@ -1180,7 +1192,7 @@ describe('ComparacaoTab - Fora do ranking (item temporariamente indisponivel)', 
       expect(dialog.querySelector('.modal-header h2')?.textContent).toBe(
         'Enviar Ordem de Compra ao parceiro Banco Alfa — fornecedor ACME Ltda',
       );
-      expect(within(dialog).getByTestId('po-partner-notice').textContent).toContain('ana@alfa.example');
+      expect(within(dialog).getByTestId('po-partner-notice').textContent).toBe('O fornecedor de origem não é copiado.');
     });
 
     it('43. excluida `stale` via parceiro: texto proprio, prefixo "via" e SEM botao de escolha manual', async () => {
