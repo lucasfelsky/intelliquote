@@ -1482,6 +1482,8 @@ export class QuoteResponseController {
           leadTimeDays,
           // Informativo (nao entra em score/landed): origem geral + origem efetiva por item.
           originPort: sourceResponse?.originPort ?? null,
+          // Informativo (nao entra em score/landed): observacoes da resposta (portal ou manual).
+          notes: sourceResponse?.notes ?? null,
           itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
           // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
           dgItems: buildDangerousGoodItems(sourceResponse?.items),
@@ -1723,6 +1725,8 @@ export class QuoteResponseController {
           leadTimeDays,
           // Informativo (nao entra em score/landed): origem geral + origem efetiva por item.
           originPort: sourceResponse?.originPort ?? null,
+          // Informativo (nao entra em score/landed): observacoes da resposta (portal ou manual).
+          notes: sourceResponse?.notes ?? null,
           itemOrigins: buildItemOrigins(sourceResponse?.items, sourceResponse?.originPort),
           // Informativo (nao entra em score/landed): itens que o fornecedor marcou como DG.
           dgItems: buildDangerousGoodItems(sourceResponse?.items),

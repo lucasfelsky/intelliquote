@@ -840,3 +840,86 @@ describe('RespostasTab - botao "Historico" (modal de historico de precos, montad
     expect(vi.mocked(api.get)).not.toHaveBeenCalledWith('/v1/quote-responses/42/price-history');
   });
 });
+
+describe('RespostasTab - observacoes do fornecedor', () => {
+  const baseItem = {
+    id: 1, quoteResponseId: 42, quoteRequestItemId: 5,
+    unitPrice: 10, quantity: 4, totalPrice: 40, leadTimeDays: 15,
+    notes: null as string | null, productName: 'Resina Epóxi',
+  };
+  const unavailableItem = {
+    id: 2, quoteResponseId: 42, quoteRequestItemId: 6,
+    unitPrice: 0, quantity: 0, totalPrice: 0, leadTimeDays: null,
+    notes: 'Back in 30 days' as string | null, productName: 'Catalisador Y', isUnavailable: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(listQuoteResponses).mockReset();
+    vi.mocked(api.get).mockReset();
+    mockRole = 'admin';
+    vi.mocked(listQuoteResponses).mockResolvedValue([response]);
+    vi.mocked(api.get).mockResolvedValue([{ id: 7, name: 'ACME Ltda', status: 'active', country: 'BR' }]);
+    vi.mocked(getTargetPriceHistory).mockResolvedValue([]);
+  });
+
+  it('N-a. nota da resposta do portal aparece na linha do fornecedor', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{ ...response, notes: 'SM6104', source: 'portal' as const }]);
+    const { findByText, getByTestId } = renderTab();
+    await findByText('ACME Ltda');
+    expect(getByTestId('supplier-notes').textContent).toContain('SM6104');
+    expect(getByTestId('supplier-notes').textContent).toContain('Observações:');
+  });
+
+  it('N-b. observacao digitada no form manual tambem aparece', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{ ...response, notes: 'Obs manual', source: 'manual' as const }]);
+    const { findByText, getByText } = renderTab();
+    await findByText('ACME Ltda');
+    expect(getByText('Obs manual')).toBeTruthy();
+  });
+
+  it('N-c. sem notes nao renderiza o bloco', async () => {
+    const { findByText, queryByTestId } = renderTab();
+    await findByText('ACME Ltda');
+    expect(queryByTestId('supplier-notes')).toBeNull();
+  });
+
+  it('N-d. pop-up de itens: nota geral no topo e coluna Obs. com a nota do item indisponivel', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{
+      ...response, id: 47, notes: 'SM6104', items: [baseItem, unavailableItem],
+    }]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).getByTestId('items-modal-notes').textContent).toContain('SM6104');
+    expect(within(dialogC).getByRole('columnheader', { name: 'Obs.' })).toBeTruthy();
+    expect(within(dialogC).getByTestId('item-notes').textContent).toBe('Back in 30 days');
+  });
+
+  it('N-e. nenhum item com nota: sem coluna Obs.', async () => {
+    vi.mocked(listQuoteResponses).mockResolvedValue([{ ...response, id: 48, items: [baseItem] }]);
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'ACME Ltda' }));
+    const [, , dialogC] = getDialogs(container);
+    expect(within(dialogC).queryByRole('columnheader', { name: 'Obs.' })).toBeNull();
+    expect(within(dialogC).queryByTestId('items-modal-notes')).toBeNull();
+  });
+
+  it('N-f. normalizeResponse preserva notes da resposta e do item', async () => {
+    const actual = await vi.importActual<typeof import('@/services/quoteResponses')>(
+      '@/services/quoteResponses',
+    );
+    const normalized = actual.normalizeResponse({
+      ...response,
+      notes: 'SM6104',
+      items: [{
+        id: 1, quoteResponseId: 42, quoteRequestItemId: 5,
+        unitPrice: '10.00', quantity: 4, totalPrice: '40.00', leadTimeDays: 15,
+        notes: 'Lote X', quoteRequestItem: { productName: 'Resina Epóxi' },
+      }],
+    });
+    expect(normalized.notes).toBe('SM6104');
+    expect(normalized.items?.[0]?.notes).toBe('Lote X');
+  });
+});

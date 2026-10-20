@@ -255,6 +255,102 @@ describe('Comparison routes', () => {
     expect(prismaMock.__tx.quoteRequest.update).not.toHaveBeenCalled();
   });
 
+  it('POST /compare devolve notes por proposta (informativo) e nao as persiste no historico', async () => {
+    const cookies = await loginAs('comprador');
+
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({
+      id: 1,
+      requestCode: 'QR-20260325-DEMO01',
+      status: 'open',
+      currency: 'USD',
+    });
+    prismaMock.quoteResponse.findMany.mockResolvedValue([
+      {
+        id: 11,
+        quoteRequestId: 1,
+        supplierId: 101,
+        offeredPrice: 100,
+        currency: 'USD',
+        exchangeRate: 5.4,
+        freightCost: 40,
+        insuranceCost: 10,
+        otherFees: 20,
+        importDuty: 14,
+        ipi: 5,
+        pis: 2.1,
+        cofins: 9.65,
+        offeredIncoterm: 'EXW',
+        paymentTermsDays: 10,
+        isWinner: false,
+        notes: 'SM6104',
+        supplier: {
+          id: 101,
+          name: 'Global Parts Ltd',
+          contacts: [{ id: 9001, name: 'Ana Vendas', email: 'ana@globalparts.example' }],
+        },
+      },
+      {
+        id: 12,
+        quoteRequestId: 1,
+        supplierId: 102,
+        offeredPrice: 120,
+        currency: 'USD',
+        exchangeRate: 5.4,
+        freightCost: 0,
+        insuranceCost: 0,
+        otherFees: 10,
+        importDuty: 10,
+        ipi: 4,
+        pis: 2.1,
+        cofins: 9.65,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        isWinner: false,
+        supplier: {
+          id: 102,
+          name: 'Nihon Trading',
+          contacts: [{ id: 9002, name: 'Kenji Sales', email: 'kenji@nihon.example' }],
+        },
+      },
+    ]);
+    prismaMock.__tx.quoteResponse.updateMany.mockResolvedValue({ count: 2 });
+    prismaMock.__tx.quoteResponse.update.mockResolvedValue({});
+    prismaMock.__tx.quoteComparison.create.mockResolvedValue({ id: 999 });
+    prismaMock.companyProfile.findUnique.mockResolvedValue({
+      id: 1,
+      awardApprovalThreshold: null,
+    });
+    prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+    const response = await request(app)
+      .post('/api/v1/quote-requests/1/compare')
+      .set('Cookie', cookies)
+      .send({
+        priceWeight: 80,
+        paymentTermsWeight: 10,
+        incotermWeight: 10,
+        qualityWeight: 10,
+      });
+
+    expect(response.status).toBe(200);
+    const byId = new Map(
+      (response.body.results as Array<{ id: number; notes: string | null }>).map((item) => [
+        item.id,
+        item,
+      ]),
+    );
+    expect(byId.get(11)?.notes).toBe('SM6104');
+    expect(byId.get(12)?.notes).toBeNull();
+
+    // O modelo persistido nao tem `notes`: a chave nao pode entrar no create do historico.
+    const createArg = prismaMock.__tx.quoteComparison.create.mock.calls[0][0];
+    const persisted = createArg.data.results.create as Array<Record<string, unknown>>;
+    expect(persisted.length).toBeGreaterThan(0);
+    for (const row of persisted) {
+      expect(row).not.toHaveProperty('notes');
+    }
+  });
+
   it('retorna o historico auditavel por cotacao', async () => {
     const cookies = await loginAs('viewer');
 
@@ -1154,6 +1250,150 @@ describe('Comparison routes', () => {
         expect(a.get(id)?.totalLandedCost).toBe(b.get(id)?.totalLandedCost);
       }
       expect(withDg.body.winnerQuoteResponseId).toBe(withoutDg.body.winnerQuoteResponseId);
+    });
+
+    it('devolve notes por proposta sem alterar score nem landed cost (informativo)', async () => {
+      const cookies = await loginAs('viewer');
+
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 1,
+        requestCode: 'QR-20260325-DEMO01',
+        status: 'open',
+        currency: 'USD',
+        items: [1, 2].map((id) => ({ id, quantity: 1 })),
+      });
+      prismaMock.companyProfile.findUnique.mockResolvedValue({
+        id: 1,
+        awardApprovalThreshold: null,
+      });
+      prismaMock.supplierReview.groupBy.mockResolvedValue([]);
+
+      const buildResponses = (withNotes: boolean) => [
+        {
+          id: 11,
+          quoteRequestId: 1,
+          supplierId: 101,
+          offeredPrice: 100,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 40,
+          insuranceCost: 10,
+          otherFees: 20,
+          importDuty: 14,
+          ipi: 5,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'EXW',
+          paymentTermsDays: 10,
+          isWinner: false,
+          originPort: null,
+          ...(withNotes ? { notes: 'SM6104' } : {}),
+          items: [
+            {
+              quoteRequestItemId: 1,
+              quantity: 1,
+              unitPrice: 40,
+              leadTimeDays: 12,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: false,
+              quoteRequestItem: { productName: 'Produto A' },
+            },
+            {
+              quoteRequestItemId: 2,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 18,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: false,
+              quoteRequestItem: { productName: 'Produto B' },
+            },
+          ],
+          supplier: { id: 101, name: 'Global Parts Ltd', contacts: [] },
+        },
+        {
+          id: 12,
+          quoteRequestId: 1,
+          supplierId: 102,
+          offeredPrice: 120,
+          currency: 'USD',
+          exchangeRate: 5.4,
+          freightCost: 0,
+          insuranceCost: 0,
+          otherFees: 10,
+          importDuty: 10,
+          ipi: 4,
+          pis: 2.1,
+          cofins: 9.65,
+          offeredIncoterm: 'FOB',
+          paymentTermsDays: 30,
+          isWinner: false,
+          originPort: null,
+          items: [
+            {
+              quoteRequestItemId: 1,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 25,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: false,
+              quoteRequestItem: { productName: 'Produto A' },
+            },
+            {
+              quoteRequestItemId: 2,
+              quantity: 1,
+              unitPrice: 60,
+              leadTimeDays: 25,
+              originPort: null,
+              isUnavailable: false,
+              isDangerousGood: false,
+              quoteRequestItem: { productName: 'Produto B' },
+            },
+          ],
+          supplier: { id: 102, name: 'Nihon Trading', contacts: [] },
+        },
+      ];
+
+      type Result = {
+        quoteResponseId: number;
+        totalScore: number;
+        totalLandedCost: number;
+        notes: string | null;
+      };
+      const weights = { priceWeight: 80, paymentTermsWeight: 10, incotermWeight: 10, qualityWeight: 0 };
+
+      prismaMock.quoteResponse.findMany.mockResolvedValue(buildResponses(true));
+      const withNotes = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+      prismaMock.quoteResponse.findMany.mockResolvedValue(buildResponses(false));
+      const withoutNotes = await request(app)
+        .post('/api/v1/quote-requests/1/compare/preview')
+        .set('Cookie', cookies)
+        .send(weights);
+
+      expect(withNotes.status).toBe(200);
+      expect(withoutNotes.status).toBe(200);
+
+      const byId = (body: { results: Result[] }) =>
+        new Map(body.results.map((item) => [item.quoteResponseId, item]));
+      const a = byId(withNotes.body);
+      const b = byId(withoutNotes.body);
+
+      expect(a.get(11)?.notes).toBe('SM6104');
+      expect(a.get(12)?.notes).toBeNull();
+      expect(b.get(11)?.notes).toBeNull();
+      expect(b.get(12)?.notes).toBeNull();
+
+      // Informativo: score, landed cost e vencedora identicos com ou sem notes.
+      for (const id of [11, 12]) {
+        expect(a.get(id)?.totalScore).toBe(b.get(id)?.totalScore);
+        expect(a.get(id)?.totalLandedCost).toBe(b.get(id)?.totalLandedCost);
+      }
+      expect(withNotes.body.winnerQuoteResponseId).toBe(withoutNotes.body.winnerQuoteResponseId);
     });
 
     it('com 1 proposta retorna responseCount 1 (sem gate de minimo 2)', async () => {
