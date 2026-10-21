@@ -1,0 +1,214 @@
+import { useCallback, useDeferredValue, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
+import Spinner from '@/components/Spinner';
+import {
+  forecastErrorMessage,
+  forecastKeys,
+  getForecastSnapshot,
+  listForecastSnapshots,
+  type ForecastDivergencia,
+  type ForecastOrigin,
+  type ForecastSnapshotDetail,
+} from '@/services/forecast';
+import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
+import ForecastMemoria from './Forecast/ForecastMemoria';
+import {
+  casaBusca,
+  colunasDoPainel,
+  contarPorFiltro,
+  dataBr,
+  FILTROS,
+  STATUS_ORDEM,
+  STATUS_ROTULO,
+  textoDoSelo,
+  type FiltroId,
+} from './Forecast/forecastPainel';
+
+const ORIGEM_ROTULO: Record<ForecastOrigin, string> = {
+  planilha: 'planilha',
+  dbcorp: 'relatórios DBCorp',
+};
+
+function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
+  const selo = textoDoSelo(detail);
+  return (
+    <div className={`fc-selo-conferencia fc-selo-conferencia--${selo.tom}`} role="status">
+      <strong>{selo.titulo}</strong>
+      {selo.detalhe && <span>{selo.detalhe}</span>}
+      {selo.nota && <span className="fc-selo-conferencia__nota">{selo.nota}</span>}
+    </div>
+  );
+}
+
+function Painel({ detail }: { detail: ForecastSnapshotDetail }) {
+  const [filtro, setFiltro] = useState<FiltroId>('todos');
+  const [busca, setBusca] = useState('');
+  const [ocultas, setOcultas] = useState(false);
+  const [sel, setSel] = useState<number | null>(null);
+  const termo = useDeferredValue(busca);
+
+  const colunas = useMemo(() => colunasDoPainel(detail.months, { ocultas }), [detail.months, ocultas]);
+  const contagem = useMemo(() => contarPorFiltro(detail.linhas), [detail.linhas]);
+  const divergencias = useMemo(() => {
+    const mapa = new Map<string, ForecastDivergencia>();
+    for (const d of detail.conferencia?.divergencias ?? []) mapa.set(chaveDaDivergencia(d.linha, d.coluna), d);
+    return mapa;
+  }, [detail.conferencia]);
+
+  const visiveis = useMemo(() => {
+    const teste = FILTROS.find((f) => f.id === filtro)?.teste ?? (() => true);
+    return detail.linhas.filter((l) => teste(l) && casaBusca(l, termo));
+  }, [detail.linhas, filtro, termo]);
+
+  const selecionada = detail.linhas.find((l) => l.linha === sel) ?? detail.linhas[0];
+  const onSelect = useCallback((linha: number) => setSel(linha), []);
+
+  return (
+    <>
+      <Selo detail={detail} />
+      <section className="fc-card" aria-label="Produtos da quinzena">
+        <div className="fc-barra">
+          <div className="fc-filtros" role="group" aria-label="Filtros">
+            {FILTROS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className="fc-filtro"
+                aria-pressed={filtro === f.id}
+                onClick={() => setFiltro(f.id)}
+              >
+                {f.rotulo(detail.baseDate)} <span className="fc-filtro__conta">{contagem[f.id]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="fc-filtros">
+            <div className="fc-busca">
+              <label className="sr-only" htmlFor="fc-busca">
+                Buscar produto, código ou fonte
+              </label>
+              <input
+                id="fc-busca"
+                className="input"
+                type="search"
+                placeholder="Produto, código ou fonte"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={ocultas}
+              className="fc-chave"
+              onClick={() => setOcultas((v) => !v)}
+            >
+              <span className={ocultas ? 'fc-trilho fc-trilho--on' : 'fc-trilho'} aria-hidden="true">
+                <span />
+              </span>
+              Colunas ocultas da planilha
+            </button>
+          </div>
+        </div>
+        <div className="fc-legenda">
+          <span>Status da compra</span>
+          {STATUS_ORDEM.map((s) => (
+            <span key={s} className="fc-legenda__item">
+              <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
+              {STATUS_ROTULO[s]}
+            </span>
+          ))}
+          <span className="fc-legenda__total">
+            {visiveis.length} de {detail.linhas.length} produtos
+          </span>
+        </div>
+        <ForecastGrid
+          colunas={colunas}
+          linhas={visiveis}
+          selecionada={selecionada?.linha ?? null}
+          divergencias={divergencias}
+          onSelect={onSelect}
+          legenda={`Forecast da quinzena ${detail.label}: ${visiveis.length} de ${detail.linhas.length} produtos`}
+        />
+      </section>
+      {selecionada && (
+        <ForecastMemoria linha={selecionada} half={detail.half} baseDate={detail.baseDate} hoje={detail.hoje} />
+      )}
+    </>
+  );
+}
+
+export default function Forecast() {
+  const [params, setParams] = useSearchParams();
+  const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
+  const quinzenas = lista.data ?? [];
+
+  const pedida = Number(params.get('quinzena'));
+  const escolhida = quinzenas.find((q) => q.id === pedida) ?? quinzenas[0];
+  const escolhidaId = escolhida?.id;
+
+  const detalhe = useQuery({
+    queryKey: forecastKeys.snapshot(escolhidaId ?? 0),
+    queryFn: () => getForecastSnapshot(escolhidaId ?? 0),
+    enabled: escolhidaId !== undefined,
+  });
+  const detail = detalhe.data;
+
+  const subtitulo = escolhida
+    ? detail
+      ? `Quinzena ${detail.label} · base ${dataBr(detail.baseDate)} · ${detail.linhas.length} produtos · origem ${ORIGEM_ROTULO[detail.origin]}`
+      : `Quinzena ${escolhida.label} · base ${dataBr(escolhida.baseDate)} · origem ${ORIGEM_ROTULO[escolhida.origin]}`
+    : 'Projeção de estoque e demanda por quinzena, no layout da planilha FORECAST (MACRO).';
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <p className="eyebrow">Planejamento · PO.COMP.01</p>
+          <h1>Forecast de compras</h1>
+          <p>{subtitulo}</p>
+        </div>
+        {quinzenas.length > 0 && (
+          <div className="page-header__actions">
+            <div className="fc-quinzena">
+              <label className="field-label" htmlFor="fc-quinzena">
+                Quinzena
+              </label>
+              <select
+                id="fc-quinzena"
+                className="select"
+                value={escolhidaId}
+                onChange={(e) => setParams({ quinzena: e.target.value })}
+              >
+                {quinzenas.map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {lista.isLoading && <Spinner />}
+      {lista.isError && (
+        <div className="alert alert--error" role="alert">
+          {forecastErrorMessage(lista.error)}
+        </div>
+      )}
+      {lista.isSuccess && quinzenas.length === 0 && (
+        <div className="empty-state">
+          Nenhuma quinzena importada ainda. A importação pela tela chega na próxima versão.
+        </div>
+      )}
+      {escolhida && detalhe.isLoading && <Spinner />}
+      {escolhida && detalhe.isError && (
+        <div className="alert alert--error" role="alert">
+          {forecastErrorMessage(detalhe.error)}
+        </div>
+      )}
+      {detail && <Painel key={detail.id} detail={detail} />}
+    </div>
+  );
+}
