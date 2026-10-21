@@ -8,6 +8,7 @@ import {
   ATTACHMENT_JSON_BODY_LIMIT_BYTES,
   ATTACHMENT_TOO_LARGE_MESSAGE,
 } from './constants/attachments';
+import { FORECAST_JSON_BODY_LIMIT_BYTES, FORECAST_TOO_LARGE_MESSAGE } from './constants/forecast';
 import {
   SUPPLIER_DOCUMENT_JSON_BODY_LIMIT_BYTES,
   SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE,
@@ -128,6 +129,24 @@ app.use(
   (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err?.type === 'entity.too.large') {
       res.status(413).json({ message: SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE });
+      return;
+    }
+    next(err);
+  },
+);
+
+// /forecast/import recebe a planilha de Forecast (.xlsx) em base64 no JSON (corpo de ate 10MB).
+// Mesmo padrao de /attachments: parser maior so neste prefixo e 413 em JSON com mensagem amigavel.
+app.use(
+  '/api/v1/forecast/import',
+  requireAuthBeforeBody,
+  express.json({ limit: FORECAST_JSON_BODY_LIMIT_BYTES }),
+);
+app.use(
+  '/api/v1/forecast/import',
+  (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      res.status(413).json({ message: FORECAST_TOO_LARGE_MESSAGE });
       return;
     }
     next(err);
