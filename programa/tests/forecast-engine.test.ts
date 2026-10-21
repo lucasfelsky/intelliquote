@@ -27,7 +27,7 @@ describe('motor do Forecast x planilha 10-2 corrigida (fixture anonimizada)', ()
     expect(r.batem).toBe(9464);
   });
 
-  it('linha 3 (ACMO na fixture real): projecao e demanda conferidas a mao', () => {
+  it('linha 3: projecao e demanda conferidas a mao', () => {
     const l = linhaDe(3);
     expect(l.Q).toBeCloseTo(1468.33, 2); // (1.000 + 1.630 + 1.775) / 3
     expect(l.T).toBeCloseTo(4453.94, 2); // 1.468,33 / 30 x 91
