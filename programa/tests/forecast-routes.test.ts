@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import exceljs from 'exceljs';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { FORECAST_TOO_LARGE_MESSAGE } from '../src/constants/forecast';
+import { FORECAST_SHEETS, FORECAST_TOO_LARGE_MESSAGE } from '../src/constants/forecast';
 import type { Quinzena } from '../src/utils/forecastTypes';
 import { hashPassword } from '../src/utils/password';
 
@@ -19,7 +20,9 @@ vi.mock('../src/lib/prisma', () => {
     forecastSource: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     forecastProduct: { findMany: vi.fn() },
     forecastSnapshot: { findMany: vi.fn(), findFirst: vi.fn() },
-    supplier: { findFirst: vi.fn() },
+    forecastMonthlySale: { findMany: vi.fn() },
+    catalogItem: { findMany: vi.fn() },
+    supplier: { findFirst: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
   };
 
@@ -37,7 +40,9 @@ const prismaMock = prisma as unknown as {
   forecastSource: { findMany: Mock; findUnique: Mock; update: Mock };
   forecastProduct: { findMany: Mock };
   forecastSnapshot: { findMany: Mock; findFirst: Mock };
-  supplier: { findFirst: Mock };
+  forecastMonthlySale: { findMany: Mock };
+  catalogItem: { findMany: Mock };
+  supplier: { findFirst: Mock; findMany: Mock };
   $transaction: Mock;
 };
 
@@ -62,6 +67,39 @@ const validConfirmBody = {
   options: { atualizarCadastro: true, gravarHistorico: true, criarQuinzena: true },
 };
 
+// Quinzena DBCorp: os arquivos sao lixo de proposito (so interessa o que roda antes da leitura).
+const fakeFile = (name: string) => ({
+  fileName: name,
+  contentBase64: Buffer.from('conteudo qualquer').toString('base64'),
+});
+const validDbcorpBody = {
+  label: '10-2',
+  baseDate: '2026-10-15',
+  files: {
+    saldo: fakeFile('saldo.xlsx'),
+    vendasMes: fakeFile('vendas-mes.xlsx'),
+    vendasAtual: fakeFile('vendas-atual.xlsx'),
+    vendasAnual: fakeFile('vendas-anual.xlsx'),
+    programacao: fakeFile('programacao.xlsx'),
+    fup: fakeFile('fup.xlsx'),
+  },
+};
+
+// Planilha sintetica no formato da 1B (10 abas) com 1 produto e a VENDAS MENSAL SEM linhas.
+async function workbookSemVendasBase64(): Promise<string> {
+  const wb = new exceljs.Workbook();
+  const sheets = Object.fromEntries(
+    Object.entries(FORECAST_SHEETS).map(([key, name]) => [key, wb.addWorksheet(name)]),
+  ) as Record<keyof typeof FORECAST_SHEETS, exceljs.Worksheet>;
+  const macro = sheets.macro;
+  macro.getCell('O2').value = '09'; // mes anterior a 2026-10-15
+  macro.getCell('A3').value = 1;
+  macro.getCell('B3').value = 'TST0001';
+  macro.getCell('I3').value = 'PRODUTO TESTE';
+  macro.getCell('Q3').value = { formula: '1+0', result: 1 };
+  return Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+}
+
 describe('Forecast routes - autenticacao e papeis', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,6 +111,8 @@ describe('Forecast routes - autenticacao e papeis', () => {
   const endpoints: Array<{ method: 'get' | 'post' | 'patch'; path: string; body?: unknown }> = [
     { method: 'post', path: '/api/v1/forecast/import/workbook/preview', body: validPreviewBody },
     { method: 'post', path: '/api/v1/forecast/import/workbook/confirm', body: validConfirmBody },
+    { method: 'post', path: '/api/v1/forecast/import/dbcorp/preview', body: validDbcorpBody },
+    { method: 'post', path: '/api/v1/forecast/import/dbcorp/confirm', body: validDbcorpBody },
     { method: 'get', path: '/api/v1/forecast/sources' },
     { method: 'patch', path: '/api/v1/forecast/sources/1', body: { isActive: false } },
     { method: 'get', path: '/api/v1/forecast/products' },
@@ -110,11 +150,15 @@ describe('Forecast routes - autenticacao e papeis', () => {
 
   it.each(WRITE_ROLES)('%s: passa do RBAC na escrita (corpo invalido -> 400, nao 403)', async (role) => {
     const cookies = await loginAs(role);
-    const response = await request(app)
-      .post('/api/v1/forecast/import/workbook/preview')
-      .set('Cookie', cookies)
-      .send({});
-    expect(response.status).toBe(400);
+    for (const path of [
+      'import/workbook/preview',
+      'import/workbook/confirm',
+      'import/dbcorp/preview',
+      'import/dbcorp/confirm',
+    ]) {
+      const response = await request(app).post(`/api/v1/forecast/${path}`).set('Cookie', cookies).send({});
+      expect(response.status, path).toBe(400);
+    }
   });
 });
 
@@ -162,6 +206,47 @@ describe('Forecast routes - validacao (Zod)', () => {
     expect(nenhuma.status).toBe(400);
     expect(nenhuma.body.message).toMatch(/ao menos uma opcao/);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('dbcorp: corpo sem saldo, rotulo, data e arquivo invalidos -> 400 (sem tocar no banco)', async () => {
+    const cookies = await loginAs('comprador');
+    const { saldo: _saldo, ...semSaldo } = validDbcorpBody.files;
+    void _saldo;
+    const fupVazio = { ...validDbcorpBody.files, fup: { fileName: 'fup.xlsx', contentBase64: '' } };
+    for (const path of ['preview', 'confirm']) {
+      const post = (body: unknown) =>
+        request(app).post(`/api/v1/forecast/import/dbcorp/${path}`).set('Cookie', cookies).send(body as object);
+
+      expect((await post({ ...validDbcorpBody, files: semSaldo })).status, path).toBe(400);
+      expect((await post({ ...validDbcorpBody, files: undefined })).status, path).toBe(400);
+      expect((await post({ ...validDbcorpBody, label: '10-3' })).status, path).toBe(400);
+      expect((await post({ ...validDbcorpBody, baseDate: '2026-02-30' })).status, path).toBe(400);
+      expect((await post({ ...validDbcorpBody, files: fupVazio })).status, path).toBe(400);
+    }
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProduct.findMany).not.toHaveBeenCalled();
+  });
+
+  it('dbcorp: 2a quinzena exige vendasAtual; na 1a quinzena passa da validacao', async () => {
+    const cookies = await loginAs('admin');
+    const { vendasAtual: _vendasAtual, ...semAtual } = validDbcorpBody.files;
+    void _vendasAtual;
+    const post = (label: string) =>
+      request(app)
+        .post('/api/v1/forecast/import/dbcorp/preview')
+        .set('Cookie', cookies)
+        .send({ ...validDbcorpBody, label, files: semAtual });
+
+    const segunda = await post('10-2');
+    expect(segunda.status).toBe(400);
+    expect(segunda.body.message).toBe('Na 2a quinzena envie o relatorio de vendas do mes atual (ate o dia 15).');
+
+    // 10-1 sem vendasAtual passa do Zod e so falha na leitura do arquivo (que aqui e lixo).
+    const primeira = await post('10-1');
+    expect(primeira.status).toBe(400);
+    expect(primeira.body.message).not.toBe(segunda.body.message);
+    expect(primeira.body.message).toMatch(/invalido \(envie \.xlsx\)/);
+    expect(prismaMock.forecastProduct.findMany).not.toHaveBeenCalled();
   });
 
   it('PATCH /sources/:id: id e corpo invalidos -> 400', async () => {
@@ -307,6 +392,54 @@ describe('Forecast routes - quinzena calculada', () => {
   });
 });
 
+describe('Forecast routes - trava de vendas vazias (planilha)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.forecastSource.findMany.mockResolvedValue([]);
+    prismaMock.forecastProduct.findMany.mockResolvedValue([]);
+    prismaMock.forecastMonthlySale.findMany.mockResolvedValue([]);
+    prismaMock.catalogItem.findMany.mockResolvedValue([]);
+    prismaMock.supplier.findMany.mockResolvedValue([]);
+  });
+
+  const body = async () => ({
+    contentBase64: await workbookSemVendasBase64(),
+    fileName: 'sintetica.xlsx',
+    label: '10-2',
+    baseDate: '2026-10-15',
+  });
+
+  it('confirm com gravarHistorico e VENDAS MENSAL vazia -> 400 antes de abrir a transacao', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .post('/api/v1/forecast/import/workbook/confirm')
+      .set('Cookie', cookies)
+      .send({
+        ...(await body()),
+        options: { atualizarCadastro: true, gravarHistorico: true, criarQuinzena: true },
+      });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      'O relatorio de vendas do mes (2026-09) nao tem linhas validas; o historico desse mes NAO foi alterado.',
+    );
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('preview com a mesma planilha -> 200 com o aviso (cadastro/quinzena continuam possiveis)', async () => {
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .post('/api/v1/forecast/import/workbook/preview')
+      .set('Cookie', cookies)
+      .send(await body());
+    expect(response.status).toBe(200);
+    expect(response.body.data.erros).toEqual([]);
+    expect(response.body.data.avisos).toContain(
+      'VENDAS MENSAL sem linhas validas: "Gravar historico" sera recusado.',
+    );
+    expect(response.body.data.historico.linhas).toBe(0);
+  });
+});
+
 describe('Forecast routes - 413', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -319,6 +452,19 @@ describe('Forecast routes - 413', () => {
       .set('Cookie', cookies)
       .set('Content-Type', 'application/json')
       .send(JSON.stringify({ ...validPreviewBody, contentBase64: 'A'.repeat(11 * 1024 * 1024) }));
+
+    expect(response.status).toBe(413);
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    expect(response.body).toEqual({ message: FORECAST_TOO_LARGE_MESSAGE });
+  });
+
+  it('corpo acima de 10MB em /forecast/import/dbcorp -> 413 em JSON com a mensagem', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .post('/api/v1/forecast/import/dbcorp/preview')
+      .set('Cookie', cookies)
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ ...validDbcorpBody, ruido: 'A'.repeat(11 * 1024 * 1024) }));
 
     expect(response.status).toBe(413);
     expect(response.headers['content-type']).toMatch(/application\/json/);

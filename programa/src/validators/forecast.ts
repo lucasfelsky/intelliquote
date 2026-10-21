@@ -46,6 +46,40 @@ export const forecastWorkbookConfirmSchema = forecastWorkbookPreviewSchema.exten
     ),
 });
 
+const dbcorpFileField = z.object({
+  fileName: fileNameField,
+  contentBase64: contentBase64Field,
+});
+
+// Quinzena a partir dos relatorios DBCorp. O confirm recebe o mesmo corpo do preview (grava sempre a
+// quinzena e o mes anterior do historico; sem opcoes).
+export const forecastDbcorpPreviewSchema = z
+  .object({
+    label: labelField,
+    baseDate: dateKeyField('Data base invalida (use AAAA-MM-DD).'),
+    files: z.object({
+      saldo: dbcorpFileField,
+      vendasMes: dbcorpFileField,
+      vendasAtual: dbcorpFileField.optional(),
+      vendasAnual: dbcorpFileField,
+      programacao: dbcorpFileField,
+      fup: dbcorpFileField,
+      clientesAtivos: dbcorpFileField.optional(),
+      margem: dbcorpFileField.optional(),
+    }),
+  })
+  .superRefine((value, ctx) => {
+    if (value.label.endsWith('-2') && !value.files.vendasAtual) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['files', 'vendasAtual'],
+        message: 'Na 2a quinzena envie o relatorio de vendas do mes atual (ate o dia 15).',
+      });
+    }
+  });
+
+export const forecastDbcorpConfirmSchema = forecastDbcorpPreviewSchema;
+
 const leadTimeDaysField = z
   .number({ error: 'Informe um numero inteiro de dias (ou null).' })
   .int('Informe um numero inteiro de dias.')
@@ -79,5 +113,7 @@ export const forecastSnapshotQuerySchema = z.object({
 
 export type ForecastWorkbookPreviewInput = z.infer<typeof forecastWorkbookPreviewSchema>;
 export type ForecastWorkbookConfirmInput = z.infer<typeof forecastWorkbookConfirmSchema>;
+export type ForecastDbcorpPreviewInput = z.infer<typeof forecastDbcorpPreviewSchema>;
+export type ForecastDbcorpConfirmInput = z.infer<typeof forecastDbcorpConfirmSchema>;
 export type ForecastSourcePatchInput = z.infer<typeof forecastSourcePatchSchema>;
 export type ForecastSnapshotQueryInput = z.infer<typeof forecastSnapshotQuerySchema>;

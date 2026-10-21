@@ -9,7 +9,7 @@ export const FORECAST_JSON_BODY_LIMIT_BYTES = 10 * 1024 * 1024;
 export const FORECAST_BASE64_MAX_LENGTH = FORECAST_JSON_BODY_LIMIT_BYTES - 64 * 1024;
 
 export const FORECAST_TOO_LARGE_MESSAGE =
-  'A planilha excede o limite de envio de 10MB (incluindo a codificacao base64).';
+  'O envio excede o limite de 10MB (incluindo a codificacao base64).';
 
 // Mais produtos que isso na aba FORECAST (MACRO) e tratado como planilha errada.
 export const FORECAST_MAX_PRODUCTS = 500;
@@ -53,5 +53,72 @@ export const FORECAST_STATUS_COLORS = {
   FF00B0F0: 'preco',
 } as const;
 
-// Opcoes do confirm da importacao da planilha.
+// Origem das quinzenas (ForecastSnapshot.origin).
 export const FORECAST_ORIGIN_WORKBOOK = 'planilha';
+export const FORECAST_ORIGIN_DBCORP = 'dbcorp';
+
+// --- Quinzena a partir dos relatorios DBCorp (D2, decidida pelo Lucas em 2026-10-21) --------------
+// Comparacao de texto (deposito, empresa, status) sempre normalizada: sem acento, espacos
+// colapsados, trim, maiusculas.
+
+// Estoque = SALDO desta empresa.
+export const FORECAST_DBCORP_SALDO_EMPRESA = 'SQ QUIMICA';
+
+// Depositos que NAO contam como estoque (nota da aba ESTOQUE do Comex). LAB - AMOSTRA aparece como
+// LABORATORIO - AMOSTRA no DS9004: as duas grafias entram; comparacao normalizada.
+export const FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS = [
+  'AMOSTRA',
+  'CMC',
+  'CORREÇÃO',
+  'LAB - AMOSTRA',
+  'LABORATORIO - AMOSTRA',
+  'PRODUCAO',
+  'QUALIDADE',
+  'QUALIDADE SUL',
+  'REFUGO',
+  'SEPARAÇÃO',
+] as const;
+
+// Rotulo do preview para saldo sem deposito (no relatorio vem vazio ou so espacos).
+export const FORECAST_DBCORP_SEM_DEPOSITO = '(sem deposito)';
+
+// PROGRAMACAO: so este status entra.
+export const FORECAST_DBCORP_PROGRAMACAO_STATUS = 'Pendente';
+
+// FUP: este status (com ou sem acento) nao entra; os demais, inclusive ATRAC. AG. LIBERAÇÃO, entram.
+export const FORECAST_DBCORP_FUP_STATUS_IGNORADO = 'CONCLUÍDO';
+
+// FUP sem ETA FINAL nem ETA (CHEGADA): chegada estimada = ETD (EMBARQUE) + N dias.
+export const FORECAST_DBCORP_ETA_POR_ETD_DIAS = 35;
+
+// Janelas em meses a partir do mes base: PROGRAMACAO = AC..AF, chegadas = V..Z.
+export const FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES = 4;
+export const FORECAST_DBCORP_JANELA_CHEGADA_MESES = 5;
+
+// O cabecalho do relatorio e a primeira linha, entre as N primeiras, que traga todos os obrigatorios.
+export const FORECAST_DBCORP_HEADER_SCAN_ROWS = 10;
+
+// Relatorios enviados (um slot por arquivo). As 3 vendas sao o MESMO relatorio (DS9003) em periodos
+// diferentes, escolhidos pelo usuario.
+export const FORECAST_DBCORP_SLOTS = {
+  saldo: 'SALDO',
+  vendasMes: 'VENDAS do mes anterior',
+  vendasAtual: 'VENDAS do mes atual (ate o dia 15)',
+  vendasAnual: 'VENDAS anual',
+  programacao: 'PROGRAMACAO',
+  fup: 'FUP',
+  clientesAtivos: 'CLIENTES ATIVOS',
+  margem: 'MARGEM',
+} as const;
+
+export type ForecastDbcorpSlot = keyof typeof FORECAST_DBCORP_SLOTS;
+
+// Cabecalhos obrigatorios por relatorio (grafia real; comparacao sem acento/caixa, com trim).
+// MARGEM nao tem: e lida por posicao (A codigo, B margem, dados a partir da linha 2).
+export const FORECAST_DBCORP_HEADERS = {
+  saldo: ['Código', 'Depósito', 'Saldo Físico Disponível', 'Empresa'],
+  vendas: ['Item', 'Quantidade', 'Empresa'],
+  programacao: ['Status', 'Data Faturamento', 'Cód. Item', 'Qtde.'],
+  fup: ['STATUS', 'CÓD. SQ', 'QTD - KGS', 'ETD (EMBARQUE)', 'ETA (CHEGADA)', 'ETA FINAL'],
+  clientesAtivos: ['Código Item'],
+} as const;

@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import {
   anoMesDoRotulo,
   mesesHistorico,
+  rotuloDoYearMonth,
   rotulosDaQuinzena,
   somarDias,
+  yearMonthsDaJanela,
 } from '../src/utils/forecastMonths';
 import type { Quinzena } from '../src/utils/forecastTypes';
 
@@ -56,6 +58,25 @@ describe('mesesHistorico', () => {
       historico: ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12'],
       anterior: '2027-01',
     });
+  });
+});
+
+describe('yearMonthsDaJanela / rotuloDoYearMonth', () => {
+  it('janela de 4 meses atravessa a virada de ano e bate com os rotulos da quinzena', () => {
+    const janela = yearMonthsDaJanela('2026-11-15', 4);
+    expect(janela).toEqual(['2026-11', '2026-12', '2027-01', '2027-02']);
+    expect(janela.map(rotuloDoYearMonth)).toEqual(rotulosDaQuinzena('2026-11-15').programacao);
+  });
+
+  it('janela de 5 meses bate com os rotulos de chegada', () => {
+    const janela = yearMonthsDaJanela('2026-10-15', 5);
+    expect(janela).toEqual(['2026-10', '2026-11', '2026-12', '2027-01', '2027-02']);
+    expect(janela.map(rotuloDoYearMonth)).toEqual(rotulosDaQuinzena('2026-10-15').chegada);
+  });
+
+  it('rotuloDoYearMonth devolve o MM e rejeita formato invalido', () => {
+    expect(rotuloDoYearMonth('2027-01')).toBe('01');
+    expect(() => rotuloDoYearMonth('2027-1')).toThrow(/Ano-mes invalido/);
   });
 });
 

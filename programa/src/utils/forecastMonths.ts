@@ -36,6 +36,22 @@ function yearMonthDe(baseDate: string, n: number): string {
   return `${year}-${pad2(month)}`;
 }
 
+// Os `n` meses a partir do mes base, como 'YYYY-MM' (mes base, base+1, ..., base+n-1).
+export function yearMonthsDaJanela(baseDate: string, n: number): string[] {
+  const meses: string[] = [];
+  for (let i = 0; i < n; i++) meses.push(yearMonthDe(baseDate, i));
+  return meses;
+}
+
+// 'YYYY-MM' -> 'MM' (o rotulo que o motor usa para casar chegadas e programacoes).
+export function rotuloDoYearMonth(yearMonth: string): string {
+  const match = /^\d{4}-(\d{2})$/.exec(yearMonth);
+  if (!match) {
+    throw new Error(`Ano-mes invalido: ${yearMonth}`);
+  }
+  return match[1];
+}
+
 export interface RotulosDaQuinzena {
   consumo: string[]; // J2..P2: base-6 .. base-1, 'MM (ATUAL)'
   chegada: string[]; // V2..Z2: base .. base+4

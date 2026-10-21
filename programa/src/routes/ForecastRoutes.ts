@@ -20,6 +20,20 @@ router.post(
   ForecastController.confirmWorkbook,
 );
 
+router.post(
+  '/forecast/import/dbcorp/preview',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.previewDbcorp,
+);
+
+router.post(
+  '/forecast/import/dbcorp/confirm',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.confirmDbcorp,
+);
+
 router.get('/forecast/sources', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSources);
 
 router.patch(
