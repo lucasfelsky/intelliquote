@@ -116,6 +116,11 @@
       "DispatchEvent",
       "EmailTemplate",
       "ExchangeRate",
+      "ForecastMonthlySale",
+      "ForecastProduct",
+      "ForecastProductCode",
+      "ForecastSnapshot",
+      "ForecastSource",
       "Forwarder",
       "ForwarderContact",
       "ItemFamily",
@@ -155,7 +160,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 58
+    "migrations": 59
   },
   "emailTemplates": [
     "commercial_request_created@pt",
