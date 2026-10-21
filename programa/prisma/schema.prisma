@@ -70,6 +70,7 @@ model User {
   createdSupplierDocuments SupplierDocument[]  @relation("SupplierDocumentCreatedBy")
   commercialRequests     CommercialRequest[]   @relation("CommercialRequestRequestedBy")
   commercialRequestStatusChanges CommercialRequest[] @relation("CommercialRequestStatusChangedBy")
+  createdForecastSnapshots ForecastSnapshot[] @relation("ForecastSnapshotCreatedBy")
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -124,6 +125,7 @@ model Supplier {
   families          ItemFamily[]
   creditSupportRequests CreditSupportRequest[]
   documents         SupplierDocument[]
+  forecastSources   ForecastSource[]
   createdBy         User?                    @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -253,6 +255,7 @@ model CatalogItem {
   updatedAt         DateTime           @updatedAt
   quoteRequestItems QuoteRequestItem[]
   commercialRequestItems CommercialRequestItem[]
+  forecastCodes     ForecastProductCode[]
   familyId          Int?
   family            ItemFamily?        @relation(fields: [familyId], references: [id], onDelete: SetNull)
 
@@ -271,6 +274,7 @@ model ItemFamily {
   updatedAt DateTime      @updatedAt
   items     CatalogItem[]
   suppliers Supplier[]
+  forecastProducts ForecastProduct[]
 }
 
 model QuoteResponse {
@@ -1070,4 +1074,105 @@ model CommercialRequestItem {
   @@unique([commercialRequestId, catalogItemId])
   @@index([catalogItemId])
   @@index([quoteRequestItemId])
+}
+
+// Forecast de compras (Fase 1, PO.COMP.01 Rev.03). "Fonte" e a chave de lead time da aba LEADTIME
+// (cadastro proprio; o vinculo com Supplier e opcional). Total = leadTimeDays (coluna G); null = sem
+// lead time -> seguranca/demanda/chegada ficam vazios no motor.
+model ForecastSource {
+  id             Int               @id @default(autoincrement())
+  name           String
+  normalizedName String            @unique
+  readinessDays  Int?
+  holidaysDays   Int?
+  shippingDays   Int?
+  transitDays    Int?
+  clearanceDays  Int?
+  leadTimeDays   Int?
+  supplierId     Int?
+  supplier       Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  isActive       Boolean           @default(true)
+  products       ForecastProduct[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([supplierId])
+}
+
+model ForecastProduct {
+  id                Int                   @id @default(autoincrement())
+  name              String
+  normalizedName    String                @unique
+  sheetOrder        Int?
+  sourceId          Int?
+  source            ForecastSource?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  notes             String?
+  fixedPriceFlag    Boolean               @default(false)
+  fixedPrice        Decimal?              @db.Decimal(14, 4)
+  packaging         String?
+  noFractioning     Boolean               @default(false)
+  sampleQty         String?
+  sampleRequestNote String?
+  familyId          Int?
+  family            ItemFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  isActive          Boolean               @default(true)
+  codes             ForecastProductCode[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@index([sourceId])
+  @@index([familyId])
+}
+
+// Ate 7 codigos DBCorp por produto (EMB.1..EMB.7 = position 1..7). Codigo em maiusculas.
+model ForecastProductCode {
+  id            Int             @id @default(autoincrement())
+  productId     Int
+  product       ForecastProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  position      Int
+  code          String          @unique
+  catalogItemId Int?
+  catalogItem   CatalogItem?    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+
+  @@unique([productId, position])
+  @@index([catalogItemId])
+}
+
+// Historico mensal de vendas POR CODIGO (a soma por codigo reproduz as colunas J..O da planilha).
+model ForecastMonthlySale {
+  id          Int               @id @default(autoincrement())
+  code        String
+  yearMonth   String
+  quantity    Decimal           @db.Decimal(18, 6)
+  sourceLabel String
+  snapshotId  Int?
+  snapshot    ForecastSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@unique([code, yearMonth])
+  @@index([yearMonth])
+}
+
+// Quinzena (snapshot congelado das entradas). label unico entre nao-deletados e garantido no service
+// (Prisma nao expressa unique parcial).
+model ForecastSnapshot {
+  id          Int                   @id @default(autoincrement())
+  label       String
+  baseDate    DateTime              @db.Date
+  half        Int
+  origin      String
+  months      Json
+  products    Json
+  inputs      Json
+  expected    Json?
+  files       Json
+  createdById Int?
+  createdBy   User?                 @relation("ForecastSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime              @default(now())
+  deletedAt   DateTime?
+  sales       ForecastMonthlySale[]
+
+  @@index([baseDate])
+  @@index([deletedAt])
 }
