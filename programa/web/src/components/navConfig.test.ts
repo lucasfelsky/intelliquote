@@ -57,6 +57,23 @@ describe('navConfig', () => {
     expect(all.filter((item) => item.icon === solicitacoes?.icon)).toHaveLength(1);
   });
 
+  it.each(COMEX_ROLES)('%s (COMEX) ve Forecast', (role) => {
+    expect(visiblePaths(role)).toContain('/forecast');
+  });
+
+  it('Forecast aponta para /forecast, vem depois de Fornecedores e nao aparece para comercial', () => {
+    const paths = PRIMARY_NAV.map((item) => item.to);
+    expect(paths.indexOf('/forecast')).toBe(paths.indexOf('/fornecedores') + 1);
+    expect(visiblePaths('comercial')).not.toContain('/forecast');
+  });
+
+  it('Forecast tem icone proprio (nenhum outro item usa o mesmo glifo)', () => {
+    const all = [...PRIMARY_NAV, ...ADMIN_NAV];
+    const forecast = all.find((item) => item.to === '/forecast');
+    expect(forecast).toBeDefined();
+    expect(all.filter((item) => item.icon === forecast?.icon)).toHaveLength(1);
+  });
+
   it('papel ausente: so itens sem roles (nenhum no menu principal)', () => {
     expect(visiblePaths(undefined)).toEqual([]);
     expect(visiblePaths(null)).toEqual([]);

@@ -165,7 +165,12 @@ export class ForecastSnapshotService {
         const produto = produtoPorLinha.get(linha.linha);
         return {
           ...linha,
+          n: produto?.n ?? null,
           item: produto?.item ?? '',
+          historico: produto?.historico ?? [],
+          obs: produto?.obs ?? '',
+          // So o selo (flag X da coluna AV); o valor do preco fechado nao sai da API.
+          precoFixo: (produto?.precoFechado ?? '').trim().toUpperCase() === 'X',
           codigos: (produto?.codigos ?? []).filter((c) => c !== ''),
           fonte: produto?.fonte ?? '',
           status: produto?.status ?? 'nao',

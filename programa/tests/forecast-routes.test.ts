@@ -354,6 +354,13 @@ describe('Forecast routes - quinzena calculada', () => {
       fonte: produtos[0].fonte,
       productId: 100,
     });
+    // Campos que a grade do painel precisa (so existem no produto congelado).
+    expect(data.linhas[0]).toMatchObject({
+      n: produtos[0].n,
+      historico: produtos[0].historico,
+      obs: produtos[0].obs,
+      precoFixo: produtos[0].precoFechado.trim().toUpperCase() === 'X',
+    });
     expect(typeof data.linhas[0].Q).toBe('number');
     expect(data.conferencia.celulas).toBe(5 * 28);
     expect(data.conferencia.batem).toBe(data.conferencia.celulas);
@@ -389,6 +396,47 @@ describe('Forecast routes - quinzena calculada', () => {
     for (const linha of response.body.data.linhas as Array<{ AG: number; Q: number }>) {
       expect(linha.AG).toBe(linha.Q);
     }
+    for (const linha of response.body.data.linhas as Array<{ precoFixo: unknown; historico: unknown }>) {
+      expect(typeof linha.precoFixo).toBe('boolean');
+      expect(Array.isArray(linha.historico)).toBe(true);
+    }
+  });
+
+  it('precoFixo sai como sim/nao e o valor do preco fechado nunca vaza', async () => {
+    const cookies = await loginAs('viewer');
+    const [base, ...resto] = fixture.produtos;
+    const produtos = [
+      { ...base, precoFechado: ' x ', obs: 'Obs. de teste', n: 11 },
+      { ...resto[0], precoFechado: '1,23', n: null },
+      { ...resto[1], precoFechado: '', n: 13 },
+    ];
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 9,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'dbcorp',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: produtos,
+      inputs: fixture.entradas,
+      expected: null,
+      files: [],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+
+    const response = await request(app).get('/api/v1/forecast/snapshots/9?hoje=2026-10-20').set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const linhas = response.body.data.linhas as Array<{ precoFixo: boolean; n: number | null; obs: string }>;
+    expect(linhas.map((l) => l.precoFixo)).toEqual([true, false, false]);
+    expect(linhas.map((l) => l.n)).toEqual([11, null, 13]);
+    expect(linhas[0]?.obs).toBe('Obs. de teste');
+    expect(JSON.stringify(response.body)).not.toContain('1,23');
+    expect(JSON.stringify(response.body)).not.toContain('precoFechado');
   });
 });
 

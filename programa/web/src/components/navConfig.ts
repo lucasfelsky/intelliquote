@@ -21,6 +21,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/solicitacoes', label: 'Solicitações',    icon: '✎',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
   { to: '/itens',     label: 'Itens',              icon: '◇',             group: 'main', roles: COMEX_ROLES },
   { to: '/fornecedores', label: 'Fornecedores',    icon: '⬢',             group: 'main', roles: COMEX_ROLES },
+  { to: '/forecast',  label: 'Forecast',           icon: '◔',             group: 'main', roles: COMEX_ROLES },
   { to: '/forwarders', label: 'Forwarders',       icon: '⇄',             group: 'main', roles: COMEX_ROLES },
   { to: '/familias',  label: 'Famílias',           icon: '⬡',             group: 'main', roles: COMEX_ROLES },
   { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main', roles: COMEX_ROLES },

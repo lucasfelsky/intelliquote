@@ -68,10 +68,10 @@ describe('audit-vault (IntelliQuote)', () => {
     expect(result.stdout).toMatch(/prisma migrations = 59/);
     expect(result.stdout).toMatch(/email templates \(chave@locale\) = 11/);
     expect(result.stdout).toMatch(/backend routes = 155/);
-    expect(result.stdout).toMatch(/web pages = 18/);
+    expect(result.stdout).toMatch(/web pages = 19/);
     expect(result.stdout).toMatch(/web AuthContextValue = 7/);
     expect(result.stdout).toMatch(/web tokenStore = 8/);
-    expect(result.stdout).toMatch(/web routes = 20/);
+    expect(result.stdout).toMatch(/web routes = 21/);
   });
 
   describe('deteccao de drift', () => {

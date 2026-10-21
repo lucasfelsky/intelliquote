@@ -22,6 +22,7 @@ import Auditoria from '@/pages/Auditoria';
 import Templates from '@/pages/Templates';
 import MinhaConta from '@/pages/MinhaConta';
 import Solicitacoes from '@/pages/Solicitacoes';
+import Forecast from '@/pages/Forecast';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -93,6 +94,7 @@ export default function App() {
                   <Route path="/respostas" element={<Navigate to="/cotacoes" replace />} />
                   <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
                   <Route path="/relatorios" element={<Relatorios />} />
+                  <Route path="/forecast" element={<Forecast />} />
                   <Route path="/ajuda" element={<Ajuda />} />
                   <Route path="/auditoria" element={<Auditoria />} />
                   <Route path="/templates" element={<Templates />} />
