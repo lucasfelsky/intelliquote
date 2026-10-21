@@ -40,29 +40,31 @@ export interface ForecastImportSummary {
   produtos: ProductPlan['resumo']['produtos'];
   codigos: ProductPlan['resumo']['codigos'];
   fontes: SourcePlan['resumo'];
-  historico: {
-    yearMonth: string | null;
-    linhas: number;
-    novas: number;
-    alteradas: number;
-    removidas: number;
-  };
+  historico: MonthlySalesResumo;
   conferencia: ForecastConferencia;
   avisos: string[];
   erros: string[];
 }
 
+export interface MonthlySalesResumo {
+  yearMonth: string | null;
+  linhas: number;
+  novas: number;
+  alteradas: number;
+  removidas: number;
+}
+
 interface SalesPlan {
   yearMonth: string | null;
   rows: Array<{ code: string; quantity: number }>;
-  resumo: ForecastImportSummary['historico'];
+  resumo: MonthlySalesResumo;
 }
 
 const roundQty = (value: number) => Math.round(value * 1e6) / 1e6;
 
 // Soma por codigo (maiusculas): a VENDAS MENSAL pode ter varias linhas do mesmo codigo e o historico
 // tem uma linha por (codigo, mes).
-function aggregateSales(linhas: Lancamento[]): Array<{ code: string; quantity: number }> {
+export function aggregateSales(linhas: Lancamento[]): Array<{ code: string; quantity: number }> {
   const sums = new Map<string, number>();
   for (const { codigo, qtd } of linhas) {
     const code = normalizeProductCode(codigo);
@@ -88,6 +90,80 @@ function decodeBase64(contentBase64: string): Buffer {
   return buffer;
 }
 
+// Diff de um mes do historico contra o banco (o mes e substituido por inteiro na gravacao).
+export async function summarizeMonthlySales(
+  db: Db,
+  yearMonth: string,
+  rows: Array<{ code: string; quantity: number }>,
+): Promise<MonthlySalesResumo> {
+  const existing = await db.forecastMonthlySale.findMany({
+    where: { yearMonth },
+    select: { code: true, quantity: true },
+  });
+  const existingByCode = new Map(existing.map((r) => [r.code, Number(r.quantity)]));
+  const incoming = new Set(rows.map((r) => r.code));
+  let novas = 0;
+  let alteradas = 0;
+  for (const row of rows) {
+    const current = existingByCode.get(row.code);
+    if (current === undefined) novas++;
+    else if (Math.abs(current - row.quantity) > 1e-6) alteradas++;
+  }
+  const removidas = existing.filter((r) => !incoming.has(r.code)).length;
+  return { yearMonth, linhas: rows.length, novas, alteradas, removidas };
+}
+
+// Substitui o mes inteiro do historico (deleteMany + createMany + auditoria). Sem linhas validas
+// recusa ANTES de apagar: o mes do historico nunca e esvaziado por um relatorio de vendas vazio
+// (dentro da transacao o 400 desfaz tudo).
+export async function replaceMonthlySales(
+  tx: Db,
+  params: {
+    yearMonth: string;
+    rows: Array<{ code: string; quantity: number }>;
+    sourceLabel: string;
+    snapshotId: number | null;
+    resumo: MonthlySalesResumo;
+  },
+  userId: number | null,
+): Promise<void> {
+  const { yearMonth, rows, sourceLabel, snapshotId, resumo } = params;
+  if (rows.length === 0) {
+    throw new HttpError(400, emptySalesMessage(yearMonth));
+  }
+  await tx.forecastMonthlySale.deleteMany({ where: { yearMonth } });
+  for (let i = 0; i < rows.length; i += SALES_CHUNK) {
+    await tx.forecastMonthlySale.createMany({
+      data: rows.slice(i, i + SALES_CHUNK).map((r) => ({
+        code: r.code,
+        yearMonth,
+        quantity: r.quantity,
+        sourceLabel,
+        snapshotId,
+      })),
+    });
+  }
+  await AuditLogService.log(
+    {
+      entityType: 'forecast_sales',
+      entityId: yearMonth,
+      action: 'replace_month',
+      performedById: userId,
+      metadata: {
+        yearMonth,
+        linhas: resumo.linhas,
+        novas: resumo.novas,
+        alteradas: resumo.alteradas,
+        removidas: resumo.removidas,
+      },
+    },
+    tx,
+  );
+}
+
+const emptySalesMessage = (yearMonth: string) =>
+  `O relatorio de vendas do mes (${yearMonth}) nao tem linhas validas; o historico desse mes NAO foi alterado.`;
+
 export class ForecastImportService {
   private static async planSales(db: Db, parsed: ParsedForecastWorkbook): Promise<SalesPlan> {
     const yearMonth = parsed.vendasMensal.yearMonth;
@@ -95,21 +171,7 @@ export class ForecastImportService {
     if (yearMonth === null) {
       return { yearMonth, rows, resumo: { yearMonth, linhas: rows.length, novas: 0, alteradas: 0, removidas: 0 } };
     }
-    const existing = await db.forecastMonthlySale.findMany({
-      where: { yearMonth },
-      select: { code: true, quantity: true },
-    });
-    const existingByCode = new Map(existing.map((r) => [r.code, Number(r.quantity)]));
-    const incoming = new Set(rows.map((r) => r.code));
-    let novas = 0;
-    let alteradas = 0;
-    for (const row of rows) {
-      const current = existingByCode.get(row.code);
-      if (current === undefined) novas++;
-      else if (Math.abs(current - row.quantity) > 1e-6) alteradas++;
-    }
-    const removidas = existing.filter((r) => !incoming.has(r.code)).length;
-    return { yearMonth, rows, resumo: { yearMonth, linhas: rows.length, novas, alteradas, removidas } };
+    return { yearMonth, rows, resumo: await summarizeMonthlySales(db, yearMonth, rows) };
   }
 
   // Diff do arquivo contra o banco, sem escrita. `db` = prisma (preview) ou a transacao (confirm).
@@ -179,7 +241,12 @@ export class ForecastImportService {
     if (parsed.erros.length > 0) {
       return ForecastImportService.summaryWithErrors(parsed, input);
     }
-    const { summary } = await ForecastImportService.diff(prisma, parsed);
+    const { salesPlan, summary } = await ForecastImportService.diff(prisma, parsed);
+    if (salesPlan.rows.length === 0) {
+      summary.avisos.push(
+        'VENDAS MENSAL sem linhas validas: "Gravar historico" sera recusado.',
+      );
+    }
     return summary;
   }
 
@@ -198,6 +265,10 @@ export class ForecastImportService {
       throw new HttpError(400, `Planilha com erros: ${parsed.erros.slice(0, 5).join(' ')}`);
     }
     const { options } = input;
+    // Trava (1a camada): relatorio de vendas vazio nunca apaga o mes do historico.
+    if (options.gravarHistorico && aggregateSales(parsed.vendasMensal.linhas).length === 0) {
+      throw new HttpError(400, emptySalesMessage(parsed.vendasMensal.yearMonth ?? 'mes anterior'));
+    }
     const fileInfo = {
       kind: 'planilha',
       fileName: input.fileName,
@@ -272,36 +343,17 @@ export class ForecastImportService {
         }
 
         if (options.gravarHistorico && salesPlan.yearMonth !== null) {
-          const { yearMonth } = salesPlan;
           // A VENDAS MENSAL e o relatorio completo do mes: substitui o mes inteiro.
-          await tx.forecastMonthlySale.deleteMany({ where: { yearMonth } });
-          const sourceLabel = `planilha ${parsed.quinzena.id}`;
-          for (let i = 0; i < salesPlan.rows.length; i += SALES_CHUNK) {
-            await tx.forecastMonthlySale.createMany({
-              data: salesPlan.rows.slice(i, i + SALES_CHUNK).map((r) => ({
-                code: r.code,
-                yearMonth,
-                quantity: r.quantity,
-                sourceLabel,
-                snapshotId,
-              })),
-            });
-          }
-          await AuditLogService.log(
-            {
-              entityType: 'forecast_sales',
-              entityId: yearMonth,
-              action: 'replace_month',
-              performedById: userId,
-              metadata: {
-                yearMonth,
-                linhas: salesPlan.resumo.linhas,
-                novas: salesPlan.resumo.novas,
-                alteradas: salesPlan.resumo.alteradas,
-                removidas: salesPlan.resumo.removidas,
-              },
-            },
+          await replaceMonthlySales(
             tx,
+            {
+              yearMonth: salesPlan.yearMonth,
+              rows: salesPlan.rows,
+              sourceLabel: `planilha ${parsed.quinzena.id}`,
+              snapshotId,
+              resumo: salesPlan.resumo,
+            },
+            userId,
           );
         }
 

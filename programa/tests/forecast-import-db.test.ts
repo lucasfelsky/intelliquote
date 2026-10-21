@@ -444,6 +444,31 @@ describe('Forecast - importacao da planilha (DB)', () => {
     expect(sales.map((s) => [s.code, Number(s.quantity), s.snapshotId])).toEqual([[CODE_A1, 70, null]]);
   });
 
+  testDbSkip('VENDAS MENSAL vazia + gravar historico -> 400, historico do mes intacto e nenhuma quinzena nova', async () => {
+    // O teste anterior deixou 1 linha em YEAR_MONTH; uma planilha sem vendas nao pode esvazia-lo.
+    const antes = await prisma.forecastMonthlySale.count({ where: { yearMonth: YEAR_MONTH } });
+    expect(antes).toBeGreaterThan(0);
+    const snapshotsAntes = await prisma.forecastSnapshot.count({ where: { createdById: adminId } });
+
+    const q = quinzena({
+      label: '03-2',
+      produtos: [produto(3, NAME_A, [CODE_A1, CODE_A2], SOURCE_1)],
+      vendasMes: [],
+    });
+    const res = await post('confirm', {
+      contentBase64: await workbookBase64(q),
+      fileName: 'sintetica-vazia.xlsx',
+      label: '03-2',
+      baseDate: BASE_DATE,
+      options: { atualizarCadastro: true, gravarHistorico: true, criarQuinzena: true },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/nao tem linhas validas/);
+    expect(await prisma.forecastMonthlySale.count({ where: { yearMonth: YEAR_MONTH } })).toBe(antes);
+    expect(await prisma.forecastSnapshot.count({ where: { createdById: adminId } })).toBe(snapshotsAntes);
+  });
+
   testDbSkip('planilha com erro (codigo em 2 produtos) -> 400 e nada e gravado', async () => {
     const q = quinzena({
       label: '03-2',
