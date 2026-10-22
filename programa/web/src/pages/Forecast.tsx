@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/auth/AuthProvider';
 import Spinner from '@/components/Spinner';
 import {
   forecastErrorMessage,
@@ -12,6 +13,7 @@ import {
   type ForecastSnapshotDetail,
 } from '@/services/forecast';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
+import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
 import {
   casaBusca,
@@ -140,6 +142,11 @@ function Painel({ detail }: { detail: ForecastSnapshotDetail }) {
 
 export default function Forecast() {
   const [params, setParams] = useSearchParams();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const podeImportar = user?.role === 'admin' || user?.role === 'comprador';
+  const [importando, setImportando] = useState(false);
+  const [importada, setImportada] = useState<string | null>(null);
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
@@ -153,6 +160,16 @@ export default function Forecast() {
     enabled: escolhidaId !== undefined,
   });
   const detail = detalhe.data;
+
+  const aoImportar = useCallback(
+    async (snapshotId: number, label: string) => {
+      setImportando(false);
+      await queryClient.invalidateQueries({ queryKey: ['forecast'] });
+      setParams({ quinzena: String(snapshotId) });
+      setImportada(label);
+    },
+    [queryClient, setParams],
+  );
 
   const subtitulo = escolhida
     ? detail
@@ -168,29 +185,44 @@ export default function Forecast() {
           <h1>Forecast de compras</h1>
           <p>{subtitulo}</p>
         </div>
-        {quinzenas.length > 0 && (
+        {(quinzenas.length > 0 || podeImportar) && (
           <div className="page-header__actions">
-            <div className="fc-quinzena">
-              <label className="field-label" htmlFor="fc-quinzena">
-                Quinzena
-              </label>
-              <select
-                id="fc-quinzena"
-                className="select"
-                value={escolhidaId}
-                onChange={(e) => setParams({ quinzena: e.target.value })}
-              >
-                {quinzenas.map((q) => (
-                  <option key={q.id} value={q.id}>
-                    {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {quinzenas.length > 0 && (
+              <div className="fc-quinzena">
+                <label className="field-label" htmlFor="fc-quinzena">
+                  Quinzena
+                </label>
+                <select
+                  id="fc-quinzena"
+                  className="select"
+                  value={escolhidaId}
+                  onChange={(e) => {
+                    setImportada(null);
+                    setParams({ quinzena: e.target.value });
+                  }}
+                >
+                  {quinzenas.map((q) => (
+                    <option key={q.id} value={q.id}>
+                      {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {podeImportar && (
+              <button type="button" className="primary-button" onClick={() => setImportando(true)}>
+                Importar quinzena
+              </button>
+            )}
           </div>
         )}
       </div>
 
+      {importada && (
+        <div className="alert alert--success" role="status">
+          Quinzena {importada} importada.
+        </div>
+      )}
       {lista.isLoading && <Spinner />}
       {lista.isError && (
         <div className="alert alert--error" role="alert">
@@ -199,7 +231,9 @@ export default function Forecast() {
       )}
       {lista.isSuccess && quinzenas.length === 0 && (
         <div className="empty-state">
-          Nenhuma quinzena importada ainda. A importação pela tela chega na próxima versão.
+          {podeImportar
+            ? 'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp.'
+            : 'Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.'}
         </div>
       )}
       {escolhida && detalhe.isLoading && <Spinner />}
@@ -209,6 +243,12 @@ export default function Forecast() {
         </div>
       )}
       {detail && <Painel key={detail.id} detail={detail} />}
+      <ForecastImportModal
+        aberto={importando}
+        onFechar={() => setImportando(false)}
+        quinzenasExistentes={quinzenas.map((q) => q.label)}
+        onImportada={aoImportar}
+      />
     </div>
   );
 }

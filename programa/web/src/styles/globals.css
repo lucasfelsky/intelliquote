@@ -2824,3 +2824,42 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 900px) {
   .fc-memoria { grid-template-columns: 1fr; }
 }
+
+/* ---- Forecast: importacao (PR 1D-2) ---- */
+.fci-modal { display: flex; flex-direction: column; gap: 16px; }
+.fci-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.fci-comuns { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 16px; }
+.fci-quinzena { min-width: 0; margin: 0; padding: 0; border: 0; }
+.fci-quinzena legend { padding: 0; margin-bottom: 6px; }
+.fci-quinzena__opcoes { display: flex; gap: 16px; min-height: 38px; align-items: center; }
+.fci-rotulo { margin: 0; padding-bottom: 8px; font-size: 14px; font-weight: 700; color: var(--ink); }
+.fci-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fci-slot { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fci-slot__topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fci-slot__topo .field-label { margin-bottom: 0; }
+.fci-slot__ajuda,
+.fci-slot__arquivo { margin: 0; font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.fci-faltam { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fci-opcoes { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fci-resumo { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fci-resumo h3 { margin: 0; }
+.fci-resumo h3:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fci-resumo__sub { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fci-resumo .table tbody th { background: transparent; color: var(--ink); font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.fci-bloco { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fci-bloco h4 { margin: 0; font-size: 14px; }
+.fci-bloco p { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.fci-lista { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
+.fci-avisos { padding: 10px 12px; border: 1px solid var(--tone-warning-border); border-radius: var(--radius-sm); background: var(--tone-warning-bg-soft); color: var(--tone-warning-fg-strong); font-size: 14px; }
+.fci-destaque { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--tone-warning-border); border-left: 4px solid var(--warning); border-radius: var(--radius-sm); background: var(--tone-warning-bg-soft); color: var(--tone-warning-fg-strong); font-size: 13px; }
+.fci-destaque__icone { font-size: 16px; line-height: 1.2; }
+.fci-entendi { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--danger); border-radius: var(--radius-sm); background: var(--tone-danger-bg-soft); color: var(--ink); font-size: 14px; }
+.fci-entendi input { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.fci-modal input[type="checkbox"]:focus-visible,
+.fci-modal input[type="radio"]:focus-visible,
+.fci-modal input[type="date"]:focus-visible,
+.fci-modal .tabs-trigger:focus-visible,
+.fci-modal .tabs-panel:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 900px) {
+  .fci-slots { grid-template-columns: 1fr; }
+}

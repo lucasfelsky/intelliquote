@@ -388,6 +388,7 @@ describe('passosDaMemoria', () => {
     expect(passos[1]?.conta).toBe('1ª quinzena: igual à média trimestral (100,0)');
     expect(passos[4]?.conta).toBe('fonte sem lead time cadastrado');
     expect(passos[4]?.resultado).toBe('#N/D');
+    expect(passos[5]?.conta).toBe('fonte sem lead time: sem segurança, a demanda não é calculada');
     expect(passos[5]?.resultado).toBe('#N/D');
   });
 

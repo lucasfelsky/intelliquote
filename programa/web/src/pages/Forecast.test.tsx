@@ -4,6 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Forecast from './Forecast';
 
+let mockRole = 'comprador';
+vi.mock('@/auth/AuthProvider', () => ({
+  useAuth: () => ({ user: { id: 1, name: 'U', email: 'u@exemplo.invalid', role: mockRole } }),
+}));
+
 vi.mock('@/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
   ApiError: class ApiError extends Error {
@@ -20,6 +25,7 @@ vi.mock('@/api/client', () => ({
 import { api, ApiError } from '@/api/client';
 
 const get = vi.mocked(api.get);
+const post = vi.mocked(api.post);
 
 // Dados 100% sinteticos.
 const MONTHS = {
@@ -134,13 +140,18 @@ const nomesDosItens = () => screen.queryAllByRole('button', { name: /PRODUTO [AB
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRole = 'comprador';
 });
 
 describe('Forecast', () => {
   it('lista vazia mostra o estado vazio e nao pede detalhe', async () => {
     mockApi({}, []);
     renderPage();
-    expect(await screen.findByText(/Nenhuma quinzena importada ainda/)).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp.',
+      ),
+    ).toBeTruthy();
     expect(detalhesChamados()).toEqual([]);
   });
 
@@ -342,5 +353,102 @@ describe('Forecast', () => {
     expect(screen.queryByText('Fixo')).toBeNull();
     fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
     expect(screen.getByRole('columnheader', { name: 'M1' })).toBeTruthy();
+  });
+});
+
+describe('Forecast - importar quinzena', () => {
+  it.each(['admin', 'comprador'])('%s ve o botao "Importar quinzena" (com lista e com lista vazia)', async (role) => {
+    mockRole = role;
+    mockApi({ 7: detalhe() });
+    const comLista = renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(screen.getByRole('button', { name: 'Importar quinzena' })).toBeTruthy();
+    comLista.unmount();
+
+    mockApi({}, []);
+    renderPage();
+    expect(await screen.findByText(/Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp\./)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Importar quinzena' })).toBeTruthy();
+  });
+
+  it.each(['gestor', 'viewer'])('%s nao ve o botao e recebe o texto de pedir a um comprador', async (role) => {
+    mockRole = role;
+    mockApi({}, []);
+    renderPage();
+    expect(
+      await screen.findByText('Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Importar quinzena' })).toBeNull();
+    expect(screen.queryByText('Quinzena', { selector: 'label' })).toBeNull();
+  });
+
+  it('sem permissao e com lista, so o seletor aparece', async () => {
+    mockRole = 'viewer';
+    mockApi({ 7: detalhe() });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(screen.queryByRole('button', { name: 'Importar quinzena' })).toBeNull();
+    expect(screen.getByLabelText('Quinzena')).toBeTruthy();
+  });
+
+  it('fluxo integrado: planilha -> preview -> confirm 201 abre a quinzena nova', async () => {
+    const novo = {
+      id: 9,
+      label: '12-2',
+      baseDate: '2026-12-15T00:00:00.000Z',
+      half: 2,
+      origin: 'planilha',
+      months: MONTHS,
+      files: [],
+      createdById: 1,
+      createdAt: '2026-12-15T12:00:00.000Z',
+    };
+    let lista: unknown[] = RESUMOS;
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/forecast/snapshots') return { data: lista };
+      const id = Number(path.split('/').pop());
+      return { data: id === 9 ? detalhe({ id: 9, label: '12-2', baseDate: '2026-12-15' }) : detalhe() };
+    });
+    const resumo = {
+      label: '12-2',
+      baseDate: '2026-12-15',
+      half: 2,
+      produtos: { total: 3, novos: 1, alterados: 1, inativados: 0 },
+      codigos: { total: 4, vinculadosCatalogo: 2, movidos: 0 },
+      fontes: { total: 2, novas: 0, alteradas: 1, comFornecedor: 1 },
+      historico: { yearMonth: '2026-11', linhas: 5, novas: 1, alteradas: 2, removidas: 0 },
+      conferencia: { celulas: 84, batem: 84, porColuna: {}, totalDivergencias: 0, divergencias: [] },
+      avisos: [],
+      erros: [],
+    };
+    post.mockImplementation((async (path: string) => {
+      if (path.endsWith('/preview')) return { data: resumo };
+      lista = [...RESUMOS, novo];
+      return { data: { ...resumo, snapshotId: 9, options: {} } };
+    }) as typeof api.post);
+
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    fireEvent.click(screen.getByRole('button', { name: 'Importar quinzena' }));
+    fireEvent.change(await screen.findByLabelText('Data-base'), { target: { value: '2026-12-15' } });
+    fireEvent.click(screen.getByLabelText('2ª'));
+    fireEvent.change(screen.getByLabelText('Arquivo da planilha'), {
+      target: { files: [new File([new Uint8Array([1, 2, 3])], 'planilha-teste.xlsx')] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Pré-visualizar' }));
+    await screen.findByRole('heading', { name: 'Pré-visualização da planilha' });
+    const listasAntes = get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar importação' }));
+
+    expect(await screen.findByText('Quinzena 12-2 importada.')).toBeTruthy();
+    expect(await screen.findByText(/^Quinzena 12-2 · base 15\/12\/2026 · 3 produtos · origem planilha$/)).toBeTruthy();
+    expect(get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots').length).toBeGreaterThan(listasAntes);
+    expect(detalhesChamados()).toContain('/v1/forecast/snapshots/9');
+    expect(screen.queryByRole('heading', { name: 'Importar quinzena' })).toBeNull();
+    expect((screen.getByLabelText('Quinzena') as HTMLSelectElement).value).toBe('9');
+
+    // a mensagem some ao trocar de quinzena
+    fireEvent.change(screen.getByLabelText('Quinzena'), { target: { value: '7' } });
+    await waitFor(() => expect(screen.queryByText('Quinzena 12-2 importada.')).toBeNull());
   });
 });
