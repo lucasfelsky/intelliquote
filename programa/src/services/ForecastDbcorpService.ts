@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import {
+  FORECAST_DBCORP_FUP_REGRA,
   FORECAST_DBCORP_SLOTS,
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_ORIGIN_DBCORP,
@@ -162,6 +163,7 @@ export class ForecastDbcorpService {
         fileName: files[slot]!.fileName,
         sha256: createHash('sha256').update(buffer).digest('hex'),
         rows: parsed.usadas,
+        ...(slot === 'fup' ? { regra: FORECAST_DBCORP_FUP_REGRA } : {}),
       });
     }
     const mesDoRotulo = label.slice(0, 2);
@@ -407,6 +409,16 @@ export class ForecastDbcorpService {
                 const ignoradas = Object.values(resumo.ignoradas).reduce((a, b) => a + b, 0);
                 return [{ kind: slot, usadas: resumo.usadas, ignoradas }];
               }),
+              // So contagem de LINHAS (nunca kg, codigo ou texto do FUP).
+              fup: {
+                regra: FORECAST_DBCORP_FUP_REGRA,
+                estimadasEtd: parsed.fup.estimadasPorEtd.linhas,
+                estimadasProntidao: parsed.fup.estimadasPorProntidao.linhas,
+                excluidasAtracadas: parsed.fup.excluidas.atracadas.linhas,
+                excluidasEtaFinal: parsed.fup.excluidas.etaFinalPreenchida.linhas,
+                prontidaoNaoReconhecida: parsed.fup.prontidaoNaoReconhecida.linhas,
+                semData: parsed.fup.semData.linhas,
+              },
             },
           },
           tx,

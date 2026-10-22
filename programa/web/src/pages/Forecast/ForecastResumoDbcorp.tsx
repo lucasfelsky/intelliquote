@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ForecastDbcorpSlot, ForecastDbcorpSummary, ForecastRelatorioResumo } from '@/services/forecast';
 import {
+  diasDaRegraFup,
   kgEmAberto,
   mesAno,
   percentualSemData,
@@ -150,10 +151,66 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
   const emAberto = kgEmAberto(porStatus);
   const semData = relatorio.semData ?? null;
   const percentual = semData ? percentualSemData(semData, emAberto) : null;
+  const dias = diasDaRegraFup(relatorio.regra);
+  const excluidas = relatorio.excluidas;
+  const naoReconhecida = relatorio.prontidaoNaoReconhecida;
   return (
     <Bloco titulo="FUP por status">
+      {relatorio.regra && (
+        <p>
+          Regra {relatorio.regra.id}: atracadas e linhas com ETA FINAL ficam fora; chegada = ETA, senão ETD + {dias.etd}{' '}
+          dias, senão DATA PRONTIDÃO + {dias.prontidao} dias (estimada).
+        </p>
+      )}
       <TabelaStatus legenda="FUP por status" unidade="kg" linhas={porStatus} />
       <p>Em aberto: {inteiroBr(emAberto)} kg</p>
+      {excluidas && (
+        <p>
+          Excluídas pela regra: {(relatorio.regra?.statusExcluidos ?? ['ATRAC. AG. LIBERAÇÃO']).join(', ')} —{' '}
+          <LinhasKg valor={excluidas.atracadas} /> · ETA FINAL preenchida — <LinhasKg valor={excluidas.etaFinalPreenchida} />
+          {excluidas.etaFinalPreenchida.depoisDaDataBase.linhas > 0 &&
+            ` (${inteiroBr(excluidas.etaFinalPreenchida.depoisDaDataBase.linhas)} com ETA FINAL depois da data base)`}
+        </p>
+      )}
+      {naoReconhecida && naoReconhecida.linhas > 0 && (
+        <div className="fci-destaque">
+          <span className="fci-destaque__icone" aria-hidden="true">
+            ⚠
+          </span>
+          <div>
+            <strong>
+              DATA PRONTIDÃO não reconhecida: {inteiroBr(naoReconhecida.linhas)} linhas · {inteiroBr(naoReconhecida.kg)} kg
+              ficaram FORA das chegadas
+            </strong>
+            <div className="table-wrapper">
+              <table className="table">
+                <caption className="sr-only">Linhas do FUP com DATA PRONTIDÃO não reconhecida</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Linha do FUP</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Código</th>
+                    <th scope="col">kg</th>
+                    <th scope="col">Texto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {naoReconhecida.detalhes.map((d) => (
+                    <tr key={d.linha}>
+                      <th scope="row">{inteiroBr(d.linha)}</th>
+                      <td>{d.status}</td>
+                      <td>{d.codigo}</td>
+                      <td>{inteiroBr(d.kg)}</td>
+                      <td>{d.texto}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {naoReconhecida.omitidos > 0 && <p>… e mais {inteiroBr(naoReconhecida.omitidos)} linhas</p>}
+          </div>
+        </div>
+      )}
       {semData && semData.linhas > 0 && (
         <div className="fci-destaque">
           <span className="fci-destaque__icone" aria-hidden="true">
@@ -184,7 +241,14 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
       )}
       {relatorio.estimadasPorEtd && (
         <p>
-          Estimadas por ETD + 35 dias: <LinhasKg valor={relatorio.estimadasPorEtd} />
+          Estimadas por ETD + {dias.etd} dias: <LinhasKg valor={relatorio.estimadasPorEtd} />{' '}
+          <span className="badge badge--warning">ESTIMADA</span>
+        </p>
+      )}
+      {relatorio.estimadasPorProntidao && (
+        <p>
+          Estimadas por DATA PRONTIDÃO + {dias.prontidao} dias: <LinhasKg valor={relatorio.estimadasPorProntidao} />{' '}
+          <span className="badge badge--warning">ESTIMADA</span>
         </p>
       )}
       {relatorio.depoisDaJanela && (

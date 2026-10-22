@@ -276,6 +276,8 @@ describe('parseFup', () => {
     'ETA (CHEGADA)',
     'ETA FINAL',
     'STATUS NF',
+    'DATA PO',
+    'DATA PRONTIDÃO',
   ];
   const row = (
     status: string,
@@ -284,16 +286,19 @@ describe('parseFup', () => {
     etd: Cell,
     eta: Cell,
     etaFinal: Cell,
-  ): Cell[] => [status, 'Exportador teste', 'PO-1', codigo, kg, etd, eta, etaFinal, null];
+    dataPo: Cell = null,
+    prontidao: Cell = null,
+  ): Cell[] => [status, 'Exportador teste', 'PO-1', codigo, kg, etd, eta, etaFinal, null, dataPo, prontidao];
   const vazio = ' ';
 
-  it('regras de status e de data (ETA FINAL > ETA > ETD + 35)', async () => {
+  it('regra F3: ATRAC e ETA FINAL ficam fora; ETA > ETD + 35 > DATA PRONTIDAO + 35; sem data fora', async () => {
     const r = await parseFup(
       await xlsx(HEADERS, [
         row('CONCLUÍDO', 'TST0001', 100, vazio, d('2026-11-20'), vazio),
         row('CONCLUIDO', 'TST0001', 110, vazio, d('2026-11-20'), vazio),
-        row('ATRAC. AG. LIBERAÇÃO', 'tst0001', 200, vazio, d('2026-12-05'), vazio),
-        row('EM TRANSITO', 'TST0001', 300, d('2026-10-01'), d('2026-12-01'), d('2027-01-10')), // ETA FINAL vence
+        row('ATRAC. AG. LIBERAÇÃO', 'tst0001', 200, vazio, d('2026-12-05'), vazio), // F3: fica fora
+        row('EM TRANSITO', 'TST0001', 300, d('2026-10-01'), d('2026-12-01'), d('2026-11-10')), // ETA FINAL: ja chegou
+        row('EM TRANSITO', 'TST0001', 310, vazio, vazio, d('2026-12-20')), // ETA FINAL depois da data base
         row('AG. EMBARQUE', 'TST0001', 400, d('2026-12-10'), vazio, vazio), // 2026-12-10 + 35 = 2027-01-14
         row('AG. EMBARQUE', 'TST0001', 500, d('2026-12-30'), vazio, vazio), // vira o ano: 2027-02-03
         row('AG. EMBARQUE', 'TST0001', 510, d('2026-11-30'), vazio, vazio), // vira o mes: 2027-01-04
@@ -304,54 +309,156 @@ describe('parseFup', () => {
         row('EM TRANSITO', 'TST0001', 900, vazio, d('2027-04-01'), vazio), // depois da janela de 5 meses
         row('EM TRANSITO', 'TST0001', 910, vazio, d('2027-03-31'), vazio), // ultimo mes da janela
         row('EM TRANSITO', 'TST0001', 920, vazio, '25/12/2026', vazio), // texto dd/mm/aaaa
-        row('EM TRANSITO', 'TST0001', 930, d('2026-12-02'), 'a definir', 'previsto'), // texto invalido cai para a ETD
+        row('EM TRANSITO', 'TST0001', 930, d('2026-12-02'), 'a definir', vazio), // texto invalido cai para a ETD
       ]),
       BASE,
     );
     expect(r.erros).toEqual([]);
     expect(r.linhas).toEqual([
-      { codigo: 'TST0001', qtd: 200, mes: '12' },
-      { codigo: 'TST0001', qtd: 300, mes: '01' },
-      { codigo: 'TST0001', qtd: 400, mes: '01' },
-      { codigo: 'TST0001', qtd: 500, mes: '02' },
-      { codigo: 'TST0001', qtd: 510, mes: '01' },
+      { codigo: 'TST0001', qtd: 400, mes: '01', estimada: 'etd' },
+      { codigo: 'TST0001', qtd: 500, mes: '02', estimada: 'etd' },
+      { codigo: 'TST0001', qtd: 510, mes: '01', estimada: 'etd' },
       { codigo: 'TST0001', qtd: 600, mes: '11' },
       { codigo: 'TST0001', qtd: 910, mes: '03' },
       { codigo: 'TST0001', qtd: 920, mes: '12' },
-      { codigo: 'TST0001', qtd: 930, mes: '01' }, // ETD 2026-12-02 + 35 = 2027-01-06
+      { codigo: 'TST0001', qtd: 930, mes: '01', estimada: 'etd' }, // ETD 2026-12-02 + 35 = 2027-01-06
     ]);
     expect(r.estimadasPorEtd).toEqual({ linhas: 4, kg: 400 + 500 + 510 + 930 });
+    expect(r.estimadasPorProntidao).toEqual({ linhas: 0, kg: 0 });
     expect(r.vencidasNoMesBase).toEqual({ linhas: 1, kg: 600 });
     expect(r.depoisDaJanela).toEqual({ linhas: 1, kg: 900 });
+    expect(r.excluidas.atracadas).toEqual({ linhas: 1, kg: 200 });
+    expect(r.excluidas.etaFinalPreenchida).toMatchObject({
+      linhas: 2,
+      kg: 610,
+      depoisDaDataBase: { linhas: 1, kg: 310 },
+    });
+    expect(r.excluidas.etaFinalPreenchida.porStatus).toEqual([{ status: 'EM TRANSITO', linhas: 2, kg: 610 }]);
     expect(r.semData.linhas).toBe(3);
     expect(r.semData.kg).toBe(1550);
-    expect(r.semData.porStatus).toEqual([
-      { status: 'AG. PAGAMENTO (ANT)', linhas: 2, kg: 750 },
-      { status: 'AG. PRONT. DA CARGA', linhas: 1, kg: 800 },
-    ].sort((a, b) => b.kg - a.kg));
+    expect(r.semData.porStatus).toEqual(
+      [
+        { status: 'AG. PAGAMENTO (ANT)', linhas: 2, kg: 750 },
+        { status: 'AG. PRONT. DA CARGA', linhas: 1, kg: 800 },
+      ].sort((a, b) => b.kg - a.kg),
+    );
     expect(r.ignoradas).toEqual({
       'status concluido': 2,
+      'atracada aguardando liberacao': 1,
+      'eta final preenchida': 2,
       'sem data': 3,
       'depois da janela': 1,
     });
     expect(r.lidas).toBe(r.usadas + ignoradasTotal(r));
     expect(r.porStatus.find((s) => s.status === 'CONCLUIDO')).toMatchObject({ incluido: false, linhas: 2, kg: 210 });
-    expect(r.porStatus.find((s) => s.status === 'ATRAC. AG. LIBERACAO')).toMatchObject({ incluido: true, linhas: 1 });
+    expect(r.porStatus.find((s) => s.status === 'ATRAC. AG. LIBERACAO')).toMatchObject({ incluido: false, linhas: 1 });
+    expect(r.regra).toMatchObject({ id: 'F3', etaPorEtdDias: 35, etaPorProntidaoDias: 35, excluiEtaFinal: true });
 
     const avisos = r.avisos.join('\n');
-    expect(avisos).toMatch(/3 linhas .*sem ETA FINAL, ETA \(CHEGADA\) nem ETD \(EMBARQUE\)/);
+    expect(avisos).toMatch(/\(regra F3\): 1 linha \(200 kg\) com status ATRAC\. AG\. LIBERAÇÃO ficaram de fora/);
+    expect(avisos).toMatch(
+      /\(regra F3\): 2 linhas \(610 kg\) com ETA FINAL preenchida ficaram de fora .*Atenção: 1 com ETA FINAL depois da data base/,
+    );
+    expect(avisos).toMatch(/3 linhas .*sem ETA \(CHEGADA\), ETD \(EMBARQUE\) nem DATA PRONTIDÃO/);
     expect(avisos).toContain('AG. PRONT. DA CARGA: 1');
     expect(avisos).toMatch(/anterior ao mes base entraram no mes base/);
-    expect(avisos).toMatch(/ETD \+ 35 dias \(estimativa\)/);
+    expect(avisos).toMatch(/ETD \(EMBARQUE\) \+ 35 dias \(ESTIMADA\)/);
     expect(avisos).toMatch(/depois da janela de 5 meses/);
     expect(avisos).toMatch(/texto invalido/);
   });
 
-  it('coluna ausente -> erro com o nome da coluna', async () => {
+  it("DATA PRONTIDAO 'MON DDth' com ETD vazia entra como ESTIMADA (ano pela DATA PO)", async () => {
+    const r = await parseFup(
+      await xlsx(HEADERS, [
+        row('AG. PRONT. DA CARGA', 'TST0001', 100, vazio, vazio, vazio, d('2026-10-05'), 'OCT 20TH'), // 2026-11-24
+        row('AG. PRONT. DA CARGA', 'TST0001', 200, null, null, null, d('2026-11-21'), 'Dec 16th'), // 2027-01-20
+        row('AG. PRONT. DA CARGA', 'TST0001', 300, null, null, null, d('2026-12-10'), 'JAN 20TH'), // 2027-02-24
+        row('AG. PRONT. DA CARGA', 'TST0001', 400, d('2026-12-01'), null, null, null, 'OCT 20TH'), // ETD vence a prontidao
+      ]),
+      BASE,
+    );
+    expect(r.erros).toEqual([]);
+    expect(r.linhas).toEqual([
+      { codigo: 'TST0001', qtd: 100, mes: '11', estimada: 'prontidao' },
+      { codigo: 'TST0001', qtd: 200, mes: '01', estimada: 'prontidao' },
+      { codigo: 'TST0001', qtd: 300, mes: '02', estimada: 'prontidao' },
+      { codigo: 'TST0001', qtd: 400, mes: '01', estimada: 'etd' },
+    ]);
+    expect(r.estimadasPorProntidao).toEqual({ linhas: 3, kg: 600 });
+    expect(r.estimadasPorEtd).toEqual({ linhas: 1, kg: 400 });
+    expect(r.avisos.join('\n')).toContain('usaram DATA PRONTIDÃO + 35 dias (ESTIMADA)');
+  });
+
+  it('DATA PRONTIDAO como celula de data', async () => {
+    const r = await parseFup(
+      await xlsx(HEADERS, [row('AG. PRONT. DA CARGA', 'TST0001', 100, vazio, vazio, vazio, null, d('2026-11-30'))]),
+      BASE,
+    );
+    expect(r.linhas).toEqual([{ codigo: 'TST0001', qtd: 100, mes: '01', estimada: 'prontidao' }]); // 2027-01-04
+  });
+
+  it('prontidao nao reconhecida: fica fora e o detalhe traz a linha da planilha', async () => {
+    const r = await parseFup(
+      await xlsx(HEADERS, [
+        row('EM TRANSITO', 'TST0001', 100, vazio, d('2026-12-10'), vazio),
+        row('AG. PAGAMENTO (ANT)', 'tst0007', 800, vazio, vazio, vazio, d('2026-10-01'), 'ASAP'),
+        row('AG. PAGAMENTO (ANT)', 'TST0008', 40, vazio, vazio, vazio, null, 'WITH PO 123-45'),
+        row('AG. EMBARQUE', 'TST0009', 5, vazio, vazio, vazio, null, null),
+      ]),
+      BASE,
+    );
+    expect(r.prontidaoNaoReconhecida.linhas).toBe(2);
+    expect(r.prontidaoNaoReconhecida.kg).toBe(840);
+    expect(r.prontidaoNaoReconhecida.omitidos).toBe(0);
+    expect(r.prontidaoNaoReconhecida.detalhes).toEqual([
+      { linha: 3, status: 'AG. PAGAMENTO (ANT)', codigo: 'TST0007', kg: 800, texto: 'ASAP' },
+      { linha: 4, status: 'AG. PAGAMENTO (ANT)', codigo: 'TST0008', kg: 40, texto: 'WITH PO 123-45' },
+    ]);
+    expect(r.semData).toMatchObject({ linhas: 1, kg: 5 });
+    expect(r.ignoradas).toEqual({ 'prontidao nao reconhecida': 2, 'sem data': 1 });
+    expect(r.lidas).toBe(r.usadas + ignoradasTotal(r));
+    expect(r.avisos.join('\n')).toMatch(/2 linhas \(840 kg\) com DATA PRONTIDÃO não reconhecida ficaram de fora/);
+  });
+
+  it('cabecalho sem DATA PO e DATA PRONTIDAO: linhas sem ETA nem ETD ficam sem data, com aviso', async () => {
+    const r = await parseFup(
+      await xlsx(
+        HEADERS.slice(0, 9),
+        [
+          row('EM TRANSITO', 'TST0001', 100, vazio, d('2026-12-10'), vazio),
+          row('AG. PRONT. DA CARGA', 'TST0001', 200, vazio, vazio, vazio, null, 'OCT 20TH'),
+        ].map((c) => c.slice(0, 9)),
+      ),
+      BASE,
+    );
+    expect(r.erros).toEqual([]);
+    expect(r.linhas).toEqual([{ codigo: 'TST0001', qtd: 100, mes: '12' }]);
+    expect(r.semData).toMatchObject({ linhas: 1, kg: 200 });
+    expect(r.prontidaoNaoReconhecida.linhas).toBe(0);
+    expect(r.avisos).toContain('FUP: coluna "DATA PRONTIDÃO" não encontrada - linhas sem ETA nem ETD ficam de fora.');
+    expect(r.avisos).toContain('FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.');
+  });
+
+  it('cabecalho so sem DATA PO: a prontidao usa a data base para o ano', async () => {
+    const r = await parseFup(
+      await xlsx(
+        HEADERS.filter((h) => h !== 'DATA PO'),
+        [['AG. PRONT. DA CARGA', 'Exportador teste', 'PO-1', 'TST0001', 100, vazio, vazio, vazio, null, 'DEC 16TH']],
+      ),
+      BASE,
+    );
+    expect(r.linhas).toEqual([{ codigo: 'TST0001', qtd: 100, mes: '01', estimada: 'prontidao' }]); // 2026-12-16 + 35
+    expect(r.avisos).toContain('FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.');
+    expect(r.avisos.join('\n')).not.toContain('coluna "DATA PRONTIDÃO"');
+  });
+
+  it('coluna obrigatoria ausente -> erro com o nome da coluna', async () => {
     const r = await parseFup(await xlsx(HEADERS.filter((h) => h !== 'ETA FINAL'), []), BASE);
     expect(r.erros).toHaveLength(1);
     expect(r.erros[0]).toContain('"ETA FINAL"');
     expect(r.erros[0]).toMatch(/FUP/);
+    expect(r.linhas).toEqual([]);
+    expect(r.regra.id).toBe('F3');
   });
 });
 
@@ -419,6 +526,10 @@ describe('relatorios reais (opcional, FORECAST_DBCORP_DIR)', () => {
         expect(r.usadas).toBeGreaterThan(0);
         expect(r.lidas).toBe(r.usadas + ignoradasTotal(r));
       }
+      // So estrutura da regra F3 (nenhum numero real): a prontidao estima chegadas e atracadas nao entram.
+      expect(fup.estimadasPorProntidao.linhas).toBeGreaterThan(0);
+      const atracada = fup.porStatus.find((x) => x.status === 'ATRAC. AG. LIBERACAO');
+      if (atracada) expect(atracada.incluido).toBe(false);
       const incluido = saldo.porDeposito.filter((x) => x.incluido).reduce((a, x) => a + x.saldo, 0);
       const excluido = saldo.porDeposito.filter((x) => !x.incluido).reduce((a, x) => a + x.saldo, 0);
       const total = saldo.porDeposito.reduce((a, x) => a + x.saldo, 0);

@@ -359,6 +359,26 @@ export interface ForecastRelatorioResumo {
   vencidasNoMesBase?: ForecastLinhasKg;
   semData?: ForecastLinhasKg & { porStatus: Array<{ status: string; linhas: number; kg: number }> };
   depoisDaJanela?: ForecastLinhasKg;
+  // FUP, regra F3 (backend antigo nao manda estes campos)
+  regra?: {
+    id: string;
+    etaPorEtdDias: number;
+    etaPorProntidaoDias: number;
+    excluiEtaFinal: boolean;
+    statusExcluidos: string[];
+  };
+  estimadasPorProntidao?: ForecastLinhasKg;
+  excluidas?: {
+    atracadas: ForecastLinhasKg;
+    etaFinalPreenchida: ForecastLinhasKg & {
+      porStatus: Array<{ status: string; linhas: number; kg: number }>;
+      depoisDaDataBase: ForecastLinhasKg;
+    };
+  };
+  prontidaoNaoReconhecida?: ForecastLinhasKg & {
+    detalhes: Array<{ linha: number; status: string; codigo: string; kg: number; texto: string }>;
+    omitidos: number;
+  };
 }
 
 /** Resumo do preview dos relatorios DBCorp (`ForecastDbcorpSummary` do backend). */

@@ -6,6 +6,7 @@ import {
   checarCorpo,
   checarTamanhos,
   dataBaseValida,
+  diasDaRegraFup,
   extensaoOk,
   faltando,
   kgEmAberto,
@@ -15,6 +16,7 @@ import {
   montarCorpoDbcorp,
   montarCorpoPlanilha,
   percentualSemData,
+  prontidaoPendente,
   readFileAsBase64,
   rotuloDaQuinzena,
   rotuloDoMotivo,
@@ -231,6 +233,9 @@ describe('leitura do resumo', () => {
     expect(rotuloDoMotivo('sem data de faturamento valida')).toBe('sem data de faturamento válida');
     expect(rotuloDoMotivo('fora da janela (antes do mes base)')).toBe('fora da janela (antes do mês base)');
     expect(rotuloDoMotivo('outra empresa')).toBe('outra empresa');
+    expect(rotuloDoMotivo('atracada aguardando liberacao')).toBe('atracada aguardando liberação');
+    expect(rotuloDoMotivo('eta final preenchida')).toBe('ETA FINAL preenchida (já chegou)');
+    expect(rotuloDoMotivo('prontidao nao reconhecida')).toBe('DATA PRONTIDÃO não reconhecida');
     expect(rotuloDoMotivo('motivo novo qualquer')).toBe('motivo novo qualquer');
   });
 
@@ -259,6 +264,25 @@ describe('leitura do resumo', () => {
     expect(percentualSemData({ kg: 250 }, 1000)).toBe(25);
     expect(percentualSemData({ kg: 1 }, 3)).toBe(33);
     expect(percentualSemData({ kg: 250 }, 0)).toBeNull();
+  });
+});
+
+describe('regra F3 do FUP no resumo', () => {
+  const regra = { id: 'F3', etaPorEtdDias: 35, etaPorProntidaoDias: 40, excluiEtaFinal: true, statusExcluidos: ['X'] };
+
+  it('diasDaRegraFup: dias do backend; backend antigo (sem regra) cai em 35/35', () => {
+    expect(diasDaRegraFup(regra)).toEqual({ etd: 35, prontidao: 40 });
+    expect(diasDaRegraFup(undefined)).toEqual({ etd: 35, prontidao: 35 });
+  });
+
+  it('prontidaoPendente: linhas e kg; ausente ou zero = null', () => {
+    const detalhes: never[] = [];
+    const com = relatorio(5, { prontidaoNaoReconhecida: { linhas: 2, kg: 840, detalhes, omitidos: 0 } });
+    expect(prontidaoPendente({ relatorios: { fup: com } })).toEqual({ linhas: 2, kg: 840 });
+    const zero = relatorio(5, { prontidaoNaoReconhecida: { linhas: 0, kg: 0, detalhes, omitidos: 0 } });
+    expect(prontidaoPendente({ relatorios: { fup: zero } })).toBeNull();
+    expect(prontidaoPendente({ relatorios: { fup: relatorio(5) } })).toBeNull();
+    expect(prontidaoPendente({ relatorios: {} })).toBeNull();
   });
 });
 

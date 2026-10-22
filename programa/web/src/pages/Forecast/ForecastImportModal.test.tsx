@@ -375,6 +375,202 @@ describe('ForecastImportModal - trava "Entendi"', () => {
   });
 });
 
+describe('ForecastImportModal - regra F3 e DATA PRONTIDAO (PR 3A)', () => {
+  const regra = {
+    id: 'F3',
+    etaPorEtdDias: 35,
+    etaPorProntidaoDias: 35,
+    excluiEtaFinal: true,
+    statusExcluidos: ['ATRAC. AG. LIBERAÇÃO'],
+  };
+  const fupF3 = (over: Record<string, unknown> = {}) =>
+    rel({
+      porStatus: [
+        { status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 },
+        { status: 'ATRAC. AG. LIBERACAO', incluido: false, linhas: 2, kg: 600 },
+        { status: 'CONCLUÍDO', incluido: false, linhas: 4, kg: 900 },
+      ],
+      regra,
+      estimadasPorEtd: { linhas: 1, kg: 500 },
+      estimadasPorProntidao: { linhas: 4, kg: 1800 },
+      vencidasNoMesBase: { linhas: 0, kg: 0 },
+      semData: { linhas: 0, kg: 0, porStatus: [] },
+      depoisDaJanela: { linhas: 0, kg: 0 },
+      excluidas: {
+        atracadas: { linhas: 2, kg: 600 },
+        etaFinalPreenchida: {
+          linhas: 3,
+          kg: 1200,
+          porStatus: [{ status: 'STATUS A', linhas: 3, kg: 1200 }],
+          depoisDaDataBase: { linhas: 1, kg: 100 },
+        },
+      },
+      prontidaoNaoReconhecida: { linhas: 0, kg: 0, detalhes: [], omitidos: 0 },
+      ...over,
+    });
+  const naoReconhecida = (omitidos = 0) => ({
+    linhas: 2 + omitidos,
+    kg: 840,
+    detalhes: [
+      { linha: 12, status: 'AG. PAGAMENTO (ANT)', codigo: 'TST0007', kg: 800, texto: 'ASAP' },
+      { linha: 15, status: 'AG. PAGAMENTO (ANT)', codigo: 'TST0008', kg: 40, texto: 'WITH PO 123-45' },
+    ],
+    omitidos,
+  });
+
+  it('mostra a regra, as excluidas e as estimadas, cada uma com o selo ESTIMADA', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({}, { fup: fupF3() }));
+    const resumo = within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+    expect(
+      resumo.getByText(
+        'Regra F3: atracadas e linhas com ETA FINAL ficam fora; chegada = ETA, senão ETD + 35 dias, senão DATA PRONTIDÃO + 35 dias (estimada).',
+      ),
+    ).toBeTruthy();
+    expect(
+      resumo.getByText(
+        /^Excluídas pela regra: ATRAC\. AG\. LIBERAÇÃO — 2 linhas · 600 kg · ETA FINAL preenchida — 3 linhas · 1\.200 kg \(1 com ETA FINAL depois da data base\)$/,
+      ),
+    ).toBeTruthy();
+    const etd = resumo.getByText(/^Estimadas por ETD \+ 35 dias: 1 linhas · 500 kg/);
+    const prontidao = resumo.getByText(/^Estimadas por DATA PRONTIDÃO \+ 35 dias: 4 linhas · 1\.800 kg/);
+    for (const linha of [etd, prontidao]) {
+      const selo = within(linha).getByText('ESTIMADA');
+      expect(selo.className).toBe('badge badge--warning');
+    }
+    expect(resumo.getAllByText('ESTIMADA')).toHaveLength(2);
+    // sem prontidao nao reconhecida: nada de destaque nem de trava
+    expect(resumo.queryByText(/DATA PRONTIDÃO não reconhecida:/)).toBeNull();
+    expect(screen.queryByLabelText(/Entendi/)).toBeNull();
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('os dias vem da regra do backend (nao do texto fixo)', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({}, { fup: fupF3({ regra: { ...regra, etaPorEtdDias: 30, etaPorProntidaoDias: 45 } }) }),
+    );
+    const resumo = within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+    expect(resumo.getByText(/senão ETD \+ 30 dias, senão DATA PRONTIDÃO \+ 45 dias \(estimada\)/)).toBeTruthy();
+    expect(resumo.getByText(/^Estimadas por ETD \+ 30 dias:/)).toBeTruthy();
+    expect(resumo.getByText(/^Estimadas por DATA PRONTIDÃO \+ 45 dias:/)).toBeTruthy();
+  });
+
+  it('prontidao nao reconhecida: destaque com a tabela e Confirmar travado ate a caixa', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({}, { fup: fupF3({ prontidaoNaoReconhecida: naoReconhecida(3) }) }));
+    const resumo = within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+    expect(
+      resumo.getByText('DATA PRONTIDÃO não reconhecida: 5 linhas · 840 kg ficaram FORA das chegadas'),
+    ).toBeTruthy();
+    const tabela = resumo.getByRole('table', { name: 'Linhas do FUP com DATA PRONTIDÃO não reconhecida' });
+    expect(within(tabela).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Linha do FUP',
+      'Status',
+      'Código',
+      'kg',
+      'Texto',
+    ]);
+    const linhas = within(tabela).getAllByRole('row').slice(1);
+    expect(linhas.map((l) => Array.from(l.children).map((c) => c.textContent))).toEqual([
+      ['12', 'AG. PAGAMENTO (ANT)', 'TST0007', '800', 'ASAP'],
+      ['15', 'AG. PAGAMENTO (ANT)', 'TST0008', '40', 'WITH PO 123-45'],
+    ]);
+    expect(resumo.getByText('… e mais 3 linhas')).toBeTruthy();
+
+    const caixa = screen.getByLabelText(
+      'Entendi que 5 linhas (840 kg) do FUP com DATA PRONTIDÃO não reconhecida ficam fora das chegadas.',
+    ) as HTMLInputElement;
+    expect(caixa.checked).toBe(false);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    fireEvent.click(caixa);
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    fireEvent.click(caixa);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+  });
+
+  it('sem "… e mais" quando nada foi omitido; trocar arquivo descarta a caixa da prontidao', async () => {
+    renderModal();
+    const comTrava = resumoDbcorp({}, { fup: fupF3({ prontidaoNaoReconhecida: naoReconhecida() }) });
+    await previsualizarDbcorp(comTrava);
+    expect(screen.queryByText(/^… e mais/)).toBeNull();
+    fireEvent.click(screen.getByLabelText(/Entendi que 2 linhas/));
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    escolher('fup', arquivo('outro-teste.xlsx'));
+    expect(queryBotao('Confirmar importação')).toBeNull();
+    post.mockResolvedValueOnce({ data: comTrava });
+    fireEvent.click(botao('Pré-visualizar'));
+    const caixa = (await screen.findByLabelText(/Entendi que 2 linhas/)) as HTMLInputElement;
+    expect(caixa.checked).toBe(false);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+  });
+
+  it('as duas travas (sem linhas uteis + prontidao) valem juntas', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp(
+        {},
+        {
+          saldo: rel({ usadas: 0, porDeposito: [] }),
+          fup: fupF3({ prontidaoNaoReconhecida: naoReconhecida() }),
+        },
+      ),
+    );
+    fireEvent.click(screen.getByLabelText(/Entendi que SALDO veio sem linhas úteis/));
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/Entendi que 2 linhas/));
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('confirmar com a caixa marcada reenvia o MESMO corpo (o backend nao bloqueia)', async () => {
+    const { onImportada } = renderModal();
+    await previsualizarDbcorp(resumoDbcorp({}, { fup: fupF3({ prontidaoNaoReconhecida: naoReconhecida() }) }));
+    fireEvent.click(screen.getByLabelText(/Entendi que 2 linhas/));
+    post.mockResolvedValueOnce({ data: { ...resumoDbcorp(), snapshotId: 7 } });
+    fireEvent.click(botao('Confirmar importação'));
+    await waitFor(() => expect(onImportada).toHaveBeenCalledWith(7, '12-2'));
+    expect(post.mock.calls[1]?.[1]).toEqual(post.mock.calls[0]?.[1]);
+  });
+
+  it('backend antigo (sem os campos novos): renderiza como hoje, sem regra, sem trava, ETD + 35 dias', async () => {
+    renderModal();
+    await previsualizarDbcorp();
+    const resumo = within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+    expect(resumo.queryByText(/^Regra /)).toBeNull();
+    expect(resumo.queryByText(/^Excluídas pela regra/)).toBeNull();
+    expect(resumo.queryByText(/^Estimadas por DATA PRONTIDÃO/)).toBeNull();
+    expect(resumo.getByText(/^Estimadas por ETD \+ 35 dias: 1 linhas · 500 kg/)).toBeTruthy();
+    expect(resumo.getAllByText('ESTIMADA')).toHaveLength(1);
+    expect(screen.queryByLabelText(/Entendi/)).toBeNull();
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('motivos novos aparecem com acento na tabela de relatorios', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp(
+        {},
+        {
+          fup: fupF3({
+            ignoradas: {
+              'atracada aguardando liberacao': 2,
+              'eta final preenchida': 3,
+              'prontidao nao reconhecida': 0,
+            },
+          }),
+        },
+      ),
+    );
+    const resumo = within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+    expect(
+      resumo.getByText(
+        'atracada aguardando liberação: 2 · ETA FINAL preenchida (já chegou): 3 · DATA PRONTIDÃO não reconhecida: 0',
+      ),
+    ).toBeTruthy();
+  });
+});
+
 describe('ForecastImportModal - confirmar', () => {
   it('reenvia o MESMO corpo do preview e chama onImportada com o id novo', async () => {
     const { onImportada } = renderModal();

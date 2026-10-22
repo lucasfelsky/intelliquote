@@ -28,6 +28,8 @@ export interface SnapshotFileInfo {
   fileName: string;
   sha256: string;
   rows: number;
+  // Regra do FUP aplicada (ex.: 'F3'); ausente = D2 (quinzenas antigas).
+  regra?: string;
 }
 
 interface SnapshotMonths {

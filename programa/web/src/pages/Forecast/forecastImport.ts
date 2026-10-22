@@ -198,6 +198,9 @@ const MOTIVOS: Record<string, string> = {
   'outra empresa': 'outra empresa',
   'deposito excluido': 'depósito excluído',
   'status concluido': 'status concluído',
+  'atracada aguardando liberacao': 'atracada aguardando liberação',
+  'eta final preenchida': 'ETA FINAL preenchida (já chegou)',
+  'prontidao nao reconhecida': 'DATA PRONTIDÃO não reconhecida',
   'sem data': 'sem data',
   'depois da janela': 'depois da janela',
   'sem data de faturamento valida': 'sem data de faturamento válida',
@@ -238,6 +241,19 @@ export function kgEmAberto(porStatus: ReadonlyArray<Pick<ForecastPorStatus, 'inc
 export function percentualSemData(semData: Pick<ForecastLinhasKg, 'kg'>, emAberto: number): number | null {
   if (emAberto <= 0) return null;
   return Math.round((semData.kg / emAberto) * 100);
+}
+
+/** Dias da estimativa do FUP (ETD + d, DATA PRONTIDAO + p); 35/35 quando o backend antigo nao manda `regra`. */
+export function diasDaRegraFup(regra?: ForecastRelatorioResumo['regra']): { etd: number; prontidao: number } {
+  return { etd: regra?.etaPorEtdDias ?? 35, prontidao: regra?.etaPorProntidaoDias ?? 35 };
+}
+
+/** FUP com DATA PRONTIDAO nao reconhecida: linhas e kg que ficam FORA das chegadas; `null` se nao ha (ou ausente). */
+export function prontidaoPendente(
+  resumo: Pick<ForecastDbcorpSummary, 'relatorios'>,
+): { linhas: number; kg: number } | null {
+  const p = resumo.relatorios.fup?.prontidaoNaoReconhecida;
+  return p && p.linhas > 0 ? { linhas: p.linhas, kg: p.kg } : null;
 }
 
 // ---------- leitura dos arquivos escolhidos (checa antes de ler e depois de montar o corpo) ----------
