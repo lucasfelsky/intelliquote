@@ -1199,3 +1199,232 @@ describe('meses atipicos fora da media no XLSX', () => {
     expect(textoMediaSemWeb(['2026-08', '2026-09'])).toBe(`Média sem: ${textoMesesForaDaMedia(['2026-08', '2026-09'])}`);
   });
 });
+
+// ---- Demanda do comercial no XLSX (PR 6d) ----
+import type { DemandaComercialAberta } from '../src/utils/forecastDemandaComercial';
+import {
+  ABA_DEMANDA_COMERCIAL,
+  COLUNAS_DEMANDA_COMERCIAL_XLSX,
+  celulasDaDemandaComercial,
+  paragrafoDemandaComercial,
+  resumoDemandaComercial,
+  seloDemandaComercial,
+  textoAvisoDemanda,
+  textoSituacaoDemanda,
+  textoSolicitacao,
+  tituloDemandaComercial,
+} from '../src/utils/forecastRelatorioComprasXlsx';
+import {
+  paragrafoDemandaComercial as paragrafoDemandaComercialWeb,
+  resumoDemandaComercial as resumoDemandaComercialWeb,
+  seloDemandaComercial as seloDemandaComercialWeb,
+  textoAvisoDemanda as textoAvisoDemandaWeb,
+  textoSituacaoDemanda as textoSituacaoDemandaWeb,
+  textoSolicitacao as textoSolicitacaoWeb,
+  tituloDemandaComercial as tituloDemandaComercialWeb,
+} from '../web/src/pages/Forecast/forecastRelatorioTextos';
+
+describe('demanda do comercial no XLSX', () => {
+  // PRODUTO 001 (caso E: AN +1.100, fora da lista) com 3 pedidos: alem do horizonte, dentro do horizonte e outro produto
+  // sem linha; PRODUTO 002 esta na lista de compra.
+  const projecaoE = [1700, 1400, 1100, 800, 500, 200];
+  const base = [
+    linha({
+      linha: 1,
+      productId: 1,
+      item: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      Q: 300,
+      AG: 300,
+      U: 2000,
+      AN: 1100,
+      AQ: 60,
+      obs: 'OBS SINTETICA 001',
+      projecao: projecaoE,
+      programacoes: [0, 0, 250, 0],
+    }),
+    linha({ linha: 2, productId: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', AN: -100 }),
+  ];
+  const demandas: DemandaComercialAberta[] = [
+    {
+      id: 11,
+      productId: 1,
+      produto: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      kg: 1600,
+      necessidade: '2027-02-10',
+      motivo: 'MOTIVO SINTETICO',
+      cliente: 'CLIENTE SINTETICO',
+      solicitacaoId: 12,
+    },
+    {
+      id: 12,
+      productId: 1,
+      produto: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      kg: 800,
+      necessidade: '2026-12-01',
+      motivo: 'MOTIVO DOIS SINTETICO',
+      cliente: null,
+      solicitacaoId: null,
+    },
+    {
+      id: 13,
+      productId: 99,
+      produto: 'PRODUTO 009',
+      fonte: null,
+      kg: 50.5,
+      necessidade: '2027-03-01',
+      motivo: 'MOTIVO TRES SINTETICO',
+      cliente: null,
+      solicitacaoId: null,
+    },
+  ];
+  const com = montarRelatorioCompras(quinzena(base), [], { demandasComerciais: demandas });
+  const sem = montarRelatorioCompras(quinzena(base), []);
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+  const regrasDe = async (r: RelatorioCompras) => {
+    const textos: string[] = [];
+    (await abrir(r)).getWorksheet(ABA_REGRAS)!.eachRow((row) => textos.push(String(row.getCell(1).value)));
+    return textos;
+  };
+
+  it('premissa: 3 pedidos listados (ordem de necessidade) e o sugerido do caso E', () => {
+    expect(com.demandaComercial.itens.map((i) => [i.id, i.situacao, i.sugerido])).toEqual([
+      [12, 'no-horizonte', 0],
+      [11, 'alem-do-horizonte', 1100],
+      [13, 'fora-da-quinzena', 0],
+    ]);
+    expect(com.demandaComercial.totais).toEqual({ abertas: 3, sugeridoKg: 1100 });
+  });
+
+  it('com pedido: aba "Demanda do comercial" depois da de sem consumo e antes das Regras; cabecalho e linhas = celulas', async () => {
+    const wb = await abrir(com);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      ABA_RELATORIO,
+      ABA_POR_URGENCIA,
+      ABA_SEM_CONSUMO,
+      ABA_DEMANDA_COMERCIAL,
+      ABA_REGRAS,
+    ]);
+    const ws = wb.getWorksheet(ABA_DEMANDA_COMERCIAL)!;
+    const n = COLUNAS_DEMANDA_COMERCIAL_XLSX.length;
+    expect(linhaComoArrayN(ws, 1, n)).toEqual([...COLUNAS_DEMANDA_COMERCIAL_XLSX]);
+    com.demandaComercial.itens.forEach((item, i) => {
+      expect(linhaComoArrayN(ws, i + 2, n)).toEqual(celulasDaDemandaComercial(item));
+    });
+    // Caso E, alem do horizonte (linha 3 da aba): kg, saldo e sugerido como numeros.
+    expect(linhaComoArrayN(ws, 3, n)).toEqual([
+      'PRODUTO 001',
+      'FONTE 001',
+      '10/02/2027',
+      1600,
+      500,
+      1100,
+      'MOTIVO SINTETICO',
+      'CLIENTE SINTETICO',
+      '#12',
+      'Além do horizonte: soma ao Forecast',
+      'OBS SINTETICA 001',
+    ]);
+    // Dentro do horizonte: nao soma, traco no saldo e no sugerido, aviso com a programacao do mes na mesma celula.
+    expect(linhaComoArrayN(ws, 2, n)).toEqual([
+      'PRODUTO 001',
+      'FONTE 001',
+      '01/12/2026',
+      800,
+      '—',
+      '—',
+      'MOTIVO DOIS SINTETICO',
+      '—',
+      '—',
+      'Dentro do horizonte: não soma\nProgramação de dez/2026: 250. Confira se já está nas programações; se estiver, marque "virou programação".',
+      'OBS SINTETICA 001',
+    ]);
+    // Produto sem linha na quinzena: nome do cadastro, sem fonte e sem calculo.
+    expect(linhaComoArrayN(ws, 4, n)).toEqual([
+      'PRODUTO 009',
+      'Sem fonte',
+      '01/03/2027',
+      50.5,
+      '—',
+      '—',
+      'MOTIVO TRES SINTETICO',
+      '—',
+      '—',
+      'Fora desta quinzena: sem cálculo\nO produto não tem linha nesta quinzena.',
+      '',
+    ]);
+  });
+
+  it('Observação continua a ULTIMA coluna da aba nova e das 3 existentes', () => {
+    expect(COLUNAS_DEMANDA_COMERCIAL_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_SEM_CONSUMO_XLSX.at(-1)).toBe('Observação');
+  });
+
+  it('numeros sao numericos na planilha (kg com ate 3 casas) e a aba tem filtro e cabecalho congelado', async () => {
+    const ws = (await abrir(com)).getWorksheet(ABA_DEMANDA_COMERCIAL)!;
+    const col = (nome: (typeof COLUNAS_DEMANDA_COMERCIAL_XLSX)[number]) => COLUNAS_DEMANDA_COMERCIAL_XLSX.indexOf(nome) + 1;
+    expect(typeof ws.getRow(3).getCell(col('Pedido (kg)')).value).toBe('number');
+    expect(ws.getRow(3).getCell(col('Pedido (kg)')).numFmt).toBe('#,##0.###');
+    expect(ws.getRow(3).getCell(col('Sugerido')).font?.bold).toBe(true);
+    expect(ws.autoFilter).toBeTruthy();
+    expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+  });
+
+  it('resumo ganha a linha so com pedido aberto; Regras ganha o paragrafo antes da nota de origem', async () => {
+    expect(linhasDoResumo(com)).toContain('3 demandas do comercial abertas (1.100 kg sugeridos)');
+    expect(linhasDoResumo(sem).some((l) => l.includes('do comercial'))).toBe(false);
+    const regras = paragrafosDeRegras(15, false, false, true);
+    expect(regras.at(-2)).toBe(paragrafoDemandaComercial());
+    expect(regras.at(-1)).toBe('Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).');
+    expect(paragrafosDeRegras(15)).toEqual(regras.filter((p) => p !== paragrafoDemandaComercial()));
+    expect(await regrasDe(com)).toEqual(paragrafosDeRegras(15, false, false, true));
+  });
+
+  it('sem pedido: nada muda (4 abas, sem linha no resumo e Regras igual a de antes)', async () => {
+    expect(sem.demandaComercial.itens).toEqual([]);
+    const wb = await abrir(sem);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([ABA_RELATORIO, ABA_POR_URGENCIA, ABA_SEM_CONSUMO, ABA_REGRAS]);
+    expect(await regrasDe(sem)).toEqual(paragrafosDeRegras(15));
+  });
+
+  it('as abas de compra nao mudam: o item que nao aponta falta continua fora delas', async () => {
+    const wb = await abrir(com);
+    for (const nome of [ABA_RELATORIO, ABA_POR_URGENCIA]) {
+      const itens: string[] = [];
+      wb.getWorksheet(nome)!.eachRow((row) => itens.push(String(row.getCell(1).value ?? '')));
+      expect(itens).toContain('PRODUTO 002');
+      expect(itens).not.toContain('PRODUTO 001');
+    }
+  });
+
+  it('paridade tela x XLSX: titulo, resumo, paragrafo, selo, situacao, aviso e solicitacao iguais', () => {
+    for (const n of [1, 3]) expect(tituloDemandaComercial(n)).toBe(tituloDemandaComercialWeb(n));
+    for (const [n, kg] of [[1, 1], [2, 1100], [3, 0], [1, 0.5]] as const) {
+      expect(resumoDemandaComercial(n, kg)).toBe(resumoDemandaComercialWeb(n, kg));
+    }
+    expect(paragrafoDemandaComercial()).toBe(paragrafoDemandaComercialWeb());
+    for (const kg of [1100, 0.5, 25]) expect(seloDemandaComercial(kg)).toBe(seloDemandaComercialWeb(kg));
+    for (const item of com.demandaComercial.itens) {
+      expect(textoSituacaoDemanda(item)).toBe(textoSituacaoDemandaWeb(item));
+      expect(textoAvisoDemanda(item)).toBe(textoAvisoDemandaWeb(item));
+      expect(textoSolicitacao(item.solicitacaoId)).toBe(textoSolicitacaoWeb(item.solicitacaoId));
+      // A celula Situacao do arquivo = situacao + quebra de linha + aviso da tela.
+      const aviso = textoAvisoDemandaWeb(item);
+      expect(celulasDaDemandaComercial(item)[9]).toBe(
+        aviso ? `${textoSituacaoDemandaWeb(item)}\n${aviso}` : textoSituacaoDemandaWeb(item),
+      );
+    }
+    expect(textoSituacaoDemanda({ situacao: 'alem-do-horizonte', sugerido: 0 })).toBe(
+      textoSituacaoDemandaWeb({ situacao: 'alem-do-horizonte', sugerido: 0 }),
+    );
+    // Sem programacao no mes (0) e antes do mes base (nulo): mesmos avisos nos dois lados.
+    for (const programacaoDoMes of [0, null]) {
+      const i = { situacao: 'no-horizonte' as const, programacaoDoMes, anoMes: '2026-12' };
+      expect(textoAvisoDemanda(i)).toBe(textoAvisoDemandaWeb(i));
+    }
+  });
+});

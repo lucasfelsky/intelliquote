@@ -517,3 +517,127 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     expect(screen.queryByText(/fora das médias trimestral e semestral/)).toBeNull();
   });
 });
+
+describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
+  const pedido = (over: Record<string, unknown> = {}) => ({
+    id: 1,
+    linha: 7,
+    productId: 70,
+    item: 'PRODUTO 004',
+    fonte: 'FONTE 002',
+    kg: 1600,
+    necessidade: '2027-02-10',
+    anoMes: '2027-02',
+    motivo: 'MOTIVO SINTETICO',
+    cliente: 'CLIENTE SINTETICO',
+    solicitacaoId: null,
+    situacao: 'alem-do-horizonte',
+    programacaoDoMes: null,
+    saldoLivre: 500,
+    sugerido: 1100,
+    noRelatorio: false,
+    obs: '',
+    ...over,
+  });
+  const comPedidos = () =>
+    relatorio({
+      demandaComercial: { itens: [pedido()], totais: { abertas: 1, sugeridoKg: 1100 } },
+    });
+
+  function renderComPermissao(podeEditar: boolean) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <ForecastRelatorioCompras snapshotId={7} podeEditar={podeEditar} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('secao, resumo e paragrafo das regras aparecem com pedido aberto, depois da lista de compra', async () => {
+    get.mockResolvedValue({ data: comPedidos() });
+    renderComPermissao(false);
+    expect(await screen.findByText('1 demanda do comercial aberta (1.100 kg sugeridos)')).toBeTruthy();
+    const secao = screen.getByRole('region', { name: 'Demanda do comercial' });
+    expect(within(secao).getByText('Demanda do comercial · 1 pedido aberto')).toBeTruthy();
+    expect(within(secao).getByText('Além do horizonte: soma ao Forecast')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Demanda do comercial: compras pedidas pelo comercial para programações fora do horizonte. Soma ao Forecast o pedido menos o saldo que sobraria no mês da necessidade; dentro do horizonte de programação não soma (deve estar nas programações).',
+      ),
+    ).toBeTruthy();
+    // A secao vem depois das tabelas por urgencia/fonte.
+    const tabelas = Array.from(document.querySelectorAll('section.fcr-grupo'));
+    expect(tabelas.at(-1)).toBe(secao);
+  });
+
+  it('o item da lista de compra com pedido a somar ganha o selo, depois dos selos de media e antes da observacao', async () => {
+    const dados = relatorio({
+      demandaComercial: { itens: [pedido({ linha: 6, noRelatorio: true })], totais: { abertas: 1, sugeridoKg: 1100 } },
+    });
+    (dados.grupos[0]!.itens[1] as Record<string, unknown>).demandaComercialKg = 1100;
+    (dados.grupos[0]!.itens[1] as Record<string, unknown>).obs = 'OBS SINTETICA';
+    get.mockResolvedValue({ data: dados });
+    renderComPermissao(false);
+    await screen.findByText('3 itens em 2 fontes');
+    const selo = screen.getAllByText('+ 1.100 kg pedidos pelo comercial');
+    expect(selo).toHaveLength(1);
+    expect(selo[0]?.className).toBe('fcr-item__demanda');
+    const celula = selo[0]?.parentElement as HTMLElement;
+    expect(Array.from(celula.children).map((c) => c.className)).toEqual([
+      'fcr-item__nome',
+      'fcr-item__codigos',
+      'badge badge--warning',
+      'fcr-item__demanda',
+      'fcr-item__obs',
+    ]);
+  });
+
+  it('backend antigo ou sem pedido aberto: nada novo na tela (sem secao, sem linha no resumo e sem botao)', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    const { unmount } = renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByRole('region', { name: 'Demanda do comercial' })).toBeNull();
+    expect(screen.queryByText(/demandas? do comercial/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lançar demanda do comercial' })).toBeNull();
+    unmount();
+
+    // Backend novo sem pedido: so o botao (admin/comprador) aparece; a secao continua oculta.
+    get.mockResolvedValue({
+      data: relatorio({ demandaComercial: { itens: [], totais: { abertas: 0, sugeridoKg: 0 } } }),
+    });
+    renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByRole('region', { name: 'Demanda do comercial' })).toBeNull();
+    expect(screen.queryByText(/demandas? do comercial aberta/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lançar demanda do comercial' })).toBeTruthy();
+  });
+
+  it('o botao "Lançar demanda do comercial" so aparece para quem pode editar', async () => {
+    get.mockResolvedValue({ data: comPedidos() });
+    const { unmount } = renderComPermissao(false);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByRole('button', { name: 'Lançar demanda do comercial' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Ações' })).toBeNull();
+    unmount();
+
+    renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.getByRole('button', { name: 'Lançar demanda do comercial' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Ações' })).toBeTruthy();
+  });
+
+  it('o botao abre o dialogo de lancamento, Cancelar fecha e o foco volta ao botao', async () => {
+    get.mockImplementation(async (url: string) =>
+      url === '/v1/forecast/products' ? { data: [] } : { data: comPedidos() },
+    );
+    renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    const botao = screen.getByRole('button', { name: 'Lançar demanda do comercial' });
+    botao.focus();
+    fireEvent.click(botao);
+    expect(await screen.findByRole('heading', { name: 'Lançar demanda do comercial' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Lançar demanda do comercial' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(botao));
+  });
+});

@@ -64,10 +64,10 @@ describe('audit-vault (IntelliQuote)', () => {
 
   it('reporta as familias de check no happy path', () => {
     const result = runScript();
-    expect(result.stdout).toMatch(/prisma models = 50/);
-    expect(result.stdout).toMatch(/prisma migrations = 65/);
+    expect(result.stdout).toMatch(/prisma models = 51/);
+    expect(result.stdout).toMatch(/prisma migrations = 66/);
     expect(result.stdout).toMatch(/email templates \(chave@locale\) = 11/);
-    expect(result.stdout).toMatch(/backend routes = 164/);
+    expect(result.stdout).toMatch(/backend routes = 167/);
     expect(result.stdout).toMatch(/web pages = 19/);
     expect(result.stdout).toMatch(/web AuthContextValue = 7/);
     expect(result.stdout).toMatch(/web tokenStore = 8/);
@@ -113,7 +113,7 @@ describe('audit-vault (IntelliQuote)', () => {
 
       const result = runScript();
       expect(isFailure(result)).toBe(true);
-      expect(result.stderr).toMatch(/prisma migrations: esperado 21, obtido 65/);
+      expect(result.stderr).toMatch(/prisma migrations: esperado 21, obtido 66/);
     });
 
     // Vault documentava 2 de 5 templates. O locale importa:

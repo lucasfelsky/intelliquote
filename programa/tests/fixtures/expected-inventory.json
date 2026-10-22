@@ -42,6 +42,7 @@
       "EmailTemplateService.ts",
       "ExchangeRateService.ts",
       "ForecastDbcorpService.ts",
+      "ForecastDemandaComercialService.ts",
       "ForecastImportService.ts",
       "ForecastMesesAtipicosService.ts",
       "ForecastProductCadastroService.ts",
@@ -128,6 +129,7 @@
       "EmailTemplate",
       "ExchangeRate",
       "ForecastAtypicalMonth",
+      "ForecastCommercialDemand",
       "ForecastMonthlySale",
       "ForecastProduct",
       "ForecastProductCode",
@@ -172,7 +174,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 65
+    "migrations": 66
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -225,6 +227,7 @@
     "GET /commercial-requests/requesters",
     "GET /credit-partners",
     "GET /credit-support-requests/:id/purchase-order/recipients",
+    "GET /forecast/commercial-demands",
     "GET /forecast/products",
     "GET /forecast/products/:id/embalagens",
     "GET /forecast/snapshots",
@@ -268,6 +271,7 @@
     "GET /users",
     "GET /users-directory",
     "GET /users/:id",
+    "PATCH /forecast/commercial-demands/:id",
     "PATCH /forecast/products/:id/compra-sob-demanda",
     "PATCH /forecast/products/:id/embalagens",
     "PATCH /forecast/sources/:id",
@@ -298,6 +302,7 @@
     "POST /credit-support-requests/:id/purchase-order",
     "POST /credit-support-requests/:id/resend",
     "POST /credit-support-requests/:id/revoke",
+    "POST /forecast/commercial-demands",
     "POST /forecast/import/dbcorp/confirm",
     "POST /forecast/import/dbcorp/preview",
     "POST /forecast/import/workbook/confirm",

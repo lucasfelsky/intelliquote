@@ -1,18 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import type { ForecastOpcaoEmbalagem } from '@/services/forecast';
+import type { ForecastItemDemandaComercial, ForecastOpcaoEmbalagem } from '@/services/forecast';
 import {
+  CONFIRA_PROGRAMACOES,
   contarComMesesForaDaMedia,
   linhasOutrasEmbalagens,
   opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
+  paragrafoDemandaComercial,
   paragrafoMesesForaDaMedia,
+  resumoDemandaComercial,
   resumoMesesForaDaMedia,
+  seloDemandaComercial,
+  textoAvisoDemanda,
   textoMediaSem,
   textoMesesForaDaMedia,
   textoObservacao,
   textoOpcaoDeEmbalagem,
   textoPallet,
+  textoSituacaoDemanda,
+  textoSolicitacao,
+  tituloDemandaComercial,
   tituloOutrasEmbalagens,
 } from './forecastRelatorioTextos';
 
@@ -199,5 +207,70 @@ describe('meses atipicos (PR 6c)', () => {
     expect(paragrafoMesesForaDaMedia()).toBe(
       'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.',
     );
+  });
+});
+
+describe('demanda do comercial (PR 6d)', () => {
+  const item = (over: Partial<ForecastItemDemandaComercial> = {}): ForecastItemDemandaComercial => ({
+    id: 1,
+    linha: 3,
+    productId: 7,
+    item: 'PRODUTO 001',
+    fonte: 'FONTE 001',
+    kg: 1600,
+    necessidade: '2027-02-10',
+    anoMes: '2027-02',
+    motivo: 'MOTIVO SINTETICO',
+    cliente: 'CLIENTE SINTETICO',
+    solicitacaoId: null,
+    situacao: 'alem-do-horizonte',
+    programacaoDoMes: null,
+    saldoLivre: 500,
+    sugerido: 1100,
+    noRelatorio: false,
+    obs: '',
+    ...over,
+  });
+
+  it('titulo, resumo e selo no singular e no plural, com kg pt-BR', () => {
+    expect(tituloDemandaComercial(1)).toBe('Demanda do comercial · 1 pedido aberto');
+    expect(tituloDemandaComercial(3)).toBe('Demanda do comercial · 3 pedidos abertos');
+    expect(resumoDemandaComercial(1, 1)).toBe('1 demanda do comercial aberta (1 kg sugerido)');
+    expect(resumoDemandaComercial(2, 1100)).toBe('2 demandas do comercial abertas (1.100 kg sugeridos)');
+    expect(resumoDemandaComercial(2, 0)).toBe('2 demandas do comercial abertas (0 kg sugeridos)');
+    expect(seloDemandaComercial(1100)).toBe('+ 1.100 kg pedidos pelo comercial');
+    expect(seloDemandaComercial(0.5)).toBe('+ 0,5 kg pedidos pelo comercial');
+  });
+
+  it('paragrafo das regras', () => {
+    expect(paragrafoDemandaComercial()).toBe(
+      'Demanda do comercial: compras pedidas pelo comercial para programações fora do horizonte. Soma ao Forecast o pedido menos o saldo que sobraria no mês da necessidade; dentro do horizonte de programação não soma (deve estar nas programações).',
+    );
+  });
+
+  it('situacao: alem do horizonte (soma ou coberta pelo saldo), dentro do horizonte e fora da quinzena', () => {
+    expect(textoSituacaoDemanda(item())).toBe('Além do horizonte: soma ao Forecast');
+    expect(textoSituacaoDemanda(item({ sugerido: 0 }))).toBe('Além do horizonte: coberta pelo saldo');
+    expect(textoSituacaoDemanda(item({ situacao: 'no-horizonte', sugerido: 0 }))).toBe('Dentro do horizonte: não soma');
+    expect(textoSituacaoDemanda(item({ situacao: 'fora-da-quinzena', sugerido: 0 }))).toBe(
+      'Fora desta quinzena: sem cálculo',
+    );
+  });
+
+  it('aviso: so dentro do horizonte (com a programacao do mes) e fora da quinzena', () => {
+    expect(textoAvisoDemanda(item())).toBeNull();
+    expect(textoAvisoDemanda(item({ situacao: 'no-horizonte', programacaoDoMes: 250, anoMes: '2026-12' }))).toBe(
+      'Programação de dez/2026: 250. Confira se já está nas programações; se estiver, marque "virou programação".',
+    );
+    expect(textoAvisoDemanda(item({ situacao: 'no-horizonte', programacaoDoMes: 0, anoMes: '2026-12' }))).toBe(
+      'Sem programação em dez/2026. Confira se já está nas programações; se estiver, marque "virou programação".',
+    );
+    expect(textoAvisoDemanda(item({ situacao: 'no-horizonte', programacaoDoMes: null }))).toBe(CONFIRA_PROGRAMACOES);
+    expect(textoAvisoDemanda(item({ situacao: 'fora-da-quinzena' }))).toBe('O produto não tem linha nesta quinzena.');
+  });
+
+  it('solicitacao: numero com # ou traco', () => {
+    expect(textoSolicitacao(12)).toBe('#12');
+    expect(textoSolicitacao(null)).toBe('—');
   });
 });

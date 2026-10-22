@@ -36,10 +36,20 @@
 // meses ficaram fora da media (`mesesForaDaMedia`, 'YYYY-MM' em ordem cronologica) para tela e XLSX avisarem. Sem marca
 // o item sai como antes (lista vazia).
 //
+// Demanda do comercial (PR 6d, Comex): pedidos abertos lancados a mao para programacoes futuras (fora do horizonte do
+// DBCorp) ganham a secao `demandaComercial` (regra pura em forecastDemandaComercial.ts); o item da lista de compra que
+// tem pedido a somar ganha so o selo `demandaComercialKg` (a quantidade dele nao muda). Sem demandas a secao sai vazia.
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
 // que le o cadastro por codigo; amanha o gateway DBCorp grava nas mesmas colunas).
+import {
+  avaliarDemandasComerciais,
+  sugeridoPorLinha,
+  type DemandaComercialAberta,
+  type DemandaComercialDoRelatorio,
+} from './forecastDemandaComercial';
 import { somarDias, yearMonthsDaJanela } from './forecastMonths';
 import { daysUntil, isValidDateKey } from './supplierDocumentDates';
 
@@ -143,6 +153,8 @@ export interface ItemRelatorioCompras {
   obs: string;
   /** Meses de venda atipica fora da media deste item (PR 6c), 'YYYY-MM' cronologico; vazio = media da planilha. */
   mesesForaDaMedia: string[];
+  /** PR 6d: kg a somar pelos pedidos abertos do comercial (alem do horizonte); ausente = nenhum. */
+  demandaComercialKg?: number;
   ruptura: RupturaEstimada | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -239,6 +251,8 @@ export interface RelatorioCompras {
   urgencia: { diasCritico: number };
   semConsumo: { itens: ItemSemConsumo[] };
   sobDemanda: { itens: ItemSobDemanda[] };
+  /** PR 6d: pedidos abertos do comercial (lancados a mao); vazio sem pedidos. */
+  demandaComercial: DemandaComercialDoRelatorio;
   grupos: GrupoRelatorioCompras[];
 }
 
@@ -503,7 +517,12 @@ export function montarRelatorioCompras(
   q: QuinzenaParaRelatorio,
   embalagens: EmbalagemCadastrada[],
   // `sobDemanda`: chave = productId do cadastro; sem a opcao o resultado e o mesmo de antes (so ganha secao vazia).
-  opcoes: { diasCritico?: number; sobDemanda?: ReadonlyMap<number, { motivo: string | null }> } = {},
+  // `demandasComerciais` (PR 6d): pedidos abertos do cadastro; sem a opcao a secao sai vazia.
+  opcoes: {
+    diasCritico?: number;
+    sobDemanda?: ReadonlyMap<number, { motivo: string | null }>;
+    demandasComerciais?: DemandaComercialAberta[];
+  } = {},
 ): RelatorioCompras {
   const diasCritico = opcoes.diasCritico ?? DIAS_RUPTURA_CRITICA;
   const regraSobDemanda = (l: Pick<LinhaParaRelatorio, 'productId'>) =>
@@ -668,6 +687,16 @@ export function montarRelatorioCompras(
   sobDemandaItens.sort(compararSobDemanda);
 
   const todos = grupos.flatMap((g) => g.itens);
+  const demandaComercial = avaliarDemandasComerciais(
+    q.linhas,
+    opcoes.demandasComerciais ?? [],
+    q.baseDate,
+    new Set(todos.map((i) => i.linha)),
+  );
+  for (const [linha, kg] of sugeridoPorLinha(demandaComercial.itens)) {
+    const item = todos.find((i) => i.linha === linha);
+    if (item) item.demandaComercialKg = kg;
+  }
   return {
     quinzena: {
       id: q.id,
@@ -690,6 +719,7 @@ export function montarRelatorioCompras(
     urgencia: { diasCritico },
     semConsumo: { itens: semConsumoItens },
     sobDemanda: { itens: sobDemandaItens },
+    demandaComercial,
     grupos,
   };
 }

@@ -90,6 +90,29 @@ router.put(
   ForecastController.putMesesAtipicos,
 );
 
+// Demanda do comercial (PR 6d): compra pedida pelo comercial por programacao futura, lancada a mao pelo COMEX.
+// Leitura = equipe COMEX; lancar, editar e fechar = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/commercial-demands',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listDemandasComerciais,
+);
+
+router.post(
+  '/forecast/commercial-demands',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createDemandaComercial,
+);
+
+router.patch(
+  '/forecast/commercial-demands/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchDemandaComercial,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(

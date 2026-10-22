@@ -183,6 +183,8 @@ export interface ForecastItemRelatorio {
   obs?: string;
   /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
   mesesForaDaMedia?: string[];
+  /** PR 6d (opcional: backend antigo nao manda): kg a somar pelos pedidos abertos do comercial; ausente = nenhum. */
+  demandaComercialKg?: number;
   ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -254,6 +256,42 @@ export interface ForecastItemSobDemanda {
   mesesForaDaMedia?: string[];
 }
 
+/** Situacao do pedido do comercial frente ao horizonte de programacao do DBCorp (PR 6d). */
+export type ForecastSituacaoDemandaComercial = 'alem-do-horizonte' | 'no-horizonte' | 'fora-da-quinzena';
+
+/** Pedido aberto do comercial na secao "Demanda do comercial" do relatorio (PR 6d). */
+export interface ForecastItemDemandaComercial {
+  id: number;
+  /** Nulo = produto sem linha nesta quinzena. */
+  linha: number | null;
+  productId: number;
+  item: string;
+  fonte: string;
+  kg: number;
+  /** AAAA-MM-DD. */
+  necessidade: string;
+  /** AAAA-MM do mes da necessidade. */
+  anoMes: string;
+  motivo: string;
+  cliente: string | null;
+  solicitacaoId: number | null;
+  situacao: ForecastSituacaoDemandaComercial;
+  /** Programacao do DBCorp no mes da necessidade (so 'no-horizonte'); nulo nos demais. */
+  programacaoDoMes: number | null;
+  /** Saldo projetado no mes da necessidade (so 'alem-do-horizonte'); nulo nos demais. */
+  saldoLivre: number | null;
+  /** kg a somar ao Forecast; 0 quando nao soma. */
+  sugerido: number;
+  /** O produto tambem esta na lista de compra. */
+  noRelatorio: boolean;
+  obs: string;
+}
+
+export interface ForecastDemandaComercialDoRelatorio {
+  itens: ForecastItemDemandaComercial[];
+  totais: { abertas: number; sugeridoKg: number };
+}
+
 export interface ForecastRelatorioCompras {
   quinzena: { id: number; label: string; baseDate: string; half: number; origin: string; hoje: string };
   totais: {
@@ -277,6 +315,8 @@ export interface ForecastRelatorioCompras {
   semConsumo?: { itens: ForecastItemSemConsumo[] };
   /** PR 6a (opcional: backend antigo nao manda). */
   sobDemanda?: { itens: ForecastItemSobDemanda[] };
+  /** PR 6d (opcional: backend antigo nao manda). */
+  demandaComercial?: ForecastDemandaComercialDoRelatorio;
   grupos: ForecastGrupoRelatorio[];
 }
 

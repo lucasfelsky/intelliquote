@@ -349,3 +349,129 @@ export const forecastMesesAtipicosPutSchema = z
   });
 
 export type ForecastMesesAtipicosPutInput = z.infer<typeof forecastMesesAtipicosPutSchema>;
+
+// Demanda do comercial (PR 6d): lancamento manual no Forecast (admin/comprador). Compra pedida pelo comercial por uma
+// programacao futura de cliente fora do horizonte do DBCorp. Fechada (comprada, cancelada, virou_programacao) nao reabre.
+// `solicitacaoId` e so o numero da Solicitacao do IntelliQuote para rastreio (o modulo de Solicitacoes nao e consultado).
+export const FORECAST_DEMANDA_STATUS = ['aberta', 'comprada', 'cancelada', 'virou_programacao'] as const;
+export const FORECAST_DEMANDA_FECHAMENTOS = ['comprada', 'cancelada', 'virou_programacao'] as const;
+export const FORECAST_DEMANDA_KG_MAX = 10_000_000;
+export const FORECAST_DEMANDA_MOTIVO_MIN = 3;
+export const FORECAST_DEMANDA_MOTIVO_MAX = 300;
+export const FORECAST_DEMANDA_CLIENTE_MAX = 200;
+export const FORECAST_DEMANDA_NOTA_MIN = 3;
+export const FORECAST_DEMANDA_NOTA_MAX = 300;
+const FORECAST_DEMANDA_ID_MAX = 2_147_483_647; // INTEGER do Postgres
+
+const demandaProdutoField = z
+  .number({ error: 'Informe o produto do Forecast.' })
+  .int('Produto inválido.')
+  .positive('Produto inválido.')
+  .max(FORECAST_DEMANDA_ID_MAX, 'Produto inválido.');
+
+const demandaKgField = z
+  .number({ error: 'Informe a quantidade em kg.' })
+  .positive('A quantidade precisa ser maior que zero.')
+  .max(FORECAST_DEMANDA_KG_MAX, 'A quantidade aceita no máximo 10.000.000 kg.')
+  // Coluna Decimal(18,6) aceita mais, mas o lancamento manual limita a 3 casas (padrao de validators/domain.ts).
+  .refine((v) => /^\d+(\.\d{1,3})?$/.test(String(v)), { message: 'A quantidade aceita no máximo 3 casas decimais.' });
+
+const demandaNecessidadeField = dateKeyField('Informe a data de necessidade (AAAA-MM-DD).');
+
+const demandaMotivoField = z
+  .string({ error: 'Informe o motivo do pedido.' })
+  .trim()
+  .min(FORECAST_DEMANDA_MOTIVO_MIN, `O motivo precisa ter ao menos ${FORECAST_DEMANDA_MOTIVO_MIN} caracteres.`)
+  .max(FORECAST_DEMANDA_MOTIVO_MAX, `O motivo aceita no máximo ${FORECAST_DEMANDA_MOTIVO_MAX} caracteres.`);
+
+const demandaClienteField = z
+  .string({ error: 'O cliente deve ser um texto (ou null).' })
+  .trim()
+  .max(FORECAST_DEMANDA_CLIENTE_MAX, `O cliente aceita no máximo ${FORECAST_DEMANDA_CLIENTE_MAX} caracteres.`)
+  .transform((value) => (value === '' ? null : value))
+  .nullable();
+
+const demandaSolicitacaoField = z
+  .number({ error: 'O número da solicitação deve ser um inteiro positivo (ou null).' })
+  .int('O número da solicitação deve ser um inteiro positivo (ou null).')
+  .positive('O número da solicitação deve ser um inteiro positivo (ou null).')
+  .max(FORECAST_DEMANDA_ID_MAX, 'O número da solicitação é inválido.')
+  .nullable();
+
+export const forecastDemandaComercialCreateSchema = z
+  .object({
+    productId: demandaProdutoField,
+    quantidadeKg: demandaKgField,
+    necessidade: demandaNecessidadeField,
+    motivo: demandaMotivoField,
+    cliente: demandaClienteField.optional(),
+    solicitacaoId: demandaSolicitacaoField.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (isValidDateKey(value.necessidade) && value.necessidade < todayKeyInSaoPaulo(new Date())) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['necessidade'],
+        message: 'A data de necessidade não pode ser anterior a hoje.',
+      });
+    }
+  });
+
+// Editar (so aberta; sem `status`) ou fechar (`status` + `nota`). Os dois modos nao se misturam. A regra "necessidade
+// nao anterior a hoje" na edicao vale so quando a data muda (service): editar o motivo de pedido antigo continua possivel.
+export const forecastDemandaComercialPatchSchema = z
+  .object({
+    status: z
+      .enum(FORECAST_DEMANDA_FECHAMENTOS, {
+        error: 'Status inválido: use comprada, cancelada ou virou_programacao.',
+      })
+      .optional(),
+    nota: z
+      .string({ error: 'A nota deve ser um texto (ou null).' })
+      .trim()
+      .max(FORECAST_DEMANDA_NOTA_MAX, `A nota aceita no máximo ${FORECAST_DEMANDA_NOTA_MAX} caracteres.`)
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .optional(),
+    quantidadeKg: demandaKgField.optional(),
+    necessidade: demandaNecessidadeField.optional(),
+    motivo: demandaMotivoField.optional(),
+    cliente: demandaClienteField.optional(),
+    solicitacaoId: demandaSolicitacaoField.optional(),
+  })
+  .superRefine((value, ctx) => {
+    const edicao = [value.quantidadeKg, value.necessidade, value.motivo, value.cliente, value.solicitacaoId];
+    const temEdicao = edicao.some((v) => v !== undefined);
+    if (value.status !== undefined) {
+      if (temEdicao) {
+        ctx.addIssue({ code: 'custom', path: ['status'], message: 'Para fechar a demanda, envie só o status e a nota.' });
+      }
+      if (value.nota != null && value.nota.length < FORECAST_DEMANDA_NOTA_MIN) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['nota'],
+          message: `A nota precisa ter ao menos ${FORECAST_DEMANDA_NOTA_MIN} caracteres.`,
+        });
+      }
+      if (value.status === 'cancelada' && !value.nota) {
+        ctx.addIssue({ code: 'custom', path: ['nota'], message: 'Informe o motivo do cancelamento na nota.' });
+      }
+      return;
+    }
+    if (value.nota !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['nota'], message: 'A nota só vale ao fechar a demanda (envie também o status).' });
+    }
+    if (!temEdicao) {
+      ctx.addIssue({ code: 'custom', message: 'Informe o que alterar ou o status para fechar a demanda.' });
+    }
+  });
+
+export const forecastDemandaComercialQuerySchema = z.object({
+  status: z.enum(FORECAST_DEMANDA_STATUS, { error: 'Status inválido.' }).optional(),
+  productId: demandaProdutoField.optional(),
+});
+
+export type ForecastDemandaComercialCreateInput = z.infer<typeof forecastDemandaComercialCreateSchema>;
+export type ForecastDemandaComercialPatchInput = z.infer<typeof forecastDemandaComercialPatchSchema>;
+export type ForecastDemandaComercialQueryInput = z.infer<typeof forecastDemandaComercialQuerySchema>;
+export type ForecastDemandaComercialStatus = (typeof FORECAST_DEMANDA_STATUS)[number];

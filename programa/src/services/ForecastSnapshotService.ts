@@ -16,6 +16,7 @@ import {
 } from '../utils/forecastRelatorioComprasXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
+import { ForecastDemandaComercialService } from './ForecastDemandaComercialService';
 import { ForecastMesesAtipicosService } from './ForecastMesesAtipicosService';
 import { ForecastProductService } from './ForecastProductService';
 import { ForecastSobDemandaService } from './ForecastSobDemandaService';
@@ -273,7 +274,9 @@ export class ForecastSnapshotService {
         l.productId != null && l.sobDemanda ? [[l.productId, { motivo: l.sobDemandaMotivo }] as const] : [],
       ),
     );
-    return montarRelatorioCompras(calc, embalagens, { sobDemanda });
+    // Demanda do comercial (PR 6d): pedidos abertos do cadastro ATUAL (nao congelados na quinzena), 1 consulta.
+    const demandasComerciais = await ForecastDemandaComercialService.abertas();
+    return montarRelatorioCompras(calc, embalagens, { sobDemanda, demandasComerciais });
   }
 
   // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.

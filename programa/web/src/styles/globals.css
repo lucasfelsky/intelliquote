@@ -3133,3 +3133,69 @@ i.fc-status--preco { background: var(--info); }
   .fca-motivo { min-width: 0; width: 100%; }
   .fca-linha--marcada { background: var(--tone-warning-bg-soft); }
 }
+
+/* ---- Forecast: demanda do comercial (PR 6d) ---- */
+.fcr-item__demanda { align-self: flex-start; padding: 1px 8px; border-radius: 10px; background: var(--tone-warning-bg); color: var(--warning); font-size: 11px; font-weight: 600; line-height: 1.4; }
+.fcd-tabela { min-width: 1040px; }
+.fcd-tabela th, .fcd-tabela td { padding-left: 8px; padding-right: 8px; }
+.fcd-tabela .fcr-item { min-width: 150px; }
+.fcd-fonte { min-width: 80px; }
+.fcd-data { white-space: nowrap; }
+.fcd-texto { min-width: 130px; max-width: 260px; overflow-wrap: anywhere; }
+.fcd-cliente { min-width: 90px; }
+.fcd-situacao { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+.fcd-aviso { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcd-acoes { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 130px; }
+.fcd-acoes .ghost-button { padding: 3px 10px; font-size: 12px; text-align: left; }
+/* Rolando a tabela larga, a coluna de acoes fica visivel. */
+@media (min-width: 701px) {
+  .fcd-tabela .fcd-col-acoes { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px var(--border-strong); }
+  .fcd-tabela thead .fcd-col-acoes { background: var(--surface-alt); }
+}
+.fcd-acoes .ghost-button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcd-form { display: flex; flex-direction: column; gap: 12px; }
+.fcd-dica { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcd-produto { margin: 0; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.fcd-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.fcd-campo .field-label { margin-bottom: 0; }
+.fcd-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fcd-input-num { text-align: right; font-variant-numeric: tabular-nums; }
+.fcd-motivo { resize: vertical; min-height: 56px; }
+.fcd-erro { margin: 0; font-size: 12px; line-height: 1.35; color: var(--danger); }
+.fcd-carregando { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); }
+.fcd-alert__texto { margin: 0 0 8px; }
+.fcd-produtos { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcd-produto { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); cursor: pointer; }
+.fcd-produto:last-child { border-bottom: 0; }
+.fcd-produto:has(input:checked) { background: var(--surface-alt); }
+.fcd-produto input { flex: none; width: 16px; height: 16px; }
+.fcd-produto__nome { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fcd-produto__fonte { flex: none; font-size: 12px; color: var(--ink-soft); }
+.fcd-form input:focus-visible,
+.fcd-form textarea:focus-visible,
+.fcd-produto:has(input:focus-visible) { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcd-form [aria-invalid="true"] { border-color: var(--danger); }
+@media print {
+  .fcr-item__demanda { padding: 0; background: none; font-size: 7.5pt; }
+  .fcd-tabela { min-width: 0; }
+  .fcd-col-acoes { display: none !important; }
+  .fcd-texto, .fcd-cliente, .fcd-fonte, .fcd-situacao { max-width: none; min-width: 0; }
+}
+/* 390 px: cada pedido vira um bloco (sem rolagem horizontal), com o rotulo de cada coluna. */
+@media (max-width: 700px) {
+  .fcd-grade { grid-template-columns: minmax(0, 1fr); }
+  .fcd-tabela { min-width: 0; }
+  .fcd-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fcd-tabela, .fcd-tabela tbody { display: block; }
+  .fcd-tabela tr { display: block; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .fcd-tabela th, .fcd-tabela td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 4px 0; border-bottom: 0; text-align: right; }
+  .fcd-tabela tbody th { display: block; text-align: left; }
+  .fcd-tabela td::before { content: attr(data-rotulo); flex: none; max-width: 45%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fcd-tabela .fcd-texto, .fcd-tabela .fcd-cliente, .fcd-tabela .fcd-fonte { min-width: 0; max-width: none; }
+  .fcd-tabela .fcd-data { white-space: normal; }
+  .fcd-tabela .fcd-situacao { min-width: 0; align-items: flex-end; text-align: right; }
+  .fcd-tabela .fcd-col-acoes { display: block; }
+  .fcd-tabela .fcd-col-acoes::before { display: block; margin-bottom: 4px; }
+  .fcd-acoes { flex-direction: row; flex-wrap: wrap; min-width: 0; }
+  .fcd-acoes .ghost-button { min-height: 44px; }
+}

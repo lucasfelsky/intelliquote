@@ -1,14 +1,15 @@
 // Textos puros do relatorio de compras (PR 5B): Observacao e quantidade arredondada para cada embalagem; (PR 6e) pallets;
-// (PR 6c) meses atipicos.
+// (PR 6c) meses atipicos; (PR 6d) demanda do comercial.
 // Copia exata em src/utils/forecastRelatorioComprasXlsx.ts (`textoOpcaoDeEmbalagem`, `textoPallet`, `PARAGRAFO_EMBALAGEM_XLSX`);
 // a igualdade tela x XLSX e provada em tests/forecast-relatorio-compras-xlsx.test.ts.
 import type {
+  ForecastItemDemandaComercial,
   ForecastItemRelatorio,
   ForecastOpcaoEmbalagem,
   ForecastPalletDaOpcao,
   ForecastRelatorioCompras,
 } from '@/services/forecast';
-import { kgBr, mesAbrevDoAnoMes } from './forecastPainel';
+import { inteiroBr, kgBr, mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Terceiro paragrafo das regras (tela e aba Regras do XLSX). */
 export const PARAGRAFO_EMBALAGEM =
@@ -140,3 +141,50 @@ export function resumoMesesForaDaMedia(n: number): string {
 export function paragrafoMesesForaDaMedia(): string {
   return 'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.';
 }
+
+// ---- Demanda do comercial (PR 6d): copia exata em src/utils/forecastRelatorioComprasXlsx.ts (guarda de paridade no teste) ----
+
+export function tituloDemandaComercial(n: number): string {
+  return `Demanda do comercial · ${n} ${n === 1 ? 'pedido aberto' : 'pedidos abertos'}`;
+}
+
+export function resumoDemandaComercial(abertas: number, sugeridoKg: number): string {
+  return `${abertas} ${abertas === 1 ? 'demanda do comercial aberta' : 'demandas do comercial abertas'} (${kgBr(sugeridoKg)} kg ${sugeridoKg === 1 ? 'sugerido' : 'sugeridos'})`;
+}
+
+export function paragrafoDemandaComercial(): string {
+  return 'Demanda do comercial: compras pedidas pelo comercial para programações fora do horizonte. Soma ao Forecast o pedido menos o saldo que sobraria no mês da necessidade; dentro do horizonte de programação não soma (deve estar nas programações).';
+}
+
+/** Selo no item da lista de compra: `+ 1.100 kg pedidos pelo comercial`. */
+export function seloDemandaComercial(kg: number): string {
+  return `+ ${kgBr(kg)} kg pedidos pelo comercial`;
+}
+
+export function textoSituacaoDemanda(i: Pick<ForecastItemDemandaComercial, 'situacao' | 'sugerido'>): string {
+  if (i.situacao === 'no-horizonte') return 'Dentro do horizonte: não soma';
+  if (i.situacao === 'fora-da-quinzena') return 'Fora desta quinzena: sem cálculo';
+  return i.sugerido > 0 ? 'Além do horizonte: soma ao Forecast' : 'Além do horizonte: coberta pelo saldo';
+}
+
+export const CONFIRA_PROGRAMACOES = 'Confira se já está nas programações; se estiver, marque "virou programação".';
+
+/** Aviso sob a situacao (nulo = nada a avisar). */
+export function textoAvisoDemanda(
+  i: Pick<ForecastItemDemandaComercial, 'situacao' | 'programacaoDoMes' | 'anoMes'>,
+): string | null {
+  if (i.situacao === 'fora-da-quinzena') return 'O produto não tem linha nesta quinzena.';
+  if (i.situacao !== 'no-horizonte') return null;
+  if (i.programacaoDoMes === null) return CONFIRA_PROGRAMACOES;
+  const mes = mesAbrevDoAnoMes(i.anoMes);
+  return i.programacaoDoMes > 0
+    ? `Programação de ${mes}: ${inteiroBr(i.programacaoDoMes)}. ${CONFIRA_PROGRAMACOES}`
+    : `Sem programação em ${mes}. ${CONFIRA_PROGRAMACOES}`;
+}
+
+/** Numero da Solicitacao do IntelliQuote (so rastreio): `#12`; sem numero, traco. */
+export const textoSolicitacao = (id: number | null): string => (id === null ? '—' : `#${id}`);
+
+/** Nota sob a tabela da secao (so na tela). */
+export const APOIO_DEMANDA_COMERCIAL =
+  'Sugerido = pedido − saldo livre no mês da necessidade (nunca negativo). Pedido fechado (comprada, virou programação ou cancelada) sai desta seção. Pedido dentro do horizonte de programação não soma.';

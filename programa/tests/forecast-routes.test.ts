@@ -21,6 +21,7 @@ vi.mock('../src/lib/prisma', () => {
     forecastSource: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     forecastProduct: { findMany: vi.fn() },
     forecastAtypicalMonth: { findMany: vi.fn() },
+    forecastCommercialDemand: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn() },
     forecastSnapshot: { findMany: vi.fn(), findFirst: vi.fn() },
     forecastMonthlySale: { findMany: vi.fn() },
@@ -44,6 +45,7 @@ const prismaMock = prisma as unknown as {
   forecastSource: { findMany: Mock; findUnique: Mock; update: Mock };
   forecastProduct: { findMany: Mock };
   forecastAtypicalMonth: { findMany: Mock };
+  forecastCommercialDemand: { findMany: Mock };
   forecastProductCode: { findMany: Mock };
   forecastSnapshot: { findMany: Mock; findFirst: Mock };
   forecastMonthlySale: { findMany: Mock };
@@ -611,6 +613,8 @@ describe('Forecast routes - relatorio de compras', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
+    // Demanda do comercial (PR 6d): sem pedido aberto por padrao.
+    prismaMock.forecastCommercialDemand.findMany.mockResolvedValue([]);
     // O relatorio le a embalagem do cadastro por codigo (PR 2C); aqui nenhum codigo tem embalagem.
     prismaMock.forecastProductCode.findMany.mockResolvedValue([]);
     const produtos = fixture.produtos.slice(0, 5);
@@ -652,6 +656,58 @@ describe('Forecast routes - relatorio de compras', () => {
       expect(item.embalagem.usada).toBeNull();
     }
     expect(data.totais.semEmbalagem).toBe(data.totais.itens);
+  });
+
+  it('relatorio traz a secao Demanda do comercial com os pedidos abertos do cadastro (1 consulta)', async () => {
+    const cookies = await loginAs('viewer');
+    const [primeiro, ...resto] = fixture.produtos.slice(0, 5);
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 7,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'dbcorp',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: [{ ...primeiro, productId: 31 }, ...resto],
+      inputs: fixture.entradas,
+      expected: null,
+      files: [],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+    prismaMock.forecastCommercialDemand.findMany.mockResolvedValue([
+      {
+        id: 4,
+        productId: 31,
+        quantityKg: '1000',
+        neededBy: new Date('2099-01-10T00:00:00.000Z'),
+        reason: 'MOTIVO SINTETICO',
+        customerName: 'CLIENTE SINTETICO',
+        commercialRequestId: 12,
+        product: { name: 'PRODUTO 001', source: { name: 'FONTE 001' } },
+      },
+    ]);
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7/relatorio-compras?hoje=2026-10-20')
+      .set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    const { demandaComercial } = response.body.data;
+    expect(demandaComercial.totais.abertas).toBe(1);
+    expect(demandaComercial.itens[0]).toMatchObject({
+      id: 4,
+      productId: 31,
+      kg: 1000,
+      necessidade: '2099-01-10',
+      situacao: 'alem-do-horizonte',
+      motivo: 'MOTIVO SINTETICO',
+      cliente: 'CLIENTE SINTETICO',
+      solicitacaoId: 12,
+    });
+    expect(prismaMock.forecastCommercialDemand.findMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.forecastCommercialDemand.findMany.mock.calls[0][0].where).toEqual({ status: 'aberta' });
   });
 
   it('a flag "nao fraciona" (coluna AX) chega ao relatorio como booleano', async () => {
