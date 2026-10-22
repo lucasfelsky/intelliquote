@@ -20,6 +20,7 @@ import {
   COLUNAS_POR_URGENCIA_XLSX,
   COLUNAS_RELATORIO_XLSX,
   COLUNAS_SEM_CONSUMO_XLSX,
+  PARAGRAFO_EMBALAGEM_XLSX,
   STATUS_ROTULO_XLSX,
   URGENCIAS_XLSX,
   celulasDoItem,
@@ -36,6 +37,7 @@ import {
   resumoSemConsumo,
   rotuloUrgencia,
   textoMotivos,
+  textoOpcaoDeEmbalagem,
   tituloDoGrupo,
 } from '../src/utils/forecastRelatorioComprasXlsx';
 import type { Quinzena } from '../src/utils/forecastTypes';
@@ -55,6 +57,10 @@ import {
   rotuloUrgencia as rotuloUrgenciaWeb,
   textoMotivos as textoMotivosWeb,
 } from '../web/src/pages/Forecast/forecastRelatorioUrgencia';
+import {
+  PARAGRAFO_EMBALAGEM,
+  textoOpcaoDeEmbalagem as textoOpcaoDeEmbalagemWeb,
+} from '../web/src/pages/Forecast/forecastRelatorioTextos';
 
 // Repo PUBLICO: so dados sinteticos (FONTE 001, PRODUTO 001, C0001) e a fixture anonimizada.
 const fixture = JSON.parse(
@@ -135,6 +141,7 @@ const sintetico = montarRelatorioCompras(
       fonte: 'FONTE 001',
       codigos: ['C0001', 'C0002', 'C0003'],
       AN: -450,
+      obs: '  OBS SINTETICA 001  ',
       status: 'cotando',
       chegadas: [0, 0, 1200, 0, 0],
       programacoes: [0, 300, 0, 0],
@@ -148,6 +155,8 @@ const sintetico = montarRelatorioCompras(
       AN: -50,
       AG: 80,
       projecao: [-40, -100, -160, -220, -280, -340],
+      // Texto que comeca com "=" tem de continuar texto na planilha (nunca virar formula).
+      obs: '=OBS SINTETICA 002',
       naoFraciona: true,
       status: 'po',
     }),
@@ -243,7 +252,11 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
     // 450 / 200 kg = 3 embalagens (C0002 e a primeira cadastrada dos codigos).
     expect(cel('PRODUTO 001', 'Embalagem')).toBe('3 × 200 kg (código C0002)');
     expect(cel('PRODUTO 001', 'Arredondamento')).toBe('Arredondado pela embalagem do código C0002');
-    expect(cel('PRODUTO 001', 'Outras embalagens')).toBe('C0003 (25 kg)');
+    // 450 / 25 kg = 18 embalagens = 450 kg (a embalagem em destaque nao se repete aqui).
+    expect(cel('PRODUTO 001', 'Outras embalagens')).toBe('18 × 25 kg (código C0003) = 450 kg');
+    expect(cel('PRODUTO 001', 'Observação')).toBe('OBS SINTETICA 001');
+    expect(cel('PRODUTO 002', 'Observação')).toBe('=OBS SINTETICA 002');
+    expect(cel('PRODUTO 003', 'Observação')).toBe('');
     expect(cel('PRODUTO 001', 'Códigos')).toBe('C0001 · C0002 · C0003');
     expect(cel('PRODUTO 001', 'Status')).toBe('Cotando');
     expect(cel('PRODUTO 001', 'Em andamento')).toBe('Chegada dez/2026: 1.200\nProgramação nov/2026: 300');
@@ -316,7 +329,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
           expect(typeof dias.value).toBe('number');
           expect(dias.numFmt).toBe('0');
         }
-        for (const nome of ['Item', 'Urgência', 'Códigos', 'Status', 'Embalagem', 'Arredondamento', 'Outras embalagens', 'Ruptura', 'Em andamento'] as const) {
+        for (const nome of ['Item', 'Urgência', 'Códigos', 'Status', 'Embalagem', 'Arredondamento', 'Outras embalagens', 'Ruptura', 'Em andamento', 'Observação'] as const) {
           expect(row.getCell(COL(nome)).alignment?.wrapText, nome).toBe(true);
           expect(row.getCell(COL(nome)).alignment?.vertical, nome).toBe('top');
         }
@@ -338,7 +351,11 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
     const ws = (await carregar(await gerarXlsxRelatorioCompras(r))).getWorksheet(ABA_RELATORIO)!;
     const n = mapearLinhas(r).grupos[0].primeiroItem;
     expect(valorDaCelula(ws, n, COL('Embalagem'))).toBe('6 × 0,5 kg (código C0007)');
-    expect(valorDaCelula(ws, n, COL('Outras embalagens'))).toBe('C0008 (2,125 kg), C0009 (1.250,5 kg)');
+    // Uma linha por opcao nao destacada, com a quantidade arredondada para cada uma.
+    expect(valorDaCelula(ws, n, COL('Outras embalagens'))).toBe(
+      '2 × 2,125 kg (código C0008) = 4,25 kg\n1 × 1.250,5 kg (código C0009) = 1.250,5 kg',
+    );
+    expect(valorDaCelula(ws, n, COL('Qtd. final'))).toBe(3);
   });
 
   it('configura a pagina em paisagem, ajustada a largura', async () => {
@@ -357,6 +374,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
     const textos = [1, 2, 3, 4, 5, 6].map((n) => String(valorDaCelula(ws, n, 1)));
     expect(textos[0]).toContain('O saldo zera no primeiro mês');
     expect(textos[1]).toContain('Data-limite do pedido = ruptura − lead time da fonte');
+    expect(textos[2]).toBe(PARAGRAFO_EMBALAGEM_XLSX);
     expect(textos[2]).toContain('Quantidade sugerida = demanda em módulo.');
     expect(textos[3]).toBe(paragrafoUrgencia(15));
     expect(textos[3]).toMatch(/^Urgência: "Sem estoque agora"/);
@@ -392,14 +410,14 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
 
   it('aba Por urgencia: lista unica na ordem de posicaoUrgencia, com fonte, filtro e cabecalho congelado', async () => {
     const ws = (await abrir()).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(18);
-    expect(linhaComoArrayN(ws, 1, 18)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(19);
+    expect(linhaComoArrayN(ws, 1, 19)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     const lista = itensNaOrdemDeUrgencia(sintetico);
     expect(lista.map((x) => x.item.item)).toEqual(['PRODUTO 004', 'PRODUTO 002', 'PRODUTO 001', 'PRODUTO 003']);
     expect(ws.rowCount).toBe(1 + lista.length);
     lista.forEach(({ item, fonte }, i) => {
       const c = celulasDoItem(item, 15);
-      expect(linhaComoArrayN(ws, i + 2, 18)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
+      expect(linhaComoArrayN(ws, i + 2, 19)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
     });
     expect(ws.autoFilter).toBeTruthy();
     expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
@@ -414,7 +432,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
   it('aba Por urgencia sem itens: cabecalho e aviso', async () => {
     const vazio = montarRelatorioCompras(quinzena([]), []);
     const ws = (await carregar(await gerarXlsxRelatorioCompras(vazio))).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(linhaComoArrayN(ws, 1, 18)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(linhaComoArrayN(ws, 1, 19)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     expect(valorDaCelula(ws, 2, 1)).toBe('Nenhum item com demanda ≤ 0 nesta quinzena.');
   });
 
@@ -428,6 +446,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
           fonte: 'FONTE 002',
           codigos: ['C0002', 'C0003'],
           status: 'cotando',
+          obs: 'OBS SINTETICA 002',
           Q: 0,
           AG: 0,
           U: 20,
@@ -443,7 +462,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
     const ws = (await carregar(await gerarXlsxRelatorioCompras(r))).getWorksheet(ABA_SEM_CONSUMO)!;
     const n = COLUNAS_SEM_CONSUMO_XLSX.length;
     expect(COLUNAS_SEM_CONSUMO_XLSX).toEqual([
-      'Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Estoque', 'Programado', 'Programações', 'Chegadas',
+      'Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Estoque', 'Programado', 'Programações', 'Chegadas', 'Observação',
     ]);
     expect(linhaComoArrayN(ws, 1, n)).toEqual([...COLUNAS_SEM_CONSUMO_XLSX]);
     expect(ws.rowCount).toBe(4);
@@ -457,13 +476,15 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
       300,
       'Programação nov/2026: 300',
       'Chegada dez/2026: 1.200',
+      'OBS SINTETICA 002',
     ]);
     expect(linhaComoArrayN(ws, 3, n)).toEqual([
-      'PRODUTO 001', 'C0001', 'FONTE 001', 'Cotação não enviada', 'tem estoque', 10, 0, '—', '—',
+      'PRODUTO 001', 'C0001', 'FONTE 001', 'Cotação não enviada', 'tem estoque', 10, 0, '—', '—', '',
     ]);
     expect(valorDaCelula(ws, 4, 3)).toBe('FONTE 009 (sem lead time)');
     expect(ws.getRow(2).getCell(6).numFmt).toBe('0.0');
     expect(ws.getRow(2).getCell(8).alignment?.wrapText).toBe(true);
+    expect(ws.getRow(2).getCell(10).alignment?.wrapText).toBe(true);
     expect(ws.autoFilter).toBeTruthy();
     expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
     expect((ws.getRow(2).getCell(1).fill as exceljs.FillPattern | undefined)?.fgColor?.argb).toBeUndefined();
@@ -483,6 +504,60 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
     const cell = ws.getRow(mapearLinhas(r).grupos[0].primeiroItem).getCell(1);
     expect(cell.value).toBe('=SOMA(A1)');
     expect(cell.type).toBe(exceljs.ValueType.String);
+  });
+});
+
+describe('Observacao e embalagens por opcao (PR 5B)', () => {
+  it('Observação e sempre a ULTIMA coluna das 3 abas (nenhuma posicao existente muda)', () => {
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_SEM_CONSUMO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_RELATORIO_XLSX.slice(0, 17)).toEqual([
+      'Item', 'Urgência', 'Códigos', 'Não fraciona', 'Status', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Arredondamento',
+      'Outras embalagens', 'Qtd. final', 'Saldo zera', 'Ruptura', 'Dias até a ruptura', 'Data-limite', 'Vencida', 'Em andamento',
+    ]);
+  });
+
+  it('obs que comeca com "=" continua TEXTO nas 3 abas', async () => {
+    const r = montarRelatorioCompras(
+      quinzena([
+        linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', AN: -10, obs: '=OBS SINTETICA' }),
+        linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', Q: 0, AG: 0, U: 10, AN: 10, obs: '=OBS SINTETICA' }),
+      ]),
+      [],
+    );
+    const wb = await carregar(await gerarXlsxRelatorioCompras(r));
+    const celulas = [
+      wb.getWorksheet(ABA_RELATORIO)!.getRow(mapearLinhas(r).grupos[0].primeiroItem).getCell(COL('Observação')),
+      wb.getWorksheet(ABA_POR_URGENCIA)!.getRow(2).getCell(COLUNAS_POR_URGENCIA_XLSX.length),
+      wb.getWorksheet(ABA_SEM_CONSUMO)!.getRow(2).getCell(COLUNAS_SEM_CONSUMO_XLSX.length),
+    ];
+    for (const cell of celulas) {
+      expect(cell.value).toBe('=OBS SINTETICA');
+      expect(cell.type).toBe(exceljs.ValueType.String);
+    }
+  });
+
+  it('item sem obs: celula Observação vazia (backend sem o campo vira texto vazio)', () => {
+    const r = montarRelatorioCompras(quinzena([linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', AN: -10 })]), []);
+    const item = r.grupos[0].itens[0];
+    expect(item.obs).toBe('');
+    expect(celulasDoItem(item, 15).at(-1)).toBe('');
+  });
+
+  it('uma so embalagem: Outras embalagens vazia; sem embalagem: nada novo', () => {
+    const r = montarRelatorioCompras(
+      quinzena([
+        linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', codigos: ['C0002'], AN: -450 }),
+        linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', codigos: ['C0004'], AN: -50 }),
+      ]),
+      EMBALAGENS,
+    );
+    const [a, b] = ['PRODUTO 001', 'PRODUTO 002'].map((n) => r.grupos[0].itens.find((i) => i.item === n)!);
+    const col = (nome: (typeof COLUNAS_RELATORIO_XLSX)[number]) => COLUNAS_RELATORIO_XLSX.indexOf(nome);
+    expect(celulasDoItem(a, 15)[col('Outras embalagens')]).toBe('');
+    expect(celulasDoItem(b, 15)[col('Outras embalagens')]).toBe('');
+    expect(celulasDoItem(b, 15)[col('Embalagem')]).toBe('Embalagem não cadastrada');
   });
 });
 
@@ -641,12 +716,28 @@ describe('paridade com a tela do web', () => {
     expect(paragrafoSemConsumo()).toBe(paragrafoSemConsumoWeb());
   });
 
+  it('textos de embalagem identicos aos da tela (formato de cada opcao e paragrafo das regras)', () => {
+    const casos = [
+      { codigo: 'C0002', quantidade: 200, rotulo: null, embalagens: 3, quantidadeFinal: 600, destaque: false },
+      { codigo: 'C0003', quantidade: 25, rotulo: 'Saco 25 kg', embalagens: 18, quantidadeFinal: 450, destaque: true },
+      { codigo: 'C0008', quantidade: 2.125, rotulo: null, embalagens: 2, quantidadeFinal: 4.25, destaque: false },
+      { codigo: 'C0009', quantidade: 1250.5, rotulo: null, embalagens: 0, quantidadeFinal: 0, destaque: false },
+    ];
+    for (const op of casos) {
+      expect(textoOpcaoDeEmbalagem(op)).toBe(textoOpcaoDeEmbalagemWeb(op));
+    }
+    expect(textoOpcaoDeEmbalagem(casos[0])).toBe('3 × 200 kg (código C0002) = 600 kg');
+    expect(textoOpcaoDeEmbalagem(casos[1])).toBe('18 × Saco 25 kg (código C0003) = 450 kg');
+    expect(PARAGRAFO_EMBALAGEM_XLSX).toBe(PARAGRAFO_EMBALAGEM);
+  });
+
   it('a tela contem os mesmos textos que o arquivo', () => {
     // a tela = o componente + as funcoes puras de texto (forecastRelatorioUrgencia.ts)
     const pasta = resolve(__dirname, '..', 'web', 'src', 'pages', 'Forecast');
     const tela =
       readFileSync(resolve(pasta, 'ForecastRelatorioCompras.tsx'), 'utf8') +
-      readFileSync(resolve(pasta, 'forecastRelatorioUrgencia.ts'), 'utf8');
+      readFileSync(resolve(pasta, 'forecastRelatorioUrgencia.ts'), 'utf8') +
+      readFileSync(resolve(pasta, 'forecastRelatorioTextos.ts'), 'utf8');
     for (const texto of [
       'Urgência',
       'Por urgência',
@@ -665,6 +756,7 @@ describe('paridade com a tela do web', () => {
       'Data-limite',
       'Em andamento',
       'Fora do relatório:',
+      'Obs.:',
     ]) {
       expect(tela).toContain(texto);
     }

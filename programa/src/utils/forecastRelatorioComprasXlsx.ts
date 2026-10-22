@@ -10,6 +10,7 @@ import type {
   ItemRelatorioCompras,
   ItemSemConsumo,
   MotivoSemConsumo,
+  OpcaoDeEmbalagem,
   RelatorioCompras,
   UrgenciaId,
 } from './forecastRelatorioCompras';
@@ -20,6 +21,7 @@ export const ABA_SEM_CONSUMO = 'Atenção sem consumo';
 export const ABA_REGRAS = 'Regras';
 
 // As colunas da tela (+ Urgencia e Dias ate a ruptura); Item / Embalagem / Data-limite desdobradas em colunas filtraveis.
+// Colunas novas entram SEMPRE no fim (nenhuma posicao existente muda): Observacao (PR 5B).
 export const COLUNAS_RELATORIO_XLSX = [
   'Item',
   'Urgência',
@@ -38,6 +40,7 @@ export const COLUNAS_RELATORIO_XLSX = [
   'Data-limite',
   'Vencida',
   'Em andamento',
+  'Observação',
 ] as const;
 
 // Aba "Por urgencia": lista unica; ganha a coluna Fonte depois de Urgencia.
@@ -58,6 +61,7 @@ export const COLUNAS_SEM_CONSUMO_XLSX = [
   'Programado',
   'Programações',
   'Chegadas',
+  'Observação',
 ] as const;
 
 // Copia exata de STATUS_ROTULO (web/src/pages/Forecast/forecastPainel.ts).
@@ -86,11 +90,12 @@ const NOMES_TEXTO_QUEBRA = [
   'Outras embalagens',
   'Ruptura',
   'Em andamento',
+  'Observação',
 ] as const;
 const NOMES_NUMERICOS = ['Demanda', 'Qtd. sugerida', 'Qtd. final'] as const;
-const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28];
+const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 40];
 const LARGURAS_POR_URGENCIA = [34, 22, 24, ...LARGURAS.slice(2)];
-const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30];
+const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 40];
 
 const plural = (n: number, singular: string, pluralForm: string) => (n === 1 ? singular : pluralForm);
 
@@ -205,6 +210,17 @@ function textoEmbalagem(item: ItemRelatorioCompras): string {
   return `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
 }
 
+// Copia EXATA de textoOpcaoDeEmbalagem (web/src/pages/Forecast/forecastRelatorioTextos.ts; guarda de paridade no teste):
+// quantidade do item arredondada para UMA embalagem cadastrada, ex.: '3 × 200 kg (código C0002) = 600 kg'.
+export function textoOpcaoDeEmbalagem(op: OpcaoDeEmbalagem): string {
+  const nome = op.rotulo ?? `${kgBr(op.quantidade)} kg`;
+  return `${op.embalagens} × ${nome} (código ${op.codigo}) = ${kgBr(op.quantidadeFinal)} kg`;
+}
+
+// Copia EXATA de PARAGRAFO_EMBALAGEM (web/.../forecastRelatorioTextos.ts); e o 3o paragrafo da aba Regras.
+export const PARAGRAFO_EMBALAGEM_XLSX =
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque.';
+
 const linhasChegada = (chegadas: Array<{ anoMes: string; quantidade: number }>) =>
   chegadas.map((c) => `Chegada ${mesAbrev(c.anoMes)}: ${inteiroBr(c.quantidade)}`);
 const linhasProgramacao = (programacoes: Array<{ anoMes: string; quantidade: number }>) =>
@@ -216,17 +232,12 @@ function textoEmAndamento(item: ItemRelatorioCompras): string {
   return juntarLinhas([...linhasChegada(chegadas), ...linhasProgramacao(programacoes)]);
 }
 
-// 17 valores, na ordem de COLUNAS_RELATORIO_XLSX.
+// 18 valores, na ordem de COLUNAS_RELATORIO_XLSX.
 export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): Array<string | number> {
-  const { usada, cadastradas, multiplas } = item.embalagem;
+  const { usada, multiplas } = item.embalagem;
   const { ruptura } = item;
-  const outras =
-    multiplas && usada
-      ? cadastradas
-          .filter((e) => e.codigo !== usada.codigo)
-          .map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`)
-          .join(', ')
-      : '';
+  // Uma linha por opcao nao destacada (a destacada ja esta em Embalagem e Qtd. final).
+  const outras = multiplas && usada ? item.porEmbalagem.filter((o) => !o.destaque).map(textoOpcaoDeEmbalagem).join('\n') : '';
   const rupturaTexto = ruptura
     ? ruptura.jaNaDataBase
       ? 'já na data-base'
@@ -250,6 +261,7 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
     item.dataLimite ? dataBr(item.dataLimite) : TRACO,
     item.vencida ? 'Vencida' : '',
     textoEmAndamento(item),
+    item.obs,
   ];
 }
 
@@ -264,6 +276,7 @@ export function celulasDoItemSemConsumo(item: ItemSemConsumo): Array<string | nu
     item.programado,
     juntarLinhas(linhasProgramacao(item.programacoes)),
     juntarLinhas(linhasChegada(item.chegadas)),
+    item.obs,
   ];
 }
 
@@ -277,7 +290,7 @@ export function paragrafosDeRegras(diasCritico: number): string[] {
   return [
     'O saldo zera no primeiro mês em que a projeção do estoque fica negativa. O dia da ruptura é uma estimativa: o consumo do mês é distribuído de forma linear (no mês base, a partir da data-base).',
     'Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite já passou na data de hoje.',
-    'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código).',
+    PARAGRAFO_EMBALAGEM_XLSX,
     paragrafoUrgencia(diasCritico),
     paragrafoSemConsumo(),
     'Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).',
@@ -395,7 +408,7 @@ function adicionarAbaSemConsumo(workbook: exceljs.Workbook, r: RelatorioCompras)
   for (const item of r.semConsumo.itens) {
     const row = ws.addRow(celulasDoItemSemConsumo(item));
     row.alignment = { vertical: 'top' };
-    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas'] as const) {
+    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Observação'] as const) {
       row.getCell(col(nome)).alignment = { vertical: 'top', wrapText: true };
     }
     row.getCell(col('Estoque')).numFmt = '0.0';

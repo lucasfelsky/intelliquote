@@ -36,6 +36,12 @@ import {
   type VisaoRelatorio,
 } from './forecastRelatorioUrgencia';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
+import {
+  linhasOutrasEmbalagens,
+  PARAGRAFO_EMBALAGEM,
+  textoObservacao,
+  tituloOutrasEmbalagens,
+} from './forecastRelatorioTextos';
 
 interface Props {
   snapshotId: number;
@@ -53,7 +59,7 @@ interface EmbalagemProps {
 }
 
 function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
-  const { usada, cadastradas, multiplas } = item.embalagem;
+  const { usada, multiplas } = item.embalagem;
   const botao = onEditar && (
     <button
       type="button"
@@ -75,7 +81,7 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
       </span>
     );
   }
-  const outras = cadastradas.filter((e) => e.codigo !== usada.codigo);
+  const outras = linhasOutrasEmbalagens(item);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
@@ -83,21 +89,24 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
         {item.quantidadeEmbalagens} × {nome} (código {usada.codigo})
       </span>
       {multiplas && (
-        <span
-          className="badge badge--info"
-          title={`Outras embalagens: ${outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}`}
-        >
+        <span className="badge badge--info" title={tituloOutrasEmbalagens(item)}>
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
-      {multiplas && (
-        <span className="fcr-embalagem__outras">
-          Outras: {outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}
+      {outras.map((linha) => (
+        <span key={linha} className="fcr-embalagem__outras">
+          {linha}
         </span>
-      )}
+      ))}
       {botao}
     </span>
   );
+}
+
+// Observacao da quinzena: linha extra na celula Item, so quando ha texto (a maioria dos itens nao tem).
+function Observacao({ obs }: { obs?: string }) {
+  const texto = textoObservacao(obs);
+  return texto ? <span className="fcr-item__obs">{texto}</span> : null;
 }
 
 function EmAndamento({ item }: { item: ForecastItemRelatorio }) {
@@ -158,6 +167,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <span className="fcr-item__nome">{item.item}</span>
           <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
           {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+          <Observacao obs={item.obs} />
         </div>
       </th>
       {comUrgencia && urgencia && (
@@ -376,6 +386,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                   <div className="fcr-item">
                     <span className="fcr-item__nome">{i.item}</span>
                     <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
+                    <Observacao obs={i.obs} />
                   </div>
                 </th>
                 <td>
@@ -539,10 +550,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite
             já passou na data de hoje.
           </p>
-          <p>
-            Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da
-            embalagem (a principal; sem principal, a do primeiro código).
-          </p>
+          <p>{PARAGRAFO_EMBALAGEM}</p>
           {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
           {semConsumo && <p>{paragrafoSemConsumo()}</p>}
         </details>

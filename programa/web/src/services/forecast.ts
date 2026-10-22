@@ -116,6 +116,13 @@ export interface ForecastEmbalagemDoItem {
   rotulo: string | null;
 }
 
+/** Quantidade do item arredondada para UMA embalagem cadastrada (PR 5B); `destaque` = a que gera a Qtd. final. */
+export interface ForecastOpcaoEmbalagem extends ForecastEmbalagemDoItem {
+  embalagens: number;
+  quantidadeFinal: number;
+  destaque: boolean;
+}
+
 /** Faixas de urgencia do relatorio (PR 2D), da mais para a menos urgente. */
 export type ForecastUrgencia = 'sem-estoque' | 'critico' | 'atrasado' | 'no-prazo';
 
@@ -134,9 +141,13 @@ export interface ForecastItemRelatorio {
     cadastradas: ForecastEmbalagemDoItem[];
     multiplas: boolean;
   };
+  /** PR 5B, opcional de proposito: backend antigo nao manda e a tela cai no texto antigo das outras embalagens. */
+  porEmbalagem?: ForecastOpcaoEmbalagem[];
   quantidadeEmbalagens: number | null;
   quantidadeFinal: number;
   naoFraciona: boolean;
+  /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
+  obs?: string;
   ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -176,6 +187,8 @@ export interface ForecastItemSemConsumo {
   programacoes: Array<{ anoMes: string; quantidade: number }>;
   chegadas: Array<{ anoMes: string; quantidade: number }>;
   semLeadTime: boolean;
+  /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
+  obs?: string;
 }
 
 export interface ForecastRelatorioCompras {

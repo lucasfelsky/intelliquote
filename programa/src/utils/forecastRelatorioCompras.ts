@@ -18,6 +18,11 @@
 // Secao "Atencao: sem consumo": itens fora da lista de compra com media trimestral <= 0 e estoque ou programacao
 // (so para conferencia, sem quantidade sugerida). Sem consumo, estoque nem programacao: so a contagem.
 //
+// Embalagens (PR 5B, Comex): a Qtd. final usa a embalagem em destaque (principal; sem principal, a do primeiro
+// codigo cadastrado). Com mais de uma embalagem cadastrada o item ainda traz a quantidade arredondada para CADA
+// uma (`porEmbalagem`), so para o comprador escolher na compra: nada disso muda a Qtd. final nem e persistido.
+// Observacao (PR 5B): texto livre da quinzena (coluna AT da planilha), repassado como esta (so trim).
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
@@ -42,6 +47,8 @@ export interface LinhaParaRelatorio {
   chegadas: number[];
   programacoes: number[];
   naoFraciona?: boolean;
+  /** Observacao congelada da quinzena (AT da planilha / notas do produto); ausente = ''. */
+  obs?: string;
 }
 
 export interface QuinzenaParaRelatorio {
@@ -80,6 +87,13 @@ export interface EscolhaDeEmbalagem {
   multiplas: boolean;
 }
 
+/** Quantidade do item arredondada para UMA embalagem cadastrada; `destaque` = a que gera a Qtd. final. */
+export interface OpcaoDeEmbalagem extends EmbalagemDoItem {
+  embalagens: number;
+  quantidadeFinal: number;
+  destaque: boolean;
+}
+
 export interface ItemRelatorioCompras {
   linha: number;
   n: number | null;
@@ -90,9 +104,13 @@ export interface ItemRelatorioCompras {
   demanda: number;
   quantidadeSugerida: number;
   embalagem: EscolhaDeEmbalagem;
+  /** Uma opcao por embalagem cadastrada (ordem EMB.1..7); vazio sem embalagem. A de `destaque` = Qtd. final. */
+  porEmbalagem: OpcaoDeEmbalagem[];
   quantidadeEmbalagens: number | null;
   quantidadeFinal: number;
   naoFraciona: boolean;
+  /** Observacao da quinzena ('' quando nao ha). */
+  obs: string;
   ruptura: RupturaEstimada | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -133,6 +151,8 @@ export interface ItemSemConsumo {
   programacoes: Array<{ anoMes: string; quantidade: number }>;
   chegadas: Array<{ anoMes: string; quantidade: number }>;
   semLeadTime: boolean;
+  /** Observacao da quinzena ('' quando nao ha). */
+  obs: string;
 }
 
 export interface RelatorioCompras {
@@ -244,6 +264,20 @@ export function arredondarPorEmbalagem(
   }
   const embalagens = Math.max(0, Math.ceil(quantidade / porEmbalagem - EPS));
   return { embalagens: semMenosZero(embalagens), quantidade: semMenosZero(embalagens * porEmbalagem) };
+}
+
+// Uma opcao por embalagem cadastrada (mesma ordem de `escolha.cadastradas`), cada uma com a quantidade do item
+// arredondada para cima nos multiplos dela. A `destaque` e a `escolha.usada`: mesmos numeros de quantidadeFinal.
+export function arredondarParaCadaEmbalagem(quantidade: number, escolha: EscolhaDeEmbalagem): OpcaoDeEmbalagem[] {
+  return escolha.cadastradas.map((e) => {
+    const arredondado = arredondarPorEmbalagem(quantidade, e.quantidade);
+    return {
+      ...e,
+      embalagens: arredondado.embalagens,
+      quantidadeFinal: arredondado.quantidade,
+      destaque: e.codigo === escolha.usada?.codigo,
+    };
+  });
 }
 
 function mesesComValor(valores: number[], anoMes: string[]): Array<{ anoMes: string; quantidade: number }> {
@@ -385,6 +419,7 @@ export function montarRelatorioCompras(
       programacoes: mesesComValor(l.programacoes.slice(0, 4), meses),
       chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
       semLeadTime: l.AN === null,
+      obs: (l.obs ?? '').trim(),
     });
   };
 
@@ -419,9 +454,11 @@ export function montarRelatorioCompras(
       demanda: semMenosZero(l.AN),
       quantidadeSugerida,
       embalagem,
+      porEmbalagem: arredondarParaCadaEmbalagem(quantidadeSugerida, embalagem),
       quantidadeEmbalagens: arredondado ? arredondado.embalagens : null,
       quantidadeFinal: arredondado ? arredondado.quantidade : quantidadeSugerida,
       naoFraciona: l.naoFraciona === true,
+      obs: (l.obs ?? '').trim(),
       ruptura,
       dataLimite,
       vencida: dataLimite !== null && dataLimite < q.hoje,

@@ -3058,3 +3058,9 @@ i.fc-status--preco { background: var(--info); }
 @media print {
   body:has(.fcr-resumo) .fcp { display: none !important; }
 }
+
+/* ---- Forecast: relatorio de compras - Observacao na celula Item (PR 5B) ---- */
+.fcr-item__obs { max-width: 320px; font-size: 11px; line-height: 1.35; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media print {
+  .fcr-item__obs { max-width: 70mm; font-size: 7.5pt; }
+}

@@ -141,6 +141,51 @@ describe('ForecastRelatorioCompras - botao de embalagens', () => {
     expect(screen.queryByText('Embalagem não cadastrada')).toBeNull();
   });
 
+  it('uma so embalagem: sem linhas extras de "outras" e sem selo de arredondamento', async () => {
+    mockApi([
+      item({
+        embalagem: {
+          usada: { codigo: 'C0001', quantidade: 200, rotulo: null },
+          cadastradas: [{ codigo: 'C0001', quantidade: 200, rotulo: null }],
+          multiplas: false,
+        },
+        porEmbalagem: [{ codigo: 'C0001', quantidade: 200, rotulo: null, embalagens: 1, quantidadeFinal: 200, destaque: true }],
+        quantidadeEmbalagens: 1,
+        quantidadeFinal: 200,
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    expect(await screen.findByText('1 × 200 kg (código C0001)')).toBeTruthy();
+    expect(container.querySelector('.fcr-embalagem__outras')).toBeNull();
+    expect(screen.queryByText(/Arredondado pela embalagem/)).toBeNull();
+  });
+
+  it('duas embalagens: a quantidade de cada uma, com o rotulo quando existe', async () => {
+    mockApi([
+      item({
+        embalagem: {
+          usada: { codigo: 'C0001', quantidade: 25, rotulo: null },
+          cadastradas: [
+            { codigo: 'C0001', quantidade: 25, rotulo: null },
+            { codigo: 'C0002', quantidade: 200, rotulo: 'Tambor 200 kg' },
+          ],
+          multiplas: true,
+        },
+        porEmbalagem: [
+          { codigo: 'C0001', quantidade: 25, rotulo: null, embalagens: 2, quantidadeFinal: 50, destaque: true },
+          { codigo: 'C0002', quantidade: 200, rotulo: 'Tambor 200 kg', embalagens: 1, quantidadeFinal: 200, destaque: false },
+        ],
+        quantidadeEmbalagens: 2,
+        quantidadeFinal: 50,
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    expect(await screen.findByText('2 × 25 kg (código C0001)')).toBeTruthy();
+    expect(Array.from(container.querySelectorAll('.fcr-embalagem__outras')).map((e) => e.textContent)).toEqual([
+      '1 × Tambor 200 kg (código C0002) = 200 kg',
+    ]);
+  });
+
   it('sem a prop podeEditar o padrao e somente leitura', async () => {
     mockApi([item()]);
     renderRelatorio();
