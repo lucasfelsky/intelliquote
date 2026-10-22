@@ -77,6 +77,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState('');
   const [fase, setFase] = useState<Fase>(null);
+  // Muda a `key` do <input type="file"> ao remover: o campo volta vazio e reescolher o mesmo arquivo dispara `change`.
+  const [versoesInput, setVersoesInput] = useState<Record<string, number>>({});
   const emCurso = useRef(false);
   const erroRef = useRef<HTMLDivElement>(null);
 
@@ -112,7 +114,9 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     },
   };
 
+  // gcTime 0: o corpo em base64 (ate ~10 MB) nao fica retido no cache de mutations depois de fechar o modal.
   const previsualizar = useMutation({
+    gcTime: 0,
     mutationFn: async (): Promise<Previa> => {
       setFase('lendo');
       if (aba === 'planilha') {
@@ -133,6 +137,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   });
 
   const confirmar = useMutation({
+    gcTime: 0,
     mutationFn: async (congelada: Previa) => {
       setFase('gravando');
       if (congelada.aba === 'planilha') {
@@ -163,6 +168,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const fechar = () => {
     if (!confirmar.isPending) onFechar();
   };
+
+  const limparInput = (chave: string) => setVersoesInput((atual) => ({ ...atual, [chave]: (atual[chave] ?? 0) + 1 }));
 
   const alterar = (fn: () => void) => {
     fn();
@@ -281,13 +288,17 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                     Arquivo da planilha
                   </label>
                   <input
+                    key={`planilha-${versoesInput.planilha ?? 0}`}
                     id="fci-planilha"
                     className="file-input"
                     type="file"
                     accept={ACCEPT}
                     onChange={(e) => alterar(() => setPlanilha(e.target.files?.[0] ?? null))}
                   />
-                  {planilha && <ArquivoEscolhido file={planilha} onRemover={() => alterar(() => setPlanilha(null))} />}
+                  {planilha && <ArquivoEscolhido file={planilha} onRemover={() => {
+                    limparInput('planilha');
+                    alterar(() => setPlanilha(null));
+                  }} />}
                 </TabPanel>
                 <TabPanel value="dbcorp">
                   <div className="fci-slots">
@@ -310,13 +321,17 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                             </p>
                           )}
                           <input
+                            key={`${slot.id}-${versoesInput[slot.id] ?? 0}`}
                             id={`fci-slot-${slot.id}`}
                             className="file-input"
                             type="file"
                             accept={ACCEPT}
                             onChange={(e) => escolherSlot(slot.id, e.target.files?.[0] ?? null)}
                           />
-                          {file && <ArquivoEscolhido file={file} onRemover={() => escolherSlot(slot.id, null)} />}
+                          {file && <ArquivoEscolhido file={file} onRemover={() => {
+                    limparInput(slot.id);
+                    escolherSlot(slot.id, null);
+                  }} />}
                         </div>
                       );
                     })}

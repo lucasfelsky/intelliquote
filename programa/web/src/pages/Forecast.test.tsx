@@ -391,6 +391,29 @@ describe('Forecast - importar quinzena', () => {
     expect(screen.getByLabelText('Quinzena')).toBeTruthy();
   });
 
+  it('ao fechar o modal o foco volta ao botao "Importar quinzena"', async () => {
+    mockRole = 'comprador';
+    mockApi({ 7: detalhe() });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    const abrir = screen.getByRole('button', { name: 'Importar quinzena' });
+    fireEvent.click(abrir);
+    await screen.findByLabelText('Data-base');
+    (screen.getByLabelText('Data-base') as HTMLElement).focus();
+    expect(document.activeElement).not.toBe(abrir);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByLabelText('Data-base')).toBeNull());
+    expect(document.activeElement).toBe(abrir);
+
+    // reabrir e fechar pelo "Fechar" do cabecalho tambem devolve o foco
+    fireEvent.click(abrir);
+    await screen.findByLabelText('Data-base');
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    await waitFor(() => expect(screen.queryByLabelText('Data-base')).toBeNull());
+    expect(document.activeElement).toBe(abrir);
+  });
+
   it('fluxo integrado: planilha -> preview -> confirm 201 abre a quinzena nova', async () => {
     const novo = {
       id: 9,

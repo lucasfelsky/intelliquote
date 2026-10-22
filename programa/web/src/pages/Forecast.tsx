@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
@@ -147,6 +147,8 @@ export default function Forecast() {
   const podeImportar = user?.role === 'admin' || user?.role === 'comprador';
   const [importando, setImportando] = useState(false);
   const [importada, setImportada] = useState<string | null>(null);
+  const botaoImportar = useRef<HTMLButtonElement>(null);
+  const importouAntes = useRef(false);
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
@@ -160,6 +162,16 @@ export default function Forecast() {
     enabled: escolhidaId !== undefined,
   });
   const detail = detalhe.data;
+
+  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
+  useEffect(() => {
+    if (importando) {
+      importouAntes.current = true;
+    } else if (importouAntes.current) {
+      importouAntes.current = false;
+      botaoImportar.current?.focus();
+    }
+  }, [importando]);
 
   const aoImportar = useCallback(
     async (snapshotId: number, label: string) => {
@@ -210,7 +222,7 @@ export default function Forecast() {
               </div>
             )}
             {podeImportar && (
-              <button type="button" className="primary-button" onClick={() => setImportando(true)}>
+              <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
                 Importar quinzena
               </button>
             )}

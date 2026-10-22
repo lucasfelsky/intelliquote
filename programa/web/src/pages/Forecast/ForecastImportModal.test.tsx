@@ -539,6 +539,68 @@ describe('ForecastImportModal - limite de 10 MB e arquivos', () => {
     const corpo = post.mock.calls[0]?.[1] as { files: Record<string, unknown> };
     expect('margem' in corpo.files).toBe(false);
   });
+
+  it('remover limpa o campo de arquivo e reescolher o MESMO arquivo volta a valer (slot DBCorp)', async () => {
+    renderModal();
+    abrirDbcorp();
+    preencherComuns();
+    escolherTodos([...SLOTS_2A, 'margem']);
+    const mesmo = arquivo('margem-teste.xlsx');
+    escolher('margem', mesmo);
+    const antes = document.querySelector('#fci-slot-margem') as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Remover margem-teste.xlsx' }));
+    const depois = document.querySelector('#fci-slot-margem') as HTMLInputElement;
+    // input novo e vazio: o nome antigo nao fica no campo e o navegador dispara `change` de novo
+    expect(depois).not.toBe(antes);
+    expect(depois.files?.length ?? 0).toBe(0);
+    expect(screen.queryByRole('button', { name: 'Remover margem-teste.xlsx' })).toBeNull();
+    escolher('margem', mesmo);
+    expect(screen.getByRole('button', { name: 'Remover margem-teste.xlsx' })).toBeTruthy();
+    post.mockResolvedValueOnce({ data: resumoDbcorp() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByRole('heading', { name: 'Pré-visualização dos relatórios DBCorp' });
+    const corpo = post.mock.calls[0]?.[1] as { files: Record<string, unknown> };
+    expect('margem' in corpo.files).toBe(true);
+  });
+
+  it('remover limpa o campo de arquivo e reescolher o MESMO arquivo volta a valer (planilha)', async () => {
+    renderModal();
+    preencherComuns();
+    const mesmo = arquivo('planilha-teste.xlsx');
+    const escolherPlanilha = () => fireEvent.change(screen.getByLabelText('Arquivo da planilha'), { target: { files: [mesmo] } });
+    escolherPlanilha();
+    const antes = screen.getByLabelText('Arquivo da planilha');
+    fireEvent.click(screen.getByRole('button', { name: 'Remover planilha-teste.xlsx' }));
+    const depois = screen.getByLabelText('Arquivo da planilha') as HTMLInputElement;
+    expect(depois).not.toBe(antes);
+    expect(depois.files?.length ?? 0).toBe(0);
+    expect(screen.getByText(/Faltam:.*arquivo da planilha/)).toBeTruthy();
+    escolherPlanilha();
+    expect(screen.getByRole('button', { name: 'Remover planilha-teste.xlsx' })).toBeTruthy();
+    expect(botao('Pré-visualizar').disabled).toBe(false);
+  });
+});
+
+describe('ForecastImportModal - corpo nao fica retido', () => {
+  it('fechar o modal nao deixa preview nem confirm no cache de mutations', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const props = { quinzenasExistentes: [], onFechar: vi.fn(), onImportada: vi.fn() };
+    const arvore = (aberto: boolean) => (
+      <QueryClientProvider client={client}>
+        <ForecastImportModal aberto={aberto} {...props} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(arvore(true));
+    await previsualizarDbcorp();
+    post.mockResolvedValueOnce({ data: { ...resumoDbcorp(), snapshotId: null } });
+    fireEvent.click(botao('Confirmar importação'));
+    await screen.findByText('Importação concluída. Nenhuma quinzena nova foi criada.');
+    // aberto: as duas mutations (com o corpo em base64) existem
+    expect(client.getMutationCache().getAll().length).toBe(2);
+
+    rerender(arvore(false));
+    await waitFor(() => expect(client.getMutationCache().getAll().length).toBe(0));
+  });
 });
 
 describe('ForecastImportModal - aba Planilha', () => {
