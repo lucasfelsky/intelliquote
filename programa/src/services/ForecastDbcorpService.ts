@@ -24,6 +24,7 @@ import {
   type ParsedVendas,
 } from '../utils/forecastDbcorp';
 import { mesesHistorico, rotulosDaQuinzena, type RotulosDaQuinzena } from '../utils/forecastMonths';
+import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Quinzena } from '../utils/forecastTypes';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
 import type { ForecastDbcorpConfirmInput, ForecastDbcorpPreviewInput } from '../validators/forecast';
@@ -34,6 +35,7 @@ import {
   summarizeMonthlySales,
   type MonthlySalesResumo,
 } from './ForecastImportService';
+import { ForecastProductService } from './ForecastProductService';
 import {
   ForecastSnapshotService,
   halfDoRotulo,
@@ -75,6 +77,8 @@ interface BuiltQuinzena {
     mesAnterior: MonthlySalesResumo | null;
   };
   casamento: Partial<Record<ForecastDbcorpSlot, Casamento>>;
+  // Codigos do DBCorp fora do cadastro ativo (ficam FORA do calculo ate completar o cadastro).
+  pendentes: PendentesResultado | null;
   avisos: string[];
   erros: string[];
 }
@@ -87,6 +91,7 @@ export interface ForecastDbcorpSummary {
   produtos: { total: number };
   historico: BuiltQuinzena['historico'];
   relatorios: Partial<Record<ForecastDbcorpSlot, Record<string, unknown>>>;
+  pendentes: PendentesResultado | null;
   avisos: string[];
   erros: string[];
 }
@@ -189,6 +194,7 @@ export class ForecastDbcorpService {
       produtosTotal: 0,
       historico: { meses: [], ausentes: [], mesAnterior: null },
       casamento: {},
+      pendentes: null,
       avisos: [],
       erros,
     };
@@ -310,6 +316,14 @@ export class ForecastDbcorpService {
       );
     }
 
+    // Pendentes de cadastro: codigo com movimento no DBCorp que nao e de nenhum produto ativo.
+    built.pendentes = codigosPendentes(entradas, await ForecastProductService.cadastroDeCodigos(db));
+    if (built.pendentes.totalItens > 0) {
+      built.avisos.push(
+        `${built.pendentes.totalItens} códigos com venda, programação ou chegada no DBCorp não estão no cadastro e ficam FORA do cálculo até completar o cadastro.`,
+      );
+    }
+
     // Efeito da gravacao do mes base-1 (o mes e substituido por inteiro).
     if (parsed.vendasMes.usadas > 0) {
       built.historico.mesAnterior = await summarizeMonthlySales(
@@ -347,6 +361,7 @@ export class ForecastDbcorpService {
       produtos: { total: built?.produtosTotal ?? 0 },
       historico: built?.historico ?? { meses: [], ausentes: [], mesAnterior: null },
       relatorios,
+      pendentes: built?.pendentes ?? null,
       avisos: [...parsed.avisos, ...(built?.avisos ?? [])],
       erros: [...parsed.erros, ...(built?.erros ?? [])],
     };

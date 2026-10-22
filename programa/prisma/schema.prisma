@@ -1116,6 +1116,8 @@ model ForecastProduct {
   familyId          Int?
   family            ItemFamily?           @relation(fields: [familyId], references: [id], onDelete: SetNull)
   isActive          Boolean               @default(true)
+  // Quem cadastrou: 'planilha' (import PO.COMP.01) ou 'dbcorp' (tela, a partir de um pendente de cadastro). O import da planilha nao inativa produto 'dbcorp'.
+  origin            String                @default("planilha")
   codes             ForecastProductCode[]
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt

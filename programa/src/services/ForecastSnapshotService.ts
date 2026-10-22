@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { FORECAST_MAX_DIVERGENCES } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
+import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
 import {
   montarRelatorioCompras,
@@ -15,6 +16,13 @@ import {
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 import { ForecastProductService } from './ForecastProductService';
+
+export interface ForecastPendentesData extends PendentesResultado {
+  // false = quinzena da planilha: nao ha relatorio DBCorp para comparar com o cadastro.
+  aplicavel: boolean;
+  snapshotId: number;
+  label: string;
+}
 
 type Db = Prisma.TransactionClient;
 
@@ -195,6 +203,32 @@ export class ForecastSnapshotService {
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
     };
+  }
+
+  // Pendentes de cadastro da quinzena: os codigos que o DBCorp trouxe (congelados em `inputs`) comparados com o
+  // cadastro ATUAL - o codigo sai da lista quando entra no cadastro. So leitura (nada e gravado na quinzena).
+  static async getPendentes(id: number): Promise<ForecastPendentesData> {
+    const snapshot = await prisma.forecastSnapshot.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, label: true, origin: true, inputs: true },
+    });
+    if (!snapshot) {
+      throw new HttpError(404, 'Quinzena nao encontrada.');
+    }
+    if (snapshot.origin !== 'dbcorp') {
+      return {
+        aplicavel: false,
+        snapshotId: snapshot.id,
+        label: snapshot.label,
+        itens: [],
+        totalItens: 0,
+        omitidos: 0,
+        soSaldo: { codigos: 0, kg: 0 },
+      };
+    }
+    const cadastro = await ForecastProductService.cadastroDeCodigos();
+    const resultado = codigosPendentes(snapshot.inputs as unknown as Entradas, cadastro);
+    return { aplicavel: true, snapshotId: snapshot.id, label: snapshot.label, ...resultado };
   }
 
   // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada

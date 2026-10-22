@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
 import { ForecastImportService } from '../services/ForecastImportService';
+import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
 import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
 import { ForecastSourceService } from '../services/ForecastSourceService';
@@ -9,6 +10,8 @@ import {
   forecastDbcorpConfirmSchema,
   forecastDbcorpPreviewSchema,
   forecastEmbalagensPatchSchema,
+  forecastProductCodeAddSchema,
+  forecastProductCreateSchema,
   forecastSnapshotQuerySchema,
   forecastSourcePatchSchema,
   forecastWorkbookConfirmSchema,
@@ -140,6 +143,43 @@ export class ForecastController {
       });
       const data = await ForecastSnapshotService.getCalculated(id, query.hoje);
       return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async getPendentes(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const data = await ForecastSnapshotService.getPendentes(id);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async createProduct(req: Request, res: Response): Promise<Response> {
+    try {
+      const input = forecastProductCreateSchema.parse(req.body);
+      const data = await ForecastProductCadastroService.create(input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async addProductCode(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const input = forecastProductCodeAddSchema.parse(req.body);
+      const data = await ForecastProductCadastroService.addCode(id, input, req.user?.id ?? null);
+      return res.status(201).json({ data });
     } catch (error) {
       return sendError(res, error);
     }

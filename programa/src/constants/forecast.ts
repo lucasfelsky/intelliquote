@@ -139,3 +139,11 @@ export const FORECAST_DBCORP_HEADERS = {
   fup: ['STATUS', 'CÓD. SQ', 'QTD - KGS', 'ETD (EMBARQUE)', 'ETA (CHEGADA)', 'ETA FINAL'],
   clientesAtivos: ['Código Item'],
 } as const;
+
+// --- Produtos pendentes de cadastro (3B) ---
+// Origem do cadastro (ForecastProduct.origin): importado da planilha ou criado pela tela a partir de um pendente.
+export const FORECAST_PRODUCT_ORIGIN_PLANILHA = 'planilha';
+export const FORECAST_PRODUCT_ORIGIN_DBCORP = 'dbcorp';
+
+// Maximo de codigos pendentes devolvidos (a contagem total e o resto omitido vao sempre).
+export const FORECAST_PENDENTES_MAX_ITENS = 200;

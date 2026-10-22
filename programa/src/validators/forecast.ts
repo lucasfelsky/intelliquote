@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   FORECAST_BASE64_MAX_LENGTH,
   FORECAST_LABEL_PATTERN,
+  FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
 import { isValidDateKey } from '../utils/supplierDocumentDates';
@@ -165,3 +166,37 @@ export type ForecastDbcorpConfirmInput = z.infer<typeof forecastDbcorpConfirmSch
 export type ForecastSourcePatchInput = z.infer<typeof forecastSourcePatchSchema>;
 export type ForecastSnapshotQueryInput = z.infer<typeof forecastSnapshotQuerySchema>;
 export type ForecastEmbalagensPatchInput = z.infer<typeof forecastEmbalagensPatchSchema>;
+
+// Produto novo a partir de um pendente de cadastro (PR 3B): nome, ate 7 codigos, fonte e familia. O lead time
+// pertence a fonte (precisa estar preenchido; a regra e do service).
+const productCodeField = z
+  .string({ error: 'Informe o código do produto.' })
+  .trim()
+  .min(1, 'Informe o código do produto.')
+  .max(40, 'O código aceita no máximo 40 caracteres.')
+  .transform((value) => value.toUpperCase());
+
+const positiveIdField = (message: string) =>
+  z.number({ error: message }).int(message).positive(message);
+
+export const forecastProductCreateSchema = z.object({
+  nome: z
+    .string({ error: 'Informe o nome do produto.' })
+    .trim()
+    .min(1, 'Informe o nome do produto.')
+    .max(200, 'O nome aceita no máximo 200 caracteres.'),
+  codigos: z
+    .array(productCodeField, { error: 'Informe os códigos do produto como lista.' })
+    .min(1, 'Informe ao menos um código.')
+    .max(FORECAST_MAX_CODES_PER_PRODUCT, `Informe no máximo ${FORECAST_MAX_CODES_PER_PRODUCT} códigos.`)
+    .refine((lista) => new Set(lista).size === lista.length, 'Código repetido na lista.'),
+  sourceId: positiveIdField('Fonte inválida.'),
+  familyId: positiveIdField('Família inválida.'),
+});
+
+export const forecastProductCodeAddSchema = z.object({
+  codigo: productCodeField,
+});
+
+export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
+export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;
