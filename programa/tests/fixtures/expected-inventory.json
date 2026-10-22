@@ -225,6 +225,7 @@
     "GET /forecast/snapshots",
     "GET /forecast/snapshots/:id",
     "GET /forecast/snapshots/:id/relatorio-compras",
+    "GET /forecast/snapshots/:id/relatorio-compras/xlsx",
     "GET /forecast/sources",
     "GET /forwarders",
     "GET /help/articles",

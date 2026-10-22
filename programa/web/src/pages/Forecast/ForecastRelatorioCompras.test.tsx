@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
 
@@ -230,5 +230,106 @@ describe('ForecastRelatorioCompras', () => {
     renderRelatorio();
     expect(screen.getByRole('status', { name: 'Carregando' })).toBeTruthy();
     expect(await screen.findByText('Quinzena não encontrada (pode ter sido removida).')).toBeTruthy();
+  });
+});
+
+describe('ForecastRelatorioCompras - exportacao e impressao', () => {
+  const NOME_XLSX = 'relatorio-compras-10-2-2026-10-20.xlsx';
+  const PATH_XLSX = '/v1/forecast/snapshots/7/relatorio-compras/xlsx';
+  const originais = { criar: URL.createObjectURL, revogar: URL.revokeObjectURL };
+  const html = document.documentElement;
+
+  // Roteia o mock de `get` por caminho: a tela chama o relatorio e o botao chama o xlsx.
+  function rotear(xlsx: () => Promise<unknown>) {
+    get.mockImplementation(async (path: string) => {
+      if (path === PATH_XLSX) return xlsx();
+      return { data: relatorio() };
+    });
+  }
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = originais.criar;
+    URL.revokeObjectURL = originais.revogar;
+    vi.restoreAllMocks();
+    delete html.dataset.theme;
+  });
+
+  it('barra de acoes: grupo "Exportar relatorio" com os dois botoes', async () => {
+    rotear(async () => ({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } }));
+    renderRelatorio();
+    const grupo = await screen.findByRole('group', { name: 'Exportar relatório' });
+    expect(within(grupo).getByRole('button', { name: 'Baixar XLSX' })).toBeTruthy();
+    expect(within(grupo).getByRole('button', { name: 'Imprimir / Salvar como PDF' })).toBeTruthy();
+    expect(grupo.closest('.fcr-resumo')).not.toBeNull();
+  });
+
+  it('"Baixar XLSX" pede o arquivo com a data da tela (quinzena.hoje) e mostra o nome gerado', async () => {
+    rotear(async () => ({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } }));
+    renderRelatorio();
+    fireEvent.click(await screen.findByRole('button', { name: 'Baixar XLSX' }));
+    const ok = await screen.findByRole('status');
+    expect(ok.textContent).toBe(`XLSX gerado: ${NOME_XLSX}`);
+    expect(get).toHaveBeenCalledWith(PATH_XLSX, { hoje: '2026-10-20' });
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
+  });
+
+  it('enquanto gera: botao desabilitado, aria-busy e texto "Gerando XLSX…"', async () => {
+    let liberar: (v: unknown) => void = () => {};
+    rotear(() => new Promise((resolve) => (liberar = resolve)));
+    renderRelatorio();
+    fireEvent.click(await screen.findByRole('button', { name: 'Baixar XLSX' }));
+    const botao = await screen.findByRole('button', { name: 'Gerando XLSX…' });
+    expect((botao as HTMLButtonElement).disabled).toBe(true);
+    expect(botao.getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      liberar({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } });
+    });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Baixar XLSX' })).toBeTruthy());
+  });
+
+  it('erro 404 do arquivo: alerta com a mensagem do servico', async () => {
+    rotear(() => Promise.reject(new ApiError(404, null)));
+    renderRelatorio();
+    fireEvent.click(await screen.findByRole('button', { name: 'Baixar XLSX' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe('Quinzena não encontrada (pode ter sido removida).');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('"Imprimir / Salvar como PDF" chama window.print e aponta para a dica', async () => {
+    rotear(async () => ({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } }));
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    renderRelatorio();
+    const botao = await screen.findByRole('button', { name: 'Imprimir / Salvar como PDF' });
+    fireEvent.click(botao);
+    expect(print).toHaveBeenCalledTimes(1);
+    const dica = document.getElementById(botao.getAttribute('aria-describedby') ?? '');
+    expect(dica?.textContent).toBe('Abre a impressão do navegador; para PDF, escolha “Salvar como PDF” no destino.');
+  });
+
+  it('em tema escuro, beforeprint vira claro e afterprint volta ao escuro; apos desmontar nao altera', async () => {
+    rotear(async () => ({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } }));
+    html.dataset.theme = 'dark';
+    const { unmount } = renderRelatorio();
+    await screen.findByRole('group', { name: 'Exportar relatório' });
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    expect(html.dataset.theme).toBe('light');
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'));
+    });
+    expect(html.dataset.theme).toBe('dark');
+    unmount();
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    expect(html.dataset.theme).toBe('dark');
   });
 });

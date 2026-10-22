@@ -31,6 +31,7 @@ vi.mock('../src/lib/prisma', () => {
 
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
+import { ForecastSnapshotService } from '../src/services/ForecastSnapshotService';
 
 type Mock = ReturnType<typeof vi.fn>;
 const prismaMock = prisma as unknown as {
@@ -119,6 +120,7 @@ describe('Forecast routes - autenticacao e papeis', () => {
     { method: 'get', path: '/api/v1/forecast/snapshots' },
     { method: 'get', path: '/api/v1/forecast/snapshots/1' },
     { method: 'get', path: '/api/v1/forecast/snapshots/1/relatorio-compras' },
+    { method: 'get', path: '/api/v1/forecast/snapshots/1/relatorio-compras/xlsx' },
   ];
 
   it.each(endpoints)('sem login: $method $path -> 401', async ({ method, path, body }) => {
@@ -316,6 +318,30 @@ describe('Forecast routes - validacao (Zod)', () => {
     prismaMock.forecastSnapshot.findFirst.mockResolvedValue(null);
     const naoAcha = await request(app)
       .get('/api/v1/forecast/snapshots/5/relatorio-compras')
+      .set('Cookie', cookies);
+    expect(naoAcha.status).toBe(404);
+    expect(prismaMock.forecastSnapshot.findFirst).toHaveBeenCalledWith({
+      where: { id: 5, deletedAt: null },
+    });
+  });
+
+  it('GET /snapshots/:id/relatorio-compras/xlsx: id e hoje invalidos -> 400; inexistente -> 404', async () => {
+    const cookies = await loginAs('viewer');
+    expect(
+      (await request(app).get('/api/v1/forecast/snapshots/abc/relatorio-compras/xlsx').set('Cookie', cookies))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app)
+          .get('/api/v1/forecast/snapshots/1/relatorio-compras/xlsx?hoje=2026-13-01')
+          .set('Cookie', cookies)
+      ).status,
+    ).toBe(400);
+
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue(null);
+    const naoAcha = await request(app)
+      .get('/api/v1/forecast/snapshots/5/relatorio-compras/xlsx')
       .set('Cookie', cookies);
     expect(naoAcha.status).toBe(404);
     expect(prismaMock.forecastSnapshot.findFirst).toHaveBeenCalledWith({
@@ -543,6 +569,64 @@ describe('Forecast routes - relatorio de compras', () => {
       .get('/api/v1/forecast/snapshots/7/relatorio-compras?hoje=2026-10-20')
       .set('Cookie', cookies);
     expect(response.status).toBe(200);
+  });
+
+  it('viewer baixa o XLSX do mesmo relatorio da tela (mesmo metodo, mesma ordem)', async () => {
+    const cookies = await loginAs('viewer');
+    const spy = vi.spyOn(ForecastSnapshotService, 'getRelatorioCompras');
+    try {
+      const tela = await request(app)
+        .get('/api/v1/forecast/snapshots/7/relatorio-compras?hoje=2026-10-20')
+        .set('Cookie', cookies);
+      expect(tela.status).toBe(200);
+      spy.mockClear();
+
+      const response = await request(app)
+        .get('/api/v1/forecast/snapshots/7/relatorio-compras/xlsx?hoje=2026-10-20')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-disposition']).toBeUndefined();
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith(7, '2026-10-20');
+      const { data } = response.body as { data: { fileName: string; contentBase64: string } };
+      expect(data.fileName).toBe('relatorio-compras-10-2-2026-10-20.xlsx');
+
+      const wb = new exceljs.Workbook();
+      await wb.xlsx.load(Buffer.from(data.contentBase64, 'base64') as unknown as ArrayBuffer);
+      const ws = wb.getWorksheet('Relatório de compras');
+      expect(ws).toBeDefined();
+
+      // Linhas de item = as que seguem o cabecalho de colunas ('Item' na coluna A) ate a linha em branco.
+      const nomesNoArquivo: string[] = [];
+      let dentro = false;
+      ws!.eachRow({ includeEmpty: true }, (row) => {
+        const a = String(row.getCell(1).value ?? '');
+        if (a === 'Item') {
+          dentro = true;
+        } else if (a === '') {
+          dentro = false;
+        } else if (dentro) {
+          nomesNoArquivo.push(a);
+        }
+      });
+      const nomesNaTela = (tela.body.data.grupos as Array<{ itens: Array<{ item: string }> }>)
+        .flatMap((g) => g.itens)
+        .map((i) => i.item);
+      expect(nomesNoArquivo.length).toBeGreaterThan(0);
+      expect(nomesNoArquivo).toEqual(nomesNaTela);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each(READ_ROLES)('%s: XLSX do relatorio de compras -> 200', async (role) => {
+    const cookies = await loginAs(role);
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7/relatorio-compras/xlsx?hoje=2026-10-20')
+      .set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    expect(typeof response.body.data.contentBase64).toBe('string');
   });
 });
 

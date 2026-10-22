@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
@@ -15,6 +15,8 @@ vi.mock('@/api/client', () => ({
 
 import { api, ApiError } from '@/api/client';
 import {
+  FORECAST_XLSX_MIME,
+  baixarForecastRelatorioXlsx,
   confirmForecastDbcorp,
   confirmForecastWorkbook,
   forecastErrorMessage,
@@ -61,6 +63,55 @@ describe('servico do Forecast', () => {
 
   it('a chave do relatorio fica sob ["forecast"] (a invalidacao pos-importacao a cobre)', () => {
     expect(forecastKeys.relatorio(7)).toEqual(['forecast', 'relatorio', 7]);
+  });
+});
+
+describe('baixarForecastRelatorioXlsx', () => {
+  const originais = { criar: URL.createObjectURL, revogar: URL.revokeObjectURL };
+  let click: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = originais.criar;
+    URL.revokeObjectURL = originais.revogar;
+    click.mockRestore();
+  });
+
+  it('pede o xlsx com a data da tela, monta o Blob xlsx e dispara o download', async () => {
+    const bytes = new Uint8Array([80, 75, 3, 4]);
+    get.mockResolvedValue({
+      data: { fileName: 'relatorio-compras-10-2-2026-10-20.xlsx', contentBase64: btoa(String.fromCharCode(...bytes)) },
+    });
+    const links: HTMLAnchorElement[] = [];
+    click.mockImplementation(function (this: HTMLAnchorElement) {
+      links.push(this);
+    });
+
+    await expect(baixarForecastRelatorioXlsx(7, '2026-10-20')).resolves.toEqual({
+      fileName: 'relatorio-compras-10-2-2026-10-20.xlsx',
+    });
+
+    expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7/relatorio-compras/xlsx', { hoje: '2026-10-20' });
+    const blob = vi.mocked(URL.createObjectURL).mock.calls[0]?.[0] as Blob;
+    expect(blob.type).toBe(FORECAST_XLSX_MIME);
+    expect(blob.size).toBe(4);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(links[0]?.download).toBe('relatorio-compras-10-2-2026-10-20.xlsx');
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
+  });
+
+  it('erro do servidor propaga e nenhum arquivo e criado', async () => {
+    get.mockRejectedValue(new ApiError(404, null));
+    await expect(baixarForecastRelatorioXlsx(7, '2026-10-20')).rejects.toBeInstanceOf(ApiError);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   });
 });
 
