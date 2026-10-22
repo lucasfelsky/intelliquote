@@ -118,6 +118,7 @@ describe('Forecast routes - autenticacao e papeis', () => {
     { method: 'get', path: '/api/v1/forecast/products' },
     { method: 'get', path: '/api/v1/forecast/snapshots' },
     { method: 'get', path: '/api/v1/forecast/snapshots/1' },
+    { method: 'get', path: '/api/v1/forecast/snapshots/1/relatorio-compras' },
   ];
 
   it.each(endpoints)('sem login: $method $path -> 401', async ({ method, path, body }) => {
@@ -299,6 +300,29 @@ describe('Forecast routes - validacao (Zod)', () => {
     });
   });
 
+  it('GET /snapshots/:id/relatorio-compras: id e hoje invalidos -> 400; inexistente -> 404', async () => {
+    const cookies = await loginAs('viewer');
+    expect(
+      (await request(app).get('/api/v1/forecast/snapshots/abc/relatorio-compras').set('Cookie', cookies)).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(app)
+          .get('/api/v1/forecast/snapshots/1/relatorio-compras?hoje=2026-13-01')
+          .set('Cookie', cookies)
+      ).status,
+    ).toBe(400);
+
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue(null);
+    const naoAcha = await request(app)
+      .get('/api/v1/forecast/snapshots/5/relatorio-compras')
+      .set('Cookie', cookies);
+    expect(naoAcha.status).toBe(404);
+    expect(prismaMock.forecastSnapshot.findFirst).toHaveBeenCalledWith({
+      where: { id: 5, deletedAt: null },
+    });
+  });
+
   it('GET /snapshots: lista so nao deletadas e sem os Json grandes', async () => {
     const cookies = await loginAs('viewer');
     prismaMock.forecastSnapshot.findMany.mockResolvedValue([]);
@@ -437,6 +461,88 @@ describe('Forecast routes - quinzena calculada', () => {
     expect(linhas[0]?.obs).toBe('Obs. de teste');
     expect(JSON.stringify(response.body)).not.toContain('1,23');
     expect(JSON.stringify(response.body)).not.toContain('precoFechado');
+  });
+});
+
+describe('Forecast routes - relatorio de compras', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const produtos = fixture.produtos.slice(0, 5);
+    const linhasDe = new Set(produtos.map((p) => String(p.linha)));
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 7,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'planilha',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: produtos,
+      inputs: fixture.entradas,
+      expected: Object.fromEntries(Object.entries(fixture.esperado).filter(([linha]) => linhasDe.has(linha))),
+      files: [{ kind: 'planilha', fileName: 'quinzena.xlsx', sha256: 'abc', rows: 5 }],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+  });
+
+  it('viewer recebe o relatorio montado so a partir da quinzena calculada', async () => {
+    const cookies = await loginAs('viewer');
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7/relatorio-compras?hoje=2026-10-20')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const { data } = response.body;
+    expect(Array.isArray(data.grupos)).toBe(true);
+    expect(data.quinzena).toMatchObject({ id: 7, label: '10-2', baseDate: '2026-10-15', hoje: '2026-10-20' });
+    const itens = (data.grupos as Array<{ itens: Array<{ embalagem: { usada: unknown } }> }>).flatMap(
+      (g) => g.itens,
+    );
+    expect(itens.length).toBe(data.totais.itens);
+    for (const item of itens) {
+      expect(item.embalagem.usada).toBeNull();
+    }
+    expect(data.totais.semEmbalagem).toBe(data.totais.itens);
+  });
+
+  it('a flag "nao fraciona" (coluna AX) chega ao relatorio como booleano', async () => {
+    const cookies = await loginAs('viewer');
+    const [base, outro] = fixture.produtos;
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 7,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'dbcorp',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: [
+        { ...base, naoFraciona: ' x ' },
+        { ...outro, naoFraciona: '' },
+      ],
+      inputs: fixture.entradas,
+      expected: null,
+      files: [],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+    const response = await request(app).get('/api/v1/forecast/snapshots/7?hoje=2026-10-20').set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    const linhas = response.body.data.linhas as Array<{ naoFraciona: boolean }>;
+    expect(linhas.map((l) => l.naoFraciona)).toEqual([true, false]);
+  });
+
+  it.each(READ_ROLES)('%s: relatorio de compras -> 200', async (role) => {
+    const cookies = await loginAs(role);
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7/relatorio-compras?hoje=2026-10-20')
+      .set('Cookie', cookies);
+    expect(response.status).toBe(200);
   });
 });
 

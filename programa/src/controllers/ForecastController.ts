@@ -116,4 +116,20 @@ export class ForecastController {
       return sendError(res, error);
     }
   }
+
+  static async getRelatorioCompras(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const query = forecastSnapshotQuerySchema.parse({
+        hoje: typeof req.query.hoje === 'string' ? req.query.hoje : undefined,
+      });
+      const data = await ForecastSnapshotService.getRelatorioCompras(id, query.hoje);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
 }

@@ -92,6 +92,13 @@ export function mesesDaProjecao(baseDate: string): string[] {
   });
 }
 
+/** 'AAAA-MM' -> 'mmm/aaaa' (out/2026); invalido = '—'. */
+export function mesAbrevDoAnoMes(anoMes: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(anoMes);
+  const abrev = m ? MES_ABREV[Number(m[2]) - 1] : undefined;
+  return m && abrev ? `${abrev}/${m[1]}` : '—';
+}
+
 /** Nome do mes (minusculo, por extenso) `deslocamento` meses depois da data base. */
 export function nomeDoMes(baseDate: string, deslocamento: number): string {
   const alvo = indiceDoMes(baseDate, deslocamento);
@@ -266,9 +273,11 @@ export interface FiltroDef {
 export const FILTROS: readonly FiltroDef[] = [
   { id: 'todos', rotulo: () => 'Todos', teste: () => true },
   {
+    // Mesma regra do relatorio de compras (backend): sem consumo e demanda = 0 fica fora; sem consumo
+    // e demanda < 0 (programacao maior que o estoque) entra.
     id: 'demanda',
     rotulo: () => 'Demanda ≤ 0',
-    teste: (l) => l.AN !== null && l.AN <= 0 && l.Q > 0,
+    teste: (l) => l.AN !== null && l.AN <= 0 && (l.Q > 0 || l.AN < 0),
   },
   {
     id: 'falta',
