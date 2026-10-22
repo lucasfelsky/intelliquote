@@ -342,7 +342,15 @@ export class ForecastProductService {
       );
     }
     if (adotados > 0) {
-      avisosCadastro.push(`${adotados} produtos cadastrados pela tela passam a vir da planilha.`);
+      avisosCadastro.push(
+        `${adotados} produtos cadastrados pela tela passam a vir da planilha: fonte, família e códigos escolhidos na tela serão substituídos pelos da planilha.`,
+      );
+    }
+    const removidos = await ForecastProductService.codigosDaTelaRemovidos(db, items);
+    if (removidos > 0) {
+      avisosCadastro.push(
+        `${removidos} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`,
+      );
     }
 
     return {
@@ -364,6 +372,43 @@ export class ForecastProductService {
         },
       },
     };
+  }
+
+  // Codigos acrescentados pela tela (AuditLog 'code_add') a produto de origem 'planilha' que a planilha vai
+  // reescrever SEM eles: o import apaga o codigo (e a embalagem gravada nele). Um codigo que a planilha poe em
+  // OUTRO produto e movido (aviso proprio), nao removido. O AuditLog distingue o codigo da tela do que o Comex
+  // tirou da planilha; sem delegate de auditoria (mock) conta 0.
+  private static async codigosDaTelaRemovidos(
+    db: Db,
+    items: ProductPlanItem[],
+  ): Promise<number> {
+    const afetados = items.filter(
+      (i) => i.existingId !== null && i.before?.origin === FORECAST_PRODUCT_ORIGIN_PLANILHA && i.codesChanged,
+    );
+    if (afetados.length === 0) return 0;
+    const rows = await AuditLogService.findMany(
+      {
+        where: {
+          entityType: ENTITY_TYPE,
+          action: 'code_add',
+          entityId: { in: afetados.map((i) => String(i.existingId)) },
+        },
+        take: 5000,
+      },
+      db,
+    );
+    const codeIds = new Set<number>();
+    for (const row of rows as Array<{ metadata?: unknown }>) {
+      const codeId = (row.metadata as { codeId?: unknown } | null)?.codeId;
+      if (typeof codeId === 'number') codeIds.add(codeId);
+    }
+    if (codeIds.size === 0) return 0;
+    const noDraft = new Set(items.flatMap((i) => i.desiredCodes.map((c) => c.code)));
+    const existentes = await db.forecastProductCode.findMany({
+      where: { id: { in: [...codeIds] }, productId: { in: afetados.map((i) => i.existingId as number) } },
+      select: { code: true },
+    });
+    return existentes.filter((c) => !noDraft.has(c.code)).length;
   }
 
   private static snapshotOf(product: {

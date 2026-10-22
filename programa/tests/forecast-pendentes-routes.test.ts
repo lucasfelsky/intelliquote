@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForecastProductService, type ProductDraft } from '../src/services/ForecastProductService';
@@ -304,6 +305,42 @@ describe('Forecast pendentes - POST /forecast/products', () => {
   });
 });
 
+describe('Forecast pendentes - transacao do cadastro x import (advisory lock de ate 120 s)', () => {
+  const p2028 = () =>
+    new Prisma.PrismaClientKnownRequestError('Transaction API error: expired', {
+      code: 'P2028',
+      clientVersion: 'test',
+    });
+  const MSG = 'O cadastro está ocupado por uma importação. Tente novamente em instantes.';
+
+  it('create e addCode usam timeout 30 s e maxWait 10 s (nao o default de 5 s)', async () => {
+    const cookies = await loginAs('admin');
+    await request(app).post(CREATE_PATH).set('Cookie', cookies).send(corpoValido);
+    prismaMock.forecastProduct.findUnique.mockResolvedValue({ id: 5, isActive: true, codes: [] });
+    await request(app).post(ADD_PATH).set('Cookie', cookies).send({ codigo: 'TST0903' });
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+    for (const call of prismaMock.$transaction.mock.calls) {
+      expect(call[1]).toEqual({ timeout: 30_000, maxWait: 10_000 });
+    }
+  });
+
+  it('P2028 no create -> 503 em portugues (nao 500)', async () => {
+    prismaMock.$transaction.mockRejectedValue(p2028());
+    const cookies = await loginAs('admin');
+    const response = await request(app).post(CREATE_PATH).set('Cookie', cookies).send(corpoValido);
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe(MSG);
+  });
+
+  it('P2028 no addCode -> 503 em portugues (nao 500)', async () => {
+    prismaMock.$transaction.mockRejectedValue(p2028());
+    const cookies = await loginAs('comprador');
+    const response = await request(app).post(ADD_PATH).set('Cookie', cookies).send({ codigo: 'TST0903' });
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe(MSG);
+  });
+});
+
 describe('Forecast pendentes - POST /forecast/products/:id/codigos', () => {
   const produtoComPosicoes = (posicoes: number[], isActive = true) => ({
     id: 5,
@@ -316,7 +353,12 @@ describe('Forecast pendentes - POST /forecast/products/:id/codigos', () => {
     const cookies = await loginAs('comprador');
     const response = await request(app).post(ADD_PATH).set('Cookie', cookies).send({ codigo: ' tst0903 ' });
     expect(response.status).toBe(201);
-    expect(response.body.data).toEqual({ produtoId: 5, codigo: { id: 902, posicao: 2, codigo: 'TST0903' } });
+    // Mock sem a coluna origin (linha antiga) = 'planilha': a tela avisa que o codigo precisa entrar na planilha.
+    expect(response.body.data).toEqual({
+      produtoId: 5,
+      produtoOrigem: 'planilha',
+      codigo: { id: 902, posicao: 2, codigo: 'TST0903' },
+    });
     expect(prismaMock.forecastProductCode.create.mock.calls[0][0].data).toEqual({
       productId: 5,
       position: 2,
@@ -331,6 +373,16 @@ describe('Forecast pendentes - POST /forecast/products/:id/codigos', () => {
       metadata: { source: 'dbcorp_pendente', position: 2, codeId: 902 },
     });
     expect(JSON.stringify(audit)).not.toMatch(/TST09/);
+  });
+
+  it('devolve a origem do produto: dbcorp e planilha', async () => {
+    const cookies = await loginAs('admin');
+    prismaMock.forecastProduct.findUnique.mockResolvedValue({ ...produtoComPosicoes([1]), origin: 'dbcorp' });
+    const dbcorp = await request(app).post(ADD_PATH).set('Cookie', cookies).send({ codigo: 'TST0903' });
+    expect(dbcorp.body.data.produtoOrigem).toBe('dbcorp');
+    prismaMock.forecastProduct.findUnique.mockResolvedValue({ ...produtoComPosicoes([1]), origin: 'planilha' });
+    const planilha = await request(app).post(ADD_PATH).set('Cookie', cookies).send({ codigo: 'TST0903' });
+    expect(planilha.body.data.produtoOrigem).toBe('planilha');
   });
 
   it('produto inexistente -> 404; inativo -> 400; com 7 codigos -> 400', async () => {
@@ -430,8 +482,138 @@ describe('Forecast pendentes - plan() do import da planilha respeita origin', ()
     expect(adotado.before?.origin).toBe('dbcorp');
     // Linha do banco sem a coluna (mock antigo): conta como 'planilha'.
     expect(igual.before?.origin).toBe('planilha');
-    expect(plano.avisos).toEqual(['1 produtos cadastrados pela tela passam a vir da planilha.']);
+    expect(plano.avisos).toEqual([
+      '1 produtos cadastrados pela tela passam a vir da planilha: fonte, família e códigos escolhidos na tela serão substituídos pelos da planilha.',
+    ]);
     expect(plano.inativados).toEqual([]);
+  });
+});
+
+// Aviso agregado: codigo acrescentado pela tela a produto da planilha que a planilha nao traz (sem banco).
+describe('Forecast pendentes - plan() avisa codigos acrescentados pela tela que serao removidos', () => {
+  type CodeRow = [number, number, string]; // [id, posicao, codigo]
+  const produtoComCodigos = (id: number, nome: string, origin: string, codes: CodeRow[]) => ({
+    id,
+    name: nome,
+    normalizedName: nome,
+    sheetOrder: id,
+    notes: null,
+    fixedPriceFlag: false,
+    packaging: null,
+    noFractioning: false,
+    sampleQty: null,
+    sampleRequestNote: null,
+    familyId: null,
+    isActive: true,
+    origin,
+    source: null,
+    codes: codes.map(([codeId, position, code]) => ({ id: codeId, position, code, catalogItemId: null })),
+  });
+  const draft = (nome: string, codes: string[]): ProductDraft => ({
+    name: nome,
+    normalizedName: nome,
+    sheetOrder: 1,
+    sourceKey: null,
+    notes: null,
+    fixedPriceFlag: false,
+    packaging: null,
+    noFractioning: false,
+    sampleQty: null,
+    sampleRequestNote: null,
+    codes: codes.map((code, i) => ({ position: i + 1, code })),
+  });
+  // codeAdds = codigos com AuditLog 'code_add' (o que a tela acrescentou).
+  const dbFalso = (produtos: ReturnType<typeof produtoComCodigos>[], codeAdds: Array<{ entityId: string; codeId: number }>) => {
+    const findAudit = vi.fn(async (_args: unknown) =>
+      codeAdds.map((a) => ({ entityId: a.entityId, metadata: { codeId: a.codeId } })),
+    );
+    const findCodes = vi.fn(async ({ where }: { where: { id: { in: number[] } } }) =>
+      produtos
+        .flatMap((p) => p.codes)
+        .filter((c) => where.id.in.includes(c.id))
+        .map((c) => ({ code: c.code })),
+    );
+    const db = {
+      forecastProduct: { findMany: async () => produtos },
+      catalogItem: { findMany: async () => [] },
+      auditLog: { create: vi.fn(), findMany: findAudit },
+      forecastProductCode: { findMany: findCodes },
+    } as never;
+    return { db, findAudit };
+  };
+  const AVISO = (n: number) =>
+    `${n} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`;
+
+  it('conta so o codigo da tela (code_add) ausente da planilha em produto da planilha', async () => {
+    const { db, findAudit } = dbFalso(
+      [
+        produtoComCodigos(1, 'PRODUTO 001', 'planilha', [[11, 1, 'TST0001'], [12, 2, 'TST0090'], [13, 3, 'TST0091']]),
+        produtoComCodigos(2, 'PRODUTO 002', 'planilha', [[21, 1, 'TST0002'], [22, 2, 'TST0092']]),
+      ],
+      [
+        { entityId: '1', codeId: 12 },
+        { entityId: '2', codeId: 22 },
+      ],
+    );
+    // TST0091 saiu da planilha por decisao do Comex (sem code_add): nao entra na contagem.
+    const plano = await ForecastProductService.plan(
+      db,
+      [draft('PRODUTO 001', ['TST0001']), draft('PRODUTO 002', ['TST0002'])],
+      new Set(),
+    );
+    expect(plano.avisos).toEqual([AVISO(2)]);
+    expect((findAudit.mock.calls[0][0] as { where: unknown }).where).toMatchObject({
+      entityType: 'forecast_product',
+      action: 'code_add',
+    });
+  });
+
+  it('codigo da tela que a planilha traz (mesmo produto ou outro) nao conta; produto igual nao consulta a auditoria', async () => {
+    const { db, findAudit } = dbFalso(
+      [
+        produtoComCodigos(1, 'PRODUTO 001', 'planilha', [[11, 1, 'TST0001'], [12, 2, 'TST0090']]),
+        produtoComCodigos(2, 'PRODUTO 002', 'planilha', [[21, 1, 'TST0002']]),
+      ],
+      [{ entityId: '1', codeId: 12 }],
+    );
+    // TST0090 foi para o PRODUTO 002 (movido, aviso proprio) e o PRODUTO 001 ficou so com TST0001.
+    const movido = await ForecastProductService.plan(
+      db,
+      [draft('PRODUTO 001', ['TST0001']), draft('PRODUTO 002', ['TST0002', 'TST0090'])],
+      new Set(),
+    );
+    expect(movido.avisos.some((a) => a.includes('códigos acrescentados pela tela'))).toBe(false);
+    // Planilha com os mesmos codigos: nada muda, sem consulta.
+    findAudit.mockClear();
+    const igual = await ForecastProductService.plan(
+      db,
+      [draft('PRODUTO 001', ['TST0001', 'TST0090']), draft('PRODUTO 002', ['TST0002'])],
+      new Set(),
+    );
+    expect(igual.avisos).toEqual([]);
+    expect(findAudit).not.toHaveBeenCalled();
+  });
+
+  it('produto cadastrado pela tela (dbcorp) nao entra nesta contagem; db sem AuditLog = sem aviso', async () => {
+    const { db } = dbFalso(
+      [produtoComCodigos(3, 'PRODUTO 003', 'dbcorp', [[31, 1, 'TST0003'], [32, 2, 'TST0093']])],
+      [{ entityId: '3', codeId: 32 }],
+    );
+    const adotado = await ForecastProductService.plan(db, [draft('PRODUTO 003', ['TST0003'])], new Set());
+    expect(adotado.avisos.some((a) => a.includes('códigos acrescentados pela tela'))).toBe(false);
+    const semAudit = await ForecastProductService.plan(
+      {
+        forecastProduct: {
+          findMany: async () => [
+            produtoComCodigos(1, 'PRODUTO 001', 'planilha', [[11, 1, 'TST0001'], [12, 2, 'TST0090']]),
+          ],
+        },
+        catalogItem: { findMany: async () => [] },
+      } as never,
+      [draft('PRODUTO 001', ['TST0001'])],
+      new Set(),
+    );
+    expect(semAudit.avisos).toEqual([]);
   });
 });
 

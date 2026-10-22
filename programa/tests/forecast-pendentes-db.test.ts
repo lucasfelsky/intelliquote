@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
+import { ForecastProductCadastroService } from '../src/services/ForecastProductCadastroService';
 import { ForecastProductService, type ProductDraft } from '../src/services/ForecastProductService';
 import { hashPassword } from '../src/utils/password';
 
@@ -343,6 +344,18 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     const known = new Set([SOURCE_NAME]);
     const sourceIdByKey = new Map([[SOURCE_NAME, sourceId]]);
 
+    // 0) Codigo acrescentado pela tela ao produto da PLANILHA: a resposta traz a origem e o preview do import avisa.
+    const acrescentado = await ForecastProductCadastroService.addCode(baseProductId, { codigo: `${U}B2` }, adminId);
+    expect(acrescentado.produtoOrigem).toBe('planilha');
+    const preview = await prisma.$transaction((tx) =>
+      ForecastProductService.plan(tx, [draft(NAME_BASE, [CODE_BASE])], known),
+    );
+    expect(
+      preview.avisos.some((a) =>
+        /^\d+ códigos acrescentados pela tela não estão na planilha e serão removidos\. Inclua-os na planilha\.$/.test(a),
+      ),
+    ).toBe(true);
+
     // 1) Planilha SEM o produto da tela (so o base): ele nao entra em `inativados`; o base ausente nao existe aqui.
     const semNovo = await prisma.$transaction(async (tx) => {
       const plan = await ForecastProductService.plan(tx, [draft(NAME_BASE, [CODE_BASE])], known);
@@ -372,7 +385,7 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
       await ForecastProductService.apply(tx, plan, sourceIdByKey, adminId);
       return plan;
     });
-    expect(comNovo.avisos).toContain('1 produtos cadastrados pela tela passam a vir da planilha.');
+    expect(comNovo.avisos).toContain('1 produtos cadastrados pela tela passam a vir da planilha: fonte, família e códigos escolhidos na tela serão substituídos pelos da planilha.');
     expect(comNovo.avisos.some((a) => a.includes('continuam ativos'))).toBe(false);
     const adotado = await prisma.forecastProduct.findUniqueOrThrow({ where: { id: novoProductId } });
     expect(adotado).toMatchObject({ isActive: true, origin: 'planilha' });

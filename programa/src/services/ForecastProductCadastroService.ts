@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import {
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_PRODUCT_ORIGIN_DBCORP,
+  FORECAST_PRODUCT_ORIGIN_PLANILHA,
 } from '../constants/forecast';
 import { normalizeProductCode, normalizeProductName } from '../utils/forecastWorkbook';
 import { HttpError } from '../utils/http';
@@ -14,6 +15,17 @@ import { AuditLogService } from './AuditLogService';
 type Db = Prisma.TransactionClient;
 
 const ENTITY_TYPE = 'forecast_product';
+
+// O import da planilha e o confirm DBCorp seguram a MESMA advisory lock por ate 120 s: sem estas opcoes o
+// default do Prisma (5 s) estoura com P2028 enquanto a importacao roda. 10 s de espera pela conexao e 30 s
+// para a transacao (a escrita em si e curta; o tempo e quase todo espera pela lock).
+export const CADASTRO_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 } as const;
+export const CADASTRO_OCUPADO_MESSAGE = 'O cadastro está ocupado por uma importação. Tente novamente em instantes.';
+
+// P2028 (transacao expirou ou sem conexao a tempo) vira 503 claro em vez de 500 generico.
+function isTransactionTimeout(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028';
+}
 
 export interface ForecastProductCriado {
   id: number;
@@ -27,6 +39,8 @@ export interface ForecastProductCriado {
 
 export interface ForecastProductCodigoAdicionado {
   produtoId: number;
+  // 'planilha' | 'dbcorp'. Em produto 'planilha' o proximo import apaga o codigo se ele nao estiver na planilha.
+  produtoOrigem: string;
   codigo: { id: number; posicao: number; codigo: string };
 }
 
@@ -141,8 +155,9 @@ export class ForecastProductCadastroService {
           familiaId: family.id,
           codigos: criados,
         };
-      });
+      }, CADASTRO_TX_OPTIONS);
     } catch (error) {
+      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(409, 'Já existe um produto com esse nome ou código.');
       }
@@ -162,7 +177,7 @@ export class ForecastProductCadastroService {
 
         const product = await tx.forecastProduct.findUnique({
           where: { id: productId },
-          select: { id: true, isActive: true, codes: { select: { position: true } } },
+          select: { id: true, isActive: true, origin: true, codes: { select: { position: true } } },
         });
         if (!product) throw new HttpError(404, 'Produto não encontrado.');
         if (!product.isActive) throw new HttpError(400, 'Produto inativo.');
@@ -197,9 +212,17 @@ export class ForecastProductCadastroService {
           },
           tx,
         );
-        return { produtoId: productId, codigo: { id: row.id, posicao: row.position, codigo: row.code } };
-      });
+        return {
+          produtoId: productId,
+          produtoOrigem:
+            product.origin === FORECAST_PRODUCT_ORIGIN_DBCORP
+              ? FORECAST_PRODUCT_ORIGIN_DBCORP
+              : FORECAST_PRODUCT_ORIGIN_PLANILHA,
+          codigo: { id: row.id, posicao: row.position, codigo: row.code },
+        };
+      }, CADASTRO_TX_OPTIONS);
     } catch (error) {
+      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(409, 'Esse código já pertence a um produto.');
       }

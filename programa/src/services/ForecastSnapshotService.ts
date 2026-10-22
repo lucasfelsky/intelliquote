@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { FORECAST_MAX_DIVERGENCES } from '../constants/forecast';
+import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
 import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
@@ -215,7 +215,7 @@ export class ForecastSnapshotService {
     if (!snapshot) {
       throw new HttpError(404, 'Quinzena nao encontrada.');
     }
-    if (snapshot.origin !== 'dbcorp') {
+    if (snapshot.origin !== FORECAST_ORIGIN_DBCORP) {
       return {
         aplicavel: false,
         snapshotId: snapshot.id,
