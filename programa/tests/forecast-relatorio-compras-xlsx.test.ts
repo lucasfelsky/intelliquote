@@ -518,11 +518,12 @@ describe('Observacao e embalagens por opcao (PR 5B)', () => {
     ]);
   });
 
-  it('obs que comeca com "=" continua TEXTO nas 3 abas', async () => {
+  it.each(['=', '+', '-', '@'])('obs que comeca com "%s" continua TEXTO nas 3 abas', async (prefixo) => {
+    const obs = `${prefixo}OBS SINTETICA`;
     const r = montarRelatorioCompras(
       quinzena([
-        linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', AN: -10, obs: '=OBS SINTETICA' }),
-        linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', Q: 0, AG: 0, U: 10, AN: 10, obs: '=OBS SINTETICA' }),
+        linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', AN: -10, obs }),
+        linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', Q: 0, AG: 0, U: 10, AN: 10, obs }),
       ]),
       [],
     );
@@ -533,7 +534,7 @@ describe('Observacao e embalagens por opcao (PR 5B)', () => {
       wb.getWorksheet(ABA_SEM_CONSUMO)!.getRow(2).getCell(COLUNAS_SEM_CONSUMO_XLSX.length),
     ];
     for (const cell of celulas) {
-      expect(cell.value).toBe('=OBS SINTETICA');
+      expect(cell.value).toBe(obs);
       expect(cell.type).toBe(exceljs.ValueType.String);
     }
   });

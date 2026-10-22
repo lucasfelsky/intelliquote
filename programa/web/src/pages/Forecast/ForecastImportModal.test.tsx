@@ -1101,6 +1101,31 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     expect(screen.getByText('Cadastro gravado. Pré-visualização atualizada.')).toBeTruthy();
   });
 
+  it('a nova pre-visualizacao falhou e depois deu certo: o aviso PO.COMP.01 da planilha continua na mensagem', async () => {
+    renderModal();
+    await previsualizarDbcorp(semSaldoComPendentes());
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Adicionar a produto existente' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /PRODUTO 001/ }));
+    post.mockResolvedValueOnce({
+      data: { produtoId: 1, produtoOrigem: 'planilha', codigo: { id: 9, posicao: 2, codigo: 'TST0901' } },
+    });
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText(/pré-visualização anterior foi descartada/);
+    await waitFor(() => expect(queryBotao('Confirmar importação')).toBeNull());
+
+    post.mockResolvedValueOnce({ data: semSaldoComPendentes() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByLabelText(/Entendi que SALDO/);
+    expect(screen.queryByText(/pré-visualização anterior foi descartada/)).toBeNull();
+    expect(
+      screen.getByText(
+        /Cadastro gravado. Pré-visualização atualizada. Inclua o código também na planilha PO.COMP.01/,
+      ),
+    ).toBeTruthy();
+  });
+
   it('a nova pre-visualizacao falhou: o cadastro continua gravado e a mensagem diz isso', async () => {
     renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
