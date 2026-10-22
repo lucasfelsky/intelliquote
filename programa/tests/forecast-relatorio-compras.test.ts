@@ -4,13 +4,17 @@ import { describe, expect, it } from 'vitest';
 import { calcular } from '../src/utils/forecastEngine';
 import { somarDias } from '../src/utils/forecastMonths';
 import {
+  DIAS_RUPTURA_CRITICA,
   REGRA_EMBALAGEM,
+  URGENCIAS,
   arredondarPorEmbalagem,
   dataDeRuptura,
   dataLimiteDoPedido,
   entraNoRelatorio,
   escolherEmbalagem,
+  itensNaOrdemDeUrgencia,
   montarRelatorioCompras,
+  motivosSemConsumo,
   type LinhaParaRelatorio,
   type QuinzenaParaRelatorio,
 } from '../src/utils/forecastRelatorioCompras';
@@ -139,6 +143,7 @@ function linha(parcial: Partial<LinhaParaRelatorio> & Pick<LinhaParaRelatorio, '
     status: 'nao',
     Q: 60,
     AG: 60,
+    U: 0,
     AN: -100,
     AQ: 30,
     projecao: [40, -20, -80, -140, -200, -260],
@@ -181,20 +186,42 @@ describe('montarRelatorioCompras (sintetico)', () => {
   ];
   const r = montarRelatorioCompras(sintetica(linhas), embalagens);
 
-  it('agrupa por fonte (sem diferenciar caixa/espacos) e ordena grupos pela data-limite mais urgente', () => {
-    expect(r.grupos.map((g) => g.fonte)).toEqual(['FONTE B', 'FONTE A', 'FONTE C']);
-    expect(r.grupos.map((g) => g.dataLimiteMaisUrgente)).toEqual(['2026-08-23', '2026-09-15', null]);
-    expect(r.grupos.map((g) => g.leadTimeDias)).toEqual([90, 30, 10]);
+  it('agrupa por fonte (sem diferenciar caixa/espacos) e ordena grupos pelo item mais urgente', () => {
+    expect(r.grupos.map((g) => g.fonte)).toEqual(['FONTE A', 'FONTE B', 'FONTE C']);
+    expect(r.grupos.map((g) => g.dataLimiteMaisUrgente)).toEqual(['2026-09-15', '2026-08-23', null]);
+    expect(r.grupos.map((g) => g.leadTimeDias)).toEqual([30, 90, 10]);
   });
 
-  it('ordena itens por data-limite e conta vencidas', () => {
+  it('ordena itens por urgencia e conta vencidas', () => {
     const fonteA = r.grupos.find((g) => g.fonte === 'FONTE A')!;
     expect(fonteA.itens.map((i) => i.item)).toEqual(['PRODUTO 001', 'PRODUTO 003']);
     expect(fonteA.itens.map((i) => i.dataLimite)).toEqual(['2026-09-15', '2026-10-22']);
     expect(fonteA.itens.map((i) => i.vencida)).toEqual([true, false]);
     expect(fonteA.vencidas).toBe(1);
-    expect(r.totais).toEqual({ itens: 4, fontes: 3, vencidas: 2, semEmbalagem: 3, multiplasEmbalagens: 1 });
-    expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2 });
+    expect(r.totais).toEqual({
+      itens: 4,
+      fontes: 3,
+      vencidas: 2,
+      semEmbalagem: 3,
+      multiplasEmbalagens: 1,
+      porUrgencia: { 'sem-estoque': 1, critico: 0, atrasado: 1, 'no-prazo': 2 },
+    });
+    expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2, semConsumoSemMovimento: 2 });
+    expect(r.semConsumo.itens).toEqual([]);
+    expect(r.urgencia).toEqual({ diasCritico: 15 });
+    const porItem = new Map(r.grupos.flatMap((g) => g.itens).map((i) => [i.item, i] as const));
+    const pegar = (nome: string) => porItem.get(nome)!;
+    expect(['PRODUTO 001', 'PRODUTO 002', 'PRODUTO 003', 'PRODUTO 004'].map((n) => pegar(n).urgencia)).toEqual([
+      'sem-estoque',
+      'atrasado',
+      'no-prazo',
+      'no-prazo',
+    ]);
+    expect(['PRODUTO 001', 'PRODUTO 002', 'PRODUTO 003', 'PRODUTO 004'].map((n) => pegar(n).diasAteRuptura)).toEqual([
+      -5, 32, 32, null,
+    ]);
+    expect(r.grupos.map((g) => g.urgenciaMaisAlta)).toEqual(['sem-estoque', 'atrasado', 'no-prazo']);
+    expect(r.grupos.map((g) => g.porUrgencia['no-prazo'])).toEqual([1, 0, 1]);
   });
 
   it('item sem ruptura fica sem datas e no fim', () => {
@@ -324,19 +351,299 @@ describe('montarRelatorioCompras (fixture anonimizada, hoje 2026-10-20)', () => 
     }
   });
 
-  it('ordenacao monotona dentro de cada grupo e entre grupos', () => {
+  it('ordenacao por urgencia: posicao e permutacao, tupla monotona no grupo, grupos pela posicao do 1o item', () => {
+    const todos = r.grupos.flatMap((g) => g.itens);
+    expect(todos.map((i) => i.posicaoUrgencia).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 97 }, (_, i) => i),
+    );
+    const tupla = (i: (typeof todos)[number]) => [URGENCIAS.indexOf(i.urgencia), i.diasAteRuptura!, i.dataLimite!];
     for (const g of r.grupos) {
-      const datas = g.itens.map((i) => i.dataLimite!);
-      expect(datas).toEqual([...datas].sort());
+      const tuplas = g.itens.map(tupla);
+      for (let k = 1; k < tuplas.length; k += 1) {
+        const [a, b] = [tuplas[k - 1], tuplas[k]];
+        const ordem = a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0);
+        expect(ordem).toBeLessThanOrEqual(0);
+      }
+      const datas = g.itens.map((i) => i.dataLimite!).sort();
       expect(g.dataLimiteMaisUrgente).toBe(datas[0]);
+      expect(g.itens.map((i) => i.posicaoUrgencia)).toEqual(
+        [...g.itens.map((i) => i.posicaoUrgencia)].sort((a, b) => a - b),
+      );
     }
-    const urgentes = r.grupos.map((g) => g.dataLimiteMaisUrgente!);
-    expect(urgentes).toEqual([...urgentes].sort());
+    const posicoes = r.grupos.map((g) => g.itens[0].posicaoUrgencia);
+    expect(posicoes).toEqual([...posicoes].sort((a, b) => a - b));
+    expect(r.totais.vencidas).toBe(91);
   });
 
   it('independe da origem da quinzena (so e repassada para exibicao)', () => {
     const outra = montarRelatorioCompras(quinzena('dbcorp'), []);
     expect({ ...outra, quinzena: undefined }).toEqual({ ...r, quinzena: undefined });
     expect(outra.quinzena.origin).toBe('dbcorp');
+  });
+});
+
+describe('urgencia (sintetico)', () => {
+  const ruptura = (
+    parcial: Partial<LinhaParaRelatorio>,
+    opcoes: { hoje?: string; diasCritico?: number } = {},
+  ) => {
+    const q = { ...sintetica([linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A', ...parcial })]), hoje: opcoes.hoje ?? HOJE };
+    const r = montarRelatorioCompras(q, [], opcoes.diasCritico === undefined ? {} : { diasCritico: opcoes.diasCritico });
+    return r.grupos[0].itens[0];
+  };
+  const resumo = (i: { urgencia: string; diasAteRuptura: number | null }) => [i.urgencia, i.diasAteRuptura];
+
+  it('mes base negativo sem estoque: ja na data-base -> sem estoque agora', () => {
+    const i = ruptura({ AG: 80, projecao: [-100, -160, -220, -280, -340, -400] });
+    expect(i.ruptura?.jaNaDataBase).toBe(true);
+    expect(resumo(i)).toEqual(['sem-estoque', -5]);
+  });
+
+  it('mes base negativo com estoque: critico; passada a data de hoje vira sem estoque; N = 0 desliga a faixa', () => {
+    const projecao = [-40, -100, -160, -220, -280, -340];
+    const base = ruptura({ AG: 80, projecao });
+    expect(base.ruptura?.data).toBe('2026-10-23');
+    expect(resumo(base)).toEqual(['critico', 3]);
+    expect(resumo(ruptura({ AG: 80, projecao }, { hoje: '2026-10-24' }))).toEqual(['sem-estoque', -1]);
+    expect(resumo(ruptura({ AG: 80, projecao }, { diasCritico: 0 }))).toEqual(['atrasado', 3]);
+  });
+
+  it('limites: hoje (0) = sem estoque, 15 dias = critico, 16 dias depende da data-limite', () => {
+    expect(resumo(ruptura({ AG: 85, projecao: [-60, -120, -180, -240, -300, -360] }))).toEqual(['sem-estoque', 0]);
+    const em15 = ruptura({ projecao: [40, -54, -114, -174, -234, -294] });
+    expect(em15.ruptura?.data).toBe('2026-11-04');
+    expect(resumo(em15)).toEqual(['critico', 15]);
+    const em16 = [40, -52, -112, -172, -232, -292];
+    expect(ruptura({ AQ: 0, projecao: em16 }).ruptura?.data).toBe('2026-11-05');
+    expect(resumo(ruptura({ AQ: 0, projecao: em16 }))).toEqual(['no-prazo', 16]);
+    expect(resumo(ruptura({ AQ: 30, projecao: em16 }))).toEqual(['atrasado', 16]);
+  });
+
+  it('critico independe da data-limite; lead time 0 nunca vence antes da ruptura', () => {
+    const i = ruptura({ AQ: 0, AG: 85, projecao: [-10, -70, -130, -190, -250, -310] });
+    expect(i.ruptura?.data).toBe('2026-10-30');
+    expect(i.vencida).toBe(false);
+    expect(resumo(i)).toEqual(['critico', 10]);
+    expect(resumo(ruptura({ AQ: 0 }))).toEqual(['no-prazo', 32]);
+  });
+
+  it('lead time nulo fica fora da lista e das faixas (soma das 4 = itens)', () => {
+    const r = montarRelatorioCompras(
+      sintetica([
+        linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A' }),
+        linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE A', AQ: null, AN: null }),
+      ]),
+      [],
+    );
+    expect(r.totais.itens).toBe(1);
+    expect(Object.values(r.totais.porUrgencia).reduce((a, b) => a + b, 0)).toBe(r.totais.itens);
+    expect(r.fora.semLeadTime).toBe(1);
+  });
+
+  it('sem ruptura no horizonte: no prazo, sem dias, ultimo da faixa e de toda a lista', () => {
+    const r = montarRelatorioCompras(
+      sintetica([
+        linha({ linha: 1, item: 'AAA SEM RUPTURA', fonte: 'FONTE A', AQ: 0, Q: 10, AG: 10, projecao: [5, 5, 5, 5, 5, 5] }),
+        linha({ linha: 2, item: 'ZZZ COM RUPTURA', fonte: 'FONTE B', AQ: 0 }),
+        linha({ linha: 3, item: 'MMM ATRASADO', fonte: 'FONTE C', AQ: 90 }),
+      ]),
+      [],
+    );
+    const lista = itensNaOrdemDeUrgencia(r);
+    expect(lista.map((x) => x.item.item)).toEqual(['MMM ATRASADO', 'ZZZ COM RUPTURA', 'AAA SEM RUPTURA']);
+    const sem = lista[2].item;
+    expect(resumo(sem)).toEqual(['no-prazo', null]);
+    expect(sem.posicaoUrgencia).toBe(2);
+  });
+
+  it('hoje anterior a data-base: ja na data-base continua sem estoque', () => {
+    const i = ruptura({ AG: 80, projecao: [-100, -160, -220, -280, -340, -400] }, { hoje: '2026-10-10' });
+    expect(resumo(i)).toEqual(['sem-estoque', 5]);
+  });
+
+  it('limite de dias invalido lanca', () => {
+    for (const diasCritico of [-1, 1.5, Number.NaN]) {
+      expect(() => montarRelatorioCompras(sintetica([]), [], { diasCritico })).toThrow(
+        'Limite de dias da faixa critica invalido.',
+      );
+    }
+    expect(DIAS_RUPTURA_CRITICA).toBe(15);
+    expect(montarRelatorioCompras(sintetica([]), [], { diasCritico: 0 }).urgencia).toEqual({ diasCritico: 0 });
+  });
+
+  it('itensNaOrdemDeUrgencia: lista unica por posicao com a fonte do grupo', () => {
+    const r = montarRelatorioCompras(
+      sintetica([
+        linha({ linha: 1, item: 'PRODUTO A', fonte: 'FONTE X', AQ: 0 }),
+        linha({ linha: 2, item: 'PRODUTO B', fonte: 'FONTE Y', AG: 80, projecao: [-100, -160, -220, -280, -340, -400] }),
+        linha({ linha: 3, item: 'PRODUTO C', fonte: 'FONTE X', AQ: 90 }),
+      ]),
+      [],
+    );
+    const lista = itensNaOrdemDeUrgencia(r);
+    expect(lista.map((x) => [x.item.item, x.fonte, x.item.posicaoUrgencia])).toEqual([
+      ['PRODUTO B', 'FONTE Y', 0],
+      ['PRODUTO C', 'FONTE X', 1],
+      ['PRODUTO A', 'FONTE X', 2],
+    ]);
+  });
+});
+
+describe('urgencia (fixture anonimizada)', () => {
+  const calculadas = calcular(fixture, { hoje: HOJE, quinzena: 2 });
+  const produtoPorLinha = new Map(fixture.produtos.map((p) => [p.linha, p]));
+  const linhas: LinhaParaRelatorio[] = calculadas.map((c) => {
+    const p = produtoPorLinha.get(c.linha)!;
+    return { ...c, n: p.n, item: p.item, codigos: p.codigos.filter((x) => x !== ''), fonte: p.fonte, status: p.status };
+  });
+  const montar = (hoje: string, diasCritico?: number) =>
+    montarRelatorioCompras(
+      { id: 7, label: fixture.id, baseDate: fixture.dataBase, half: 2, origin: 'planilha', hoje, linhas },
+      [],
+      diasCritico === undefined ? {} : { diasCritico },
+    );
+
+  it('hoje 2026-10-20: 29 / 23 / 39 / 6 e os 16 ja na data-base ficam em sem estoque', () => {
+    const r = montar('2026-10-20');
+    expect(r.totais.porUrgencia).toEqual({ 'sem-estoque': 29, critico: 23, atrasado: 39, 'no-prazo': 6 });
+    const jaNaBase = r.grupos.flatMap((g) => g.itens).filter((i) => i.ruptura?.jaNaDataBase);
+    expect(jaNaBase).toHaveLength(16);
+    expect(jaNaBase.every((i) => i.urgencia === 'sem-estoque')).toBe(true);
+  });
+
+  it('hoje 2026-10-15: 20 / 21 / 47 / 9', () => {
+    expect(montar('2026-10-15').totais.porUrgencia).toEqual({ 'sem-estoque': 20, critico: 21, atrasado: 47, 'no-prazo': 9 });
+  });
+
+  it('N = 7 (hoje 2026-10-20): 29 / 9 / 53 / 6', () => {
+    expect(montar('2026-10-20', 7).totais.porUrgencia).toEqual({ 'sem-estoque': 29, critico: 9, atrasado: 53, 'no-prazo': 6 });
+  });
+});
+
+describe('sem consumo (sintetico)', () => {
+  const montar = (ls: LinhaParaRelatorio[]) => montarRelatorioCompras(sintetica(ls), []);
+
+  it('so estoque: entra na secao com motivo estoque', () => {
+    const r = montar([linha({ linha: 1, item: 'PRODUTO 001', fonte: ' FONTE A ', Q: 0, AG: 0, U: 10, AN: 10 })]);
+    expect(r.grupos).toEqual([]);
+    expect(r.semConsumo.itens).toHaveLength(1);
+    const [i] = r.semConsumo.itens;
+    expect(i).toMatchObject({ motivos: ['estoque'], estoque: 10, programado: 0, fonte: 'FONTE A', semLeadTime: false });
+    expect(r.fora.semConsumoSemMovimento).toBe(0);
+  });
+
+  it('programacao e estoque: os dois motivos e vem antes do so-estoque', () => {
+    const r = montar([
+      linha({ linha: 1, item: 'AAA SO ESTOQUE', fonte: 'FONTE A', Q: 0, AG: 0, U: 10, AN: 10 }),
+      linha({ linha: 2, item: 'ZZZ COM PROGRAMACAO', fonte: 'FONTE Z', Q: 0, AG: 0, U: 20, AN: 15, programacoes: [0, 5, 0, 0] }),
+    ]);
+    expect(r.semConsumo.itens.map((i) => [i.item, i.motivos])).toEqual([
+      ['ZZZ COM PROGRAMACAO', ['programacao', 'estoque']],
+      ['AAA SO ESTOQUE', ['estoque']],
+    ]);
+    expect(r.semConsumo.itens[0].programado).toBe(5);
+  });
+
+  it('sem consumo que ja esta na lista de compra nao repete na secao', () => {
+    const r = montar([
+      linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A', Q: 0, AG: 0, U: 0, AN: -5, programacoes: [0, 5, 0, 0] }),
+    ]);
+    expect(r.totais.itens).toBe(1);
+    expect(r.semConsumo.itens).toEqual([]);
+    expect(r.fora.semConsumoSemMovimento).toBe(0);
+  });
+
+  it('sem estoque, programacao nem chegada: so conta (chegada nao conta como movimento)', () => {
+    const r = montar([
+      linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A', Q: 0, AG: 0, U: 0, AN: 0 }),
+      linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE A', Q: 0, AG: 0, U: 0, AN: 100, chegadas: [0, 0, 100, 0, 0] }),
+    ]);
+    expect(r.semConsumo.itens).toEqual([]);
+    expect(r.fora).toEqual({ semLeadTime: 0, semConsumoSemFalta: 1, semConsumoSemMovimento: 2 });
+  });
+
+  it('sem lead time com estoque entra na secao e continua em fora.semLeadTime', () => {
+    const r = montar([linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A', Q: 0, AG: 0, U: 5, AQ: null, AN: null })]);
+    expect(r.semConsumo.itens[0].semLeadTime).toBe(true);
+    expect(r.fora.semLeadTime).toBe(1);
+  });
+
+  it('media negativa (devolucao) tambem e sem consumo; com consumo nunca entra na secao', () => {
+    const r = montar([
+      linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A', Q: -3, AG: -3, U: 5, AN: 5 }),
+      linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE A', Q: 60, U: 500, AN: 200 }),
+    ]);
+    expect(r.semConsumo.itens.map((i) => i.item)).toEqual(['PRODUTO 001']);
+    expect(r.grupos).toEqual([]);
+    expect(r.fora.semConsumoSemMovimento).toBe(0);
+  });
+
+  it('programacoes e chegadas do item com anoMes corretos; productId repassado', () => {
+    const r = montar([
+      linha({
+        linha: 1,
+        item: 'PRODUTO 001',
+        fonte: 'FONTE A',
+        productId: 42,
+        Q: 0,
+        AG: 0,
+        U: 10,
+        AN: 10,
+        programacoes: [0, 5, 0, 7],
+        chegadas: [0, 0, 100, 0, 30],
+      }),
+    ]);
+    const [i] = r.semConsumo.itens;
+    expect(i.productId).toBe(42);
+    expect(i.programacoes).toEqual([
+      { anoMes: '2026-11', quantidade: 5 },
+      { anoMes: '2027-01', quantidade: 7 },
+    ]);
+    expect(i.chegadas).toEqual([
+      { anoMes: '2026-12', quantidade: 100 },
+      { anoMes: '2027-02', quantidade: 30 },
+    ]);
+    expect(i.programado).toBe(12);
+  });
+
+  it('motivosSemConsumo: ordem fixa e vazio quando entra na lista ou tem consumo', () => {
+    expect(motivosSemConsumo({ AN: 10, Q: 0, U: 3, programacoes: [1, 0, 0, 0] })).toEqual(['programacao', 'estoque']);
+    expect(motivosSemConsumo({ AN: 10, Q: 5, U: 3, programacoes: [1, 0, 0, 0] })).toEqual([]);
+    expect(motivosSemConsumo({ AN: -1, Q: 0, U: 3, programacoes: [1, 0, 0, 0] })).toEqual([]);
+    expect(motivosSemConsumo({ AN: 10, Q: 0, U: 0, programacoes: [0, 0, 0, 0] })).toEqual([]);
+  });
+});
+
+describe('sem consumo (fixture anonimizada)', () => {
+  const montarEm = (hoje: string) => {
+    const calculadas = calcular(fixture, { hoje, quinzena: 2 });
+    const produtoPorLinha = new Map(fixture.produtos.map((p) => [p.linha, p]));
+    const linhas: LinhaParaRelatorio[] = calculadas.map((c) => {
+      const p = produtoPorLinha.get(c.linha)!;
+      return { ...c, n: p.n, item: p.item, codigos: p.codigos.filter((x) => x !== ''), fonte: p.fonte, status: p.status };
+    });
+    return montarRelatorioCompras(
+      { id: 7, label: fixture.id, baseDate: fixture.dataBase, half: 2, origin: 'planilha', hoje, linhas },
+      [],
+    );
+  };
+  const r = montarEm('2026-10-20');
+
+  it('50 itens na secao (2 com programacao, 49 com estoque) e 46 so na contagem', () => {
+    expect(r.semConsumo.itens).toHaveLength(50);
+    expect(r.semConsumo.itens.filter((i) => i.motivos.includes('programacao'))).toHaveLength(2);
+    expect(r.semConsumo.itens.filter((i) => i.motivos.includes('estoque'))).toHaveLength(49);
+    expect(r.fora.semConsumoSemMovimento).toBe(46);
+    expect(r.fora.semConsumoSemFalta).toBe(43);
+  });
+
+  it('nenhuma linha da secao aparece na lista de compra', () => {
+    const naLista = new Set(r.grupos.flatMap((g) => g.itens.map((i) => i.linha)));
+    expect(r.semConsumo.itens.some((i) => naLista.has(i.linha))).toBe(false);
+  });
+
+  it('nao depende de hoje', () => {
+    expect(montarEm('2026-10-15').semConsumo).toEqual(r.semConsumo);
+    expect(montarEm('2026-10-15').fora).toEqual(r.fora);
   });
 });

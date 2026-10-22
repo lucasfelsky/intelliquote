@@ -11,12 +11,19 @@
 //    consumo_i) (consumo linear dentro do periodo), sempre dentro do mes.
 // Data-limite do pedido = ruptura - lead time (AQ, dias corridos, sem folga). Vencida = data-limite < hoje.
 //
+// Urgencia (PR 2D, Comex 2026-10-22), 4 faixas em ordem de prioridade; dias = dias de hoje ate a ruptura estimada:
+//  - sem ruptura em 6 meses -> 'no-prazo'; ruptura na data-base ou dias <= 0 -> 'sem-estoque';
+//    dias <= N (DIAS_RUPTURA_CRITICA) -> 'critico'; data-limite vencida -> 'atrasado'; o resto -> 'no-prazo'.
+//  - Ordem da lista: faixa -> dias ate a ruptura -> data-limite -> nome -> linha.
+// Secao "Atencao: sem consumo": itens fora da lista de compra com media trimestral <= 0 e estoque ou programacao
+// (so para conferencia, sem quantidade sugerida). Sem consumo, estoque nem programacao: so a contagem.
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
 // que le o cadastro por codigo; amanha o gateway DBCorp grava nas mesmas colunas).
 import { somarDias, yearMonthsDaJanela } from './forecastMonths';
-import { isValidDateKey } from './supplierDocumentDates';
+import { daysUntil, isValidDateKey } from './supplierDocumentDates';
 
 export interface LinhaParaRelatorio {
   linha: number;
@@ -28,6 +35,7 @@ export interface LinhaParaRelatorio {
   status: string;
   Q: number;
   AG: number;
+  U: number;
   AN: number | null;
   AQ: number | null;
   projecao: number[];
@@ -93,6 +101,10 @@ export interface ItemRelatorioCompras {
     chegadas: Array<{ anoMes: string; quantidade: number }>;
     programacoes: Array<{ anoMes: string; quantidade: number }>;
   };
+  urgencia: UrgenciaId;
+  diasAteRuptura: number | null;
+  /** 0-based na ordem global de urgencia; tela e XLSX ordenam por este numero sem repetir a regra. */
+  posicaoUrgencia: number;
 }
 
 export interface GrupoRelatorioCompras {
@@ -100,15 +112,52 @@ export interface GrupoRelatorioCompras {
   leadTimeDias: number;
   dataLimiteMaisUrgente: string | null;
   vencidas: number;
+  urgenciaMaisAlta: UrgenciaId;
+  porUrgencia: Record<UrgenciaId, number>;
   itens: ItemRelatorioCompras[];
+}
+
+export type MotivoSemConsumo = 'programacao' | 'estoque';
+
+export interface ItemSemConsumo {
+  linha: number;
+  n: number | null;
+  productId: number | null;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: string;
+  motivos: MotivoSemConsumo[];
+  estoque: number;
+  programado: number;
+  programacoes: Array<{ anoMes: string; quantidade: number }>;
+  chegadas: Array<{ anoMes: string; quantidade: number }>;
+  semLeadTime: boolean;
 }
 
 export interface RelatorioCompras {
   quinzena: { id: number; label: string; baseDate: string; half: number; origin: string; hoje: string };
-  totais: { itens: number; fontes: number; vencidas: number; semEmbalagem: number; multiplasEmbalagens: number };
-  fora: { semLeadTime: number; semConsumoSemFalta: number };
+  totais: {
+    itens: number;
+    fontes: number;
+    vencidas: number;
+    semEmbalagem: number;
+    multiplasEmbalagens: number;
+    porUrgencia: Record<UrgenciaId, number>;
+  };
+  fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento: number };
+  urgencia: { diasCritico: number };
+  semConsumo: { itens: ItemSemConsumo[] };
   grupos: GrupoRelatorioCompras[];
 }
+
+export type UrgenciaId = 'sem-estoque' | 'critico' | 'atrasado' | 'no-prazo';
+
+// Prioridade: o indice na lista e a ordem das faixas.
+export const URGENCIAS: readonly UrgenciaId[] = ['sem-estoque', 'critico', 'atrasado', 'no-prazo'];
+
+// Comex 2026-10-22: 15 dias (uma quinzena). 0 desliga a faixa "Ruptura em ate N dias".
+export const DIAS_RUPTURA_CRITICA = 15;
 
 // Varias embalagens no item: usa a marcada como principal; sem principal, a de menor posicao (EMB.1 -> EMB.7).
 export const REGRA_EMBALAGEM = 'principal-depois-menor-posicao' as const;
@@ -215,19 +264,91 @@ function compararDataNulaPorUltimo(a: string | null, b: string | null): number {
   return a < b ? -1 : 1;
 }
 
-function compararItens(a: ItemRelatorioCompras, b: ItemRelatorioCompras): number {
+function contarPorUrgencia(itens: Array<Pick<ItemRelatorioCompras, 'urgencia'>>): Record<UrgenciaId, number> {
+  const contagem: Record<UrgenciaId, number> = { 'sem-estoque': 0, critico: 0, atrasado: 0, 'no-prazo': 0 };
+  for (const i of itens) contagem[i.urgencia] += 1;
+  return contagem;
+}
+
+// Faixa de urgencia do item. Nao altera a data de ruptura nem a data-limite: so classifica.
+export function urgenciaDoItem(
+  item: Pick<ItemRelatorioCompras, 'ruptura' | 'vencida'>,
+  hoje: string,
+  diasCritico: number,
+): { urgencia: UrgenciaId; diasAteRuptura: number | null } {
+  if (item.ruptura === null) {
+    return { urgencia: 'no-prazo', diasAteRuptura: null };
+  }
+  const dias = daysUntil(item.ruptura.data, hoje);
+  if (item.ruptura.jaNaDataBase || dias <= 0) {
+    return { urgencia: 'sem-estoque', diasAteRuptura: dias };
+  }
+  if (dias <= diasCritico) {
+    return { urgencia: 'critico', diasAteRuptura: dias };
+  }
+  return { urgencia: item.vencida ? 'atrasado' : 'no-prazo', diasAteRuptura: dias };
+}
+
+function compararNumeroNuloPorUltimo(a: number | null, b: number | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a - b;
+}
+
+type ChaveDeUrgencia = Pick<ItemRelatorioCompras, 'urgencia' | 'diasAteRuptura' | 'dataLimite' | 'item' | 'linha'>;
+
+// Faixa -> dias ate a ruptura (nulo por ultimo) -> data-limite (nula por ultimo) -> nome -> linha.
+export function compararUrgencia(a: ChaveDeUrgencia, b: ChaveDeUrgencia): number {
   return (
+    URGENCIAS.indexOf(a.urgencia) - URGENCIAS.indexOf(b.urgencia) ||
+    compararNumeroNuloPorUltimo(a.diasAteRuptura, b.diasAteRuptura) ||
     compararDataNulaPorUltimo(a.dataLimite, b.dataLimite) ||
-    compararDataNulaPorUltimo(a.ruptura?.data ?? null, b.ruptura?.data ?? null) ||
     compararTexto(a.item, b.item) ||
     a.linha - b.linha
   );
 }
 
+// Todos os itens do relatorio numa lista unica na ordem de urgencia, cada um com a fonte do seu grupo.
+export function itensNaOrdemDeUrgencia(
+  r: Pick<RelatorioCompras, 'grupos'>,
+): Array<{ item: ItemRelatorioCompras; fonte: string }> {
+  return r.grupos
+    .flatMap((g) => g.itens.map((item) => ({ item, fonte: g.fonte })))
+    .sort((a, b) => a.item.posicaoUrgencia - b.item.posicaoUrgencia);
+}
+
+const somaProgramacoes = (l: Pick<LinhaParaRelatorio, 'programacoes'>) =>
+  l.programacoes.slice(0, 4).reduce((total, v) => total + v, 0);
+
+// Motivos para a linha aparecer em "Atencao: sem consumo" (vazio = nao aparece). Ordem fixa: programacao, estoque.
+export function motivosSemConsumo(
+  l: Pick<LinhaParaRelatorio, 'AN' | 'Q' | 'U' | 'programacoes'>,
+): MotivoSemConsumo[] {
+  if (entraNoRelatorio(l) || l.Q > 0) {
+    return [];
+  }
+  const motivos: MotivoSemConsumo[] = [];
+  if (somaProgramacoes(l) > 0) motivos.push('programacao');
+  if (l.U > 0) motivos.push('estoque');
+  return motivos;
+}
+
+function compararSemConsumo(a: ItemSemConsumo, b: ItemSemConsumo): number {
+  const pa = a.motivos.includes('programacao') ? 0 : 1;
+  const pb = b.motivos.includes('programacao') ? 0 : 1;
+  return pa - pb || compararTexto(a.fonte, b.fonte) || compararTexto(a.item, b.item) || a.linha - b.linha;
+}
+
 export function montarRelatorioCompras(
   q: QuinzenaParaRelatorio,
   embalagens: EmbalagemCadastrada[],
+  opcoes: { diasCritico?: number } = {},
 ): RelatorioCompras {
+  const diasCritico = opcoes.diasCritico ?? DIAS_RUPTURA_CRITICA;
+  if (!Number.isInteger(diasCritico) || diasCritico < 0) {
+    throw new Error('Limite de dias da faixa critica invalido.');
+  }
   if (!isValidDateKey(q.baseDate)) {
     throw new Error(`Data base invalida: ${String(q.baseDate)}`);
   }
@@ -238,14 +359,43 @@ export function montarRelatorioCompras(
 
   let semLeadTime = 0;
   let semConsumoSemFalta = 0;
+  let semConsumoSemMovimento = 0;
+  const semConsumoItens: ItemSemConsumo[] = [];
   const porFonte = new Map<string, { fonte: string; leadTimeDias: number; itens: ItemRelatorioCompras[] }>();
+
+  // Fora da lista de compra: sem consumo com estoque ou programacao vai para a secao de atencao; sem nada, so conta.
+  const registrarSemConsumo = (l: LinhaParaRelatorio) => {
+    if (l.Q > 0) return;
+    const motivos = motivosSemConsumo(l);
+    if (motivos.length === 0) {
+      semConsumoSemMovimento += 1;
+      return;
+    }
+    semConsumoItens.push({
+      linha: l.linha,
+      n: l.n ?? null,
+      productId: l.productId ?? null,
+      item: l.item,
+      codigos: l.codigos,
+      fonte: l.fonte.trim(),
+      status: l.status,
+      motivos,
+      estoque: l.U,
+      programado: somaProgramacoes(l),
+      programacoes: mesesComValor(l.programacoes.slice(0, 4), meses),
+      chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
+      semLeadTime: l.AN === null,
+    });
+  };
 
   for (const l of q.linhas) {
     if (l.AN === null) {
+      registrarSemConsumo(l);
       semLeadTime += 1;
       continue;
     }
     if (!entraNoRelatorio(l)) {
+      registrarSemConsumo(l);
       if (l.AN <= 0) semConsumoSemFalta += 1;
       continue;
     }
@@ -280,7 +430,11 @@ export function montarRelatorioCompras(
         chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
         programacoes: mesesComValor(l.programacoes.slice(0, 4), meses),
       },
+      urgencia: 'no-prazo',
+      diasAteRuptura: null,
+      posicaoUrgencia: 0,
     };
+    Object.assign(item, urgenciaDoItem(item, q.hoje, diasCritico));
 
     const chave = l.fonte.trim().toUpperCase();
     const grupo = porFonte.get(chave);
@@ -291,21 +445,31 @@ export function montarRelatorioCompras(
     }
   }
 
+  // Ordem global de urgencia; `posicaoUrgencia` e gravada no item para tela e XLSX nao repetirem a regra.
+  [...porFonte.values()]
+    .flatMap((g) => g.itens)
+    .sort(compararUrgencia)
+    .forEach((item, i) => {
+      item.posicaoUrgencia = i;
+    });
+
   const grupos: GrupoRelatorioCompras[] = [...porFonte.values()].map((g) => {
-    const itens = [...g.itens].sort(compararItens);
+    const itens = [...g.itens].sort((a, b) => a.posicaoUrgencia - b.posicaoUrgencia);
     return {
       fonte: g.fonte,
       leadTimeDias: g.leadTimeDias,
-      dataLimiteMaisUrgente: itens[0]?.dataLimite ?? null,
+      dataLimiteMaisUrgente: itens.reduce<string | null>(
+        (menor, i) => (compararDataNulaPorUltimo(i.dataLimite, menor) < 0 ? i.dataLimite : menor),
+        null,
+      ),
       vencidas: itens.filter((i) => i.vencida).length,
+      urgenciaMaisAlta: itens[0].urgencia,
+      porUrgencia: contarPorUrgencia(itens),
       itens,
     };
   });
-  grupos.sort(
-    (a, b) =>
-      compararDataNulaPorUltimo(a.dataLimiteMaisUrgente, b.dataLimiteMaisUrgente) ||
-      compararTexto(a.fonte, b.fonte),
-  );
+  grupos.sort((a, b) => a.itens[0].posicaoUrgencia - b.itens[0].posicaoUrgencia);
+  semConsumoItens.sort(compararSemConsumo);
 
   const todos = grupos.flatMap((g) => g.itens);
   return {
@@ -323,8 +487,11 @@ export function montarRelatorioCompras(
       vencidas: todos.filter((i) => i.vencida).length,
       semEmbalagem: todos.filter((i) => i.embalagem.usada === null).length,
       multiplasEmbalagens: todos.filter((i) => i.embalagem.multiplas).length,
+      porUrgencia: contarPorUrgencia(todos),
     },
-    fora: { semLeadTime, semConsumoSemFalta },
+    fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento },
+    urgencia: { diasCritico },
+    semConsumo: { itens: semConsumoItens },
     grupos,
   };
 }

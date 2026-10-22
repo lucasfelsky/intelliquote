@@ -45,7 +45,7 @@ export function useFocoNoTitulo() {
 export default function ForecastResumoPlanilha({ resumo }: { resumo: ForecastImportSummary }) {
   const tituloRef = useFocoNoTitulo();
   const { produtos, codigos, fontes, historico } = resumo;
-  const selo = resumo.erros.length === 0 ? textoDoSelo({ conferencia: resumo.conferencia, half: resumo.half }) : null;
+  const selo = resumo.erros.length === 0 ? textoDoSelo({ conferencia: resumo.conferencia, half: resumo.half }, { comGrade: false }) : null;
 
   return (
     <section className="fci-resumo" aria-labelledby="fci-resumo-planilha">
@@ -105,6 +105,14 @@ export default function ForecastResumoPlanilha({ resumo }: { resumo: ForecastImp
         <div className={`fc-selo-conferencia fc-selo-conferencia--${selo.tom}`}>
           <strong>{selo.titulo}</strong>
           {selo.detalhe && <span>{selo.detalhe}</span>}
+          {selo.colunas && (
+            <ul className="fc-selo-conferencia__colunas">
+              {selo.colunas.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
+          {selo.informativa && <span className="fc-selo-conferencia__nota">{selo.informativa}</span>}
           {selo.nota && <span className="fc-selo-conferencia__nota">{selo.nota}</span>}
         </div>
       )}

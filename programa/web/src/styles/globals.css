@@ -2979,3 +2979,25 @@ i.fc-status--preco { background: var(--info); }
   .fcr-grupo ~ .fcr-grupo { break-before: page; } /* uma fonte por pagina; a 1a fica com o resumo */
   .fcr-linha--vencida th, .fcr-linha--vencida td, .fcr-grupo .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---- Forecast: relatorio de compras - urgencia, sem consumo e selo por coluna (PR 2D) ---- */
+.fcr-controles { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 4px; }
+.fcr-mostrando { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcr-urgencia { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 130px; }
+.fcr-urgencia__dias { font-size: 11px; color: var(--ink-soft); }
+.fcr-linha--sem-estoque td,
+.fcr-linha--sem-estoque th,
+.fcr-linha--critico td,
+.fcr-linha--critico th { background: var(--tone-danger-bg-soft); }
+.fcr-linha--sem-estoque th { border-left: 3px solid var(--danger); }
+.fcr-linha--sem-estoque .fcr-fraco,
+.fcr-linha--critico .fcr-fraco { color: var(--ink-soft); }
+.fcr-tabela--compacta { min-width: 900px; font-size: 12px; }
+.fcr-sem-consumo__nota { margin: 0; padding: 8px 14px 12px; font-size: 12px; color: var(--ink-soft); }
+.fc-selo-conferencia--aviso { background: var(--tone-warning-bg); border-color: var(--tone-warning-border-strong); color: var(--tone-warning-fg-strong); }
+.fc-selo-conferencia__colunas { margin: 2px 0 0; padding-left: 18px; }
+@media print {
+  body:has(.fcr-resumo) .fcr-controles { display: none !important; }
+  .fcr-linha--sem-estoque th, .fcr-linha--sem-estoque td, .fcr-linha--critico th, .fcr-linha--critico td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .fcr-tabela--compacta { min-width: 0; }
+}

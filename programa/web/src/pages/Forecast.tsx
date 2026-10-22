@@ -40,6 +40,14 @@ function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
     <div className={`fc-selo-conferencia fc-selo-conferencia--${selo.tom}`} role="status">
       <strong>{selo.titulo}</strong>
       {selo.detalhe && <span>{selo.detalhe}</span>}
+      {selo.colunas && (
+        <ul className="fc-selo-conferencia__colunas">
+          {selo.colunas.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
+        </ul>
+      )}
+      {selo.informativa && <span className="fc-selo-conferencia__nota">{selo.informativa}</span>}
       {selo.nota && <span className="fc-selo-conferencia__nota">{selo.nota}</span>}
       {selo.notaRegra && <span className="fc-selo-conferencia__nota">{selo.notaRegra}</span>}
     </div>
