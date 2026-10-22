@@ -206,6 +206,31 @@ describe('Forecast pendentes - GET /forecast/snapshots/:id/pendentes', () => {
     expect(prismaMock.forecastSnapshot).not.toHaveProperty('upsert');
   });
 
+  it('virada de ano: base 2027-01-15 le 2026-10 e 2026-11 do historico e a regra cita 2026-10/11/12', async () => {
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      ...snapshotDbcorp,
+      baseDate: new Date('2027-01-15T00:00:00.000Z'),
+      inputs: { ...snapshotDbcorp.inputs, vendasMes: [{ codigo: 'TST0903', qtd: 9 }] },
+    });
+    prismaMock.forecastMonthlySale.findMany.mockResolvedValue([
+      { code: 'TST0901', yearMonth: '2026-10', quantity: new Prisma.Decimal(4) },
+      { code: 'TST0902', yearMonth: '2026-11', quantity: new Prisma.Decimal(6) },
+    ]);
+    const cookies = await loginAs('viewer');
+    const { data } = (await request(app).get(GET_PATH).set('Cookie', cookies)).body;
+    expect(prismaMock.forecastMonthlySale.findMany.mock.calls[0][0].where).toEqual({
+      yearMonth: { in: ['2026-10', '2026-11'] },
+    });
+    expect(data.regra).toEqual({
+      mesesVenda: ['2026-10', '2026-11', '2026-12'],
+      historicoAusente: [],
+      compras: 'chegadas',
+    });
+    // base-3 e base-2 do historico + base-1 (VENDAS do mes anterior, das Entradas) entram em vendas3Meses.
+    const porCodigo = Object.fromEntries(data.itens.map((i: { codigo: string; vendas3Meses: number }) => [i.codigo, i.vendas3Meses]));
+    expect(porCodigo).toMatchObject({ TST0901: 4, TST0902: 6, TST0903: 9 });
+  });
+
   it('mes base-3/base-2 sem nenhuma linha no historico vira regra.historicoAusente', async () => {
     prismaMock.forecastMonthlySale.findMany.mockResolvedValue([
       { code: 'TST0001', yearMonth: '2026-08', quantity: new Prisma.Decimal(1) },

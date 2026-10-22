@@ -21,6 +21,7 @@ import {
   situacaoTexto,
   soSaldoTexto,
   textoEntradaNoCalculo,
+  textoForaDoCalculoPrevia,
   textoProdutoInativo,
   vagasTexto,
   validarNovoProduto,
@@ -75,8 +76,20 @@ describe('textos', () => {
   });
 
   it('textoEntradaNoCalculo cita a quinzena e quando o codigo entra', () => {
-    expect(textoEntradaNoCalculo('10-2')).toBe(
+    expect(textoEntradaNoCalculo('10-2', 3)).toBe(
       'Esses códigos ficaram FORA do cálculo da quinzena 10-2. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.',
+    );
+  });
+
+  it('textos fixos de "FORA do calculo": singular com 1 pendente, plural nos demais', () => {
+    expect(textoEntradaNoCalculo('10-2', 1)).toBe(
+      'Este código ficou FORA do cálculo da quinzena 10-2. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.',
+    );
+    expect(textoForaDoCalculoPrevia(1)).toBe(
+      'Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.',
+    );
+    expect(textoForaDoCalculoPrevia(2)).toBe(
+      'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.',
     );
   });
 
@@ -128,6 +141,10 @@ describe('textos', () => {
     const regra = { mesesVenda: ['2026-07', '2026-08', '2026-09'], historicoAusente: [], compras: 'fup_em_aberto' as const };
     expect(nenhumPendenteTexto(regra)).toBe(
       'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou compra em aberto no FUP fora do cadastro nesta quinzena.',
+    );
+    // Quinzena antiga (sem `comprasEmAberto`): o criterio cita a chegada prevista, como o criterioTexto.
+    expect(nenhumPendenteTexto({ ...regra, compras: 'chegadas' })).toBe(
+      'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou chegada prevista no FUP fora do cadastro nesta quinzena.',
     );
     expect(nenhumPendenteTexto(undefined)).toBe('Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.');
   });

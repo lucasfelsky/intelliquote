@@ -160,7 +160,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
       setPrevia(pronta);
       setEntendi(false);
       setEntendiProntidao(false);
-      setCadastro((c) => (c?.estado === 'atualizando' ? { ...c, estado: 'atualizada' } : c));
+      // 'falhou' tambem sai do estado: a previa nova e valida e a faixa de "previa descartada" nao pode ficar ao lado dela.
+      setCadastro((c) => (c && c.estado !== 'atualizada' ? { ...c, estado: 'atualizada' } : c));
     },
     ...aoFalhar,
   });

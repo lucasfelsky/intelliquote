@@ -14,7 +14,7 @@ import {
 import { AvisosEErros, useFocoNoTitulo } from './ForecastResumoPlanilha';
 import { dataBr, inteiroBr } from './forecastPainel';
 import { TabelaPendentes } from './ForecastPendentesCadastro';
-import { TEXTO_FORA_DO_CALCULO_PREVIA } from './forecastPendentes';
+import { textoForaDoCalculoPrevia } from './forecastPendentes';
 import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
 const SIM_NAO = (v: boolean) => (v ? 'Sim' : 'Não');
@@ -274,7 +274,7 @@ function BlocoPendentes({
 }) {
   return (
     <Bloco titulo={`Pendentes de cadastro (${inteiroBr(pendentes.totalItens)})`}>
-      <p>{TEXTO_FORA_DO_CALCULO_PREVIA}</p>
+      <p>{textoForaDoCalculoPrevia(pendentes.totalItens)}</p>
       <TabelaPendentes
         itens={pendentes.itens}
         omitidos={pendentes.omitidos}

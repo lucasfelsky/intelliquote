@@ -40,13 +40,19 @@ export function textoProdutoInativo(nome: string | null | undefined): string {
 
 export const TEXTO_REATIVACAO_INDISPONIVEL = 'A reativação de produto ainda não está disponível nesta tela.';
 
-/** Texto fixo do painel da quinzena: quando o codigo passa a entrar no calculo. */
-export function textoEntradaNoCalculo(label: string): string {
-  return `Esses códigos ficaram FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.`;
+/** Texto fixo do painel da quinzena: quando o codigo passa a entrar no calculo (singular com 1 pendente). */
+export function textoEntradaNoCalculo(label: string, totalItens: number): string {
+  return totalItens === 1
+    ? `Este código ficou FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.`
+    : `Esses códigos ficaram FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.`;
 }
 
-export const TEXTO_FORA_DO_CALCULO_PREVIA =
-  'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.';
+/** Texto fixo do bloco da pre-visualizacao (singular com 1 pendente). */
+export function textoForaDoCalculoPrevia(totalItens: number): string {
+  return totalItens === 1
+    ? 'Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.'
+    : 'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.';
+}
 
 export const TEXTO_AVISO_PLANILHA =
   'Inclua o código também na planilha PO.COMP.01: o próximo import da planilha remove os códigos que não estão nela.';
@@ -90,9 +96,9 @@ export function historicoAusenteTexto(regra: ForecastPendentesRegra | undefined)
 
 /** Linha do painel quando nao ha pendente (o criterio so e afirmado quando o backend o informa). */
 export function nenhumPendenteTexto(regra: ForecastPendentesRegra | undefined): string {
-  return regra
-    ? 'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou compra em aberto no FUP fora do cadastro nesta quinzena.'
-    : 'Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.';
+  if (!regra) return 'Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.';
+  const compra = regra.compras === 'chegadas' ? 'chegada prevista no FUP' : 'compra em aberto no FUP';
+  return `Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou ${compra} fora do cadastro nesta quinzena.`;
 }
 
 type ResultadoGravado = { tipo: 'novo' | 'codigo'; produtoOrigem?: string | null };

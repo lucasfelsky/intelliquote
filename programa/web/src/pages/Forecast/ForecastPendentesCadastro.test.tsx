@@ -126,6 +126,26 @@ describe('ForecastPendentesCadastro - estados', () => {
     expect(await screen.findByText('Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.')).toBeTruthy();
   });
 
+  it('1 pendente: o texto fixo de rodape vai para o singular', async () => {
+    pendentes = dados({ itens: [dados().itens[0]], totalItens: 1 });
+    renderPainel();
+    expect(
+      await screen.findByText(
+        'Este código ficou FORA do cálculo da quinzena 11-1. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('vazio de quinzena antiga (regra.compras = chegadas): cita a chegada prevista, nao a compra em aberto', async () => {
+    pendentes = dados({ itens: [], totalItens: 0, regra: { ...REGRA, compras: 'chegadas' } });
+    renderPainel();
+    expect(
+      await screen.findByText(
+        'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou chegada prevista no FUP fora do cadastro nesta quinzena.',
+      ),
+    ).toBeTruthy();
+  });
+
   it('quinzena da planilha (aplicavel: false): nao renderiza nada', async () => {
     pendentes = dados({ aplicavel: false, itens: [], totalItens: 0 });
     const { container } = renderPainel();

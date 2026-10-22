@@ -953,6 +953,14 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     });
   });
 
+  it('1 pendente: o texto "FORA do calculo" do bloco vai para o singular', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes([pend({})]) }));
+    expect(
+      regiao().getByText('Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.'),
+    ).toBeTruthy();
+  });
+
   it('mostra o bloco com a tabela, o texto "FORA do calculo" e um botao por codigo SEM cadastro', async () => {
     renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
@@ -1088,6 +1096,9 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     await screen.findByLabelText(/Entendi que SALDO/);
     expect(caixaSaldo().checked).toBe(false);
     expect(botao('Confirmar importação').disabled).toBe(true);
+    // A faixa de "previa descartada" nao fica ao lado da previa nova e valida.
+    expect(screen.queryByText(/pré-visualização anterior foi descartada/)).toBeNull();
+    expect(screen.getByText('Cadastro gravado. Pré-visualização atualizada.')).toBeTruthy();
   });
 
   it('a nova pre-visualizacao falhou: o cadastro continua gravado e a mensagem diz isso', async () => {

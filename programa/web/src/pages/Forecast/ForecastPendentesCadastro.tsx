@@ -264,7 +264,7 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
           <span className="fcp__resumo"> · ficam fora do cálculo</span>
         </summary>
         <div className="fcp__corpo">
-          <p className="fcp-nota">{textoEntradaNoCalculo(label)}</p>
+          <p className="fcp-nota">{textoEntradaNoCalculo(label, dados.totalItens)}</p>
           <TabelaPendentes
             itens={dados.itens}
             omitidos={dados.omitidos}
