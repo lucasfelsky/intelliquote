@@ -27,6 +27,11 @@
 // (`pallet`), so para o comprador escolher na compra: a Qtd. final continua sendo a da embalagem em destaque e nada
 // disso e persistido.
 //
+// Compra sob demanda (PR 6a, Comex): produto marcado so e comprado quando o cliente envia a programacao. A linha que
+// entraria na lista de compra NAO vira item: vai para `sobDemanda.itens` (com o motivo e a programacao ainda nao coberta
+// por estoque e chegadas) e conta em `fora.sobDemanda`; nunca volta sozinha para a lista principal. Linha sob demanda
+// que nao entraria nao muda; sem consumo so ganha o selo. O motor nao e tocado: a marca vem do cadastro ATUAL.
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
@@ -170,6 +175,32 @@ export interface ItemSemConsumo {
   semLeadTime: boolean;
   /** Observacao da quinzena ('' quando nao ha). */
   obs: string;
+  /** Produto marcado como compra sob demanda (so selo; a lista continua a mesma). */
+  sobDemanda: boolean;
+}
+
+// Item sob demanda que entraria na lista de compra: fica fora dela e aparece em secao propria.
+export interface ItemSobDemanda {
+  linha: number;
+  n: number | null;
+  productId: number | null;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: string;
+  /** Motivo cadastrado ao marcar o produto; nulo = marcado sem motivo. */
+  motivo: string | null;
+  /** AN do motor (<= 0), so informativo: a quantidade que a lista de compra sugeriria. */
+  demanda: number;
+  quantidadeSugerida: number;
+  estoque: number;
+  chegadas: Array<{ anoMes: string; quantidade: number }>;
+  programacoes: Array<{ anoMes: string; quantidade: number }>;
+  programado: number;
+  /** max(0, programacoes - estoque - chegadas): o que a programacao do cliente ainda nao tem de cobertura. */
+  programacaoDescoberta: number;
+  /** Observacao da quinzena ('' quando nao ha): o item sai da lista de compra, a nota vai junto. */
+  obs: string;
 }
 
 export interface RelatorioCompras {
@@ -184,9 +215,16 @@ export interface RelatorioCompras {
     comPallet: number;
     porUrgencia: Record<UrgenciaId, number>;
   };
-  fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento: number };
+  fora: {
+    semLeadTime: number;
+    semConsumoSemFalta: number;
+    semConsumoSemMovimento: number;
+    /** Itens que entrariam na lista de compra mas estao marcados como compra sob demanda. */
+    sobDemanda: number;
+  };
   urgencia: { diasCritico: number };
   semConsumo: { itens: ItemSemConsumo[] };
+  sobDemanda: { itens: ItemSobDemanda[] };
   grupos: GrupoRelatorioCompras[];
 }
 
@@ -413,6 +451,18 @@ export function motivosSemConsumo(
   return motivos;
 }
 
+const somaChegadas = (l: Pick<LinhaParaRelatorio, 'chegadas'>) =>
+  l.chegadas.slice(0, 5).reduce((total, v) => total + v, 0);
+
+function compararSobDemanda(a: ItemSobDemanda, b: ItemSobDemanda): number {
+  return (
+    b.programacaoDescoberta - a.programacaoDescoberta ||
+    compararTexto(a.fonte, b.fonte) ||
+    compararTexto(a.item, b.item) ||
+    a.linha - b.linha
+  );
+}
+
 function compararSemConsumo(a: ItemSemConsumo, b: ItemSemConsumo): number {
   const pa = a.motivos.includes('programacao') ? 0 : 1;
   const pb = b.motivos.includes('programacao') ? 0 : 1;
@@ -422,9 +472,12 @@ function compararSemConsumo(a: ItemSemConsumo, b: ItemSemConsumo): number {
 export function montarRelatorioCompras(
   q: QuinzenaParaRelatorio,
   embalagens: EmbalagemCadastrada[],
-  opcoes: { diasCritico?: number } = {},
+  // `sobDemanda`: chave = productId do cadastro; sem a opcao o resultado e o mesmo de antes (so ganha secao vazia).
+  opcoes: { diasCritico?: number; sobDemanda?: ReadonlyMap<number, { motivo: string | null }> } = {},
 ): RelatorioCompras {
   const diasCritico = opcoes.diasCritico ?? DIAS_RUPTURA_CRITICA;
+  const regraSobDemanda = (l: Pick<LinhaParaRelatorio, 'productId'>) =>
+    l.productId != null ? opcoes.sobDemanda?.get(l.productId) : undefined;
   if (!Number.isInteger(diasCritico) || diasCritico < 0) {
     throw new Error('Limite de dias da faixa critica invalido.');
   }
@@ -440,6 +493,7 @@ export function montarRelatorioCompras(
   let semConsumoSemFalta = 0;
   let semConsumoSemMovimento = 0;
   const semConsumoItens: ItemSemConsumo[] = [];
+  const sobDemandaItens: ItemSobDemanda[] = [];
   const porFonte = new Map<string, { fonte: string; leadTimeDias: number; itens: ItemRelatorioCompras[] }>();
 
   // Fora da lista de compra: sem consumo com estoque ou programacao vai para a secao de atencao; sem nada, so conta.
@@ -465,6 +519,7 @@ export function montarRelatorioCompras(
       chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
       semLeadTime: l.AN === null,
       obs: (l.obs ?? '').trim(),
+      sobDemanda: regraSobDemanda(l) !== undefined,
     });
   };
 
@@ -477,6 +532,31 @@ export function montarRelatorioCompras(
     if (!entraNoRelatorio(l)) {
       registrarSemConsumo(l);
       if (l.AN <= 0) semConsumoSemFalta += 1;
+      continue;
+    }
+
+    // Compra sob demanda: o item que entraria sai da lista de compra e vai para a secao propria, com o motivo.
+    const sob = regraSobDemanda(l);
+    if (sob) {
+      const programado = somaProgramacoes(l);
+      sobDemandaItens.push({
+        linha: l.linha,
+        n: l.n ?? null,
+        productId: l.productId ?? null,
+        item: l.item,
+        codigos: l.codigos,
+        fonte: l.fonte.trim(),
+        status: l.status,
+        motivo: sob.motivo,
+        demanda: semMenosZero(l.AN),
+        quantidadeSugerida: semMenosZero(Math.abs(l.AN)),
+        estoque: l.U,
+        chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
+        programacoes: mesesComValor(l.programacoes.slice(0, 4), meses),
+        programado,
+        programacaoDescoberta: semMenosZero(Math.max(0, arredondar6(programado - l.U - somaChegadas(l)))),
+        obs: (l.obs ?? '').trim(),
+      });
       continue;
     }
 
@@ -552,6 +632,7 @@ export function montarRelatorioCompras(
   });
   grupos.sort((a, b) => a.itens[0].posicaoUrgencia - b.itens[0].posicaoUrgencia);
   semConsumoItens.sort(compararSemConsumo);
+  sobDemandaItens.sort(compararSobDemanda);
 
   const todos = grupos.flatMap((g) => g.itens);
   return {
@@ -572,9 +653,10 @@ export function montarRelatorioCompras(
       comPallet: todos.filter((i) => i.porEmbalagem.some((o) => o.pallet !== null)).length,
       porUrgencia: contarPorUrgencia(todos),
     },
-    fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento },
+    fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento, sobDemanda: sobDemandaItens.length },
     urgencia: { diasCritico },
     semConsumo: { itens: semConsumoItens },
+    sobDemanda: { itens: sobDemandaItens },
     grupos,
   };
 }

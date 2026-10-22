@@ -18,7 +18,7 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     // forecastSnapshot SEM update/upsert/updateMany de proposito: o historico nunca e editado.
     forecastSnapshot: { findFirst: vi.fn() },
-    forecastProduct: { findUnique: vi.fn() },
+    forecastProduct: { findUnique: vi.fn(), findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
   };
@@ -35,7 +35,7 @@ const prismaMock = prisma as unknown as {
   session: { create: Mock; findUnique: Mock; update: Mock; updateMany: Mock };
   auditLog: { create: Mock };
   forecastSnapshot: Record<string, Mock>;
-  forecastProduct: { findUnique: Mock };
+  forecastProduct: { findUnique: Mock; findMany: Mock };
   forecastProductCode: { findMany: Mock; update: Mock; updateMany: Mock };
   $transaction: Mock;
 };
@@ -90,6 +90,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
   prismaMock.forecastProduct.findUnique.mockResolvedValue(produto());
+  prismaMock.forecastProduct.findMany.mockResolvedValue([]);
   prismaMock.forecastProductCode.update.mockResolvedValue({});
   prismaMock.forecastProductCode.updateMany.mockResolvedValue({ count: 0 });
   prismaMock.forecastProductCode.findMany.mockResolvedValue([]);

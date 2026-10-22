@@ -13,6 +13,7 @@ import {
   type ForecastUrgencia,
 } from '@/services/forecast';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
+import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
   APOIO_SEM_CONSUMO,
@@ -40,6 +41,8 @@ import {
   opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
+  paragrafoSobDemanda,
+  resumoSobDemanda,
   textoObservacao,
   tituloOutrasEmbalagens,
 } from './forecastRelatorioTextos';
@@ -398,7 +401,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                   {i.semLeadTime ? ' (sem lead time)' : ''}
                 </td>
                 <td>{STATUS_ROTULO[i.status] ?? i.status}</td>
-                <td>{textoMotivos(i.motivos)}</td>
+                <td>{textoMotivos(i.motivos, i.sobDemanda === true)}</td>
                 <td className="fcr-num">{d1(i.estoque)}</td>
                 <td>
                   <ListaDeMeses prefixo="Programação" meses={i.programacoes} />
@@ -449,6 +452,8 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   const porUrgencia = totais.porUrgencia;
   const diasCritico = dados.urgencia?.diasCritico ?? 0;
   const semConsumo = temSemConsumo(dados) ? dados.semConsumo : undefined;
+  // Compra sob demanda (PR 6a): backend antigo nao manda `sobDemanda`; sem item marcado a secao nao aparece.
+  const sobDemanda = dados.sobDemanda && dados.sobDemanda.itens.length > 0 ? dados.sobDemanda : undefined;
   const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro) : [];
   const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro) : dados.grupos;
   const totalMostrado = visao === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
@@ -500,6 +505,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           <li>{totais.semEmbalagem} sem embalagem cadastrada</li>
           {totais.multiplasEmbalagens > 0 && <li>{totais.multiplasEmbalagens} com mais de uma embalagem</li>}
           {(totais.comPallet ?? 0) > 0 && <li>{totais.comPallet} com pallet cadastrado</li>}
+          {sobDemanda && <li>{resumoSobDemanda(fora.sobDemanda ?? sobDemanda.itens.length)}</li>}
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
@@ -558,6 +564,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           <p>{PARAGRAFO_EMBALAGEM}</p>
           {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
           {semConsumo && <p>{paragrafoSemConsumo()}</p>}
+          {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
         </details>
       </section>
       {dados.grupos.length === 0 ? (
@@ -579,6 +586,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
         ))
       )}
       {semConsumo && semConsumo.itens.length > 0 && <SecaoSemConsumo itens={semConsumo.itens} />}
+      {sobDemanda && <ForecastRelatorioSobDemanda itens={sobDemanda.itens} />}
     </>
   );
 }

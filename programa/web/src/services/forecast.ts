@@ -58,6 +58,9 @@ export interface ForecastLinha {
   precoFixo?: boolean;
   /** Flag X da coluna AX ("nao fraciona"). */
   naoFraciona?: boolean;
+  /** PR 6a (opcionais: backend antigo nao manda): produto marcado como compra sob demanda no cadastro ATUAL. */
+  sobDemanda?: boolean;
+  sobDemandaMotivo?: string | null;
 }
 
 export interface ForecastDivergencia {
@@ -198,6 +201,30 @@ export interface ForecastItemSemConsumo {
   semLeadTime: boolean;
   /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
   obs?: string;
+  /** PR 6a (opcional: backend antigo nao manda): produto marcado como compra sob demanda (so selo). */
+  sobDemanda?: boolean;
+}
+
+/** Item sob demanda que entraria na lista de compra, mas fica fora dela (PR 6a). */
+export interface ForecastItemSobDemanda {
+  linha: number;
+  n: number | null;
+  productId: number | null;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: ForecastStatus;
+  /** Motivo cadastrado ao marcar; nulo = sem motivo (a tela mostra so o texto padrao). */
+  motivo: string | null;
+  demanda: number;
+  quantidadeSugerida: number;
+  estoque: number;
+  chegadas: Array<{ anoMes: string; quantidade: number }>;
+  programacoes: Array<{ anoMes: string; quantidade: number }>;
+  programado: number;
+  /** max(0, programacoes - estoque - chegadas). */
+  programacaoDescoberta: number;
+  obs?: string;
 }
 
 export interface ForecastRelatorioCompras {
@@ -212,9 +239,17 @@ export interface ForecastRelatorioCompras {
     comPallet?: number;
     porUrgencia?: Record<ForecastUrgencia, number>;
   };
-  fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento?: number };
+  fora: {
+    semLeadTime: number;
+    semConsumoSemFalta: number;
+    semConsumoSemMovimento?: number;
+    /** PR 6a (opcional: backend antigo nao manda): itens que entrariam na lista mas sao compra sob demanda. */
+    sobDemanda?: number;
+  };
   urgencia?: { diasCritico: number };
   semConsumo?: { itens: ForecastItemSemConsumo[] };
+  /** PR 6a (opcional: backend antigo nao manda). */
+  sobDemanda?: { itens: ForecastItemSobDemanda[] };
   grupos: ForecastGrupoRelatorio[];
 }
 

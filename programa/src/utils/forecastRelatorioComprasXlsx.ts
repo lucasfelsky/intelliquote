@@ -9,6 +9,7 @@ import type {
   GrupoRelatorioCompras,
   ItemRelatorioCompras,
   ItemSemConsumo,
+  ItemSobDemanda,
   MotivoSemConsumo,
   OpcaoDeEmbalagem,
   PalletDaOpcao,
@@ -19,6 +20,7 @@ import type {
 export const ABA_RELATORIO = 'Relatório de compras';
 export const ABA_POR_URGENCIA = 'Por urgência';
 export const ABA_SEM_CONSUMO = 'Atenção sem consumo';
+export const ABA_SOB_DEMANDA = 'Sob demanda';
 export const ABA_REGRAS = 'Regras';
 
 // As colunas da tela (+ Urgencia e Dias ate a ruptura); Item / Embalagem / Data-limite desdobradas em colunas filtraveis.
@@ -65,6 +67,21 @@ export const COLUNAS_SEM_CONSUMO_XLSX = [
   'Observação',
 ] as const;
 
+// Aba "Sob demanda" (PR 6a): so existe quando ha item sob demanda; Observacao segue a ultima coluna.
+export const COLUNAS_SOB_DEMANDA_XLSX = [
+  'Item',
+  'Códigos',
+  'Fonte',
+  'Status',
+  'Motivo',
+  'Demanda',
+  'Programações',
+  'Programação descoberta',
+  'Estoque',
+  'Chegadas',
+  'Observação',
+] as const;
+
 // Copia exata de STATUS_ROTULO (web/src/pages/Forecast/forecastPainel.ts).
 export const STATUS_ROTULO_XLSX: Record<string, string> = {
   nao: 'Cotação não enviada',
@@ -97,6 +114,7 @@ const NOMES_NUMERICOS = ['Demanda', 'Qtd. sugerida', 'Qtd. final'] as const;
 const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 40];
 const LARGURAS_POR_URGENCIA = [34, 22, 24, ...LARGURAS.slice(2)];
 const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 40];
+const LARGURAS_SOB_DEMANDA = [34, 22, 24, 24, 40, 11, 30, 14, 11, 30, 40];
 
 const plural = (n: number, singular: string, pluralForm: string) => (n === 1 ? singular : pluralForm);
 
@@ -160,8 +178,25 @@ export function paragrafoUrgencia(diasCritico: number): string {
   return `Urgência: "Sem estoque agora" = a ruptura cai na data-base ou já passou na data de hoje; ${critica}"Atrasado" = a data-limite do pedido já passou; "No prazo" = o restante, inclusive sem ruptura em 6 meses. A lista segue essa ordem e, dentro de cada faixa, os dias até a ruptura e depois a data-limite.`;
 }
 
-export function textoMotivos(motivos: MotivoSemConsumo[]): string {
-  return motivos.map((m) => (m === 'programacao' ? 'tem programação' : 'tem estoque')).join(' · ');
+export function textoMotivos(motivos: MotivoSemConsumo[], sobDemanda = false): string {
+  const textos: string[] = motivos.map((m) => (m === 'programacao' ? 'tem programação' : 'tem estoque'));
+  if (sobDemanda) textos.push('compra sob demanda');
+  return textos.join(' · ');
+}
+
+// Copia EXATA de web/src/pages/Forecast/forecastRelatorioTextos.ts (guarda de paridade no teste): compra sob demanda.
+export const MOTIVO_SOB_DEMANDA_PADRAO = 'Compra sob programação do cliente';
+
+export function textoMotivoSobDemanda(motivo: string | null): string {
+  return motivo ? `${MOTIVO_SOB_DEMANDA_PADRAO}: ${motivo}` : MOTIVO_SOB_DEMANDA_PADRAO;
+}
+
+export function resumoSobDemanda(n: number): string {
+  return `${n} sob demanda (fora da lista de compra)`;
+}
+
+export function paragrafoSobDemanda(): string {
+  return 'Itens marcados como "compra sob demanda" saem da lista de compra: só se compra com programação do cliente. A seção mostra a programação ainda não coberta por estoque e chegadas.';
 }
 
 export function resumoSemConsumo(emAtencao: number, semMovimento: number): string {
@@ -202,6 +237,9 @@ export function linhasDoResumo(r: RelatorioCompras): string[] {
   }
   linhas.push(`Fora do relatório: ${fora.semLeadTime} sem lead time, ${fora.semConsumoSemFalta} sem consumo e sem falta`);
   linhas.push(resumoSemConsumo(r.semConsumo.itens.length, fora.semConsumoSemMovimento));
+  if (fora.sobDemanda > 0) {
+    linhas.push(resumoSobDemanda(fora.sobDemanda));
+  }
   return linhas;
 }
 
@@ -296,10 +334,27 @@ export function celulasDoItemSemConsumo(item: ItemSemConsumo): Array<string | nu
     item.codigos.join(' · '),
     `${item.fonte || 'Sem fonte'}${item.semLeadTime ? ' (sem lead time)' : ''}`,
     STATUS_ROTULO_XLSX[item.status] ?? item.status,
-    textoMotivos(item.motivos),
+    textoMotivos(item.motivos, item.sobDemanda),
     item.estoque,
     item.programado,
     juntarLinhas(linhasProgramacao(item.programacoes)),
+    juntarLinhas(linhasChegada(item.chegadas)),
+    item.obs,
+  ];
+}
+
+// 11 valores, na ordem de COLUNAS_SOB_DEMANDA_XLSX.
+export function celulasDoItemSobDemanda(item: ItemSobDemanda): Array<string | number> {
+  return [
+    item.item,
+    item.codigos.join(' · '),
+    item.fonte || 'Sem fonte',
+    STATUS_ROTULO_XLSX[item.status] ?? item.status,
+    textoMotivoSobDemanda(item.motivo),
+    item.demanda,
+    juntarLinhas(linhasProgramacao(item.programacoes)),
+    item.programacaoDescoberta,
+    item.estoque,
     juntarLinhas(linhasChegada(item.chegadas)),
     item.obs,
   ];
@@ -311,13 +366,14 @@ export function nomeArquivoRelatorioCompras(q: { label: string; hoje: string }):
 }
 
 // Texto da aba Regras: os paragrafos do <details> da tela + nota de origem do arquivo.
-export function paragrafosDeRegras(diasCritico: number): string[] {
+export function paragrafosDeRegras(diasCritico: number, comSobDemanda = false): string[] {
   return [
     'O saldo zera no primeiro mês em que a projeção do estoque fica negativa. O dia da ruptura é uma estimativa: o consumo do mês é distribuído de forma linear (no mês base, a partir da data-base).',
     'Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite já passou na data de hoje.',
     PARAGRAFO_EMBALAGEM_XLSX,
     paragrafoUrgencia(diasCritico),
     paragrafoSemConsumo(),
+    ...(comSobDemanda ? [paragrafoSobDemanda()] : []),
     'Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).',
   ];
 }
@@ -441,6 +497,30 @@ function adicionarAbaSemConsumo(workbook: exceljs.Workbook, r: RelatorioCompras)
   }
 }
 
+function adicionarAbaSobDemanda(workbook: exceljs.Workbook, r: RelatorioCompras): void {
+  const ws = workbook.addWorksheet(ABA_SOB_DEMANDA);
+  ws.columns = LARGURAS_SOB_DEMANDA.map((width) => ({ width }));
+  ws.pageSetup = { ...PAGINA_PAISAGEM };
+  estilizarCabecalho(ws.addRow([...COLUNAS_SOB_DEMANDA_XLSX]));
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUNAS_SOB_DEMANDA_XLSX.length } };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const col = (nome: (typeof COLUNAS_SOB_DEMANDA_XLSX)[number]) => COLUNAS_SOB_DEMANDA_XLSX.indexOf(nome) + 1;
+  for (const item of r.sobDemanda.itens) {
+    const row = ws.addRow(celulasDoItemSobDemanda(item));
+    row.alignment = { vertical: 'top' };
+    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Observação'] as const) {
+      row.getCell(col(nome)).alignment = { vertical: 'top', wrapText: true };
+    }
+    row.getCell(col('Demanda')).numFmt = '0.0';
+    row.getCell(col('Programação descoberta')).numFmt = '0.0';
+    row.getCell(col('Estoque')).numFmt = '0.0';
+    if (item.programacaoDescoberta > 0) {
+      row.getCell(col('Programação descoberta')).font = { bold: true, color: { argb: COR_VENCIDA_TEXTO } };
+    }
+  }
+}
+
 export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Buffer> {
   const workbook = new exceljs.Workbook();
   const ws = workbook.addWorksheet(ABA_RELATORIO);
@@ -465,10 +545,14 @@ export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Bu
 
   adicionarAbaPorUrgencia(workbook, r);
   adicionarAbaSemConsumo(workbook, r);
+  const comSobDemanda = r.sobDemanda.itens.length > 0;
+  if (comSobDemanda) {
+    adicionarAbaSobDemanda(workbook, r);
+  }
 
   const regras = workbook.addWorksheet(ABA_REGRAS);
   regras.columns = [{ width: 120 }];
-  paragrafosDeRegras(r.urgencia.diasCritico).forEach((texto) => {
+  paragrafosDeRegras(r.urgencia.diasCritico, comSobDemanda).forEach((texto) => {
     const row = regras.addRow([texto]);
     row.getCell(1).alignment = { vertical: 'top', wrapText: true };
   });

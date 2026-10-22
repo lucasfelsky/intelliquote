@@ -255,3 +255,34 @@ export const forecastProductCodeAddSchema = z.object({
 
 export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
 export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;
+
+// Compra sob demanda (PR 6a): marca por produto. `motivo` e opcional (vazio = sem motivo); `sobDemanda: false`
+// limpa o motivo no service, qualquer que seja o valor enviado.
+export const FORECAST_SOB_DEMANDA_MOTIVO_MIN = 3;
+export const FORECAST_SOB_DEMANDA_MOTIVO_MAX = 300;
+
+export const forecastSobDemandaPatchSchema = z
+  .object({
+    sobDemanda: z.boolean({ error: 'Informe se a compra é sob demanda (true/false).' }),
+    motivo: z
+      .string({ error: 'O motivo deve ser um texto (ou null).' })
+      .trim()
+      .max(
+        FORECAST_SOB_DEMANDA_MOTIVO_MAX,
+        `O motivo aceita no máximo ${FORECAST_SOB_DEMANDA_MOTIVO_MAX} caracteres.`,
+      )
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.motivo != null && value.motivo.length < FORECAST_SOB_DEMANDA_MOTIVO_MIN) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['motivo'],
+        message: `O motivo precisa ter ao menos ${FORECAST_SOB_DEMANDA_MOTIVO_MIN} caracteres.`,
+      });
+    }
+  });
+
+export type ForecastSobDemandaPatchInput = z.infer<typeof forecastSobDemandaPatchSchema>;

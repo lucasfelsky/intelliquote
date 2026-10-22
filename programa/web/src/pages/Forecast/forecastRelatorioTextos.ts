@@ -76,3 +76,28 @@ export function textoObservacao(obs: string | null | undefined): string | null {
   const texto = (obs ?? '').trim();
   return texto ? `Obs.: ${texto}` : null;
 }
+
+// ---- Compra sob demanda (PR 6a): copia exata em src/utils/forecastRelatorioComprasXlsx.ts (guarda de paridade no teste) ----
+
+export const MOTIVO_SOB_DEMANDA_PADRAO = 'Compra sob programação do cliente';
+
+/** Motivo exibido: o padrao, seguido do motivo cadastrado quando houver. */
+export function textoMotivoSobDemanda(motivo: string | null | undefined): string {
+  return motivo ? `${MOTIVO_SOB_DEMANDA_PADRAO}: ${motivo}` : MOTIVO_SOB_DEMANDA_PADRAO;
+}
+
+export function resumoSobDemanda(n: number): string {
+  return `${n} sob demanda (fora da lista de compra)`;
+}
+
+export function paragrafoSobDemanda(): string {
+  return 'Itens marcados como "compra sob demanda" saem da lista de compra: só se compra com programação do cliente. A seção mostra a programação ainda não coberta por estoque e chegadas.';
+}
+
+export function tituloSobDemanda(n: number): string {
+  return `Sob demanda: só com programação do cliente · ${n} ${n === 1 ? 'item' : 'itens'}`;
+}
+
+/** Nota sob a tabela da secao (so na tela): o que a coluna "Programação descoberta" mede. */
+export const APOIO_SOB_DEMANDA =
+  'Programação descoberta = programações − estoque − chegadas (nunca negativa). Só informativo: o item não entra na lista de compra.';

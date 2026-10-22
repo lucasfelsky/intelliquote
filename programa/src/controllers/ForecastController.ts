@@ -4,6 +4,7 @@ import { ForecastImportService } from '../services/ForecastImportService';
 import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
 import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
+import { ForecastSobDemandaService } from '../services/ForecastSobDemandaService';
 import { ForecastSourceService } from '../services/ForecastSourceService';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
 import {
@@ -13,6 +14,7 @@ import {
   forecastProductCodeAddSchema,
   forecastProductCreateSchema,
   forecastSnapshotQuerySchema,
+  forecastSobDemandaPatchSchema,
   forecastSourcePatchSchema,
   forecastWorkbookConfirmSchema,
   forecastWorkbookPreviewSchema,
@@ -117,6 +119,20 @@ export class ForecastController {
       }
       const input = forecastEmbalagensPatchSchema.parse(req.body);
       const data = await ForecastProductService.patchEmbalagens(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async patchSobDemanda(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const input = forecastSobDemandaPatchSchema.parse(req.body);
+      const data = await ForecastSobDemandaService.patch(id, input, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

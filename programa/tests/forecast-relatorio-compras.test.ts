@@ -300,7 +300,7 @@ describe('montarRelatorioCompras (sintetico)', () => {
       comPallet: 0,
       porUrgencia: { 'sem-estoque': 1, critico: 0, atrasado: 1, 'no-prazo': 2 },
     });
-    expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2, semConsumoSemMovimento: 2 });
+    expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2, semConsumoSemMovimento: 2, sobDemanda: 0 });
     expect(r.semConsumo.itens).toEqual([]);
     expect(r.urgencia).toEqual({ diasCritico: 15 });
     const porItem = new Map(r.grupos.flatMap((g) => g.itens).map((i) => [i.item, i] as const));
@@ -655,7 +655,7 @@ describe('sem consumo (sintetico)', () => {
       linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE A', Q: 0, AG: 0, U: 0, AN: 100, chegadas: [0, 0, 100, 0, 0] }),
     ]);
     expect(r.semConsumo.itens).toEqual([]);
-    expect(r.fora).toEqual({ semLeadTime: 0, semConsumoSemFalta: 1, semConsumoSemMovimento: 2 });
+    expect(r.fora).toEqual({ semLeadTime: 0, semConsumoSemFalta: 1, semConsumoSemMovimento: 2, sobDemanda: 0 });
   });
 
   it('sem lead time com estoque entra na secao e continua em fora.semLeadTime', () => {

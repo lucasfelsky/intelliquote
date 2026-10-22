@@ -18,13 +18,16 @@ import {
   ABA_REGRAS,
   ABA_RELATORIO,
   ABA_SEM_CONSUMO,
+  ABA_SOB_DEMANDA,
   COLUNAS_POR_URGENCIA_XLSX,
   COLUNAS_RELATORIO_XLSX,
   COLUNAS_SEM_CONSUMO_XLSX,
+  COLUNAS_SOB_DEMANDA_XLSX,
   PARAGRAFO_EMBALAGEM_XLSX,
   STATUS_ROTULO_XLSX,
   URGENCIAS_XLSX,
   celulasDoItem,
+  celulasDoItemSobDemanda,
   dataBr,
   gerarXlsxRelatorioCompras,
   inteiroBr,
@@ -33,10 +36,14 @@ import {
   mesAbrev,
   nomeArquivoRelatorioCompras,
   paragrafoSemConsumo,
+  paragrafoSobDemanda,
   paragrafoUrgencia,
+  paragrafosDeRegras,
   resumoDeUrgencia,
   resumoSemConsumo,
+  resumoSobDemanda,
   rotuloUrgencia,
+  textoMotivoSobDemanda,
   textoMotivos,
   textoOpcaoDeEmbalagem,
   textoPallet,
@@ -63,6 +70,9 @@ import {
   PARAGRAFO_EMBALAGEM,
   opcoesOutrasComPallet,
   palletDoDestaque,
+  paragrafoSobDemanda as paragrafoSobDemandaWeb,
+  resumoSobDemanda as resumoSobDemandaWeb,
+  textoMotivoSobDemanda as textoMotivoSobDemandaWeb,
   textoOpcaoDeEmbalagem as textoOpcaoDeEmbalagemWeb,
   textoPallet as textoPalletWeb,
 } from '../web/src/pages/Forecast/forecastRelatorioTextos';
@@ -897,5 +907,143 @@ describe('pallet fechado no XLSX (PR 6e)', () => {
     for (const texto of ['Pallet de ', 'com pallet cadastrado', 'fcr-embalagem__pallet']) {
       expect(tela).toContain(texto);
     }
+  });
+});
+
+// ---- Compra sob demanda (PR 6a) ----
+describe('compra sob demanda no XLSX', () => {
+  // PRODUTO 001 marcado (entraria com 800), PRODUTO 002 regular e PRODUTO 003 sem consumo marcado (so selo).
+  const marca = new Map([
+    [1, { motivo: 'MOTIVO SINTETICO' }],
+    [3, { motivo: null }],
+  ]);
+  const base = [
+    linha({
+      linha: 1,
+      productId: 1,
+      item: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      Q: 100,
+      AG: 100,
+      U: 300,
+      AN: -800,
+      AQ: 60,
+      status: 'cotando',
+      obs: 'OBS SINTETICA 001',
+      chegadas: [0, 0, 0, 0, 100],
+      programacoes: [0, 800, 0, 0],
+    }),
+    linha({ linha: 2, productId: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', AN: -100 }),
+    linha({
+      linha: 3,
+      productId: 3,
+      item: 'PRODUTO 003',
+      fonte: 'FONTE 002',
+      Q: 0,
+      AG: 0,
+      U: 200,
+      AN: 200,
+      projecao: [200, 200, 200, 200, 200, 200],
+    }),
+  ];
+  const comMarca = montarRelatorioCompras(quinzena(base), [], { sobDemanda: marca });
+  const semMarca = montarRelatorioCompras(quinzena(base), []);
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+
+  it('premissa: o item marcado sai da lista e vai para a secao; o sem consumo so ganha o selo', () => {
+    expect(comMarca.totais.itens).toBe(1);
+    expect(comMarca.sobDemanda.itens.map((i) => i.item)).toEqual(['PRODUTO 001']);
+    expect(comMarca.sobDemanda.itens[0].programacaoDescoberta).toBe(400); // 800 - 300 - 100
+    expect(comMarca.fora.sobDemanda).toBe(1);
+    expect(comMarca.semConsumo.itens.map((i) => [i.item, i.sobDemanda])).toEqual([['PRODUTO 003', true]]);
+  });
+
+  it('com item: aba "Sob demanda" depois da de sem consumo e antes das Regras; cabecalho e linhas = celulas', async () => {
+    const wb = await abrir(comMarca);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      ABA_RELATORIO,
+      ABA_POR_URGENCIA,
+      ABA_SEM_CONSUMO,
+      ABA_SOB_DEMANDA,
+      ABA_REGRAS,
+    ]);
+    const ws = wb.getWorksheet(ABA_SOB_DEMANDA)!;
+    const n = COLUNAS_SOB_DEMANDA_XLSX.length;
+    expect(linhaComoArrayN(ws, 1, n)).toEqual([...COLUNAS_SOB_DEMANDA_XLSX]);
+    expect(linhaComoArrayN(ws, 2, n)).toEqual(celulasDoItemSobDemanda(comMarca.sobDemanda.itens[0]));
+    expect(linhaComoArrayN(ws, 2, n)).toEqual([
+      'PRODUTO 001',
+      'C0001',
+      'FONTE 001',
+      'Cotando',
+      'Compra sob programação do cliente: MOTIVO SINTETICO',
+      -800,
+      'Programação nov/2026: 800',
+      400,
+      300,
+      'Chegada fev/2027: 100',
+      'OBS SINTETICA 001',
+    ]);
+    expect(COLUNAS_SOB_DEMANDA_XLSX.at(-1)).toBe('Observação');
+  });
+
+  it('o item marcado nao aparece nas abas de compra (por fonte e por urgencia)', async () => {
+    const wb = await abrir(comMarca);
+    for (const nome of [ABA_RELATORIO, ABA_POR_URGENCIA]) {
+      const ws = wb.getWorksheet(nome)!;
+      const itensDaAba: string[] = [];
+      ws.eachRow((row) => itensDaAba.push(String(row.getCell(1).value ?? '')));
+      expect(itensDaAba).toContain('PRODUTO 002');
+      expect(itensDaAba).not.toContain('PRODUTO 001');
+    }
+  });
+
+  it('resumo com a contagem so quando ha item; Regras ganha o paragrafo antes da nota de origem', async () => {
+    expect(linhasDoResumo(comMarca)).toContain('1 sob demanda (fora da lista de compra)');
+    expect(linhasDoResumo(semMarca).some((l) => l.includes('sob demanda'))).toBe(false);
+    const regras = paragrafosDeRegras(15, true);
+    expect(regras.at(-2)).toBe(paragrafoSobDemanda());
+    expect(regras.at(-1)).toBe('Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).');
+    expect(paragrafosDeRegras(15)).toEqual(regras.filter((p) => p !== paragrafoSobDemanda()));
+
+    const wb = await abrir(comMarca);
+    const textos: string[] = [];
+    wb.getWorksheet(ABA_REGRAS)!.eachRow((row) => textos.push(String(row.getCell(1).value)));
+    expect(textos).toEqual(paragrafosDeRegras(15, true));
+  });
+
+  it('sem item sob demanda: nada muda (4 abas, sem linha no resumo, Regras igual a de antes)', async () => {
+    expect(semMarca.sobDemanda.itens).toEqual([]);
+    expect(semMarca.fora.sobDemanda).toBe(0);
+    const wb = await abrir(semMarca);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([ABA_RELATORIO, ABA_POR_URGENCIA, ABA_SEM_CONSUMO, ABA_REGRAS]);
+    const textos: string[] = [];
+    wb.getWorksheet(ABA_REGRAS)!.eachRow((row) => textos.push(String(row.getCell(1).value)));
+    expect(textos.some((t) => t.includes('sob demanda'))).toBe(false);
+  });
+
+  it('sem consumo: coluna Motivo ganha "compra sob demanda" no item marcado', async () => {
+    const wb = await abrir(comMarca);
+    const ws = wb.getWorksheet(ABA_SEM_CONSUMO)!;
+    const colMotivo = COLUNAS_SEM_CONSUMO_XLSX.indexOf('Motivo') + 1;
+    expect(valorDaCelula(ws, 2, colMotivo)).toBe('tem estoque · compra sob demanda');
+    expect(COLUNAS_SEM_CONSUMO_XLSX.at(-1)).toBe('Observação');
+  });
+
+  it('Observação continua a ULTIMA coluna das 3 abas existentes (nenhuma coluna nova entre elas)', () => {
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_SEM_CONSUMO_XLSX.at(-1)).toBe('Observação');
+  });
+
+  it('paridade tela x XLSX: motivo, resumo e paragrafo iguais; textoMotivos com o selo', () => {
+    for (const motivo of [null, '', 'MOTIVO SINTETICO']) {
+      expect(textoMotivoSobDemanda(motivo || null)).toBe(textoMotivoSobDemandaWeb(motivo));
+    }
+    expect(resumoSobDemanda(1)).toBe(resumoSobDemandaWeb(1));
+    expect(resumoSobDemanda(12)).toBe(resumoSobDemandaWeb(12));
+    expect(paragrafoSobDemanda()).toBe(paragrafoSobDemandaWeb());
+    expect(textoMotivos(['programacao', 'estoque'], true)).toBe(textoMotivosWeb(['programacao', 'estoque'], true));
+    expect(textoMotivos(['estoque'])).toBe(textoMotivosWeb(['estoque']));
   });
 });

@@ -46,6 +46,7 @@
       "ForecastProductCadastroService.ts",
       "ForecastProductService.ts",
       "ForecastSnapshotService.ts",
+      "ForecastSobDemandaService.ts",
       "ForecastSourceService.ts",
       "HealthService.ts",
       "PortalAreaService.ts",
@@ -169,7 +170,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 63
+    "migrations": 64
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -265,6 +266,7 @@
     "GET /users",
     "GET /users-directory",
     "GET /users/:id",
+    "PATCH /forecast/products/:id/compra-sob-demanda",
     "PATCH /forecast/products/:id/embalagens",
     "PATCH /forecast/sources/:id",
     "PATCH /quote-request-items/:id/purchase-order",

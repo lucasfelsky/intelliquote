@@ -1122,6 +1122,10 @@ model ForecastProduct {
   isActive          Boolean               @default(true)
   // Quem cadastrou: 'planilha' (import PO.COMP.01) ou 'dbcorp' (tela, a partir de um pendente de cadastro). O import da planilha nao inativa produto 'dbcorp'.
   origin            String                @default("planilha")
+  // Compra sob demanda (PR 6a): o item so e comprado quando o cliente envia a programacao; sai da lista de compra do
+  // relatorio. Fora das colunas que o import da planilha grava, entao a reimportacao nao sobrescreve.
+  purchaseOnDemand     Boolean            @default(false)
+  purchaseOnDemandNote String?
   codes             ForecastProductCode[]
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt

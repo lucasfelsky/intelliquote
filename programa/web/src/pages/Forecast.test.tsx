@@ -10,7 +10,7 @@ vi.mock('@/auth/AuthProvider', () => ({
 }));
 
 vi.mock('@/api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), del: vi.fn() },
   ApiError: class ApiError extends Error {
     status: number;
     body: unknown;
@@ -26,6 +26,7 @@ import { api, ApiError } from '@/api/client';
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
+const patch = vi.mocked(api.patch);
 
 // Dados 100% sinteticos.
 const MONTHS = {
@@ -761,5 +762,127 @@ describe('Forecast - pendentes de cadastro (PR 3B-2)', () => {
     expect(screen.getByText('TST0901')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Completar cadastro/ })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Ação' })).toBeNull();
+  });
+});
+
+describe('Forecast - compra sob demanda na memoria de calculo (PR 6a)', () => {
+  const ROTULO = 'Só compra quando o cliente envia a programação';
+  const memoria = () => within(screen.getByRole('region', { name: 'Memória de cálculo' }));
+
+  async function abrir(over: Record<string, unknown> = {}) {
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: 42, sobDemanda: false, sobDemandaMotivo: null, ...over }), ...LINHAS.slice(1)] }) });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+  }
+
+  it.each(['admin', 'comprador'])('%s ve o controle (caixa, motivo e Salvar) na memoria', async (role) => {
+    mockRole = role;
+    await abrir();
+    expect(memoria().getByRole('checkbox', { name: ROTULO })).toBeTruthy();
+    expect(memoria().getByRole('textbox', { name: 'Motivo (opcional)' })).toBeTruthy();
+    expect(memoria().getByRole('button', { name: 'Salvar' })).toBeTruthy();
+  });
+
+  it.each(['gestor', 'viewer'])('%s so le: "Compra regular" ou o motivo, sem controle', async (role) => {
+    mockRole = role;
+    await abrir();
+    expect(memoria().getByText('Compra regular')).toBeTruthy();
+    expect(memoria().queryByRole('checkbox')).toBeNull();
+    expect(memoria().queryByRole('button', { name: 'Salvar' })).toBeNull();
+  });
+
+  it('leitor ve o motivo da marca no texto padrao', async () => {
+    mockRole = 'viewer';
+    await abrir({ sobDemanda: true, sobDemandaMotivo: 'MOTIVO SINTETICO' });
+    expect(memoria().getByText('Compra sob programação do cliente: MOTIVO SINTETICO')).toBeTruthy();
+  });
+
+  it('produto fora do cadastro e backend antigo (sem a marca no dado): "—" e nenhum controle', async () => {
+    mockRole = 'admin';
+    mockApi({ 7: detalhe() });
+    const { unmount } = renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(memoria().queryByRole('checkbox')).toBeNull();
+    unmount();
+
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: 42 }), ...LINHAS.slice(1)] }) });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(memoria().queryByRole('checkbox')).toBeNull();
+  });
+
+  it('marcar com motivo grava por PATCH, avisa em role=status e mantem o foco no botao', async () => {
+    mockRole = 'comprador';
+    await abrir();
+    patch.mockResolvedValue({ data: { productId: 42, sobDemanda: true, motivo: 'MOTIVO SINTETICO' } });
+    const salvar = memoria().getByRole('button', { name: 'Salvar' });
+    expect(salvar.getAttribute('aria-disabled')).toBe('true');
+    const motivo = memoria().getByRole('textbox', { name: 'Motivo (opcional)' }) as HTMLInputElement;
+    expect(motivo.disabled).toBe(true);
+
+    fireEvent.click(memoria().getByRole('checkbox', { name: ROTULO }));
+    expect(motivo.disabled).toBe(false);
+    fireEvent.change(motivo, { target: { value: '  MOTIVO SINTETICO ' } });
+    expect(salvar.getAttribute('aria-disabled')).toBe('false');
+    salvar.focus();
+    fireEvent.click(salvar);
+
+    expect(await screen.findByText('Salvo. O relatório foi atualizado.')).toBeTruthy();
+    expect(patch).toHaveBeenCalledWith('/v1/forecast/products/42/compra-sob-demanda', {
+      sobDemanda: true,
+      motivo: 'MOTIVO SINTETICO',
+    });
+    expect(memoria().getByText('Salvo. O relatório foi atualizado.').getAttribute('role')).toBe('status');
+    expect(document.activeElement).toBe(salvar);
+    expect(salvar.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('marcar sem motivo envia motivo nulo; desmarcar envia sobDemanda false e motivo nulo', async () => {
+    mockRole = 'admin';
+    await abrir({ sobDemanda: true, sobDemandaMotivo: 'MOTIVO SINTETICO' });
+    patch.mockResolvedValue({ data: { productId: 42, sobDemanda: false, motivo: null } });
+    const caixa = memoria().getByRole('checkbox', { name: ROTULO }) as HTMLInputElement;
+    expect(caixa.checked).toBe(true);
+    expect((memoria().getByRole('textbox', { name: 'Motivo (opcional)' }) as HTMLInputElement).value).toBe('MOTIVO SINTETICO');
+    fireEvent.click(caixa);
+    fireEvent.click(memoria().getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith('/v1/forecast/products/42/compra-sob-demanda', { sobDemanda: false, motivo: null });
+  });
+
+  it('motivo curto: erro no proprio campo (aria-invalid + aria-describedby) e nada e enviado', async () => {
+    mockRole = 'admin';
+    await abrir();
+    fireEvent.click(memoria().getByRole('checkbox', { name: ROTULO }));
+    const motivo = memoria().getByRole('textbox', { name: 'Motivo (opcional)' });
+    fireEvent.change(motivo, { target: { value: 'ab' } });
+    expect(motivo.getAttribute('aria-invalid')).toBe('true');
+    const erro = memoria().getByText('O motivo precisa ter ao menos 3 caracteres.');
+    expect(motivo.getAttribute('aria-describedby')).toBe(erro.id);
+    const salvar = memoria().getByRole('button', { name: 'Salvar' });
+    expect(salvar.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(salvar);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('erro do servidor: alerta com a mensagem e o rascunho continua', async () => {
+    mockRole = 'admin';
+    await abrir();
+    patch.mockRejectedValue(new ApiError(403, null));
+    fireEvent.click(memoria().getByRole('checkbox', { name: ROTULO }));
+    fireEvent.click(memoria().getByRole('button', { name: 'Salvar' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Seu perfil não pode marcar compra sob demanda.');
+    expect((memoria().getByRole('checkbox', { name: ROTULO }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('depois de salvar, a quinzena e o relatorio sao lidos de novo (a marca vale para todas as quinzenas)', async () => {
+    mockRole = 'admin';
+    await abrir();
+    patch.mockResolvedValue({ data: { productId: 42, sobDemanda: true, motivo: null } });
+    const antes = detalhesChamados().length;
+    fireEvent.click(memoria().getByRole('checkbox', { name: ROTULO }));
+    fireEvent.click(memoria().getByRole('button', { name: 'Salvar' }));
+    await screen.findByText('Salvo. O relatório foi atualizado.');
+    await waitFor(() => expect(detalhesChamados().length).toBeGreaterThan(antes));
   });
 });

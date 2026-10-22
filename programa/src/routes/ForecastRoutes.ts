@@ -74,6 +74,14 @@ router.patch(
   ForecastController.patchEmbalagens,
 );
 
+// Marca "compra sob demanda" do produto (PR 6a): sai da lista de compra do relatorio, com o motivo.
+router.patch(
+  '/forecast/products/:id/compra-sob-demanda',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchSobDemanda,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(

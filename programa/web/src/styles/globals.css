@@ -3084,3 +3084,18 @@ i.fc-status--preco { background: var(--info); }
 .fce-tabela th, .fce-tabela td { padding-left: 7px; padding-right: 7px; }
 .fce-tabela .fce-input-qtd { min-width: 84px; }
 .fce-input-rotulo { min-width: 100px; }
+
+/* ---- Forecast: compra sob demanda (PR 6a) ---- */
+.fc-lado__lista > .fc-compra-item { flex-direction: column; align-items: stretch; }
+.fc-compra-item dd { text-align: left; }
+.fc-compra { display: flex; flex-direction: column; gap: 8px; }
+.fc-compra .checkbox-field { align-items: flex-start; }
+.fc-compra .checkbox-field input { flex: none; margin-top: 2px; }
+.fc-compra .field-label { margin-bottom: 0; }
+.fc-compra .input:disabled { opacity: 0.6; cursor: not-allowed; }
+.fc-compra .input[aria-invalid="true"] { border-color: var(--danger); }
+.fc-compra__salvar { align-self: flex-start; }
+.fc-compra__salvar[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.fc-compra input:focus-visible,
+.fc-compra__salvar:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcr-tabela td.fcr-descoberta { color: var(--danger); }

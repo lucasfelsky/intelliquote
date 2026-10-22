@@ -16,6 +16,7 @@ import {
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 import { ForecastProductService } from './ForecastProductService';
+import { ForecastSobDemandaService } from './ForecastSobDemandaService';
 
 export interface ForecastPendentesData extends PendentesResultado {
   // false = quinzena da planilha: nao ha relatorio DBCorp para comparar com o cadastro.
@@ -177,6 +178,10 @@ export class ForecastSnapshotService {
     const half: 1 | 2 = snapshot.half === 1 ? 1 : 2;
     const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half });
     const produtoPorLinha = new Map(produtos.map((p) => [p.linha, p]));
+    // Compra sob demanda: marca do cadastro ATUAL (nao congelada na quinzena), 1 consulta por produto.
+    const sobDemanda = await ForecastSobDemandaService.regrasDosProdutos(
+      produtos.flatMap((p) => (p.productId != null ? [p.productId] : [])),
+    );
 
     return {
       id: snapshot.id,
@@ -205,6 +210,8 @@ export class ForecastSnapshotService {
           status: produto?.status ?? 'nao',
           analiseForecast: produto?.analiseForecast ?? null,
           productId: produto?.productId ?? null,
+          sobDemanda: produto?.productId != null && sobDemanda.has(produto.productId),
+          sobDemandaMotivo: (produto?.productId != null && sobDemanda.get(produto.productId)?.motivo) || null,
         };
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
@@ -248,7 +255,12 @@ export class ForecastSnapshotService {
     const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
       calc.linhas.flatMap((l) => l.codigos),
     );
-    return montarRelatorioCompras(calc, embalagens);
+    const sobDemanda = new Map(
+      calc.linhas.flatMap((l) =>
+        l.productId != null && l.sobDemanda ? [[l.productId, { motivo: l.sobDemandaMotivo }] as const] : [],
+      ),
+    );
+    return montarRelatorioCompras(calc, embalagens, { sobDemanda });
   }
 
   // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.
