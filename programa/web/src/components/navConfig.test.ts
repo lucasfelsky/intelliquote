@@ -5,6 +5,7 @@ import {
   PRIMARY_NAV,
   filterNavByRole,
   isComercialRole,
+  type NavItem,
 } from './navConfig';
 
 function visiblePaths(role: string | null | undefined): string[] {
@@ -72,6 +73,23 @@ describe('navConfig', () => {
     const forecast = all.find((item) => item.to === '/forecast');
     expect(forecast).toBeDefined();
     expect(all.filter((item) => item.icon === forecast?.icon)).toHaveLength(1);
+  });
+
+  it('so o Forecast tem selo, e o selo e "Beta"', () => {
+    const comSelo = [...PRIMARY_NAV, ...ADMIN_NAV].filter((i) => i.tag).map((i) => [i.to, i.tag]);
+    expect(comSelo).toEqual([['/forecast', 'Beta']]);
+  });
+
+  it('o selo nao altera o filtro por papel', () => {
+    const semTag = (items: NavItem[]) => items.map(({ tag: _tag, ...rest }) => rest);
+    for (const role of [...COMEX_ROLES, 'comercial']) {
+      const esperado = [
+        ...filterNavByRole(semTag(PRIMARY_NAV), role),
+        ...filterNavByRole(semTag(ADMIN_NAV), role),
+      ].map((item) => item.to);
+      expect(visiblePaths(role), role).toEqual(esperado);
+    }
+    expect(visiblePaths('comercial')).toEqual(['/solicitacoes']);
   });
 
   it('papel ausente: so itens sem roles (nenhum no menu principal)', () => {

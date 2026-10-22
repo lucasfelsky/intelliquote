@@ -2863,3 +2863,31 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 900px) {
   .fci-slots { grid-template-columns: 1fr; }
 }
+
+/* ---- Forecast: selo BETA (sidebar + titulo) ---- */
+.sidebar__tag {
+  margin-left: auto;
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--tone-warning-border);
+  border-radius: 999px;
+  background: var(--tone-warning-bg);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.fc-beta {
+  margin-left: 8px;
+  vertical-align: middle;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border: 1px solid var(--tone-warning-border);
+}
+.fc-beta-aviso {
+  font-size: 13px;
+}

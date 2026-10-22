@@ -6,6 +6,7 @@ export interface NavItem {
   end?: boolean;
   group?: 'main' | 'admin';
   roles?: string[];   // se vazio/ausente, todos os papeis veem
+  tag?: string;       // selo curto ao lado do rotulo (ex.: 'Beta')
 }
 
 // Papeis da equipe COMEX (acesso interno). `comercial` fica de fora: so ve /solicitacoes.
@@ -21,7 +22,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/solicitacoes', label: 'Solicitações',    icon: '✎',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
   { to: '/itens',     label: 'Itens',              icon: '◇',             group: 'main', roles: COMEX_ROLES },
   { to: '/fornecedores', label: 'Fornecedores',    icon: '⬢',             group: 'main', roles: COMEX_ROLES },
-  { to: '/forecast',  label: 'Forecast',           icon: '◔',             group: 'main', roles: COMEX_ROLES },
+  { to: '/forecast',  label: 'Forecast',           icon: '◔',             group: 'main', roles: COMEX_ROLES, tag: 'Beta' },
   { to: '/forwarders', label: 'Forwarders',       icon: '⇄',             group: 'main', roles: COMEX_ROLES },
   { to: '/familias',  label: 'Famílias',           icon: '⬡',             group: 'main', roles: COMEX_ROLES },
   { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main', roles: COMEX_ROLES },

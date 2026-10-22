@@ -194,8 +194,11 @@ export default function Forecast() {
       <div className="page-header">
         <div>
           <p className="eyebrow">Planejamento · PO.COMP.01</p>
-          <h1>Forecast de compras</h1>
+          <h1>
+            Forecast de compras <span className="badge badge--warning fc-beta">Beta</span>
+          </h1>
           <p>{subtitulo}</p>
+          <p className="fc-beta-aviso">Em validação: confira os números com a planilha do Forecast.</p>
         </div>
         {(quinzenas.length > 0 || podeImportar) && (
           <div className="page-header__actions">
