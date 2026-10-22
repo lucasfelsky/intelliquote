@@ -95,12 +95,18 @@ export const FORECAST_DBCORP_FUP_REGRA = 'F3';
 export const FORECAST_DBCORP_FUP_STATUS_EXCLUIDOS = ['ATRAC. AG. LIBERAÇÃO'] as const;
 export const FORECAST_DBCORP_FUP_EXCLUI_ETA_FINAL = true;
 
-// FUP sem ETA (CHEGADA): chegada estimada = ETD (EMBARQUE) + N dias.
+// FUP sem ETA (CHEGADA): chegada estimada = ETD (EMBARQUE) + N dias. Padrao quando a fonte nao tem prazo salvo
+// (ForecastSource.arrivalFromEtdDays) nem prazo digitado no resumo da importacao.
 export const FORECAST_DBCORP_ETA_POR_ETD_DIAS = 35;
 
 // FUP sem ETA (CHEGADA) nem ETD (EMBARQUE): chegada estimada = DATA PRONTIDAO + N dias. Configuravel aqui;
-// 35 ficou mais perto da planilha que 65 na analise de 2026-10-22.
+// 35 ficou mais perto da planilha que 65 na analise de 2026-10-22. Tambem e o padrao quando a fonte nao tem prazo salvo
+// (ForecastSource.arrivalFromReadinessDays) nem prazo digitado.
 export const FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS = 35;
+
+// Prazo por fonte (PR 5A): dias digitados no resumo da importacao (0..365 inteiros) e limite de fontes no corpo.
+export const FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS = 365;
+export const FORECAST_DBCORP_PRAZOS_MAX_FONTES = 500;
 
 // Colunas do FUP que nao derrubam a importacao quando faltam (so geram aviso).
 export const FORECAST_DBCORP_HEADERS_OPCIONAIS = { fup: ['DATA PO', 'DATA PRONTIDÃO'] } as const;

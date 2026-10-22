@@ -328,10 +328,19 @@ export type ForecastDbcorpFiles = {
   margem?: ForecastArquivoBody;
 };
 
+/** Prazo (dias) das chegadas estimadas do FUP de UMA fonte: DATA PRONTIDAO + n e ETD + n (PR 5A). */
+export interface ForecastPrazoEstimativaBody {
+  sourceId: number;
+  prontidaoDias: number;
+  etdDias: number;
+}
+
 export type ForecastDbcorpBody = {
   label: string;
   baseDate: string;
   files: ForecastDbcorpFiles;
+  /** Prazos por fonte (inteiros 0..365); ausente = o servidor usa o padrao salvo da fonte, senao 35. */
+  prazosEstimativa?: ForecastPrazoEstimativaBody[];
 };
 
 export interface ForecastLinhasKg {
@@ -380,6 +389,8 @@ export interface ForecastRelatorioResumo {
     etaPorProntidaoDias: number;
     excluiEtaFinal: boolean;
     statusExcluidos: string[];
+    /** O prazo de cada fonte vale no lugar dos dias acima, que passam a ser o padrao (backend com PR 5A). */
+    prazoPorFonte?: boolean;
   };
   estimadasPorProntidao?: ForecastLinhasKg;
   excluidas?: {
@@ -393,6 +404,30 @@ export interface ForecastRelatorioResumo {
     detalhes: Array<{ linha: number; status: string; codigo: string; kg: number; texto: string }>;
     omitidos: number;
   };
+}
+
+export interface ForecastPrazoChegada {
+  prontidaoDias: number;
+  etdDias: number;
+}
+
+/** Tabela do prazo por fonte (so fontes com linha estimada). */
+export interface ForecastPrazosEstimativa {
+  padrao: ForecastPrazoChegada;
+  fontes: Array<{
+    sourceId: number;
+    nome: string;
+    /** Padrao salvo na fonte (`null` = nunca salvo: usa o padrao). */
+    salvo: { prontidaoDias: number | null; etdDias: number | null };
+    /** Prazo que esta pre-visualizacao usou. */
+    usado: ForecastPrazoChegada;
+    prontidao: ForecastLinhasKg;
+    etd: ForecastLinhasKg;
+  }>;
+  /** Codigo sem produto ativo ou produto sem fonte: usa o padrao, nao editavel. */
+  semFonte: { prontidao: ForecastLinhasKg; etd: ForecastLinhasKg };
+  /** Fontes cujo prazo usado vira o novo padrao salvo no confirm. */
+  padroesAlterados: number;
 }
 
 /** Resumo do preview dos relatorios DBCorp (`ForecastDbcorpSummary` do backend). */
@@ -410,6 +445,8 @@ export interface ForecastDbcorpSummary {
   relatorios: Partial<Record<ForecastDbcorpSlot, ForecastRelatorioResumo>>;
   /** Codigos do DBCorp fora do cadastro (PR 3B); ausente/null em backend antigo ou sem quinzena montada. */
   pendentes?: ForecastPendentesResumo | null;
+  /** Prazo por fonte (PR 5A); ausente/null em backend antigo ou com erro de leitura: a tabela nao aparece. */
+  prazosEstimativa?: ForecastPrazosEstimativa | null;
   avisos: string[];
   erros: string[];
 }

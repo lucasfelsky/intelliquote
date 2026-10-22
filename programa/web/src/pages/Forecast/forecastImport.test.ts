@@ -185,6 +185,16 @@ describe('corpos', () => {
     expect('vendasAtual' in corpo.files).toBe(false);
   });
 
+  it('DBCorp com prazosEstimativa: a chave entra no fim; sem prazos nao gera a chave', () => {
+    const arquivos = { saldo: arquivo, vendasMes: arquivo, vendasAnual: arquivo, programacao: arquivo, fup: arquivo };
+    const prazos = [{ sourceId: 1, prontidaoDias: 60, etdDias: 0 }];
+    const com = montarCorpoDbcorp('10-1', '2026-10-05', arquivos, prazos);
+    expect(Object.keys(com)).toEqual(['label', 'baseDate', 'files', 'prazosEstimativa']);
+    expect(com.prazosEstimativa).toEqual(prazos);
+    expect('prazosEstimativa' in montarCorpoDbcorp('10-1', '2026-10-05', arquivos)).toBe(false);
+    expect('prazosEstimativa' in montarCorpoDbcorp('10-1', '2026-10-05', arquivos, undefined)).toBe(false);
+  });
+
   it('readFileAsBase64 devolve o base64 sem o prefixo data:', async () => {
     const file = new File([new Uint8Array([1, 2, 3])], 'saldo-teste.xlsx');
     await expect(readFileAsBase64(file)).resolves.toBe('AQID');
@@ -308,6 +318,13 @@ describe('leitura dos arquivos escolhidos', () => {
     const corpo = await lerCorpoDbcorp({ fup: pequeno('fup.xlsx'), saldo: pequeno('saldo.xlsx') }, '12-1', '2026-12-05');
     expect(Object.keys(corpo.files)).toEqual(['saldo', 'fup']);
     expect(corpo.files.saldo).toEqual({ fileName: 'saldo.xlsx', contentBase64: 'AQID' });
+  });
+
+  it('lerCorpoDbcorp leva os prazos aplicados quando informados', async () => {
+    const prazos = [{ sourceId: 2, prontidaoDias: 10, etdDias: 20 }];
+    const corpo = await lerCorpoDbcorp({ saldo: pequeno('saldo.xlsx') }, '12-1', '2026-12-05', prazos);
+    expect(corpo.prazosEstimativa).toEqual(prazos);
+    expect('prazosEstimativa' in (await lerCorpoDbcorp({ saldo: pequeno('saldo.xlsx') }, '12-1', '2026-12-05'))).toBe(false);
   });
 
   it('lerCorpoDbcorp aponta o relatorio com extensao errada', async () => {

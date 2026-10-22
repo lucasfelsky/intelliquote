@@ -8,11 +8,17 @@ import {
   FORECAST_DBCORP_MAX_DETALHES,
 } from '../src/constants/forecast';
 import {
+  PRAZO_CHEGADA_PADRAO,
+  PRAZOS_CHEGADA_PADRAO,
   aplicarRegrasFup,
   comprasEmAbertoDoFup,
+  mudancasDePrazo,
   parseProntidao,
+  resolverPrazosChegada,
+  resumirPrazosEstimativa,
   type DataDaCelula,
   type FupLinha,
+  type PrazosChegadaFup,
 } from '../src/utils/forecastDbcorpRegras';
 import { somarDias } from '../src/utils/forecastMonths';
 
@@ -369,5 +375,238 @@ describe('comprasEmAbertoDoFup (regra dos pendentes de cadastro)', () => {
     comprasEmAbertoDoFup(linhas);
     expect(linhas).toEqual(copia);
     expect(comprasEmAbertoDoFup([])).toEqual([]);
+  });
+});
+
+describe('prazo das chegadas estimadas por fonte (PR 5A)', () => {
+  // Fonte 1: codigos TSTA*; fonte 2: TSTB*; TSTX = sem fonte. Prazos ja resolvidos: fonte 1 = 20/10, fonte 2 = 50/60.
+  const prazos = (porFonte: Array<[number, { prontidaoDias: number; etdDias: number }]>): PrazosChegadaFup => ({
+    padrao: PRAZO_CHEGADA_PADRAO,
+    fonteDoCodigo: new Map([
+      ['TSTA1', 1],
+      ['TSTA2', 1],
+      ['TSTB1', 2],
+    ]),
+    porFonte: new Map(porFonte),
+  });
+  const FONTES = prazos([
+    [1, { prontidaoDias: 20, etdDias: 10 }],
+    [2, { prontidaoDias: 50, etdDias: 60 }],
+  ]);
+
+  it('PRONTIDAO: fonte A 20 dias, fonte B 50 dias, sem fonte 35', () => {
+    const r = aplicarRegrasFup(
+      [
+        linha({ codigo: 'TSTA1', kg: 100, prontidao: '2026-10-20' }), // +20 = 2026-11-09
+        linha({ codigo: 'TSTB1', kg: 200, prontidao: '2026-10-20' }), // +50 = 2026-12-09
+        linha({ codigo: 'TSTX1', kg: 400, prontidao: '2026-10-20' }), // sem fonte: +35 = 2026-11-24
+      ],
+      BASE,
+      FONTES,
+    );
+    expect(somarDias('2026-10-20', 20)).toBe('2026-11-09');
+    expect(somarDias('2026-10-20', 50)).toBe('2026-12-09');
+    expect(r.linhas).toEqual([
+      { codigo: 'TSTA1', qtd: 100, mes: '11', estimada: 'prontidao' },
+      { codigo: 'TSTB1', qtd: 200, mes: '12', estimada: 'prontidao' },
+      { codigo: 'TSTX1', qtd: 400, mes: '11', estimada: 'prontidao' },
+    ]);
+    expect(r.estimadasPorProntidao).toEqual({ linhas: 3, kg: 700 });
+    expect(r.estimadasPorFonte).toEqual([
+      { fonteId: 1, prontidao: { linhas: 1, kg: 100 }, etd: { linhas: 0, kg: 0 } },
+      { fonteId: 2, prontidao: { linhas: 1, kg: 200 }, etd: { linhas: 0, kg: 0 } },
+      { fonteId: null, prontidao: { linhas: 1, kg: 400 }, etd: { linhas: 0, kg: 0 } },
+    ]);
+    // 1 so aviso de estimadas (nao duplica) e cita as 2 fontes com prazo proprio.
+    expect(r.avisos).toEqual([
+      'FUP: 3 linhas (700 kg) sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + prazo da fonte (padrão 35 dias; 2 fontes com prazo próprio) (ESTIMADA).',
+    ]);
+    expect(r.regra.etaPorProntidaoDias).toBe(35);
+    expect(r.regra.etaPorEtdDias).toBe(35);
+    expect(r.regra.prazoPorFonte).toBe(true);
+  });
+
+  it('ETD tambem por fonte; o aviso cita o prazo da fonte (plural e singular)', () => {
+    const linhas = [
+      linha({ codigo: 'TSTA1', kg: 100, etd: data('2026-12-01') }), // +10 = 2026-12-11
+      linha({ codigo: 'TSTB1', kg: 200, etd: data('2026-12-01') }), // +60 = 2027-01-30
+      linha({ codigo: 'TSTX1', kg: 400, etd: data('2026-12-01') }), // sem fonte: +35 = 2027-01-05
+    ];
+    const r = aplicarRegrasFup(linhas, BASE, FONTES);
+    expect(r.linhas.map((l) => [l.codigo, l.mes, l.estimada])).toEqual([
+      ['TSTA1', '12', 'etd'],
+      ['TSTB1', '01', 'etd'],
+      ['TSTX1', '01', 'etd'],
+    ]);
+    expect(r.estimadasPorEtd).toEqual({ linhas: 3, kg: 700 });
+    expect(r.avisos).toEqual([
+      'FUP: 3 linhas (700 kg) sem ETA (CHEGADA) usaram ETD (EMBARQUE) + prazo da fonte (padrão 35 dias; 2 fontes com prazo próprio) (ESTIMADA).',
+    ]);
+    const so1 = aplicarRegrasFup(linhas, BASE, prazos([[2, { prontidaoDias: 35, etdDias: 60 }]]));
+    expect(so1.avisos).toEqual([
+      'FUP: 3 linhas (700 kg) sem ETA (CHEGADA) usaram ETD (EMBARQUE) + prazo da fonte (padrão 35 dias; 1 fonte com prazo próprio) (ESTIMADA).',
+    ]);
+  });
+
+  it('prazo 0: a chegada e a propria DATA PRONTIDAO / ETD', () => {
+    const r = aplicarRegrasFup(
+      [
+        linha({ codigo: 'TSTA1', kg: 100, prontidao: '2026-11-20' }),
+        linha({ codigo: 'TSTA1', kg: 50, etd: data('2026-12-05') }),
+      ],
+      BASE,
+      prazos([[1, { prontidaoDias: 0, etdDias: 0 }]]),
+    );
+    expect(r.linhas).toEqual([
+      { codigo: 'TSTA1', qtd: 100, mes: '11', estimada: 'prontidao' },
+      { codigo: 'TSTA1', qtd: 50, mes: '12', estimada: 'etd' },
+    ]);
+  });
+
+  it('prazo que empurra para depois da janela: a linha sai do calculo, mas continua contada na fonte', () => {
+    const r = aplicarRegrasFup(
+      [linha({ codigo: 'TSTA1', kg: 300, prontidao: '2026-10-20' })], // +365 = 2027-10-20 > janela (ate 2027-03)
+      BASE,
+      prazos([[1, { prontidaoDias: 365, etdDias: 35 }]]),
+    );
+    expect(r.linhas).toEqual([]);
+    expect(r.depoisDaJanela).toEqual({ linhas: 1, kg: 300 });
+    expect(r.estimadasPorProntidao).toEqual({ linhas: 0, kg: 0 });
+    // O conjunto da tabela nao depende dos dias: a fonte continua la, com a linha.
+    expect(r.estimadasPorFonte).toEqual([
+      { fonteId: 1, prontidao: { linhas: 1, kg: 300 }, etd: { linhas: 0, kg: 0 } },
+    ]);
+  });
+
+  it('linha com ETA nao depende do prazo: nao entra em estimadasPorFonte', () => {
+    const r = aplicarRegrasFup([linha({ codigo: 'TSTA1', kg: 10, eta: data('2026-12-10') })], BASE, FONTES);
+    expect(r.estimadasPorFonte).toEqual([]);
+    expect(r.linhas).toEqual([{ codigo: 'TSTA1', qtd: 10, mes: '12' }]);
+  });
+
+  it('todas as fontes no padrao: aviso e regra iguais ao de hoje (so ganha prazoPorFonte)', () => {
+    const linhas = [
+      linha({ codigo: 'TSTA1', kg: 100, prontidao: '2026-10-20' }),
+      linha({ codigo: 'TSTB1', kg: 50, etd: data('2026-12-10') }),
+    ];
+    const padrao = aplicarRegrasFup(linhas, BASE);
+    const r = aplicarRegrasFup(
+      linhas,
+      BASE,
+      prazos([
+        [1, PRAZO_CHEGADA_PADRAO],
+        [2, PRAZO_CHEGADA_PADRAO],
+      ]),
+    );
+    expect(r.avisos).toEqual(padrao.avisos);
+    expect(r.linhas).toEqual(padrao.linhas);
+    expect(r.regra).toEqual({ ...padrao.regra, prazoPorFonte: true });
+  });
+
+  it('sem o 3o argumento (ou com o padrao exportado) o resultado e o de hoje: 35 para todos', () => {
+    const linhas = [
+      linha({ codigo: 'TSTA1', kg: 100, prontidao: '2026-10-20' }),
+      linha({ codigo: 'TSTB1', kg: 50, etd: data('2026-12-10') }),
+      linha({ codigo: 'TSTX1', kg: 5, eta: data('2026-12-10') }),
+    ];
+    const a = aplicarRegrasFup(linhas, BASE);
+    const b = aplicarRegrasFup(linhas, BASE, PRAZOS_CHEGADA_PADRAO);
+    expect(b).toEqual(a);
+    expect(a.regra.prazoPorFonte).toBeUndefined();
+    expect(a.linhas[0]).toEqual({ codigo: 'TSTA1', qtd: 100, mes: '11', estimada: 'prontidao' });
+    expect(PRAZOS_CHEGADA_PADRAO.padrao).toEqual({ prontidaoDias: 35, etdDias: 35 });
+  });
+
+  it('nao muta as linhas nem os prazos', () => {
+    const linhas = [linha({ codigo: 'TSTA1', kg: 100, prontidao: '2026-10-20' })];
+    const copia = JSON.parse(JSON.stringify(linhas));
+    aplicarRegrasFup(linhas, BASE, FONTES);
+    expect(linhas).toEqual(copia);
+    expect([...FONTES.porFonte.keys()]).toEqual([1, 2]);
+  });
+});
+
+describe('resolverPrazosChegada (precedencia digitado > salvo > padrao)', () => {
+  const padrao = { prontidaoDias: 35, etdDias: 35 };
+
+  it('por fonte e por coluna', () => {
+    const r = resolverPrazosChegada({
+      padrao,
+      salvos: [
+        { sourceId: 1, prontidaoDias: null, etdDias: null }, // nada salvo: padrao
+        { sourceId: 2, prontidaoDias: 50, etdDias: null }, // so prontidao salva
+        { sourceId: 3, prontidaoDias: 40, etdDias: 45 }, // tudo salvo
+      ],
+      editados: [{ sourceId: 3, prontidaoDias: 20, etdDias: 0 }], // digitado vence
+    });
+    expect(r.get(1)).toEqual({ prontidaoDias: 35, etdDias: 35 });
+    expect(r.get(2)).toEqual({ prontidaoDias: 50, etdDias: 35 });
+    expect(r.get(3)).toEqual({ prontidaoDias: 20, etdDias: 0 });
+  });
+
+  it('editado sem salvo correspondente entra com o digitado; sem nada devolve vazio', () => {
+    expect(
+      resolverPrazosChegada({ padrao, salvos: [], editados: [{ sourceId: 9, prontidaoDias: 1, etdDias: 2 }] }).get(9),
+    ).toEqual({ prontidaoDias: 1, etdDias: 2 });
+    expect(resolverPrazosChegada({ padrao, salvos: [], editados: [] }).size).toBe(0);
+  });
+});
+
+describe('mudancasDePrazo e resumirPrazosEstimativa', () => {
+  const padrao = { prontidaoDias: 35, etdDias: 35 };
+  const fontes = [
+    { sourceId: 1, nome: 'FONTE 001', salvo: { prontidaoDias: null, etdDias: null } },
+    { sourceId: 2, nome: 'FONTE 002', salvo: { prontidaoDias: 50, etdDias: null } },
+    { sourceId: 3, nome: 'FONTE 003', salvo: { prontidaoDias: 40, etdDias: 45 } },
+  ];
+
+  it('so as fontes pedidas cujo valor usado difere de salvo ?? padrao; so a coluna que mudou', () => {
+    const porFonte = new Map([
+      [1, { prontidaoDias: 35, etdDias: 35 }], // igual ao padrao: nada
+      [2, { prontidaoDias: 50, etdDias: 20 }], // so ETD mudou
+      [3, { prontidaoDias: 35, etdDias: 45 }], // 40 -> 35: volta ao padrao mas DIFERE do salvo
+    ]);
+    expect(mudancasDePrazo({ padrao, fontes, porFonte, sourceIds: [1, 2, 3] })).toEqual([
+      { sourceId: 2, arrivalFromEtdDays: 20 },
+      { sourceId: 3, arrivalFromReadinessDays: 35 },
+    ]);
+    // fonte fora do corpo nao e gravada, mesmo que difira
+    expect(mudancasDePrazo({ padrao, fontes, porFonte, sourceIds: [2] })).toEqual([
+      { sourceId: 2, arrivalFromEtdDays: 20 },
+    ]);
+    expect(mudancasDePrazo({ padrao, fontes, porFonte, sourceIds: [] })).toEqual([]);
+  });
+
+  it('resumo: so fontes com linha estimada, ordem kg desc, sem fonte somado, usado x salvo', () => {
+    const porFonte = new Map([
+      [1, { prontidaoDias: 35, etdDias: 35 }],
+      [2, { prontidaoDias: 60, etdDias: 35 }],
+      [3, { prontidaoDias: 40, etdDias: 45 }],
+    ]);
+    const zero = { linhas: 0, kg: 0 };
+    const r = resumirPrazosEstimativa({
+      padrao,
+      fontes,
+      porFonte,
+      estimadasPorFonte: [
+        { fonteId: 1, prontidao: { linhas: 1, kg: 100 }, etd: zero },
+        { fonteId: 2, prontidao: { linhas: 2, kg: 500 }, etd: { linhas: 1, kg: 50 } },
+        { fonteId: null, prontidao: { linhas: 1, kg: 7 }, etd: zero },
+        { fonteId: 99, prontidao: zero, etd: { linhas: 1, kg: 3 } }, // fonte desconhecida cai em "sem fonte"
+      ],
+      padroesAlterados: 1,
+    });
+    expect(r.fontes.map((f) => f.sourceId)).toEqual([2, 1]); // 3 nao tem linha estimada: fora
+    expect(r.fontes[0]).toEqual({
+      sourceId: 2,
+      nome: 'FONTE 002',
+      salvo: { prontidaoDias: 50, etdDias: null },
+      usado: { prontidaoDias: 60, etdDias: 35 },
+      prontidao: { linhas: 2, kg: 500 },
+      etd: { linhas: 1, kg: 50 },
+    });
+    expect(r.semFonte).toEqual({ prontidao: { linhas: 1, kg: 7 }, etd: { linhas: 1, kg: 3 } });
+    expect(r.padrao).toEqual(padrao);
+    expect(r.padroesAlterados).toBe(1);
   });
 });

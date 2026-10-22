@@ -158,13 +158,17 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
   const semData = relatorio.semData ?? null;
   const percentual = semData ? percentualSemData(semData, emAberto) : null;
   const dias = diasDaRegraFup(relatorio.regra);
+  // Prazo por fonte (PR 5A): os dias da regra viram o padrao; cada fonte tem o seu (tabela abaixo do resumo).
+  const porFonte = relatorio.regra?.prazoPorFonte === true;
+  const textoEtd = porFonte ? `prazo da fonte (padrão ${dias.etd} dias)` : `${dias.etd} dias`;
+  const textoProntidao = porFonte ? `prazo da fonte (padrão ${dias.prontidao} dias)` : `${dias.prontidao} dias`;
   const naoReconhecida = relatorio.prontidaoNaoReconhecida;
   return (
     <Bloco titulo="FUP por status">
       {relatorio.regra && (
         <p>
-          Regra {relatorio.regra.id}: atracadas e linhas com ETA FINAL ficam fora; chegada = ETA, senão ETD + {dias.etd}{' '}
-          dias, senão DATA PRONTIDÃO + {dias.prontidao} dias (estimada).
+          Regra {relatorio.regra.id}: atracadas e linhas com ETA FINAL ficam fora; chegada = ETA, senão ETD + {textoEtd},
+          senão DATA PRONTIDÃO + {textoProntidao} (estimada).
         </p>
       )}
       <TabelaStatus legenda="FUP por status" unidade="kg" linhas={porStatus} />
@@ -246,13 +250,13 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
       )}
       {relatorio.estimadasPorEtd && (
         <p>
-          Estimadas por ETD + {dias.etd} dias: <LinhasKg valor={relatorio.estimadasPorEtd} />{' '}
+          Estimadas por ETD + {textoEtd}: <LinhasKg valor={relatorio.estimadasPorEtd} />{' '}
           <span className="badge badge--warning">ESTIMADA</span>
         </p>
       )}
       {relatorio.estimadasPorProntidao && (
         <p>
-          Estimadas por DATA PRONTIDÃO + {dias.prontidao} dias: <LinhasKg valor={relatorio.estimadasPorProntidao} />{' '}
+          Estimadas por DATA PRONTIDÃO + {textoProntidao}: <LinhasKg valor={relatorio.estimadasPorProntidao} />{' '}
           <span className="badge badge--warning">ESTIMADA</span>
         </p>
       )}
@@ -329,10 +333,13 @@ function BlocoHistorico({ historico }: { historico: ForecastDbcorpSummary['histo
 export default function ForecastResumoDbcorp({
   resumo,
   onCompletar,
+  prazos,
 }: {
   resumo: ForecastDbcorpSummary;
   /** Abre o dialogo de completar o cadastro de um codigo pendente (sem a prop, a lista e so de leitura). */
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
+  /** Tabela do prazo por fonte (PR 5A), logo abaixo do bloco do FUP; ausente em backend antigo. */
+  prazos?: ReactNode;
 }) {
   const tituloRef = useFocoNoTitulo();
   const presentes = SLOTS_DBCORP.flatMap((s) => {
@@ -412,6 +419,7 @@ export default function ForecastResumoDbcorp({
       )}
       {programacao && <BlocoProgramacao relatorio={programacao} />}
       {fup && <BlocoFup relatorio={fup} />}
+      {prazos}
       <BlocoHistorico historico={resumo.historico} />
     </section>
   );

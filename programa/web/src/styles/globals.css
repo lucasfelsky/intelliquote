@@ -3064,3 +3064,15 @@ i.fc-status--preco { background: var(--info); }
 @media print {
   .fcr-item__obs { max-width: 70mm; font-size: 7.5pt; }
 }
+
+/* ---- Forecast: prazo das chegadas estimadas por fonte, no resumo da importacao (PR 5A) ---- */
+.fci-prazo__tabela td { vertical-align: middle; white-space: nowrap; }
+.fci-prazo__tabela tbody th { min-width: 150px; max-width: 260px; }
+.fci-prazo__campo { display: flex; flex-direction: column; gap: 4px; }
+.fci-prazo__input { width: 84px; min-height: 36px; padding-top: 6px; padding-bottom: 6px; text-align: right; }
+.fci-prazo__input[aria-invalid="true"] { border-color: var(--danger); }
+.fci-prazo__erro { max-width: 150px; font-size: 12px; line-height: 1.35; white-space: normal; color: var(--danger); }
+.fci-prazo__sem { color: var(--ink-soft); }
+.fci-prazo__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.fci-prazo__retorno:focus-visible,
+.fci-prazo__input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }

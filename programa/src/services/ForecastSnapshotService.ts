@@ -38,6 +38,12 @@ export interface SnapshotFileInfo {
   rows: number;
   // Regra do FUP aplicada (ex.: 'F3'); ausente = D2 (quinzenas antigas).
   regra?: string;
+  // So no arquivo 'fup' (PR 5A): prazo das chegadas estimadas usado no calculo, por fonte (so as fontes com linha
+  // estimada). Ausente = 35 dias para todas.
+  estimativa?: {
+    padrao: { prontidaoDias: number; etdDias: number };
+    porFonte: Array<{ sourceId: number; nome: string; prontidaoDias: number; etdDias: number }>;
+  };
 }
 
 interface SnapshotMonths {

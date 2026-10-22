@@ -8,6 +8,7 @@ import {
   type ForecastDbcorpBody,
   type ForecastDbcorpFiles,
   type ForecastDbcorpSlot,
+  type ForecastPrazoEstimativaBody,
   type ForecastDbcorpSummary,
   type ForecastLinhasKg,
   type ForecastPorStatus,
@@ -162,18 +163,24 @@ export function montarCorpoPlanilha(
   return { contentBase64, fileName, label, baseDate };
 }
 
-/** So os slots com arquivo entram em `files` (nada alem do contrato). */
+/** So os slots com arquivo entram em `files` (nada alem do contrato); `prazosEstimativa` so quando informado. */
 export function montarCorpoDbcorp(
   label: string,
   baseDate: string,
   arquivos: Partial<Record<ForecastDbcorpSlot, ForecastArquivoBody>>,
+  prazosEstimativa?: ForecastPrazoEstimativaBody[],
 ): ForecastDbcorpBody {
   const files: Partial<Record<ForecastDbcorpSlot, ForecastArquivoBody>> = {};
   for (const { id } of SLOTS_DBCORP) {
     const arquivo = arquivos[id];
     if (arquivo) files[id] = { fileName: arquivo.fileName, contentBase64: arquivo.contentBase64 };
   }
-  return { label, baseDate, files: files as ForecastDbcorpFiles };
+  return {
+    label,
+    baseDate,
+    files: files as ForecastDbcorpFiles,
+    ...(prazosEstimativa ? { prazosEstimativa } : {}),
+  };
 }
 
 // ---------- leitura do resumo ----------
@@ -299,6 +306,7 @@ export async function lerCorpoDbcorp(
   arquivos: Partial<Record<ForecastDbcorpSlot, File>>,
   label: string,
   baseDate: string,
+  prazosEstimativa?: ForecastPrazoEstimativaBody[],
 ): Promise<ForecastDbcorpBody> {
   const escolhidos = SLOTS_DBCORP.flatMap((s) => {
     const file = arquivos[s.id];
@@ -308,7 +316,7 @@ export async function lerCorpoDbcorp(
   if (recusa) throw new ForecastLocalError(recusa);
   const lidos: Partial<Record<ForecastDbcorpSlot, ForecastArquivoBody>> = {};
   for (const { id, file } of escolhidos) lidos[id] = { fileName: file.name, contentBase64: await readFileAsBase64(file) };
-  const corpo = montarCorpoDbcorp(label, baseDate, lidos);
+  const corpo = montarCorpoDbcorp(label, baseDate, lidos, prazosEstimativa);
   const grande = checarCorpo(corpo);
   if (grande) throw new ForecastLocalError(grande);
   return corpo;

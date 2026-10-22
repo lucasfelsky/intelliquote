@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FORECAST_SHEETS, FORECAST_TOO_LARGE_MESSAGE } from '../src/constants/forecast';
 import type { Quinzena } from '../src/utils/forecastTypes';
 import { hashPassword } from '../src/utils/password';
+import { forecastDbcorpConfirmSchema, forecastDbcorpPreviewSchema } from '../src/validators/forecast';
 
 // O arquivo faz dezenas de logins: sobe o limite do rate limit de /auth/login.
 vi.hoisted(() => {
@@ -252,6 +253,67 @@ describe('Forecast routes - validacao (Zod)', () => {
     expect(primeira.body.message).not.toBe(segunda.body.message);
     expect(primeira.body.message).toMatch(/invalido \(envie \.xlsx\)/);
     expect(prismaMock.forecastProduct.findMany).not.toHaveBeenCalled();
+  });
+
+  it('dbcorp: prazosEstimativa invalido -> 400 (preview e confirm), sem tocar no banco', async () => {
+    const cookies = await loginAs('comprador');
+    const prazo = (over: object = {}) => ({ sourceId: 1, prontidaoDias: 35, etdDias: 35, ...over });
+    const casos: Array<[string, unknown, RegExp]> = [
+      ['fonte repetida', [prazo(), prazo({ prontidaoDias: 20 })], /Fonte repetida/],
+      ['366 dias (prontidao)', [prazo({ prontidaoDias: 366 })], /no maximo 365/],
+      ['366 dias (etd)', [prazo({ etdDias: 366 })], /no maximo 365/],
+      ['dias negativos', [prazo({ etdDias: -1 })], /negativos/],
+      ['dias fracionarios', [prazo({ prontidaoDias: 12.5 })], /inteiro/],
+      ['dias em texto', [prazo({ prontidaoDias: '20' })], /inteiro/],
+      ['sourceId zero', [prazo({ sourceId: 0 })], /Fonte invalida/],
+      ['sourceId fracionario', [prazo({ sourceId: 1.5 })], /Fonte invalida/],
+      ['sem dias de ETD', [{ sourceId: 1, prontidaoDias: 35 }], /inteiro/],
+      ['nao e lista', { sourceId: 1 }, /./],
+      [
+        '501 fontes',
+        Array.from({ length: 501 }, (_, i) => prazo({ sourceId: i + 1 })),
+        /no maximo 500/,
+      ],
+    ];
+    for (const path of ['preview', 'confirm']) {
+      for (const [nome, prazosEstimativa, mensagem] of casos) {
+        const response = await request(app)
+          .post(`/api/v1/forecast/import/dbcorp/${path}`)
+          .set('Cookie', cookies)
+          .send({ ...validDbcorpBody, prazosEstimativa });
+        expect(response.status, `${path}: ${nome}`).toBe(400);
+        expect(response.body.message, `${path}: ${nome}`).toMatch(mensagem);
+      }
+    }
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProduct.findMany).not.toHaveBeenCalled();
+  });
+
+  it('dbcorp: prazosEstimativa valido (ou ausente) passa do Zod e o Zod NAO descarta o campo', async () => {
+    const cookies = await loginAs('admin');
+    const prazosEstimativa = [
+      { sourceId: 1, prontidaoDias: 0, etdDias: 365 },
+      { sourceId: 2, prontidaoDias: 20, etdDias: 35 },
+    ];
+    // Arquivos-lixo: passa da validacao e so falha na leitura do .xlsx (400 com outra mensagem).
+    for (const path of ['preview', 'confirm']) {
+      for (const body of [{ ...validDbcorpBody, prazosEstimativa }, validDbcorpBody, { ...validDbcorpBody, prazosEstimativa: [] }]) {
+        const response = await request(app)
+          .post(`/api/v1/forecast/import/dbcorp/${path}`)
+          .set('Cookie', cookies)
+          .send(body);
+        expect(response.status, path).toBe(400);
+        expect(response.body.message, path).toMatch(/invalido \(envie \.xlsx\)/);
+      }
+    }
+    // O schema compartilhado pelo preview e pelo confirm mantem a lista (o confirm repete o calculo do preview).
+    expect(forecastDbcorpPreviewSchema.parse({ ...validDbcorpBody, prazosEstimativa }).prazosEstimativa).toEqual(
+      prazosEstimativa,
+    );
+    expect(forecastDbcorpConfirmSchema.parse({ ...validDbcorpBody, prazosEstimativa }).prazosEstimativa).toEqual(
+      prazosEstimativa,
+    );
+    expect(forecastDbcorpPreviewSchema.parse(validDbcorpBody).prazosEstimativa).toBeUndefined();
   });
 
   it('PATCH /sources/:id: id e corpo invalidos -> 400', async () => {

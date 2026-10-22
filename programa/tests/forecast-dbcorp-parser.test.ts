@@ -483,7 +483,32 @@ describe('parseFup', () => {
     expect(r.erros[0]).toMatch(/FUP/);
     expect(r.linhas).toEqual([]);
     expect(r.comprasEmAberto).toEqual([]);
+    expect(r.fupLinhas).toEqual([]);
+    expect(r.avisosColuna).toEqual([]);
     expect(r.regra.id).toBe('F3');
+  });
+
+  it('fupLinhas (linhas normalizadas para o prazo por fonte) e avisosColuna; avisos continuam com tudo', async () => {
+    const r = await parseFup(
+      await xlsx(
+        HEADERS.filter((h) => h !== 'DATA PO'),
+        [
+          ['EM TRANSITO', 'Exportador teste', 'PO-1', 'tst0001', 100, vazio, d('2026-12-10'), vazio, null, null],
+          ['AG. PRONT. DA CARGA', 'Exportador teste', 'PO-1', 'TST0002', 'x', vazio, vazio, vazio, null, 'OCT 20TH'],
+        ],
+      ),
+      BASE,
+    );
+    expect(r.fupLinhas).toHaveLength(2);
+    expect(r.fupLinhas[0]).toMatchObject({ codigo: 'TST0001', kg: 100, status: 'EM TRANSITO', prontidao: '' });
+    expect(r.fupLinhas[0].eta).toEqual({ tipo: 'data', key: '2026-12-10' });
+    expect(r.fupLinhas[1]).toMatchObject({ codigo: 'TST0002', kg: null, prontidao: 'OCT 20TH' });
+    expect(r.avisosColuna).toEqual([
+      'FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.',
+    ]);
+    // `avisos` = avisos de coluna + os da regra com o prazo padrao (nada muda para quem le so `avisos`).
+    expect(r.avisos.slice(0, 1)).toEqual(r.avisosColuna);
+    expect(r.avisos.length).toBeGreaterThanOrEqual(1);
   });
 });
 

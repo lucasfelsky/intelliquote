@@ -1145,6 +1145,29 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
   });
 
+  it('re-previa apos completar o cadastro manda os prazos JA APLICADOS e mantem o texto digitado', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos({}, { pendentes: pendentes() }));
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes() }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+
+    // Edita de novo (ainda nao aplicado) e completa o cadastro: a re-previa leva o aplicado (60), nao o rascunho (70).
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '70' } });
+    await cadastrarCodigoExistente();
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    const corpos = post.mock.calls.filter((c) => c[0] === '/v1/forecast/import/dbcorp/preview').map((c) => c[1]);
+    expect(corpos).toHaveLength(3);
+    expect((corpos[2] as { prazosEstimativa: unknown }).prazosEstimativa).toEqual(PRAZOS_60);
+    // O texto digitado (70) continua; o Confirmar espera um novo recalculo.
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('70');
+    expect(botao('Confirmar importação').disabled).toBe(true);
+  });
+
   it('Esc no dialogo de cadastro devolve o foco ao botao "Completar cadastro" e nao fecha a importacao', async () => {
     const { onFechar } = renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
@@ -1262,5 +1285,223 @@ describe('ForecastImportModal - ajustes do 3A (PR 3B-2)', () => {
       resumoDbcorp({ avisos: ['FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.'] }),
     );
     expect(regiao().getByText(/coluna "DATA PO" não encontrada/)).toBeTruthy();
+  });
+});
+
+// ---------- prazo por fonte (PR 5A) ----------
+const SEM_LINHAS = { linhas: 0, kg: 0 };
+const PRAZOS_60 = [
+  { sourceId: 1, prontidaoDias: 60, etdDias: 35 },
+  { sourceId: 2, prontidaoDias: 50, etdDias: 20 },
+];
+
+function fontesComUsado(prontidao1 = 35) {
+  return [
+    {
+      sourceId: 1,
+      nome: 'FONTE 001',
+      salvo: { prontidaoDias: null, etdDias: null },
+      usado: { prontidaoDias: prontidao1, etdDias: 35 },
+      prontidao: { linhas: 2, kg: 1800 },
+      etd: { linhas: 1, kg: 500 },
+    },
+    {
+      sourceId: 2,
+      nome: 'FONTE 002',
+      salvo: { prontidaoDias: 50, etdDias: 20 },
+      usado: { prontidaoDias: 50, etdDias: 20 },
+      prontidao: SEM_LINHAS,
+      etd: { linhas: 1, kg: 100 },
+    },
+  ];
+}
+
+function prazosDoResumo(over: Record<string, unknown> = {}) {
+  return {
+    padrao: { prontidaoDias: 35, etdDias: 35 },
+    fontes: fontesComUsado(),
+    semFonte: { prontidao: { linhas: 1, kg: 90 }, etd: SEM_LINHAS },
+    padroesAlterados: 0,
+    ...over,
+  };
+}
+
+// FUP com a regra do 5A (`prazoPorFonte`) e as estimadas do calculo atual.
+function resumoComPrazos(prazos: Record<string, unknown> = {}, resumoOver: Record<string, unknown> = {}, fup: Record<string, unknown> = {}) {
+  return resumoDbcorp(
+    { prazosEstimativa: prazosDoResumo(prazos), ...resumoOver },
+    {
+      fup: rel({
+        porStatus: [{ status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 }],
+        regra: {
+          id: 'F3',
+          etaPorEtdDias: 35,
+          etaPorProntidaoDias: 35,
+          excluiEtaFinal: true,
+          statusExcluidos: ['ATRAC. AG. LIBERAÇÃO'],
+          prazoPorFonte: true,
+        },
+        estimadasPorEtd: { linhas: 2, kg: 600 },
+        estimadasPorProntidao: { linhas: 3, kg: 1890 },
+        vencidasNoMesBase: SEM_LINHAS,
+        semData: { linhas: 0, kg: 0, porStatus: [] },
+        depoisDaJanela: SEM_LINHAS,
+        ...fup,
+      }),
+    },
+  );
+}
+
+const campoPrazo = (nome: string) => screen.getByLabelText(nome) as HTMLInputElement;
+const regiaoPrazos = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+
+describe('ForecastImportModal - prazo das chegadas por fonte (PR 5A)', () => {
+  const TITULO = 'Prazo das chegadas estimadas, por fonte';
+
+  it('backend sem prazosEstimativa (ou null): nenhuma tabela e o fluxo segue como antes', async () => {
+    renderModal();
+    await previsualizarDbcorp();
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Recalcular pré-visualização' })).toBeNull();
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    cleanup();
+
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ prazosEstimativa: null }));
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
+  });
+
+  it('com prazosEstimativa: tabela por fonte logo apos o FUP, regra com "prazo da fonte" e Confirmar liberado', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    const resumo = regiaoPrazos();
+    expect(resumo.getByRole('heading', { name: TITULO })).toBeTruthy();
+    expect(resumo.getByText(/senão ETD \+ prazo da fonte \(padrão 35 dias\), senão DATA PRONTIDÃO \+ prazo da fonte \(padrão 35 dias\) \(estimada\)\./)).toBeTruthy();
+    expect(resumo.getByText(/Estimadas por ETD \+ prazo da fonte \(padrão 35 dias\): 2 linhas · 600 kg/)).toBeTruthy();
+    expect(campoPrazo('Dias do ETD até a chegada - FONTE 002').value).toBe('20');
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    // A 1a previa NAO manda prazos: o servidor abre com o padrao salvo da fonte.
+    expect(Object.keys(post.mock.calls[0]?.[1] as object)).toEqual(['label', 'baseDate', 'files']);
+    // A tabela vem logo depois do bloco do FUP.
+    const blocos = [...document.querySelectorAll('.fci-bloco h4')].map((h) => h.textContent);
+    expect(blocos.indexOf(TITULO)).toBe(blocos.indexOf('FUP por status') + 1);
+  });
+
+  it('editar bloqueia o Confirmar e avisa; recalcular reaproveita o corpo (sem reler arquivos) e o confirm manda os prazos aplicados', async () => {
+    const { onImportada } = renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    const leitura = vi.spyOn(FileReader.prototype, 'readAsDataURL');
+    const corpoInicial = post.mock.calls[0]?.[1] as { files: unknown };
+
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    expect(screen.getByText('Você editou prazos: recalcule a pré-visualização antes de confirmar.')).toBeTruthy();
+    expect(post).toHaveBeenCalledTimes(1); // editar nao chama o servidor
+
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60), padroesAlterados: 1 }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post.mock.calls[1]?.[0]).toBe('/v1/forecast/import/dbcorp/preview');
+    const recalculo = post.mock.calls[1]?.[1] as { files: unknown; prazosEstimativa: unknown };
+    expect(recalculo.files).toEqual(corpoInicial.files);
+    expect(recalculo.prazosEstimativa).toEqual(PRAZOS_60);
+    expect(leitura).not.toHaveBeenCalled(); // nenhum arquivo foi lido de novo
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    expect(screen.getByText('Ao confirmar, 1 fonte terá o padrão salvo alterado.')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByText('Pré-visualização recalculada com os prazos informados.'));
+
+    post.mockResolvedValueOnce({ data: { ...resumoDbcorp(), snapshotId: 8 } });
+    fireEvent.click(botao('Confirmar importação'));
+    await waitFor(() => expect(onImportada).toHaveBeenCalledWith(8, '12-2'));
+    expect(post.mock.calls[2]?.[0]).toBe('/v1/forecast/import/dbcorp/confirm');
+    expect(post.mock.calls[2]?.[1]).toEqual(post.mock.calls[1]?.[1]); // o MESMO corpo do preview, com os prazos
+    expect((post.mock.calls[2]?.[1] as { prazosEstimativa: unknown }).prazosEstimativa).toEqual(PRAZOS_60);
+  });
+
+  it('o recalculo preserva as caixas "Entendi" (dependem dos arquivos, nao dos dias)', async () => {
+    renderModal();
+    const semSaldo = (prazos: Record<string, unknown> = {}) => {
+      const r = resumoComPrazos(prazos);
+      (r.relatorios as Record<string, unknown>).saldo = rel({ usadas: 0, porDeposito: [] });
+      return r;
+    };
+    await previsualizarDbcorp(semSaldo());
+    const caixa = () => screen.getByLabelText(/Entendi que SALDO veio sem linhas úteis/) as HTMLInputElement;
+    fireEvent.click(caixa());
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    fireEvent.change(campoPrazo('Dias do ETD até a chegada - FONTE 002'), { target: { value: '25' } });
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    post.mockResolvedValueOnce({
+      data: semSaldo({
+        fontes: fontesComUsado().map((f) =>
+          f.sourceId === 2 ? { ...f, usado: { ...f.usado, etdDias: 25 } } : f,
+        ),
+      }),
+    });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+    expect(caixa().checked).toBe(true);
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('valor invalido: mensagem no campo, Recalcular e Confirmar bloqueados (nenhum POST)', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias do ETD até a chegada - FONTE 001'), { target: { value: '400' } });
+    expect(screen.getByText('No máximo 365 dias.')).toBeTruthy();
+    expect((botao('Recalcular pré-visualização')).disabled).toBe(true);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('o recalculo falhou: a previa antiga fica, o erro aparece e o Confirmar continua bloqueado', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: TITULO })).toBeTruthy();
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('60'); // o texto digitado fica
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    expect(botao('Recalcular pré-visualização').disabled).toBe(false); // pode tentar de novo
+  });
+
+  it('dois cliques em Recalcular geram um unico POST', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockReturnValueOnce(new Promise(() => undefined) as never);
+    const botaoRecalcular = botao('Recalcular pré-visualização');
+    fireEvent.click(botaoRecalcular);
+    fireEvent.click(botaoRecalcular);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(botao('Pré-visualizando…').disabled).toBe(true);
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').closest('fieldset')?.disabled).toBe(true);
+  });
+
+  it('trocar um arquivo depois do preview descarta a tabela e o rascunho: a nova previa nao manda prazos', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    escolher('fup', arquivo('fup-novo.xlsx'));
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
+
+    post.mockResolvedValueOnce({ data: resumoComPrazos() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByRole('heading', { name: TITULO });
+    expect(Object.keys(post.mock.calls[1]?.[1] as object)).toEqual(['label', 'baseDate', 'files']);
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('35'); // abre no usado, sem o rascunho velho
+  });
+
+  it('a aba Planilha nao tem a tabela', async () => {
+    renderModal();
+    await previsualizarPlanilha();
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
   });
 });

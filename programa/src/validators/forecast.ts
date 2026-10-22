@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   FORECAST_BASE64_MAX_LENGTH,
   FORECAST_LABEL_PATTERN,
+  FORECAST_DBCORP_PRAZOS_MAX_FONTES,
+  FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
@@ -52,8 +54,28 @@ const dbcorpFileField = z.object({
   contentBase64: contentBase64Field,
 });
 
+const prazoDiasField = z
+  .number({ error: 'Informe os dias como numero inteiro.' })
+  .int('Informe os dias como numero inteiro.')
+  .min(0, 'Os dias nao podem ser negativos.')
+  .max(
+    FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
+    `Os dias aceitam no maximo ${FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS}.`,
+  );
+
+// Prazo (dias) das chegadas estimadas do FUP, por fonte: DATA PRONTIDAO + n e ETD + n.
+const prazoEstimativaField = z.object({
+  sourceId: z
+    .number({ error: 'Fonte invalida.' })
+    .int('Fonte invalida.')
+    .positive('Fonte invalida.'),
+  prontidaoDias: prazoDiasField,
+  etdDias: prazoDiasField,
+});
+
 // Quinzena a partir dos relatorios DBCorp. O confirm recebe o mesmo corpo do preview (grava sempre a
-// quinzena e o mes anterior do historico; sem opcoes).
+// quinzena e o mes anterior do historico; sem opcoes). `prazosEstimativa` (opcional) viaja nos dois: o confirm
+// repete o calculo do preview com os mesmos prazos.
 export const forecastDbcorpPreviewSchema = z
   .object({
     label: labelField,
@@ -68,8 +90,28 @@ export const forecastDbcorpPreviewSchema = z
       clientesAtivos: dbcorpFileField.optional(),
       margem: dbcorpFileField.optional(),
     }),
+    prazosEstimativa: z
+      .array(prazoEstimativaField)
+      .max(
+        FORECAST_DBCORP_PRAZOS_MAX_FONTES,
+        `Informe no maximo ${FORECAST_DBCORP_PRAZOS_MAX_FONTES} fontes em prazosEstimativa.`,
+      )
+      .optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.prazosEstimativa) {
+      const vistos = new Set<number>();
+      for (const [index, prazo] of value.prazosEstimativa.entries()) {
+        if (vistos.has(prazo.sourceId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['prazosEstimativa', index, 'sourceId'],
+            message: 'Fonte repetida em prazosEstimativa.',
+          });
+        }
+        vistos.add(prazo.sourceId);
+      }
+    }
     if (value.label.endsWith('-2') && !value.files.vendasAtual) {
       ctx.addIssue({
         code: 'custom',

@@ -1080,21 +1080,25 @@ model CommercialRequestItem {
 // (cadastro proprio; o vinculo com Supplier e opcional). Total = leadTimeDays (coluna G); null = sem
 // lead time -> seguranca/demanda/chegada ficam vazios no motor.
 model ForecastSource {
-  id             Int               @id @default(autoincrement())
-  name           String
-  normalizedName String            @unique
-  readinessDays  Int?
-  holidaysDays   Int?
-  shippingDays   Int?
-  transitDays    Int?
-  clearanceDays  Int?
-  leadTimeDays   Int?
-  supplierId     Int?
-  supplier       Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  isActive       Boolean           @default(true)
-  products       ForecastProduct[]
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                       Int               @id @default(autoincrement())
+  name                     String
+  normalizedName           String            @unique
+  readinessDays            Int?
+  holidaysDays             Int?
+  shippingDays             Int?
+  transitDays              Int?
+  clearanceDays            Int?
+  leadTimeDays             Int?
+  // Dias de DATA PRONTIDAO / ETD ate a chegada usados na estimativa do FUP; null = padrao 35. Editado no resumo da
+  // importacao DBCorp (o import da planilha nao mexe nestas colunas).
+  arrivalFromReadinessDays Int?
+  arrivalFromEtdDays       Int?
+  supplierId               Int?
+  supplier                 Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  isActive                 Boolean           @default(true)
+  products                 ForecastProduct[]
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
 
   @@index([supplierId])
 }
