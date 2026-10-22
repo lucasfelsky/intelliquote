@@ -14,7 +14,11 @@ import {
 } from '../utils/forecastWorkbook';
 import { mesesHistorico } from '../utils/forecastMonths';
 import type { CadastroDeCodigos, VendasRecentes } from '../utils/forecastPendentes';
-import { escolherEmbalagem, type EmbalagemCadastrada } from '../utils/forecastRelatorioCompras';
+import {
+  escolherEmbalagem,
+  palletEMultiploDaEmbalagem,
+  type EmbalagemCadastrada,
+} from '../utils/forecastRelatorioCompras';
 import { HttpError } from '../utils/http';
 import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import type {
@@ -42,6 +46,7 @@ const EMBALAGENS_SELECT = {
       position: true,
       code: true,
       packagingQtyKg: true,
+      packagingPalletKg: true,
       packagingLabel: true,
       packagingIsPrimary: true,
       packagingSource: true,
@@ -59,6 +64,8 @@ export interface ForecastEmbalagensData {
     posicao: number;
     codigo: string;
     quantidadeKg: number | null;
+    /** kg de UM pallet fechado desta embalagem (multiplo da quantidade); nulo = sem pallet. */
+    palletKg: number | null;
     rotulo: string | null;
     principal: boolean;
     origem: 'manual' | 'dbcorp' | null;
@@ -75,6 +82,7 @@ function toEmbalagensData(product: ProdutoComEmbalagens): ForecastEmbalagensData
     posicao: c.position,
     codigo: c.code,
     quantidadeKg: qtyToNumber(c.packagingQtyKg),
+    palletKg: qtyToNumber(c.packagingPalletKg),
     rotulo: c.packagingLabel,
     principal: c.packagingIsPrimary,
     origem: c.packagingSource === 'manual' ? 'manual' : c.packagingSource === 'dbcorp' ? 'dbcorp' : null,
@@ -524,6 +532,7 @@ export class ForecastProductService {
               code: true,
               productId: true,
               packagingQtyKg: true,
+              packagingPalletKg: true,
               packagingLabel: true,
               packagingIsPrimary: true,
               packagingSource: true,
@@ -550,6 +559,7 @@ export class ForecastProductService {
             code: c.code,
             catalogItemId: c.catalogItemId,
             packagingQtyKg: anterior?.packagingQtyKg ?? null,
+            packagingPalletKg: anterior?.packagingPalletKg ?? null,
             packagingLabel: anterior?.packagingLabel ?? null,
             // A principal e do PRODUTO: codigo movido para outro produto perde a flag (mantem "no maximo uma").
             packagingIsPrimary: anterior?.productId === o.productId && anterior.packagingIsPrimary,
@@ -592,13 +602,20 @@ export class ForecastProductService {
     if (unicos.length === 0) return [];
     const rows = await db.forecastProductCode.findMany({
       where: { code: { in: unicos }, packagingQtyKg: { not: null } },
-      select: { code: true, packagingQtyKg: true, packagingLabel: true, packagingIsPrimary: true },
+      select: {
+        code: true,
+        packagingQtyKg: true,
+        packagingPalletKg: true,
+        packagingLabel: true,
+        packagingIsPrimary: true,
+      },
     });
     return rows.map((r) => ({
       codigo: r.code,
       quantidade: Number(r.packagingQtyKg),
       rotulo: r.packagingLabel,
       principal: r.packagingIsPrimary,
+      palletKg: qtyToNumber(r.packagingPalletKg),
     }));
   }
 
@@ -643,7 +660,17 @@ export class ForecastProductService {
           const edicao = edicoes.get(c.id);
           const quantidade = edicao ? edicao.quantidadeKg : qtyToNumber(c.packagingQtyKg);
           const rotulo = edicao && edicao.rotulo !== undefined ? edicao.rotulo : c.packagingLabel;
-          return { code: c, quantidade, rotulo: quantidade === null ? null : rotulo };
+          // Pallet fechado (PR 6e): precisa de quantidade e ser multiplo dela. Quantidade apagada apaga o pallet junto.
+          let pallet = edicao && edicao.palletKg !== undefined ? edicao.palletKg : qtyToNumber(c.packagingPalletKg);
+          if (quantidade === null) {
+            if (edicao?.palletKg != null) {
+              throw new HttpError(400, 'O pallet precisa da quantidade da embalagem.');
+            }
+            pallet = null;
+          } else if (pallet !== null && !palletEMultiploDaEmbalagem(pallet, quantidade)) {
+            throw new HttpError(400, `O pallet precisa ser multiplo da embalagem (${String(quantidade).replace('.', ',')} kg).`);
+          }
+          return { code: c, quantidade, pallet, rotulo: quantidade === null ? null : rotulo };
         });
         const quantidadePorId = new Map(desejado.map((d) => [d.code.id, d.quantidade] as const));
 
@@ -663,6 +690,7 @@ export class ForecastProductService {
           .filter(
             (d) =>
               d.quantidade !== qtyToNumber(d.code.packagingQtyKg) ||
+              d.pallet !== qtyToNumber(d.code.packagingPalletKg) ||
               d.rotulo !== d.code.packagingLabel ||
               d.principal !== d.code.packagingIsPrimary,
           );
@@ -680,6 +708,7 @@ export class ForecastProductService {
             where: { id: d.code.id },
             data: {
               packagingQtyKg: d.quantidade,
+              packagingPalletKg: d.pallet,
               packagingLabel: d.rotulo,
               packagingIsPrimary: d.principal,
               packagingSource: 'manual',
@@ -689,6 +718,7 @@ export class ForecastProductService {
         }
 
         const comEmbalagem = desejado.filter((d) => d.quantidade !== null).length;
+        const comPallet = desejado.filter((d) => d.pallet !== null).length;
         await AuditLogService.log(
           {
             entityType: ENTITY_TYPE,
@@ -701,6 +731,7 @@ export class ForecastProductService {
               codigoIdsAlterados: alterados.map((d) => d.code.id),
               comEmbalagem,
               semEmbalagem: desejado.length - comEmbalagem,
+              comPallet,
               principalAntes,
               principalDepois,
             },

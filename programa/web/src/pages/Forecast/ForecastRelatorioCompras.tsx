@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { Fragment, useEffect, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
@@ -37,8 +37,9 @@ import {
 } from './forecastRelatorioUrgencia';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
 import {
-  linhasOutrasEmbalagens,
+  opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
+  palletDoDestaque,
   textoObservacao,
   tituloOutrasEmbalagens,
 } from './forecastRelatorioTextos';
@@ -81,7 +82,8 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
       </span>
     );
   }
-  const outras = linhasOutrasEmbalagens(item);
+  const outras = opcoesOutrasComPallet(item);
+  const palletUsada = palletDoDestaque(item);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
@@ -93,10 +95,12 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
-      {outras.map((linha) => (
-        <span key={linha} className="fcr-embalagem__outras">
-          {linha}
-        </span>
+      {palletUsada && <span className="fcr-embalagem__pallet">{palletUsada}</span>}
+      {outras.map(({ texto, pallet }) => (
+        <Fragment key={texto}>
+          <span className="fcr-embalagem__outras">{texto}</span>
+          {pallet && <span className="fcr-embalagem__pallet">{pallet}</span>}
+        </Fragment>
       ))}
       {botao}
     </span>
@@ -495,6 +499,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {comUrgencia && porUrgencia && <li>{resumoDeUrgencia(porUrgencia, diasCritico)}</li>}
           <li>{totais.semEmbalagem} sem embalagem cadastrada</li>
           {totais.multiplasEmbalagens > 0 && <li>{totais.multiplasEmbalagens} com mais de uma embalagem</li>}
+          {(totais.comPallet ?? 0) > 0 && <li>{totais.comPallet} com pallet cadastrado</li>}
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">

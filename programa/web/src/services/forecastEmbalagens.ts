@@ -7,6 +7,8 @@ export interface ForecastEmbalagemCodigo {
   posicao: number;
   codigo: string;
   quantidadeKg: number | null;
+  /** PR 6e (opcional: backend antigo nao manda): kg de UM pallet fechado, multiplo da quantidade; nulo = sem pallet. */
+  palletKg?: number | null;
   rotulo: string | null;
   principal: boolean;
   origem: 'manual' | 'dbcorp' | null;
@@ -25,6 +27,8 @@ export type ForecastEmbalagemEdicao = {
   codigoId: number;
   quantidadeKg: number | null;
   rotulo?: string | null;
+  /** Ausente = mantem; null = sem pallet; numero = kg de um pallet fechado. */
+  palletKg?: number | null;
 };
 
 export type ForecastEmbalagensPatch = {

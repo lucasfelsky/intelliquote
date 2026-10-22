@@ -3076,3 +3076,11 @@ i.fc-status--preco { background: var(--info); }
 .fci-prazo__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .fci-prazo__retorno:focus-visible,
 .fci-prazo__input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+
+/* ---- Forecast: pallet fechado (PR 6e) ---- */
+.fcr-embalagem__pallet { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+/* O modal de embalagens ganhou a coluna Pallet (kg): colunas mais justas para caber no dialogo de 760 px. */
+.fce-tabela { min-width: 700px; }
+.fce-tabela th, .fce-tabela td { padding-left: 7px; padding-right: 7px; }
+.fce-tabela .fce-input-qtd { min-width: 84px; }
+.fce-input-rotulo { min-width: 100px; }

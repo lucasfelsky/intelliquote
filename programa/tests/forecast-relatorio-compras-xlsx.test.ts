@@ -7,6 +7,7 @@ import {
   URGENCIAS,
   itensNaOrdemDeUrgencia,
   montarRelatorioCompras,
+  opcoesDePallet,
   type EmbalagemCadastrada,
   type LinhaParaRelatorio,
   type QuinzenaParaRelatorio,
@@ -38,6 +39,7 @@ import {
   rotuloUrgencia,
   textoMotivos,
   textoOpcaoDeEmbalagem,
+  textoPallet,
   tituloDoGrupo,
 } from '../src/utils/forecastRelatorioComprasXlsx';
 import type { Quinzena } from '../src/utils/forecastTypes';
@@ -59,7 +61,10 @@ import {
 } from '../web/src/pages/Forecast/forecastRelatorioUrgencia';
 import {
   PARAGRAFO_EMBALAGEM,
+  opcoesOutrasComPallet,
+  palletDoDestaque,
   textoOpcaoDeEmbalagem as textoOpcaoDeEmbalagemWeb,
+  textoPallet as textoPalletWeb,
 } from '../web/src/pages/Forecast/forecastRelatorioTextos';
 
 // Repo PUBLICO: so dados sinteticos (FONTE 001, PRODUTO 001, C0001) e a fixture anonimizada.
@@ -759,6 +764,137 @@ describe('paridade com a tela do web', () => {
       'Fora do relatório:',
       'Obs.:',
     ]) {
+      expect(tela).toContain(texto);
+    }
+  });
+});
+
+// Pallet fechado (PR 6e): o texto fica dentro das celulas de embalagem (nenhuma coluna nova: Observacao segue a ultima).
+describe('pallet fechado no XLSX (PR 6e)', () => {
+  const comPallet = montarRelatorioCompras(
+    quinzena([
+      // Embalagem usada com pallet; a outra (nao destacada) tambem tem pallet.
+      linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', codigos: ['C0001', 'C0002'], AN: -1400, obs: 'OBS SINTETICA' }),
+      // Multiplo exato e so uma embalagem.
+      linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', codigos: ['C0003'], AN: -1200 }),
+      // Sem pallet cadastrado.
+      linha({ linha: 3, item: 'PRODUTO 003', fonte: 'FONTE 002', codigos: ['C0004'], AN: -100 }),
+      // Menos de 1 pallet: so "acima".
+      linha({ linha: 4, item: 'PRODUTO 004', fonte: 'FONTE 002', codigos: ['C0005'], AN: -500 }),
+    ]),
+    [
+      { codigo: 'C0001', quantidade: 25, palletKg: 600 },
+      { codigo: 'C0002', quantidade: 1000, palletKg: 2000 },
+      { codigo: 'C0003', quantidade: 25, palletKg: 600 },
+      { codigo: 'C0004', quantidade: 25 },
+      { codigo: 'C0005', quantidade: 25, palletKg: 600 },
+    ],
+  );
+
+  const itens = comPallet.grupos.flatMap((g) => g.itens);
+  const porNome = (nome: string) => itens.find((i) => i.item === nome)!;
+
+  it('textoPallet do XLSX e identico ao da tela nos casos (abaixo+acima, exato, so acima, singular, kg com casas)', () => {
+    for (const [qtd, pallet] of [
+      [1400, 600],
+      [1200, 600],
+      [500, 600],
+      [700, 600],
+      [3000, 1250.5],
+      [0.3, 0.125],
+    ] as const) {
+      const p = opcoesDePallet(qtd, pallet);
+      expect(textoPallet(p)).toBe(textoPalletWeb(p));
+    }
+    expect(textoPallet(opcoesDePallet(1400, 600))).toBe(
+      'Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)',
+    );
+    expect(textoPalletWeb(null)).toBeNull();
+    expect(textoPalletWeb(undefined)).toBeNull();
+  });
+
+  it('celulas Embalagem e Outras embalagens = as linhas da tela, com o pallet logo abaixo de cada opcao', () => {
+    const i = porNome('PRODUTO 001');
+    const cel = celulasDoItem(i, 15);
+    const col = (nome: (typeof COLUNAS_RELATORIO_XLSX)[number]) => COLUNAS_RELATORIO_XLSX.indexOf(nome);
+    expect(cel[col('Embalagem')]).toBe(
+      '56 × 25 kg (código C0001)\nPallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)',
+    );
+    expect(cel[col('Outras embalagens')]).toBe(
+      '2 × 1.000 kg (código C0002) = 2.000 kg\nPallet de 2.000 kg: 1 pallet = 2.000 kg (acima)',
+    );
+    // Paridade: o mesmo texto que a tela monta (palletDoDestaque / opcoesOutrasComPallet).
+    const web = i as unknown as Parameters<typeof palletDoDestaque>[0] & Parameters<typeof opcoesOutrasComPallet>[0];
+    expect(cel[col('Embalagem')]).toBe(`56 × 25 kg (código C0001)\n${palletDoDestaque(web)}`);
+    expect(cel[col('Outras embalagens')]).toBe(
+      opcoesOutrasComPallet(web)
+        .flatMap(({ texto, pallet }) => (pallet ? [texto, pallet] : [texto]))
+        .join('\n'),
+    );
+  });
+
+  it('multiplo exato, so acima e sem pallet', () => {
+    const col = (nome: (typeof COLUNAS_RELATORIO_XLSX)[number]) => COLUNAS_RELATORIO_XLSX.indexOf(nome);
+    expect(celulasDoItem(porNome('PRODUTO 002'), 15)[col('Embalagem')]).toBe(
+      '48 × 25 kg (código C0003)\nPallet de 600 kg: 2 pallets = 1.200 kg (exato)',
+    );
+    expect(celulasDoItem(porNome('PRODUTO 004'), 15)[col('Embalagem')]).toBe(
+      '20 × 25 kg (código C0005)\nPallet de 600 kg: 1 pallet = 600 kg (acima)',
+    );
+    expect(celulasDoItem(porNome('PRODUTO 003'), 15)[col('Embalagem')]).toBe('4 × 25 kg (código C0004)');
+    expect(celulasDoItem(porNome('PRODUTO 002'), 15)[col('Outras embalagens')]).toBe('');
+  });
+
+  it('a Qtd. final continua a da embalagem em destaque (o pallet e so informacao)', () => {
+    expect(porNome('PRODUTO 001').quantidadeFinal).toBe(1400);
+    expect(porNome('PRODUTO 004').quantidadeFinal).toBe(500);
+  });
+
+  it('as 3 abas: celulas iguais a celulasDoItem, Observacao continua a ultima coluna e o resumo conta os itens com pallet', async () => {
+    const wb = await carregar(await gerarXlsxRelatorioCompras(comPallet));
+    const ws = wb.getWorksheet(ABA_RELATORIO)!;
+    const { grupos } = mapearLinhas(comPallet);
+    for (const { g, primeiroItem } of grupos) {
+      g.itens.forEach((item, i) => {
+        expect(linhaComoArray(ws, primeiroItem + i)).toEqual(celulasDoItem(item, 15));
+      });
+    }
+    // Por urgencia: mesma celula de embalagem (Fonte entra depois de Urgencia).
+    const wu = wb.getWorksheet(ABA_POR_URGENCIA)!;
+    const lista = itensNaOrdemDeUrgencia(comPallet);
+    const colU = (nome: (typeof COLUNAS_POR_URGENCIA_XLSX)[number]) => COLUNAS_POR_URGENCIA_XLSX.indexOf(nome) + 1;
+    lista.forEach(({ item }, i) => {
+      const c = celulasDoItem(item, 15);
+      expect(valorDaCelula(wu, i + 2, colU('Embalagem'))).toBe(c[COLUNAS_RELATORIO_XLSX.indexOf('Embalagem')]);
+      expect(valorDaCelula(wu, i + 2, colU('Outras embalagens'))).toBe(c[COLUNAS_RELATORIO_XLSX.indexOf('Outras embalagens')]);
+    });
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_SEM_CONSUMO_XLSX.at(-1)).toBe('Observação');
+    expect(valorDaCelula(wu, 2, colU('Observação'))).toBe(lista[0].item.obs);
+    expect(comPallet.totais.comPallet).toBe(3);
+    expect(linhasDoResumo(comPallet)).toContain('3 com pallet cadastrado');
+    const regras = wb.getWorksheet(ABA_REGRAS)!;
+    expect(valorDaCelula(regras, 3, 1)).toBe(PARAGRAFO_EMBALAGEM);
+  });
+
+  it('sem nenhum pallet cadastrado: a linha do resumo nao aparece e a celula e a de antes', () => {
+    const r = montarRelatorioCompras(
+      quinzena([linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', codigos: ['C0001'], AN: -1400 })]),
+      [{ codigo: 'C0001', quantidade: 25 }],
+    );
+    expect(linhasDoResumo(r).some((l) => l.includes('pallet'))).toBe(false);
+    expect(celulasDoItem(r.grupos[0].itens[0], 15)[COLUNAS_RELATORIO_XLSX.indexOf('Embalagem')]).toBe(
+      '56 × 25 kg (código C0001)',
+    );
+  });
+
+  it('a tela contem os textos do pallet', () => {
+    const pasta = resolve(__dirname, '..', 'web', 'src', 'pages', 'Forecast');
+    const tela =
+      readFileSync(resolve(pasta, 'ForecastRelatorioCompras.tsx'), 'utf8') +
+      readFileSync(resolve(pasta, 'forecastRelatorioTextos.ts'), 'utf8');
+    for (const texto of ['Pallet de ', 'com pallet cadastrado', 'fcr-embalagem__pallet']) {
       expect(tela).toContain(texto);
     }
   });

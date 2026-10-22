@@ -22,6 +22,10 @@
 // codigo cadastrado). Com mais de uma embalagem cadastrada o item ainda traz a quantidade arredondada para CADA
 // uma (`porEmbalagem`), so para o comprador escolher na compra: nada disso muda a Qtd. final nem e persistido.
 // Observacao (PR 5B): texto livre da quinzena (coluna AT da planilha), repassado como esta (so trim).
+// Pallet fechado (PR 6e, Comex): o cadastro pode dizer quantos kg tem UM pallet da embalagem (`palletKg`, multiplo
+// da embalagem). Cada opcao de embalagem traz entao os pallets fechados ABAIXO e ACIMA da quantidade sugerida
+// (`pallet`), so para o comprador escolher na compra: a Qtd. final continua sendo a da embalagem em destaque e nada
+// disso e persistido.
 //
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
@@ -66,6 +70,8 @@ export interface EmbalagemCadastrada {
   quantidade: number;
   rotulo?: string | null;
   principal?: boolean;
+  /** kg de UM pallet fechado desta embalagem; ausente/nulo = sem pallet. */
+  palletKg?: number | null;
 }
 
 export interface RupturaEstimada {
@@ -79,6 +85,15 @@ export interface EmbalagemDoItem {
   codigo: string;
   quantidade: number;
   rotulo: string | null;
+  /** So quando o cadastro tem pallet (item sem pallet sai com o mesmo formato de antes). */
+  palletKg?: number;
+}
+
+/** Pallets fechados ao redor da quantidade sugerida; `abaixo` e `acima` coincidem quando o multiplo e exato. */
+export interface PalletDaOpcao {
+  kgPorPallet: number;
+  abaixo: { pallets: number; kg: number };
+  acima: { pallets: number; kg: number };
 }
 
 export interface EscolhaDeEmbalagem {
@@ -88,10 +103,12 @@ export interface EscolhaDeEmbalagem {
 }
 
 /** Quantidade do item arredondada para UMA embalagem cadastrada; `destaque` = a que gera a Qtd. final. */
-export interface OpcaoDeEmbalagem extends EmbalagemDoItem {
+export interface OpcaoDeEmbalagem extends Omit<EmbalagemDoItem, 'palletKg'> {
   embalagens: number;
   quantidadeFinal: number;
   destaque: boolean;
+  /** Multiplos de pallet abaixo/acima da quantidade sugerida; nulo = embalagem sem pallet (ou nada a comprar). */
+  pallet: PalletDaOpcao | null;
 }
 
 export interface ItemRelatorioCompras {
@@ -163,6 +180,8 @@ export interface RelatorioCompras {
     vencidas: number;
     semEmbalagem: number;
     multiplasEmbalagens: number;
+    /** Itens com pallet cadastrado em ao menos uma embalagem. */
+    comPallet: number;
     porUrgencia: Record<UrgenciaId, number>;
   };
   fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento: number };
@@ -188,6 +207,8 @@ const EPS = 1e-9;
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const semMenosZero = (n: number) => (n === 0 ? 0 : n);
+
+const arredondar6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
 // Item com demanda a comprar: lead time conhecido, demanda <= 0 e (consumo > 0 ou falta real).
 // Fora: sem lead time (AN nulo) e sem consumo com demanda = 0. Sem consumo com demanda < 0 entra.
@@ -244,6 +265,7 @@ export function escolherEmbalagem(codigos: string[], embalagens: EmbalagemCadast
     if (!codigo || !emb || vistos.has(chave)) continue;
     vistos.add(chave);
     const dado: EmbalagemDoItem = { codigo, quantidade: emb.quantidade, rotulo: emb.rotulo ?? null };
+    if (emb.palletKg != null && Number.isFinite(emb.palletKg) && emb.palletKg > 0) dado.palletKg = emb.palletKg;
     cadastradas.push(dado);
     if (principal === null && emb.principal === true) principal = dado;
   }
@@ -266,16 +288,39 @@ export function arredondarPorEmbalagem(
   return { embalagens: semMenosZero(embalagens), quantidade: semMenosZero(embalagens * porEmbalagem) };
 }
 
+// Pallets fechados abaixo e acima da quantidade (kg). A base e a quantidade SUGERIDA, nao a Qtd. final ja
+// arredondada pela embalagem. Multiplo exato: abaixo == acima.
+export function opcoesDePallet(quantidade: number, kgPorPallet: number): PalletDaOpcao {
+  if (!Number.isFinite(kgPorPallet) || kgPorPallet <= 0) {
+    throw new Error('Quantidade por pallet invalida.');
+  }
+  const pallets = (n: number) => ({ pallets: semMenosZero(n), kg: semMenosZero(arredondar6(n * kgPorPallet)) });
+  return {
+    kgPorPallet,
+    abaixo: pallets(Math.max(0, Math.floor(quantidade / kgPorPallet + EPS))),
+    acima: pallets(Math.max(0, Math.ceil(quantidade / kgPorPallet - EPS))),
+  };
+}
+
+// O pallet precisa caber um numero inteiro de vezes a embalagem (tolerancia de 1e-6 kg para os decimais).
+export function palletEMultiploDaEmbalagem(palletKg: number, embalagemKg: number): boolean {
+  if (!Number.isFinite(palletKg) || !Number.isFinite(embalagemKg) || palletKg <= 0 || embalagemKg <= 0) return false;
+  const vezes = Math.round(palletKg / embalagemKg);
+  return vezes >= 1 && Math.abs(palletKg - vezes * embalagemKg) <= 1e-6;
+}
+
 // Uma opcao por embalagem cadastrada (mesma ordem de `escolha.cadastradas`), cada uma com a quantidade do item
 // arredondada para cima nos multiplos dela. A `destaque` e a `escolha.usada`: mesmos numeros de quantidadeFinal.
+// Com pallet cadastrado (e algo a comprar) a opcao traz tambem os pallets fechados abaixo e acima da quantidade.
 export function arredondarParaCadaEmbalagem(quantidade: number, escolha: EscolhaDeEmbalagem): OpcaoDeEmbalagem[] {
-  return escolha.cadastradas.map((e) => {
+  return escolha.cadastradas.map(({ palletKg, ...e }) => {
     const arredondado = arredondarPorEmbalagem(quantidade, e.quantidade);
     return {
       ...e,
       embalagens: arredondado.embalagens,
       quantidadeFinal: arredondado.quantidade,
       destaque: e.codigo === escolha.usada?.codigo,
+      pallet: palletKg !== undefined && quantidade > 0 ? opcoesDePallet(quantidade, palletKg) : null,
     };
   });
 }
@@ -524,6 +569,7 @@ export function montarRelatorioCompras(
       vencidas: todos.filter((i) => i.vencida).length,
       semEmbalagem: todos.filter((i) => i.embalagem.usada === null).length,
       multiplasEmbalagens: todos.filter((i) => i.embalagem.multiplas).length,
+      comPallet: todos.filter((i) => i.porEmbalagem.some((o) => o.pallet !== null)).length,
       porUrgencia: contarPorUrgencia(todos),
     },
     fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento },

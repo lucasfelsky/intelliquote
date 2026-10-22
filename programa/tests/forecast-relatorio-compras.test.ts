@@ -136,9 +136,9 @@ describe('arredondarParaCadaEmbalagem (PR 5B)', () => {
     ]);
     const opcoes = arredondarParaCadaEmbalagem(450, escolha);
     expect(opcoes).toEqual([
-      { codigo: 'C0001', quantidade: 200, rotulo: null, embalagens: 3, quantidadeFinal: 600, destaque: false },
-      { codigo: 'C0002', quantidade: 25, rotulo: null, embalagens: 18, quantidadeFinal: 450, destaque: false },
-      { codigo: 'C0003', quantidade: 1000, rotulo: 'Bag', embalagens: 1, quantidadeFinal: 1000, destaque: true },
+      { codigo: 'C0001', quantidade: 200, rotulo: null, embalagens: 3, quantidadeFinal: 600, destaque: false, pallet: null },
+      { codigo: 'C0002', quantidade: 25, rotulo: null, embalagens: 18, quantidadeFinal: 450, destaque: false, pallet: null },
+      { codigo: 'C0003', quantidade: 1000, rotulo: 'Bag', embalagens: 1, quantidadeFinal: 1000, destaque: true, pallet: null },
     ]);
     expect(opcoes.filter((o) => o.destaque).map((o) => o.codigo)).toEqual([escolha.usada?.codigo]);
   });
@@ -297,6 +297,7 @@ describe('montarRelatorioCompras (sintetico)', () => {
       vencidas: 2,
       semEmbalagem: 3,
       multiplasEmbalagens: 1,
+      comPallet: 0,
       porUrgencia: { 'sem-estoque': 1, critico: 0, atrasado: 1, 'no-prazo': 2 },
     });
     expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2, semConsumoSemMovimento: 2 });

@@ -160,6 +160,17 @@ const packagingQtyField = z
   })
   .nullable();
 
+// Pallet fechado (PR 6e): mesmas regras da quantidade. As regras entre campos (precisa de quantidade, multiplo dela)
+// dependem do estado do codigo e ficam no service.
+const packagingPalletField = z
+  .number({ error: 'Informe os kg do pallet (ou null).' })
+  .positive('O pallet deve ser maior que zero.')
+  .max(1000000, 'O pallet aceita no maximo 1.000.000 kg.')
+  .refine((v) => /^\d+(\.\d{1,3})?$/.test(String(v)), {
+    message: 'O pallet aceita no maximo 3 casas decimais.',
+  })
+  .nullable();
+
 const packagingLabelField = z
   .string({ error: 'Rotulo invalido.' })
   .trim()
@@ -183,6 +194,8 @@ export const forecastEmbalagensPatchSchema = z
           codigoId: codigoIdField,
           quantidadeKg: packagingQtyField,
           rotulo: packagingLabelField,
+          // Ausente = mantem; null = sem pallet; numero = kg de um pallet fechado (multiplo da embalagem).
+          palletKg: packagingPalletField.optional(),
         }),
         { error: 'Informe as embalagens como lista.' },
       )

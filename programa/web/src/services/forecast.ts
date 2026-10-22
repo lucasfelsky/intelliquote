@@ -116,11 +116,20 @@ export interface ForecastEmbalagemDoItem {
   rotulo: string | null;
 }
 
+/** Pallets fechados ao redor da quantidade sugerida (PR 6e); `abaixo` e `acima` coincidem no multiplo exato. */
+export interface ForecastPalletDaOpcao {
+  kgPorPallet: number;
+  abaixo: { pallets: number; kg: number };
+  acima: { pallets: number; kg: number };
+}
+
 /** Quantidade do item arredondada para UMA embalagem cadastrada (PR 5B); `destaque` = a que gera a Qtd. final. */
 export interface ForecastOpcaoEmbalagem extends ForecastEmbalagemDoItem {
   embalagens: number;
   quantidadeFinal: number;
   destaque: boolean;
+  /** PR 6e (opcional: backend antigo nao manda): pallets abaixo/acima; nulo/ausente = embalagem sem pallet. */
+  pallet?: ForecastPalletDaOpcao | null;
 }
 
 /** Faixas de urgencia do relatorio (PR 2D), da mais para a menos urgente. */
@@ -199,6 +208,8 @@ export interface ForecastRelatorioCompras {
     vencidas: number;
     semEmbalagem: number;
     multiplasEmbalagens: number;
+    /** PR 6e (opcional: backend antigo nao manda): itens com pallet cadastrado em alguma embalagem. */
+    comPallet?: number;
     porUrgencia?: Record<ForecastUrgencia, number>;
   };
   fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento?: number };

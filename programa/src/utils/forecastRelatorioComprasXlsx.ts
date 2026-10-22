@@ -11,6 +11,7 @@ import type {
   ItemSemConsumo,
   MotivoSemConsumo,
   OpcaoDeEmbalagem,
+  PalletDaOpcao,
   RelatorioCompras,
   UrgenciaId,
 } from './forecastRelatorioCompras';
@@ -196,6 +197,9 @@ export function linhasDoResumo(r: RelatorioCompras): string[] {
   if (totais.multiplasEmbalagens > 0) {
     linhas.push(`${totais.multiplasEmbalagens} com mais de uma embalagem`);
   }
+  if (totais.comPallet > 0) {
+    linhas.push(`${totais.comPallet} com pallet cadastrado`);
+  }
   linhas.push(`Fora do relatório: ${fora.semLeadTime} sem lead time, ${fora.semConsumoSemFalta} sem consumo e sem falta`);
   linhas.push(resumoSemConsumo(r.semConsumo.itens.length, fora.semConsumoSemMovimento));
   return linhas;
@@ -207,7 +211,10 @@ function textoEmbalagem(item: ItemRelatorioCompras): string {
     return 'Embalagem não cadastrada';
   }
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
-  return `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
+  const principal = `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
+  // Pallet da embalagem em destaque: linha extra na mesma celula (sem coluna nova; Observacao segue a ultima).
+  const pallet = item.porEmbalagem.find((o) => o.destaque)?.pallet;
+  return pallet ? `${principal}\n${textoPallet(pallet)}` : principal;
 }
 
 // Copia EXATA de textoOpcaoDeEmbalagem (web/src/pages/Forecast/forecastRelatorioTextos.ts; guarda de paridade no teste):
@@ -217,9 +224,21 @@ export function textoOpcaoDeEmbalagem(op: OpcaoDeEmbalagem): string {
   return `${op.embalagens} × ${nome} (código ${op.codigo}) = ${kgBr(op.quantidadeFinal)} kg`;
 }
 
+// Copia EXATA de textoPallet (web/.../forecastRelatorioTextos.ts; guarda de paridade no teste): pallets fechados
+// abaixo e acima da quantidade sugerida, ex.: 'Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)'.
+// Multiplo exato: so '(exato)'; nada abaixo de 1 pallet: so '(acima)'.
+export function textoPallet(p: PalletDaOpcao): string {
+  const parte = (v: { pallets: number; kg: number }, marca: string) =>
+    `${v.pallets} ${v.pallets === 1 ? 'pallet' : 'pallets'} = ${kgBr(v.kg)} kg (${marca})`;
+  const inicio = `Pallet de ${kgBr(p.kgPorPallet)} kg: `;
+  if (p.abaixo.pallets === p.acima.pallets) return inicio + parte(p.acima, 'exato');
+  if (p.abaixo.pallets === 0) return inicio + parte(p.acima, 'acima');
+  return `${inicio}${parte(p.abaixo, 'abaixo')} · ${parte(p.acima, 'acima')}`;
+}
+
 // Copia EXATA de PARAGRAFO_EMBALAGEM (web/.../forecastRelatorioTextos.ts); e o 3o paragrafo da aba Regras.
 export const PARAGRAFO_EMBALAGEM_XLSX =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.';
 
 const linhasChegada = (chegadas: Array<{ anoMes: string; quantidade: number }>) =>
   chegadas.map((c) => `Chegada ${mesAbrev(c.anoMes)}: ${inteiroBr(c.quantidade)}`);
@@ -236,8 +255,14 @@ function textoEmAndamento(item: ItemRelatorioCompras): string {
 export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): Array<string | number> {
   const { usada, multiplas } = item.embalagem;
   const { ruptura } = item;
-  // Uma linha por opcao nao destacada (a destacada ja esta em Embalagem e Qtd. final).
-  const outras = multiplas && usada ? item.porEmbalagem.filter((o) => !o.destaque).map(textoOpcaoDeEmbalagem).join('\n') : '';
+  // Uma linha por opcao nao destacada (a destacada ja esta em Embalagem e Qtd. final); o pallet da opcao vem logo abaixo.
+  const outras =
+    multiplas && usada
+      ? item.porEmbalagem
+          .filter((o) => !o.destaque)
+          .flatMap((o) => (o.pallet ? [textoOpcaoDeEmbalagem(o), textoPallet(o.pallet)] : [textoOpcaoDeEmbalagem(o)]))
+          .join('\n')
+      : '';
   const rupturaTexto = ruptura
     ? ruptura.jaNaDataBase
       ? 'já na data-base'
