@@ -1,13 +1,16 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
 import {
+  baixarForecastRelatorioXlsx,
   forecastErrorMessage,
   forecastKeys,
   getForecastRelatorioCompras,
   type ForecastGrupoRelatorio,
   type ForecastItemRelatorio,
 } from '@/services/forecast';
-import { d1, dataBr, inteiroBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
+import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
+import { forcarClaroNaImpressao } from './impressaoEmClaro';
 
 interface Props {
   snapshotId: number;
@@ -21,7 +24,7 @@ function Embalagem({ item }: { item: ForecastItemRelatorio }) {
     return <span className="badge badge--muted">Embalagem não cadastrada</span>;
   }
   const outras = cadastradas.filter((e) => e.codigo !== usada.codigo);
-  const nome = usada.rotulo ?? `${inteiroBr(usada.quantidade)} kg`;
+  const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
       <span>
@@ -30,14 +33,14 @@ function Embalagem({ item }: { item: ForecastItemRelatorio }) {
       {multiplas && (
         <span
           className="badge badge--info"
-          title={`Outras embalagens: ${outras.map((e) => `${e.codigo} (${inteiroBr(e.quantidade)} kg)`).join(', ')}`}
+          title={`Outras embalagens: ${outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}`}
         >
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
       {multiplas && (
         <span className="fcr-embalagem__outras">
-          Outras: {outras.map((e) => `${e.codigo} (${inteiroBr(e.quantidade)} kg)`).join(', ')}
+          Outras: {outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}
         </span>
       )}
     </span>
@@ -155,6 +158,11 @@ export default function ForecastRelatorioCompras({ snapshotId }: Props) {
     queryKey: forecastKeys.relatorio(snapshotId),
     queryFn: () => getForecastRelatorioCompras(snapshotId),
   });
+  // Impressao sempre em tema claro (cobre o botao e o Ctrl+P).
+  useEffect(() => forcarClaroNaImpressao(), []);
+  const xlsx = useMutation({
+    mutationFn: (hoje: string) => baixarForecastRelatorioXlsx(snapshotId, hoje),
+  });
 
   if (relatorio.isLoading) {
     return <Spinner />;
@@ -179,6 +187,38 @@ export default function ForecastRelatorioCompras({ snapshotId }: Props) {
           {totais.itens} {plural(totais.itens, 'item', 'itens')} em {totais.fontes}{' '}
           {plural(totais.fontes, 'fonte', 'fontes')}
         </p>
+        <div className="fcr-acoes" role="group" aria-label="Exportar relatório">
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => xlsx.mutate(quinzena.hoje)}
+            disabled={xlsx.isPending}
+            aria-busy={xlsx.isPending}
+          >
+            {xlsx.isPending ? 'Gerando XLSX…' : 'Baixar XLSX'}
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => window.print()}
+            aria-describedby="fcr-dica-impressao"
+          >
+            Imprimir / Salvar como PDF
+          </button>
+          <p id="fcr-dica-impressao" className="fcr-acoes__dica">
+            Abre a impressão do navegador; para PDF, escolha “Salvar como PDF” no destino.
+          </p>
+          {xlsx.isError && (
+            <p role="alert" className="fcr-acoes__erro">
+              {forecastErrorMessage(xlsx.error)}
+            </p>
+          )}
+          {xlsx.isSuccess && (
+            <p role="status" className="fcr-acoes__ok">
+              XLSX gerado: {xlsx.data.fileName}
+            </p>
+          )}
+        </div>
         <ul className="fcr-resumo__lista">
           <li className={totais.vencidas > 0 ? 'fcr-forte fcr-resumo__alerta' : undefined}>
             {totais.vencidas} com data-limite vencida

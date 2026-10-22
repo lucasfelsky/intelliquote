@@ -163,6 +163,31 @@ export async function getForecastRelatorioCompras(id: number): Promise<ForecastR
   return response.data;
 }
 
+export const FORECAST_XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/**
+ * Baixa o XLSX do relatorio de compras (JSON base64 -> Blob -> <a download>, como downloadSupplierDocument).
+ * `hoje` e o da tela (quinzena.hoje): o arquivo sai igual ao que esta exibido.
+ */
+export async function baixarForecastRelatorioXlsx(id: number, hoje: string): Promise<{ fileName: string }> {
+  const response = await api.get<{ data: { fileName: string; contentBase64: string } }>(
+    `/v1/forecast/snapshots/${id}/relatorio-compras/xlsx`,
+    { hoje },
+  );
+  const { fileName, contentBase64 } = response.data;
+  const binary = atob(contentBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: FORECAST_XLSX_MIME });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+  return { fileName };
+}
+
 /** Mensagem em portugues para o usuario; 400/409/413 repassam a mensagem do backend. */
 export function forecastErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {

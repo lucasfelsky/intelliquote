@@ -2927,3 +2927,28 @@ i.fc-status--preco { background: var(--info); }
 .fcr-linha--vencida td,
 .fcr-linha--vencida th { background: var(--tone-danger-bg-soft); }
 .fcr-linha--vencida th { border-left: 3px solid var(--danger); }
+
+/* ---- Forecast: relatorio de compras - exportacao e impressao (PR 2B) ---- */
+.fcr-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 12px; }
+.fcr-acoes__dica { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--ink-soft); }
+.fcr-acoes__erro { flex-basis: 100%; margin: 0; color: var(--danger); }
+.fcr-acoes__ok { flex-basis: 100%; margin: 0; color: var(--ink-soft); }
+.fcr-acoes .ghost-button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+
+/* Impressao: A4 paisagem, so nesta tela (escopo body:has(.fcr-resumo)); as outras telas nao mudam. */
+@page fcr-paisagem { size: A4 landscape; margin: 10mm; }
+@media print {
+  body:has(.fcr-resumo) #root { page: fcr-paisagem; }
+  html:has(.fcr-resumo), body:has(.fcr-resumo), body:has(.fcr-resumo) #root { height: auto; }
+  body:has(.fcr-resumo) :is(.sidebar, .topbar, .page-header__actions, .fc-visoes, .alert--success, .fcr-acoes, .fcr-acoes__dica, .fcr-acoes__ok, .fcr-regra) { display: none !important; }
+  body:has(.fcr-resumo) .app-shell { display: block; min-height: 0; background: var(--paper); }
+  body:has(.fcr-resumo) .app-shell__content { padding: 0; max-width: none; }
+  .fcr-resumo, .fcr-grupo { overflow: visible; box-shadow: none; }
+  .fcr-scroll { overflow: visible; }
+  .fcr-tabela { min-width: 0; font-size: 8.5pt; }
+  .fcr-item, .fcr-embalagem { min-width: 0; }
+  .fcr-tabela thead { display: table-header-group; } /* cabecalho de colunas repete em cada pagina */
+  .fcr-tabela tr { break-inside: avoid; }
+  .fcr-grupo ~ .fcr-grupo { break-before: page; } /* uma fonte por pagina; a 1a fica com o resumo */
+  .fcr-linha--vencida th, .fcr-linha--vencida td, .fcr-grupo .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

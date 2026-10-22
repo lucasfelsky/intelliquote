@@ -61,4 +61,11 @@ router.get(
   ForecastController.getRelatorioCompras,
 );
 
+router.get(
+  '/forecast/snapshots/:id/relatorio-compras/xlsx',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getRelatorioComprasXlsx,
+);
+
 export { router as forecastRoutes };

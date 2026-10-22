@@ -8,6 +8,10 @@ import {
   type EmbalagemCadastrada,
   type RelatorioCompras,
 } from '../utils/forecastRelatorioCompras';
+import {
+  gerarXlsxRelatorioCompras,
+  nomeArquivoRelatorioCompras,
+} from '../utils/forecastRelatorioComprasXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 
@@ -196,5 +200,15 @@ export class ForecastSnapshotService {
   static async getRelatorioCompras(id: number, hoje?: string): Promise<RelatorioCompras> {
     const calc = await ForecastSnapshotService.getCalculated(id, hoje);
     return montarRelatorioCompras(calc, EMBALAGENS_CADASTRADAS);
+  }
+
+  // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.
+  static async getRelatorioComprasXlsx(
+    id: number,
+    hoje?: string,
+  ): Promise<{ fileName: string; contentBase64: string }> {
+    const relatorio = await ForecastSnapshotService.getRelatorioCompras(id, hoje);
+    const buffer = await gerarXlsxRelatorioCompras(relatorio);
+    return { fileName: nomeArquivoRelatorioCompras(relatorio.quinzena), contentBase64: buffer.toString('base64') };
   }
 }
