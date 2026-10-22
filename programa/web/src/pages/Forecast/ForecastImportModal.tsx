@@ -18,6 +18,7 @@ import {
   type ForecastWorkbookBody,
 } from '@/services/forecast';
 import { inteiroBr } from './forecastPainel';
+import { inativosDosPendentes, useDialogoCompletar } from './ForecastPendentesCadastro';
 import ForecastResumoDbcorp from './ForecastResumoDbcorp';
 import ForecastResumoPlanilha from './ForecastResumoPlanilha';
 import {
@@ -31,7 +32,10 @@ import {
   rotuloDoSlot,
   slotsSemLinhasUteis,
   SLOTS_DBCORP,
+  textoEntendiProntidao,
 } from './forecastImport';
+import { mensagemCadastroNaPrevia, type EstadoPrevia } from './forecastPendentes';
+import type { ResultadoCadastro } from './ForecastCompletarCadastroModal';
 
 type Aba = 'planilha' | 'dbcorp';
 type Fase = 'lendo' | 'previa' | 'gravando' | null;
@@ -80,6 +84,9 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState('');
   const [fase, setFase] = useState<Fase>(null);
+  // Retorno do "Completar cadastro" dentro do import: o cadastro gravou e a pre-visualizacao roda de novo.
+  const [cadastro, setCadastro] = useState<{ resultado: ResultadoCadastro; estado: EstadoPrevia } | null>(null);
+  const cadastroRef = useRef<HTMLDivElement>(null);
   // Muda a `key` do <input type="file"> ao remover: o campo volta vazio e reescolher o mesmo arquivo dispara `change`.
   const [versoesInput, setVersoesInput] = useState<Record<string, number>>({});
   const emCurso = useRef(false);
@@ -90,11 +97,17 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     if (erro) erroRef.current?.scrollIntoView?.({ block: 'nearest' });
   }, [erro]);
 
+  // O botao do codigo some quando ele sai da lista: o foco vai para a mensagem de retorno (aria-live).
+  useEffect(() => {
+    if (cadastro?.estado === 'atualizando') cadastroRef.current?.focus();
+  }, [cadastro?.estado]);
+
   const rotulo = rotuloDaQuinzena(baseDate, quinzena);
   const rotuloExiste = rotulo !== '' && quinzenasExistentes.includes(rotulo);
   const ocupado = fase !== null;
 
   const descartar = () => {
+    setCadastro(null);
     setPrevia(null);
     setEntendi(false);
     setEntendiProntidao(false);
@@ -110,6 +123,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const aoFalhar = {
     onError: (err: unknown) => {
       setErro(forecastImportErrorMessage(err, rotulo));
+      setCadastro((c) => (c?.estado === 'atualizando' ? { ...c, estado: 'falhou' } : c));
       avisarSeInconclusivo(err);
     },
     onSettled: () => {
@@ -137,6 +151,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
       setPrevia(pronta);
       setEntendi(false);
       setEntendiProntidao(false);
+      setCadastro((c) => (c?.estado === 'atualizando' ? { ...c, estado: 'atualizada' } : c));
     },
     ...aoFalhar,
   });
@@ -204,6 +219,16 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     setFase('lendo');
     previsualizar.mutate();
   };
+
+  // Cadastro gravado: pre-visualiza de novo com os MESMOS arquivos (o backend re-le; nada vem do cliente).
+  const dialogo = useDialogoCompletar((resultado) => {
+    if (emCurso.current) return;
+    emCurso.current = true;
+    setErro('');
+    setCadastro({ resultado, estado: 'atualizando' });
+    setFase('lendo');
+    previsualizar.mutate();
+  });
 
   const aoConfirmar = () => {
     if (emCurso.current || !previa) return;
@@ -349,7 +374,12 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
             {faltas.length > 0 && <p className="fci-faltam">Faltam: {faltas.join(', ')}</p>}
 
             {previa?.aba === 'planilha' && <ForecastResumoPlanilha resumo={previa.resumo} />}
-            {previa?.aba === 'dbcorp' && <ForecastResumoDbcorp resumo={previa.resumo} />}
+            {cadastro && (
+              <div ref={cadastroRef} className="alert alert--success" role="status" tabIndex={-1}>
+                {mensagemCadastroNaPrevia(cadastro.resultado, cadastro.estado)}
+              </div>
+            )}
+            {previa?.aba === 'dbcorp' && <ForecastResumoDbcorp resumo={previa.resumo} onCompletar={dialogo.abrir} />}
 
             {previa?.aba === 'planilha' && efetivas && (
               <fieldset className="fci-opcoes" disabled={ocupado}>
@@ -394,10 +424,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                   disabled={ocupado}
                   onChange={(e) => setEntendiProntidao(e.target.checked)}
                 />
-                <span>
-                  Entendi que {inteiroBr(prontidao.linhas)} linhas ({inteiroBr(prontidao.kg)} kg) do FUP com DATA PRONTIDÃO
-                  não reconhecida ficam fora das chegadas.
-                </span>
+                <span>{textoEntendiProntidao(prontidao, inteiroBr)}</span>
               </label>
             )}
 
@@ -420,6 +447,11 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
               )}
             </div>
           </>
+        )}
+        {dialogo.renderizar(
+          previa?.aba === 'dbcorp' && previa.resumo.pendentes
+            ? inativosDosPendentes(previa.resumo.pendentes.itens)
+            : undefined,
         )}
       </div>
     </Modal>

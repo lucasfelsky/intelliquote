@@ -1,5 +1,6 @@
 import { api, ApiError } from '@/api/client';
 import { messageOf } from '@/services/quoteResponses';
+import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
 export type ForecastStatus = 'nao' | 'cotando' | 'confirmado' | 'po' | 'preco';
 export type ForecastOrigin = 'planilha' | 'dbcorp';
@@ -394,6 +395,8 @@ export interface ForecastDbcorpSummary {
     mesAnterior: ForecastHistoricoMensal | null;
   };
   relatorios: Partial<Record<ForecastDbcorpSlot, ForecastRelatorioResumo>>;
+  /** Codigos do DBCorp fora do cadastro (PR 3B); ausente/null em backend antigo ou sem quinzena montada. */
+  pendentes?: ForecastPendentesResumo | null;
   avisos: string[];
   erros: string[];
 }

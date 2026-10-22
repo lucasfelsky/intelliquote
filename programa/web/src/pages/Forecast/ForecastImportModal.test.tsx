@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ForecastImportModal from './ForecastImportModal';
 
 vi.mock('@/api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), del: vi.fn() },
   ApiError: class ApiError extends Error {
     status: number;
     body: unknown;
@@ -19,6 +19,7 @@ vi.mock('@/api/client', () => ({
 import { api, ApiError } from '@/api/client';
 
 const post = vi.mocked(api.post);
+const get = vi.mocked(api.get);
 const MB = 1024 * 1024;
 
 // ---------- dados 100% sinteticos ----------
@@ -903,5 +904,259 @@ describe('ForecastImportModal - privacidade', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect(setItem).not.toHaveBeenCalled();
     for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
+  const pend = (over: Record<string, unknown>) => ({
+    codigo: 'TST0901',
+    situacao: 'sem_cadastro',
+    produtoInativo: null,
+    vendasMes: 20,
+    vendasAtual: 0,
+    vendasAnual: 1200,
+    programacao: 0,
+    chegadas: 80,
+    saldo: 0,
+    ...over,
+  });
+  const inativo = () =>
+    pend({ codigo: 'TST0902', situacao: 'produto_inativo', produtoInativo: { id: 9, nome: 'PRODUTO 009' } });
+  const pendentes = (itens: unknown[] = [pend({}), inativo()]) => ({
+    itens,
+    totalItens: itens.length,
+    omitidos: 0,
+    soSaldo: { codigos: 0, kg: 0 },
+  });
+  const regiao = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+
+  beforeEach(() => {
+    get.mockReset();
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/forecast/sources') {
+        return { data: [{ id: 3, name: 'FONTE 001', leadTimeDays: 45, clearanceDays: null, isActive: true }] };
+      }
+      if (path === '/v1/item-families') return { data: [{ id: 7, name: 'FAMILIA A', isActive: true }] };
+      if (path === '/v1/forecast/products') {
+        return {
+          data: [
+            { id: 1, name: 'PRODUTO 001', isActive: true, origin: 'planilha', codes: [{ id: 11, position: 1, code: 'TST0001' }] },
+          ],
+        };
+      }
+      throw new Error(`GET inesperado: ${path}`);
+    });
+  });
+
+  it('mostra o bloco com a tabela, o texto "FORA do calculo" e um botao por codigo SEM cadastro', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (2)' })).toBeTruthy();
+    expect(
+      regiao().getByText('Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.'),
+    ).toBeTruthy();
+    const tabela = regiao().getByRole('table', { name: /Códigos do DBCorp pendentes de cadastro/ });
+    expect(within(tabela).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
+      'Código',
+      'Situação',
+      'Vendas mês ant.',
+      'Vendas mês atual',
+      'Vendas anual',
+      'Programação',
+      'Chegadas',
+      'Ação',
+    ]);
+    expect(regiao().getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);
+    expect(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' })).toBeTruthy();
+  });
+
+  it('codigo de produto INATIVO: nome do produto e explicacao, sem botao', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    const linha = regiao().getByRole('rowheader', { name: 'TST0902' }).closest('tr') as HTMLElement;
+    expect(within(linha).getByText('Produto inativo')).toBeTruthy();
+    expect(within(linha).getByText('PRODUTO 009')).toBeTruthy();
+    expect(within(linha).queryByRole('button')).toBeNull();
+    expect(
+      regiao().getByText(
+        /Reative o produto para o código voltar ao cálculo\. A reativação de produto ainda não está disponível nesta tela\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('sem pendentes (null ou lista vazia): nenhum bloco', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: null }));
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+    cleanup();
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes([]) }));
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+  });
+
+  it('completar: grava, pre-visualiza de novo com os MESMOS arquivos e mostra a mensagem (foco nela)', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    const corpoInicial = post.mock.calls[0]?.[1];
+
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.change(await screen.findByLabelText('Nome do produto'), { target: { value: 'PRODUTO 901' } });
+    fireEvent.change(screen.getByLabelText('Fonte'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Família'), { target: { value: '7' } });
+    // 1o POST depois do preview = o cadastro; 2o = a nova pre-visualizacao (sem o pendente).
+    post.mockResolvedValueOnce({ data: { id: 55 } });
+    post.mockResolvedValueOnce({ data: resumoDbcorp({ pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar produto' }));
+
+    const status = await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    expect(status.getAttribute('role')).toBe('status');
+    expect(post.mock.calls.map((c) => c[0])).toEqual([
+      '/v1/forecast/import/dbcorp/preview',
+      '/v1/forecast/products',
+      '/v1/forecast/import/dbcorp/preview',
+    ]);
+    expect(post.mock.calls[2]?.[1]).toEqual(corpoInicial);
+    await waitFor(() => expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (1)' })).toBeTruthy());
+    expect(regiao().queryByRole('button', { name: /Completar cadastro do código/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Completar cadastro' })).toBeNull();
+    expect(document.activeElement).toBe(status);
+  });
+
+  it('a nova pre-visualizacao falhou: o cadastro continua gravado e a mensagem diz isso', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Adicionar a produto existente' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /PRODUTO 001/ }));
+    post.mockResolvedValueOnce({
+      data: { produtoId: 1, produtoOrigem: 'planilha', codigo: { id: 9, posicao: 2, codigo: 'TST0901' } },
+    });
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    expect(
+      await screen.findByText(
+        /Cadastro gravado\. A pré-visualização não foi atualizada: pré-visualize de novo\. Inclua o código também na planilha PO\.COMP\.01/,
+      ),
+    ).toBeTruthy();
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+  });
+
+  it('Esc no dialogo de cadastro devolve o foco ao botao "Completar cadastro" e nao fecha a importacao', async () => {
+    const { onFechar } = renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    const gatilho = regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' });
+    gatilho.focus();
+    fireEvent.click(gatilho);
+    await screen.findByRole('heading', { name: 'Completar cadastro' });
+    const dialogos = document.querySelectorAll('dialog');
+    fireEvent(dialogos[dialogos.length - 1] as HTMLDialogElement, new Event('cancel', { cancelable: true }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Completar cadastro' })).toBeNull());
+    expect(document.activeElement).toBe(gatilho);
+    expect(onFechar).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Importar quinzena' })).toBeTruthy();
+    // Nada foi gravado nem pre-visualizado de novo.
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('trocar um arquivo depois do preview descarta o bloco de pendentes', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    escolher('fup', arquivo('outro-teste.xlsx'));
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+  });
+});
+
+describe('ForecastImportModal - ajustes do 3A (PR 3B-2)', () => {
+  const regiao = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+  const confirmar = () => screen.getByRole('button', { name: 'Confirmar importação' }) as HTMLButtonElement;
+  const fupComEtaFinal = (over: Record<string, unknown> = {}) =>
+    rel({
+      porStatus: [
+        { status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 },
+        { status: 'CONCLUÍDO', incluido: false, linhas: 4, kg: 900 },
+      ],
+      regra: {
+        id: 'F3',
+        etaPorEtdDias: 35,
+        etaPorProntidaoDias: 35,
+        excluiEtaFinal: true,
+        statusExcluidos: ['ATRAC. AG. LIBERAÇÃO'],
+      },
+      semData: { linhas: 2, kg: 1700, porStatus: [{ status: 'STATUS A', linhas: 2, kg: 1700 }] },
+      excluidas: {
+        atracadas: { linhas: 0, kg: 0 },
+        etaFinalPreenchida: {
+          linhas: 3,
+          kg: 3000,
+          porStatus: [{ status: 'STATUS A', linhas: 3, kg: 3000 }],
+          depoisDaDataBase: { linhas: 0, kg: 0 },
+        },
+      },
+      prontidaoNaoReconhecida: { linhas: 0, kg: 0, detalhes: [], omitidos: 0 },
+      ...over,
+    });
+
+  it('"Em aberto" e "% do em aberto" nao contam as linhas com ETA FINAL excluidas pela F3', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({}, { fup: fupComEtaFinal() }));
+    // 8000 do status que entra - 3000 de ETA FINAL = 5000; 1700 sem data = 34% de 5000 (era 21% de 8000).
+    expect(regiao().getByText('Em aberto: 5.000 kg')).toBeTruthy();
+    expect(regiao().getByText('Sem data: 2 linhas · 1.700 kg (34% do em aberto) ficaram FORA das chegadas')).toBeTruthy();
+  });
+
+  it('backend antigo (sem `excluidas`): "Em aberto" como antes', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({}, { fup: rel({ porStatus: [{ status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 }] }) }),
+    );
+    expect(regiao().getByText('Em aberto: 8.000 kg')).toBeTruthy();
+  });
+
+  it('1 linha com DATA PRONTIDAO nao reconhecida: checkbox no singular', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp(
+        {},
+        {
+          fup: fupComEtaFinal({
+            prontidaoNaoReconhecida: {
+              linhas: 1,
+              kg: 40,
+              detalhes: [{ linha: 15, status: 'AG. PAGAMENTO (ANT)', codigo: 'TST0008', kg: 40, texto: 'ASAP' }],
+              omitidos: 0,
+            },
+          }),
+        },
+      ),
+    );
+    const caixa = screen.getByLabelText(
+      'Entendi que 1 linha (40 kg) do FUP com DATA PRONTIDÃO não reconhecida fica fora das chegadas.',
+    ) as HTMLInputElement;
+    expect(caixa.checked).toBe(false);
+    expect(confirmar().disabled).toBe(true);
+    fireEvent.click(caixa);
+    expect(confirmar().disabled).toBe(false);
+  });
+
+  it('sem a coluna DATA PRONTIDAO o aviso de DATA PO ausente nao aparece junto (uma vez so)', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({
+        avisos: [
+          'FUP: coluna "DATA PRONTIDÃO" não encontrada - linhas sem ETA nem ETD ficam de fora.',
+          'FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.',
+        ],
+      }),
+    );
+    expect(regiao().getByText(/coluna "DATA PRONTIDÃO" não encontrada/)).toBeTruthy();
+    expect(regiao().queryByText(/coluna "DATA PO" não encontrada/)).toBeNull();
+  });
+
+  it('so a DATA PO ausente: o aviso continua', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({ avisos: ['FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.'] }),
+    );
+    expect(regiao().getByText(/coluna "DATA PO" não encontrada/)).toBeTruthy();
   });
 });

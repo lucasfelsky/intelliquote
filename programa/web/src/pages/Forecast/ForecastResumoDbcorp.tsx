@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ForecastDbcorpSlot, ForecastDbcorpSummary, ForecastRelatorioResumo } from '@/services/forecast';
 import {
+  avisosSemRedundancia,
   diasDaRegraFup,
   kgEmAberto,
   mesAno,
@@ -12,6 +13,9 @@ import {
 } from './forecastImport';
 import { AvisosEErros, useFocoNoTitulo } from './ForecastResumoPlanilha';
 import { dataBr, inteiroBr } from './forecastPainel';
+import { TabelaPendentes } from './ForecastPendentesCadastro';
+import { TEXTO_FORA_DO_CALCULO_PREVIA } from './forecastPendentes';
+import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
 const SIM_NAO = (v: boolean) => (v ? 'Sim' : 'Não');
 
@@ -148,11 +152,12 @@ function BlocoProgramacao({ relatorio }: { relatorio: ForecastRelatorioResumo })
 
 function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
   const porStatus = relatorio.porStatus ?? [];
-  const emAberto = kgEmAberto(porStatus);
+  const excluidas = relatorio.excluidas;
+  // As linhas com ETA FINAL ficam no status que entra, mas a regra F3 as exclui: nao contam como "em aberto".
+  const emAberto = kgEmAberto(porStatus, excluidas?.etaFinalPreenchida.kg ?? 0);
   const semData = relatorio.semData ?? null;
   const percentual = semData ? percentualSemData(semData, emAberto) : null;
   const dias = diasDaRegraFup(relatorio.regra);
-  const excluidas = relatorio.excluidas;
   const naoReconhecida = relatorio.prontidaoNaoReconhecida;
   return (
     <Bloco titulo="FUP por status">
@@ -260,6 +265,28 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
   );
 }
 
+function BlocoPendentes({
+  pendentes,
+  onCompletar,
+}: {
+  pendentes: ForecastPendentesResumo;
+  onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
+}) {
+  return (
+    <Bloco titulo={`Pendentes de cadastro (${inteiroBr(pendentes.totalItens)})`}>
+      <p>{TEXTO_FORA_DO_CALCULO_PREVIA}</p>
+      <TabelaPendentes
+        itens={pendentes.itens}
+        omitidos={pendentes.omitidos}
+        soSaldo={pendentes.soSaldo}
+        podeCompletar={onCompletar !== undefined}
+        onCompletar={onCompletar}
+        legenda="Códigos do DBCorp pendentes de cadastro"
+      />
+    </Bloco>
+  );
+}
+
 function BlocoHistorico({ historico }: { historico: ForecastDbcorpSummary['historico'] }) {
   const anterior = historico.mesAnterior;
   return (
@@ -297,7 +324,14 @@ function BlocoHistorico({ historico }: { historico: ForecastDbcorpSummary['histo
   );
 }
 
-export default function ForecastResumoDbcorp({ resumo }: { resumo: ForecastDbcorpSummary }) {
+export default function ForecastResumoDbcorp({
+  resumo,
+  onCompletar,
+}: {
+  resumo: ForecastDbcorpSummary;
+  /** Abre o dialogo de completar o cadastro de um codigo pendente (sem a prop, a lista e so de leitura). */
+  onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
+}) {
   const tituloRef = useFocoNoTitulo();
   const presentes = SLOTS_DBCORP.flatMap((s) => {
     const relatorio = resumo.relatorios[s.id];
@@ -321,7 +355,7 @@ export default function ForecastResumoDbcorp({ resumo }: { resumo: ForecastDbcor
       <p className="fci-resumo__sub">
         Chegadas: {resumo.meses.chegada.join(', ')} · Programação: {resumo.meses.programacao.join(', ')}
       </p>
-      <AvisosEErros erros={resumo.erros} avisos={resumo.avisos} />
+      <AvisosEErros erros={resumo.erros} avisos={avisosSemRedundancia(resumo.avisos)} />
       <div className="table-wrapper">
         <table className="table">
           <caption className="sr-only">Resumo por relatório</caption>
@@ -361,6 +395,9 @@ export default function ForecastResumoDbcorp({ resumo }: { resumo: ForecastDbcor
           </tbody>
         </table>
       </div>
+      {resumo.pendentes && resumo.pendentes.totalItens > 0 && (
+        <BlocoPendentes pendentes={resumo.pendentes} onCompletar={onCompletar} />
+      )}
       {saldo && <BlocoSaldo relatorio={saldo} />}
       {vendas.length > 0 && (
         <Bloco titulo="VENDAS">

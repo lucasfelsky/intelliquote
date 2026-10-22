@@ -232,9 +232,17 @@ export function totaisDeposito(
   return { incluido, excluido };
 }
 
-/** FUP: kg dos status que entram. */
-export function kgEmAberto(porStatus: ReadonlyArray<Pick<ForecastPorStatus, 'incluido' | 'kg'>>): number {
-  return porStatus.reduce((soma, s) => (s.incluido ? soma + (s.kg ?? 0) : soma), 0);
+/**
+ * FUP: kg dos status que entram, SEM as linhas com ETA FINAL preenchida (a regra F3 as exclui das chegadas: ja
+ * chegaram). O backend as mantem dentro do status que entra, entao `etaFinalKg`
+ * (`excluidas.etaFinalPreenchida.kg`) sai da soma. Backend antigo (sem `excluidas`): 0.
+ */
+export function kgEmAberto(
+  porStatus: ReadonlyArray<Pick<ForecastPorStatus, 'incluido' | 'kg'>>,
+  etaFinalKg = 0,
+): number {
+  const soma = porStatus.reduce((total, s) => (s.incluido ? total + (s.kg ?? 0) : total), 0);
+  return Math.max(0, soma - etaFinalKg);
 }
 
 /** % inteiro do FUP sem data sobre o em aberto; `null` se o em aberto for 0. */
@@ -254,6 +262,24 @@ export function prontidaoPendente(
 ): { linhas: number; kg: number } | null {
   const p = resumo.relatorios.fup?.prontidaoNaoReconhecida;
   return p && p.linhas > 0 ? { linhas: p.linhas, kg: p.kg } : null;
+}
+
+/** `1 linha ... fica` / `2 linhas ... ficam`: texto do checkbox da trava suave da DATA PRONTIDAO. */
+export function textoEntendiProntidao(p: { linhas: number; kg: number }, formatar: (n: number) => string): string {
+  const singular = p.linhas === 1;
+  return `Entendi que ${formatar(p.linhas)} ${singular ? 'linha' : 'linhas'} (${formatar(p.kg)} kg) do FUP com DATA PRONTIDÃO não reconhecida ${singular ? 'fica' : 'ficam'} fora das chegadas.`;
+}
+
+const AVISO_SEM_PRONTIDAO = 'coluna "DATA PRONTIDÃO" não encontrada';
+const AVISO_SEM_DATA_PO = 'coluna "DATA PO" não encontrada';
+
+/**
+ * Avisos do resumo sem redundancia: sem a coluna DATA PRONTIDAO, o aviso de DATA PO ausente ("o ano da DATA
+ * PRONTIDAO usa a data base") nao tem o que dizer; fica so o da prontidao. Ordem e demais textos intactos.
+ */
+export function avisosSemRedundancia(avisos: readonly string[]): string[] {
+  const semProntidao = avisos.some((a) => a.includes(AVISO_SEM_PRONTIDAO));
+  return avisos.filter((a) => !(semProntidao && a.includes(AVISO_SEM_DATA_PO)));
 }
 
 // ---------- leitura dos arquivos escolhidos (checa antes de ler e depois de montar o corpo) ----------
