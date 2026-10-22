@@ -109,12 +109,49 @@ const RESUMOS = [
   { id: 8, label: '11-1', baseDate: '2026-11-05T00:00:00.000Z', half: 1, origin: 'dbcorp', months: MONTHS, files: [], createdById: 1, createdAt: '2026-11-05T12:00:00.000Z' },
 ];
 
+function relatorioDe(id: number) {
+  return {
+    quinzena: { id, label: id === 8 ? '11-1' : '10-2', baseDate: '2026-10-15', half: 2, origin: 'planilha', hoje: '2026-10-20' },
+    totais: { itens: 1, fontes: 1, vencidas: 0, semEmbalagem: 1, multiplasEmbalagens: 0 },
+    fora: { semLeadTime: 0, semConsumoSemFalta: 0 },
+    grupos: [
+      {
+        fonte: 'FONTE 2',
+        leadTimeDias: 30,
+        dataLimiteMaisUrgente: '2026-10-22',
+        vencidas: 0,
+        itens: [
+          {
+            linha: 4,
+            n: 2,
+            item: 'PRODUTO B',
+            codigos: ['C0003'],
+            status: 'cotando',
+            demanda: -40,
+            quantidadeSugerida: 40,
+            embalagem: { usada: null, cadastradas: [], multiplas: false },
+            quantidadeEmbalagens: null,
+            quantidadeFinal: 40,
+            naoFraciona: false,
+            ruptura: { indiceMes: 1, anoMes: '2026-11', data: '2026-11-21', jaNaDataBase: false },
+            dataLimite: '2026-10-22',
+            vencida: false,
+            leadTimeDias: 30,
+            emAndamento: { chegadas: [], programacoes: [] },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function mockApi(detalhes: Record<number, unknown> | ((id: number) => unknown), lista: unknown = RESUMOS) {
   get.mockImplementation(async (path: string) => {
     if (path === '/v1/forecast/snapshots') {
       if (lista instanceof Error) throw lista;
       return { data: lista };
     }
+    if (path.endsWith('/relatorio-compras')) return { data: relatorioDe(Number(path.split('/')[4])) };
     const id = Number(path.split('/').pop());
     const value = typeof detalhes === 'function' ? detalhes(id) : detalhes[id];
     if (value instanceof Error) throw value;
@@ -134,7 +171,12 @@ function renderPage(url = '/forecast') {
 }
 
 const detalhesChamados = () =>
-  get.mock.calls.map((c) => String(c[0])).filter((p) => p.startsWith('/v1/forecast/snapshots/'));
+  get.mock.calls
+    .map((c) => String(c[0]))
+    .filter((p) => p.startsWith('/v1/forecast/snapshots/') && !p.endsWith('/relatorio-compras'));
+
+const relatoriosChamados = () =>
+  get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith('/relatorio-compras'));
 
 const nomesDosItens = () => screen.queryAllByRole('button', { name: /PRODUTO [ABC]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
@@ -490,5 +532,62 @@ describe('Forecast - importar quinzena', () => {
     // a mensagem some ao trocar de quinzena
     fireEvent.change(screen.getByLabelText('Quinzena'), { target: { value: '7' } });
     await waitFor(() => expect(screen.queryByText('Quinzena 12-2 importada.')).toBeNull());
+  });
+});
+
+describe('Forecast - visao Relatorio de compras', () => {
+  const botaoPainel = () => screen.getByRole('button', { name: 'Painel' });
+  const botaoCompras = () => screen.getByRole('button', { name: 'Relatório de compras' });
+
+  it('o padrao e o painel e nao pede o relatorio', async () => {
+    mockApi({ 7: detalhe() });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(botaoPainel().getAttribute('aria-pressed')).toBe('true');
+    expect(botaoCompras().getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('region', { name: 'Grade do Forecast' })).toBeTruthy();
+    expect(relatoriosChamados()).toEqual([]);
+  });
+
+  it('clicar em "Relatorio de compras" pede o relatorio, esconde a grade e permite voltar ao painel', async () => {
+    mockApi({ 7: detalhe() });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    fireEvent.click(botaoCompras());
+
+    expect(await screen.findByText('1 item em 1 fonte')).toBeTruthy();
+    expect(botaoCompras().getAttribute('aria-pressed')).toBe('true');
+    expect(botaoPainel().getAttribute('aria-pressed')).toBe('false');
+    expect(relatoriosChamados()).toEqual(['/v1/forecast/snapshots/7/relatorio-compras']);
+    expect(screen.queryByRole('region', { name: 'Grade do Forecast' })).toBeNull();
+    expect(screen.queryByText('Cálculo idêntico ao da planilha')).toBeNull();
+    expect(document.querySelector('.fc-grid')).toBeNull();
+
+    fireEvent.click(botaoPainel());
+    expect(await screen.findByRole('region', { name: 'Grade do Forecast' })).toBeTruthy();
+    expect(screen.queryByText('1 item em 1 fonte')).toBeNull();
+  });
+
+  it('?quinzena=8&visao=compras abre direto o relatorio da quinzena pedida', async () => {
+    mockApi({ 7: detalhe(), 8: detalhe({ id: 8, label: '11-1', baseDate: '2026-11-05', half: 1, origin: 'dbcorp', conferencia: null }) });
+    renderPage('/forecast?quinzena=8&visao=compras');
+    expect(await screen.findByText('1 item em 1 fonte')).toBeTruthy();
+    expect(botaoCompras().getAttribute('aria-pressed')).toBe('true');
+    expect(relatoriosChamados()).toEqual(['/v1/forecast/snapshots/8/relatorio-compras']);
+    expect(screen.queryByRole('region', { name: 'Grade do Forecast' })).toBeNull();
+  });
+
+  it('trocar a quinzena mantem a visao; trocar a visao mantem a quinzena', async () => {
+    mockApi({ 7: detalhe(), 8: detalhe({ id: 8, label: '11-1', baseDate: '2026-11-05', half: 1, origin: 'dbcorp', conferencia: null }) });
+    renderPage('/forecast?visao=compras');
+    await screen.findByText('1 item em 1 fonte');
+    fireEvent.change(screen.getByLabelText('Quinzena'), { target: { value: '8' } });
+    await waitFor(() => expect(relatoriosChamados()).toContain('/v1/forecast/snapshots/8/relatorio-compras'));
+    expect(botaoCompras().getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getByLabelText('Quinzena') as HTMLSelectElement).value).toBe('8');
+
+    fireEvent.click(botaoPainel());
+    expect(await screen.findByRole('region', { name: 'Grade do Forecast' })).toBeTruthy();
+    expect((screen.getByLabelText('Quinzena') as HTMLSelectElement).value).toBe('8');
   });
 });

@@ -3,6 +3,11 @@ import { prisma } from '../lib/prisma';
 import { FORECAST_MAX_DIVERGENCES } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
+import {
+  montarRelatorioCompras,
+  type EmbalagemCadastrada,
+  type RelatorioCompras,
+} from '../utils/forecastRelatorioCompras';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 
@@ -60,6 +65,9 @@ export function halfDoRotulo(label: string): 1 | 2 {
 }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
+
+// Provedor de embalagens: o PR 2C troca por leitura do cadastro (ForecastProductCode).
+const EMBALAGENS_CADASTRADAS: EmbalagemCadastrada[] = [];
 
 export class ForecastSnapshotService {
   // 409 quando ja existe quinzena nao deletada com o mesmo rotulo (o Prisma nao expressa unique parcial).
@@ -171,6 +179,8 @@ export class ForecastSnapshotService {
           obs: produto?.obs ?? '',
           // So o selo (flag X da coluna AV); o valor do preco fechado nao sai da API.
           precoFixo: (produto?.precoFechado ?? '').trim().toUpperCase() === 'X',
+          // Flag X da coluna AX: o relatorio de compras so sinaliza, nao muda o arredondamento.
+          naoFraciona: (produto?.naoFraciona ?? '').trim().toUpperCase() === 'X',
           codigos: (produto?.codigos ?? []).filter((c) => c !== ''),
           fonte: produto?.fonte ?? '',
           status: produto?.status ?? 'nao',
@@ -180,5 +190,11 @@ export class ForecastSnapshotService {
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
     };
+  }
+
+  // Relatorio de compras: so a quinzena calculada + o provedor de embalagens (reusa o 404 de getCalculated).
+  static async getRelatorioCompras(id: number, hoje?: string): Promise<RelatorioCompras> {
+    const calc = await ForecastSnapshotService.getCalculated(id, hoje);
+    return montarRelatorioCompras(calc, EMBALAGENS_CADASTRADAS);
   }
 }

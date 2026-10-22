@@ -55,6 +55,8 @@ export interface ForecastLinha {
   obs?: string;
   /** Selo "Fixo": so sim/nao. O valor do preco fechado nunca sai da API. */
   precoFixo?: boolean;
+  /** Flag X da coluna AX ("nao fraciona"). */
+  naoFraciona?: boolean;
 }
 
 export interface ForecastDivergencia {
@@ -91,6 +93,7 @@ export interface ForecastSnapshotDetail {
 export const forecastKeys = {
   snapshots: ['forecast', 'snapshots'] as const,
   snapshot: (id: number) => ['forecast', 'snapshot', id] as const,
+  relatorio: (id: number) => ['forecast', 'relatorio', id] as const,
 };
 
 export async function listForecastSnapshots(): Promise<ForecastSnapshotSummary[]> {
@@ -100,6 +103,63 @@ export async function listForecastSnapshots(): Promise<ForecastSnapshotSummary[]
 
 export async function getForecastSnapshot(id: number): Promise<ForecastSnapshotDetail> {
   const response = await api.get<{ data: ForecastSnapshotDetail }>(`/v1/forecast/snapshots/${id}`);
+  return response.data;
+}
+
+// ---------- relatorio de compras (PR 2A) ----------
+
+/** Espelha src/utils/forecastRelatorioCompras.ts (`GET /forecast/snapshots/:id/relatorio-compras`). */
+export interface ForecastEmbalagemDoItem {
+  codigo: string;
+  quantidade: number;
+  rotulo: string | null;
+}
+
+export interface ForecastItemRelatorio {
+  linha: number;
+  n: number | null;
+  item: string;
+  codigos: string[];
+  status: ForecastStatus;
+  demanda: number;
+  quantidadeSugerida: number;
+  embalagem: {
+    usada: ForecastEmbalagemDoItem | null;
+    cadastradas: ForecastEmbalagemDoItem[];
+    multiplas: boolean;
+  };
+  quantidadeEmbalagens: number | null;
+  quantidadeFinal: number;
+  naoFraciona: boolean;
+  ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
+  dataLimite: string | null;
+  vencida: boolean;
+  leadTimeDias: number;
+  emAndamento: {
+    chegadas: Array<{ anoMes: string; quantidade: number }>;
+    programacoes: Array<{ anoMes: string; quantidade: number }>;
+  };
+}
+
+export interface ForecastGrupoRelatorio {
+  fonte: string;
+  leadTimeDias: number;
+  dataLimiteMaisUrgente: string | null;
+  vencidas: number;
+  itens: ForecastItemRelatorio[];
+}
+
+export interface ForecastRelatorioCompras {
+  quinzena: { id: number; label: string; baseDate: string; half: number; origin: string; hoje: string };
+  totais: { itens: number; fontes: number; vencidas: number; semEmbalagem: number; multiplasEmbalagens: number };
+  fora: { semLeadTime: number; semConsumoSemFalta: number };
+  grupos: ForecastGrupoRelatorio[];
+}
+
+export async function getForecastRelatorioCompras(id: number): Promise<ForecastRelatorioCompras> {
+  const response = await api.get<{ data: ForecastRelatorioCompras }>(
+    `/v1/forecast/snapshots/${id}/relatorio-compras`,
+  );
   return response.data;
 }
 

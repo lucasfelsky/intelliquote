@@ -13,6 +13,7 @@ import {
   dMmm,
   FILTROS,
   inteiroBr,
+  mesAbrevDoAnoMes,
   mesesDaProjecao,
   nomeDoMes,
   normalizarBusca,
@@ -120,6 +121,13 @@ describe('meses', () => {
   it('mesesDaProjecao: 6 rotulos mmm/aaaa e virada de ano', () => {
     expect(mesesDaProjecao('2026-10-15')).toEqual(['out/2026', 'nov/2026', 'dez/2026', 'jan/2027', 'fev/2027', 'mar/2027']);
     expect(mesesDaProjecao('2026-12-01')).toEqual(['dez/2026', 'jan/2027', 'fev/2027', 'mar/2027', 'abr/2027', 'mai/2027']);
+  });
+
+  it('mesAbrevDoAnoMes: AAAA-MM -> mmm/aaaa; invalido = travessao', () => {
+    expect(mesAbrevDoAnoMes('2026-10')).toBe('out/2026');
+    expect(mesAbrevDoAnoMes('2027-02')).toBe('fev/2027');
+    expect(mesAbrevDoAnoMes('2026-13')).toBe('—');
+    expect(mesAbrevDoAnoMes('lixo')).toBe('—');
   });
 
   it('nomeDoMes: por extenso, com deslocamento', () => {
@@ -235,6 +243,16 @@ describe('filtros e busca', () => {
 
   it('contagens sobre a quinzena inteira (Q = 0 fica fora de "Demanda <= 0" e de "Falta ate")', () => {
     expect(contarPorFiltro(linhas)).toEqual({ todos: 4, demanda: 1, falta: 1, andamento: 2 });
+  });
+
+  it('"Demanda <= 0" segue a regra do relatorio: sem consumo so entra com demanda negativa', () => {
+    const demanda = FILTROS.find((f) => f.id === 'demanda')!;
+    expect(demanda.teste(linha({ AN: 0, Q: 0 }))).toBe(false);
+    expect(demanda.teste(linha({ AN: -3, Q: 0 }))).toBe(true);
+    expect(demanda.teste(linha({ AN: 0, Q: 10 }))).toBe(true);
+    expect(demanda.teste(linha({ AN: 5, Q: 10 }))).toBe(false);
+    expect(demanda.teste(linha({ AN: null, Q: 10 }))).toBe(false);
+    expect(contarPorFiltro([linha({ AN: -3, Q: 0 }), linha({ AN: 0, Q: 0 })]).demanda).toBe(1);
   });
 
   it('rotulo do filtro de falta acompanha o mes da base', () => {

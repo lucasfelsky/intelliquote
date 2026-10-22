@@ -21,6 +21,7 @@ import {
   forecastImportErrorMessage,
   forecastKeys,
   ForecastLocalError,
+  getForecastRelatorioCompras,
   getForecastSnapshot,
   listForecastSnapshots,
   previewForecastDbcorp,
@@ -47,9 +48,19 @@ describe('servico do Forecast', () => {
     expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7');
   });
 
+  it('pede o relatorio de compras da quinzena e desembrulha { data }', async () => {
+    get.mockResolvedValue({ data: { grupos: [] } });
+    await expect(getForecastRelatorioCompras(7)).resolves.toEqual({ grupos: [] });
+    expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7/relatorio-compras');
+  });
+
   it('chaves de cache', () => {
     expect(forecastKeys.snapshots).toEqual(['forecast', 'snapshots']);
     expect(forecastKeys.snapshot(7)).toEqual(['forecast', 'snapshot', 7]);
+  });
+
+  it('a chave do relatorio fica sob ["forecast"] (a invalidacao pos-importacao a cobre)', () => {
+    expect(forecastKeys.relatorio(7)).toEqual(['forecast', 'relatorio', 7]);
   });
 });
 

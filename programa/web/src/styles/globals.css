@@ -2891,3 +2891,39 @@ i.fc-status--preco { background: var(--info); }
 .fc-beta-aviso {
   font-size: 13px;
 }
+
+/* ---- Forecast: relatorio de compras (PR 2A) ---- */
+.fc-visoes { margin-bottom: 4px; }
+.fcr-resumo { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; }
+.fcr-resumo__titulo { margin: 0; font-size: 16px; font-weight: 700; color: var(--ink); }
+.fcr-resumo__lista { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink); }
+.fcr-resumo__alerta { color: var(--danger); }
+.fcr-resumo__fora { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcr-regra { margin-top: 4px; font-size: 13px; color: var(--ink-soft); }
+.fcr-regra summary { cursor: pointer; font-weight: 600; color: var(--primary-700); }
+.fcr-regra summary:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcr-regra p { margin: 6px 0 0; }
+.fcr-grupo { margin-top: 12px; }
+.fcr-scroll { overflow-x: auto; }
+.fcr-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
+.fcr-tabela { width: 100%; min-width: 1180px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fcr-caption { padding: 12px 14px; text-align: left; font-size: 14px; font-weight: 700; color: var(--ink); background: var(--surface-alt); border-bottom: 1px solid var(--border-strong); }
+.fcr-caption__corpo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.fcr-tabela th,
+.fcr-tabela td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--ink); }
+.fcr-tabela thead th { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: var(--ink-soft); background: var(--surface-alt); }
+.fcr-tabela tbody th { font-weight: 400; }
+.fcr-tabela .fcr-num { text-align: right; }
+.fcr-forte { font-weight: 700; }
+.fcr-fraco { color: var(--ink-muted); }
+.fcr-item { display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
+.fcr-item__nome { font-weight: 700; }
+.fcr-item__codigos { font-size: 11px; color: var(--ink-soft); }
+.fcr-embalagem { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 210px; }
+.fcr-embalagem__outras { font-size: 11px; color: var(--ink-soft); }
+.fcr-limite { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fcr-limite__data--vencida { color: var(--danger); }
+.fcr-andamento { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--ink-soft); }
+.fcr-linha--vencida td,
+.fcr-linha--vencida th { background: var(--tone-danger-bg-soft); }
+.fcr-linha--vencida th { border-left: 3px solid var(--danger); }

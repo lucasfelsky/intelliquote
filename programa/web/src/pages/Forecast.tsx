@@ -15,6 +15,7 @@ import {
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
+import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
 import {
   casaBusca,
   colunasDoPainel,
@@ -152,6 +153,7 @@ export default function Forecast() {
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
+  const visao = params.get('visao') === 'compras' ? 'compras' : 'painel';
   const pedida = Number(params.get('quinzena'));
   const escolhida = quinzenas.find((q) => q.id === pedida) ?? quinzenas[0];
   const escolhidaId = escolhida?.id;
@@ -172,6 +174,14 @@ export default function Forecast() {
       botaoImportar.current?.focus();
     }
   }, [importando]);
+
+  // Trocar de visao preserva a quinzena da URL.
+  const mudarVisao = (proxima: 'painel' | 'compras') => {
+    const next = new URLSearchParams(params);
+    if (proxima === 'compras') next.set('visao', 'compras');
+    else next.delete('visao');
+    setParams(next);
+  };
 
   const aoImportar = useCallback(
     async (snapshotId: number, label: string) => {
@@ -213,7 +223,7 @@ export default function Forecast() {
                   value={escolhidaId}
                   onChange={(e) => {
                     setImportada(null);
-                    setParams({ quinzena: e.target.value });
+                    setParams(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
                   }}
                 >
                   {quinzenas.map((q) => (
@@ -257,7 +267,18 @@ export default function Forecast() {
           {forecastErrorMessage(detalhe.error)}
         </div>
       )}
-      {detail && <Painel key={detail.id} detail={detail} />}
+      {detail && (
+        <div className="fc-filtros fc-visoes" role="group" aria-label="Visão">
+          <button type="button" className="fc-filtro" aria-pressed={visao === 'painel'} onClick={() => mudarVisao('painel')}>
+            Painel
+          </button>
+          <button type="button" className="fc-filtro" aria-pressed={visao === 'compras'} onClick={() => mudarVisao('compras')}>
+            Relatório de compras
+          </button>
+        </div>
+      )}
+      {detail && visao === 'painel' && <Painel key={detail.id} detail={detail} />}
+      {detail && visao === 'compras' && <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} />}
       <ForecastImportModal
         aberto={importando}
         onFechar={() => setImportando(false)}
