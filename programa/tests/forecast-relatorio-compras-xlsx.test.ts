@@ -19,6 +19,7 @@ import {
   dataBr,
   gerarXlsxRelatorioCompras,
   inteiroBr,
+  kgBr,
   linhasDoResumo,
   mesAbrev,
   nomeArquivoRelatorioCompras,
@@ -29,6 +30,7 @@ import {
   STATUS_ROTULO,
   dataBr as dataBrWeb,
   inteiroBr as inteiroBrWeb,
+  kgBr as kgBrWeb,
   mesAbrevDoAnoMes,
 } from '../web/src/pages/Forecast/forecastPainel';
 
@@ -263,9 +265,29 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
         } else {
           expect(fill?.fgColor?.argb).toBeUndefined();
         }
-        expect(row.getCell(COL('Em andamento')).alignment?.wrapText).toBe(true);
+        for (const nome of ['Item', 'Códigos', 'Status', 'Embalagem', 'Arredondamento', 'Outras embalagens', 'Ruptura', 'Em andamento'] as const) {
+          expect(row.getCell(COL(nome)).alignment?.wrapText, nome).toBe(true);
+          expect(row.getCell(COL(nome)).alignment?.vertical, nome).toBe('top');
+        }
       });
     }
+  });
+
+  it('kg de embalagem fracionado sai com ate 3 casas, sem virar inteiro', async () => {
+    const r = montarRelatorioCompras(
+      quinzena([
+        linha({ linha: 7, item: 'PRODUTO 007', fonte: 'FONTE 007', codigos: ['C0007', 'C0008', 'C0009'], AN: -3 }),
+      ]),
+      [
+        { codigo: 'C0007', quantidade: 0.5 },
+        { codigo: 'C0008', quantidade: 2.125 },
+        { codigo: 'C0009', quantidade: 1250.5 },
+      ],
+    );
+    const ws = (await carregar(await gerarXlsxRelatorioCompras(r))).getWorksheet(ABA_RELATORIO)!;
+    const n = mapearLinhas(r).grupos[0].primeiroItem;
+    expect(valorDaCelula(ws, n, COL('Embalagem'))).toBe('6 × 0,5 kg (código C0007)');
+    expect(valorDaCelula(ws, n, COL('Outras embalagens'))).toBe('C0008 (2,125 kg), C0009 (1.250,5 kg)');
   });
 
   it('configura a pagina em paisagem, ajustada a largura', async () => {
@@ -389,6 +411,13 @@ describe('paridade com a tela do web', () => {
     for (const m of ['2026-10', '2027-01']) {
       expect(mesAbrev(m)).toBe(mesAbrevDoAnoMes(m));
     }
+    for (const v of [0.5, 2.125, 25, 0.0004, 1250.5, 1234567.8912]) {
+      expect(kgBr(v)).toBe(kgBrWeb(v));
+    }
+    expect(kgBr(0.5)).toBe('0,5');
+    expect(kgBr(2.125)).toBe('2,125');
+    expect(kgBr(25)).toBe('25');
+    expect(kgBr(1250.5)).toBe('1.250,5');
     expect(dataBr(null)).toBe('—');
     expect(mesAbrev('2026-13')).toBe('—');
   });

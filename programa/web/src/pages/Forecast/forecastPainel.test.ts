@@ -13,6 +13,7 @@ import {
   dMmm,
   FILTROS,
   inteiroBr,
+  kgBr,
   mesAbrevDoAnoMes,
   mesesDaProjecao,
   nomeDoMes,
@@ -94,6 +95,14 @@ describe('formatos', () => {
     expect(d1(1468.3)).toBe('1468,3');
     expect(d1(0)).toBe('0,0');
     expect(d1(-5.25)).toBe('-5,3');
+  });
+
+  it('kgBr mostra ate 3 casas pt-BR e "—" para ausente', () => {
+    expect(kgBr(0.5)).toBe('0,5');
+    expect(kgBr(2.125)).toBe('2,125');
+    expect(kgBr(1250.5)).toBe('1.250,5');
+    expect(kgBr(25)).toBe('25');
+    expect(kgBr(null)).toBe('—');
   });
 
   it('inteiroBr usa o sinal tipografico e "—" para ausente', () => {

@@ -5,6 +5,7 @@ import type { ForecastDivergencia, ForecastLinha, ForecastMonths, ForecastSnapsh
 
 // ---------- formatos iguais aos da planilha ----------
 const INT_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+const KG_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const UMA_CASA_BR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const QUATRO_CASAS_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
 
@@ -47,6 +48,12 @@ export function inteiroBr(v: number | null | undefined): string {
   if (v === null || v === undefined) return '—';
   const arredondado = Math.round(v);
   return (arredondado < 0 ? '−' : '') + INT_BR.format(Math.abs(arredondado));
+}
+
+/** kg de embalagem: ate 3 casas pt-BR (0,5 / 2,25 / 25), sem arredondar para inteiro; nulo = "—". */
+export function kgBr(v: number | null | undefined): string {
+  if (v === null || v === undefined) return '—';
+  return KG_BR.format(v);
 }
 
 /** AAAA-MM-DD (ou ISO completo) -> [ano, mes (1-12), dia]; nulo se o texto nao for uma data. */

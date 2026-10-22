@@ -9,7 +9,7 @@ import {
   type ForecastGrupoRelatorio,
   type ForecastItemRelatorio,
 } from '@/services/forecast';
-import { d1, dataBr, inteiroBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
+import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
 
 interface Props {
@@ -24,7 +24,7 @@ function Embalagem({ item }: { item: ForecastItemRelatorio }) {
     return <span className="badge badge--muted">Embalagem não cadastrada</span>;
   }
   const outras = cadastradas.filter((e) => e.codigo !== usada.codigo);
-  const nome = usada.rotulo ?? `${inteiroBr(usada.quantidade)} kg`;
+  const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
       <span>
@@ -33,14 +33,14 @@ function Embalagem({ item }: { item: ForecastItemRelatorio }) {
       {multiplas && (
         <span
           className="badge badge--info"
-          title={`Outras embalagens: ${outras.map((e) => `${e.codigo} (${inteiroBr(e.quantidade)} kg)`).join(', ')}`}
+          title={`Outras embalagens: ${outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}`}
         >
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
       {multiplas && (
         <span className="fcr-embalagem__outras">
-          Outras: {outras.map((e) => `${e.codigo} (${inteiroBr(e.quantidade)} kg)`).join(', ')}
+          Outras: {outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}
         </span>
       )}
     </span>

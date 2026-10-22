@@ -43,6 +43,7 @@ export const STATUS_ROTULO_XLSX: Record<string, string> = {
 
 const MES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'] as const;
 const INT_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+const KG_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const TRACO = '—';
 
 const COL_ITEM = 1;
@@ -51,6 +52,10 @@ const COL_NAO_FRACIONA = COLUNAS_RELATORIO_XLSX.indexOf('Não fraciona') + 1;
 const COL_QTD_FINAL = COLUNAS_RELATORIO_XLSX.indexOf('Qtd. final') + 1;
 const COL_VENCIDA = COLUNAS_RELATORIO_XLSX.indexOf('Vencida') + 1;
 const COL_ANDAMENTO = COLUNAS_RELATORIO_XLSX.indexOf('Em andamento') + 1;
+// Colunas de texto que podem passar da largura: quebram linha em vez de cortar (ex.: Arredondamento tem ate 42 caracteres).
+const COLUNAS_TEXTO_QUEBRA = (
+  ['Item', 'Códigos', 'Status', 'Embalagem', 'Arredondamento', 'Outras embalagens', 'Ruptura', 'Em andamento'] as const
+).map((nome) => COLUNAS_RELATORIO_XLSX.indexOf(nome) + 1);
 const COLUNAS_NUMERICAS = [
   COLUNAS_RELATORIO_XLSX.indexOf('Demanda') + 1,
   COLUNAS_RELATORIO_XLSX.indexOf('Qtd. sugerida') + 1,
@@ -71,6 +76,11 @@ export function mesAbrev(anoMes: string): string {
   const m = /^(\d{4})-(\d{2})$/.exec(anoMes);
   const abrev = m ? MES_ABREV[Number(m[2]) - 1] : undefined;
   return m && abrev ? `${abrev}/${m[1]}` : TRACO;
+}
+
+// kg de embalagem: ate 3 casas pt-BR (0,5 / 2,25 / 25), sem arredondar para inteiro; igual ao kgBr do web.
+export function kgBr(v: number): string {
+  return KG_BR.format(v);
 }
 
 // Inteiro pt-BR com milhar e sinal tipografico, igual ao do web.
@@ -107,7 +117,7 @@ function textoEmbalagem(item: ItemRelatorioCompras): string {
   if (!usada) {
     return 'Embalagem não cadastrada';
   }
-  const nome = usada.rotulo ?? `${inteiroBr(usada.quantidade)} kg`;
+  const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
 }
 
@@ -128,7 +138,7 @@ export function celulasDoItem(item: ItemRelatorioCompras): Array<string | number
     multiplas && usada
       ? cadastradas
           .filter((e) => e.codigo !== usada.codigo)
-          .map((e) => `${e.codigo} (${inteiroBr(e.quantidade)} kg)`)
+          .map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`)
           .join(', ')
       : '';
   const rupturaTexto = ruptura
@@ -196,7 +206,9 @@ function adicionarGrupo(ws: exceljs.Worksheet, g: GrupoRelatorioCompras): void {
   for (const item of g.itens) {
     const row = ws.addRow(celulasDoItem(item));
     row.alignment = { vertical: 'top' };
-    row.getCell(COL_ANDAMENTO).alignment = { vertical: 'top', wrapText: true };
+    for (const col of COLUNAS_TEXTO_QUEBRA) {
+      row.getCell(col).alignment = { vertical: 'top', wrapText: true };
+    }
     for (const col of COLUNAS_NUMERICAS) {
       row.getCell(col).numFmt = '0.0';
     }
