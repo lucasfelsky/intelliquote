@@ -8,6 +8,7 @@ import { handleControllerError, HttpError, parseId } from '../utils/http';
 import {
   forecastDbcorpConfirmSchema,
   forecastDbcorpPreviewSchema,
+  forecastEmbalagensPatchSchema,
   forecastSnapshotQuerySchema,
   forecastSourcePatchSchema,
   forecastWorkbookConfirmSchema,
@@ -86,6 +87,33 @@ export class ForecastController {
   static async listProducts(_req: Request, res: Response): Promise<Response> {
     try {
       const data = await ForecastProductService.list();
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async getEmbalagens(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const data = await ForecastProductService.getEmbalagens(id);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async patchEmbalagens(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const input = forecastEmbalagensPatchSchema.parse(req.body);
+      const data = await ForecastProductService.patchEmbalagens(id, input, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

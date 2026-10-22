@@ -2825,6 +2825,33 @@ i.fc-status--preco { background: var(--info); }
   .fc-memoria { grid-template-columns: 1fr; }
 }
 
+/* ---- Forecast: embalagens (PR 2C) ---- */
+.fce-modal, .fce-form { display: flex; flex-direction: column; gap: 12px; }
+.fce-cabecalho { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fce-produto { margin: 0; font-size: 15px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.fce-regra, .fce-dica { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fce-scroll { overflow-x: auto; }
+.fce-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
+.fce-tabela { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fce-tabela th,
+.fce-tabela td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--ink); }
+.fce-tabela thead th { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: var(--ink-soft); background: var(--surface-alt); }
+.fce-tabela tbody th { font-weight: 700; white-space: nowrap; }
+.fce-tabela .fce-num { text-align: right; }
+.fce-input-qtd { min-width: 96px; text-align: right; }
+.fce-input-qtd[aria-invalid="true"] { border-color: var(--danger); }
+.fce-tabela td input[type="radio"] { width: 16px; height: 16px; }
+.fce-codigo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.fce-codigo .badge { white-space: nowrap; }
+.fce-erro { margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--danger); }
+.fce-origem { font-size: 12px; white-space: nowrap; color: var(--ink-soft); }
+.fce-nenhuma { padding: 0 10px; }
+.fcr-embalagem__editar { padding: 4px 10px; font-size: 12px; }
+.fcr-embalagem__editar:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media print {
+  .fcr-embalagem__editar { display: none; }
+}
+
 /* ---- Forecast: importacao (PR 1D-2) ---- */
 .fci-modal { display: flex; flex-direction: column; gap: 16px; }
 .fci-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }

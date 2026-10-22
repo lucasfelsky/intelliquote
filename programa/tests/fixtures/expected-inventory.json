@@ -168,7 +168,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 59
+    "migrations": 60
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -222,6 +222,7 @@
     "GET /credit-partners",
     "GET /credit-support-requests/:id/purchase-order/recipients",
     "GET /forecast/products",
+    "GET /forecast/products/:id/embalagens",
     "GET /forecast/snapshots",
     "GET /forecast/snapshots/:id",
     "GET /forecast/snapshots/:id/relatorio-compras",
@@ -262,6 +263,7 @@
     "GET /users",
     "GET /users-directory",
     "GET /users/:id",
+    "PATCH /forecast/products/:id/embalagens",
     "PATCH /forecast/sources/:id",
     "PATCH /quote-request-items/:id/purchase-order",
     "PATCH /quote-request-purchase-orders/:id",

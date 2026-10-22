@@ -5,7 +5,7 @@ import { COMEX_ROLES } from '../constants/roles';
 
 const router = Router();
 
-// Escrita (importar, editar fonte) = admin/comprador; leitura = equipe COMEX. `comercial` nao entra.
+// Escrita (importar, editar fonte, editar embalagem) = admin/comprador; leitura = equipe COMEX. `comercial` nao entra.
 router.post(
   '/forecast/import/workbook/preview',
   requireAuth,
@@ -44,6 +44,20 @@ router.patch(
 );
 
 router.get('/forecast/products', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listProducts);
+
+router.get(
+  '/forecast/products/:id/embalagens',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getEmbalagens,
+);
+
+router.patch(
+  '/forecast/products/:id/embalagens',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchEmbalagens,
+);
 
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 

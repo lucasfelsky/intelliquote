@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
 import {
@@ -9,19 +10,47 @@ import {
   type ForecastGrupoRelatorio,
   type ForecastItemRelatorio,
 } from '@/services/forecast';
+import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
 
 interface Props {
   snapshotId: number;
+  /** admin/comprador: mostra o botao que abre o modal de embalagens do item. */
+  podeEditar?: boolean;
 }
 
 const plural = (n: number, singular: string, pluralForm: string) => (n === 1 ? singular : pluralForm);
 
-function Embalagem({ item }: { item: ForecastItemRelatorio }) {
+interface EmbalagemProps {
+  item: ForecastItemRelatorio;
+  /** Definido so quando o usuario pode editar e o item tem produto no cadastro. */
+  onEditar?: () => void;
+  botaoRef?: Ref<HTMLButtonElement>;
+}
+
+function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
   const { usada, cadastradas, multiplas } = item.embalagem;
+  const botao = onEditar && (
+    <button
+      type="button"
+      ref={botaoRef}
+      className="ghost-button fcr-embalagem__editar"
+      aria-haspopup="dialog"
+      aria-label={`${usada ? 'Editar embalagens de' : 'Cadastrar embalagem de'} ${item.item}`}
+      onClick={onEditar}
+    >
+      {usada ? 'Editar embalagens' : 'Cadastrar embalagem'}
+    </button>
+  );
   if (!usada) {
-    return <span className="badge badge--muted">Embalagem não cadastrada</span>;
+    if (!botao) return <span className="badge badge--muted">Embalagem não cadastrada</span>;
+    return (
+      <span className="fcr-embalagem">
+        <span className="badge badge--muted">Embalagem não cadastrada</span>
+        {botao}
+      </span>
+    );
   }
   const outras = cadastradas.filter((e) => e.codigo !== usada.codigo);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
@@ -43,6 +72,7 @@ function Embalagem({ item }: { item: ForecastItemRelatorio }) {
           Outras: {outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}
         </span>
       )}
+      {botao}
     </span>
   );
 }
@@ -68,8 +98,21 @@ function EmAndamento({ item }: { item: ForecastItemRelatorio }) {
   );
 }
 
-function Linha({ item }: { item: ForecastItemRelatorio }) {
+function Linha({ item, podeEditar }: { item: ForecastItemRelatorio; podeEditar: boolean }) {
   const { ruptura } = item;
+  const productId = item.productId ?? null;
+  const [editando, setEditando] = useState(false);
+  const botao = useRef<HTMLButtonElement>(null);
+  const abriuAntes = useRef(false);
+  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
+  useEffect(() => {
+    if (editando) {
+      abriuAntes.current = true;
+    } else if (abriuAntes.current) {
+      abriuAntes.current = false;
+      botao.current?.focus();
+    }
+  }, [editando]);
   return (
     <tr className={item.vencida ? 'fcr-linha fcr-linha--vencida' : 'fcr-linha'}>
       <th scope="row">
@@ -83,7 +126,18 @@ function Linha({ item }: { item: ForecastItemRelatorio }) {
       <td className="fcr-num">{d1(item.demanda)}</td>
       <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
       <td>
-        <Embalagem item={item} />
+        <Embalagem
+          item={item}
+          botaoRef={botao}
+          onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
+        />
+        {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
+        {editando &&
+          productId !== null &&
+          createPortal(
+            <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
+            document.body,
+          )}
       </td>
       <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
       <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
@@ -103,7 +157,7 @@ function Linha({ item }: { item: ForecastItemRelatorio }) {
   );
 }
 
-function Grupo({ grupo }: { grupo: ForecastGrupoRelatorio }) {
+function Grupo({ grupo, podeEditar }: { grupo: ForecastGrupoRelatorio; podeEditar: boolean }) {
   const urgente = grupo.dataLimiteMaisUrgente
     ? `mais urgente ${dataBr(grupo.dataLimiteMaisUrgente)}`
     : 'sem data-limite';
@@ -144,7 +198,7 @@ function Grupo({ grupo }: { grupo: ForecastGrupoRelatorio }) {
           </thead>
           <tbody>
             {grupo.itens.map((item) => (
-              <Linha key={item.linha} item={item} />
+              <Linha key={item.linha} item={item} podeEditar={podeEditar} />
             ))}
           </tbody>
         </table>
@@ -153,7 +207,7 @@ function Grupo({ grupo }: { grupo: ForecastGrupoRelatorio }) {
   );
 }
 
-export default function ForecastRelatorioCompras({ snapshotId }: Props) {
+export default function ForecastRelatorioCompras({ snapshotId, podeEditar = false }: Props) {
   const relatorio = useQuery({
     queryKey: forecastKeys.relatorio(snapshotId),
     queryFn: () => getForecastRelatorioCompras(snapshotId),
@@ -251,7 +305,7 @@ export default function ForecastRelatorioCompras({ snapshotId }: Props) {
       {dados.grupos.length === 0 ? (
         <div className="empty-state">Nenhum item com demanda ≤ 0 nesta quinzena.</div>
       ) : (
-        dados.grupos.map((grupo) => <Grupo key={grupo.fonte} grupo={grupo} />)
+        dados.grupos.map((grupo) => <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} />)
       )}
     </>
   );
