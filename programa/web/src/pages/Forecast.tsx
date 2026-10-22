@@ -44,7 +44,7 @@ function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
   );
 }
 
-function Painel({ detail }: { detail: ForecastSnapshotDetail }) {
+function Painel({ detail, podeEditar }: { detail: ForecastSnapshotDetail; podeEditar: boolean }) {
   const [filtro, setFiltro] = useState<FiltroId>('todos');
   const [busca, setBusca] = useState('');
   const [ocultas, setOcultas] = useState(false);
@@ -135,7 +135,13 @@ function Painel({ detail }: { detail: ForecastSnapshotDetail }) {
         />
       </section>
       {selecionada && (
-        <ForecastMemoria linha={selecionada} half={detail.half} baseDate={detail.baseDate} hoje={detail.hoje} />
+        <ForecastMemoria
+          linha={selecionada}
+          half={detail.half}
+          baseDate={detail.baseDate}
+          hoje={detail.hoje}
+          podeEditar={podeEditar}
+        />
       )}
     </>
   );
@@ -277,8 +283,10 @@ export default function Forecast() {
           </button>
         </div>
       )}
-      {detail && visao === 'painel' && <Painel key={detail.id} detail={detail} />}
-      {detail && visao === 'compras' && <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} />}
+      {detail && visao === 'painel' && <Painel key={detail.id} detail={detail} podeEditar={podeImportar} />}
+      {detail && visao === 'compras' && (
+        <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} podeEditar={podeImportar} />
+      )}
       <ForecastImportModal
         aberto={importando}
         onFechar={() => setImportando(false)}

@@ -14,6 +14,7 @@ import {
 } from '../utils/forecastRelatorioComprasXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
+import { ForecastProductService } from './ForecastProductService';
 
 type Db = Prisma.TransactionClient;
 
@@ -69,9 +70,6 @@ export function halfDoRotulo(label: string): 1 | 2 {
 }
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
-
-// Provedor de embalagens: o PR 2C troca por leitura do cadastro (ForecastProductCode).
-const EMBALAGENS_CADASTRADAS: EmbalagemCadastrada[] = [];
 
 export class ForecastSnapshotService {
   // 409 quando ja existe quinzena nao deletada com o mesmo rotulo (o Prisma nao expressa unique parcial).
@@ -196,10 +194,14 @@ export class ForecastSnapshotService {
     };
   }
 
-  // Relatorio de compras: so a quinzena calculada + o provedor de embalagens (reusa o 404 de getCalculated).
+  // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada
+  // na quinzena; reusa o 404 de getCalculated). Nada aqui escreve em forecastSnapshot.
   static async getRelatorioCompras(id: number, hoje?: string): Promise<RelatorioCompras> {
     const calc = await ForecastSnapshotService.getCalculated(id, hoje);
-    return montarRelatorioCompras(calc, EMBALAGENS_CADASTRADAS);
+    const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
+      calc.linhas.flatMap((l) => l.codigos),
+    );
+    return montarRelatorioCompras(calc, embalagens);
   }
 
   // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.

@@ -7,11 +7,90 @@ import {
   normalizeProductName,
   normalizeSourceName,
 } from '../utils/forecastWorkbook';
+import { escolherEmbalagem, type EmbalagemCadastrada } from '../utils/forecastRelatorioCompras';
+import { HttpError } from '../utils/http';
+import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
+import type { ForecastEmbalagensPatchInput } from '../validators/forecast';
 import { AuditLogService } from './AuditLogService';
 
 type Db = Prisma.TransactionClient;
 
 const ENTITY_TYPE = 'forecast_product';
+
+// Produto + codigos com as colunas de embalagem (leitura do GET e releitura do PATCH).
+const EMBALAGENS_SELECT = {
+  id: true,
+  name: true,
+  isActive: true,
+  packaging: true,
+  noFractioning: true,
+  codes: {
+    orderBy: { position: 'asc' },
+    select: {
+      id: true,
+      position: true,
+      code: true,
+      packagingQtyKg: true,
+      packagingLabel: true,
+      packagingIsPrimary: true,
+      packagingSource: true,
+      packagingUpdatedAt: true,
+    },
+  },
+} satisfies Prisma.ForecastProductSelect;
+
+type ProdutoComEmbalagens = Prisma.ForecastProductGetPayload<{ select: typeof EMBALAGENS_SELECT }>;
+
+export interface ForecastEmbalagensData {
+  produto: { id: number; nome: string; ativo: boolean; embalagemPlanilha: string | null; naoFraciona: boolean };
+  codigos: Array<{
+    id: number;
+    posicao: number;
+    codigo: string;
+    quantidadeKg: number | null;
+    rotulo: string | null;
+    principal: boolean;
+    origem: 'manual' | 'dbcorp' | null;
+    atualizadoEm: string | null;
+  }>;
+  usadaCodigoId: number | null;
+}
+
+const qtyToNumber = (value: Prisma.Decimal | null): number | null => (value === null ? null : Number(value));
+
+function toEmbalagensData(product: ProdutoComEmbalagens): ForecastEmbalagensData {
+  const codigos: ForecastEmbalagensData['codigos'] = product.codes.map((c) => ({
+    id: c.id,
+    posicao: c.position,
+    codigo: c.code,
+    quantidadeKg: qtyToNumber(c.packagingQtyKg),
+    rotulo: c.packagingLabel,
+    principal: c.packagingIsPrimary,
+    origem: c.packagingSource === 'manual' ? 'manual' : c.packagingSource === 'dbcorp' ? 'dbcorp' : null,
+    atualizadoEm: c.packagingUpdatedAt ? todayKeyInSaoPaulo(c.packagingUpdatedAt) : null,
+  }));
+  // Mesma regra do relatorio de compras (principal, senao menor posicao), sem duplicar a regra.
+  const escolha = escolherEmbalagem(
+    codigos.map((c) => c.codigo),
+    codigos.flatMap((c) =>
+      c.quantidadeKg !== null
+        ? [{ codigo: c.codigo, quantidade: c.quantidadeKg, rotulo: c.rotulo, principal: c.principal }]
+        : [],
+    ),
+  );
+  const usada = escolha.usada ? (codigos.find((c) => c.codigo === escolha.usada?.codigo) ?? null) : null;
+  return {
+    produto: {
+      id: product.id,
+      nome: product.name,
+      ativo: product.isActive,
+      embalagemPlanilha: product.packaging,
+      naoFraciona: product.noFractioning,
+    },
+    codigos,
+    usadaCodigoId: usada?.id ?? null,
+  };
+}
 
 export interface ProductDraft {
   name: string;
@@ -355,6 +434,24 @@ export class ForecastProductService {
 
     if (codeOwners.length > 0) {
       const allCodes = codeOwners.flatMap((o) => o.codes.map((c) => c.code));
+      // A embalagem e do CODIGO: le antes do deleteMany para devolve-la na recriacao. Um codigo que saiu da
+      // planilha continua sendo apagado, com a embalagem.
+      const anteriores = new Map(
+        (
+          await tx.forecastProductCode.findMany({
+            where: { code: { in: allCodes } },
+            select: {
+              code: true,
+              productId: true,
+              packagingQtyKg: true,
+              packagingLabel: true,
+              packagingIsPrimary: true,
+              packagingSource: true,
+              packagingUpdatedAt: true,
+            },
+          })
+        ).map((a) => [a.code, a] as const),
+      );
       // Apaga os codigos dos produtos alterados e qualquer codigo que va para outro dono (movido).
       await tx.forecastProductCode.deleteMany({
         where: {
@@ -365,12 +462,21 @@ export class ForecastProductService {
         },
       });
       const rows = codeOwners.flatMap((o) =>
-        o.codes.map((c) => ({
-          productId: o.productId,
-          position: c.position,
-          code: c.code,
-          catalogItemId: c.catalogItemId,
-        })),
+        o.codes.map((c) => {
+          const anterior = anteriores.get(c.code);
+          return {
+            productId: o.productId,
+            position: c.position,
+            code: c.code,
+            catalogItemId: c.catalogItemId,
+            packagingQtyKg: anterior?.packagingQtyKg ?? null,
+            packagingLabel: anterior?.packagingLabel ?? null,
+            // A principal e do PRODUTO: codigo movido para outro produto perde a flag (mantem "no maximo uma").
+            packagingIsPrimary: anterior?.productId === o.productId && anterior.packagingIsPrimary,
+            packagingSource: anterior?.packagingSource ?? null,
+            packagingUpdatedAt: anterior?.packagingUpdatedAt ?? null,
+          };
+        }),
       );
       if (rows.length > 0) {
         await tx.forecastProductCode.createMany({ data: rows });
@@ -394,6 +500,150 @@ export class ForecastProductService {
     }
 
     return productIds;
+  }
+
+  // Provedor de embalagens do relatorio de compras: le o cadastro ATUAL por codigo. O gateway DBCorp futuro
+  // grava nas mesmas colunas e esta funcao nao muda (nao olha a origem).
+  static async embalagensDosCodigos(
+    codigos: string[],
+    db: Db | typeof prisma = prisma,
+  ): Promise<EmbalagemCadastrada[]> {
+    const unicos = [...new Set(codigos.map((c) => c.toUpperCase()).filter((c) => c !== ''))];
+    if (unicos.length === 0) return [];
+    const rows = await db.forecastProductCode.findMany({
+      where: { code: { in: unicos }, packagingQtyKg: { not: null } },
+      select: { code: true, packagingQtyKg: true, packagingLabel: true, packagingIsPrimary: true },
+    });
+    return rows.map((r) => ({
+      codigo: r.code,
+      quantidade: Number(r.packagingQtyKg),
+      rotulo: r.packagingLabel,
+      principal: r.packagingIsPrimary,
+    }));
+  }
+
+  static async getEmbalagens(productId: number): Promise<ForecastEmbalagensData> {
+    const product = await prisma.forecastProduct.findUnique({
+      where: { id: productId },
+      select: EMBALAGENS_SELECT,
+    });
+    if (!product) throw new HttpError(404, 'Produto nao encontrado.');
+    return toEmbalagensData(product);
+  }
+
+  // Edicao manual da embalagem por codigo. Tudo na mesma transacao: valida, grava (primeiro tira a principal
+  // antiga, porque o indice parcial nao aceita duas "true" nem por um instante) e rele. Nunca toca
+  // forecastSnapshot: o historico da quinzena nao muda, so o arredondamento exibido pelo cadastro atual.
+  static async patchEmbalagens(
+    productId: number,
+    input: ForecastEmbalagensPatchInput,
+    userId: number | null,
+  ): Promise<ForecastEmbalagensData> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const product = await tx.forecastProduct.findUnique({
+          where: { id: productId },
+          select: EMBALAGENS_SELECT,
+        });
+        if (!product) throw new HttpError(404, 'Produto nao encontrado.');
+
+        const doProduto = new Set(product.codes.map((c) => c.id));
+        const foraDoProduto =
+          (input.embalagens ?? []).some((e) => !doProduto.has(e.codigoId)) ||
+          (typeof input.principalCodigoId === 'number' && !doProduto.has(input.principalCodigoId));
+        if (foraDoProduto) {
+          throw new HttpError(400, 'O codigo informado nao pertence a este produto.');
+        }
+
+        const edicoes = new Map((input.embalagens ?? []).map((e) => [e.codigoId, e] as const));
+        const principalAntes = product.codes.find((c) => c.packagingIsPrimary)?.id ?? null;
+
+        // Estado desejado por codigo. Quantidade nula = sem embalagem: sem rotulo e sem principal.
+        const desejado = product.codes.map((c) => {
+          const edicao = edicoes.get(c.id);
+          const quantidade = edicao ? edicao.quantidadeKg : qtyToNumber(c.packagingQtyKg);
+          const rotulo = edicao && edicao.rotulo !== undefined ? edicao.rotulo : c.packagingLabel;
+          return { code: c, quantidade, rotulo: quantidade === null ? null : rotulo };
+        });
+        const quantidadePorId = new Map(desejado.map((d) => [d.code.id, d.quantidade] as const));
+
+        let principalDepois: number | null;
+        if (input.principalCodigoId !== undefined) {
+          principalDepois = input.principalCodigoId;
+          if (principalDepois !== null && quantidadePorId.get(principalDepois) === null) {
+            throw new HttpError(400, 'A embalagem principal precisa de quantidade.');
+          }
+        } else {
+          principalDepois =
+            principalAntes !== null && quantidadePorId.get(principalAntes) !== null ? principalAntes : null;
+        }
+
+        const alterados = desejado
+          .map((d) => ({ ...d, principal: d.code.id === principalDepois }))
+          .filter(
+            (d) =>
+              d.quantidade !== qtyToNumber(d.code.packagingQtyKg) ||
+              d.rotulo !== d.code.packagingLabel ||
+              d.principal !== d.code.packagingIsPrimary,
+          );
+        if (alterados.length === 0) return toEmbalagensData(product);
+
+        if (principalAntes !== null && principalAntes !== principalDepois) {
+          await tx.forecastProductCode.updateMany({
+            where: { productId, packagingIsPrimary: true },
+            data: { packagingIsPrimary: false },
+          });
+        }
+        const agora = new Date();
+        for (const d of alterados) {
+          await tx.forecastProductCode.update({
+            where: { id: d.code.id },
+            data: {
+              packagingQtyKg: d.quantidade,
+              packagingLabel: d.rotulo,
+              packagingIsPrimary: d.principal,
+              packagingSource: 'manual',
+              packagingUpdatedAt: agora,
+            },
+          });
+        }
+
+        const comEmbalagem = desejado.filter((d) => d.quantidade !== null).length;
+        await AuditLogService.log(
+          {
+            entityType: ENTITY_TYPE,
+            entityId: productId,
+            action: 'packaging_update',
+            performedById: userId,
+            // So ids e contagens: nunca quantidade, rotulo, nome de produto ou codigo DBCorp.
+            metadata: {
+              source: 'manual_patch',
+              codigoIdsAlterados: alterados.map((d) => d.code.id),
+              comEmbalagem,
+              semEmbalagem: desejado.length - comEmbalagem,
+              principalAntes,
+              principalDepois,
+            },
+          },
+          tx,
+        );
+
+        const atualizado = await tx.forecastProduct.findUnique({
+          where: { id: productId },
+          select: EMBALAGENS_SELECT,
+        });
+        if (!atualizado) throw new HttpError(404, 'Produto nao encontrado.');
+        return toEmbalagensData(atualizado);
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new HttpError(
+          409,
+          'A embalagem principal foi alterada por outra pessoa. Recarregue e tente de novo.',
+        );
+      }
+      throw error;
+    }
   }
 
   static async list() {

@@ -13,13 +13,15 @@
 //
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
-// embalagens so precisa devolver `EmbalagemCadastrada[]`.
+// embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
+// que le o cadastro por codigo; amanha o gateway DBCorp grava nas mesmas colunas).
 import { somarDias, yearMonthsDaJanela } from './forecastMonths';
 import { isValidDateKey } from './supplierDocumentDates';
 
 export interface LinhaParaRelatorio {
   linha: number;
   n?: number | null;
+  productId?: number | null;
   item: string;
   codigos: string[];
   fonte: string;
@@ -73,6 +75,7 @@ export interface EscolhaDeEmbalagem {
 export interface ItemRelatorioCompras {
   linha: number;
   n: number | null;
+  productId: number | null;
   item: string;
   codigos: string[];
   status: string;
@@ -259,6 +262,7 @@ export function montarRelatorioCompras(
     const item: ItemRelatorioCompras = {
       linha: l.linha,
       n: l.n ?? null,
+      productId: l.productId ?? null,
       item: l.item,
       codigos: l.codigos,
       status: l.status,

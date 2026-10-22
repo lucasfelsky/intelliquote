@@ -254,6 +254,21 @@ describe('montarRelatorioCompras (sintetico)', () => {
     expect(Object.is(item.quantidadeSugerida, 0)).toBe(true);
   });
 
+  it('repassa o productId da linha para o item (nulo quando a linha nao tem)', () => {
+    const com = montarRelatorioCompras(
+      sintetica([
+        linha({ linha: 3, item: 'PRODUTO 003', fonte: 'FONTE A', productId: 42 }),
+        linha({ linha: 4, item: 'PRODUTO 004', fonte: 'FONTE A' }),
+        linha({ linha: 5, item: 'PRODUTO 005', fonte: 'FONTE A', productId: null }),
+      ]),
+      [],
+    );
+    const porLinha = new Map(com.grupos.flatMap((g) => g.itens).map((i) => [i.linha, i.productId] as const));
+    expect(porLinha.get(3)).toBe(42);
+    expect(porLinha.get(4)).toBeNull();
+    expect(porLinha.get(5)).toBeNull();
+  });
+
   it('data-base ou hoje invalidos lancam', () => {
     expect(() => montarRelatorioCompras({ ...sintetica([]), baseDate: '2026-13-01' }, [])).toThrow();
     expect(() => montarRelatorioCompras({ ...sintetica([]), hoje: 'ontem' }, [])).toThrow();

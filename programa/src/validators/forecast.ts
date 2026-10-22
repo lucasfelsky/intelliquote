@@ -107,6 +107,53 @@ export const forecastSourcePatchSchema = z
     'Informe ao menos um campo para atualizar.',
   );
 
+const packagingQtyField = z
+  .number({ error: 'Informe a quantidade da embalagem em kg (ou null).' })
+  .positive('A quantidade da embalagem deve ser maior que zero.')
+  .max(1000000, 'A quantidade da embalagem aceita no maximo 1.000.000 kg.')
+  // Coluna Decimal(18,6) aceita mais, mas a edicao manual limita a 3 casas (padrao de validators/domain.ts).
+  .refine((v) => /^\d+(\.\d{1,3})?$/.test(String(v)), {
+    message: 'A quantidade da embalagem aceita no maximo 3 casas decimais.',
+  })
+  .nullable();
+
+const packagingLabelField = z
+  .string({ error: 'Rotulo invalido.' })
+  .trim()
+  .max(60, 'O rotulo aceita no maximo 60 caracteres.')
+  .transform((value) => (value === '' ? null : value))
+  .nullable()
+  .optional();
+
+const codigoIdField = z
+  .number({ error: 'Codigo invalido.' })
+  .int('Codigo invalido.')
+  .positive('Codigo invalido.');
+
+// Embalagem por codigo (PR 2C): `embalagens` altera quantidade/rotulo dos codigos citados; `principalCodigoId`
+// ausente = mantem, null = nenhuma principal, numero = esse codigo. Pelo menos um dos dois.
+export const forecastEmbalagensPatchSchema = z
+  .object({
+    embalagens: z
+      .array(
+        z.object({
+          codigoId: codigoIdField,
+          quantidadeKg: packagingQtyField,
+          rotulo: packagingLabelField,
+        }),
+        { error: 'Informe as embalagens como lista.' },
+      )
+      .min(1, 'Informe ao menos uma embalagem ou a principal.')
+      .max(7, 'Informe no maximo 7 embalagens.')
+      .refine((lista) => new Set(lista.map((e) => e.codigoId)).size === lista.length, 'Codigo repetido na lista.')
+      .optional(),
+    principalCodigoId: codigoIdField.nullable().optional(),
+  })
+  .refine(
+    (value) => value.embalagens !== undefined || value.principalCodigoId !== undefined,
+    'Informe ao menos uma embalagem ou a principal.',
+  );
+
 export const forecastSnapshotQuerySchema = z.object({
   hoje: dateKeyField('Data invalida (use AAAA-MM-DD).').optional(),
 });
@@ -117,3 +164,4 @@ export type ForecastDbcorpPreviewInput = z.infer<typeof forecastDbcorpPreviewSch
 export type ForecastDbcorpConfirmInput = z.infer<typeof forecastDbcorpConfirmSchema>;
 export type ForecastSourcePatchInput = z.infer<typeof forecastSourcePatchSchema>;
 export type ForecastSnapshotQueryInput = z.infer<typeof forecastSnapshotQuerySchema>;
+export type ForecastEmbalagensPatchInput = z.infer<typeof forecastEmbalagensPatchSchema>;

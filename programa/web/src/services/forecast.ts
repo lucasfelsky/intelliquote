@@ -118,6 +118,8 @@ export interface ForecastEmbalagemDoItem {
 export interface ForecastItemRelatorio {
   linha: number;
   n: number | null;
+  /** Produto do cadastro congelado na quinzena; nulo = fora do cadastro (sem botao de embalagem). */
+  productId?: number | null;
   item: string;
   codigos: string[];
   status: ForecastStatus;

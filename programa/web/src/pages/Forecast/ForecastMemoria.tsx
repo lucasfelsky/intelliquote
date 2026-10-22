@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import type { ForecastLinha } from '@/services/forecast';
+import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import { dataBr, passosDaMemoria, risco, type TomValor } from './forecastPainel';
 
 interface Props {
@@ -6,6 +8,8 @@ interface Props {
   half: number;
   baseDate: string;
   hoje: string;
+  /** admin/comprador editam as embalagens; os demais papeis COMEX abrem o modal em leitura. */
+  podeEditar: boolean;
 }
 
 const CLASSE_DO_TOM: Record<Exclude<TomValor, null>, string> = {
@@ -16,7 +20,19 @@ const CLASSE_DO_TOM: Record<Exclude<TomValor, null>, string> = {
 
 const classeDoTom = (tom: TomValor) => (tom ? CLASSE_DO_TOM[tom] : '');
 
-export default function ForecastMemoria({ linha, half, baseDate, hoje }: Props) {
+export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEditar }: Props) {
+  const [embalagens, setEmbalagens] = useState(false);
+  const botao = useRef<HTMLButtonElement>(null);
+  const abriuAntes = useRef(false);
+  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
+  useEffect(() => {
+    if (embalagens) {
+      abriuAntes.current = true;
+    } else if (abriuAntes.current) {
+      abriuAntes.current = false;
+      botao.current?.focus();
+    }
+  }, [embalagens]);
   const passos = passosDaMemoria(linha, half, baseDate);
   const situacao = risco(linha, baseDate);
   const codigos = linha.codigos.join(' · ');
@@ -64,9 +80,34 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje }: Props) 
             <dt>Códigos</dt>
             <dd>{codigos || '—'}</dd>
           </div>
+          <div>
+            <dt>Embalagens</dt>
+            <dd>
+              {linha.productId != null ? (
+                <button
+                  type="button"
+                  ref={botao}
+                  className="ghost-button"
+                  aria-haspopup="dialog"
+                  onClick={() => setEmbalagens(true)}
+                >
+                  Embalagens do item
+                </button>
+              ) : (
+                'Produto fora do cadastro'
+              )}
+            </dd>
+          </div>
         </dl>
         <span className="fc-lado__fraco">CHEG. calculada com hoje = {dataBr(hoje)}</span>
       </div>
+      {embalagens && linha.productId != null && (
+        <ForecastEmbalagensModal
+          productId={linha.productId}
+          podeEditar={podeEditar}
+          onFechar={() => setEmbalagens(false)}
+        />
+      )}
     </section>
   );
 }

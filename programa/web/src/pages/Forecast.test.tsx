@@ -591,3 +591,66 @@ describe('Forecast - visao Relatorio de compras', () => {
     expect((screen.getByLabelText('Quinzena') as HTMLSelectElement).value).toBe('8');
   });
 });
+
+describe('Forecast - embalagens do item na memoria de calculo', () => {
+  const EMBALAGENS = {
+    produto: { id: 42, nome: 'PRODUTO A', ativo: true, embalagemPlanilha: null, naoFraciona: false },
+    codigos: [
+      { id: 1, posicao: 1, codigo: 'C0001', quantidadeKg: 25, rotulo: null, principal: false, origem: 'manual', atualizadoEm: '2026-10-22' },
+      { id: 2, posicao: 2, codigo: 'C0002', quantidadeKg: null, rotulo: null, principal: false, origem: null, atualizadoEm: null },
+    ],
+    usadaCodigoId: 1,
+  };
+
+  function mockComProduto() {
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: 42 }), ...LINHAS.slice(1)] }) });
+    const base = get.getMockImplementation();
+    get.mockImplementation(async (path: string, query?: unknown) => {
+      if (path === '/v1/forecast/products/42/embalagens') return { data: EMBALAGENS };
+      return (base as (p: string, q?: unknown) => Promise<unknown>)(path, query);
+    });
+  }
+
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao "Embalagens do item" na memoria', async (role) => {
+    mockRole = role;
+    mockComProduto();
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    const memoria = within(screen.getByRole('region', { name: 'Memória de cálculo' }));
+    const botao = memoria.getByRole('button', { name: 'Embalagens do item' });
+    expect(botao.getAttribute('aria-haspopup')).toBe('dialog');
+  });
+
+  it('linha sem productId mostra "Produto fora do cadastro" e nenhum botao', async () => {
+    mockApi({ 7: detalhe() });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    const memoria = within(screen.getByRole('region', { name: 'Memória de cálculo' }));
+    expect(memoria.getByText('Produto fora do cadastro')).toBeTruthy();
+    expect(memoria.queryByRole('button', { name: 'Embalagens do item' })).toBeNull();
+  });
+
+  it('o modal do viewer abre em leitura (sem campos de texto)', async () => {
+    mockRole = 'viewer';
+    mockComProduto();
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    fireEvent.click(within(screen.getByRole('region', { name: 'Memória de cálculo' })).getByRole('button', { name: 'Embalagens do item' }));
+    expect(await screen.findByText('Somente admin e comprador editam embalagens.')).toBeTruthy();
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'Salvar embalagens' })).toBeNull();
+  });
+
+  it('o modal do admin abre em edicao e fechar devolve o foco ao botao', async () => {
+    mockRole = 'admin';
+    mockComProduto();
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    const botao = within(screen.getByRole('region', { name: 'Memória de cálculo' })).getByRole('button', { name: 'Embalagens do item' });
+    fireEvent.click(botao);
+    expect(await screen.findByLabelText('Quantidade em kg do código C0001')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByLabelText('Quantidade em kg do código C0001')).toBeNull());
+    expect(document.activeElement).toBe(botao);
+  });
+});

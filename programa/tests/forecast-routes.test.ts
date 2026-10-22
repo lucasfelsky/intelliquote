@@ -19,6 +19,7 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     forecastSource: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     forecastProduct: { findMany: vi.fn() },
+    forecastProductCode: { findMany: vi.fn() },
     forecastSnapshot: { findMany: vi.fn(), findFirst: vi.fn() },
     forecastMonthlySale: { findMany: vi.fn() },
     catalogItem: { findMany: vi.fn() },
@@ -40,6 +41,7 @@ const prismaMock = prisma as unknown as {
   auditLog: { create: Mock };
   forecastSource: { findMany: Mock; findUnique: Mock; update: Mock };
   forecastProduct: { findMany: Mock };
+  forecastProductCode: { findMany: Mock };
   forecastSnapshot: { findMany: Mock; findFirst: Mock };
   forecastMonthlySale: { findMany: Mock };
   catalogItem: { findMany: Mock };
@@ -493,6 +495,8 @@ describe('Forecast routes - quinzena calculada', () => {
 describe('Forecast routes - relatorio de compras', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // O relatorio le a embalagem do cadastro por codigo (PR 2C); aqui nenhum codigo tem embalagem.
+    prismaMock.forecastProductCode.findMany.mockResolvedValue([]);
     const produtos = fixture.produtos.slice(0, 5);
     const linhasDe = new Set(produtos.map((p) => String(p.linha)));
     prismaMock.forecastSnapshot.findFirst.mockResolvedValue({

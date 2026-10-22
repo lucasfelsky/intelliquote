@@ -1125,14 +1125,24 @@ model ForecastProduct {
 }
 
 // Ate 7 codigos DBCorp por produto (EMB.1..EMB.7 = position 1..7). Codigo em maiusculas.
+// Cada codigo e uma embalagem (EMB.1..EMB.7); a quantidade/rotulo/principal ficam nas colunas packaging*.
 model ForecastProductCode {
-  id            Int             @id @default(autoincrement())
-  productId     Int
-  product       ForecastProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  position      Int
-  code          String          @unique
-  catalogItemId Int?
-  catalogItem   CatalogItem?    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  id                 Int             @id @default(autoincrement())
+  productId          Int
+  product            ForecastProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  position           Int
+  code               String          @unique
+  catalogItemId      Int?
+  catalogItem        CatalogItem?    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
+  // Quantidade de UMA embalagem do codigo, em kg (nulo = sem embalagem). 18,6 = precisao de TbEmbalagemItem.EmbalagemQuant (DBCorp).
+  packagingQtyKg     Decimal?        @db.Decimal(18, 6)
+  packagingLabel     String?
+  // Embalagem principal do PRODUTO.
+  // Indice unico parcial (so na migration): no maximo uma packagingIsPrimary = true por productId.
+  packagingIsPrimary Boolean         @default(false)
+  // Quem gravou por ultimo: 'manual' (tela) ou 'dbcorp' (gateway futuro). Nulo = nunca gravado.
+  packagingSource    String?
+  packagingUpdatedAt DateTime?
 
   @@unique([productId, position])
   @@index([catalogItemId])
