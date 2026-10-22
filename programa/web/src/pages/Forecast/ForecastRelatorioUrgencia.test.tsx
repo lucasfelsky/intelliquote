@@ -342,6 +342,16 @@ describe('ForecastRelatorioCompras - urgencia (PR 2D)', () => {
     expect(tabela.className).toContain('fcr-tabela--compacta');
   });
 
+  it('secao "Atencao: sem consumo": estoque fracionario aparece com 1 casa (0,4 e nao 0), como no XLSX', async () => {
+    const fracionado = { ...SEM_CONSUMO[1], estoque: 0.4 };
+    get.mockResolvedValue({ data: relatorio({ semConsumo: { itens: [fracionado] } }) });
+    renderRelatorio();
+    await screen.findByText('4 itens em 2 fontes');
+    const tabela = within(screen.getByRole('region', { name: 'Itens sem consumo' })).getByRole('table');
+    const celulas = Array.from(tabela.querySelectorAll('td.fcr-num')).map((c) => c.textContent);
+    expect(celulas).toEqual(['0,4']);
+  });
+
   it('sem itens em sem consumo: a secao nao aparece (o resumo continua)', async () => {
     get.mockResolvedValue({ data: relatorio({ semConsumo: { itens: [] } }) });
     renderRelatorio();

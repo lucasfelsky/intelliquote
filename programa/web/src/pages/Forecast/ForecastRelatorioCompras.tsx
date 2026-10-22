@@ -384,7 +384,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                 </td>
                 <td>{STATUS_ROTULO[i.status] ?? i.status}</td>
                 <td>{textoMotivos(i.motivos)}</td>
-                <td className="fcr-num">{inteiroBr(i.estoque)}</td>
+                <td className="fcr-num">{d1(i.estoque)}</td>
                 <td>
                   <ListaDeMeses prefixo="Programação" meses={i.programacoes} />
                 </td>
