@@ -1168,6 +1168,31 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     expect(botao('Confirmar importação').disabled).toBe(true);
   });
 
+  it('uma nova pre-visualizacao completa tira a mensagem "recalculada" da tela (o recalculo anterior ja nao vale)', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos({}, { pendentes: pendentes() }));
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes() }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+
+    // Sem editar de novo (rascunho == aplicado): so a nova previa completa pode tirar a mensagem.
+    await cadastrarCodigoExistente();
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    expect(screen.queryByText('Pré-visualização recalculada com os prazos informados.')).toBeNull();
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('60');
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    // Um novo recalculo volta a mostrar a mensagem.
+    fireEvent.change(campoPrazo('Dias do ETD até a chegada - FONTE 002'), { target: { value: '25' } });
+    const fontes25 = fontesComUsado(60).map((f) => (f.sourceId === 2 ? { ...f, usado: { ...f.usado, etdDias: 25 } } : f));
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontes25 }, { pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+  });
+
   it('Esc no dialogo de cadastro devolve o foco ao botao "Completar cadastro" e nao fecha a importacao', async () => {
     const { onFechar } = renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));

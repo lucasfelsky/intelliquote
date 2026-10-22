@@ -166,6 +166,15 @@ describe('ForecastPrazosPorFonte', () => {
     expect(screen.queryByText(/Pré-visualização recalculada/)).toBeNull();
   });
 
+  it('a tabela explica que conta tambem as chegadas que caem depois da janela (sem mudar a regra)', () => {
+    render(<Harness />);
+    expect(
+      screen.getByText(
+        /As linhas e os kg desta tabela incluem as chegadas estimadas que, com o prazo da fonte, caem depois da janela e ficam fora do cálculo; por isso podem somar mais que as linhas “Estimadas por…” acima\./,
+      ),
+    ).toBeTruthy();
+  });
+
   it('sem fonte nenhuma e sem "Sem fonte": diz que nada precisou de estimativa', () => {
     render(
       <Harness

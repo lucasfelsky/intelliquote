@@ -176,6 +176,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     onSuccess: (pronta) => {
       setPrevia(pronta);
       guardarRascunho(pronta);
+      // Previa completa nova: a mensagem "recalculada" (e o foco nela) valia so para o recalculo anterior.
+      setRecalculos(0);
       setEntendi(false);
       setEntendiProntidao(false);
       // 'falhou' tambem sai do estado: a previa nova e valida e a faixa de "previa descartada" nao pode ficar ao lado dela.

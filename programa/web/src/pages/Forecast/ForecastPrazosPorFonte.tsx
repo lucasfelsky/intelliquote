@@ -94,6 +94,12 @@ export default function ForecastPrazosPorFonte({ prazos, rascunho, onMudar, onRe
         o padrão da fonte nas próximas importações.
       </p>
       {alterados && <p className="fci-prazo__alterados">{alterados}</p>}
+      {(prazos.fontes.length > 0 || temSemFonte) && (
+        <p>
+          As linhas e os kg desta tabela incluem as chegadas estimadas que, com o prazo da fonte, caem depois da janela e
+          ficam fora do cálculo; por isso podem somar mais que as linhas “Estimadas por…” acima.
+        </p>
+      )}
       {prazos.fontes.length === 0 && !temSemFonte ? (
         <p>Nenhuma chegada do FUP precisou de estimativa.</p>
       ) : (
