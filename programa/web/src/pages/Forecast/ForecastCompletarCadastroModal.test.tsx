@@ -220,6 +220,47 @@ describe('ForecastCompletarCadastroModal - novo produto', () => {
     );
   });
 
+  it('Esc e clique no fundo sao ignorados com a gravacao pendente; a falha parcial continua visivel', async () => {
+    let rejeitar: (erro: unknown) => void = () => undefined;
+    patch.mockResolvedValue({ data: fonte(4, 'FONTE 002', 60) });
+    post.mockReturnValue(
+      new Promise((_, rej) => {
+        rejeitar = rej;
+      }),
+    );
+    const { container } = renderModal();
+    await screen.findByLabelText('Nome do produto');
+    fireEvent.change(campoNome(), { target: { value: 'PRODUTO 901' } });
+    fireEvent.change(campoFonte(), { target: { value: '4' } });
+    fireEvent.change(campoFamilia(), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Lead time da fonte (dias)'), { target: { value: '60' } });
+    fireEvent.click(cadastrar());
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    expect(cadastrar().disabled).toBe(true);
+
+    const dialogo = container.ownerDocument.querySelector('dialog') as HTMLDialogElement;
+    fireEvent(dialogo, new Event('cancel', { cancelable: true }));
+    fireEvent.mouseDown(dialogo);
+    fireEvent.click(dialogo);
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar' }));
+    expect(onFechar).not.toHaveBeenCalled();
+
+    rejeitar(new ApiError(409, { message: 'O código TST0901 já pertence ao produto PRODUTO 009.' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe(
+      'O lead time da fonte foi gravado, mas o produto não foi cadastrado. O código TST0901 já pertence ao produto PRODUTO 009.',
+    );
+    // Terminada a gravacao o dialogo volta a fechar (o estado "gravando" desce um render depois do botao): tenta
+    // o Esc ate o dialogo aceitar.
+    await waitFor(
+      () => {
+        fireEvent(dialogo, new Event('cancel', { cancelable: true }));
+        expect(onFechar).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 5000 },
+    );
+  });
+
   it('503 (importacao em andamento) mostra a mensagem de tentar de novo', async () => {
     post.mockRejectedValue(
       new ApiError(503, { message: 'O cadastro está ocupado por uma importação. Tente novamente em instantes.' }),
@@ -361,6 +402,20 @@ describe('ForecastCompletarCadastroModal - adicionar a produto existente', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
     expect((await screen.findByRole('alert')).textContent).toBe('O código TST0901 já pertence ao produto PRODUTO 009.');
     expect(onConcluido).not.toHaveBeenCalled();
+  });
+
+  it('produto escolhido que sai da lista pela busca deixa de contar: nao acrescenta o codigo', async () => {
+    await abrirExistente();
+    fireEvent.click(screen.getByRole('radio', { name: /PRODUTO 001/ }));
+    const acrescentar = () => screen.getByRole('button', { name: 'Acrescentar código' }) as HTMLButtonElement;
+    expect(acrescentar().disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Buscar produto por nome ou código'), { target: { value: 'tst0002' } });
+    expect(screen.queryByRole('radio', { name: /PRODUTO 001/ })).toBeNull();
+    expect(acrescentar().disabled).toBe(true);
+    expect(screen.queryByText(/Este produto vem da planilha/)).toBeNull();
+    fireEvent.submit(acrescentar().closest('form') as HTMLFormElement);
+    expect(post).not.toHaveBeenCalled();
   });
 
   it('lista cortada em 50 produtos avisa para refinar a busca', async () => {

@@ -106,6 +106,15 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const rotuloExiste = rotulo !== '' && quinzenasExistentes.includes(rotulo);
   const ocupado = fase !== null;
 
+  // A nova pre-visualizacao pos-cadastro falhou: a previa antiga ainda lista como FORA o codigo que acabou de ser
+  // cadastrado e o confirm (que re-le os arquivos) ja o incluiria. Descarta a previa e as caixas "Entendi".
+  useEffect(() => {
+    if (cadastro?.estado !== 'falhou') return;
+    setPrevia(null);
+    setEntendi(false);
+    setEntendiProntidao(false);
+  }, [cadastro?.estado]);
+
   const descartar = () => {
     setCadastro(null);
     setPrevia(null);

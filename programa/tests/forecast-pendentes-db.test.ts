@@ -350,11 +350,9 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     const preview = await prisma.$transaction((tx) =>
       ForecastProductService.plan(tx, [draft(NAME_BASE, [CODE_BASE])], known),
     );
-    expect(
-      preview.avisos.some((a) =>
-        /^\d+ códigos acrescentados pela tela não estão na planilha e serão removidos\. Inclua-os na planilha\.$/.test(a),
-      ),
-    ).toBe(true);
+    expect(preview.avisos).toContain(
+      '1 código acrescentado pela tela não está na planilha e será removido. Inclua-o na planilha.',
+    );
 
     // 1) Planilha SEM o produto da tela (so o base): ele nao entra em `inativados`; o base ausente nao existe aqui.
     const semNovo = await prisma.$transaction(async (tx) => {

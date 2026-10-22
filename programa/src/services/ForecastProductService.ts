@@ -349,7 +349,9 @@ export class ForecastProductService {
     const removidos = await ForecastProductService.codigosDaTelaRemovidos(db, items);
     if (removidos > 0) {
       avisosCadastro.push(
-        `${removidos} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`,
+        removidos === 1
+          ? '1 código acrescentado pela tela não está na planilha e será removido. Inclua-o na planilha.'
+          : `${removidos} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`,
       );
     }
 

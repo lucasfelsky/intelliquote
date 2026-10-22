@@ -542,7 +542,9 @@ describe('Forecast pendentes - plan() avisa codigos acrescentados pela tela que 
     return { db, findAudit };
   };
   const AVISO = (n: number) =>
-    `${n} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`;
+    n === 1
+      ? '1 código acrescentado pela tela não está na planilha e será removido. Inclua-o na planilha.'
+      : `${n} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`;
 
   it('conta so o codigo da tela (code_add) ausente da planilha em produto da planilha', async () => {
     const { db, findAudit } = dbFalso(
@@ -566,6 +568,24 @@ describe('Forecast pendentes - plan() avisa codigos acrescentados pela tela que 
       entityType: 'forecast_product',
       action: 'code_add',
     });
+  });
+
+  it('1 codigo da tela fora da planilha: aviso no singular; 2 ou mais: plural', async () => {
+    const { db } = dbFalso(
+      [produtoComCodigos(1, 'PRODUTO 001', 'planilha', [[11, 1, 'TST0001'], [12, 2, 'TST0090'], [13, 3, 'TST0091']])],
+      [
+        { entityId: '1', codeId: 12 },
+        { entityId: '1', codeId: 13 },
+      ],
+    );
+    const um = await ForecastProductService.plan(db, [draft('PRODUTO 001', ['TST0001', 'TST0091'])], new Set());
+    expect(um.avisos).toEqual([
+      '1 código acrescentado pela tela não está na planilha e será removido. Inclua-o na planilha.',
+    ]);
+    const dois = await ForecastProductService.plan(db, [draft('PRODUTO 001', ['TST0001'])], new Set());
+    expect(dois.avisos).toEqual([
+      '2 códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.',
+    ]);
   });
 
   it('codigo da tela que a planilha traz (mesmo produto ou outro) nao conta; produto igual nao consulta a auditoria', async () => {

@@ -74,7 +74,7 @@ export function mensagemCadastroNaPrevia(resultado: ResultadoGravado, estado: Es
       ? 'Atualizando a pré-visualização…'
       : estado === 'atualizada'
         ? 'Pré-visualização atualizada.'
-        : 'A pré-visualização não foi atualizada: pré-visualize de novo.';
+        : 'A pré-visualização anterior foi descartada: pré-visualize de novo para poder confirmar.';
   return ['Cadastro gravado.', meio, avisoDaPlanilha(resultado)].filter(Boolean).join(' ');
 }
 

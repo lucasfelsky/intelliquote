@@ -97,7 +97,7 @@ describe('textos', () => {
     );
     expect(mensagemCadastroNaPrevia({ tipo: 'novo' }, 'atualizada')).toBe('Cadastro gravado. Pré-visualização atualizada.');
     expect(mensagemCadastroNaPrevia({ tipo: 'novo' }, 'falhou')).toBe(
-      'Cadastro gravado. A pré-visualização não foi atualizada: pré-visualize de novo.',
+      'Cadastro gravado. A pré-visualização anterior foi descartada: pré-visualize de novo para poder confirmar.',
     );
     expect(mensagemCadastroNaPrevia({ tipo: 'codigo', produtoOrigem: 'planilha' }, 'atualizada')).toContain(
       'Inclua o código também na planilha',

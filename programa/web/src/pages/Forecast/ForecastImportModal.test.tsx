@@ -1022,6 +1022,65 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     expect(document.activeElement).toBe(status);
   });
 
+  const semSaldoComPendentes = () =>
+    resumoDbcorp({ pendentes: pendentes() }, { saldo: rel({ usadas: 0, porDeposito: [] }) });
+  const caixaSaldo = () =>
+    screen.getByLabelText(/Entendi que SALDO veio sem linhas úteis/) as HTMLInputElement;
+
+  async function cadastrarCodigoExistente() {
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Adicionar a produto existente' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /PRODUTO 001/ }));
+    post.mockResolvedValueOnce({
+      data: { produtoId: 1, produtoOrigem: 'dbcorp', codigo: { id: 9, posicao: 2, codigo: 'TST0901' } },
+    });
+  }
+
+  it('re-previa com sucesso ZERA a caixa "Entendi": o usuario precisa marcar de novo', async () => {
+    renderModal();
+    await previsualizarDbcorp(semSaldoComPendentes());
+    fireEvent.click(caixaSaldo());
+    expect(caixaSaldo().checked).toBe(true);
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    await cadastrarCodigoExistente();
+    post.mockResolvedValueOnce({
+      data: resumoDbcorp({ pendentes: pendentes([inativo()]) }, { saldo: rel({ usadas: 0, porDeposito: [] }) }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    await waitFor(() => expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (1)' })).toBeTruthy());
+    expect(caixaSaldo().checked).toBe(false);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    fireEvent.click(caixaSaldo());
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('a nova pre-visualizacao falhou: descarta a previa antiga e as caixas, sem Confirmar, e diz isso', async () => {
+    renderModal();
+    await previsualizarDbcorp(semSaldoComPendentes());
+    fireEvent.click(caixaSaldo());
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    await cadastrarCodigoExistente();
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText(/Cadastro gravado\. A pré-visualização anterior foi descartada: pré-visualize de novo para poder confirmar\./);
+    // A previa antiga listava TST0901 como FORA: nao pode sobrar nem o resumo, nem o bloco, nem o Confirmar.
+    await waitFor(() => expect(queryBotao('Confirmar importação')).toBeNull());
+    expect(screen.queryByRole('heading', { name: 'Pré-visualização dos relatórios DBCorp' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+    expect(screen.queryByLabelText(/Entendi/)).toBeNull();
+    expect(post.mock.calls.map((c) => c[0])).not.toContain('/v1/forecast/import/dbcorp/confirm');
+
+    // Pre-visualizar de novo: a caixa volta desmarcada.
+    post.mockResolvedValueOnce({ data: semSaldoComPendentes() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByLabelText(/Entendi que SALDO/);
+    expect(caixaSaldo().checked).toBe(false);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+  });
+
   it('a nova pre-visualizacao falhou: o cadastro continua gravado e a mensagem diz isso', async () => {
     renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
@@ -1035,7 +1094,7 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
     expect(
       await screen.findByText(
-        /Cadastro gravado\. A pré-visualização não foi atualizada: pré-visualize de novo\. Inclua o código também na planilha PO\.COMP\.01/,
+        /Cadastro gravado\. A pré-visualização anterior foi descartada: pré-visualize de novo para poder confirmar\. Inclua o código também na planilha PO\.COMP\.01/,
       ),
     ).toBeTruthy();
     expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);

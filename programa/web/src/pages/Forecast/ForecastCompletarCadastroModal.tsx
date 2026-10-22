@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
@@ -52,6 +52,11 @@ interface Props {
   onConcluido: (resultado: ResultadoCadastro) => void;
 }
 
+/** Props das abas: avisam o dialogo quando ha gravacao pendente (Esc, fundo e troca de aba ficam ignorados). */
+interface PropsAba extends Props {
+  onGravando: (pendente: boolean) => void;
+}
+
 type Aba = 'novo' | 'existente';
 
 function Carregando({ texto }: { texto: string }) {
@@ -84,7 +89,7 @@ function ErroDeCampo({ id, texto }: { id: string; texto?: string }) {
 
 // ---------- aba: novo produto ----------
 
-function NovoProduto({ codigo, inativos, onFechar, onConcluido }: Props) {
+function NovoProduto({ codigo, inativos, onFechar, onConcluido, onGravando }: PropsAba) {
   const queryClient = useQueryClient();
   const baseId = useId();
   const [nome, setNome] = useState('');
@@ -138,6 +143,10 @@ function NovoProduto({ codigo, inativos, onFechar, onConcluido }: Props) {
       );
     },
   });
+
+  useEffect(() => {
+    onGravando(gravar.isPending);
+  }, [gravar.isPending, onGravando]);
 
   // O erro de um campo some assim que ele muda (o proximo envio valida de novo).
   const limpar = (campo: CampoNovoProduto) => setErros((e) => (e[campo] ? { ...e, [campo]: undefined } : e));
@@ -363,7 +372,7 @@ function NovoProduto({ codigo, inativos, onFechar, onConcluido }: Props) {
 
 // ---------- aba: produto existente ----------
 
-function ProdutoExistente({ codigo, onFechar, onConcluido }: Props) {
+function ProdutoExistente({ codigo, onFechar, onConcluido, onGravando }: PropsAba) {
   const queryClient = useQueryClient();
   const baseId = useId();
   const [busca, setBusca] = useState('');
@@ -385,6 +394,10 @@ function ProdutoExistente({ codigo, onFechar, onConcluido }: Props) {
     onError: (err) => setErroServidor(forecastPendentesErrorMessage(err)),
   });
 
+  useEffect(() => {
+    onGravando(gravar.isPending);
+  }, [gravar.isPending, onGravando]);
+
   if (produtosQuery.isLoading) return <Carregando texto="Carregando produtos…" />;
   if (produtosQuery.isError) {
     return (
@@ -405,7 +418,8 @@ function ProdutoExistente({ codigo, onFechar, onConcluido }: Props) {
 
   const achados = filtrarProdutos(todos, busca);
   const listados = achados.slice(0, MAX_PRODUTOS_LISTADOS);
-  const produto: ForecastProdutoCadastro | null = todos.find((p) => p.id === escolhido) ?? null;
+  // So conta como escolhido o produto VISIVEL: a busca que o tira da lista tambem desfaz a escolha (o botao desabilita).
+  const produto: ForecastProdutoCadastro | null = listados.find((p) => p.id === escolhido) ?? null;
   const id = (campo: string) => `${baseId}-${campo}`;
 
   return (
@@ -493,7 +507,7 @@ function ProdutoExistente({ codigo, onFechar, onConcluido }: Props) {
 
 // ---------- dialogo ----------
 
-function Corpo(props: Props) {
+function Corpo(props: PropsAba & { gravando: boolean }) {
   const [aba, setAba] = useState<Aba>('novo');
   return (
     <div className="fcc-modal">
@@ -504,7 +518,7 @@ function Corpo(props: Props) {
         O produto entra no cálculo a partir da próxima pré-visualização ou quinzena importada. A quinzena já gravada não
         muda.
       </p>
-      <Tabs value={aba} onValueChange={(v) => (v === 'novo' || v === 'existente') && setAba(v)} baseId="fcc">
+      <Tabs value={aba} onValueChange={(v) => (v === 'novo' || v === 'existente') && !props.gravando && setAba(v)} baseId="fcc">
         <TabList aria-label="Como completar o cadastro">
           <Tab value="novo">Novo produto</Tab>
           <Tab value="existente">Adicionar a produto existente</Tab>
@@ -522,9 +536,15 @@ function Corpo(props: Props) {
 
 /** Dialogo "Completar cadastro" de um codigo pendente (sem cadastro). Admin e comprador. */
 export default function ForecastCompletarCadastroModal(props: Props) {
+  const [gravando, setGravando] = useState(false);
+  // Esc, clique no fundo e o X ficam ignorados enquanto a gravacao esta pendente: a mensagem de falha parcial
+  // (lead time gravado, produto nao) precisa de um dialogo montado para ser lida.
+  const fechar = () => {
+    if (!gravando) props.onFechar();
+  };
   return (
-    <Modal isOpen onClose={props.onFechar} title="Completar cadastro" size="wide">
-      <Corpo {...props} />
+    <Modal isOpen onClose={fechar} title="Completar cadastro" size="wide">
+      <Corpo {...props} gravando={gravando} onGravando={setGravando} />
     </Modal>
   );
 }
