@@ -480,7 +480,10 @@ export function passosDaMemoria(linha: ForecastLinha, half: number, baseDate: st
     {
       titulo: 'Demanda',
       coluna: 'col. AN',
-      conta: `${inteiroBr(linha.U)} + ${inteiroBr(somaChegadas)} chegadas − ${d1(linha.T)} segurança − ${d1(linha.Q)} média − ${inteiroBr(somaProgramacoes)} programações`,
+      conta:
+        linha.T === null
+          ? 'fonte sem lead time: sem segurança, a demanda não é calculada'
+          : `${inteiroBr(linha.U)} + ${inteiroBr(somaChegadas)} chegadas − ${d1(linha.T)} segurança − ${d1(linha.Q)} média − ${inteiroBr(somaProgramacoes)} programações`,
       resultado: linha.AN === null ? '#N/D' : contabil1(linha.AN),
       tom: linha.AN !== null && linha.AN < 0 ? 'neg' : null,
     },
