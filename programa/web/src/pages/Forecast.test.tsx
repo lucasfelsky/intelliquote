@@ -155,6 +155,23 @@ describe('Forecast', () => {
     expect(detalhesChamados()).toEqual([]);
   });
 
+  it('titulo mostra o selo Beta e o aviso de validacao', async () => {
+    const aviso = 'Em validação: confira os números com a planilha do Forecast.';
+    mockApi({}, []);
+    const vazio = renderPage();
+    await screen.findByText(/Nenhuma quinzena importada ainda/);
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1.textContent).toContain('Forecast de compras');
+    expect(h1.querySelector('.fc-beta')?.textContent).toBe('Beta');
+    expect(screen.getByText(aviso)).toBeTruthy();
+    vazio.unmount();
+
+    mockApi({ 7: detalhe() });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(screen.getByText(aviso)).toBeTruthy();
+  });
+
   it('mostra o spinner enquanto a lista carrega', () => {
     get.mockImplementation(() => new Promise(() => undefined));
     renderPage();

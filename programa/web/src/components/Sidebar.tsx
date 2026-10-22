@@ -37,6 +37,12 @@ export default function Sidebar({
               >
                 <span className="sidebar__icon" aria-hidden="true">{item.icon}</span>
                 <span>{item.label}</span>
+                {item.tag && (
+                  <span className="sidebar__tag">
+                    <span className="sr-only">, </span>
+                    {item.tag}
+                  </span>
+                )}
                 {(badges[item.to] ?? 0) > 0 && (
                   <span className="sidebar__badge" aria-label={`${badges[item.to]} pendentes`}>
                     {badges[item.to]}
@@ -62,6 +68,12 @@ export default function Sidebar({
                   >
                     <span className="sidebar__icon" aria-hidden="true">{item.icon}</span>
                     <span>{item.label}</span>
+                    {item.tag && (
+                      <span className="sidebar__tag">
+                        <span className="sr-only">, </span>
+                        {item.tag}
+                      </span>
+                    )}
                   </NavLink>
                 </li>
               ))}
