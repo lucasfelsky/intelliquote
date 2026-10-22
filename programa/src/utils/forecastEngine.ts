@@ -1,7 +1,8 @@
 // Porte de Forecast-prototipo/src/motor/calcular.ts. Mudancas em relacao ao prototipo:
 //  - `hoje` e um date key (YYYY-MM-DD) e AP usa aritmetica UTC (sem conversao ISO de data local);
 //  - `quinzena` (1 | 2): na 1a quinzena o consumo do mes (AG) e a media trimestral (Q);
-//  - `somarChegada5oMes` / PROJECAO_5O_MES_SOMA_CHEGADA: regra do Comex sobre a coluna AL (a projecao do 5o mes soma a chegada desse mes).
+//  - `somarChegada5oMes` / PROJECAO_5O_MES_SOMA_CHEGADA: regra do Comex sobre a coluna AL (a projecao do 5o mes soma a chegada desse mes);
+//  - `mesesForaDaMedia` (PR 6c): meses de venda atipica ficam FORA das medias Q e R (e da AG quando o mes atual e marcado).
 import type {
   ColunaConferida,
   Lancamento,
@@ -52,6 +53,17 @@ export interface OpcoesCalculo {
   hoje: string; // YYYY-MM-DD: base da coluna CHEG. (HOJE() + lead time)
   quinzena?: 1 | 2; // default 2
   somarChegada5oMes?: boolean; // default PROJECAO_5O_MES_SOMA_CHEGADA
+  // PR 6c: por Produto.linha, os indices dos meses fora da media: 0..5 = J..O, 6 = P (mes atual). Ausente, vazio ou
+  // sem a linha = calculo IDENTICO ao da planilha (a conferencia motor x planilha NAO passa esta opcao).
+  mesesForaDaMedia?: ReadonlyMap<number, ReadonlySet<number>>;
+}
+
+// Media dos valores nos indices que NAO estao marcados. Todos marcados (nenhum mes valido): nao divide por zero e
+// devolve a media da planilha (todos os meses), sinalizando `semMesValido`.
+function mediaSemMeses(valores: number[], base: number, fora: ReadonlySet<number>): { media: number; semMesValido: boolean } {
+  const validos = valores.filter((_, i) => !fora.has(base + i));
+  if (validos.length === 0) return { media: somar(valores) / valores.length, semMesValido: true };
+  return { media: somar(validos) / validos.length, semMesValido: false };
 }
 
 export function calcular(q: Quinzena, opcoes: OpcoesCalculo): LinhaCalculada[] {
@@ -61,6 +73,7 @@ export function calcular(q: Quinzena, opcoes: OpcoesCalculo): LinhaCalculada[] {
   const hoje = opcoes.hoje;
   const quinzena = opcoes.quinzena ?? 2;
   const somarChegada5oMes = opcoes.somarChegada5oMes ?? PROJECAO_5O_MES_SOMA_CHEGADA;
+  const mesesForaDaMedia = opcoes.mesesForaDaMedia;
   const e = q.entradas;
   const estoque = somaPorCodigo(e.estoque);
   const vendasMes = somaPorCodigo(e.vendasMes);
@@ -93,8 +106,16 @@ export function calcular(q: Quinzena, opcoes: OpcoesCalculo): LinhaCalculada[] {
     const [J, K, L, M, N] = p.historico;
     const O = somarCodigos(cods, (k) => vendasMes.get(k) ?? 0);
     const P = somarCodigos(cods, (k) => vendasAtual.get(k) ?? 0);
-    const Q = (M + N + O) / 3;
-    const R = (J + K + L + M + N + O) / 6;
+    const Qplanilha = (M + N + O) / 3;
+    const Rplanilha = (J + K + L + M + N + O) / 6;
+    // PR 6c: so indices 0..6 contam; sem nenhum, o calculo e o da planilha (mesmas expressoes, mesmo resultado).
+    const fora = [...(mesesForaDaMedia?.get(p.linha) ?? [])].filter((i) => Number.isInteger(i) && i >= 0 && i <= 6);
+    const foraSet: ReadonlySet<number> = new Set(fora);
+    const ajustar = foraSet.size > 0;
+    const trimestre = ajustar ? mediaSemMeses([M, N, O], 3, foraSet) : null;
+    const semestre = ajustar ? mediaSemMeses([J, K, L, M, N, O], 0, foraSet) : null;
+    const Q = trimestre ? trimestre.media : Qplanilha;
+    const R = semestre ? semestre.media : Rplanilha;
     const S = somarCodigos(cods, (k) => vendasAnual.get(k) ?? 0) / 11; // dezembro entra só na soma (resposta do Comex)
     const AQ = p.fonte ? leadtime.get(p.fonte.toUpperCase()) ?? null : null;
     const T = AQ === null ? null : (Q / 30) * AQ;
@@ -107,7 +128,9 @@ export function calcular(q: Quinzena, opcoes: OpcoesCalculo): LinhaCalculada[] {
     );
     const AA = Q === 0 ? '0' : (U + somar(cheg)) / Q;
     // 1a quinzena: o consumo do mes e a media (regra do Comex). 2a: maior entre Q e P (planilha).
-    const AG = quinzena === 1 ? Q : Q < P ? P : Q;
+    // Mes atual (P) marcado como atipico: a venda parcial nao entra no consumo do mes, que fica na media (Q).
+    const agPlanilha = quinzena === 1 ? Qplanilha : Qplanilha < P ? P : Qplanilha;
+    const AG = quinzena === 1 || foraSet.has(6) ? Q : Q < P ? P : Q;
 
     // Projeção do estoque no fim de cada mês. A falta acumula para o mês seguinte.
     const AH = U + cheg[0] - prog[0] - AG;
@@ -132,10 +155,21 @@ export function calcular(q: Quinzena, opcoes: OpcoesCalculo): LinhaCalculada[] {
 
     const AS = somarCodigos(cods, (k) => clientes.get(k) ?? 0);
 
-    return {
+    const linhaCalculada: LinhaCalculada = {
       linha: p.linha, O, P, Q, R, S, T, U, chegadas: cheg, AA,
       programacoes: prog, AG, projecao: [AH, AI, AJ, AK, AL, AM], AN, AQ, AP, AR, AS,
     };
+    if (trimestre && semestre) {
+      // Valores DA PLANILHA (a memoria mostra antes/depois); so presente quando a linha tem meses marcados.
+      linhaCalculada.mediaAjustada = {
+        meses: [...foraSet].sort((a, b) => a - b),
+        Q: Qplanilha,
+        R: Rplanilha,
+        AG: agPlanilha,
+        semMesValido: trimestre.semMesValido || semestre.semMesValido,
+      };
+    }
+    return linhaCalculada;
   }
 }
 

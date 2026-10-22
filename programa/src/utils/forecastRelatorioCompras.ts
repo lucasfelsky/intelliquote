@@ -32,6 +32,10 @@
 // por estoque e chegadas) e conta em `fora.sobDemanda`; nunca volta sozinha para a lista principal. Linha sob demanda
 // que nao entraria nao muda; sem consumo so ganha o selo. O motor nao e tocado: a marca vem do cadastro ATUAL.
 //
+// Meses atipicos (PR 6c, Comex): o motor ja entrega Q/AN/projecao SEM os meses marcados; o relatorio so repassa QUAIS
+// meses ficaram fora da media (`mesesForaDaMedia`, 'YYYY-MM' em ordem cronologica) para tela e XLSX avisarem. Sem marca
+// o item sai como antes (lista vazia).
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
@@ -58,6 +62,8 @@ export interface LinhaParaRelatorio {
   naoFraciona?: boolean;
   /** Observacao congelada da quinzena (AT da planilha / notas do produto); ausente = ''. */
   obs?: string;
+  /** PR 6c: meses de venda atipica que ficaram fora da media da linha (ja na janela da quinzena); ausente = nenhum. */
+  mesesForaDaMedia?: Array<{ anoMes: string }>;
 }
 
 export interface QuinzenaParaRelatorio {
@@ -133,6 +139,8 @@ export interface ItemRelatorioCompras {
   naoFraciona: boolean;
   /** Observacao da quinzena ('' quando nao ha). */
   obs: string;
+  /** Meses de venda atipica fora da media deste item (PR 6c), 'YYYY-MM' cronologico; vazio = media da planilha. */
+  mesesForaDaMedia: string[];
   ruptura: RupturaEstimada | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -175,6 +183,8 @@ export interface ItemSemConsumo {
   semLeadTime: boolean;
   /** Observacao da quinzena ('' quando nao ha). */
   obs: string;
+  /** Meses de venda atipica fora da media deste item (PR 6c); vazio = media da planilha. */
+  mesesForaDaMedia: string[];
   /** Produto marcado como compra sob demanda (so selo; a lista continua a mesma). */
   sobDemanda: boolean;
 }
@@ -201,6 +211,8 @@ export interface ItemSobDemanda {
   programacaoDescoberta: number;
   /** Observacao da quinzena ('' quando nao ha): o item sai da lista de compra, a nota vai junto. */
   obs: string;
+  /** Meses de venda atipica fora da media deste item (PR 6c); vazio = media da planilha. */
+  mesesForaDaMedia: string[];
 }
 
 export interface RelatorioCompras {
@@ -371,6 +383,9 @@ function mesesComValor(valores: number[], anoMes: string[]): Array<{ anoMes: str
   return saida;
 }
 
+const mesesForaDaMediaDaLinha = (l: Pick<LinhaParaRelatorio, 'mesesForaDaMedia'>): string[] =>
+  (l.mesesForaDaMedia ?? []).map((m) => m.anoMes);
+
 const compararTexto = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
 
 // Datas (YYYY-MM-DD) comparam como texto; nulo vai por ultimo.
@@ -519,6 +534,7 @@ export function montarRelatorioCompras(
       chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
       semLeadTime: l.AN === null,
       obs: (l.obs ?? '').trim(),
+      mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
       sobDemanda: regraSobDemanda(l) !== undefined,
     });
   };
@@ -556,6 +572,7 @@ export function montarRelatorioCompras(
         programado,
         programacaoDescoberta: semMenosZero(Math.max(0, arredondar6(programado - l.U - somaChegadas(l)))),
         obs: (l.obs ?? '').trim(),
+        mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
       });
       continue;
     }
@@ -584,6 +601,7 @@ export function montarRelatorioCompras(
       quantidadeFinal: arredondado ? arredondado.quantidade : quantidadeSugerida,
       naoFraciona: l.naoFraciona === true,
       obs: (l.obs ?? '').trim(),
+      mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
       ruptura,
       dataLimite,
       vencida: dataLimite !== null && dataLimite < q.hoje,

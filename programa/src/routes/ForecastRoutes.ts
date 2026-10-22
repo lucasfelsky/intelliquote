@@ -82,6 +82,14 @@ router.patch(
   ForecastController.patchSobDemanda,
 );
 
+// Meses de venda atipica do produto (PR 6c): ficam fora das medias trimestral/semestral. Substitui o conjunto.
+router.put(
+  '/forecast/products/:id/meses-atipicos',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putMesesAtipicos,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(

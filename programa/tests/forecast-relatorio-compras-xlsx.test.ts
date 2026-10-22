@@ -28,6 +28,7 @@ import {
   URGENCIAS_XLSX,
   celulasDoItem,
   celulasDoItemSobDemanda,
+  contarComMesesForaDaMedia,
   dataBr,
   gerarXlsxRelatorioCompras,
   inteiroBr,
@@ -35,14 +36,17 @@ import {
   linhasDoResumo,
   mesAbrev,
   nomeArquivoRelatorioCompras,
+  paragrafoMesesForaDaMedia,
   paragrafoSemConsumo,
   paragrafoSobDemanda,
   paragrafoUrgencia,
   paragrafosDeRegras,
   resumoDeUrgencia,
+  resumoMesesForaDaMedia,
   resumoSemConsumo,
   resumoSobDemanda,
   rotuloUrgencia,
+  textoMesesForaDaMedia,
   textoMotivoSobDemanda,
   textoMotivos,
   textoOpcaoDeEmbalagem,
@@ -68,10 +72,15 @@ import {
 } from '../web/src/pages/Forecast/forecastRelatorioUrgencia';
 import {
   PARAGRAFO_EMBALAGEM,
+  contarComMesesForaDaMedia as contarComMesesForaDaMediaWeb,
   opcoesOutrasComPallet,
   palletDoDestaque,
+  paragrafoMesesForaDaMedia as paragrafoMesesForaDaMediaWeb,
   paragrafoSobDemanda as paragrafoSobDemandaWeb,
+  resumoMesesForaDaMedia as resumoMesesForaDaMediaWeb,
   resumoSobDemanda as resumoSobDemandaWeb,
+  textoMediaSem as textoMediaSemWeb,
+  textoMesesForaDaMedia as textoMesesForaDaMediaWeb,
   textoMotivoSobDemanda as textoMotivoSobDemandaWeb,
   textoOpcaoDeEmbalagem as textoOpcaoDeEmbalagemWeb,
   textoPallet as textoPalletWeb,
@@ -425,14 +434,14 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
 
   it('aba Por urgencia: lista unica na ordem de posicaoUrgencia, com fonte, filtro e cabecalho congelado', async () => {
     const ws = (await abrir()).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(19);
-    expect(linhaComoArrayN(ws, 1, 19)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(20);
+    expect(linhaComoArrayN(ws, 1, 20)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     const lista = itensNaOrdemDeUrgencia(sintetico);
     expect(lista.map((x) => x.item.item)).toEqual(['PRODUTO 004', 'PRODUTO 002', 'PRODUTO 001', 'PRODUTO 003']);
     expect(ws.rowCount).toBe(1 + lista.length);
     lista.forEach(({ item, fonte }, i) => {
       const c = celulasDoItem(item, 15);
-      expect(linhaComoArrayN(ws, i + 2, 19)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
+      expect(linhaComoArrayN(ws, i + 2, 20)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
     });
     expect(ws.autoFilter).toBeTruthy();
     expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
@@ -447,7 +456,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
   it('aba Por urgencia sem itens: cabecalho e aviso', async () => {
     const vazio = montarRelatorioCompras(quinzena([]), []);
     const ws = (await carregar(await gerarXlsxRelatorioCompras(vazio))).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(linhaComoArrayN(ws, 1, 19)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(linhaComoArrayN(ws, 1, 20)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     expect(valorDaCelula(ws, 2, 1)).toBe('Nenhum item com demanda ≤ 0 nesta quinzena.');
   });
 
@@ -477,7 +486,8 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
     const ws = (await carregar(await gerarXlsxRelatorioCompras(r))).getWorksheet(ABA_SEM_CONSUMO)!;
     const n = COLUNAS_SEM_CONSUMO_XLSX.length;
     expect(COLUNAS_SEM_CONSUMO_XLSX).toEqual([
-      'Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Estoque', 'Programado', 'Programações', 'Chegadas', 'Observação',
+      'Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Estoque', 'Programado', 'Programações', 'Chegadas',
+      'Meses fora da média', 'Observação',
     ]);
     expect(linhaComoArrayN(ws, 1, n)).toEqual([...COLUNAS_SEM_CONSUMO_XLSX]);
     expect(ws.rowCount).toBe(4);
@@ -491,10 +501,11 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
       300,
       'Programação nov/2026: 300',
       'Chegada dez/2026: 1.200',
+      '',
       'OBS SINTETICA 002',
     ]);
     expect(linhaComoArrayN(ws, 3, n)).toEqual([
-      'PRODUTO 001', 'C0001', 'FONTE 001', 'Cotação não enviada', 'tem estoque', 10, 0, '—', '—', '',
+      'PRODUTO 001', 'C0001', 'FONTE 001', 'Cotação não enviada', 'tem estoque', 10, 0, '—', '—', '', '',
     ]);
     expect(valorDaCelula(ws, 4, 3)).toBe('FONTE 009 (sem lead time)');
     expect(ws.getRow(2).getCell(6).numFmt).toBe('0.0');
@@ -982,6 +993,7 @@ describe('compra sob demanda no XLSX', () => {
       400,
       300,
       'Chegada fev/2027: 100',
+      '',
       'OBS SINTETICA 001',
     ]);
     expect(COLUNAS_SOB_DEMANDA_XLSX.at(-1)).toBe('Observação');
@@ -1045,5 +1057,145 @@ describe('compra sob demanda no XLSX', () => {
     expect(paragrafoSobDemanda()).toBe(paragrafoSobDemandaWeb());
     expect(textoMotivos(['programacao', 'estoque'], true)).toBe(textoMotivosWeb(['programacao', 'estoque'], true));
     expect(textoMotivos(['estoque'])).toBe(textoMotivosWeb(['estoque']));
+  });
+});
+
+// ---- Meses atipicos fora da media (PR 6c) ----
+describe('meses atipicos fora da media no XLSX', () => {
+  // PRODUTO 001 (lista) com ago/2026 e set/2026 fora; PRODUTO 002 (lista) sem marca; PRODUTO 003 sem consumo, com ago/2026;
+  // PRODUTO 004 sob demanda, com ago/2026.
+  const base = [
+    linha({
+      linha: 1,
+      productId: 1,
+      item: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      obs: 'OBS SINTETICA 001',
+      mesesForaDaMedia: [{ anoMes: '2026-08' }, { anoMes: '2026-09' }],
+    }),
+    linha({ linha: 2, productId: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', AN: -50 }),
+    linha({
+      linha: 3,
+      productId: 3,
+      item: 'PRODUTO 003',
+      fonte: 'FONTE 002',
+      Q: 0,
+      AG: 0,
+      U: 200,
+      AN: 200,
+      projecao: [200, 200, 200, 200, 200, 200],
+      mesesForaDaMedia: [{ anoMes: '2026-08' }],
+    }),
+    linha({
+      linha: 4,
+      productId: 4,
+      item: 'PRODUTO 004',
+      fonte: 'FONTE 003',
+      AN: -300,
+      obs: 'OBS SINTETICA 004',
+      mesesForaDaMedia: [{ anoMes: '2026-08' }],
+    }),
+  ];
+  const marca = new Map([[4, { motivo: 'MOTIVO SINTETICO' }]]);
+  const com = montarRelatorioCompras(quinzena(base), [], { sobDemanda: marca });
+  const semMarcas = montarRelatorioCompras(
+    quinzena(base.map(({ mesesForaDaMedia: _omitido, ...resto }) => resto)),
+    [],
+    { sobDemanda: marca },
+  );
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+
+  it('premissa: o relatorio repassa os meses fora da media nas tres listas', () => {
+    expect(com.grupos[0].itens.map((i) => [i.item, i.mesesForaDaMedia])).toEqual([
+      ['PRODUTO 001', ['2026-08', '2026-09']],
+      ['PRODUTO 002', []],
+    ]);
+    expect(com.semConsumo.itens.map((i) => i.mesesForaDaMedia)).toEqual([['2026-08']]);
+    expect(com.sobDemanda.itens.map((i) => i.mesesForaDaMedia)).toEqual([['2026-08']]);
+  });
+
+  it('coluna "Meses fora da média" fica ANTES da Observação, que continua a ultima, nas 4 abas', () => {
+    for (const colunas of [
+      COLUNAS_RELATORIO_XLSX,
+      COLUNAS_POR_URGENCIA_XLSX,
+      COLUNAS_SEM_CONSUMO_XLSX,
+      COLUNAS_SOB_DEMANDA_XLSX,
+    ] as ReadonlyArray<readonly string[]>) {
+      expect(colunas.at(-1)).toBe('Observação');
+      expect(colunas.at(-2)).toBe('Meses fora da média');
+      expect(colunas.filter((c) => c === 'Meses fora da média')).toHaveLength(1);
+    }
+  });
+
+  it('aba por fonte e por urgencia: texto dos meses e Observacao na ultima coluna', async () => {
+    const wb = await abrir(com);
+    const mapa = mapearLinhas(com);
+    const row = (i: number) => linhaComoArray(wb.getWorksheet(ABA_RELATORIO)!, mapa.grupos[0].primeiroItem + i);
+    expect(row(0)[COL('Meses fora da média') - 1]).toBe('ago/2026, set/2026');
+    expect(row(0)[COL('Observação') - 1]).toBe('OBS SINTETICA 001');
+    expect(row(0)).toEqual(celulasDoItem(com.grupos[0].itens[0], 15));
+    expect(row(1)[COL('Meses fora da média') - 1]).toBe('');
+
+    const urg = wb.getWorksheet(ABA_POR_URGENCIA)!;
+    const colMeses = COLUNAS_POR_URGENCIA_XLSX.indexOf('Meses fora da média') + 1;
+    const colObs = COLUNAS_POR_URGENCIA_XLSX.indexOf('Observação') + 1;
+    expect(colObs).toBe(COLUNAS_POR_URGENCIA_XLSX.length);
+    const textos = itensNaOrdemDeUrgencia(com).map((_, i) => valorDaCelula(urg, i + 2, colMeses));
+    expect([...textos].sort()).toEqual(['', 'ago/2026, set/2026']);
+  });
+
+  it('abas sem consumo e sob demanda: coluna preenchida e Observação por ultimo', async () => {
+    const wb = await abrir(com);
+    const sem = wb.getWorksheet(ABA_SEM_CONSUMO)!;
+    expect(valorDaCelula(sem, 2, COLUNAS_SEM_CONSUMO_XLSX.indexOf('Meses fora da média') + 1)).toBe('ago/2026');
+    const sob = wb.getWorksheet(ABA_SOB_DEMANDA)!;
+    const n = COLUNAS_SOB_DEMANDA_XLSX.length;
+    expect(linhaComoArrayN(sob, 2, n)).toEqual(celulasDoItemSobDemanda(com.sobDemanda.itens[0]));
+    expect(valorDaCelula(sob, 2, n - 1)).toBe('ago/2026');
+    expect(valorDaCelula(sob, 2, n)).toBe('OBS SINTETICA 004');
+  });
+
+  it('resumo e Regras ganham a linha e o paragrafo so quando ha item com meses fora da media', async () => {
+    expect(contarComMesesForaDaMedia(com)).toBe(3);
+    expect(linhasDoResumo(com)).toContain('3 itens usam média sem meses atípicos');
+    expect(linhasDoResumo(semMarcas).some((l) => l.includes('meses atípicos'))).toBe(false);
+
+    const regras = paragrafosDeRegras(15, true, true);
+    expect(regras.at(-2)).toBe(paragrafoMesesForaDaMedia());
+    expect(regras.at(-1)).toBe('Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).');
+    expect(paragrafosDeRegras(15, true)).toEqual(regras.filter((p) => p !== paragrafoMesesForaDaMedia()));
+    const wb = await abrir(com);
+    const textos: string[] = [];
+    wb.getWorksheet(ABA_REGRAS)!.eachRow((row) => textos.push(String(row.getCell(1).value)));
+    expect(textos).toEqual(paragrafosDeRegras(15, true, true));
+
+    // Sem marca: Regras identica a de antes.
+    const wbSem = await abrir(semMarcas);
+    const textosSem: string[] = [];
+    wbSem.getWorksheet(ABA_REGRAS)!.eachRow((row) => textosSem.push(String(row.getCell(1).value)));
+    expect(textosSem).toEqual(paragrafosDeRegras(15, true));
+  });
+
+  it('sem meses marcados a coluna existe mas fica vazia em todas as abas', async () => {
+    const wb = await abrir(semMarcas);
+    const mapa = mapearLinhas(semMarcas);
+    expect(linhaComoArray(wb.getWorksheet(ABA_RELATORIO)!, mapa.grupos[0].primeiroItem)[COL('Meses fora da média') - 1]).toBe('');
+    const sem = wb.getWorksheet(ABA_SEM_CONSUMO)!;
+    expect(valorDaCelula(sem, 2, COLUNAS_SEM_CONSUMO_XLSX.indexOf('Meses fora da média') + 1)).toBe('');
+  });
+
+  it('paridade tela x XLSX: texto dos meses, contagem, resumo e paragrafo iguais', () => {
+    for (const meses of [[], ['2026-08'], ['2026-08', '2026-09', '2026-10']]) {
+      expect(textoMesesForaDaMedia(meses)).toBe(textoMesesForaDaMediaWeb(meses));
+    }
+    for (const n of [1, 2, 10]) {
+      expect(resumoMesesForaDaMedia(n)).toBe(resumoMesesForaDaMediaWeb(n));
+    }
+    expect(paragrafoMesesForaDaMedia()).toBe(paragrafoMesesForaDaMediaWeb());
+    expect(contarComMesesForaDaMedia(com)).toBe(
+      contarComMesesForaDaMediaWeb(com as unknown as Parameters<typeof contarComMesesForaDaMediaWeb>[0]),
+    );
+    // A linha da tela e o texto do XLSX usam a mesma lista: "Média sem: " + texto.
+    expect(textoMediaSemWeb(['2026-08', '2026-09'])).toBe(`Média sem: ${textoMesesForaDaMedia(['2026-08', '2026-09'])}`);
   });
 });

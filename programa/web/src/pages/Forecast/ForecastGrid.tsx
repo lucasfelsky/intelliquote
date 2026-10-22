@@ -51,7 +51,11 @@ const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergenci
           .filter(Boolean)
           .join(' ');
         const destaque = texto !== '' ? c.destaque?.(linha) : undefined;
-        const title = divergencia ? descreverDivergencia(divergencia) : c.id === 'obs' && texto !== '' ? texto : undefined;
+        const title = divergencia
+          ? descreverDivergencia(divergencia)
+          : c.id === 'obs' && texto !== ''
+            ? texto
+            : c.titulo?.(linha);
         return (
           <td key={c.id} className={classes} title={title}>
             {destaque ? <span className={destaque}>{texto}</span> : texto}

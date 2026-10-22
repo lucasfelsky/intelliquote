@@ -224,3 +224,22 @@ describe('textos da compra sob demanda', () => {
     expect(resumoSobDemanda(2)).toBe('2 sob demanda (fora da lista de compra)');
   });
 });
+
+describe('ForecastRelatorioSobDemanda - meses atipicos (PR 6c)', () => {
+  it('item com meses fora da media ganha o selo "Média sem" antes da observacao; sem marca, nada', () => {
+    render(
+      <ForecastRelatorioSobDemanda
+        itens={[sob({ mesesForaDaMedia: ['2026-08'], obs: 'OBS SINTETICA' }), sob({ linha: 10, item: 'PRODUTO 002' })]}
+      />,
+    );
+    const selos = screen.getAllByText(/^Média sem:/);
+    expect(selos).toHaveLength(1);
+    expect(selos[0]?.textContent).toBe('Média sem: ago/2026');
+    expect(Array.from((selos[0]?.parentElement as HTMLElement).children).map((c) => c.className)).toEqual([
+      'fcr-item__nome',
+      'fcr-item__codigos',
+      'fcr-item__media',
+      'fcr-item__obs',
+    ]);
+  });
+});

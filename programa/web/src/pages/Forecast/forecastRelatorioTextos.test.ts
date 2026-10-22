@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { ForecastOpcaoEmbalagem } from '@/services/forecast';
 import {
+  contarComMesesForaDaMedia,
   linhasOutrasEmbalagens,
   opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
+  paragrafoMesesForaDaMedia,
+  resumoMesesForaDaMedia,
+  textoMediaSem,
+  textoMesesForaDaMedia,
   textoObservacao,
   textoOpcaoDeEmbalagem,
   textoPallet,
@@ -159,6 +164,40 @@ describe('palletDoDestaque / opcoesOutrasComPallet', () => {
   it('PARAGRAFO_EMBALAGEM explica o pallet e que a Qtd. final continua pela embalagem', () => {
     expect(PARAGRAFO_EMBALAGEM).toContain(
       'Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.',
+    );
+  });
+});
+
+describe('meses atipicos (PR 6c)', () => {
+  it('textoMesesForaDaMedia e textoMediaSem: meses abreviados em ordem; vazio/ausente = nenhum', () => {
+    expect(textoMesesForaDaMedia(['2026-08'])).toBe('ago/2026');
+    expect(textoMesesForaDaMedia(['2026-08', '2026-09', '2026-10'])).toBe('ago/2026, set/2026, out/2026');
+    expect(textoMesesForaDaMedia([])).toBe('');
+    expect(textoMesesForaDaMedia(undefined)).toBe('');
+    expect(textoMesesForaDaMedia(null)).toBe('');
+    expect(textoMediaSem(['2026-08', '2026-09'])).toBe('Média sem: ago/2026, set/2026');
+    expect(textoMediaSem([])).toBeNull();
+    expect(textoMediaSem(undefined)).toBeNull();
+  });
+
+  it('contarComMesesForaDaMedia soma lista de compra, sem consumo e sob demanda; backend antigo = 0', () => {
+    const itens = (...marcas: Array<string[] | undefined>) => marcas.map((mesesForaDaMedia) => ({ mesesForaDaMedia }));
+    const r = {
+      grupos: [{ itens: itens(['2026-08'], undefined, []) }, { itens: itens(['2026-09']) }],
+      semConsumo: { itens: itens(['2026-08']) },
+      sobDemanda: { itens: itens([], ['2026-10']) },
+    } as unknown as Parameters<typeof contarComMesesForaDaMedia>[0];
+    expect(contarComMesesForaDaMedia(r)).toBe(4);
+    expect(
+      contarComMesesForaDaMedia({ grupos: [{ itens: itens(undefined) }] } as unknown as Parameters<typeof contarComMesesForaDaMedia>[0]),
+    ).toBe(0);
+  });
+
+  it('resumo no singular/plural e o paragrafo das regras', () => {
+    expect(resumoMesesForaDaMedia(1)).toBe('1 item usa média sem meses atípicos');
+    expect(resumoMesesForaDaMedia(3)).toBe('3 itens usam média sem meses atípicos');
+    expect(paragrafoMesesForaDaMedia()).toBe(
+      'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.',
     );
   });
 });

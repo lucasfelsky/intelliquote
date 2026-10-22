@@ -3099,3 +3099,37 @@ i.fc-status--preco { background: var(--info); }
 .fc-compra input:focus-visible,
 .fc-compra__salvar:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
 .fcr-tabela td.fcr-descoberta { color: var(--danger); }
+
+/* ---- Forecast: meses atipicos fora da media (PR 6c) ---- */
+.fc-grid .fc-cell--fora-media { color: var(--ink-soft); text-decoration: line-through; }
+.fc-passo__nota { color: var(--ink-soft); font-size: 12px; line-height: 1.4; }
+.fc-atipicos { margin: 0 0 8px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.fc-atipicos li { overflow-wrap: anywhere; }
+.fc-atipicos__editar { align-self: flex-start; }
+.fcr-item__media { align-self: flex-start; padding: 1px 8px; border-radius: 10px; background: var(--tone-info-bg); color: var(--info); font-size: 11px; font-weight: 600; line-height: 1.4; }
+@media print {
+  .fcr-item__media { padding: 0; background: none; font-size: 7.5pt; }
+}
+.fca-tabela { min-width: 640px; }
+.fca-linha--marcada th, .fca-linha--marcada td { background: var(--tone-warning-bg-soft); }
+.fca-atual { font-weight: 400; color: var(--ink-soft); }
+.fca-motivo { min-width: 220px; }
+.fca-motivo:disabled { opacity: 0.6; cursor: not-allowed; }
+.fca-tabela input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fca-tabela [aria-invalid="true"] { border-color: var(--danger); }
+/* Telas estreitas: cada mes vira um bloco (mes + venda na 1a linha; caixa + motivo na 2a), sem rolagem horizontal. */
+@media (max-width: 560px) {
+  .fca-tabela { min-width: 0; }
+  .fca-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fca-tabela, .fca-tabela tbody { display: block; }
+  .fca-tabela tr { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .fca-tabela th, .fca-tabela td { display: block; padding: 4px 0; border-bottom: 0; }
+  .fca-tabela tr > :nth-child(1) { grid-column: 1; }
+  .fca-tabela tr > :nth-child(2) { grid-column: 2; text-align: right; }
+  .fca-tabela td.fce-num::before { content: 'Venda (kg): '; color: var(--ink-soft); }
+  .fca-tabela tr > :nth-child(3) { grid-column: 1; }
+  .fca-tabela tr > :nth-child(4) { grid-column: 2; }
+  .fca-tabela .fca-atual { display: block; }
+  .fca-motivo { min-width: 0; width: 100%; }
+  .fca-linha--marcada { background: var(--tone-warning-bg-soft); }
+}

@@ -24,7 +24,7 @@ export const ABA_SOB_DEMANDA = 'Sob demanda';
 export const ABA_REGRAS = 'Regras';
 
 // As colunas da tela (+ Urgencia e Dias ate a ruptura); Item / Embalagem / Data-limite desdobradas em colunas filtraveis.
-// Colunas novas entram SEMPRE no fim (nenhuma posicao existente muda): Observacao (PR 5B).
+// Colunas novas entram no fim, mas a Observacao (PR 5B) continua a ULTIMA: 'Meses fora da média' (PR 6c) entra antes dela.
 export const COLUNAS_RELATORIO_XLSX = [
   'Item',
   'Urgência',
@@ -43,6 +43,7 @@ export const COLUNAS_RELATORIO_XLSX = [
   'Data-limite',
   'Vencida',
   'Em andamento',
+  'Meses fora da média',
   'Observação',
 ] as const;
 
@@ -64,6 +65,7 @@ export const COLUNAS_SEM_CONSUMO_XLSX = [
   'Programado',
   'Programações',
   'Chegadas',
+  'Meses fora da média',
   'Observação',
 ] as const;
 
@@ -79,6 +81,7 @@ export const COLUNAS_SOB_DEMANDA_XLSX = [
   'Programação descoberta',
   'Estoque',
   'Chegadas',
+  'Meses fora da média',
   'Observação',
 ] as const;
 
@@ -108,13 +111,14 @@ const NOMES_TEXTO_QUEBRA = [
   'Outras embalagens',
   'Ruptura',
   'Em andamento',
+  'Meses fora da média',
   'Observação',
 ] as const;
 const NOMES_NUMERICOS = ['Demanda', 'Qtd. sugerida', 'Qtd. final'] as const;
-const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 40];
+const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 20, 40];
 const LARGURAS_POR_URGENCIA = [34, 22, 24, ...LARGURAS.slice(2)];
-const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 40];
-const LARGURAS_SOB_DEMANDA = [34, 22, 24, 24, 40, 11, 30, 14, 11, 30, 40];
+const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 20, 40];
+const LARGURAS_SOB_DEMANDA = [34, 22, 24, 24, 40, 11, 30, 14, 11, 30, 20, 40];
 
 const plural = (n: number, singular: string, pluralForm: string) => (n === 1 ? singular : pluralForm);
 
@@ -199,6 +203,33 @@ export function paragrafoSobDemanda(): string {
   return 'Itens marcados como "compra sob demanda" saem da lista de compra: só se compra com programação do cliente. A seção mostra a programação ainda não coberta por estoque e chegadas.';
 }
 
+// ---- Meses atipicos (PR 6c): copia EXATA de web/src/pages/Forecast/forecastRelatorioTextos.ts (guarda de paridade no teste) ----
+
+// Meses fora da media do item, ex.: 'ago/2026, set/2026' (vazio = nenhum; a celula fica vazia).
+export function textoMesesForaDaMedia(anoMeses: string[]): string {
+  return anoMeses.map(mesAbrev).join(', ');
+}
+
+// Itens (lista de compra, sem consumo e sob demanda) cuja media usa meses excluidos.
+export function contarComMesesForaDaMedia(
+  r: Pick<RelatorioCompras, 'grupos' | 'semConsumo' | 'sobDemanda'>,
+): number {
+  const itens: Array<{ mesesForaDaMedia: string[] }> = [
+    ...r.grupos.flatMap((g) => g.itens),
+    ...r.semConsumo.itens,
+    ...r.sobDemanda.itens,
+  ];
+  return itens.filter((i) => i.mesesForaDaMedia.length > 0).length;
+}
+
+export function resumoMesesForaDaMedia(n: number): string {
+  return `${n} ${n === 1 ? 'item usa' : 'itens usam'} média sem meses atípicos`;
+}
+
+export function paragrafoMesesForaDaMedia(): string {
+  return 'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.';
+}
+
 export function resumoSemConsumo(emAtencao: number, semMovimento: number): string {
   return `Sem consumo: ${emAtencao} em atenção (com estoque ou programação, fora da lista de compra) · ${semMovimento} sem estoque nem programação`;
 }
@@ -239,6 +270,10 @@ export function linhasDoResumo(r: RelatorioCompras): string[] {
   linhas.push(resumoSemConsumo(r.semConsumo.itens.length, fora.semConsumoSemMovimento));
   if (fora.sobDemanda > 0) {
     linhas.push(resumoSobDemanda(fora.sobDemanda));
+  }
+  const comMesesForaDaMedia = contarComMesesForaDaMedia(r);
+  if (comMesesForaDaMedia > 0) {
+    linhas.push(resumoMesesForaDaMedia(comMesesForaDaMedia));
   }
   return linhas;
 }
@@ -289,7 +324,7 @@ function textoEmAndamento(item: ItemRelatorioCompras): string {
   return juntarLinhas([...linhasChegada(chegadas), ...linhasProgramacao(programacoes)]);
 }
 
-// 18 valores, na ordem de COLUNAS_RELATORIO_XLSX.
+// 19 valores, na ordem de COLUNAS_RELATORIO_XLSX.
 export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): Array<string | number> {
   const { usada, multiplas } = item.embalagem;
   const { ruptura } = item;
@@ -324,6 +359,7 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
     item.dataLimite ? dataBr(item.dataLimite) : TRACO,
     item.vencida ? 'Vencida' : '',
     textoEmAndamento(item),
+    textoMesesForaDaMedia(item.mesesForaDaMedia),
     item.obs,
   ];
 }
@@ -339,11 +375,12 @@ export function celulasDoItemSemConsumo(item: ItemSemConsumo): Array<string | nu
     item.programado,
     juntarLinhas(linhasProgramacao(item.programacoes)),
     juntarLinhas(linhasChegada(item.chegadas)),
+    textoMesesForaDaMedia(item.mesesForaDaMedia),
     item.obs,
   ];
 }
 
-// 11 valores, na ordem de COLUNAS_SOB_DEMANDA_XLSX.
+// 12 valores, na ordem de COLUNAS_SOB_DEMANDA_XLSX.
 export function celulasDoItemSobDemanda(item: ItemSobDemanda): Array<string | number> {
   return [
     item.item,
@@ -356,6 +393,7 @@ export function celulasDoItemSobDemanda(item: ItemSobDemanda): Array<string | nu
     item.programacaoDescoberta,
     item.estoque,
     juntarLinhas(linhasChegada(item.chegadas)),
+    textoMesesForaDaMedia(item.mesesForaDaMedia),
     item.obs,
   ];
 }
@@ -366,7 +404,11 @@ export function nomeArquivoRelatorioCompras(q: { label: string; hoje: string }):
 }
 
 // Texto da aba Regras: os paragrafos do <details> da tela + nota de origem do arquivo.
-export function paragrafosDeRegras(diasCritico: number, comSobDemanda = false): string[] {
+export function paragrafosDeRegras(
+  diasCritico: number,
+  comSobDemanda = false,
+  comMesesForaDaMedia = false,
+): string[] {
   return [
     'O saldo zera no primeiro mês em que a projeção do estoque fica negativa. O dia da ruptura é uma estimativa: o consumo do mês é distribuído de forma linear (no mês base, a partir da data-base).',
     'Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite já passou na data de hoje.',
@@ -374,6 +416,7 @@ export function paragrafosDeRegras(diasCritico: number, comSobDemanda = false): 
     paragrafoUrgencia(diasCritico),
     paragrafoSemConsumo(),
     ...(comSobDemanda ? [paragrafoSobDemanda()] : []),
+    ...(comMesesForaDaMedia ? [paragrafoMesesForaDaMedia()] : []),
     'Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).',
   ];
 }
@@ -489,7 +532,7 @@ function adicionarAbaSemConsumo(workbook: exceljs.Workbook, r: RelatorioCompras)
   for (const item of r.semConsumo.itens) {
     const row = ws.addRow(celulasDoItemSemConsumo(item));
     row.alignment = { vertical: 'top' };
-    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Observação'] as const) {
+    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Meses fora da média', 'Observação'] as const) {
       row.getCell(col(nome)).alignment = { vertical: 'top', wrapText: true };
     }
     row.getCell(col('Estoque')).numFmt = '0.0';
@@ -509,7 +552,7 @@ function adicionarAbaSobDemanda(workbook: exceljs.Workbook, r: RelatorioCompras)
   for (const item of r.sobDemanda.itens) {
     const row = ws.addRow(celulasDoItemSobDemanda(item));
     row.alignment = { vertical: 'top' };
-    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Observação'] as const) {
+    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Meses fora da média', 'Observação'] as const) {
       row.getCell(col(nome)).alignment = { vertical: 'top', wrapText: true };
     }
     row.getCell(col('Demanda')).numFmt = '0.0';
@@ -552,7 +595,7 @@ export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Bu
 
   const regras = workbook.addWorksheet(ABA_REGRAS);
   regras.columns = [{ width: 120 }];
-  paragrafosDeRegras(r.urgencia.diasCritico, comSobDemanda).forEach((texto) => {
+  paragrafosDeRegras(r.urgencia.diasCritico, comSobDemanda, contarComMesesForaDaMedia(r) > 0).forEach((texto) => {
     const row = regras.addRow([texto]);
     row.getCell(1).alignment = { vertical: 'top', wrapText: true };
   });

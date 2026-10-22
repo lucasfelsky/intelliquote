@@ -20,6 +20,7 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     forecastSource: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     forecastProduct: { findMany: vi.fn() },
+    forecastAtypicalMonth: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn() },
     forecastSnapshot: { findMany: vi.fn(), findFirst: vi.fn() },
     forecastMonthlySale: { findMany: vi.fn() },
@@ -42,6 +43,7 @@ const prismaMock = prisma as unknown as {
   auditLog: { create: Mock };
   forecastSource: { findMany: Mock; findUnique: Mock; update: Mock };
   forecastProduct: { findMany: Mock };
+  forecastAtypicalMonth: { findMany: Mock };
   forecastProductCode: { findMany: Mock };
   forecastSnapshot: { findMany: Mock; findFirst: Mock };
   forecastMonthlySale: { findMany: Mock };
@@ -428,6 +430,8 @@ describe('Forecast routes - validacao (Zod)', () => {
 describe('Forecast routes - quinzena calculada', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Meses atipicos (PR 6c): sem marca por padrao.
+    prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
   });
 
   it('GET /snapshots/:id devolve as linhas do motor e a conferencia com o Excel', async () => {
@@ -479,6 +483,55 @@ describe('Forecast routes - quinzena calculada', () => {
     expect(data.conferencia.celulas).toBe(5 * 28);
     expect(data.conferencia.batem).toBe(data.conferencia.celulas);
     expect(data.conferencia.divergencias).toEqual([]);
+  });
+
+  it('mes atipico marcado: a linha usa a media sem o mes e a conferencia continua pela planilha (5 x 28)', async () => {
+    const cookies = await loginAs('viewer');
+    const produtos = fixture.produtos.slice(0, 5);
+    const linhasDe = new Set(produtos.map((p) => String(p.linha)));
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 7,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'planilha',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: produtos.map((p, i) => ({ ...p, productId: 100 + i })),
+      inputs: fixture.entradas,
+      expected: Object.fromEntries(Object.entries(fixture.esperado).filter(([linha]) => linhasDe.has(linha))),
+      files: [{ kind: 'planilha', fileName: 'quinzena.xlsx', sha256: 'abc', rows: 5 }],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+    // 2026-08 = N (indice 4) na quinzena 10-2; 2025-01 esta fora da janela (a marca continua gravada, sem efeito aqui).
+    prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([
+      { productId: 100, yearMonth: '2025-01', reason: 'MOTIVO ANTIGO SINTETICO' },
+      { productId: 100, yearMonth: '2026-08', reason: 'MOTIVO SINTETICO' },
+    ]);
+
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7?hoje=2026-10-20')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const { data } = response.body;
+    expect(prismaMock.forecastAtypicalMonth.findMany).toHaveBeenCalledTimes(1);
+    const marcada = data.linhas[0];
+    expect(marcada.mesesForaDaMedia).toEqual([{ anoMes: '2026-08', motivo: 'MOTIVO SINTETICO', indice: 4 }]);
+    const [, , , M] = produtos[0].historico;
+    expect(marcada.Q).toBeCloseTo((M + marcada.O) / 2, 9);
+    expect(marcada.mediaAjustada).toMatchObject({ meses: [4], semMesValido: false });
+    expect(marcada.mediaAjustada.Q).toBeCloseTo((M + produtos[0].historico[4] + marcada.O) / 3, 9);
+    for (const outra of data.linhas.slice(1) as Array<{ mesesForaDaMedia: unknown[]; mediaAjustada?: unknown }>) {
+      expect(outra.mesesForaDaMedia).toEqual([]);
+      expect(outra.mediaAjustada).toBeUndefined();
+    }
+    // A conferencia compara com as medias da planilha: segue 100%, com marca no cadastro.
+    expect(data.conferencia.celulas).toBe(5 * 28);
+    expect(data.conferencia.batem).toBe(data.conferencia.celulas);
   });
 
   it('sem expected (origem dbcorp) a conferencia vem nula; 1a quinzena usa AG = Q', async () => {
@@ -557,6 +610,7 @@ describe('Forecast routes - quinzena calculada', () => {
 describe('Forecast routes - relatorio de compras', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
     // O relatorio le a embalagem do cadastro por codigo (PR 2C); aqui nenhum codigo tem embalagem.
     prismaMock.forecastProductCode.findMany.mockResolvedValue([]);
     const produtos = fixture.produtos.slice(0, 5);

@@ -886,3 +886,187 @@ describe('Forecast - compra sob demanda na memoria de calculo (PR 6a)', () => {
     await waitFor(() => expect(detalhesChamados().length).toBeGreaterThan(antes));
   });
 });
+
+describe('Forecast - meses atipicos na memoria de calculo (PR 6c)', () => {
+  const put = vi.mocked(api.put);
+  const memoria = () => within(screen.getByRole('region', { name: 'Memória de cálculo' }));
+  const MARCA = { anoMes: '2026-08', motivo: 'VENDA ATIPICA SINTETICA', indice: 4 };
+  // Caso A do plano (sintetico): J..N = 300 300 300 300 2100 (N = ago/2026 atipico), O 300, P 100; media sem ago/2026.
+  const ATIPICA = {
+    productId: 42,
+    historico: [300, 300, 300, 300, 2100],
+    O: 300,
+    P: 100,
+    Q: 300,
+    R: 300,
+    AG: 300,
+    mesesForaDaMedia: [MARCA],
+    mediaAjustada: { meses: [4], Q: 900, R: 600, AG: 900, semMesValido: false },
+  };
+
+  async function abrir(over: Record<string, unknown> = {}, detalheOver: Record<string, unknown> = {}) {
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: 42, mesesForaDaMedia: [], ...over }), ...LINHAS.slice(1)], ...detalheOver }) });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+  }
+
+  it('mostra a conta com os meses restantes, o mes excluido e quanto seria pela planilha', async () => {
+    mockRole = 'comprador';
+    await abrir(ATIPICA);
+    expect(memoria().getByText('(300 + 300) ÷ 2')).toBeTruthy();
+    expect(memoria().getByText('média usa 2 de 3 meses (excluído: ago/2026) · pela planilha seria 900,0')).toBeTruthy();
+  });
+
+  it.each(['admin', 'comprador'])('%s ve o botao "Meses fora da média" e a lista de meses marcados', async (role) => {
+    mockRole = role;
+    await abrir(ATIPICA);
+    expect(memoria().getByRole('button', { name: 'Meses fora da média' })).toBeTruthy();
+    expect(memoria().getByText('VENDA ATIPICA SINTETICA', { exact: false })).toBeTruthy();
+  });
+
+  it.each(['gestor', 'viewer'])('%s so ve os meses marcados e o motivo, sem botao', async (role) => {
+    mockRole = role;
+    await abrir(ATIPICA);
+    expect(memoria().getByText('VENDA ATIPICA SINTETICA', { exact: false })).toBeTruthy();
+    expect(memoria().queryByRole('button', { name: 'Meses fora da média' })).toBeNull();
+  });
+
+  it('sem marca: "Nenhum mês fora da média"; produto fora do cadastro ou backend antigo: "—" e sem botao', async () => {
+    mockRole = 'admin';
+    await abrir();
+    expect(memoria().getByText('Nenhum mês fora da média')).toBeTruthy();
+    expect(memoria().getByRole('button', { name: 'Meses fora da média' })).toBeTruthy();
+    expect(memoria().queryByText(/média usa/)).toBeNull();
+  });
+
+  it('backend antigo (sem mesesForaDaMedia no dado) e produto fora do cadastro: nenhum controle', async () => {
+    mockRole = 'admin';
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: 42 }), ...LINHAS.slice(1)] }) });
+    const { unmount } = renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(memoria().queryByRole('button', { name: 'Meses fora da média' })).toBeNull();
+    unmount();
+
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: null, mesesForaDaMedia: [] }), ...LINHAS.slice(1)] }) });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(memoria().queryByRole('button', { name: 'Meses fora da média' })).toBeNull();
+  });
+
+  it('modal: 7 meses com a venda de cada um, o mes marcado ja vem marcado com o motivo', async () => {
+    mockRole = 'admin';
+    await abrir(ATIPICA);
+    fireEvent.click(memoria().getByRole('button', { name: 'Meses fora da média' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    const linhas = dialogo.getAllByRole('row').slice(1);
+    expect(linhas.map((l) => within(l).getAllByRole('cell')[0]?.textContent ?? l.querySelector('th')?.textContent)).toBeTruthy();
+    expect(dialogo.getAllByRole('checkbox')).toHaveLength(7);
+    const caixaAgosto = dialogo.getByRole('checkbox', { name: 'Venda atípica em ago/2026' }) as HTMLInputElement;
+    expect(caixaAgosto.checked).toBe(true);
+    expect((dialogo.getByRole('textbox', { name: 'Motivo da venda atípica em ago/2026' }) as HTMLInputElement).value).toBe(
+      'VENDA ATIPICA SINTETICA',
+    );
+    // Os outros meses nao tem marca e o motivo fica desabilitado ate marcar.
+    expect((dialogo.getByRole('textbox', { name: 'Motivo da venda atípica em set/2026' }) as HTMLInputElement).disabled).toBe(true);
+    // Venda do mes e o mes atual identificado.
+    expect(dialogo.getByText('2.100')).toBeTruthy();
+    expect(dialogo.getByText(/mês atual, até o dia 15/)).toBeTruthy();
+    expect((dialogo.getByRole('button', { name: 'Salvar meses atípicos' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('marcar outro mes exige motivo; salva por PUT com a janela e fecha, relendo a quinzena e o relatorio', async () => {
+    mockRole = 'comprador';
+    await abrir(ATIPICA);
+    put.mockResolvedValue({ data: { productId: 42, meses: [] } });
+    const antes = detalhesChamados().length;
+    fireEvent.click(memoria().getByRole('button', { name: 'Meses fora da média' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    const salvar = dialogo.getByRole('button', { name: 'Salvar meses atípicos' }) as HTMLButtonElement;
+
+    fireEvent.click(dialogo.getByRole('checkbox', { name: 'Venda atípica em set/2026' }));
+    const motivo = dialogo.getByRole('textbox', { name: 'Motivo da venda atípica em set/2026' });
+    expect(motivo.getAttribute('aria-invalid')).toBe('true');
+    const erro = dialogo.getByText('Informe o motivo (ao menos 3 caracteres).');
+    expect(motivo.getAttribute('aria-describedby')).toBe(erro.id);
+    expect(salvar.disabled).toBe(true);
+
+    fireEvent.change(motivo, { target: { value: '  OUTRA VENDA ATIPICA  ' } });
+    expect(salvar.disabled).toBe(false);
+    fireEvent.click(salvar);
+
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put).toHaveBeenCalledWith('/v1/forecast/products/42/meses-atipicos', {
+      meses: [
+        { anoMes: '2026-08', motivo: 'VENDA ATIPICA SINTETICA' },
+        { anoMes: '2026-09', motivo: 'OUTRA VENDA ATIPICA' },
+      ],
+      janela: ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'],
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(detalhesChamados().length).toBeGreaterThan(antes));
+    // O foco volta ao botao que abriu o dialogo.
+    expect(document.activeElement).toBe(memoria().getByRole('button', { name: 'Meses fora da média' }));
+  });
+
+  it('desmarcar o unico mes envia a lista vazia (com a janela)', async () => {
+    mockRole = 'admin';
+    await abrir(ATIPICA);
+    put.mockResolvedValue({ data: { productId: 42, meses: [] } });
+    fireEvent.click(memoria().getByRole('button', { name: 'Meses fora da média' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    fireEvent.click(dialogo.getByRole('checkbox', { name: 'Venda atípica em ago/2026' }));
+    fireEvent.click(dialogo.getByRole('button', { name: 'Salvar meses atípicos' }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0]?.[1]).toMatchObject({ meses: [] });
+  });
+
+  it('avisa quando os 3 meses da media trimestral e o mes atual estao marcados', async () => {
+    mockRole = 'admin';
+    await abrir();
+    fireEvent.click(memoria().getByRole('button', { name: 'Meses fora da média' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    for (const mes of ['jul/2026', 'ago/2026', 'set/2026', 'out/2026']) {
+      fireEvent.click(dialogo.getByRole('checkbox', { name: `Venda atípica em ${mes}` }));
+    }
+    expect(dialogo.getByText(/Os 3 meses da média trimestral estão marcados/)).toBeTruthy();
+    expect(dialogo.getByText(/Mês atual marcado: o consumo do mês \(AG\) fica igual à média trimestral/)).toBeTruthy();
+  });
+
+  it('erro do servidor: alerta com a mensagem e o dialogo continua aberto', async () => {
+    mockRole = 'admin';
+    await abrir(ATIPICA);
+    put.mockRejectedValue(new ApiError(403, null));
+    fireEvent.click(memoria().getByRole('button', { name: 'Meses fora da média' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    fireEvent.click(dialogo.getByRole('checkbox', { name: 'Venda atípica em ago/2026' }));
+    fireEvent.click(dialogo.getByRole('button', { name: 'Salvar meses atípicos' }));
+    expect((await dialogo.findByRole('alert')).textContent).toBe('Seu perfil não pode marcar meses atípicos.');
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('grade: celula do mes marcado riscada com o motivo, Q com asterisco e title; selo avisa', async () => {
+    mockRole = 'viewer';
+    await abrir(ATIPICA);
+    // Os meses mais antigos ficam ocultos por padrao; ago/2026 (N) e a 5a coluna de consumo e e visivel.
+    const celulas = Array.from(document.querySelectorAll('td.fc-cell--fora-media'));
+    expect(celulas).toHaveLength(1);
+    expect(celulas[0]?.getAttribute('title')).toBe('Venda atípica, fora da média: VENDA ATIPICA SINTETICA');
+    expect(celulas[0]?.textContent).toBe('2.100');
+    const q = Array.from(document.querySelectorAll('tbody tr.fc-row'))[0]?.querySelector('td[title^="Média sem meses atípicos"]');
+    expect(q?.textContent).toBe('300,0*');
+    expect(q?.getAttribute('title')).toBe('Média sem meses atípicos (ago/2026) · pela planilha seria 900,0');
+    expect(
+      screen.getByText(
+        '1 produto tem meses fora da média: o painel e o relatório usam a média sem esses meses. A conferência acima usa a regra da planilha.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('sem meses marcados: nenhuma celula riscada, sem asterisco e sem nota no selo', async () => {
+    mockRole = 'viewer';
+    await abrir();
+    expect(document.querySelectorAll('.fc-cell--fora-media')).toHaveLength(0);
+    expect(screen.queryByText(/meses fora da média: o painel/)).toBeNull();
+    expect(document.querySelectorAll('td[title^="Média sem meses atípicos"]')).toHaveLength(0);
+  });
+});

@@ -2,6 +2,7 @@ import type { ForecastItemSobDemanda } from '@/services/forecast';
 import { d1, inteiroBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
   APOIO_SOB_DEMANDA,
+  textoMediaSem,
   textoMotivoSobDemanda,
   textoObservacao,
   tituloSobDemanda,
@@ -56,12 +57,21 @@ export default function ForecastRelatorioSobDemanda({ itens }: Props) {
           <tbody>
             {itens.map((i) => {
               const obs = textoObservacao(i.obs);
+              const mediaSem = textoMediaSem(i.mesesForaDaMedia);
               return (
                 <tr key={i.linha} className="fcr-linha">
                   <th scope="row">
                     <div className="fcr-item">
                       <span className="fcr-item__nome">{i.item}</span>
                       <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
+                      {mediaSem && (
+                        <span
+                          className="fcr-item__media"
+                          title="A média deste item não conta o mês marcado como venda atípica."
+                        >
+                          {mediaSem}
+                        </span>
+                      )}
                       {obs && <span className="fcr-item__obs">{obs}</span>}
                     </div>
                   </th>

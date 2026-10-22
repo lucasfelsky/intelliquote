@@ -7,7 +7,8 @@ import {
   patchForecastSobDemanda,
 } from '@/services/forecastSobDemanda';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
-import { dataBr, passosDaMemoria, risco, type TomValor } from './forecastPainel';
+import ForecastMesesAtipicosModal from './ForecastMesesAtipicosModal';
+import { dataBr, mesAbrevDoAnoMes, passosDaMemoria, risco, type TomValor } from './forecastPainel';
 import { textoMotivoSobDemanda } from './forecastRelatorioTextos';
 
 interface Props {
@@ -145,8 +146,11 @@ function CompraSobDemanda({ productId, marcado: marcadoSalvo, motivo: motivoSalv
 
 export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEditar }: Props) {
   const [embalagens, setEmbalagens] = useState(false);
+  const [atipicos, setAtipicos] = useState(false);
   const botao = useRef<HTMLButtonElement>(null);
+  const botaoAtipicos = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
+  const abriuAtipicosAntes = useRef(false);
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
   useEffect(() => {
     if (embalagens) {
@@ -156,6 +160,14 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
       botao.current?.focus();
     }
   }, [embalagens]);
+  useEffect(() => {
+    if (atipicos) {
+      abriuAtipicosAntes.current = true;
+    } else if (abriuAtipicosAntes.current) {
+      abriuAtipicosAntes.current = false;
+      botaoAtipicos.current?.focus();
+    }
+  }, [atipicos]);
   const passos = passosDaMemoria(linha, half, baseDate);
   const situacao = risco(linha, baseDate);
   const codigos = linha.codigos.join(' · ');
@@ -173,6 +185,7 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
                   {passo.titulo} <span className="fc-passo__coluna">{passo.coluna}</span>
                 </strong>
                 <span className="fc-passo__conta">{passo.conta}</span>
+                {passo.nota && <span className="fc-passo__nota">{passo.nota}</span>}
                 {passo.meses && (
                   <span className="fc-meses">
                     {passo.meses.map((mes) => (
@@ -241,9 +254,51 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
               )}
             </dd>
           </div>
+          {/* Backend antigo nao manda `mesesForaDaMedia`: sem o campo, a linha nao mostra o controle. */}
+          <div className={linha.productId != null && linha.mesesForaDaMedia !== undefined ? 'fc-compra-item' : undefined}>
+            <dt>Meses atípicos</dt>
+            <dd>
+              {linha.productId == null || linha.mesesForaDaMedia === undefined ? (
+                '—'
+              ) : (
+                <>
+                  {linha.mesesForaDaMedia.length === 0 ? (
+                    <span>Nenhum mês fora da média</span>
+                  ) : (
+                    <ul className="fc-atipicos">
+                      {linha.mesesForaDaMedia.map((m) => (
+                        <li key={m.anoMes}>
+                          <strong>{mesAbrevDoAnoMes(m.anoMes)}</strong> · {m.motivo}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {podeEditar && (
+                    <button
+                      type="button"
+                      ref={botaoAtipicos}
+                      className="ghost-button fc-atipicos__editar"
+                      aria-haspopup="dialog"
+                      onClick={() => setAtipicos(true)}
+                    >
+                      Meses fora da média
+                    </button>
+                  )}
+                </>
+              )}
+            </dd>
+          </div>
         </dl>
         <span className="fc-lado__fraco">CHEG. calculada com hoje = {dataBr(hoje)}</span>
       </div>
+      {atipicos && linha.productId != null && (
+        <ForecastMesesAtipicosModal
+          productId={linha.productId}
+          baseDate={baseDate}
+          linha={linha}
+          onFechar={() => setAtipicos(false)}
+        />
+      )}
       {embalagens && linha.productId != null && (
         <ForecastEmbalagensModal
           productId={linha.productId}

@@ -106,6 +106,17 @@ export function mesesDaProjecao(baseDate: string): string[] {
   });
 }
 
+/**
+ * Os 7 meses da janela de vendas da quinzena ('AAAA-MM'), na ordem dos indices do motor: J..N (base-6 .. base-2), O
+ * (base-1) e P (o proprio mes da data base). Copia de mesesDaJanelaDeVendas (src/utils/forecastMesesAtipicos.ts).
+ */
+export function mesesDaJanelaDeVendas(baseDate: string): string[] {
+  return [-6, -5, -4, -3, -2, -1, 0].map((n) => {
+    const alvo = indiceDoMes(baseDate, n);
+    return alvo ? `${alvo.ano}-${String(alvo.mes + 1).padStart(2, '0')}` : '';
+  });
+}
+
 /** 'AAAA-MM' -> 'mmm/aaaa' (out/2026); invalido = '—'. */
 export function mesAbrevDoAnoMes(anoMes: string): string {
   const m = /^(\d{4})-(\d{2})$/.exec(anoMes);
@@ -148,6 +159,8 @@ export interface ColunaPainel {
   classe?: (linha: ForecastLinha) => string;
   /** Classe do destaque (pilula/selo) que envolve o texto da celula. */
   destaque?: (linha: ForecastLinha) => string;
+  /** `title` da celula (PR 6c: mes atipico e media sem meses excluidos); a divergencia e a observacao tem prioridade. */
+  titulo?: (linha: ForecastLinha) => string | undefined;
 }
 
 type ColunaDefinida = ColunaPainel & { oculta?: boolean };
@@ -160,6 +173,44 @@ export function vendaAcimaDaMedia(linha: Pick<ForecastLinha, 'P' | 'Q'>): boolea
   return linha.P > linha.Q;
 }
 
+// ---------- meses atipicos (PR 6c) ----------
+/** O mes de indice `i` (0..5 = J..O, 6 = P) esta marcado como venda atipica nesta linha. */
+export function mesForaDaMedia(linha: Pick<ForecastLinha, 'mediaAjustada'>, i: number): boolean {
+  return linha.mediaAjustada?.meses.includes(i) ?? false;
+}
+
+/** A media trimestral (Q) usa meses excluidos (algum de M, N, O marcado). */
+export function trimestralSemMeses(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
+  return [3, 4, 5].some((i) => mesForaDaMedia(linha, i));
+}
+
+/** A media semestral (R) usa meses excluidos (algum de J..O marcado). */
+export function semestralSemMeses(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
+  return [0, 1, 2, 3, 4, 5].some((i) => mesForaDaMedia(linha, i));
+}
+
+const CLASSE_FORA_DA_MEDIA = 'fc-cell--fora-media';
+
+function classeDoMes(i: number): (l: ForecastLinha) => string {
+  return (l) => (mesForaDaMedia(l, i) ? CLASSE_FORA_DA_MEDIA : '');
+}
+
+function tituloDoMes(i: number): (l: ForecastLinha) => string | undefined {
+  return (l) => {
+    const marca = l.mesesForaDaMedia?.find((m) => m.indice === i);
+    return marca ? `Venda atípica, fora da média: ${marca.motivo}` : undefined;
+  };
+}
+
+function tituloDaMedia(usa: (l: ForecastLinha) => boolean, planilha: (l: ForecastLinha) => number | undefined) {
+  return (l: ForecastLinha): string | undefined => {
+    if (!usa(l)) return undefined;
+    const meses = (l.mesesForaDaMedia ?? []).map((m) => mesAbrevDoAnoMes(m.anoMes)).join(', ');
+    const antes = planilha(l);
+    return `Média sem meses atípicos (${meses})${antes === undefined ? '' : ` · pela planilha seria ${d1(antes)}`}`;
+  };
+}
+
 function definirColunas(months: ForecastMonths): ColunaDefinida[] {
   const consumo = (i: number) => months.consumo[i] ?? '';
   const historico = (i: number): ColunaDefinida => ({
@@ -169,6 +220,8 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
     largura: 70,
     oculta: i < 3,
     texto: (l) => contabil(l.historico?.[i]),
+    classe: classeDoMes(i),
+    titulo: tituloDoMes(i),
   });
   return [
     {
@@ -185,7 +238,16 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
     historico(2),
     historico(3),
     historico(4),
-    { id: 'O', grupo: 'cons', rotulo: consumo(5), colunaPlanilha: 'O', largura: 70, texto: (l) => contabil(l.O) },
+    {
+      id: 'O',
+      grupo: 'cons',
+      rotulo: consumo(5),
+      colunaPlanilha: 'O',
+      largura: 70,
+      texto: (l) => contabil(l.O),
+      classe: classeDoMes(5),
+      titulo: tituloDoMes(5),
+    },
     {
       id: 'P',
       grupo: 'cons',
@@ -193,10 +255,30 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       colunaPlanilha: 'P',
       largura: 90,
       texto: (l) => contabil(l.P),
-      classe: (l) => (vendaAcimaDaMedia(l) ? 'fc-cell--acima-media' : ''),
+      classe: (l) =>
+        [vendaAcimaDaMedia(l) ? 'fc-cell--acima-media' : '', mesForaDaMedia(l, 6) ? CLASSE_FORA_DA_MEDIA : '']
+          .filter(Boolean)
+          .join(' '),
+      titulo: tituloDoMes(6),
     },
-    { id: 'Q', grupo: 'trim', rotulo: 'MED.', colunaPlanilha: 'Q', largura: 76, texto: (l) => d1(l.Q) },
-    { id: 'R', grupo: 'sem', rotulo: 'MED.', colunaPlanilha: 'R', largura: 76, texto: (l) => d1(l.R) },
+    {
+      id: 'Q',
+      grupo: 'trim',
+      rotulo: 'MED.',
+      colunaPlanilha: 'Q',
+      largura: 76,
+      texto: (l) => `${d1(l.Q)}${trimestralSemMeses(l) ? '*' : ''}`,
+      titulo: tituloDaMedia(trimestralSemMeses, (l) => l.mediaAjustada?.Q),
+    },
+    {
+      id: 'R',
+      grupo: 'sem',
+      rotulo: 'MED.',
+      colunaPlanilha: 'R',
+      largura: 76,
+      texto: (l) => `${d1(l.R)}${semestralSemMeses(l) ? '*' : ''}`,
+      titulo: tituloDaMedia(semestralSemMeses, (l) => l.mediaAjustada?.R),
+    },
     { id: 'S', grupo: 'anual', rotulo: 'MED.', colunaPlanilha: 'S', largura: 76, texto: (l) => d1(l.S) },
     {
       id: 'T',
@@ -452,6 +534,13 @@ export interface SeloConferencia {
   nota?: string;
   /** Regra AL do Comex: so quando ha produto com chegada no 5o mes e a conferencia existe. */
   notaRegra?: string;
+  /** Meses atipicos (PR 6c): so quando ha produto com meses fora da media (tambem em quinzena DBCorp). */
+  notaMedia?: string;
+}
+
+/** Meses atipicos: quantas linhas usam media sem meses excluidos (a conferencia continua pela regra da planilha). */
+export function mediaAjustadaDoPainel(detail: Pick<ForecastSnapshotDetail, 'linhas'>): { linhas: number } {
+  return { linhas: detail.linhas.filter((l) => l.mediaAjustada !== undefined).length };
 }
 
 /** Regra AL: quantas linhas tem chegada no 5o mes (a projecao desse mes soma essa chegada) e qual e o mes. */
@@ -489,14 +578,21 @@ function soInformativas(conferencia: ForecastConferencia, divergentes: Array<{ l
 
 export function textoDoSelo(
   detail: Pick<ForecastSnapshotDetail, 'conferencia' | 'half'>,
-  opcoes: { regraAL?: { linhas: number; mes: string }; comGrade?: boolean } = {},
+  opcoes: { regraAL?: { linhas: number; mes: string }; mediaAjustada?: { linhas: number }; comGrade?: boolean } = {},
 ): SeloConferencia {
   const { conferencia, half } = detail;
+  const linhasAjustadas = opcoes.mediaAjustada?.linhas ?? 0;
+  const prefixoMedia = `${linhasAjustadas} ${linhasAjustadas === 1 ? 'produto tem' : 'produtos têm'} meses fora da média: o painel e o relatório usam a média sem esses meses.`;
+  const notaMedia =
+    linhasAjustadas > 0
+      ? { notaMedia: conferencia === null ? prefixoMedia : `${prefixoMedia} A conferência acima usa a regra da planilha.` }
+      : {};
   if (conferencia === null) {
     return {
       tom: 'neutro',
       titulo: 'Quinzena gerada dos relatórios DBCorp — sem planilha para conferir.',
       detalhe: '',
+      ...notaMedia,
     };
   }
   const ok = conferencia.batem === conferencia.celulas;
@@ -541,6 +637,7 @@ export function textoDoSelo(
       ...porColuna,
       nota: 'Nesta 1ª quinzena o consumo do mês (AG) usa a média trimestral; a conferência usa a regra da planilha.',
       ...notaRegra,
+      ...notaMedia,
     };
   }
   return {
@@ -553,6 +650,7 @@ export function textoDoSelo(
     detalhe,
     ...porColuna,
     ...notaRegra,
+    ...notaMedia,
   };
 }
 
@@ -576,10 +674,46 @@ export interface PassoDaMemoria {
   tom: TomValor;
   /** So no passo "Meses seguintes": cada mes da projecao com o alerta da planilha. */
   meses?: Array<{ rotulo: string; valor: string; tom: TomValor }>;
+  /** PR 6c: linha extra quando a media usa meses excluidos (qual mes saiu e quanto seria pela planilha). */
+  nota?: string;
+}
+
+// Passo "Media trimestral" com os meses atipicos fora: so os restantes entram na conta e na divisao. Todos os 3 marcados:
+// a media fica a da planilha (nao ha mes valido) e a nota avisa.
+function passoDaMediaTrimestral(linha: ForecastLinha, baseDate: string): PassoDaMemoria {
+  const h = linha.historico ?? [];
+  const meses = mesesDaJanelaDeVendas(baseDate);
+  const trimestre = [
+    { i: 3, valor: h[3] },
+    { i: 4, valor: h[4] },
+    { i: 5, valor: linha.O },
+  ];
+  const fora = trimestre.filter((m) => mesForaDaMedia(linha, m.i));
+  const restantes = trimestre.filter((m) => !mesForaDaMedia(linha, m.i));
+  const passo: PassoDaMemoria = {
+    titulo: 'Média trimestral',
+    coluna: 'col. Q',
+    conta: `(${trimestre.map((m) => inteiroBr(m.valor)).join(' + ')}) ÷ 3`,
+    resultado: d1(linha.Q),
+    tom: null,
+  };
+  if (fora.length === 0) return passo;
+  const rotulos = fora.map((m) => mesAbrevDoAnoMes(meses[m.i] ?? '')).join(', ');
+  if (restantes.length === 0) {
+    return {
+      ...passo,
+      nota: `os 3 meses estão marcados como atípicos (${rotulos}): sem mês válido, a média usa os 3 meses, como a planilha`,
+    };
+  }
+  const planilha = linha.mediaAjustada ? ` · pela planilha seria ${d1(linha.mediaAjustada.Q)}` : '';
+  return {
+    ...passo,
+    conta: `(${restantes.map((m) => inteiroBr(m.valor)).join(' + ')}) ÷ ${restantes.length}`,
+    nota: `média usa ${restantes.length} de 3 meses (${fora.length === 1 ? 'excluído' : 'excluídos'}: ${rotulos})${planilha}`,
+  };
 }
 
 export function passosDaMemoria(linha: ForecastLinha, half: number, baseDate: string): PassoDaMemoria[] {
-  const h = linha.historico ?? [];
   const rotulos = mesesDaProjecao(baseDate);
   const somaChegadas = linha.chegadas.reduce((a, b) => a + b, 0);
   const somaProgramacoes = linha.programacoes.reduce((a, b) => a + b, 0);
@@ -587,22 +721,21 @@ export function passosDaMemoria(linha: ForecastLinha, half: number, baseDate: st
   const seguintes = linha.projecao.slice(1, 6);
   const ultimo = linha.projecao[5] ?? 0;
   return [
-    {
-      titulo: 'Média trimestral',
-      coluna: 'col. Q',
-      conta: `(${inteiroBr(h[3])} + ${inteiroBr(h[4])} + ${inteiroBr(linha.O)}) ÷ 3`,
-      resultado: d1(linha.Q),
-      tom: null,
-    },
+    passoDaMediaTrimestral(linha, baseDate),
     {
       titulo: 'Consumo do mês atual',
       coluna: 'col. AG',
       conta:
         half === 1
           ? `1ª quinzena: igual à média trimestral (${d1(linha.Q)})`
-          : `maior entre a média (${d1(linha.Q)}) e a venda até o dia 15 (${inteiroBr(linha.P)})`,
+          : mesForaDaMedia(linha, 6)
+            ? `mês atual marcado como atípico: igual à média trimestral (${d1(linha.Q)}), sem a venda até o dia 15 (${inteiroBr(linha.P)})`
+            : `maior entre a média (${d1(linha.Q)}) e a venda até o dia 15 (${inteiroBr(linha.P)})`,
       resultado: d1(linha.AG),
       tom: null,
+      ...(linha.mediaAjustada && linha.mediaAjustada.AG !== linha.AG
+        ? { nota: `pela planilha seria ${d1(linha.mediaAjustada.AG)}` }
+        : {}),
     },
     {
       titulo: `Final de ${nomeDoMes(baseDate, 0)}`,

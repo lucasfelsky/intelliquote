@@ -1127,11 +1127,28 @@ model ForecastProduct {
   purchaseOnDemand     Boolean            @default(false)
   purchaseOnDemandNote String?
   codes             ForecastProductCode[]
+  atypicalMonths    ForecastAtypicalMonth[]
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
   @@index([sourceId])
   @@index([familyId])
+}
+
+// Mes de venda atipica de um produto (PR 6c): fica FORA das medias trimestral/semestral (o motor divide pelos meses
+// restantes). Vale em toda quinzena cuja janela de vendas contem o mes e e lida do cadastro ATUAL (nao congelada na
+// quinzena). `yearMonth` = 'YYYY-MM'. `createdById` sem FK: o autor fica no AuditLog. Hard delete (substituicao do conjunto).
+model ForecastAtypicalMonth {
+  id          Int             @id @default(autoincrement())
+  productId   Int
+  product     ForecastProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  yearMonth   String
+  reason      String
+  createdById Int?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([productId, yearMonth])
 }
 
 // Ate 7 codigos DBCorp por produto (EMB.1..EMB.7 = position 1..7). Codigo em maiusculas.

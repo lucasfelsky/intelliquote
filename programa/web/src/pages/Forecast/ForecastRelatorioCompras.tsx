@@ -38,11 +38,15 @@ import {
 } from './forecastRelatorioUrgencia';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
 import {
+  contarComMesesForaDaMedia,
   opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
+  paragrafoMesesForaDaMedia,
   paragrafoSobDemanda,
+  resumoMesesForaDaMedia,
   resumoSobDemanda,
+  textoMediaSem,
   textoObservacao,
   tituloOutrasEmbalagens,
 } from './forecastRelatorioTextos';
@@ -116,6 +120,16 @@ function Observacao({ obs }: { obs?: string }) {
   return texto ? <span className="fcr-item__obs">{texto}</span> : null;
 }
 
+// Meses atipicos (PR 6c): selo discreto na celula Item quando a media do item nao conta algum mes marcado.
+function MediaSem({ meses }: { meses?: string[] }) {
+  const texto = textoMediaSem(meses);
+  return texto ? (
+    <span className="fcr-item__media" title="A média deste item não conta o mês marcado como venda atípica.">
+      {texto}
+    </span>
+  ) : null;
+}
+
 function EmAndamento({ item }: { item: ForecastItemRelatorio }) {
   const { chegadas, programacoes } = item.emAndamento;
   if (chegadas.length === 0 && programacoes.length === 0) {
@@ -174,6 +188,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <span className="fcr-item__nome">{item.item}</span>
           <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
           {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+          <MediaSem meses={item.mesesForaDaMedia} />
           <Observacao obs={item.obs} />
         </div>
       </th>
@@ -393,6 +408,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                   <div className="fcr-item">
                     <span className="fcr-item__nome">{i.item}</span>
                     <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
+                    <MediaSem meses={i.mesesForaDaMedia} />
                     <Observacao obs={i.obs} />
                   </div>
                 </th>
@@ -454,6 +470,8 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   const semConsumo = temSemConsumo(dados) ? dados.semConsumo : undefined;
   // Compra sob demanda (PR 6a): backend antigo nao manda `sobDemanda`; sem item marcado a secao nao aparece.
   const sobDemanda = dados.sobDemanda && dados.sobDemanda.itens.length > 0 ? dados.sobDemanda : undefined;
+  // Meses atipicos (PR 6c): so aparece quando algum item usa media sem meses excluidos (backend antigo: nada).
+  const comMesesForaDaMedia = contarComMesesForaDaMedia(dados);
   const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro) : [];
   const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro) : dados.grupos;
   const totalMostrado = visao === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
@@ -506,6 +524,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {totais.multiplasEmbalagens > 0 && <li>{totais.multiplasEmbalagens} com mais de uma embalagem</li>}
           {(totais.comPallet ?? 0) > 0 && <li>{totais.comPallet} com pallet cadastrado</li>}
           {sobDemanda && <li>{resumoSobDemanda(fora.sobDemanda ?? sobDemanda.itens.length)}</li>}
+          {comMesesForaDaMedia > 0 && <li>{resumoMesesForaDaMedia(comMesesForaDaMedia)}</li>}
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
@@ -565,6 +584,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
           {semConsumo && <p>{paragrafoSemConsumo()}</p>}
           {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
+          {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
         </details>
       </section>
       {dados.grupos.length === 0 ? (

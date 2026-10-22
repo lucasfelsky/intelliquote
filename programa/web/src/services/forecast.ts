@@ -61,6 +61,27 @@ export interface ForecastLinha {
   /** PR 6a (opcionais: backend antigo nao manda): produto marcado como compra sob demanda no cadastro ATUAL. */
   sobDemanda?: boolean;
   sobDemandaMotivo?: string | null;
+  /** PR 6c (opcionais: backend antigo nao manda): marcas de mes atipico da janela desta quinzena (cadastro ATUAL). */
+  mesesForaDaMedia?: ForecastMesForaDaMedia[];
+  /** So presente quando a linha tem meses marcados: Q/R/AG acima ja sao SEM esses meses; aqui, os da planilha. */
+  mediaAjustada?: ForecastMediaAjustada;
+}
+
+/** Mes de venda atipica de um produto dentro da janela da quinzena; `indice`: 0..5 = J..O, 6 = P (mes atual). */
+export interface ForecastMesForaDaMedia {
+  anoMes: string;
+  motivo: string;
+  indice: number;
+}
+
+/** Valores DA PLANILHA (antes) das medias que mudaram por causa dos meses atipicos. */
+export interface ForecastMediaAjustada {
+  meses: number[];
+  Q: number;
+  R: number;
+  AG: number;
+  /** Todos os meses da media estavam marcados: a media ficou como a da planilha (sem divisao por zero). */
+  semMesValido: boolean;
 }
 
 export interface ForecastDivergencia {
@@ -160,6 +181,8 @@ export interface ForecastItemRelatorio {
   naoFraciona: boolean;
   /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
   obs?: string;
+  /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
+  mesesForaDaMedia?: string[];
   ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -203,6 +226,8 @@ export interface ForecastItemSemConsumo {
   obs?: string;
   /** PR 6a (opcional: backend antigo nao manda): produto marcado como compra sob demanda (so selo). */
   sobDemanda?: boolean;
+  /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
+  mesesForaDaMedia?: string[];
 }
 
 /** Item sob demanda que entraria na lista de compra, mas fica fora dela (PR 6a). */
@@ -225,6 +250,8 @@ export interface ForecastItemSobDemanda {
   /** max(0, programacoes - estoque - chegadas). */
   programacaoDescoberta: number;
   obs?: string;
+  /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
+  mesesForaDaMedia?: string[];
 }
 
 export interface ForecastRelatorioCompras {

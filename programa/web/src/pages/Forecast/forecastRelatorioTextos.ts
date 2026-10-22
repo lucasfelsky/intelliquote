@@ -1,8 +1,14 @@
-// Textos puros do relatorio de compras (PR 5B): Observacao e quantidade arredondada para cada embalagem; (PR 6e) pallets.
+// Textos puros do relatorio de compras (PR 5B): Observacao e quantidade arredondada para cada embalagem; (PR 6e) pallets;
+// (PR 6c) meses atipicos.
 // Copia exata em src/utils/forecastRelatorioComprasXlsx.ts (`textoOpcaoDeEmbalagem`, `textoPallet`, `PARAGRAFO_EMBALAGEM_XLSX`);
 // a igualdade tela x XLSX e provada em tests/forecast-relatorio-compras-xlsx.test.ts.
-import type { ForecastItemRelatorio, ForecastOpcaoEmbalagem, ForecastPalletDaOpcao } from '@/services/forecast';
-import { kgBr } from './forecastPainel';
+import type {
+  ForecastItemRelatorio,
+  ForecastOpcaoEmbalagem,
+  ForecastPalletDaOpcao,
+  ForecastRelatorioCompras,
+} from '@/services/forecast';
+import { kgBr, mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Terceiro paragrafo das regras (tela e aba Regras do XLSX). */
 export const PARAGRAFO_EMBALAGEM =
@@ -101,3 +107,36 @@ export function tituloSobDemanda(n: number): string {
 /** Nota sob a tabela da secao (so na tela): o que a coluna "Programação descoberta" mede. */
 export const APOIO_SOB_DEMANDA =
   'Programação descoberta = programações − estoque − chegadas (nunca negativa). Só informativo: o item não entra na lista de compra.';
+
+// ---- Meses atipicos (PR 6c): copia exata em src/utils/forecastRelatorioComprasXlsx.ts (guarda de paridade no teste) ----
+
+/** Meses fora da media do item, ex.: `ago/2026, set/2026` (vazio = nenhum; backend antigo = sem o campo). */
+export function textoMesesForaDaMedia(anoMeses: string[] | null | undefined): string {
+  return (anoMeses ?? []).map(mesAbrevDoAnoMes).join(', ');
+}
+
+/** Linha do selo na celula Item do relatorio: `Média sem: ago/2026`; null quando a media e a da planilha. */
+export function textoMediaSem(anoMeses: string[] | null | undefined): string | null {
+  const texto = textoMesesForaDaMedia(anoMeses);
+  return texto ? `Média sem: ${texto}` : null;
+}
+
+/** Itens (lista de compra, sem consumo e sob demanda) cuja media usa meses excluidos. */
+export function contarComMesesForaDaMedia(
+  r: Pick<ForecastRelatorioCompras, 'grupos' | 'semConsumo' | 'sobDemanda'>,
+): number {
+  const itens: Array<{ mesesForaDaMedia?: string[] }> = [
+    ...r.grupos.flatMap((g) => g.itens),
+    ...(r.semConsumo?.itens ?? []),
+    ...(r.sobDemanda?.itens ?? []),
+  ];
+  return itens.filter((i) => (i.mesesForaDaMedia ?? []).length > 0).length;
+}
+
+export function resumoMesesForaDaMedia(n: number): string {
+  return `${n} ${n === 1 ? 'item usa' : 'itens usam'} média sem meses atípicos`;
+}
+
+export function paragrafoMesesForaDaMedia(): string {
+  return 'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.';
+}
