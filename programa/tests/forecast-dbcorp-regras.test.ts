@@ -9,6 +9,7 @@ import {
 } from '../src/constants/forecast';
 import {
   aplicarRegrasFup,
+  comprasEmAbertoDoFup,
   parseProntidao,
   type DataDaCelula,
   type FupLinha,
@@ -319,5 +320,54 @@ describe('aplicarRegrasFup (regra F3)', () => {
     expect(r.usadas).toBe(1);
     expect(r.lidas).toBe(r.usadas + total(r));
     expect(r.total).toBe(100);
+  });
+});
+
+describe('comprasEmAbertoDoFup (regra dos pendentes de cadastro)', () => {
+  it('concluido (com ou sem acento) fica de fora; atracada, ETA FINAL, sem data e prontidao "ASAP" entram', () => {
+    const r = comprasEmAbertoDoFup([
+      linha({ codigo: 'TST0001', status: 'CONCLUÍDO', kg: 100 }),
+      linha({ codigo: 'TST0001', status: 'concluido', kg: 110 }),
+      linha({ codigo: 'TST0001', status: 'ATRAC. AG. LIBERAÇÃO', kg: 200, eta: data('2026-12-05') }),
+      linha({ codigo: 'TST0001', kg: 300, etaFinal: data('2026-11-01') }),
+      linha({ codigo: 'TST0002', status: 'AG. PAGAMENTO (ANT)', kg: 700 }),
+      linha({ codigo: 'TST0003', status: 'AG. PAGAMENTO (ANT)', kg: 40, prontidao: 'ASAP' }),
+      linha({ codigo: 'TST0004', kg: 900, eta: data('2028-01-01') }), // depois da janela
+    ]);
+    expect(r).toEqual([
+      { codigo: 'TST0001', qtd: 500 },
+      { codigo: 'TST0002', qtd: 700 },
+      { codigo: 'TST0003', qtd: 40 },
+      { codigo: 'TST0004', qtd: 900 },
+    ]);
+  });
+
+  it('soma por codigo e ignora linha sem codigo ou com kg nao numerico', () => {
+    const r = comprasEmAbertoDoFup([
+      linha({ codigo: 'TST0001', kg: 0.1 }),
+      linha({ codigo: 'TST0001', kg: 0.2 }),
+      linha({ codigo: '', kg: 50 }),
+      linha({ codigo: 'TST0002', kg: null }),
+      linha({ codigo: 'TST0003', kg: Number.NaN }),
+    ]);
+    expect(r).toEqual([{ codigo: 'TST0001', qtd: 0.3 }]);
+  });
+
+  it('nao depende das datas: as linhas que a F3 deixa de fora das chegadas contam como compra em aberto', () => {
+    const linhas = [
+      linha({ codigo: 'TST0001', status: 'ATRAC. AG. LIBERAÇÃO', kg: 10 }),
+      linha({ codigo: 'TST0001', kg: 20 }), // sem nenhuma data
+      linha({ codigo: 'TST0001', kg: 40, eta: data('2026-12-01') }),
+    ];
+    expect(aplicarRegrasFup(linhas, BASE).linhas.reduce((s, c) => s + c.qtd, 0)).toBe(40);
+    expect(comprasEmAbertoDoFup(linhas)).toEqual([{ codigo: 'TST0001', qtd: 70 }]);
+  });
+
+  it('nao muta as linhas e devolve [] sem linhas', () => {
+    const linhas = [linha({ codigo: 'TST0001', kg: 5 })];
+    const copia = JSON.parse(JSON.stringify(linhas));
+    comprasEmAbertoDoFup(linhas);
+    expect(linhas).toEqual(copia);
+    expect(comprasEmAbertoDoFup([])).toEqual([]);
   });
 });

@@ -10,9 +10,24 @@ export interface ForecastPendente {
   vendasMes: number;
   vendasAtual: number;
   vendasAnual: number;
+  /** Venda dos ultimos 3 meses (base-3 + base-2 do historico + mes anterior). Ausente em backend antigo. */
+  vendas3Meses?: number;
+  vendasAnteriores?: number;
   programacao: number;
   chegadas: number;
+  /** Compra em aberto no FUP (qualquer linha nao concluida). Ausente em backend antigo. */
+  comprasEmAberto?: number;
   saldo: number;
+}
+
+/** Criterio que o backend aplicou (`PendentesResultado.regra`); ausente em backend antigo. */
+export interface ForecastPendentesRegra {
+  /** [base-3, base-2, base-1] (YYYY-MM). */
+  mesesVenda: string[];
+  /** Meses base-3/base-2 sem historico gravado: a lista pode estar incompleta. */
+  historicoAusente: string[];
+  /** 'chegadas' = quinzena gravada antes da regra de compras em aberto (usa as chegadas aceitas pela F3). */
+  compras: 'fup_em_aberto' | 'chegadas';
 }
 
 /** Espelha `PendentesResultado`; vem em `ForecastDbcorpSummary.pendentes` (null quando o backend nao montou a quinzena). */
@@ -21,8 +36,11 @@ export interface ForecastPendentesResumo {
   totalItens: number;
   /** Itens alem do corte (200) que nao vieram em `itens`. */
   omitidos: number;
-  /** Codigos so com saldo (sem venda, programacao nem chegada): nao listados, so contados. */
+  /** Codigos so com saldo (sem venda, programacao nem compra em aberto): nao listados, so contados. */
   soSaldo: { codigos: number; kg: number };
+  /** Codigos com venda so no mes atual / acumulado anual (sem venda em 3 meses, programacao nem compra): so contados. */
+  semVendaRecente?: { codigos: number; vendasAnual: number };
+  regra?: ForecastPendentesRegra;
 }
 
 /** `GET /forecast/snapshots/:id/pendentes`; `aplicavel: false` = quinzena da planilha (itens vazios). */

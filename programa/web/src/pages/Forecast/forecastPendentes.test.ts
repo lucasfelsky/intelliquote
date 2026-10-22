@@ -3,17 +3,21 @@ import type { ForecastFonte } from '@/services/forecastFontes';
 import type { ForecastProdutoCadastro } from '@/services/forecastPendentes';
 import {
   contagemTexto,
+  criterioTexto,
   filtrarProdutos,
   fontesAtivas,
+  historicoAusenteTexto,
   lerLeadTime,
   mensagemCadastroGravado,
   mensagemCadastroNaPrevia,
   montarCorpoNovoProduto,
+  nenhumPendenteTexto,
   normalizarCodigo,
   primeiroCampoComErro,
   produtoCheio,
   rotuloDaFonte,
   semLeadTime,
+  semVendaRecenteTexto,
   situacaoTexto,
   soSaldoTexto,
   textoEntradaNoCalculo,
@@ -81,6 +85,51 @@ describe('textos', () => {
     expect(soSaldoTexto({ codigos: 0, kg: 0 }, kg)).toBeNull();
     expect(soSaldoTexto({ codigos: 1, kg: 30 }, kg)).toBe('Só saldo (não listados): 1 código · 30 kg');
     expect(soSaldoTexto({ codigos: 5, kg: 300 }, kg)).toBe('Só saldo (não listados): 5 códigos · 300 kg');
+  });
+
+  it('criterioTexto: meses da regra, compra em aberto do FUP; sem regra (backend antigo) nao afirma nada', () => {
+    const regra = { mesesVenda: ['2026-07', '2026-08', '2026-09'], historicoAusente: [], compras: 'fup_em_aberto' as const };
+    expect(criterioTexto(regra)).toBe(
+      'Entram na lista: venda em jul/2026, ago/2026 ou set/2026, programação pendente ou compra em aberto no FUP.',
+    );
+    expect(criterioTexto({ ...regra, compras: 'chegadas' })).toBe(
+      'Entram na lista: venda em jul/2026, ago/2026 ou set/2026, programação pendente ou chegada prevista no FUP.',
+    );
+    expect(criterioTexto({ ...regra, mesesVenda: ['2026-12'] })).toContain('venda em dez/2026, programação');
+    expect(criterioTexto(undefined)).toBeNull();
+    expect(criterioTexto({ ...regra, mesesVenda: [] })).toBeNull();
+  });
+
+  it('semVendaRecenteTexto: so com codigos; singular; kg so quando ha venda anual', () => {
+    const kg = (n: number) => String(n);
+    expect(semVendaRecenteTexto(undefined, kg)).toBeNull();
+    expect(semVendaRecenteTexto({ codigos: 0, vendasAnual: 0 }, kg)).toBeNull();
+    expect(semVendaRecenteTexto({ codigos: 1, vendasAnual: 900 }, kg)).toBe(
+      'Sem venda nos últimos 3 meses (não listados): 1 código · 900 kg de venda anual',
+    );
+    expect(semVendaRecenteTexto({ codigos: 12, vendasAnual: 0 }, kg)).toBe(
+      'Sem venda nos últimos 3 meses (não listados): 12 códigos',
+    );
+  });
+
+  it('historicoAusenteTexto: avisa que a lista pode estar incompleta', () => {
+    const base = { mesesVenda: ['2026-07', '2026-08', '2026-09'], compras: 'fup_em_aberto' as const };
+    expect(historicoAusenteTexto({ ...base, historicoAusente: [] })).toBeNull();
+    expect(historicoAusenteTexto(undefined)).toBeNull();
+    expect(historicoAusenteTexto({ ...base, historicoAusente: ['2026-08'] })).toBe(
+      'Sem histórico de vendas gravado em ago/2026: a lista pode estar incompleta.',
+    );
+    expect(historicoAusenteTexto({ ...base, historicoAusente: ['2026-07', '2026-08'] })).toBe(
+      'Sem histórico de vendas gravado em jul/2026 e ago/2026: a lista pode estar incompleta.',
+    );
+  });
+
+  it('nenhumPendenteTexto: cita o criterio so quando o backend informa a regra', () => {
+    const regra = { mesesVenda: ['2026-07', '2026-08', '2026-09'], historicoAusente: [], compras: 'fup_em_aberto' as const };
+    expect(nenhumPendenteTexto(regra)).toBe(
+      'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou compra em aberto no FUP fora do cadastro nesta quinzena.',
+    );
+    expect(nenhumPendenteTexto(undefined)).toBe('Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.');
   });
 
   it('mensagens de gravacao: o aviso da planilha so vem para codigo em produto da planilha', () => {

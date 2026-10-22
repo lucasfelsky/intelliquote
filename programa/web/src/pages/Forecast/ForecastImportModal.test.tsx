@@ -915,8 +915,11 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     vendasMes: 20,
     vendasAtual: 0,
     vendasAnual: 1200,
+    vendas3Meses: 50,
+    vendasAnteriores: 30,
     programacao: 0,
     chegadas: 80,
+    comprasEmAberto: 80,
     saldo: 0,
     ...over,
   });
@@ -927,6 +930,8 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     totalItens: itens.length,
     omitidos: 0,
     soSaldo: { codigos: 0, kg: 0 },
+    semVendaRecente: { codigos: 3, vendasAnual: 900 },
+    regra: { mesesVenda: ['2026-10', '2026-11', '2026-12'], historicoAusente: [], compras: 'fup_em_aberto' },
   });
   const regiao = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
 
@@ -959,13 +964,17 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     expect(within(tabela).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
       'Código',
       'Situação',
-      'Vendas mês ant.',
+      'Vendas 3 meses',
       'Vendas mês atual',
-      'Vendas anual',
       'Programação',
-      'Chegadas',
+      'Compras em aberto (FUP)',
       'Ação',
     ]);
+    // O criterio da regra e a contagem do que ficou fora da lista aparecem sob a tabela.
+    expect(
+      regiao().getByText('Entram na lista: venda em out/2026, nov/2026 ou dez/2026, programação pendente ou compra em aberto no FUP.'),
+    ).toBeTruthy();
+    expect(regiao().getByText('Sem venda nos últimos 3 meses (não listados): 3 códigos · 900 kg de venda anual')).toBeTruthy();
     expect(regiao().getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);
     expect(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' })).toBeTruthy();
   });

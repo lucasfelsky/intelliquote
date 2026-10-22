@@ -11,7 +11,11 @@ import ForecastCompletarCadastroModal, { type ResultadoCadastro } from './Foreca
 import { inteiroBr } from './forecastPainel';
 import {
   contagemTexto,
+  criterioTexto,
+  historicoAusenteTexto,
   mensagemCadastroGravado,
+  nenhumPendenteTexto,
+  semVendaRecenteTexto,
   situacaoTexto,
   soSaldoTexto,
   TEXTO_REATIVACAO_INDISPONIVEL,
@@ -32,6 +36,9 @@ interface TabelaProps {
   itens: readonly ForecastPendente[];
   omitidos: number;
   soSaldo: ForecastPendentesResumo['soSaldo'];
+  /** Criterio e contagens fora da lista (regra do COMEX); ausentes em backend antigo. */
+  regra?: ForecastPendentesResumo['regra'];
+  semVendaRecente?: ForecastPendentesResumo['semVendaRecente'];
   /** Quem completa (admin/comprador) ve a coluna Acao; os demais so leem. */
   podeCompletar: boolean;
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
@@ -39,11 +46,23 @@ interface TabelaProps {
 }
 
 /** Tabela dos codigos pendentes (painel da quinzena e pre-visualizacao do import). Quantidades em kg. */
-export function TabelaPendentes({ itens, omitidos, soSaldo, podeCompletar, onCompletar, legenda }: TabelaProps) {
+export function TabelaPendentes({
+  itens,
+  omitidos,
+  soSaldo,
+  regra,
+  semVendaRecente,
+  podeCompletar,
+  onCompletar,
+  legenda,
+}: TabelaProps) {
   const mostrarSaldo = itens.some((p) => p.saldo !== 0);
   const comAcao = podeCompletar && onCompletar !== undefined;
   const temInativo = itens.some((p) => p.situacao === 'produto_inativo');
   const saldoTexto = soSaldoTexto(soSaldo, inteiroBr);
+  const criterio = criterioTexto(regra);
+  const semVendaTexto = semVendaRecenteTexto(semVendaRecente, inteiroBr);
+  const historicoTexto = historicoAusenteTexto(regra);
   return (
     <>
       <div className="fcp-scroll" role="region" tabIndex={0} aria-label={legenda}>
@@ -54,19 +73,16 @@ export function TabelaPendentes({ itens, omitidos, soSaldo, podeCompletar, onCom
               <th scope="col">Código</th>
               <th scope="col">Situação</th>
               <th scope="col" className="fcp-num">
-                Vendas mês ant.
+                Vendas 3 meses
               </th>
               <th scope="col" className="fcp-num">
                 Vendas mês atual
               </th>
               <th scope="col" className="fcp-num">
-                Vendas anual
-              </th>
-              <th scope="col" className="fcp-num">
                 Programação
               </th>
               <th scope="col" className="fcp-num">
-                Chegadas
+                Compras em aberto (FUP)
               </th>
               {mostrarSaldo && (
                 <th scope="col" className="fcp-num">
@@ -92,11 +108,10 @@ export function TabelaPendentes({ itens, omitidos, soSaldo, podeCompletar, onCom
                     <span className="fcp-produto-inativo">{p.produtoInativo.nome}</span>
                   )}
                 </td>
-                <td className="fcp-num">{numero(p.vendasMes)}</td>
+                <td className="fcp-num">{numero(p.vendas3Meses ?? p.vendasMes)}</td>
                 <td className="fcp-num">{numero(p.vendasAtual)}</td>
-                <td className="fcp-num">{numero(p.vendasAnual)}</td>
                 <td className="fcp-num">{numero(p.programacao)}</td>
-                <td className="fcp-num">{numero(p.chegadas)}</td>
+                <td className="fcp-num">{numero(p.comprasEmAberto ?? p.chegadas)}</td>
                 {mostrarSaldo && <td className="fcp-num">{numero(p.saldo)}</td>}
                 {comAcao && (
                   <td className="fcp-acao">
@@ -119,10 +134,13 @@ export function TabelaPendentes({ itens, omitidos, soSaldo, podeCompletar, onCom
           </tbody>
         </table>
       </div>
+      {criterio && <p className="fcp-nota">{criterio}</p>}
       {omitidos > 0 && (
         <p className="fcp-nota">… e mais {contagemTexto(omitidos, 'código', 'códigos')} (lista cortada nos primeiros itens).</p>
       )}
+      {semVendaTexto && <p className="fcp-nota">{semVendaTexto}</p>}
       {saldoTexto && <p className="fcp-nota">{saldoTexto}</p>}
+      {historicoTexto && <p className="fcp-nota">{historicoTexto}</p>}
       {temInativo && (
         <p className="fcp-nota">
           {textoProdutoInativo(null)} {TEXTO_REATIVACAO_INDISPONIVEL}
@@ -229,7 +247,10 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
     return (
       <section className="fcp" aria-label="Pendentes de cadastro">
         {status}
-        <p className="fcp-estado">Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.</p>
+        <p className="fcp-estado">{nenhumPendenteTexto(dados.regra)}</p>
+        {[semVendaRecenteTexto(dados.semVendaRecente, inteiroBr), historicoAusenteTexto(dados.regra)].map(
+          (nota) => nota && <p key={nota} className="fcp-nota">{nota}</p>,
+        )}
       </section>
     );
   }
@@ -248,6 +269,8 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
             itens={dados.itens}
             omitidos={dados.omitidos}
             soSaldo={dados.soSaldo}
+            regra={dados.regra}
+            semVendaRecente={dados.semVendaRecente}
             podeCompletar={podeEditar}
             onCompletar={dialogo.abrir}
             legenda={`Códigos pendentes de cadastro da quinzena ${label}`}

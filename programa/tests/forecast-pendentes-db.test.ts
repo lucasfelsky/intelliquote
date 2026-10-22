@@ -24,6 +24,10 @@ const CODE_NOVO = `${U}N1`; // pendente: vira produto novo
 const CODE_NOVO_2 = `${U}N2`; // pendente: entra depois como 2o codigo do produto novo
 const CODE_INATIVO = `${U}I1`; // codigo de produto INATIVO
 const CODE_SO_SALDO = `${U}S1`; // so saldo
+const CODE_SO_ANUAL = `${U}A1`; // venda so no acumulado anual: fora da lista (semVendaRecente)
+const CODE_FUP_ABERTO = `${U}F1`; // FUP "AG. PAGAMENTO" sem data: compra em aberto
+const CODE_SO_CONCLUIDO = `${U}C1`; // FUP CONCLUIDO: nada
+const CODE_SO_HIST = `${U}H1`; // venda gravada so em base-2 (historico mensal)
 const SOURCE_NAME = `FONTE ${U} 1`;
 const SOURCE_SEM_LT = `FONTE ${U} 2`;
 const NAME_BASE = `PRODUTO ${U} BASE`;
@@ -200,8 +204,11 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
       vendasMes: 40,
       vendasAtual: 8,
       vendasAnual: 300,
+      vendas3Meses: 80, // 40 do mes anterior + 20 (base-3) + 20 (base-2) do historico mensal
+      vendasAnteriores: 40,
       programacao: 0,
       chegadas: 500,
+      comprasEmAberto: 500,
       saldo: 12,
     });
     expect(data.pendentes.itens[1]).toMatchObject({ vendasMes: 5, programacao: 60 });
@@ -210,9 +217,18 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
       produtoInativo: { id: inativoProductId, nome: NAME_INATIVO },
     });
     expect(data.pendentes.soSaldo).toEqual({ codigos: 1, kg: 7 });
+    expect(data.pendentes.semVendaRecente).toEqual({ codigos: 0, vendasAnual: 0 });
+    expect(data.pendentes.regra).toEqual({
+      mesesVenda: ['2034-03', '2034-04', '2034-05'],
+      historicoAusente: [],
+      compras: 'fup_em_aberto',
+    });
     expect(data.avisos).toContain(
-      '3 códigos com venda, programação ou chegada no DBCorp não estão no cadastro e ficam FORA do cálculo até completar o cadastro.',
+      '3 códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro e ficam FORA do cálculo até completar o cadastro.',
     );
+    // O resumo do FUP nao leva a compra em aberto (so as Entradas congeladas).
+    expect(data.relatorios.fup).not.toHaveProperty('comprasEmAberto');
+    expect(data.relatorios.fup).not.toHaveProperty('linhas');
     expect(await prisma.forecastSnapshot.count({ where: { createdById: adminId } })).toBe(0);
   });
 
@@ -273,6 +289,10 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     });
     expect(confirm.status).toBe(201);
     snapshotId = confirm.body.data.snapshotId;
+    const gravado = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: snapshotId } });
+    expect((gravado.inputs as { comprasEmAberto?: unknown }).comprasEmAberto).toEqual([
+      { codigo: CODE_NOVO, qtd: 500 },
+    ]);
 
     const calc = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}?hoje=${HOJE}`).set('Cookie', cookies);
     expect(calc.status).toBe(200);
@@ -287,6 +307,65 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     expect(pend.body.data).toMatchObject({ aplicavel: true, snapshotId, label: LABEL, totalItens: 2 });
     expect(pend.body.data.itens.map((i: { codigo: string }) => i.codigo)).toEqual([CODE_NOVO_2, CODE_INATIVO]);
     expect(pend.body.data.soSaldo).toEqual({ codigos: 1, kg: 7 });
+    expect(pend.body.data.regra).toEqual({
+      mesesVenda: ['2034-03', '2034-04', '2034-05'],
+      historicoAusente: [],
+      compras: 'fup_em_aberto',
+    });
+  });
+
+  testDbSkip('regra do COMEX: venda so anual fora; historico base-2 e FUP sem data entram; FUP concluido nao', async () => {
+    // Venda gravada so em base-2 (2034-04), sem nenhuma linha nos relatorios: lista pelo historico mensal.
+    await prisma.forecastMonthlySale.create({
+      data: { code: CODE_SO_HIST, yearMonth: HIST[4], quantity: 25, sourceLabel: `semente ${runId}` },
+    });
+    try {
+      const base = await reports();
+      const res = await request(app)
+        .post('/api/v1/forecast/import/dbcorp/preview')
+        .set('Cookie', cookies)
+        .send({
+          label: LABEL,
+          baseDate: BASE_DATE,
+          files: {
+            ...base,
+            vendasAnual: file(
+              'vendas-anual.xlsx',
+              await xlsxBase64(VENDAS_HEADERS, [
+                vendasRow(CODE_BASE, 360),
+                vendasRow(CODE_NOVO, 300),
+                vendasRow(CODE_SO_ANUAL, 900),
+              ]),
+            ),
+            fup: file(
+              'fup.xlsx',
+              await xlsxBase64(FUP_HEADERS, [
+                ['EM TRANSITO', CODE_NOVO, 500, VAZIO, d('2034-06-25'), VAZIO],
+                ['AG. PAGAMENTO (ANT)', CODE_FUP_ABERTO, 70, VAZIO, VAZIO, VAZIO],
+                ['CONCLUÍDO', CODE_SO_CONCLUIDO, 90, VAZIO, d('2034-06-25'), VAZIO],
+              ]),
+            ),
+          },
+        });
+      expect(res.status).toBe(200);
+      const { pendentes } = res.body.data;
+      // Ordem: vendas3Meses desc (25, 5, 3) e, sem venda, programacao/compra.
+      expect(pendentes.itens.map((i: { codigo: string }) => i.codigo)).toEqual([
+        CODE_SO_HIST,
+        CODE_NOVO_2,
+        CODE_INATIVO,
+        CODE_FUP_ABERTO,
+      ]);
+      expect(pendentes.itens[0]).toMatchObject({ vendasAnteriores: 25, vendasMes: 0, vendas3Meses: 25 });
+      expect(pendentes.itens[3]).toMatchObject({ vendas3Meses: 0, chegadas: 0, comprasEmAberto: 70 });
+      expect(pendentes.semVendaRecente).toEqual({ codigos: 1, vendasAnual: 900 });
+      expect(pendentes.soSaldo).toEqual({ codigos: 1, kg: 7 });
+      const todos = JSON.stringify(pendentes);
+      expect(todos).not.toContain(CODE_SO_CONCLUIDO);
+      expect(todos).not.toContain(CODE_SO_ANUAL);
+    } finally {
+      await prisma.forecastMonthlySale.deleteMany({ where: { code: CODE_SO_HIST } });
+    }
   });
 
   testDbSkip('POST /forecast/products/:id/codigos usa a menor posicao livre (sem embalagem) e audita', async () => {

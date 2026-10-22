@@ -29,11 +29,16 @@ const item = (over: Record<string, unknown>) => ({
   vendasMes: 0,
   vendasAtual: 0,
   vendasAnual: 0,
+  vendas3Meses: 0,
+  vendasAnteriores: 0,
   programacao: 0,
   chegadas: 0,
+  comprasEmAberto: 0,
   saldo: 0,
   ...over,
 });
+
+const REGRA = { mesesVenda: ['2026-08', '2026-09', '2026-10'], historicoAusente: [] as string[], compras: 'fup_em_aberto' };
 
 let pendentes: Record<string, unknown>;
 
@@ -43,12 +48,21 @@ function dados(over: Record<string, unknown> = {}) {
     snapshotId: 8,
     label: '11-1',
     itens: [
-      item({ codigo: 'TST0901', vendasMes: 20, vendasAnual: 1200, chegadas: 80 }),
-      item({ codigo: 'TST0902', situacao: 'produto_inativo', produtoInativo: { id: 9, nome: 'PRODUTO 009' }, vendasMes: 5, vendasAnual: 50 }),
+      item({ codigo: 'TST0901', vendasMes: 20, vendasAnteriores: 40, vendas3Meses: 60, vendasAnual: 1200, comprasEmAberto: 80 }),
+      item({
+        codigo: 'TST0902',
+        situacao: 'produto_inativo',
+        produtoInativo: { id: 9, nome: 'PRODUTO 009' },
+        vendasMes: 5,
+        vendas3Meses: 5,
+        vendasAnual: 50,
+      }),
     ],
     totalItens: 2,
     omitidos: 0,
     soSaldo: { codigos: 0, kg: 0 },
+    semVendaRecente: { codigos: 0, vendasAnual: 0 },
+    regra: REGRA,
     ...over,
   };
 }
@@ -94,11 +108,22 @@ describe('ForecastPendentesCadastro - estados', () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 
-  it('vazio: uma linha discreta, sem tabela', async () => {
-    pendentes = dados({ itens: [], totalItens: 0 });
+  it('vazio: uma linha discreta com o criterio, sem tabela; as contagens fora da lista continuam visiveis', async () => {
+    pendentes = dados({ itens: [], totalItens: 0, semVendaRecente: { codigos: 4, vendasAnual: 2500 } });
+    renderPainel();
+    expect(
+      await screen.findByText(
+        'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou compra em aberto no FUP fora do cadastro nesta quinzena.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Sem venda nos últimos 3 meses (não listados): 4 códigos · 2.500 kg de venda anual')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+  });
+
+  it('vazio com backend antigo (sem `regra`): o texto de antes', async () => {
+    pendentes = dados({ itens: [], totalItens: 0, regra: undefined, semVendaRecente: undefined });
     renderPainel();
     expect(await screen.findByText('Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.')).toBeTruthy();
-    expect(screen.queryByRole('table')).toBeNull();
   });
 
   it('quinzena da planilha (aplicavel: false): nao renderiza nada', async () => {
@@ -124,22 +149,69 @@ describe('ForecastPendentesCadastro - lista', () => {
     expect(within(tabela).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
       'Código',
       'Situação',
-      'Vendas mês ant.',
+      'Vendas 3 meses',
       'Vendas mês atual',
-      'Vendas anual',
       'Programação',
-      'Chegadas',
+      'Compras em aberto (FUP)',
       'Ação',
     ]);
     const linhas = within(tabela).getAllByRole('row').slice(1);
     const celulas = (l: HTMLElement) => within(l).getAllByRole('cell').map((c) => c.textContent);
-    expect(celulas(linhas[0] as HTMLElement)).toEqual(['Sem cadastro', '20', '—', '1.200', '—', '80', 'Completar cadastro']);
+    // Vendas 3 meses = 60 (nao so o mes anterior); a venda anual (1.200) nao e coluna.
+    expect(celulas(linhas[0] as HTMLElement)).toEqual(['Sem cadastro', '60', '—', '—', '80', 'Completar cadastro']);
     expect(within(linhas[0] as HTMLElement).getByRole('rowheader').textContent).toBe('TST0901');
+  });
+
+  it('criterio, sem-venda-recente e historico ausente viram notas sob a tabela', async () => {
+    pendentes = dados({
+      semVendaRecente: { codigos: 7, vendasAnual: 3400 },
+      regra: { ...REGRA, historicoAusente: ['2026-08'] },
+    });
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    expect(
+      screen.getByText('Entram na lista: venda em ago/2026, set/2026 ou out/2026, programação pendente ou compra em aberto no FUP.'),
+    ).toBeTruthy();
+    expect(screen.getByText('Sem venda nos últimos 3 meses (não listados): 7 códigos · 3.400 kg de venda anual')).toBeTruthy();
+    expect(screen.getByText('Sem histórico de vendas gravado em ago/2026: a lista pode estar incompleta.')).toBeTruthy();
+  });
+
+  it('backend antigo (sem vendas3Meses/comprasEmAberto/regra): mostra vendas do mes anterior e chegadas, sem criterio', async () => {
+    pendentes = dados({
+      itens: [
+        {
+          codigo: 'TST0901',
+          situacao: 'sem_cadastro',
+          produtoInativo: null,
+          vendasMes: 20,
+          vendasAtual: 0,
+          vendasAnual: 1200,
+          programacao: 0,
+          chegadas: 80,
+          saldo: 0,
+        },
+      ],
+      totalItens: 1,
+      regra: undefined,
+      semVendaRecente: undefined,
+    });
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(1\)/);
+    const linha = within(screen.getByRole('table')).getAllByRole('row')[1] as HTMLElement;
+    expect(within(linha).getAllByRole('cell').map((c) => c.textContent)).toEqual([
+      'Sem cadastro',
+      '20',
+      '—',
+      '—',
+      '80',
+      'Completar cadastro',
+    ]);
+    expect(screen.queryByText(/Entram na lista/)).toBeNull();
   });
 
   it('coluna Saldo aparece quando algum codigo tem saldo; so-saldo e omitidos viram notas', async () => {
     pendentes = dados({
-      itens: [item({ codigo: 'TST0901', vendasMes: 20, saldo: 300 })],
+      itens: [item({ codigo: 'TST0901', vendasMes: 20, vendas3Meses: 20, saldo: 300 })],
       totalItens: 3,
       omitidos: 2,
       soSaldo: { codigos: 5, kg: 1234 },

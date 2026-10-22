@@ -16,6 +16,7 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     // forecastSnapshot SEM update/upsert/updateMany de proposito: os pendentes sao so leitura.
     forecastSnapshot: { findFirst: vi.fn() },
+    forecastMonthlySale: { findMany: vi.fn() },
     forecastProduct: { findUnique: vi.fn(), create: vi.fn() },
     forecastProductCode: { findMany: vi.fn(), create: vi.fn() },
     forecastSource: { findUnique: vi.fn() },
@@ -37,6 +38,7 @@ const prismaMock = prisma as unknown as {
   session: { create: Mock; findUnique: Mock; update: Mock; updateMany: Mock };
   auditLog: { create: Mock };
   forecastSnapshot: Record<string, Mock>;
+  forecastMonthlySale: { findMany: Mock };
   forecastProduct: { findUnique: Mock; create: Mock };
   forecastProductCode: { findMany: Mock; create: Mock };
   forecastSource: { findUnique: Mock };
@@ -59,6 +61,7 @@ const snapshotDbcorp = {
   id: 7,
   label: '10-2',
   origin: 'dbcorp',
+  baseDate: new Date('2026-10-15T00:00:00.000Z'),
   inputs: {
     estoque: [{ codigo: 'TST0001', qtd: 10 }, { codigo: 'TST0950', qtd: 3 }],
     vendasMes: [{ codigo: 'TST0001', qtd: 5 }, { codigo: 'TST0901', qtd: 20 }],
@@ -75,6 +78,10 @@ beforeEach(() => {
   prismaMock.$executeRaw.mockResolvedValue(1);
   prismaMock.auditLog.create.mockResolvedValue({});
   prismaMock.forecastSnapshot.findFirst.mockResolvedValue(snapshotDbcorp);
+  prismaMock.forecastMonthlySale.findMany.mockResolvedValue([
+    { code: 'TST0001', yearMonth: '2026-07', quantity: new Prisma.Decimal(10) },
+    { code: 'TST0001', yearMonth: '2026-08', quantity: new Prisma.Decimal(10) },
+  ]);
   prismaMock.forecastSource.findUnique.mockResolvedValue({ id: 3, isActive: true, leadTimeDays: 45 });
   prismaMock.itemFamily.findUnique.mockResolvedValue({ id: 4, isActive: true });
   prismaMock.forecastProduct.findUnique.mockResolvedValue(null);
@@ -140,11 +147,72 @@ describe('Forecast pendentes - GET /forecast/snapshots/:id/pendentes', () => {
       situacao: 'sem_cadastro',
       vendasMes: 20,
       vendasAnual: 200,
+      vendas3Meses: 20,
+      vendasAnteriores: 0,
       chegadas: 0,
+      comprasEmAberto: 0,
     });
-    expect(data.itens[1]).toMatchObject({ chegadas: 80 });
+    // Quinzena gravada antes do 5C (sem `comprasEmAberto` em inputs): a compra em aberto cai nas chegadas.
+    expect(data.itens[1]).toMatchObject({ chegadas: 80, comprasEmAberto: 80, vendas3Meses: 0 });
     expect(data.soSaldo).toEqual({ codigos: 1, kg: 3 });
+    expect(data.semVendaRecente).toEqual({ codigos: 0, vendasAnual: 0 });
+    expect(data.regra).toEqual({
+      mesesVenda: ['2026-07', '2026-08', '2026-09'],
+      historicoAusente: [],
+      compras: 'chegadas',
+    });
     expect(prismaMock.forecastSnapshot.findFirst.mock.calls[0][0].where).toEqual({ id: 7, deletedAt: null });
+  });
+
+  it('regra do COMEX: historico base-3/base-2, compra em aberto do FUP e venda so anual (so leitura)', async () => {
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      ...snapshotDbcorp,
+      inputs: {
+        estoque: [],
+        vendasMes: [],
+        vendasAtual: [{ codigo: 'TST0930', qtd: 4 }],
+        vendasAnual: [
+          { codigo: 'TST0901', qtd: 200 },
+          { codigo: 'TST0930', qtd: 700 },
+        ],
+        programacoes: [],
+        chegadas: [{ codigo: 'TST0902', qtd: 80, mes: '11' }],
+        comprasEmAberto: [{ codigo: 'TST0903', qtd: 55 }],
+      },
+    });
+    prismaMock.forecastMonthlySale.findMany.mockResolvedValue([
+      { code: 'TST0901', yearMonth: '2026-07', quantity: new Prisma.Decimal('12.5') },
+      { code: 'tst0901', yearMonth: '2026-08', quantity: new Prisma.Decimal('7.5') },
+    ]);
+    const cookies = await loginAs('viewer');
+    const response = await request(app).get(GET_PATH).set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    const { data } = response.body;
+    // TST0902 so tem chegada (a quinzena tem `comprasEmAberto`: ela nao qualifica); TST0930 so venda anual/mes atual.
+    expect(data.itens.map((i: { codigo: string }) => i.codigo)).toEqual(['TST0901', 'TST0903']);
+    expect(data.itens[0]).toMatchObject({ vendasAnteriores: 20, vendasMes: 0, vendas3Meses: 20, vendasAnual: 200 });
+    expect(data.itens[1]).toMatchObject({ comprasEmAberto: 55 });
+    expect(data.semVendaRecente).toEqual({ codigos: 1, vendasAnual: 700 });
+    expect(data.regra).toEqual({
+      mesesVenda: ['2026-07', '2026-08', '2026-09'],
+      historicoAusente: [],
+      compras: 'fup_em_aberto',
+    });
+    // O historico e lido dos meses base-3 e base-2 da data base da quinzena (2026-10-15).
+    expect(prismaMock.forecastMonthlySale.findMany.mock.calls[0][0].where).toEqual({
+      yearMonth: { in: ['2026-07', '2026-08'] },
+    });
+    expect(prismaMock.forecastSnapshot).not.toHaveProperty('update');
+    expect(prismaMock.forecastSnapshot).not.toHaveProperty('upsert');
+  });
+
+  it('mes base-3/base-2 sem nenhuma linha no historico vira regra.historicoAusente', async () => {
+    prismaMock.forecastMonthlySale.findMany.mockResolvedValue([
+      { code: 'TST0001', yearMonth: '2026-08', quantity: new Prisma.Decimal(1) },
+    ]);
+    const cookies = await loginAs('viewer');
+    const { data } = (await request(app).get(GET_PATH).set('Cookie', cookies)).body;
+    expect(data.regra.historicoAusente).toEqual(['2026-07']);
   });
 
   it('quinzena DBCorp: o codigo que entrou no cadastro ATIVO sai da lista', async () => {
@@ -170,8 +238,11 @@ describe('Forecast pendentes - GET /forecast/snapshots/:id/pendentes', () => {
       totalItens: 0,
       omitidos: 0,
       soSaldo: { codigos: 0, kg: 0 },
+      semVendaRecente: { codigos: 0, vendasAnual: 0 },
+      regra: { mesesVenda: [], historicoAusente: [], compras: 'chegadas' },
     });
     expect(prismaMock.forecastProductCode.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.forecastMonthlySale.findMany).not.toHaveBeenCalled();
   });
 
   it('quinzena inexistente -> 404; id invalido -> 400', async () => {

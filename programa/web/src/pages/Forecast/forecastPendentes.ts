@@ -3,9 +3,12 @@
 import type { ForecastFonte } from '@/services/forecastFontes';
 import type {
   ForecastPendente,
+  ForecastPendentesRegra,
+  ForecastPendentesResumo,
   ForecastProdutoCadastro,
   ForecastProdutoNovoBody,
 } from '@/services/forecastPendentes';
+import { mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Espelha FORECAST_MAX_CODES_PER_PRODUCT (backend revalida). */
 export const MAX_CODIGOS_POR_PRODUTO = 7;
@@ -51,6 +54,45 @@ export const TEXTO_AVISO_PLANILHA =
 export function soSaldoTexto(soSaldo: { codigos: number; kg: number }, formatarKg: (kg: number) => string): string | null {
   if (soSaldo.codigos <= 0) return null;
   return `Só saldo (não listados): ${contagemTexto(soSaldo.codigos, 'código', 'códigos')} · ${formatarKg(soSaldo.kg)} kg`;
+}
+
+/** `jul/2026`, `jul/2026 e ago/2026` ou `jul/2026, ago/2026 e set/2026`. */
+function listaDeMeses(meses: readonly string[]): string {
+  const rotulos = meses.map(mesAbrevDoAnoMes);
+  return rotulos.length <= 1 ? (rotulos[0] ?? '') : `${rotulos.slice(0, -1).join(', ')} e ${rotulos[rotulos.length - 1]}`;
+}
+
+/** Criterio da lista (regra do COMEX). `null` sem a regra (backend antigo): a tela nao afirma nada. */
+export function criterioTexto(regra: ForecastPendentesRegra | undefined): string | null {
+  if (!regra || regra.mesesVenda.length === 0) return null;
+  const meses = regra.mesesVenda.map(mesAbrevDoAnoMes);
+  const venda =
+    meses.length === 1 ? meses[0] : `${meses.slice(0, -1).join(', ')} ou ${meses[meses.length - 1]}`;
+  const compra = regra.compras === 'chegadas' ? 'chegada prevista no FUP' : 'compra em aberto no FUP';
+  return `Entram na lista: venda em ${venda}, programação pendente ou ${compra}.`;
+}
+
+/** Codigos fora da lista por falta de venda recente (so no mes atual ou no acumulado anual). */
+export function semVendaRecenteTexto(
+  semVenda: ForecastPendentesResumo['semVendaRecente'],
+  formatarKg: (kg: number) => string,
+): string | null {
+  if (!semVenda || semVenda.codigos <= 0) return null;
+  const base = `Sem venda nos últimos 3 meses (não listados): ${contagemTexto(semVenda.codigos, 'código', 'códigos')}`;
+  return semVenda.vendasAnual > 0 ? `${base} · ${formatarKg(semVenda.vendasAnual)} kg de venda anual` : base;
+}
+
+/** Aviso quando falta historico de vendas em base-3/base-2: os codigos so com venda ali nao aparecem. */
+export function historicoAusenteTexto(regra: ForecastPendentesRegra | undefined): string | null {
+  if (!regra || regra.historicoAusente.length === 0) return null;
+  return `Sem histórico de vendas gravado em ${listaDeMeses(regra.historicoAusente)}: a lista pode estar incompleta.`;
+}
+
+/** Linha do painel quando nao ha pendente (o criterio so e afirmado quando o backend o informa). */
+export function nenhumPendenteTexto(regra: ForecastPendentesRegra | undefined): string {
+  return regra
+    ? 'Pendentes de cadastro: nenhum código com venda nos últimos 3 meses, programação ou compra em aberto no FUP fora do cadastro nesta quinzena.'
+    : 'Pendentes de cadastro: nenhum código fora do cadastro nesta quinzena.';
 }
 
 type ResultadoGravado = { tipo: 'novo' | 'codigo'; produtoOrigem?: string | null };

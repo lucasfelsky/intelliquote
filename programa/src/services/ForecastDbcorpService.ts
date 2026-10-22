@@ -106,9 +106,11 @@ function decodeBase64(slot: ForecastDbcorpSlot, contentBase64: string): Buffer {
   return buffer;
 }
 
-function tirarLinhas<T extends { linhas: unknown }>(parsed: T): Omit<T, 'linhas'> {
-  const { linhas, ...resto } = parsed;
+// Tira do resumo as linhas lidas e a compra em aberto do FUP (so entra nas `Entradas` congeladas).
+function tirarLinhas<T extends { linhas: unknown }>(parsed: T): Omit<T, 'linhas' | 'comprasEmAberto'> {
+  const { linhas, comprasEmAberto, ...resto } = parsed as T & { comprasEmAberto?: unknown };
   void linhas;
+  void comprasEmAberto;
   return resto;
 }
 
@@ -280,6 +282,7 @@ export class ForecastDbcorpService {
       leadtime: sources.map((s) => ({ fonte: s.name, total: s.leadTimeDays })),
       margem: parsed.margem?.linhas ?? [],
       clientesAtivos: parsed.clientesAtivos?.linhas ?? [],
+      comprasEmAberto: parsed.fup.comprasEmAberto,
     };
     const rotulos = rotulosDaQuinzena(baseDate);
     built.quinzena = {
@@ -316,11 +319,19 @@ export class ForecastDbcorpService {
       );
     }
 
-    // Pendentes de cadastro: codigo com movimento no DBCorp que nao e de nenhum produto ativo.
-    built.pendentes = codigosPendentes(entradas, await ForecastProductService.cadastroDeCodigos(db));
-    if (built.pendentes.totalItens > 0) {
+    // Pendentes de cadastro: codigo fora dos produtos ativos com venda nos ultimos 3 meses, programacao ou compra
+    // em aberto no FUP (regra do COMEX).
+    built.pendentes = codigosPendentes(
+      entradas,
+      await ForecastProductService.cadastroDeCodigos(db),
+      await ForecastProductService.vendasRecentes(db, baseDate),
+    );
+    const totalPendentes = built.pendentes.totalItens;
+    if (totalPendentes > 0) {
       built.avisos.push(
-        `${built.pendentes.totalItens} códigos com venda, programação ou chegada no DBCorp não estão no cadastro e ficam FORA do cálculo até completar o cadastro.`,
+        totalPendentes === 1
+          ? '1 código com venda nos últimos 3 meses, programação ou compra em aberto no FUP não está no cadastro e fica FORA do cálculo até completar o cadastro.'
+          : `${totalPendentes} códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro e ficam FORA do cálculo até completar o cadastro.`,
       );
     }
 

@@ -18,7 +18,7 @@ import {
 import { rotuloDoYearMonth, somarDias, yearMonthsDaJanela } from './forecastMonths';
 import type { Bruto } from './forecastXlsx';
 import { isValidDateKey } from './supplierDocumentDates';
-import type { LancamentoMensal } from './forecastTypes';
+import type { Lancamento, LancamentoMensal } from './forecastTypes';
 
 // --- Helpers compartilhados com forecastDbcorp.ts ---------------------------------------------------
 
@@ -463,4 +463,17 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
       statusExcluidos,
     },
   };
+}
+
+// Compra em aberto do FUP por codigo (regra dos pendentes de cadastro, 5C): TODA linha com codigo e kg numerico cujo
+// status nao e CONCLUIDO. Diferente de `aplicarRegrasFup`, nao olha datas: entram tambem as atracadas, as com ETA FINAL
+// preenchida, sem data, com DATA PRONTIDAO nao reconhecida e depois da janela (continuam sendo compra em aberto).
+export function comprasEmAbertoDoFup(linhas: readonly FupLinha[]): Lancamento[] {
+  const porCodigo = new Map<string, number>();
+  for (const l of linhas) {
+    if (!l.codigo || l.kg === null || !Number.isFinite(l.kg)) continue;
+    if (normalizeDbcorpText(l.status) === STATUS_CONCLUIDO) continue;
+    porCodigo.set(l.codigo, (porCodigo.get(l.codigo) ?? 0) + l.kg);
+  }
+  return [...porCodigo].map(([codigo, qtd]) => ({ codigo, qtd: round6(qtd) }));
 }

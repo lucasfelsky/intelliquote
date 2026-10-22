@@ -389,6 +389,30 @@ describe('parseFup', () => {
     expect(r.avisos.join('\n')).toContain('usaram DATA PRONTIDÃO + 35 dias (ESTIMADA)');
   });
 
+  it('comprasEmAberto: toda linha nao concluida com codigo e kg, somada por codigo (alem das chegadas da F3)', async () => {
+    const r = await parseFup(
+      await xlsx(HEADERS, [
+        row('CONCLUÍDO', 'TST0001', 100, vazio, d('2026-11-20'), vazio),
+        row('ATRAC. AG. LIBERAÇÃO', 'tst0001', 200, vazio, d('2026-12-05'), vazio),
+        row('EM TRANSITO', 'TST0001', 300, d('2026-10-01'), d('2026-12-01'), d('2026-11-10')), // ETA FINAL
+        row('EM TRANSITO', 'TST0001', 400, vazio, d('2026-12-10'), vazio), // chegada normal
+        row('AG. PAGAMENTO (ANT)', 'TST0002', 700, vazio, vazio, vazio), // sem data
+        row('AG. PAGAMENTO (ANT)', 'TST0003', 40, vazio, vazio, vazio, null, 'ASAP'),
+        row('EM TRANSITO', 'TST0004', 900, vazio, d('2027-04-01'), vazio), // depois da janela
+      ]),
+      BASE,
+    );
+    expect(r.erros).toEqual([]);
+    expect(r.comprasEmAberto).toEqual([
+      { codigo: 'TST0001', qtd: 900 },
+      { codigo: 'TST0002', qtd: 700 },
+      { codigo: 'TST0003', qtd: 40 },
+      { codigo: 'TST0004', qtd: 900 },
+    ]);
+    // As chegadas da F3 nao mudam: so a linha com ETA aceita entra.
+    expect(r.linhas).toEqual([{ codigo: 'TST0001', qtd: 400, mes: '12' }]);
+  });
+
   it('DATA PRONTIDAO como celula de data', async () => {
     const r = await parseFup(
       await xlsx(HEADERS, [row('AG. PRONT. DA CARGA', 'TST0001', 100, vazio, vazio, vazio, null, d('2026-11-30'))]),
@@ -458,6 +482,7 @@ describe('parseFup', () => {
     expect(r.erros[0]).toContain('"ETA FINAL"');
     expect(r.erros[0]).toMatch(/FUP/);
     expect(r.linhas).toEqual([]);
+    expect(r.comprasEmAberto).toEqual([]);
     expect(r.regra.id).toBe('F3');
   });
 });

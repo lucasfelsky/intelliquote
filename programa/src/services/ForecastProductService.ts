@@ -12,7 +12,8 @@ import {
   normalizeProductName,
   normalizeSourceName,
 } from '../utils/forecastWorkbook';
-import type { CadastroDeCodigos } from '../utils/forecastPendentes';
+import { mesesHistorico } from '../utils/forecastMonths';
+import type { CadastroDeCodigos, VendasRecentes } from '../utils/forecastPendentes';
 import { escolherEmbalagem, type EmbalagemCadastrada } from '../utils/forecastRelatorioCompras';
 import { HttpError } from '../utils/http';
 import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
@@ -738,6 +739,35 @@ export class ForecastProductService {
       else inativos.set(row.code, { productId: row.product.id, nome: row.product.name });
     }
     return { ativos, inativos };
+  }
+
+  // Soma por codigo das vendas gravadas em `ForecastMonthlySale` nos meses pedidos (so leitura). `ausentes` = meses
+  // sem nenhuma linha no historico.
+  static async vendasAnteriores(
+    db: Db | typeof prisma,
+    yearMonths: string[],
+  ): Promise<{ porCodigo: Map<string, number>; ausentes: string[] }> {
+    const rows = await db.forecastMonthlySale.findMany({
+      where: { yearMonth: { in: yearMonths } },
+      select: { code: true, yearMonth: true, quantity: true },
+    });
+    const porCodigo = new Map<string, number>();
+    const comLinhas = new Set<string>();
+    for (const row of rows) {
+      comLinhas.add(row.yearMonth);
+      const codigo = normalizeProductCode(row.code);
+      porCodigo.set(codigo, (porCodigo.get(codigo) ?? 0) + Number(row.quantity));
+    }
+    return { porCodigo, ausentes: yearMonths.filter((m) => !comLinhas.has(m)) };
+  }
+
+  // Vendas dos 3 meses da regra dos pendentes: base-3 e base-2 do historico gravado; base-1 vem das `Entradas`
+  // (VENDAS do mes anterior). Mesma base da media trimestral do motor.
+  static async vendasRecentes(db: Db | typeof prisma, baseDate: string): Promise<VendasRecentes> {
+    const m = mesesHistorico(baseDate);
+    const doHistorico = [m.historico[3], m.historico[4]];
+    const { porCodigo, ausentes } = await ForecastProductService.vendasAnteriores(db, doHistorico);
+    return { meses: [...doHistorico, m.anterior], anteriores: porCodigo, ausentes };
   }
 
   static async list() {

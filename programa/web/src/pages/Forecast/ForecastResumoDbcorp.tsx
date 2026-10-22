@@ -279,6 +279,8 @@ function BlocoPendentes({
         itens={pendentes.itens}
         omitidos={pendentes.omitidos}
         soSaldo={pendentes.soSaldo}
+        regra={pendentes.regra}
+        semVendaRecente={pendentes.semVendaRecente}
         podeCompletar={onCompletar !== undefined}
         onCompletar={onCompletar}
         legenda="Códigos do DBCorp pendentes de cadastro"

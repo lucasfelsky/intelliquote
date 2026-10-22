@@ -210,7 +210,7 @@ export class ForecastSnapshotService {
   static async getPendentes(id: number): Promise<ForecastPendentesData> {
     const snapshot = await prisma.forecastSnapshot.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, label: true, origin: true, inputs: true },
+      select: { id: true, label: true, origin: true, baseDate: true, inputs: true },
     });
     if (!snapshot) {
       throw new HttpError(404, 'Quinzena nao encontrada.');
@@ -224,10 +224,14 @@ export class ForecastSnapshotService {
         totalItens: 0,
         omitidos: 0,
         soSaldo: { codigos: 0, kg: 0 },
+        semVendaRecente: { codigos: 0, vendasAnual: 0 },
+        regra: { mesesVenda: [], historicoAusente: [], compras: 'chegadas' },
       };
     }
     const cadastro = await ForecastProductService.cadastroDeCodigos();
-    const resultado = codigosPendentes(snapshot.inputs as unknown as Entradas, cadastro);
+    // Historico ATUAL de base-3/base-2 (so leitura): regravar esses meses muda a lista, como o cadastro atual.
+    const vendas = await ForecastProductService.vendasRecentes(prisma, dbDateToKey(snapshot.baseDate));
+    const resultado = codigosPendentes(snapshot.inputs as unknown as Entradas, cadastro, vendas);
     return { aplicavel: true, snapshotId: snapshot.id, label: snapshot.label, ...resultado };
   }
 
