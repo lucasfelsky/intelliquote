@@ -15,12 +15,13 @@ const q = JSON.parse(
 ) as Quinzena;
 
 const HOJE = '2026-10-20';
-const linhas = calcular(q, { hoje: HOJE });
-const linhaDe = (n: number) => linhas.find((l) => l.linha === n)!;
+// Regra da PLANILHA (sem somar a chegada do 5o mes): e com ela que o Excel calculou as celulas conferidas.
+const linhasPlanilha = calcular(q, { hoje: HOJE, somarChegada5oMes: false });
+const linhaDe = (n: number) => linhasPlanilha.find((l) => l.linha === n)!;
 
 describe('motor do Forecast x planilha 10-2 corrigida (fixture anonimizada)', () => {
   it('bate com todas as celulas que o Excel calculou', () => {
-    const r = conferir(q, linhas);
+    const r = conferir(q, linhasPlanilha);
     expect(r.divergencias.slice(0, 5)).toEqual([]);
     expect(r.batem).toBe(r.celulas);
     expect(r.celulas).toBe(9464);
@@ -57,43 +58,49 @@ describe('motor do Forecast x planilha 10-2 corrigida (fixture anonimizada)', ()
         { ...p, codigos: p.codigos.map((c) => c.toLowerCase()), fonte: p.fonte.toLowerCase() },
       ],
     };
-    const [l] = calcular(minusculo, { hoje: HOJE });
+    const [l] = calcular(minusculo, { hoje: HOJE, somarChegada5oMes: false });
     expect(l).toEqual(linhaDe(3));
   });
 
   it('quinzena 1: AG e a media trimestral (Q), mesmo com P > Q', () => {
-    const l = linhas.find((x) => x.P > x.Q)!;
+    const l = linhasPlanilha.find((x) => x.P > x.Q)!;
     expect(l).toBeDefined();
     expect(l.AG).toBe(l.P); // quinzena 2 (default): maior entre Q e P
 
-    const q1 = calcular(q, { hoje: HOJE, quinzena: 1 });
+    const q1 = calcular(q, { hoje: HOJE, quinzena: 1, somarChegada5oMes: false });
     const l1 = q1.find((x) => x.linha === l.linha)!;
     expect(l1.AG).toBe(l1.Q);
     expect(l1.projecao[0]).toBeCloseTo(l.projecao[0] + (l.P - l.Q), 6);
   });
 
-  it('quinzena 2 explicita equivale ao default (planilha)', () => {
-    expect(calcular(q, { hoje: HOJE, quinzena: 2 })).toEqual(linhas);
+  it('quinzena 2 explicita equivale ao default', () => {
+    expect(calcular(q, { hoje: HOJE, quinzena: 2 })).toEqual(calcular(q, { hoje: HOJE }));
   });
 
-  it('PROJECAO_5O_MES_SOMA_CHEGADA = false replica a planilha; true soma chegadas[4] em AL', () => {
-    expect(PROJECAO_5O_MES_SOMA_CHEGADA).toBe(false);
-    expect(calcular(q, { hoje: HOJE, somarChegada5oMes: false })).toEqual(linhas);
+  it('regra AL do Comex: default soma chegadas[4] em AL e AM; false replica a planilha', () => {
+    expect(PROJECAO_5O_MES_SOMA_CHEGADA).toBe(true);
+    const padrao = calcular(q, { hoje: HOJE });
+    expect(padrao).toEqual(calcular(q, { hoje: HOJE, somarChegada5oMes: true }));
 
-    const com = calcular(q, { hoje: HOJE, somarChegada5oMes: true });
-    expect(linhas.filter((l) => l.chegadas[4] !== 0).length).toBeGreaterThan(0);
-    for (const l of linhas) {
-      const c = com.find((x) => x.linha === l.linha)!;
+    expect(linhasPlanilha.filter((l) => l.chegadas[4] !== 0).length).toBeGreaterThan(0);
+    for (const l of linhasPlanilha) {
+      const c = padrao.find((x) => x.linha === l.linha)!;
       expect(c.projecao[4]).toBeCloseTo(l.projecao[4] + l.chegadas[4], 6); // AL
       expect(c.projecao[5]).toBeCloseTo(l.projecao[5] + l.chegadas[4], 6); // AM = AL - Q
       expect(c.projecao.slice(0, 4)).toEqual(l.projecao.slice(0, 4));
+      expect(c.AN).toEqual(l.AN);
     }
-    // Com a opcao ligada a conferencia com a planilha diverge so em AL/AM.
-    const { porColuna } = conferir(q, com);
+    const planilha = conferir(q, linhasPlanilha);
+    expect(planilha.celulas).toBe(9464);
+    expect(planilha.batem).toBe(9464);
+    // Com a regra do Comex a conferencia com o Excel diverge so em AL/AM (2 celulas cada na fixture).
+    const { porColuna } = conferir(q, padrao);
     const divergentes = Object.keys(porColuna).filter(
       (col) => porColuna[col].batem !== porColuna[col].celulas,
     );
     expect(divergentes.sort()).toEqual(['AL', 'AM']);
+    expect(porColuna.AL.celulas - porColuna.AL.batem).toBe(2);
+    expect(porColuna.AM.celulas - porColuna.AM.batem).toBe(2);
   });
 
   it('rejeita data de hoje invalida', () => {

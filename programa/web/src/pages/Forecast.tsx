@@ -24,6 +24,7 @@ import {
   FILTROS,
   STATUS_ORDEM,
   STATUS_ROTULO,
+  regraALDoPainel,
   textoDoSelo,
   type FiltroId,
 } from './Forecast/forecastPainel';
@@ -34,12 +35,13 @@ const ORIGEM_ROTULO: Record<ForecastOrigin, string> = {
 };
 
 function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
-  const selo = textoDoSelo(detail);
+  const selo = textoDoSelo(detail, { regraAL: regraALDoPainel(detail) });
   return (
     <div className={`fc-selo-conferencia fc-selo-conferencia--${selo.tom}`} role="status">
       <strong>{selo.titulo}</strong>
       {selo.detalhe && <span>{selo.detalhe}</span>}
       {selo.nota && <span className="fc-selo-conferencia__nota">{selo.nota}</span>}
+      {selo.notaRegra && <span className="fc-selo-conferencia__nota">{selo.notaRegra}</span>}
     </div>
   );
 }

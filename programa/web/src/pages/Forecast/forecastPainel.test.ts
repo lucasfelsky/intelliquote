@@ -19,6 +19,7 @@ import {
   nomeDoMes,
   normalizarBusca,
   passosDaMemoria,
+  regraALDoPainel,
   risco,
   textoAA,
   textoDoSelo,
@@ -359,6 +360,35 @@ describe('textoDoSelo', () => {
     const ruim = textoDoSelo(detail({ half: 1, conferencia: conf({ batem: 1500, totalDivergencias: 40, divergencias: [] }) }));
     expect(ruim.tom).toBe('erro');
     expect(ruim.nota).toBeDefined();
+  });
+
+  it('regra AL: nota so com conferencia e chegada no 5o mes; singular e plural', () => {
+    const um = textoDoSelo(detail({}), { regraAL: { linhas: 1, mes: 'fev/2027' } });
+    expect(um.notaRegra).toBe(
+      '1 produto tem chegada em fev/2027: o painel e o relatório somam essa chegada na projeção de fev/2027 (colunas AL e AM), regra confirmada pelo Comex. A conferência acima usa a regra da planilha, que não soma.',
+    );
+    expect(um.titulo).toBe('Cálculo idêntico ao da planilha');
+    const dois = textoDoSelo(detail({}), { regraAL: { linhas: 2, mes: 'fev/2027' } });
+    expect(dois.notaRegra).toMatch(/^2 produtos têm chegada em fev\/2027:/);
+    const meia = textoDoSelo(detail({ half: 1 }), { regraAL: { linhas: 2, mes: 'fev/2027' } });
+    expect(meia.nota).toBeDefined();
+    expect(meia.notaRegra).toBeDefined();
+
+    expect(textoDoSelo(detail({}), { regraAL: { linhas: 0, mes: 'fev/2027' } })).toEqual({
+      tom: 'ok',
+      titulo: 'Cálculo idêntico ao da planilha',
+      detalhe: '1.540 de 1.540 células batem',
+    });
+    const dbcorp = textoDoSelo(detail({ conferencia: null }), { regraAL: { linhas: 3, mes: 'fev/2027' } });
+    expect(dbcorp.notaRegra).toBeUndefined();
+  });
+
+  it('regraALDoPainel conta linhas com chegada no 5o mes e rotula o mes da janela', () => {
+    const com = (n: number) => linha({ chegadas: [0, 0, 0, 0, n] });
+    expect(regraALDoPainel({ baseDate: '2026-10-15', linhas: [linha(), com(0)] })).toEqual({ linhas: 0, mes: 'fev/2027' });
+    expect(regraALDoPainel({ baseDate: '2026-10-15', linhas: [linha(), com(50)] })).toEqual({ linhas: 1, mes: 'fev/2027' });
+    expect(regraALDoPainel({ baseDate: '2026-10-15', linhas: [com(50), com(10), linha()] }).linhas).toBe(2);
+    expect(regraALDoPainel({ baseDate: '2026-11-05', linhas: [com(50)] }).mes).toBe('mar/2027');
   });
 
   it('descreverDivergencia mostra planilha x motor', () => {

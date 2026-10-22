@@ -45,10 +45,11 @@ export interface ForecastConferencia {
 }
 
 // Conferencia motor x valores que o Excel gravou. Compara SEMPRE com a regra da planilha (AG = maior
-// entre Q e P, quinzena 2): o Excel nao conhece a regra "1a quinzena" do Comex, entao comparar com ela
-// geraria divergencia de AG em toda linha com P > Q que nao e erro do motor.
+// entre Q e P, quinzena 2) e a regra AL da planilha (sem somar a chegada do 5o mes): o Excel nao conhece
+// a regra "1a quinzena" nem a regra AL do Comex, entao comparar com elas geraria divergencia que nao e
+// erro do motor.
 export function conferenciaDaQuinzena(q: Quinzena, hoje: string): ForecastConferencia {
-  const linhas = calcular(q, { hoje, quinzena: 2 });
+  const linhas = calcular(q, { hoje, quinzena: 2, somarChegada5oMes: false });
   const resultado = conferir(q, linhas);
   return {
     celulas: resultado.celulas,

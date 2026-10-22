@@ -72,7 +72,7 @@ function quinzena(options: { produtos: Produto[]; vendasMes: Array<[string, numb
     esperado: {},
   };
   // O "Excel" desta planilha sintetica e o proprio motor (o que se prova aqui e o encanamento).
-  const linhas = calcular(q, { hoje: HOJE, quinzena: 2 });
+  const linhas = calcular(q, { hoje: HOJE, quinzena: 2, somarChegada5oMes: false });
   for (const l of linhas) {
     q.esperado[String(l.linha)] = Object.fromEntries(COLUNAS_CONFERIDAS.map((c) => [c, valorDaColuna(l, c)]));
   }

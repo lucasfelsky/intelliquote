@@ -232,6 +232,23 @@ describe('Forecast', () => {
     expect(screen.getByText('3 de 3 produtos')).toBeTruthy();
   });
 
+  it('regra AL: nota no selo quando ha chegada no 5o mes', async () => {
+    mockApi({
+      7: detalhe({ linhas: [linha({ chegadas: [0, 0, 0, 0, 50] }), ...LINHAS.slice(1)] }),
+    });
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Cálculo idêntico ao da planilha')).toBeTruthy();
+    expect(
+      screen.getByText(/^1 produto tem chegada em fev\/2027: o painel e o relatório somam essa chegada/),
+    ).toBeTruthy();
+    unmount();
+
+    mockApi({ 7: detalhe() });
+    renderPage();
+    expect(await screen.findByText('Cálculo idêntico ao da planilha')).toBeTruthy();
+    expect(screen.queryByText(/regra confirmada pelo Comex/)).toBeNull();
+  });
+
   it('trocar o seletor pede o detalhe da outra quinzena (origem DBCorp, 1a quinzena)', async () => {
     mockApi({
       7: detalhe(),

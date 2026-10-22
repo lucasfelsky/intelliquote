@@ -190,7 +190,7 @@ describe('parseForecastWorkbook - planilha montada a partir da fixture anonimiza
   });
 
   it('o motor sobre o que o parser leu bate com todas as celulas do Excel (9.464)', () => {
-    const linhas = calcular(completo.quinzena, { hoje: HOJE });
+    const linhas = calcular(completo.quinzena, { hoje: HOJE, somarChegada5oMes: false });
     const r = conferir(completo.quinzena, linhas);
     expect(r.divergencias.slice(0, 5)).toEqual([]);
     expect(r.celulas).toBe(9464);
@@ -384,7 +384,10 @@ describe('parseForecastWorkbook - arquivo real x JSON do prototipo', () => {
       expect(parsed.quinzena.mesesChegada).toEqual(real.mesesChegada);
       expect(parsed.quinzena.mesesProgramacao).toEqual(real.mesesProgramacao);
       // E o motor sobre o que foi lido bate com o Excel.
-      const r = conferir(parsed.quinzena, calcular(parsed.quinzena, { hoje: '2026-10-20' }));
+      const r = conferir(
+        parsed.quinzena,
+        calcular(parsed.quinzena, { hoje: '2026-10-20', somarChegada5oMes: false }),
+      );
       expect(r.batem).toBe(r.celulas);
     },
     60_000,

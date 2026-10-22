@@ -380,11 +380,27 @@ export interface SeloConferencia {
   titulo: string;
   detalhe: string;
   nota?: string;
+  /** Regra AL do Comex: so quando ha produto com chegada no 5o mes e a conferencia existe. */
+  notaRegra?: string;
+}
+
+/** Regra AL: quantas linhas tem chegada no 5o mes (a projecao desse mes soma essa chegada) e qual e o mes. */
+export function regraALDoPainel(detail: Pick<ForecastSnapshotDetail, 'linhas' | 'baseDate'>): {
+  linhas: number;
+  mes: string;
+} {
+  return {
+    linhas: detail.linhas.filter((l) => l.chegadas[4] !== 0).length,
+    mes: mesesDaProjecao(detail.baseDate)[4] ?? '—',
+  };
 }
 
 const NUMERO_BR = new Intl.NumberFormat('pt-BR');
 
-export function textoDoSelo(detail: Pick<ForecastSnapshotDetail, 'conferencia' | 'half'>): SeloConferencia {
+export function textoDoSelo(
+  detail: Pick<ForecastSnapshotDetail, 'conferencia' | 'half'>,
+  opcoes: { regraAL?: { linhas: number; mes: string } } = {},
+): SeloConferencia {
   const { conferencia, half } = detail;
   if (conferencia === null) {
     return {
@@ -401,18 +417,27 @@ export function textoDoSelo(detail: Pick<ForecastSnapshotDetail, 'conferencia' |
       detalhe += ` (as primeiras ${conferencia.divergencias.length} estão marcadas na grade)`;
     }
   }
+  const regraAL = opcoes.regraAL;
+  const notaRegra =
+    regraAL && regraAL.linhas > 0
+      ? {
+          notaRegra: `${regraAL.linhas} ${regraAL.linhas === 1 ? 'produto tem' : 'produtos têm'} chegada em ${regraAL.mes}: o painel e o relatório somam essa chegada na projeção de ${regraAL.mes} (colunas AL e AM), regra confirmada pelo Comex. A conferência acima usa a regra da planilha, que não soma.`,
+        }
+      : {};
   if (half === 1) {
     return {
       tom: ok ? 'ok' : 'erro',
       titulo: 'Conferência motor × planilha (regra da planilha, 2ª quinzena)',
       detalhe,
       nota: 'Nesta 1ª quinzena o consumo do mês (AG) usa a média trimestral; a conferência usa a regra da planilha.',
+      ...notaRegra,
     };
   }
   return {
     tom: ok ? 'ok' : 'erro',
     titulo: ok ? 'Cálculo idêntico ao da planilha' : 'Há diferenças com a planilha',
     detalhe,
+    ...notaRegra,
   };
 }
 

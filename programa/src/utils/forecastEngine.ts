@@ -1,7 +1,7 @@
 // Porte de Forecast-prototipo/src/motor/calcular.ts. Mudancas em relacao ao prototipo:
 //  - `hoje` e um date key (YYYY-MM-DD) e AP usa aritmetica UTC (sem conversao ISO de data local);
 //  - `quinzena` (1 | 2): na 1a quinzena o consumo do mes (AG) e a media trimestral (Q);
-//  - `somarChegada5oMes` / PROJECAO_5O_MES_SOMA_CHEGADA: ponto em aberto com o Comex sobre a coluna AL.
+//  - `somarChegada5oMes` / PROJECAO_5O_MES_SOMA_CHEGADA: regra do Comex sobre a coluna AL (a projecao do 5o mes soma a chegada desse mes).
 import type {
   ColunaConferida,
   Lancamento,
@@ -14,10 +14,10 @@ import { COLUNAS_CONFERIDAS } from './forecastTypes';
 import { somarDias } from './forecastMonths';
 import { isValidDateKey } from './supplierDocumentDates';
 
-// PONTO EM ABERTO COM O COMEX: a planilha calcula a projecao do 5o mes (coluna AL; fevereiro na
-// quinzena 10-2) como AK - Q, SEM somar a chegada daquele mes (coluna Z). false replica a planilha;
-// true faz AL = AK + chegadas[4] - Q. Nao mudar sem resposta do Comex.
-export const PROJECAO_5O_MES_SOMA_CHEGADA = false;
+// Regra do Comex (2026-10-22): a projecao do 5o mes (AL) soma a chegada desse mes (coluna Z); AM = AL - Q herda.
+// A planilha original NAO soma: a conferencia motor x planilha passa somarChegada5oMes: false
+// (ForecastSnapshotService.conferenciaDaQuinzena).
+export const PROJECAO_5O_MES_SOMA_CHEGADA = true;
 
 // SOMASE / CONT.SE do Excel comparam texto sem diferenciar maiúsculas.
 const chave = (codigo: string) => codigo.toUpperCase();
@@ -114,7 +114,7 @@ export function calcular(q: Quinzena, opcoes: OpcoesCalculo): LinhaCalculada[] {
     const AI = AH + cheg[1] - Q - prog[1];
     const AJ = AI + cheg[2] - Q - prog[2];
     const AK = AJ + cheg[3] - Q - prog[3];
-    // Por padrao a planilha nao soma a chegada do 5o mes (coluna Z) aqui; ver PROJECAO_5O_MES_SOMA_CHEGADA.
+    // Regra do Comex: AL soma a chegada do 5o mes (coluna Z); a planilha nao soma (somarChegada5oMes: false). Ver PROJECAO_5O_MES_SOMA_CHEGADA.
     const AL = (somarChegada5oMes ? AK + cheg[4] : AK) - Q;
     const AM = AL - Q;
 
