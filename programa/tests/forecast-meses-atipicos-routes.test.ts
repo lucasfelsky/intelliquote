@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/utils/password';
 
 // O arquivo faz dezenas de logins: sobe o limite do rate limit de /auth/login.
@@ -156,6 +156,16 @@ describe('PUT /forecast/products/:id/meses-atipicos - validacao e erros', () => 
     expect(lista.body.data.meses).toHaveLength(24);
   });
 
+  it('produto INATIVO aceita a marca: o service so procura o produto por id, sem filtrar isActive', async () => {
+    const cookies = await loginAs('admin');
+    tx.forecastProduct.findUnique.mockResolvedValue({ id: 5, isActive: false });
+    const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
+    expect(response.status).toBe(200);
+    expect(response.body.data.meses).toEqual([{ anoMes: '2024-08', motivo: 'MOTIVO SINTETICO' }]);
+    expect(tx.forecastProduct.findUnique).toHaveBeenCalledWith({ where: { id: 5 }, select: { id: true } });
+    expect(tx.forecastAtypicalMonth.createMany).toHaveBeenCalledTimes(1);
+  });
+
   it('id invalido -> 400; produto inexistente -> 404 sem gravar', async () => {
     const cookies = await loginAs('admin');
     const ruim = await request(app)
@@ -266,6 +276,45 @@ describe('PUT /forecast/products/:id/meses-atipicos - gravacao e auditoria', () 
     expect(tx.forecastAtypicalMonth.update).not.toHaveBeenCalled();
     expect(tx.forecastAtypicalMonth.createMany).not.toHaveBeenCalled();
     expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('PUT /forecast/products/:id/meses-atipicos - virada de mes em Sao Paulo (relogio simulado)', () => {
+  // So o Date e simulado (supertest/sockets seguem com timers reais). O login e feito DEPOIS de fixar o relogio.
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const comRelogio = async (instante: string) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(instante));
+    return loginAs('admin');
+  };
+  const marcar = (cookies: string[], anoMes: string) =>
+    request(app).put(PATH).set('Cookie', cookies).send(corpo([anoMes, 'MOTIVO SINTETICO']));
+
+  it('23:30 de 28/02 em Sao Paulo (ja e 01/03 em UTC): marco ainda e futuro (400) e fevereiro e aceito', async () => {
+    const cookies = await comRelogio('2026-03-01T02:30:00Z');
+    const futuro = await marcar(cookies, '2026-03');
+    expect(futuro.status).toBe(400);
+    expect(JSON.stringify(futuro.body)).toContain('O mês 2026-03 é futuro: marque só meses que já tiveram venda.');
+    expect(tx.forecastAtypicalMonth.createMany).not.toHaveBeenCalled();
+    expect((await marcar(cookies, '2026-02')).status).toBe(200);
+  });
+
+  it('00:30 de 01/03 em Sao Paulo: marco vira o mes atual e passa a ser aceito', async () => {
+    const cookies = await comRelogio('2026-03-01T03:30:00Z');
+    expect((await marcar(cookies, '2026-03')).status).toBe(200);
+    banco = [];
+    const abril = await marcar(cookies, '2026-04');
+    expect(abril.status).toBe(400);
+    expect(JSON.stringify(abril.body)).toContain('é futuro');
+  });
+
+  it('virada de ano: 23:30 de 31/12 em Sao Paulo ainda recusa janeiro e aceita dezembro', async () => {
+    const cookies = await comRelogio('2027-01-01T02:30:00Z');
+    expect((await marcar(cookies, '2027-01')).status).toBe(400);
+    expect((await marcar(cookies, '2026-12')).status).toBe(200);
   });
 });
 

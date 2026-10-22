@@ -664,6 +664,40 @@ describe('meses atipicos (PR 6c)', () => {
     expect(col('h4').classe?.(sem)).toBe('');
   });
 
+  it('sem mes valido (os 3 meses da trimestral marcados): Q sem asterisco e so o aviso, sem "pela planilha seria"; R segue com asterisco', () => {
+    const colunas = colunasDoPainel(MONTHS, { ocultas: true });
+    const col = (id: string) => colunas.find((c) => c.id === id)!;
+    const l = atipica({
+      Q: 900,
+      R: 600,
+      mesesForaDaMedia: [3, 4, 5].map((indice) => ({ ...MARCA, anoMes: `2026-0${indice + 4}`, indice })),
+      mediaAjustada: { meses: [3, 4, 5], Q: 900, R: 1200, AG: 900, semMesValido: true },
+    });
+    expect(col('Q').texto(l)).toBe('900,0');
+    expect(col('Q').titulo?.(l)).toBe(
+      'Sem mês válido: todos os meses da média estão marcados como atípicos, a média usa todos eles, como a planilha',
+    );
+    expect(col('Q').titulo?.(l)).not.toContain('pela planilha seria');
+    // O semestre ainda tem J, K e L: R mudou e segue marcado com asterisco.
+    expect(col('R').texto(l)).toBe('600,0*');
+    expect(col('R').titulo?.(l)).toBe('Média sem meses atípicos (jul/2026, ago/2026, set/2026) · pela planilha seria 1200,0');
+  });
+
+  it('sem mes valido nos 6 meses da semestral: R tambem sem asterisco e so com o aviso', () => {
+    const colunas = colunasDoPainel(MONTHS, { ocultas: true });
+    const col = (id: string) => colunas.find((c) => c.id === id)!;
+    const l = atipica({
+      Q: 900,
+      R: 1200,
+      mesesForaDaMedia: [0, 1, 2, 3, 4, 5].map((indice) => ({ ...MARCA, anoMes: `2026-0${indice + 4}`, indice })),
+      mediaAjustada: { meses: [0, 1, 2, 3, 4, 5], Q: 900, R: 1200, AG: 900, semMesValido: true },
+    });
+    expect(col('Q').texto(l)).toBe('900,0');
+    expect(col('R').texto(l)).toBe('1200,0');
+    expect(col('R').titulo?.(l)).toMatch(/^Sem mês válido/);
+    expect(col('R').titulo?.(l)).not.toContain('pela planilha seria');
+  });
+
   it('mes atual marcado risca o P (e mantem o destaque de P acima da media)', () => {
     const colunas = colunasDoPainel(MONTHS, { ocultas: false });
     const p = colunas.find((c) => c.id === 'P')!;

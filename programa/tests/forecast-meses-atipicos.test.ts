@@ -330,6 +330,35 @@ describe('relatorio de compras com meses atipicos', () => {
     expect(ajustada.totais.itens).toBe(1);
   });
 
+  it('so avisa "Media sem" quando a marca muda a compra: J/K/L mudam so R e ficam so na memoria de calculo', () => {
+    const planilha = relatorio(casoA(), []).grupos[0].itens[0];
+    // 2026-04 = J (indice 0): muda R, nao Q/T/AN -> a compra e a mesma e o relatorio nao avisa.
+    const soJ = relatorio(casoA(), ['2026-04']).grupos[0].itens[0];
+    expect(soJ.quantidadeSugerida).toBe(planilha.quantidadeSugerida);
+    expect(soJ.mesesForaDaMedia).toEqual([]);
+    const jKL = relatorio(casoA(), ['2026-04', '2026-05', '2026-06']).grupos[0].itens[0];
+    expect(jKL.quantidadeSugerida).toBe(planilha.quantidadeSugerida);
+    expect(jKL.mesesForaDaMedia).toEqual([]);
+    // J + N (indice 4): so o N muda a compra, so ele aparece na linha do relatorio.
+    const jN = relatorio(casoA(), ['2026-04', '2026-08']).grupos[0].itens[0];
+    expect(jN.quantidadeSugerida).toBe(1700);
+    expect(jN.mesesForaDaMedia).toEqual(['2026-08']);
+  });
+
+  it('M, N e O todos marcados (sem mes valido): Q e o da planilha, a compra nao muda e o relatorio nao avisa', () => {
+    const planilha = relatorio(casoA(), []).grupos[0].itens[0];
+    const semMesValido = relatorio(casoA(), ['2026-07', '2026-08', '2026-09']).grupos[0].itens[0];
+    expect(semMesValido.quantidadeSugerida).toBe(planilha.quantidadeSugerida);
+    expect(semMesValido.mesesForaDaMedia).toEqual([]);
+  });
+
+  it('mes atual (P) marcado so avisa quando a AG muda (venda ate o dia 15 acima da media)', () => {
+    // P = 100 < Q = 900: AG = Q com ou sem a marca -> nada muda.
+    expect(relatorio(casoA(), ['2026-10']).grupos[0].itens[0].mesesForaDaMedia).toEqual([]);
+    // P = 5.000 > Q: a planilha usa AG = 5.000; com a marca AG = Q -> a projecao muda e o relatorio avisa.
+    expect(relatorio(casoA({ vendasAtual: 5000 }), ['2026-10']).grupos[0].itens[0].mesesForaDaMedia).toEqual(['2026-10']);
+  });
+
   it('mes marcado fora da janela da quinzena: relatorio identico ao sem marca', () => {
     expect(relatorio(casoA(), ['2025-01'])).toStrictEqual(relatorio(casoA(), []));
   });

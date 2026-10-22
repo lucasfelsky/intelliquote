@@ -179,14 +179,24 @@ export function mesForaDaMedia(linha: Pick<ForecastLinha, 'mediaAjustada'>, i: n
   return linha.mediaAjustada?.meses.includes(i) ?? false;
 }
 
-/** A media trimestral (Q) usa meses excluidos (algum de M, N, O marcado). */
-export function trimestralSemMeses(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
-  return [3, 4, 5].some((i) => mesForaDaMedia(linha, i));
+/** Todos os meses da media trimestral (M, N, O) estao marcados: sem mes valido, Q e o da planilha. */
+export function trimestralSemMesValido(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
+  return [3, 4, 5].every((i) => mesForaDaMedia(linha, i));
 }
 
-/** A media semestral (R) usa meses excluidos (algum de J..O marcado). */
+/** Todos os meses da media semestral (J..O) estao marcados: sem mes valido, R e o da planilha. */
+export function semestralSemMesValido(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
+  return [0, 1, 2, 3, 4, 5].every((i) => mesForaDaMedia(linha, i));
+}
+
+/** A media trimestral (Q) mudou por meses excluidos (algum de M, N, O marcado, mas nao todos). */
+export function trimestralSemMeses(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
+  return [3, 4, 5].some((i) => mesForaDaMedia(linha, i)) && !trimestralSemMesValido(linha);
+}
+
+/** A media semestral (R) mudou por meses excluidos (algum de J..O marcado, mas nao todos). */
 export function semestralSemMeses(linha: Pick<ForecastLinha, 'mediaAjustada'>): boolean {
-  return [0, 1, 2, 3, 4, 5].some((i) => mesForaDaMedia(linha, i));
+  return [0, 1, 2, 3, 4, 5].some((i) => mesForaDaMedia(linha, i)) && !semestralSemMesValido(linha);
 }
 
 const CLASSE_FORA_DA_MEDIA = 'fc-cell--fora-media';
@@ -202,8 +212,16 @@ function tituloDoMes(i: number): (l: ForecastLinha) => string | undefined {
   };
 }
 
-function tituloDaMedia(usa: (l: ForecastLinha) => boolean, planilha: (l: ForecastLinha) => number | undefined) {
+// Sem mes valido a media e igual a da planilha: so o aviso (sem asterisco e sem "pela planilha seria X").
+const TITULO_SEM_MES_VALIDO = 'Sem mês válido: todos os meses da média estão marcados como atípicos, a média usa todos eles, como a planilha';
+
+function tituloDaMedia(
+  usa: (l: ForecastLinha) => boolean,
+  semMesValido: (l: ForecastLinha) => boolean,
+  planilha: (l: ForecastLinha) => number | undefined,
+) {
   return (l: ForecastLinha): string | undefined => {
+    if (semMesValido(l)) return TITULO_SEM_MES_VALIDO;
     if (!usa(l)) return undefined;
     const meses = (l.mesesForaDaMedia ?? []).map((m) => mesAbrevDoAnoMes(m.anoMes)).join(', ');
     const antes = planilha(l);
@@ -268,7 +286,7 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       colunaPlanilha: 'Q',
       largura: 76,
       texto: (l) => `${d1(l.Q)}${trimestralSemMeses(l) ? '*' : ''}`,
-      titulo: tituloDaMedia(trimestralSemMeses, (l) => l.mediaAjustada?.Q),
+      titulo: tituloDaMedia(trimestralSemMeses, trimestralSemMesValido, (l) => l.mediaAjustada?.Q),
     },
     {
       id: 'R',
@@ -277,7 +295,7 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       colunaPlanilha: 'R',
       largura: 76,
       texto: (l) => `${d1(l.R)}${semestralSemMeses(l) ? '*' : ''}`,
-      titulo: tituloDaMedia(semestralSemMeses, (l) => l.mediaAjustada?.R),
+      titulo: tituloDaMedia(semestralSemMeses, semestralSemMesValido, (l) => l.mediaAjustada?.R),
     },
     { id: 'S', grupo: 'anual', rotulo: 'MED.', colunaPlanilha: 'S', largura: 76, texto: (l) => d1(l.S) },
     {

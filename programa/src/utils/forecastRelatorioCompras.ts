@@ -63,7 +63,9 @@ export interface LinhaParaRelatorio {
   /** Observacao congelada da quinzena (AT da planilha / notas do produto); ausente = ''. */
   obs?: string;
   /** PR 6c: meses de venda atipica que ficaram fora da media da linha (ja na janela da quinzena); ausente = nenhum. */
-  mesesForaDaMedia?: Array<{ anoMes: string }>;
+  mesesForaDaMedia?: Array<{ anoMes: string; /** 0..5 = J..O, 6 = P; ausente = conta como mes que muda a compra. */ indice?: number }>;
+  /** PR 6c: Q e AG DA PLANILHA (todos os meses), so presentes com marca; comparados com Q/AG para saber se a marca mudou a compra. */
+  mediaAjustada?: { Q: number; AG: number };
 }
 
 export interface QuinzenaParaRelatorio {
@@ -383,8 +385,21 @@ function mesesComValor(valores: number[], anoMes: string[]): Array<{ anoMes: str
   return saida;
 }
 
-const mesesForaDaMediaDaLinha = (l: Pick<LinhaParaRelatorio, 'mesesForaDaMedia'>): string[] =>
-  (l.mesesForaDaMedia ?? []).map((m) => m.anoMes);
+// So avisa no relatorio quando a marca MUDA a compra: marca em J/K/L muda so R (nao entra em T, AN nem na projecao), e
+// marca que nao altera Q/AG (ex.: os 3 meses do trimestre marcados = sem mes valido) deixa a linha igual a da planilha.
+// A memoria de calculo da tela continua mostrando todas as marcas.
+const MIN_INDICE_QUE_MUDA_A_COMPRA = 3; // M, N, O (Q) e P (AG)
+const mesmoValor = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+const mesesForaDaMediaDaLinha = (
+  l: Pick<LinhaParaRelatorio, 'mesesForaDaMedia' | 'mediaAjustada' | 'Q' | 'AG'>,
+): string[] => {
+  const relevantes = (l.mesesForaDaMedia ?? []).filter(
+    (m) => m.indice === undefined || m.indice >= MIN_INDICE_QUE_MUDA_A_COMPRA,
+  );
+  if (relevantes.length === 0) return [];
+  if (l.mediaAjustada && mesmoValor(l.mediaAjustada.Q, l.Q) && mesmoValor(l.mediaAjustada.AG, l.AG)) return [];
+  return relevantes.map((m) => m.anoMes);
+};
 
 const compararTexto = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
 
