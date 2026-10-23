@@ -407,8 +407,10 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
       ? 'já na data-base'
       : dataBr(ruptura.data)
     : 'sem ruptura em 6 meses';
+  // Selo do comercial (PR 6d): 2a linha da celula Item, como na tela (sem coluna nova; Observacao segue a ultima).
+  const selo = item.demandaComercialKg && item.demandaComercialKg > 0 ? seloDemandaComercial(item.demandaComercialKg) : '';
   return [
-    item.item,
+    selo ? `${item.item}\n${selo}` : item.item,
     rotuloUrgencia(item.urgencia, diasCritico),
     item.codigos.join(' · '),
     item.naoFraciona ? 'Não fraciona' : '',

@@ -3198,4 +3198,7 @@ i.fc-status--preco { background: var(--info); }
   .fcd-tabela .fcd-col-acoes::before { display: block; margin-bottom: 4px; }
   .fcd-acoes { flex-direction: row; flex-wrap: wrap; min-width: 0; }
   .fcd-acoes .ghost-button { min-height: 44px; }
+  /* Dialogos de lancar, editar e fechar: botoes e linhas de produto com alvo de toque de 44 px. */
+  .fcd-form .modal-actions button, .fcd-form .ghost-button { min-height: 44px; }
+  .fcd-produto { min-height: 44px; }
 }

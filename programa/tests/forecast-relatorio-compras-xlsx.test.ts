@@ -1428,3 +1428,72 @@ describe('demanda do comercial no XLSX', () => {
     }
   });
 });
+
+// ---- Fixup do 6d: texto livre na aba nova e selo do comercial nas abas de compra ----
+describe('demanda do comercial no XLSX: texto livre e selo (fixup do 6d)', () => {
+  // PRODUTO 001 ja esta na lista de compra (AN -900) e tem pedido alem do horizonte; PRODUTO 002 nao tem pedido.
+  const linhas = [
+    linha({ linha: 1, productId: 3, item: 'PRODUTO 001', fonte: 'FONTE 001', Q: 300, AG: 300, U: 0, AN: -900, AQ: 60 }),
+    linha({ linha: 2, productId: 4, item: 'PRODUTO 002', fonte: 'FONTE 001', AN: -100 }),
+  ];
+  const demandaDe = (motivo: string, cliente: string | null): DemandaComercialAberta => ({
+    id: 21,
+    productId: 3,
+    produto: 'PRODUTO 001',
+    fonte: 'FONTE 001',
+    kg: 1600,
+    necessidade: '2027-02-10',
+    motivo,
+    cliente,
+    solicitacaoId: null,
+  });
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+
+  it.each(['=', '+', '-', '@'])('motivo e cliente que comecam com "%s" continuam TEXTO na aba nova', async (prefixo) => {
+    const motivo = `${prefixo}MOTIVO SINTETICO`;
+    const cliente = `${prefixo}CLIENTE SINTETICO`;
+    const r = montarRelatorioCompras(quinzena(linhas), [], { demandasComerciais: [demandaDe(motivo, cliente)] });
+    const ws = (await abrir(r)).getWorksheet(ABA_DEMANDA_COMERCIAL)!;
+    const col = (nome: (typeof COLUNAS_DEMANDA_COMERCIAL_XLSX)[number]) => COLUNAS_DEMANDA_COMERCIAL_XLSX.indexOf(nome) + 1;
+    for (const [nome, valor] of [['Motivo', motivo], ['Cliente', cliente]] as const) {
+      const cell = ws.getRow(2).getCell(col(nome));
+      expect(cell.value).toBe(valor);
+      expect(cell.type).toBe(exceljs.ValueType.String);
+    }
+  });
+
+  it('item da lista com pedido a somar: selo da tela na 2a linha da celula Item, nas duas abas de compra', async () => {
+    const r = montarRelatorioCompras(quinzena(linhas), [], { demandasComerciais: [demandaDe('MOTIVO SINTETICO', null)] });
+    const itens = r.grupos.flatMap((g) => g.itens);
+    const item = itens.find((i) => i.item === 'PRODUTO 001')!;
+    const outro = itens.find((i) => i.item === 'PRODUTO 002')!;
+    expect(item.demandaComercialKg).toBe(1600);
+    expect(outro.demandaComercialKg).toBeUndefined();
+    const selo = seloDemandaComercialWeb(1600);
+    expect(selo).toBe('+ 1.600 kg pedidos pelo comercial');
+    expect(celulasDoItem(item, 15)[0]).toBe('PRODUTO 001\n' + selo);
+    expect(celulasDoItem(outro, 15)[0]).toBe('PRODUTO 002');
+
+    const wb = await abrir(r);
+    const { grupos } = mapearLinhas(r);
+    const wsRel = wb.getWorksheet(ABA_RELATORIO)!;
+    r.grupos[0].itens.forEach((it, i) => {
+      expect(linhaComoArray(wsRel, grupos[0].primeiroItem + i)).toEqual(celulasDoItem(it, 15));
+    });
+    // Aba "Por urgencia": mesma celula Item; a coluna Fonte continua depois de Urgencia.
+    const wsUrg = wb.getWorksheet(ABA_POR_URGENCIA)!;
+    const celulasItem = [2, 3].map((n) => String(valorDaCelula(wsUrg, n, 1)));
+    expect(celulasItem).toContain('PRODUTO 001\n' + selo);
+    expect(celulasItem).toContain('PRODUTO 002');
+  });
+
+  it('sem pedido a somar: celula Item e as colunas continuam como antes e Observação segue a ultima', () => {
+    const r = montarRelatorioCompras(quinzena(linhas), []);
+    for (const it of r.grupos.flatMap((g) => g.itens)) {
+      expect(celulasDoItem(it, 15)[0]).toBe(it.item);
+      expect(celulasDoItem(it, 15)).toHaveLength(COLUNAS_RELATORIO_XLSX.length);
+    }
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+  });
+});
