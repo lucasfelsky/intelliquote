@@ -2844,6 +2844,7 @@ i.fc-status--preco { background: var(--info); }
 .fce-codigo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .fce-codigo .badge { white-space: nowrap; }
 .fce-erro { margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--danger); }
+.fce-aviso { min-width: 200px; margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--warning); }
 .fce-origem { font-size: 12px; white-space: nowrap; color: var(--ink-soft); }
 .fce-nenhuma { padding: 0 10px; }
 .fcr-embalagem__editar { padding: 4px 10px; font-size: 12px; }
@@ -3207,6 +3208,7 @@ i.fc-status--preco { background: var(--info); }
 .fcr-item > .fcg-selo { align-self: flex-start; }
 .fcr-item__nome .fcg-selo { margin-left: 8px; vertical-align: middle; }
 .fcr-item__grupo { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcg-obs { max-width: 320px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .fcg-selo__nota { display: block; margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
 .fcr-tabela .fcr-linha-grupo > td { padding: 0 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
 /* A celula das sublinhas ocupa a tabela inteira (que rola na horizontal): a caixa fica colada a esquerda e com a largura VISIVEL. */

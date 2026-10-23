@@ -438,6 +438,17 @@ describe('precedencia com as regras anteriores', () => {
     expect(item.porEmbalagem[0].pallet).toMatchObject({ kgPorPallet: 600, abaixo: { pallets: 0 }, acima: { pallets: 1, kg: 600 } });
   });
 
+  it('observacao do GRUPO (cadastro, so trim) vai para os dados do grupo e para o item coberto; sem texto, vazia', () => {
+    const linhas = casoB();
+    const comObs = relatorio(linhas, [{ ...GRUPO, observacao: '  OBS DO GRUPO SINTETICA  ' }]);
+    expect(comObs.gruposDeEquivalencia[0].observacao).toBe('OBS DO GRUPO SINTETICA');
+    expect(comObs.cobertosPorGrupo.itens.every((i) => i.grupoObservacao === 'OBS DO GRUPO SINTETICA')).toBe(true);
+    for (const observacao of [undefined, null, '   ']) {
+      const sem = relatorio(linhas, [{ ...GRUPO, observacao }]);
+      expect(sem.gruposDeEquivalencia[0].observacao).toBe('');
+    }
+  });
+
   it('observacao do principal e status do principal passam para a linha do grupo', () => {
     const linhas = linhasDe([{ ...P001, obs: 'OBS SINTETICA 001', status: 'cotando' }, { ...P002, U: 100 }]);
     const item = itensDaLista(relatorio(linhas, [{ ...GRUPO, productIds: [1, 2] }]))[0];

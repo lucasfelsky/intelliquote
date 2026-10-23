@@ -19,6 +19,8 @@ export interface GrupoDeEquivalencia {
   nome: string;
   principalProductId: number | null;
   productIds: number[];
+  /** Observacao do grupo no cadastro (restricoes da equivalencia, ex.: cliente com um so item homologado). */
+  observacao?: string | null;
 }
 
 /** Um membro do grupo na quinzena, com os componentes que entram na soma. */
@@ -49,6 +51,8 @@ export interface DadosDoGrupo {
   nome: string;
   principalProductId: number;
   principalItem: string;
+  /** Observacao do grupo (so trim); vazia quando o cadastro nao tem. */
+  observacao: string;
   membros: MembroDoGrupo[];
   estoque: number;
   chegadas: number;
@@ -133,6 +137,7 @@ function montarGrupo(grupo: GrupoDeEquivalencia, membros: LinhaParaRelatorio[]):
     nome: grupo.nome,
     principalProductId: principal.productId as number,
     principalItem: principal.item,
+    observacao: (grupo.observacao ?? '').trim(),
     membros: membros.map<MembroDoGrupo>((m) => ({
       linha: m.linha,
       productId: m.productId as number,
@@ -236,6 +241,7 @@ export interface GrupoDaLinha {
   id: number;
   nome: string;
   principalProductId: number | null;
+  observacao?: string | null;
 }
 
 /** Monta os grupos a partir das linhas que carregam `grupo` (os membros ausentes da quinzena nao importam). */
@@ -252,6 +258,7 @@ export function gruposDasLinhas(
         id: l.grupo.id,
         nome: l.grupo.nome,
         principalProductId: l.grupo.principalProductId,
+        observacao: l.grupo.observacao ?? null,
         productIds: [l.productId],
       });
     }

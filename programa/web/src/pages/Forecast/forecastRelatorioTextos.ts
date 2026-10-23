@@ -16,7 +16,7 @@ import { d1, inteiroBr, kgBr, mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Terceiro paragrafo das regras (tela e aba Regras do XLSX). */
 export const PARAGRAFO_EMBALAGEM =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
 
 /** Quantidade do item arredondada para UMA embalagem, ex.: `3 × 200 kg (código C0002) = 600 kg`. */
 export function textoOpcaoDeEmbalagem(op: ForecastOpcaoEmbalagem): string {
@@ -201,12 +201,28 @@ export function textoCobertura(cobertura: number | null): string {
   return cobertura === null ? 'sem consumo' : `${COBERTURA_BR.format(cobertura)} meses`;
 }
 
-/** Motivo do membro fora da lista de compra: `Coberto pelo grupo X: estoque somado 1.200 kg, cobertura 8,0 meses`. */
+/** Frase fixa do motivo de "coberto" (e ressalva da equivalencia): a equivalencia nao vale sempre para todos os clientes. */
+export const FRASE_EQUIVALENCIA_NEM_SEMPRE =
+  'Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.';
+
+/** Observacao do grupo (cadastro) na linha do grupo e no motivo de "coberto"; sem texto, nada. */
+export function textoObservacaoDoGrupo(obs: string | null | undefined): string | null {
+  const texto = (obs ?? '').trim();
+  return texto ? `Observação do grupo: ${texto}` : null;
+}
+
+/**
+ * Motivo do membro fora da lista de compra: `Coberto pelo grupo X: estoque somado 1.200 kg, cobertura 8,0 meses ·
+ * Observação do grupo: ... · Equivalência pode não valer ...` (a observacao so entra quando o grupo tem uma).
+ */
 export function textoMotivoCobertoPorGrupo(
-  i: Pick<ForecastItemCobertoPorGrupo, 'grupoNome' | 'estoqueDoGrupo' | 'cobertura'>,
+  i: Pick<ForecastItemCobertoPorGrupo, 'grupoNome' | 'estoqueDoGrupo' | 'cobertura' | 'grupoObservacao'>,
 ): string {
   const base = `Coberto pelo grupo ${i.grupoNome}: estoque somado ${kgBr(i.estoqueDoGrupo)} kg`;
-  return i.cobertura === null ? `${base}, sem consumo no grupo` : `${base}, cobertura ${textoCobertura(i.cobertura)}`;
+  const cobertura =
+    i.cobertura === null ? `${base}, sem consumo no grupo` : `${base}, cobertura ${textoCobertura(i.cobertura)}`;
+  const obs = textoObservacaoDoGrupo(i.grupoObservacao);
+  return obs ? `${cobertura} · ${obs} · ${FRASE_EQUIVALENCIA_NEM_SEMPRE}` : `${cobertura} · ${FRASE_EQUIVALENCIA_NEM_SEMPRE}`;
 }
 
 export function resumoCobertosPorGrupo(n: number): string {
@@ -222,7 +238,7 @@ export const APOIO_COBERTOS_POR_GRUPO =
   'Estes itens entrariam na lista de compra sozinhos, mas o estoque somado do grupo os cobre. Se algum produto não for o mesmo material, tire-o do grupo em "Grupos de equivalência".';
 
 export function paragrafoGruposDeEquivalencia(): string {
-  return 'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo.';
+  return 'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo. A equivalência nem sempre vale para todos os clientes (depende da demanda do cliente ou do preço; alguns clientes têm apenas um item do grupo homologado): confira a observação do grupo antes de dispensar a compra.';
 }
 
 /** Linha de apoio sob o item do grupo: `Compra pelo produto principal: PRODUTO 001`. */

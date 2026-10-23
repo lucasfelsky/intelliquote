@@ -16,7 +16,6 @@ import { mesesHistorico } from '../utils/forecastMonths';
 import type { CadastroDeCodigos, VendasRecentes } from '../utils/forecastPendentes';
 import {
   escolherEmbalagem,
-  palletEMultiploDaEmbalagem,
   type EmbalagemCadastrada,
 } from '../utils/forecastRelatorioCompras';
 import { HttpError } from '../utils/http';
@@ -64,7 +63,7 @@ export interface ForecastEmbalagensData {
     posicao: number;
     codigo: string;
     quantidadeKg: number | null;
-    /** kg de UM pallet fechado desta embalagem (multiplo da quantidade); nulo = sem pallet. */
+    /** kg de UM pallet desta embalagem (opcao de compra; nao precisa ser multiplo da quantidade); nulo = sem pallet. */
     palletKg: number | null;
     rotulo: string | null;
     principal: boolean;
@@ -660,15 +659,14 @@ export class ForecastProductService {
           const edicao = edicoes.get(c.id);
           const quantidade = edicao ? edicao.quantidadeKg : qtyToNumber(c.packagingQtyKg);
           const rotulo = edicao && edicao.rotulo !== undefined ? edicao.rotulo : c.packagingLabel;
-          // Pallet fechado (PR 6e): precisa de quantidade e ser multiplo dela. Quantidade apagada apaga o pallet junto.
+          // Pallet (PR 6e, ajustado na rodada 5 do Comex): opcao de compra informada pelo cadastro, nao regra; so precisa de
+          // quantidade na embalagem e NAO precisa ser multiplo dela. Quantidade apagada apaga o pallet junto.
           let pallet = edicao && edicao.palletKg !== undefined ? edicao.palletKg : qtyToNumber(c.packagingPalletKg);
           if (quantidade === null) {
             if (edicao?.palletKg != null) {
               throw new HttpError(400, 'O pallet precisa da quantidade da embalagem.');
             }
             pallet = null;
-          } else if (pallet !== null && !palletEMultiploDaEmbalagem(pallet, quantidade)) {
-            throw new HttpError(400, `O pallet precisa ser multiplo da embalagem (${String(quantidade).replace('.', ',')} kg).`);
           }
           return { code: c, quantidade, pallet, rotulo: quantidade === null ? null : rotulo };
         });

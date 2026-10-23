@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ForecastDadosDoGrupo, ForecastItemCobertoPorGrupo } from '@/services/forecast';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
-import ForecastRelatorioGrupos, { SublinhasDoGrupo } from './ForecastRelatorioGrupos';
+import ForecastRelatorioGrupos, { SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
 import {
   APOIO_COBERTOS_POR_GRUPO,
   paragrafoGruposDeEquivalencia,
@@ -247,9 +247,11 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     const linha = within(secao).getAllByRole('row')[1] as HTMLElement;
     expect(within(linha).getByRole('rowheader').textContent).toContain('PRODUTO 009');
     expect(within(linha).getByText('Obs.: OBS SINTETICA')).toBeTruthy();
-    expect(within(linha).getByText('Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses')).toBeTruthy();
+    expect(
+      within(linha).getByText('Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.'),
+    ).toBeTruthy();
     expect(textoMotivoCobertoPorGrupo(COBERTO)).toBe(
-      'Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses',
+      'Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
     );
     expect(screen.getByText(APOIO_COBERTOS_POR_GRUPO)).toBeTruthy();
   });
@@ -284,6 +286,36 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
   });
 });
 
+describe('observacao do grupo na tela (rodada 5 do Comex)', () => {
+  it('secao de cobertos: a observacao do grupo entra no motivo, antes da frase fixa', () => {
+    render(<ForecastRelatorioGrupos itens={[{ ...COBERTO, grupoObservacao: 'OBS DO GRUPO SINTETICA' }]} />);
+    expect(
+      screen.getByText(
+        'Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Observação do grupo: OBS DO GRUPO SINTETICA · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('linha do grupo: observacao logo abaixo do selo (sem texto, nada)', () => {
+    const { container, rerender } = render(<SeloGrupo grupo={{ ...GRUPO, observacao: 'OBS DO GRUPO SINTETICA' }} />);
+    expect(screen.getByText('Grupo de equivalência')).toBeTruthy();
+    expect(container.querySelector('.fcg-obs')?.textContent).toBe('Observação do grupo: OBS DO GRUPO SINTETICA');
+    rerender(<SeloGrupo grupo={{ ...GRUPO, observacao: '   ' }} />);
+    expect(container.querySelector('.fcg-obs')).toBeNull();
+    rerender(<SeloGrupo grupo={undefined} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('relatorio: a observacao do grupo aparece na celula Item da linha do grupo', async () => {
+    const base = relatorio();
+    (base.grupos[0] as { itens: unknown[] }).itens = [itemDoGrupo({ grupo: { ...GRUPO, observacao: 'OBS DO GRUPO SINTETICA' } })];
+    get.mockResolvedValue({ data: base });
+    renderRelatorio();
+    await screen.findByText('1 item em 1 fonte');
+    expect(screen.getByText('Observação do grupo: OBS DO GRUPO SINTETICA')).toBeTruthy();
+  });
+});
+
 describe('ForecastRelatorioGrupos - secao isolada', () => {
   it('varios cobertos: plural no titulo e uma linha por membro', () => {
     render(<ForecastRelatorioGrupos itens={[COBERTO, { ...COBERTO, linha: 10, productId: 10, item: 'PRODUTO 010' }]} />);
@@ -293,6 +325,8 @@ describe('ForecastRelatorioGrupos - secao isolada', () => {
 
   it('cobertura nula (grupo sem consumo): o motivo diz "sem consumo no grupo"', () => {
     render(<ForecastRelatorioGrupos itens={[{ ...COBERTO, cobertura: null }]} />);
-    expect(screen.getByText('Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, sem consumo no grupo')).toBeTruthy();
+    expect(
+      screen.getByText('Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, sem consumo no grupo · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.'),
+    ).toBeTruthy();
   });
 });

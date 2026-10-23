@@ -162,6 +162,13 @@ describe('ForecastGruposModal - criar', () => {
     expect(screen.getByRole('heading', { name: 'GRUPO SINTETICO' })).toBeTruthy();
   });
 
+  it('campo Observação traz o texto de ajuda e ele descreve o campo (aria-describedby)', async () => {
+    await abrirNovo();
+    const campo = screen.getByLabelText('Observação (opcional)');
+    const ajuda = screen.getByText('Registre restrições (ex.: cliente com apenas um item do grupo homologado).');
+    expect(campo.getAttribute('aria-describedby')).toBe(ajuda.id);
+  });
+
   it('"Voltar e revisar" volta ao formulario sem gravar e mantem o que foi digitado', async () => {
     await abrirNovo();
     fireEvent.change(screen.getByLabelText('Nome do grupo'), { target: { value: 'OUTRO GRUPO SINTETICO' } });

@@ -326,11 +326,25 @@ export function textoCobertura(cobertura: number | null): string {
   return cobertura === null ? 'sem consumo' : `${COBERTURA_BR.format(cobertura)} meses`;
 }
 
+// Copia EXATA de web/.../forecastRelatorioTextos.ts.
+/** Frase fixa do motivo de "coberto" (e ressalva da equivalencia): a equivalencia nao vale sempre para todos os clientes. */
+export const FRASE_EQUIVALENCIA_NEM_SEMPRE =
+  'Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.';
+
+/** Observacao do grupo (cadastro) na linha do grupo e no motivo de "coberto"; sem texto, nada. */
+export function textoObservacaoDoGrupo(obs: string | null | undefined): string | null {
+  const texto = (obs ?? '').trim();
+  return texto ? `Observação do grupo: ${texto}` : null;
+}
+
 export function textoMotivoCobertoPorGrupo(
-  i: Pick<ItemCobertoPorGrupo, 'grupoNome' | 'estoqueDoGrupo' | 'cobertura'>,
+  i: Pick<ItemCobertoPorGrupo, 'grupoNome' | 'estoqueDoGrupo' | 'cobertura' | 'grupoObservacao'>,
 ): string {
   const base = `Coberto pelo grupo ${i.grupoNome}: estoque somado ${kgBr(i.estoqueDoGrupo)} kg`;
-  return i.cobertura === null ? `${base}, sem consumo no grupo` : `${base}, cobertura ${textoCobertura(i.cobertura)}`;
+  const cobertura =
+    i.cobertura === null ? `${base}, sem consumo no grupo` : `${base}, cobertura ${textoCobertura(i.cobertura)}`;
+  const obs = textoObservacaoDoGrupo(i.grupoObservacao);
+  return obs ? `${cobertura} · ${obs} · ${FRASE_EQUIVALENCIA_NEM_SEMPRE}` : `${cobertura} · ${FRASE_EQUIVALENCIA_NEM_SEMPRE}`;
 }
 
 export function resumoCobertosPorGrupo(n: number): string {
@@ -338,7 +352,7 @@ export function resumoCobertosPorGrupo(n: number): string {
 }
 
 export function paragrafoGruposDeEquivalencia(): string {
-  return 'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo.';
+  return 'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo. A equivalência nem sempre vale para todos os clientes (depende da demanda do cliente ou do preço; alguns clientes têm apenas um item do grupo homologado): confira a observação do grupo antes de dispensar a compra.';
 }
 
 export function textoPrincipalDoGrupo(principalItem: string): string {
@@ -455,7 +469,7 @@ export function textoPallet(p: PalletDaOpcao): string {
 
 // Copia EXATA de PARAGRAFO_EMBALAGEM (web/.../forecastRelatorioTextos.ts); e o 3o paragrafo da aba Regras.
 export const PARAGRAFO_EMBALAGEM_XLSX =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
 
 const linhasChegada = (chegadas: Array<{ anoMes: string; quantidade: number }>) =>
   chegadas.map((c) => `Chegada ${mesAbrev(c.anoMes)}: ${inteiroBr(c.quantidade)}`);
@@ -506,7 +520,11 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
     item.vencida ? 'Vencida' : '',
     textoEmAndamento(item),
     textoMesesForaDaMedia(item.mesesForaDaMedia),
-    item.grupo ? item.grupo.membros.map(textoMembroDoGrupo).join('\n') : '',
+    item.grupo
+      ? [...item.grupo.membros.map(textoMembroDoGrupo), textoObservacaoDoGrupo(item.grupo.observacao)]
+          .filter((t) => t !== null)
+          .join('\n')
+      : '',
     item.obs,
   ];
 }
@@ -583,7 +601,9 @@ export function celulasDoGrupo(
     g.mediaTrimestral,
     g.demanda === null ? 'sem lead time' : g.demanda,
     '',
-    `${textoPrincipalDoGrupo(g.principalItem)}\n${textoResumoDoGrupo(g)}`,
+    [textoPrincipalDoGrupo(g.principalItem), textoResumoDoGrupo(g), textoObservacaoDoGrupo(g.observacao)]
+      .filter((t) => t !== null)
+      .join('\n'),
   ];
   const membros = g.membros.map<Array<string | number>>((m) => {
     const coberto = cobertosPorProduto.get(m.productId);

@@ -417,7 +417,7 @@ describe('Forecast embalagens - pallet fechado (PR 6e)', () => {
     expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
   });
 
-  it.each(['admin', 'comprador'] as Role[])('%s grava o pallet (multiplo da embalagem) e o GET devolve palletKg', async (role) => {
+  it.each(['admin', 'comprador'] as Role[])('%s grava o pallet e o GET devolve palletKg', async (role) => {
     const antes = produto([codigo(11, { packagingQtyKg: dec('25') }), codigo(12), codigo(13)]);
     const depois = produto([codigo(11, { packagingQtyKg: dec('25'), packagingPalletKg: dec('600') }), codigo(12), codigo(13)]);
     prismaMock.forecastProduct.findUnique.mockResolvedValueOnce(antes).mockResolvedValueOnce(depois);
@@ -432,7 +432,7 @@ describe('Forecast embalagens - pallet fechado (PR 6e)', () => {
     );
     expect(response.body.data.codigos[0]).toMatchObject({ quantidadeKg: 25, palletKg: 600 });
     expect(response.body.data.codigos[1]).toMatchObject({ quantidadeKg: null, palletKg: null });
-    // 3 casas e aceito (multiplo de 0,125 kg).
+    // 3 casas e aceito.
     comCodigo11();
     const tresCasas = await request(app)
       .patch(PATH)
@@ -460,25 +460,34 @@ describe('Forecast embalagens - pallet fechado (PR 6e)', () => {
     expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
   });
 
-  it('pallet que nao e multiplo da embalagem (ou menor que ela) -> 400', async () => {
+  it.each([610, 12.5, 600.001])('pallet %s que nao e multiplo da embalagem (ou menor que ela) e aceito e gravado (rodada 5 do Comex)', async (pallet) => {
+    comCodigo11();
     const cookies = await loginAs('admin');
-    for (const pallet of [610, 12.5, 600.001]) {
-      const response = await request(app).patch(PATH).set('Cookie', cookies).send(um(pallet));
-      expect(response.status, String(pallet)).toBe(400);
-      expect(response.body.message).toBe('O pallet precisa ser multiplo da embalagem (25 kg).');
-    }
-    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+    const response = await request(app).patch(PATH).set('Cookie', cookies).send(um(pallet));
+    expect(response.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ packagingQtyKg: 25, packagingPalletKg: pallet }) }),
+    );
   });
 
-  it('trocar so a quantidade de um codigo com pallet que deixa de ser multiplo -> 400; multiplo continua valendo', async () => {
+  it('pallet no limite de 1.000.000 kg continua aceito (formato segue valendo: ver os 400 acima)', async () => {
+    comCodigo11();
+    const cookies = await loginAs('admin');
+    expect((await request(app).patch(PATH).set('Cookie', cookies).send(um(1000000))).status).toBe(200);
+  });
+
+  it('trocar so a quantidade de um codigo com pallet que deixa de ser multiplo e aceito e mantem o pallet', async () => {
     comCodigo11({ packagingPalletKg: dec('600') });
     const cookies = await loginAs('admin');
     const ruim = await request(app)
       .patch(PATH)
       .set('Cookie', cookies)
       .send({ embalagens: [{ codigoId: 11, quantidadeKg: 7 }] });
-    expect(ruim.status).toBe(400);
-    expect(ruim.body.message).toBe('O pallet precisa ser multiplo da embalagem (7 kg).');
+    expect(ruim.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ packagingQtyKg: 7, packagingPalletKg: 600 }) }),
+    );
+    comCodigo11({ packagingPalletKg: dec('600') });
     const boa = await request(app)
       .patch(PATH)
       .set('Cookie', cookies)

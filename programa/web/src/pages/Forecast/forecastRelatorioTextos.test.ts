@@ -20,6 +20,8 @@ import {
   textoMediaSem,
   textoMesesForaDaMedia,
   textoMotivoCobertoPorGrupo,
+  textoObservacaoDoGrupo,
+  FRASE_EQUIVALENCIA_NEM_SEMPRE,
   textoObservacao,
   textoOpcaoDeEmbalagem,
   textoPallet,
@@ -181,8 +183,9 @@ describe('palletDoDestaque / opcoesOutrasComPallet', () => {
 
   it('PARAGRAFO_EMBALAGEM explica o pallet e que a Qtd. final continua pela embalagem', () => {
     expect(PARAGRAFO_EMBALAGEM).toContain(
-      'Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.',
+      'O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.',
     );
+    expect(PARAGRAFO_EMBALAGEM).not.toContain('pallets fechados');
   });
 });
 
@@ -297,11 +300,22 @@ describe('textos dos grupos de equivalencia (PR 6b)', () => {
 
   it('motivo do membro coberto (caso B: estoque somado 1.200 kg, cobertura 8,0 meses)', () => {
     expect(textoMotivoCobertoPorGrupo(coberto)).toBe(
-      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses',
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
     );
     expect(textoMotivoCobertoPorGrupo({ ...coberto, cobertura: null })).toBe(
-      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, sem consumo no grupo',
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, sem consumo no grupo · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
     );
+  });
+
+  it('motivo do coberto com a observacao do grupo (rodada 5 do Comex): observacao antes da frase fixa; vazia nao aparece', () => {
+    expect(textoMotivoCobertoPorGrupo({ ...coberto, grupoObservacao: 'OBS DO GRUPO SINTETICA' })).toBe(
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Observação do grupo: OBS DO GRUPO SINTETICA · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
+    );
+    expect(textoMotivoCobertoPorGrupo({ ...coberto, grupoObservacao: '   ' })).toBe(textoMotivoCobertoPorGrupo(coberto));
+    expect(FRASE_EQUIVALENCIA_NEM_SEMPRE).toBe('Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.');
+    expect(textoObservacaoDoGrupo('  OBS  ')).toBe('Observação do grupo: OBS');
+    expect(textoObservacaoDoGrupo('')).toBeNull();
+    expect(textoObservacaoDoGrupo(undefined)).toBeNull();
   });
 
   it('resumo e titulo: singular e plural', () => {
@@ -313,7 +327,7 @@ describe('textos dos grupos de equivalencia (PR 6b)', () => {
 
   it('paragrafo das regras do grupo', () => {
     expect(paragrafoGruposDeEquivalencia()).toBe(
-      'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo.',
+      'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo. A equivalência nem sempre vale para todos os clientes (depende da demanda do cliente ou do preço; alguns clientes têm apenas um item do grupo homologado): confira a observação do grupo antes de dispensar a compra.',
     );
   });
 

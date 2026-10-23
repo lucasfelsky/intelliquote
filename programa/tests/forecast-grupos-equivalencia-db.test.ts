@@ -293,15 +293,17 @@ describe('Forecast - grupos de equivalencia (DB)', () => {
       quantidadeSugerida: 300,
       estoqueDoGrupo: 1200,
       cobertura: 8,
+      // Rodada 5 do Comex: a observacao do grupo (cadastro) chega ao item coberto e ao grupo do relatorio.
+      grupoObservacao: `OBS ${U}`,
     });
     expect(r.gruposDeEquivalencia).toHaveLength(1);
-    expect(r.gruposDeEquivalencia[0]).toMatchObject({ id: grupoId, nome: GRUPO, situacao: 'coberto', estoque: 1200 });
+    expect(r.gruposDeEquivalencia[0]).toMatchObject({ id: grupoId, nome: GRUPO, situacao: 'coberto', estoque: 1200, observacao: `OBS ${U}` });
     expect(r.gruposDeEquivalencia[0].demanda).toBeCloseTo(750, 6);
 
     const calc = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}?hoje=${HOJE}`).set('Cookie', cookies);
-    const linhas = calc.body.data.linhas as Array<{ productId: number; grupo: { id: number; nome: string; principalProductId: number } | null }>;
+    const linhas = calc.body.data.linhas as Array<{ productId: number; grupo: { id: number; nome: string; principalProductId: number; observacao: string | null } | null }>;
     for (const id of [productA, productB, productC]) {
-      expect(linhas.find((l) => l.productId === id)?.grupo).toEqual({ id: grupoId, nome: GRUPO, principalProductId: productA });
+      expect(linhas.find((l) => l.productId === id)?.grupo).toEqual({ id: grupoId, nome: GRUPO, principalProductId: productA, observacao: `OBS ${U}` });
     }
     const depois = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: snapshotId } });
     expect({ products: depois.products, inputs: depois.inputs, months: depois.months }).toEqual({

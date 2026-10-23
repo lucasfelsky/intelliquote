@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ForecastEmbalagens } from '@/services/forecastEmbalagens';
 import {
+  avisoDoPallet,
   edicaoInicial,
   type EdicaoDeEmbalagens,
   ERRO_QTD_CASAS,
@@ -131,16 +132,32 @@ describe('lerPalletKg (PR 6e)', () => {
 });
 
 describe('erroDoPallet (PR 6e)', () => {
-  it('sem pallet nao ha erro; pallet exige quantidade e ser multiplo dela', () => {
+  it('sem pallet nao ha erro; pallet exige quantidade na embalagem, mas NAO precisa ser multiplo dela', () => {
     expect(erroDoPallet(25, null)).toBeNull();
     expect(erroDoPallet(null, null)).toBeNull();
     expect(erroDoPallet(null, 600)).toBe(ERRO_PALLET_SEM_QUANTIDADE);
     expect(erroDoPallet(25, 600)).toBeNull();
     expect(erroDoPallet(25, 25)).toBeNull();
     expect(erroDoPallet(0.125, 3.125)).toBeNull();
-    expect(erroDoPallet(25, 610)).toBe('O pallet precisa ser múltiplo da embalagem (25 kg).');
-    expect(erroDoPallet(25, 12.5)).toBe('O pallet precisa ser múltiplo da embalagem (25 kg).');
-    expect(erroDoPallet(22.68, 600)).toBe('O pallet precisa ser múltiplo da embalagem (22,68 kg).');
+    expect(erroDoPallet(25, 610)).toBeNull();
+    expect(erroDoPallet(25, 12.5)).toBeNull();
+    expect(erroDoPallet(22.68, 600)).toBeNull();
+  });
+});
+
+describe('avisoDoPallet (rodada 5 do Comex)', () => {
+  it('multiplo exato, sem pallet ou sem quantidade: sem aviso', () => {
+    expect(avisoDoPallet(25, null)).toBeNull();
+    expect(avisoDoPallet(null, 600)).toBeNull();
+    expect(avisoDoPallet(25, 600)).toBeNull();
+    expect(avisoDoPallet(0.125, 3.125)).toBeNull();
+    expect(avisoDoPallet(0.7, 2.1)).toBeNull();
+  });
+
+  it('nao multiplo (ou menor que a embalagem): aviso com os dois valores em kg, sem bloquear', () => {
+    expect(avisoDoPallet(25, 610)).toBe('O pallet (610 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.');
+    expect(avisoDoPallet(25, 12.5)).toBe('O pallet (12,5 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.');
+    expect(avisoDoPallet(22.68, 600)).toBe('O pallet (600 kg) não é múltiplo da embalagem (22,68 kg): confira com o fornecedor.');
   });
 });
 

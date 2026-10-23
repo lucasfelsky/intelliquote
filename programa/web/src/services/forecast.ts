@@ -182,6 +182,8 @@ export interface ForecastDadosDoGrupo {
   nome: string;
   principalProductId: number;
   principalItem: string;
+  /** Observacao do grupo no cadastro (opcional: backend antigo nao manda). */
+  observacao?: string;
   membros: ForecastMembroDoGrupo[];
   estoque: number;
   chegadas: number;
@@ -214,6 +216,8 @@ export interface ForecastItemCobertoPorGrupo {
   grupoId: number;
   grupoNome: string;
   principalItem: string;
+  /** Observacao do grupo no cadastro (opcional: backend antigo nao manda). */
+  grupoObservacao?: string;
   estoqueDoGrupo: number;
   cobertura: number | null;
   obs: string;

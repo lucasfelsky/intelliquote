@@ -58,6 +58,8 @@ export interface GrupoDoProduto {
   id: number;
   nome: string;
   principalProductId: number | null;
+  /** Observacao do grupo (`notes`); nula quando nao ha. */
+  observacao: string | null;
 }
 
 const NOME_DUPLICADO = 'Já existe um grupo de equivalência com esse nome.';
@@ -103,12 +105,12 @@ export class ForecastGrupoEquivalenciaService {
     if (ids.length === 0) return new Map();
     const rows = await db.forecastProduct.findMany({
       where: { id: { in: ids }, equivalenceGroupId: { not: null } },
-      select: { id: true, equivalenceGroup: { select: { id: true, name: true, principalProductId: true } } },
+      select: { id: true, equivalenceGroup: { select: { id: true, name: true, principalProductId: true, notes: true } } },
     });
     return new Map(
       rows.flatMap((r) =>
         r.equivalenceGroup
-          ? [[r.id, { id: r.equivalenceGroup.id, nome: r.equivalenceGroup.name, principalProductId: r.equivalenceGroup.principalProductId }] as const]
+          ? [[r.id, { id: r.equivalenceGroup.id, nome: r.equivalenceGroup.name, principalProductId: r.equivalenceGroup.principalProductId, observacao: r.equivalenceGroup.notes }] as const]
           : [],
       ),
     );

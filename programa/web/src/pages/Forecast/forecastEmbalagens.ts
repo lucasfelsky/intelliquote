@@ -55,15 +55,30 @@ export function lerPalletKg(texto: string): QuantidadeLida {
 }
 
 /**
- * Regra entre os dois campos do mesmo codigo (o backend revalida): pallet exige quantidade e e multiplo inteiro
- * dela (tolerancia de 1e-6 kg). `null` = valido. Espelha `palletEMultiploDaEmbalagem` do backend.
+ * Regra entre os dois campos do mesmo codigo (o backend revalida): pallet exige quantidade na embalagem. Nao exige
+ * que seja multiplo dela (rodada 5 do Comex: o pallet e uma opcao de compra do cadastro, nao uma regra). `null` = valido.
  */
 export function erroDoPallet(quantidadeKg: number | null, palletKg: number | null): string | null {
   if (palletKg === null) return null;
   if (quantidadeKg === null) return ERRO_PALLET_SEM_QUANTIDADE;
+  return null;
+}
+
+/** Espelha `palletEMultiploDaEmbalagem` do backend: multiplo inteiro (>= 1) da embalagem, tolerancia de 1e-6 kg. */
+export function palletEMultiplo(palletKg: number, quantidadeKg: number): boolean {
+  if (!(palletKg > 0) || !(quantidadeKg > 0)) return false;
   const vezes = Math.round(palletKg / quantidadeKg);
-  if (vezes >= 1 && Math.abs(palletKg - vezes * quantidadeKg) <= 1e-6) return null;
-  return `O pallet precisa ser múltiplo da embalagem (${quantidadeParaCampo(quantidadeKg)} kg).`;
+  return vezes >= 1 && Math.abs(palletKg - vezes * quantidadeKg) <= 1e-6;
+}
+
+/**
+ * Aviso NAO bloqueante: pallet que nao e multiplo da embalagem. O Salvar continua liberado; so pede para conferir
+ * com o fornecedor. `null` = sem aviso (sem pallet, sem quantidade ou multiplo exato).
+ */
+export function avisoDoPallet(quantidadeKg: number | null, palletKg: number | null): string | null {
+  if (palletKg === null || quantidadeKg === null) return null;
+  if (palletEMultiplo(palletKg, quantidadeKg)) return null;
+  return `O pallet (${quantidadeParaCampo(palletKg)} kg) não é múltiplo da embalagem (${quantidadeParaCampo(quantidadeKg)} kg): confira com o fornecedor.`;
 }
 
 /** Quantidade para o campo de texto (virgula decimal, sem milhar: o que `lerQuantidadeKg` le de volta). */

@@ -160,8 +160,8 @@ const packagingQtyField = z
   })
   .nullable();
 
-// Pallet fechado (PR 6e): mesmas regras da quantidade. As regras entre campos (precisa de quantidade, multiplo dela)
-// dependem do estado do codigo e ficam no service.
+// Pallet (PR 6e): mesmas regras da quantidade. Nao precisa ser multiplo da embalagem (rodada 5 do Comex); a regra
+// entre campos (precisa de quantidade na embalagem) depende do estado do codigo e fica no service.
 const packagingPalletField = z
   .number({ error: 'Informe os kg do pallet (ou null).' })
   .positive('O pallet deve ser maior que zero.')
@@ -194,7 +194,7 @@ export const forecastEmbalagensPatchSchema = z
           codigoId: codigoIdField,
           quantidadeKg: packagingQtyField,
           rotulo: packagingLabelField,
-          // Ausente = mantem; null = sem pallet; numero = kg de um pallet fechado (multiplo da embalagem).
+          // Ausente = mantem; null = sem pallet; numero = kg de um pallet (opcao de compra; nao precisa ser multiplo da embalagem).
           palletKg: packagingPalletField.optional(),
         }),
         { error: 'Informe as embalagens como lista.' },

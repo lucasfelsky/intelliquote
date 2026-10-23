@@ -22,8 +22,8 @@
 // codigo cadastrado). Com mais de uma embalagem cadastrada o item ainda traz a quantidade arredondada para CADA
 // uma (`porEmbalagem`), so para o comprador escolher na compra: nada disso muda a Qtd. final nem e persistido.
 // Observacao (PR 5B): texto livre da quinzena (coluna AT da planilha), repassado como esta (so trim).
-// Pallet fechado (PR 6e, Comex): o cadastro pode dizer quantos kg tem UM pallet da embalagem (`palletKg`, multiplo
-// da embalagem). Cada opcao de embalagem traz entao os pallets fechados ABAIXO e ACIMA da quantidade sugerida
+// Pallet fechado (PR 6e, Comex): o cadastro pode dizer quantos kg tem UM pallet da embalagem (`palletKg`, opcao de
+// compra informada pelo cadastro, nao regra: pode nao ser multiplo da embalagem). Cada opcao de embalagem traz entao os pallets fechados ABAIXO e ACIMA da quantidade sugerida
 // (`pallet`), so para o comprador escolher na compra: a Qtd. final continua sendo a da embalagem em destaque e nada
 // disso e persistido.
 //
@@ -264,6 +264,8 @@ export interface ItemCobertoPorGrupo {
   grupoNome: string;
   /** Produto principal do grupo (o que compraria se o grupo precisasse). */
   principalItem: string;
+  /** Observacao do grupo no cadastro (so trim); vazia sem texto. A equivalencia pode nao valer para todos os clientes. */
+  grupoObservacao: string;
   /** Estoque somado do grupo (kg) e cobertura em meses ((estoque + chegadas) / media do grupo). */
   estoqueDoGrupo: number;
   cobertura: number | null;
@@ -423,7 +425,8 @@ export function opcoesDePallet(quantidade: number, kgPorPallet: number): PalletD
   };
 }
 
-// O pallet precisa caber um numero inteiro de vezes a embalagem (tolerancia de 1e-6 kg para os decimais).
+// O pallet cabe um numero inteiro de vezes a embalagem (tolerancia de 1e-6 kg para os decimais)? Nao e mais regra
+// bloqueante (rodada 5 do Comex); continua exportada (consumida pelo preview local do Forecast).
 export function palletEMultiploDaEmbalagem(palletKg: number, embalagemKg: number): boolean {
   if (!Number.isFinite(palletKg) || !Number.isFinite(embalagemKg) || palletKg <= 0 || embalagemKg <= 0) return false;
   const vezes = Math.round(palletKg / embalagemKg);
@@ -781,6 +784,7 @@ export function montarRelatorioCompras(
             grupoId: g.dados.id,
             grupoNome: g.dados.nome,
             principalItem: g.dados.principalItem,
+            grupoObservacao: g.dados.observacao,
             estoqueDoGrupo: g.dados.estoque,
             cobertura: g.dados.cobertura,
             obs: (m.obs ?? '').trim(),

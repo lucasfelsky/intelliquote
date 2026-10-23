@@ -6,6 +6,7 @@ import {
   textoMediaSem,
   textoMotivoCobertoPorGrupo,
   textoObservacao,
+  textoObservacaoDoGrupo,
   textoPrincipalDoGrupo,
   textoResumoDoGrupo,
   tituloCobertosPorGrupo,
@@ -13,13 +14,18 @@ import {
 
 // Grupos de equivalencia (PR 6b) no relatorio de compras: selo, sublinhas dos membros e secao dos cobertos.
 
-/** Selo discreto no item cuja linha e um grupo. */
+/** Selo discreto no item cuja linha e um grupo, com a observacao do grupo (restricoes da equivalencia) logo abaixo. */
 export function SeloGrupo({ grupo }: { grupo?: ForecastDadosDoGrupo }) {
-  return grupo ? (
-    <span className="badge badge--info fcg-selo" title="Os membros têm o estoque avaliado somado; a compra sai pelo principal.">
-      Grupo de equivalência
-    </span>
-  ) : null;
+  if (!grupo) return null;
+  const obs = textoObservacaoDoGrupo(grupo.observacao);
+  return (
+    <>
+      <span className="badge badge--info fcg-selo" title="Os membros têm o estoque avaliado somado; a compra sai pelo principal.">
+        Grupo de equivalência
+      </span>
+      {obs && <span className="fcr-item__grupo fcg-obs">{obs}</span>}
+    </>
+  );
 }
 
 /** Linha de apoio na celula Item do grupo: quem e o principal. */

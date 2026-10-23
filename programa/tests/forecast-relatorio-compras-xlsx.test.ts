@@ -1509,15 +1509,19 @@ import {
   textoCobertura,
   textoMembroDoGrupo,
   textoMotivoCobertoPorGrupo,
+  textoObservacaoDoGrupo,
   textoPrincipalDoGrupo,
   textoResumoDoGrupo,
   textoSituacaoDoGrupo,
+  FRASE_EQUIVALENCIA_NEM_SEMPRE,
 } from '../src/utils/forecastRelatorioComprasXlsx';
 import {
   paragrafoGruposDeEquivalencia as paragrafoGruposWeb,
   resumoCobertosPorGrupo as resumoCobertosWeb,
   textoCobertura as textoCoberturaWeb,
   textoMotivoCobertoPorGrupo as textoMotivoCobertoWeb,
+  textoObservacaoDoGrupo as textoObservacaoGrupoWeb,
+  FRASE_EQUIVALENCIA_NEM_SEMPRE as FRASE_WEB,
   textoPrincipalDoGrupo as textoPrincipalWeb,
   textoResumoDoGrupo as textoResumoWeb,
   textoSituacaoDoGrupo as textoSituacaoWeb,
@@ -1585,7 +1589,7 @@ describe('grupos de equivalencia no XLSX', () => {
       0,
       100,
       -300,
-      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses',
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
       'OBS SINTETICA 001',
     ]);
     expect(linhaComoArrayN(ws, 4, n).slice(2, 11)).toEqual(['PRODUTO 002', '', 'FONTE 002', 1000, 0, 0, 50, 850, '']);
@@ -1637,6 +1641,14 @@ describe('grupos de equivalencia no XLSX', () => {
     const [item] = coberto.cobertosPorGrupo.itens;
     expect(textoMotivoCobertoPorGrupo(item)).toBe(textoMotivoCobertoWeb(item));
     expect(textoMotivoCobertoPorGrupo({ ...item, cobertura: null })).toBe(textoMotivoCobertoWeb({ ...item, cobertura: null }));
+    // Observacao do grupo (rodada 5): com e sem texto, e a frase fixa.
+    const comObs = { ...item, grupoObservacao: 'OBS DO GRUPO SINTETICA' };
+    expect(textoMotivoCobertoPorGrupo(comObs)).toBe(textoMotivoCobertoWeb(comObs));
+    expect(textoMotivoCobertoPorGrupo(comObs)).toContain('Observação do grupo: OBS DO GRUPO SINTETICA');
+    expect(FRASE_EQUIVALENCIA_NEM_SEMPRE).toBe(FRASE_WEB);
+    for (const obs of [null, undefined, '', '   ', ' OBS ']) {
+      expect(textoObservacaoDoGrupo(obs)).toBe(textoObservacaoGrupoWeb(obs));
+    }
     for (const n of [1, 2]) expect(resumoCobertosPorGrupo(n)).toBe(resumoCobertosWeb(n));
     expect(paragrafoGruposDeEquivalencia()).toBe(paragrafoGruposWeb());
     for (const c of [null, 0, 1, 8, 2.345]) expect(textoCobertura(c)).toBe(textoCoberturaWeb(c));
@@ -1647,6 +1659,57 @@ describe('grupos de equivalencia no XLSX', () => {
     const g = coberto.gruposDeEquivalencia[0];
     expect(textoResumoDoGrupo(g)).toBe(textoResumoWeb(g));
     expect(textoMembroDoGrupo({ item: 'PRODUTO 001', principal: true, fonte: '' })).toBe('PRODUTO 001 (principal) · Sem fonte');
+  });
+
+  describe('observacao do grupo (rodada 5 do Comex)', () => {
+    const OBS = 'OBS DO GRUPO SINTETICA';
+    const coberto2 = montarRelatorioCompras(quinzena(caso()), [], { grupos: [{ ...grupo, observacao: ` ${OBS} ` }] });
+    const naLista2 = montarRelatorioCompras(quinzena(caso(100)), [], { grupos: [{ ...grupo, observacao: OBS }] });
+
+    it('o relatorio carrega a observacao (so trim) no grupo e no item coberto; sem texto, vazia', () => {
+      expect(coberto2.gruposDeEquivalencia[0].observacao).toBe(OBS);
+      expect(coberto2.cobertosPorGrupo.itens[0].grupoObservacao).toBe(OBS);
+      expect(coberto.gruposDeEquivalencia[0].observacao).toBe('');
+      expect(coberto.cobertosPorGrupo.itens[0].grupoObservacao).toBe('');
+    });
+
+    it('aba Grupos: observacao na celula Observação da linha "Total do grupo" (ultima coluna) e no motivo do coberto', async () => {
+      const ws = (await abrir(coberto2)).getWorksheet(ABA_GRUPOS)!;
+      const n = COLUNAS_GRUPOS_XLSX.length;
+      expect(COLUNAS_GRUPOS_XLSX.at(-1)).toBe('Observação');
+      expect(linhaComoArrayN(ws, 2, n).at(-1)).toBe(
+        'Compra pelo produto principal: PRODUTO 001\nEstoque somado 1.200 kg · cobertura 8,0 meses · segurança somada 300 kg\nObservação do grupo: ' + OBS,
+      );
+      expect(linhaComoArrayN(ws, 3, n)[10]).toBe(
+        'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Observação do grupo: ' + OBS + ' · ' + FRASE_EQUIVALENCIA_NEM_SEMPRE,
+      );
+      expect(linhaComoArrayN(ws, 3, n).at(-1)).toBe('OBS SINTETICA 001'); // a Observação do produto nao muda
+      celulasDoGrupo(coberto2.gruposDeEquivalencia[0], new Map(coberto2.cobertosPorGrupo.itens.map((i) => [i.productId, i]))).forEach((valores, i) => {
+        expect(linhaComoArrayN(ws, i + 2, n)).toEqual(valores);
+      });
+    });
+
+    it('abas de compra: observacao como ultima linha da celula "Grupo de equivalência"; Observação segue a ultima coluna', async () => {
+      const wb = await abrir(naLista2);
+      const { grupos } = mapearLinhas(naLista2);
+      const linhaDoGrupo = linhaComoArray(wb.getWorksheet(ABA_RELATORIO)!, grupos[0].primeiroItem);
+      expect(linhaDoGrupo[COL('Grupo de equivalência') - 1]).toBe(
+        'PRODUTO 001 (principal) · FONTE 001\nPRODUTO 002 · FONTE 002\nPRODUTO 003 · FONTE 003\nObservação do grupo: ' + OBS,
+      );
+      expect(linhaDoGrupo.at(-1)).toBe('OBS SINTETICA 001');
+      // Sem observacao: celula igual a de antes.
+      const semObs = montarRelatorioCompras(quinzena(caso(100)), [], { grupos: [grupo] });
+      expect(celulasDoItem(semObs.grupos[0].itens[0], 15)[COL('Grupo de equivalência') - 1]).toBe(
+        'PRODUTO 001 (principal) · FONTE 001\nPRODUTO 002 · FONTE 002\nPRODUTO 003 · FONTE 003',
+      );
+    });
+
+    it('Regras: o paragrafo de equivalencia traz a ressalva e o de embalagem diz que o pallet e opcao, nao regra', () => {
+      expect(paragrafoGruposDeEquivalencia()).toContain('A equivalência nem sempre vale para todos os clientes');
+      expect(paragrafoGruposDeEquivalencia()).toContain('alguns clientes têm apenas um item do grupo homologado');
+      expect(PARAGRAFO_EMBALAGEM_XLSX).toContain('O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem');
+      expect(PARAGRAFO_EMBALAGEM_XLSX).not.toContain('pallets fechados');
+    });
   });
 
   it.each(['=', '+', '-', '@'])('nome de grupo e de produto que comecam com "%s" continuam TEXTO', async (prefixo) => {

@@ -340,9 +340,12 @@ function Formulario({ grupo, grupos, onVoltar }: VoltarProps & { grupo?: Forecas
             setObservacao(e.target.value);
           }}
           aria-invalid={erros.observacao ? true : undefined}
-          aria-describedby={erros.observacao ? id('observacao-erro') : undefined}
+          aria-describedby={erros.observacao ? `${id('observacao-dica')} ${id('observacao-erro')}` : id('observacao-dica')}
           disabled={pendente}
         />
+        <p className="fcd-dica" id={id('observacao-dica')}>
+          Registre restrições (ex.: cliente com apenas um item do grupo homologado).
+        </p>
         <Erro id={id('observacao-erro')} texto={erros.observacao} />
       </div>
 
