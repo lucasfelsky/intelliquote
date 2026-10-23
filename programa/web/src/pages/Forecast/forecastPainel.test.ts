@@ -4,6 +4,10 @@ import {
   alertaProjecao,
   casaBusca,
   colunasDoPainel,
+  COLUNAS_DO_CALCULO,
+  COLUNAS_INFORMATIVAS,
+  NOME_COLUNA_PLANILHA,
+  colunasDaGrade,
   contabil,
   contabil1,
   contarPorFiltro,
@@ -19,6 +23,7 @@ import {
   nomeDoMes,
   normalizarBusca,
   passosDaMemoria,
+  regraALDoPainel,
   risco,
   textoAA,
   textoDoSelo,
@@ -345,7 +350,109 @@ describe('textoDoSelo', () => {
     const com = textoDoSelo(
       detail({ conferencia: conf({ batem: 1440, totalDivergencias: 100, divergencias }) }),
     );
-    expect(com.detalhe).toBe('1.440 de 1.540 células batem · 100 divergem (as primeiras 50 estão marcadas na grade)');
+    expect(com.detalhe).toBe('1.440 de 1.540 células batem · 100 divergem');
+    expect(com.colunas).toBeUndefined();
+  });
+
+  describe('selo por coluna', () => {
+    const COLUNAS_28 = [
+      'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AC', 'AD', 'AE', 'AF', 'AG',
+      'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AQ', 'AR', 'AS',
+    ];
+    // 28 colunas conferidas com 338 celulas cada (9.464 no total, como a quinzena 10-2).
+    const confColunas = (divergentes: Record<string, number>, devolvidas = 50, semColunas: string[] = [], em?: string) => {
+      const porColuna = Object.fromEntries(
+        COLUNAS_28.filter((c) => !semColunas.includes(c)).map((c) => [c, { celulas: 338, batem: 338 - (divergentes[c] ?? 0) }]),
+      );
+      const total = Object.values(divergentes).reduce((a, b) => a + b, 0);
+      const primeira = Object.keys(divergentes)[0] ?? 'AS';
+      return conf({
+        celulas: 338 * (28 - semColunas.length),
+        batem: 338 * (28 - semColunas.length) - total,
+        porColuna,
+        totalDivergencias: total,
+        divergencias: Array.from({ length: Math.min(devolvidas, total) }, () => ({ coluna: em ?? primeira })),
+      });
+    };
+    const TEXTO_INFORMATIVA =
+      'Só colunas informativas divergem: a demanda, a projeção e o relatório de compras não usam esses valores, e as colunas do cálculo batem com a planilha.';
+
+    it('divergencia so em AS (clientes ativos): aviso, nomeia a coluna e diz que esta fora da grade', () => {
+      const selo = textoDoSelo(detail({ conferencia: confColunas({ AS: 97 }) }));
+      expect(selo.tom).toBe('aviso');
+      expect(selo.titulo).toBe('Diferenças só em colunas informativas');
+      expect(selo.detalhe).toBe('9.367 de 9.464 células batem · 97 divergem');
+      expect(selo.colunas).toEqual(['97 em Clientes ativos 3m (col. AS) — coluna fora da grade']);
+      expect(selo.informativa).toBe(TEXTO_INFORMATIVA);
+    });
+
+    it('divergencia em coluna do calculo junto: erro, sem a frase informativa, por quantidade e com a nota da grade', () => {
+      const selo = textoDoSelo(detail({ conferencia: confColunas({ AS: 97, AN: 3 }, 50, [], 'AN') }));
+      expect(selo.tom).toBe('erro');
+      expect(selo.titulo).toBe('Há diferenças com a planilha');
+      expect(selo.informativa).toBeUndefined();
+      expect(selo.colunas).toEqual([
+        '97 em Clientes ativos 3m (col. AS) — coluna fora da grade',
+        '3 em Demanda (col. AN) — marcadas na grade',
+        // as 50 devolvidas sao de AN (coluna da grade) e o total passa de 50
+        'Na grade aparecem só as primeiras 50 divergências.',
+      ]);
+    });
+
+    it('sem a prova de que as colunas do calculo foram conferidas, nao afirma "informativa"', () => {
+      const selo = textoDoSelo(detail({ conferencia: confColunas({ AS: 97 }, 50, ['AG']) }));
+      expect(selo.tom).toBe('erro');
+      expect(selo.informativa).toBeUndefined();
+      expect(selo.titulo).toBe('Há diferenças com a planilha');
+      expect(selo.colunas).toEqual(['97 em Clientes ativos 3m (col. AS) — coluna fora da grade']);
+    });
+
+    it('comGrade: false (resumo da importacao) nao fala de grade', () => {
+      const selo = textoDoSelo(detail({ conferencia: confColunas({ AS: 97, AN: 3 }) }), { comGrade: false });
+      expect(selo.colunas).toEqual(['97 em Clientes ativos 3m (col. AS)', '3 em Demanda (col. AN)']);
+      expect(selo.detalhe).toBe('9.364 de 9.464 células batem · 100 divergem');
+    });
+
+    it('1a quinzena so em AS: mantem titulo e nota da regra e acrescenta a frase informativa', () => {
+      const selo = textoDoSelo(detail({ half: 1, conferencia: confColunas({ AS: 97 }) }));
+      expect(selo.tom).toBe('aviso');
+      expect(selo.titulo).toBe('Conferência motor × planilha (regra da planilha, 2ª quinzena)');
+      expect(selo.nota).toBe(
+        'Nesta 1ª quinzena o consumo do mês (AG) usa a média trimestral; a conferência usa a regra da planilha.',
+      );
+      expect(selo.informativa).toBe(TEXTO_INFORMATIVA);
+    });
+
+    it('empate de quantidade segue a ordem da planilha (Z antes de AA, AR antes de AS)', () => {
+      const selo = textoDoSelo(detail({ conferencia: confColunas({ AS: 5, AA: 5, AR: 5, Z: 5 }) }));
+      expect(selo.colunas?.map((c) => c.split(' em ')[1]?.split(' (')[0])).toEqual([
+        'Chegadas',
+        'Meses de estoque',
+        'Margem',
+        'Clientes ativos 3m',
+      ]);
+      expect(selo.tom).toBe('erro');
+    });
+
+    it('convive com a nota da regra AL (so quando ha chegada no 5o mes)', () => {
+      const conferencia = confColunas({ AS: 97 });
+      const com = textoDoSelo(detail({ conferencia }), { regraAL: { linhas: 2, mes: 'fev/2027' } });
+      expect(com.informativa).toBe(TEXTO_INFORMATIVA);
+      expect(com.notaRegra).toMatch(/^2 produtos têm chegada em fev\/2027:/);
+      const sem = textoDoSelo(detail({ conferencia }), { regraAL: { linhas: 0, mes: 'fev/2027' } });
+      expect(sem.informativa).toBe(TEXTO_INFORMATIVA);
+      expect(sem.notaRegra).toBeUndefined();
+    });
+
+    it('colunasDaGrade e a particao das colunas conferidas', () => {
+      expect([...colunasDaGrade()].sort()).toEqual(
+        ['O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AC', 'AD', 'AE', 'AF', 'AN'].sort(),
+      );
+      const todas = [...COLUNAS_INFORMATIVAS, ...COLUNAS_DO_CALCULO].sort();
+      expect(todas).toEqual([...COLUNAS_28].sort());
+      expect(COLUNAS_INFORMATIVAS.filter((c) => (COLUNAS_DO_CALCULO as readonly string[]).includes(c))).toEqual([]);
+      for (const c of COLUNAS_28) expect(NOME_COLUNA_PLANILHA[c], c).toBeTruthy();
+    });
   });
 
   it('1a quinzena (half 1): rotulo da regra da planilha e nota; nunca "identico"', () => {
@@ -359,6 +466,35 @@ describe('textoDoSelo', () => {
     const ruim = textoDoSelo(detail({ half: 1, conferencia: conf({ batem: 1500, totalDivergencias: 40, divergencias: [] }) }));
     expect(ruim.tom).toBe('erro');
     expect(ruim.nota).toBeDefined();
+  });
+
+  it('regra AL: nota so com conferencia e chegada no 5o mes; singular e plural', () => {
+    const um = textoDoSelo(detail({}), { regraAL: { linhas: 1, mes: 'fev/2027' } });
+    expect(um.notaRegra).toBe(
+      '1 produto tem chegada em fev/2027: o painel e o relatório somam essa chegada na projeção de fev/2027 (colunas AL e AM), regra confirmada pelo Comex. A conferência acima usa a regra da planilha, que não soma.',
+    );
+    expect(um.titulo).toBe('Cálculo idêntico ao da planilha');
+    const dois = textoDoSelo(detail({}), { regraAL: { linhas: 2, mes: 'fev/2027' } });
+    expect(dois.notaRegra).toMatch(/^2 produtos têm chegada em fev\/2027:/);
+    const meia = textoDoSelo(detail({ half: 1 }), { regraAL: { linhas: 2, mes: 'fev/2027' } });
+    expect(meia.nota).toBeDefined();
+    expect(meia.notaRegra).toBeDefined();
+
+    expect(textoDoSelo(detail({}), { regraAL: { linhas: 0, mes: 'fev/2027' } })).toEqual({
+      tom: 'ok',
+      titulo: 'Cálculo idêntico ao da planilha',
+      detalhe: '1.540 de 1.540 células batem',
+    });
+    const dbcorp = textoDoSelo(detail({ conferencia: null }), { regraAL: { linhas: 3, mes: 'fev/2027' } });
+    expect(dbcorp.notaRegra).toBeUndefined();
+  });
+
+  it('regraALDoPainel conta linhas com chegada no 5o mes e rotula o mes da janela', () => {
+    const com = (n: number) => linha({ chegadas: [0, 0, 0, 0, n] });
+    expect(regraALDoPainel({ baseDate: '2026-10-15', linhas: [linha(), com(0)] })).toEqual({ linhas: 0, mes: 'fev/2027' });
+    expect(regraALDoPainel({ baseDate: '2026-10-15', linhas: [linha(), com(50)] })).toEqual({ linhas: 1, mes: 'fev/2027' });
+    expect(regraALDoPainel({ baseDate: '2026-10-15', linhas: [com(50), com(10), linha()] }).linhas).toBe(2);
+    expect(regraALDoPainel({ baseDate: '2026-11-05', linhas: [com(50)] }).mes).toBe('mar/2027');
   });
 
   it('descreverDivergencia mostra planilha x motor', () => {

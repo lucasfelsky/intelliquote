@@ -17,6 +17,7 @@ import {
   type ForecastImportSummary,
   type ForecastWorkbookBody,
 } from '@/services/forecast';
+import { inteiroBr } from './forecastPainel';
 import ForecastResumoDbcorp from './ForecastResumoDbcorp';
 import ForecastResumoPlanilha from './ForecastResumoPlanilha';
 import {
@@ -25,6 +26,7 @@ import {
   lerCorpoDbcorp,
   lerCorpoPlanilha,
   mesAno,
+  prontidaoPendente,
   rotuloDaQuinzena,
   rotuloDoSlot,
   slotsSemLinhasUteis,
@@ -73,6 +75,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const [relatorios, setRelatorios] = useState<Partial<Record<ForecastDbcorpSlot, File>>>({});
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [entendi, setEntendi] = useState(false);
+  const [entendiProntidao, setEntendiProntidao] = useState(false);
   const [opcoes, setOpcoes] = useState<ForecastImportOptions>(OPCOES_INICIAIS);
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState('');
@@ -94,6 +97,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const descartar = () => {
     setPrevia(null);
     setEntendi(false);
+    setEntendiProntidao(false);
     setErro('');
   };
 
@@ -132,6 +136,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     onSuccess: (pronta) => {
       setPrevia(pronta);
       setEntendi(false);
+      setEntendiProntidao(false);
     },
     ...aoFalhar,
   });
@@ -209,13 +214,14 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   };
 
   const semLinhas = previa?.aba === 'dbcorp' ? slotsSemLinhasUteis(previa.resumo) : [];
+  const prontidao = previa?.aba === 'dbcorp' ? prontidaoPendente(previa.resumo) : null;
   const efetivas = previa?.aba === 'planilha' ? opcoesEfetivas(previa.resumo) : null;
   const nenhumaOpcao = efetivas !== null && !efetivas.atualizarCadastro && !efetivas.gravarHistorico && !efetivas.criarQuinzena;
   const confirmarBloqueado =
     !previa ||
     previa.resumo.erros.length > 0 ||
     nenhumaOpcao ||
-    (previa.aba === 'dbcorp' && (rotuloExiste || (semLinhas.length > 0 && !entendi)));
+    (previa.aba === 'dbcorp' && (rotuloExiste || (semLinhas.length > 0 && !entendi) || (prontidao !== null && !entendiProntidao)));
   const rotuloDoBotao =
     fase === 'lendo' ? 'Lendo arquivos…' : fase === 'previa' ? 'Pré-visualizando…' : fase === 'gravando' ? 'Gravando…' : null;
 
@@ -376,6 +382,21 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                 <span>
                   Entendi que {semLinhas.map(rotuloDoSlot).join(', ')} {semLinhas.length > 1 ? 'vieram' : 'veio'} sem linhas
                   úteis e quero criar a quinzena assim mesmo.
+                </span>
+              </label>
+            )}
+
+            {prontidao && (
+              <label className="fci-entendi">
+                <input
+                  type="checkbox"
+                  checked={entendiProntidao}
+                  disabled={ocupado}
+                  onChange={(e) => setEntendiProntidao(e.target.checked)}
+                />
+                <span>
+                  Entendi que {inteiroBr(prontidao.linhas)} linhas ({inteiroBr(prontidao.kg)} kg) do FUP com DATA PRONTIDÃO
+                  não reconhecida ficam fora das chegadas.
                 </span>
               </label>
             )}

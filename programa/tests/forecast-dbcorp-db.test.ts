@@ -283,6 +283,14 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
     expect(data.relatorios.fup.semData.porStatus).toEqual([{ status: 'AG. PAGAMENTO (ANT)', linhas: 1, kg: 1000 }]);
     expect(data.relatorios.fup.estimadasPorEtd).toEqual({ linhas: 1, kg: 400 });
     expect(data.relatorios.fup.vencidasNoMesBase).toEqual({ linhas: 1, kg: 300 });
+    // Regra F3: este FUP nao tem ATRAC nem ETA FINAL, nem as colunas DATA PO / DATA PRONTIDAO (so aviso).
+    expect(data.relatorios.fup.regra).toMatchObject({ id: 'F3', etaPorEtdDias: 35, etaPorProntidaoDias: 35 });
+    expect(data.relatorios.fup.excluidas.atracadas).toEqual({ linhas: 0, kg: 0 });
+    expect(data.relatorios.fup.excluidas.etaFinalPreenchida.linhas).toBe(0);
+    expect(data.relatorios.fup.estimadasPorProntidao).toEqual({ linhas: 0, kg: 0 });
+    expect(data.relatorios.fup.prontidaoNaoReconhecida.linhas).toBe(0);
+    expect(data.avisos).toContain('FUP: coluna "DATA PRONTIDÃO" não encontrada - linhas sem ETA nem ETD ficam de fora.');
+    expect(data.avisos).toContain('FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.');
 
     expect(await prisma.forecastSnapshot.count({ where: { label: LABEL, createdById: adminId } })).toBe(0);
     expect(await salesOf(ANTERIOR)).toEqual({ [CODE_OLD]: 999 });
@@ -296,10 +304,18 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
 
     const snapshot = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: snapshotId } });
     expect(snapshot).toMatchObject({ label: LABEL, half: 2, origin: 'dbcorp', expected: null, createdById: adminId });
-    const files = snapshot.files as unknown as Array<{ kind: string; fileName: string; sha256: string; rows: number }>;
+    const files = snapshot.files as unknown as Array<{
+      kind: string;
+      fileName: string;
+      sha256: string;
+      rows: number;
+      regra?: string;
+    }>;
     expect(files.map((f) => f.kind)).toEqual(['saldo', 'vendasMes', 'vendasAtual', 'vendasAnual', 'programacao', 'fup']);
     expect(files.every((f) => /^[0-9a-f]{64}$/.test(f.sha256))).toBe(true);
     expect(files.find((f) => f.kind === 'saldo')).toMatchObject({ fileName: 'saldo.xlsx', rows: 3 });
+    expect(files.find((f) => f.kind === 'fup')?.regra).toBe('F3');
+    expect(files.filter((f) => f.kind !== 'fup').every((f) => f.regra === undefined)).toBe(true);
 
     const frozen = (snapshot.products as unknown as Array<Record<string, unknown>>).filter((p) =>
       [productA.id, productB.id].includes(p.productId as number),
@@ -338,6 +354,16 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
     expect(auditSnapshot.metadata).toMatchObject({ label: LABEL, origin: 'dbcorp' });
     const arquivos = (auditSnapshot.metadata as { arquivos: Array<{ kind: string; usadas: number }> }).arquivos;
     expect(arquivos.map((x) => x.kind)).toEqual(['saldo', 'vendasMes', 'vendasAtual', 'vendasAnual', 'programacao', 'fup']);
+    // So contagens de LINHAS (nunca kg, codigo ou texto do FUP).
+    expect((auditSnapshot.metadata as { fup: unknown }).fup).toEqual({
+      regra: 'F3',
+      estimadasEtd: 1,
+      estimadasProntidao: 0,
+      excluidasAtracadas: 0,
+      excluidasEtaFinal: 0,
+      prontidaoNaoReconhecida: 0,
+      semData: 1,
+    });
     const auditSales = audits.find((l) => l.entityType === 'forecast_sales' && l.entityId === ANTERIOR)!;
     expect(auditSales.action).toBe('replace_month');
     expect(auditSales.metadata).toMatchObject({ yearMonth: ANTERIOR, linhas: 4, novas: 4, alteradas: 0, removidas: 1 });

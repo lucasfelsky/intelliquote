@@ -1,7 +1,14 @@
 // Funcoes puras do painel do Forecast (sem React, sem Date local).
 // Datas sao sempre manipuladas pelo texto AAAA-MM-DD: new Date(...) / toISOString()
 // mostram o dia anterior em BRT.
-import type { ForecastDivergencia, ForecastLinha, ForecastMonths, ForecastSnapshotDetail, ForecastStatus } from '@/services/forecast';
+import type {
+  ForecastConferencia,
+  ForecastDivergencia,
+  ForecastLinha,
+  ForecastMonths,
+  ForecastSnapshotDetail,
+  ForecastStatus,
+} from '@/services/forecast';
 
 // ---------- formatos iguais aos da planilha ----------
 const INT_BR = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -375,16 +382,115 @@ export function risco(linha: Pick<ForecastLinha, 'projecao' | 'AP'>, baseDate: s
 }
 
 // ---------- selo de conferencia ----------
+/** Nome humano de cada coluna conferida da planilha (selo por coluna). Letra desconhecida: a propria letra. */
+export const NOME_COLUNA_PLANILHA: Readonly<Record<string, string>> = {
+  O: 'Venda do mês anterior',
+  P: 'Venda do mês atual',
+  Q: 'Média trimestral',
+  R: 'Média semestral',
+  S: 'Média anual',
+  T: 'Segurança',
+  U: 'Estoque',
+  V: 'Chegadas',
+  W: 'Chegadas',
+  X: 'Chegadas',
+  Y: 'Chegadas',
+  Z: 'Chegadas',
+  AA: 'Meses de estoque',
+  AC: 'Programações',
+  AD: 'Programações',
+  AE: 'Programações',
+  AF: 'Programações',
+  AG: 'Consumo do mês atual',
+  AH: 'Projeção de estoque',
+  AI: 'Projeção de estoque',
+  AJ: 'Projeção de estoque',
+  AK: 'Projeção de estoque',
+  AL: 'Projeção de estoque',
+  AM: 'Projeção de estoque',
+  AN: 'Demanda',
+  AQ: 'Lead time',
+  AR: 'Margem',
+  AS: 'Clientes ativos 3m',
+};
+
+/**
+ * Colunas conferidas que SO informam: nao alimentam a demanda (AN), a projecao (AH-AM) nem o relatorio de
+ * compras. Provado em tests/forecast-colunas-informativas.test.ts (AA nao tem entrada propria e nao e lido
+ * por AN nem pela projecao em `calcularLinha`).
+ */
+export const COLUNAS_INFORMATIVAS = ['R', 'S', 'AA', 'AR', 'AS'] as const;
+
+/** Colunas conferidas que alimentam a demanda, a projecao ou o relatorio (`calcularLinha` em src/utils/forecastEngine.ts). */
+export const COLUNAS_DO_CALCULO = [
+  'O', 'P', 'Q', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AC', 'AD', 'AE', 'AF', 'AG',
+  'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AQ',
+] as const;
+
+/** Letras das colunas que a grade do painel mostra e marca como divergentes. */
+export function colunasDaGrade(): ReadonlySet<string> {
+  return new Set(
+    definirColunas({ consumo: [], chegada: [], programacao: [] })
+      .map((c) => c.colunaPlanilha)
+      .filter((c): c is string => c !== undefined),
+  );
+}
+
+// 'A' = 1, 'Z' = 26, 'AA' = 27: ordem da planilha.
+function numeroDaColuna(letra: string): number {
+  return [...letra].reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0);
+}
+
 export interface SeloConferencia {
-  tom: 'ok' | 'erro' | 'neutro';
+  tom: 'ok' | 'erro' | 'neutro' | 'aviso';
   titulo: string;
   detalhe: string;
+  /** Uma linha por coluna que diverge: "N em <nome> (col. X)", com onde aparece quando `comGrade`. */
+  colunas?: string[];
+  /** So quando comprovado: a divergencia esta apenas em colunas informativas (nao afeta demanda nem relatorio). */
+  informativa?: string;
   nota?: string;
+  /** Regra AL do Comex: so quando ha produto com chegada no 5o mes e a conferencia existe. */
+  notaRegra?: string;
+}
+
+/** Regra AL: quantas linhas tem chegada no 5o mes (a projecao desse mes soma essa chegada) e qual e o mes. */
+export function regraALDoPainel(detail: Pick<ForecastSnapshotDetail, 'linhas' | 'baseDate'>): {
+  linhas: number;
+  mes: string;
+} {
+  return {
+    linhas: detail.linhas.filter((l) => l.chegadas[4] !== 0).length,
+    mes: mesesDaProjecao(detail.baseDate)[4] ?? '—',
+  };
 }
 
 const NUMERO_BR = new Intl.NumberFormat('pt-BR');
 
-export function textoDoSelo(detail: Pick<ForecastSnapshotDetail, 'conferencia' | 'half'>): SeloConferencia {
+const TEXTO_INFORMATIVA =
+  'Só colunas informativas divergem: a demanda, a projeção e o relatório de compras não usam esses valores, e as colunas do cálculo batem com a planilha.';
+
+function colunasDivergentes(
+  porColuna: ForecastConferencia['porColuna'],
+): Array<{ letra: string; divergentes: number }> {
+  return Object.entries(porColuna)
+    .map(([letra, c]) => ({ letra, divergentes: c.celulas - c.batem }))
+    .filter((c) => c.divergentes > 0)
+    .sort((a, b) => b.divergentes - a.divergentes || numeroDaColuna(a.letra) - numeroDaColuna(b.letra));
+}
+
+/** Divergencia so em colunas informativas E todas as colunas do calculo foram conferidas e batem. */
+function soInformativas(conferencia: ForecastConferencia, divergentes: Array<{ letra: string }>): boolean {
+  if (divergentes.length === 0) return false;
+  const informativas: readonly string[] = COLUNAS_INFORMATIVAS;
+  if (!divergentes.every((d) => informativas.includes(d.letra))) return false;
+  return COLUNAS_DO_CALCULO.every((c) => (conferencia.porColuna[c]?.celulas ?? 0) > 0);
+}
+
+export function textoDoSelo(
+  detail: Pick<ForecastSnapshotDetail, 'conferencia' | 'half'>,
+  opcoes: { regraAL?: { linhas: number; mes: string }; comGrade?: boolean } = {},
+): SeloConferencia {
   const { conferencia, half } = detail;
   if (conferencia === null) {
     return {
@@ -394,25 +500,59 @@ export function textoDoSelo(detail: Pick<ForecastSnapshotDetail, 'conferencia' |
     };
   }
   const ok = conferencia.batem === conferencia.celulas;
+  const comGrade = opcoes.comGrade ?? true;
   let detalhe = `${NUMERO_BR.format(conferencia.batem)} de ${NUMERO_BR.format(conferencia.celulas)} células batem`;
+  const porColuna: { colunas?: string[]; informativa?: string } = {};
+  let informativa = false;
   if (!ok) {
     detalhe += ` · ${NUMERO_BR.format(conferencia.totalDivergencias)} divergem`;
-    if (conferencia.totalDivergencias > conferencia.divergencias.length) {
-      detalhe += ` (as primeiras ${conferencia.divergencias.length} estão marcadas na grade)`;
+    const divergentes = colunasDivergentes(conferencia.porColuna);
+    if (divergentes.length > 0) {
+      const grade = comGrade ? colunasDaGrade() : null;
+      const colunas = divergentes.map((d) => {
+        const nome = NOME_COLUNA_PLANILHA[d.letra] ?? d.letra;
+        const onde = grade ? (grade.has(d.letra) ? ' — marcadas na grade' : ' — coluna fora da grade') : '';
+        return `${NUMERO_BR.format(d.divergentes)} em ${nome} (col. ${d.letra})${onde}`;
+      });
+      const devolvidaNaGrade = grade && conferencia.divergencias.some((d) => grade.has(d.coluna));
+      if (devolvidaNaGrade && conferencia.totalDivergencias > conferencia.divergencias.length) {
+        colunas.push(`Na grade aparecem só as primeiras ${conferencia.divergencias.length} divergências.`);
+      }
+      porColuna.colunas = colunas;
+      if (soInformativas(conferencia, divergentes)) {
+        informativa = true;
+        porColuna.informativa = TEXTO_INFORMATIVA;
+      }
     }
   }
+  const tom = ok ? 'ok' : informativa ? 'aviso' : 'erro';
+  const regraAL = opcoes.regraAL;
+  const notaRegra =
+    regraAL && regraAL.linhas > 0
+      ? {
+          notaRegra: `${regraAL.linhas} ${regraAL.linhas === 1 ? 'produto tem' : 'produtos têm'} chegada em ${regraAL.mes}: o painel e o relatório somam essa chegada na projeção de ${regraAL.mes} (colunas AL e AM), regra confirmada pelo Comex. A conferência acima usa a regra da planilha, que não soma.`,
+        }
+      : {};
   if (half === 1) {
     return {
-      tom: ok ? 'ok' : 'erro',
+      tom,
       titulo: 'Conferência motor × planilha (regra da planilha, 2ª quinzena)',
       detalhe,
+      ...porColuna,
       nota: 'Nesta 1ª quinzena o consumo do mês (AG) usa a média trimestral; a conferência usa a regra da planilha.',
+      ...notaRegra,
     };
   }
   return {
-    tom: ok ? 'ok' : 'erro',
-    titulo: ok ? 'Cálculo idêntico ao da planilha' : 'Há diferenças com a planilha',
+    tom,
+    titulo: ok
+      ? 'Cálculo idêntico ao da planilha'
+      : informativa
+        ? 'Diferenças só em colunas informativas'
+        : 'Há diferenças com a planilha',
     detalhe,
+    ...porColuna,
+    ...notaRegra,
   };
 }
 

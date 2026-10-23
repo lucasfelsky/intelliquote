@@ -232,6 +232,23 @@ describe('Forecast', () => {
     expect(screen.getByText('3 de 3 produtos')).toBeTruthy();
   });
 
+  it('regra AL: nota no selo quando ha chegada no 5o mes', async () => {
+    mockApi({
+      7: detalhe({ linhas: [linha({ chegadas: [0, 0, 0, 0, 50] }), ...LINHAS.slice(1)] }),
+    });
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Cálculo idêntico ao da planilha')).toBeTruthy();
+    expect(
+      screen.getByText(/^1 produto tem chegada em fev\/2027: o painel e o relatório somam essa chegada/),
+    ).toBeTruthy();
+    unmount();
+
+    mockApi({ 7: detalhe() });
+    renderPage();
+    expect(await screen.findByText('Cálculo idêntico ao da planilha')).toBeTruthy();
+    expect(screen.queryByText(/regra confirmada pelo Comex/)).toBeNull();
+  });
+
   it('trocar o seletor pede o detalhe da outra quinzena (origem DBCorp, 1a quinzena)', async () => {
     mockApi({
       7: detalhe(),
@@ -296,6 +313,37 @@ describe('Forecast', () => {
     expect(celula).not.toBeNull();
     expect((celula)?.getAttribute('title')).toBe('Planilha: 77 · motor: 100');
     expect(document.querySelectorAll('.fc-cell--diverge')).toHaveLength(1);
+  });
+
+  it('divergencia so em coluna fora da grade: selo nomeia a coluna e nada e marcado', async () => {
+    const colunas = [
+      'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AC', 'AD', 'AE', 'AF', 'AG',
+      'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AQ', 'AR', 'AS',
+    ];
+    mockApi({
+      7: detalhe({
+        conferencia: {
+          celulas: 84,
+          batem: 81,
+          porColuna: Object.fromEntries(colunas.map((c) => [c, { celulas: 3, batem: c === 'AS' ? 0 : 3 }])),
+          totalDivergencias: 3,
+          divergencias: [4, 5, 6].map((linhaDaPlanilha) => ({
+            linha: linhaDaPlanilha,
+            item: 'PRODUTO B',
+            coluna: 'AS',
+            esperado: 12,
+            calculado: 9,
+          })),
+        },
+      }),
+    });
+    renderPage();
+    expect(await screen.findByText('Diferenças só em colunas informativas')).toBeTruthy();
+    expect(screen.getByText('81 de 84 células batem · 3 divergem')).toBeTruthy();
+    expect(screen.getByText('3 em Clientes ativos 3m (col. AS) — coluna fora da grade')).toBeTruthy();
+    expect(screen.getByText(/^Só colunas informativas divergem: a demanda, a projeção e o relatório de compras/)).toBeTruthy();
+    expect(document.querySelectorAll('.fc-cell--diverge')).toHaveLength(0);
+    expect(screen.queryByText('Há diferenças com a planilha')).toBeNull();
   });
 
   it('filtros mudam as linhas e mostram as contagens da quinzena inteira', async () => {

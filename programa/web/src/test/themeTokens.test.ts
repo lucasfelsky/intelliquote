@@ -172,6 +172,9 @@ const PAIRS: ReadonlyArray<readonly [string, string, number]> = [
   ['danger', 'surface', TEXT],
   ['danger', 'tone-danger-bg', TEXT],
   ['danger', 'tone-danger-bg-soft', TEXT],
+  // linhas criticas do relatorio de compras (PR 2D): texto sobre o fundo vermelho discreto
+  ['ink', 'tone-danger-bg-soft', TEXT],
+  ['ink-soft', 'tone-danger-bg-soft', TEXT],
   ['danger', 'tone-danger-bg-alt', TEXT],
   ['warning', 'surface', TEXT],
   ['warning', 'tone-warning-bg', TEXT],
@@ -254,6 +257,12 @@ describe('tema escuro: guarda do CSS', () => {
 
   it('contraste do anel do toggle selecionado tambem no claro (>= 3)', () => {
     expect(contrast('primary-700', 'surface-alt', lightTokens)).toBeGreaterThanOrEqual(UI);
+  });
+
+  it('contraste das linhas criticas do relatorio tambem no claro (>= 4.5)', () => {
+    for (const fg of ['ink', 'ink-soft', 'danger']) {
+      expect(contrast(fg, 'tone-danger-bg-soft', lightTokens), fg).toBeGreaterThanOrEqual(TEXT);
+    }
   });
 
   it('escopo "papel claro" no escuro religa color e os tokens de texto (Jodit e assinatura)', () => {

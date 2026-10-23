@@ -57,7 +57,7 @@ export const FORECAST_STATUS_COLORS = {
 export const FORECAST_ORIGIN_WORKBOOK = 'planilha';
 export const FORECAST_ORIGIN_DBCORP = 'dbcorp';
 
-// --- Quinzena a partir dos relatorios DBCorp (D2, decidida pelo Lucas em 2026-10-21) --------------
+// --- Quinzena a partir dos relatorios DBCorp (estoque D2, decidida pelo Lucas em 2026-10-21; FUP F3, 2026-10-22) ---
 // Comparacao de texto (deposito, empresa, status) sempre normalizada: sem acento, espacos
 // colapsados, trim, maiusculas.
 
@@ -85,11 +85,28 @@ export const FORECAST_DBCORP_SEM_DEPOSITO = '(sem deposito)';
 // PROGRAMACAO: so este status entra.
 export const FORECAST_DBCORP_PROGRAMACAO_STATUS = 'Pendente';
 
-// FUP: este status (com ou sem acento) nao entra; os demais, inclusive ATRAC. AG. LIBERAÇÃO, entram.
+// FUP: este status (com ou sem acento) nao entra.
 export const FORECAST_DBCORP_FUP_STATUS_IGNORADO = 'CONCLUÍDO';
 
-// FUP sem ETA FINAL nem ETA (CHEGADA): chegada estimada = ETD (EMBARQUE) + N dias.
+// FUP, regra F3 (decidida pelo Lucas em 2026-10-22; revoga a parte da D2 que incluia as atracadas e usava
+// ETA FINAL como data): atracada aguardando liberacao NAO entra (a carga ja pode estar no estoque) e linha
+// com ETA FINAL preenchida NAO entra (ja chegou). Comparacao de status normalizada.
+export const FORECAST_DBCORP_FUP_REGRA = 'F3';
+export const FORECAST_DBCORP_FUP_STATUS_EXCLUIDOS = ['ATRAC. AG. LIBERAÇÃO'] as const;
+export const FORECAST_DBCORP_FUP_EXCLUI_ETA_FINAL = true;
+
+// FUP sem ETA (CHEGADA): chegada estimada = ETD (EMBARQUE) + N dias.
 export const FORECAST_DBCORP_ETA_POR_ETD_DIAS = 35;
+
+// FUP sem ETA (CHEGADA) nem ETD (EMBARQUE): chegada estimada = DATA PRONTIDAO + N dias. Configuravel aqui;
+// 35 ficou mais perto da planilha que 65 na analise de 2026-10-22.
+export const FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS = 35;
+
+// Colunas do FUP que nao derrubam a importacao quando faltam (so geram aviso).
+export const FORECAST_DBCORP_HEADERS_OPCIONAIS = { fup: ['DATA PO', 'DATA PRONTIDÃO'] } as const;
+
+// Linhas detalhadas (prontidao nao reconhecida) devolvidas no resumo; a contagem total vai sempre.
+export const FORECAST_DBCORP_MAX_DETALHES = 50;
 
 // Janelas em meses a partir do mes base: PROGRAMACAO = AC..AF, chegadas = V..Z.
 export const FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES = 4;

@@ -115,6 +115,9 @@ export interface ForecastEmbalagemDoItem {
   rotulo: string | null;
 }
 
+/** Faixas de urgencia do relatorio (PR 2D), da mais para a menos urgente. */
+export type ForecastUrgencia = 'sem-estoque' | 'critico' | 'atrasado' | 'no-prazo';
+
 export interface ForecastItemRelatorio {
   linha: number;
   n: number | null;
@@ -141,6 +144,10 @@ export interface ForecastItemRelatorio {
     chegadas: Array<{ anoMes: string; quantidade: number }>;
     programacoes: Array<{ anoMes: string; quantidade: number }>;
   };
+  // Campos do PR 2D: opcionais de proposito (backend antigo = modo legado, sem faixas).
+  urgencia?: ForecastUrgencia;
+  diasAteRuptura?: number | null;
+  posicaoUrgencia?: number;
 }
 
 export interface ForecastGrupoRelatorio {
@@ -148,13 +155,41 @@ export interface ForecastGrupoRelatorio {
   leadTimeDias: number;
   dataLimiteMaisUrgente: string | null;
   vencidas: number;
+  urgenciaMaisAlta?: ForecastUrgencia;
+  porUrgencia?: Record<ForecastUrgencia, number>;
   itens: ForecastItemRelatorio[];
+}
+
+/** Item sem consumo, fora da lista de compra, com estoque ou programacao (PR 2D). */
+export interface ForecastItemSemConsumo {
+  linha: number;
+  n: number | null;
+  productId: number | null;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: ForecastStatus;
+  motivos: Array<'programacao' | 'estoque'>;
+  estoque: number;
+  programado: number;
+  programacoes: Array<{ anoMes: string; quantidade: number }>;
+  chegadas: Array<{ anoMes: string; quantidade: number }>;
+  semLeadTime: boolean;
 }
 
 export interface ForecastRelatorioCompras {
   quinzena: { id: number; label: string; baseDate: string; half: number; origin: string; hoje: string };
-  totais: { itens: number; fontes: number; vencidas: number; semEmbalagem: number; multiplasEmbalagens: number };
-  fora: { semLeadTime: number; semConsumoSemFalta: number };
+  totais: {
+    itens: number;
+    fontes: number;
+    vencidas: number;
+    semEmbalagem: number;
+    multiplasEmbalagens: number;
+    porUrgencia?: Record<ForecastUrgencia, number>;
+  };
+  fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento?: number };
+  urgencia?: { diasCritico: number };
+  semConsumo?: { itens: ForecastItemSemConsumo[] };
   grupos: ForecastGrupoRelatorio[];
 }
 
@@ -324,6 +359,26 @@ export interface ForecastRelatorioResumo {
   vencidasNoMesBase?: ForecastLinhasKg;
   semData?: ForecastLinhasKg & { porStatus: Array<{ status: string; linhas: number; kg: number }> };
   depoisDaJanela?: ForecastLinhasKg;
+  // FUP, regra F3 (backend antigo nao manda estes campos)
+  regra?: {
+    id: string;
+    etaPorEtdDias: number;
+    etaPorProntidaoDias: number;
+    excluiEtaFinal: boolean;
+    statusExcluidos: string[];
+  };
+  estimadasPorProntidao?: ForecastLinhasKg;
+  excluidas?: {
+    atracadas: ForecastLinhasKg;
+    etaFinalPreenchida: ForecastLinhasKg & {
+      porStatus: Array<{ status: string; linhas: number; kg: number }>;
+      depoisDaDataBase: ForecastLinhasKg;
+    };
+  };
+  prontidaoNaoReconhecida?: ForecastLinhasKg & {
+    detalhes: Array<{ linha: number; status: string; codigo: string; kg: number; texto: string }>;
+    omitidos: number;
+  };
 }
 
 /** Resumo do preview dos relatorios DBCorp (`ForecastDbcorpSummary` do backend). */
