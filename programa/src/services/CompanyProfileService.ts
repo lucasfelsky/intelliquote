@@ -27,6 +27,15 @@ export interface CompanyProfileInput {
   updatedById?: number | null;
 }
 
+/** Nome exibido a terceiros: nome fantasia (trim) quando preenchido; senao razao social. */
+export function companyDisplayName(profile: {
+  companyName: string;
+  tradeName?: string | null;
+}): string {
+  const trade = profile.tradeName?.trim();
+  return trade ? trade : profile.companyName;
+}
+
 export class CompanyProfileService {
   static async get(client: PrismaClient | Prisma.TransactionClient = defaultPrisma) {
     const profile = await client.companyProfile.findUnique({ where: { id: 1 } });

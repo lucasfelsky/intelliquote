@@ -4,7 +4,10 @@ const getTemplate = vi.fn();
 vi.mock('../src/services/EmailTemplateService', () => ({
   EmailTemplateService: { get: (...args: unknown[]) => getTemplate(...args) },
 }));
+// CompanyProfileService importa o prisma real; so usamos a funcao pura.
+vi.mock('../src/lib/prisma', () => ({ prisma: {} }));
 
+import { companyDisplayName } from '../src/services/CompanyProfileService';
 import {
   defaultCreditSupportSubject,
   formatCreditSupportExpiry,
@@ -104,5 +107,48 @@ describe('renderCreditSupportFromTemplate', () => {
 
   it('formata a expiracao em en-GB (UTC)', () => {
     expect(formatCreditSupportExpiry(new Date('2026-10-08T03:00:00.000Z'))).toBe('08 Oct 2026');
+  });
+});
+
+describe('renderCreditSupportFromTemplate - nome da empresa (nome fantasia)', () => {
+  const RAZAO = 'SQ QUIMICA IMPORTADORA E DISTRIBUIDORA DE PRODUTOS QUIMICOS LTDA';
+
+  beforeEach(() => {
+    getTemplate.mockReset();
+    getTemplate.mockResolvedValue(null);
+  });
+
+  it('exibe o nome fantasia no corpo e na assinatura (html e texto)', async () => {
+    const out = await renderCreditSupportFromTemplate(
+      vars({ companyName: companyDisplayName({ companyName: RAZAO, tradeName: 'SQ QUIMICA' }) }),
+    );
+    const html = out.html.replace(/\s+/g, ' ');
+    expect(html).toContain('SQ QUIMICA is evaluating');
+    expect(html).toContain('>SQ QUIMICA</strong>');
+    expect(out.text).toContain('SQ QUIMICA is evaluating a purchase');
+    expect(out.text.endsWith('Best regards,\r\nSQ QUIMICA')).toBe(true);
+    expect(out.html).not.toContain('IMPORTADORA');
+    expect(out.text).not.toContain('IMPORTADORA');
+  });
+
+  it('cai na razao social quando nao ha nome fantasia', async () => {
+    const out = await renderCreditSupportFromTemplate(
+      vars({ companyName: companyDisplayName({ companyName: RAZAO, tradeName: null }) }),
+    );
+    expect(out.text).toContain(`${RAZAO} is evaluating`);
+    expect(out.html).toContain(RAZAO);
+  });
+
+  it('template do banco recebe o nome curto', async () => {
+    getTemplate.mockResolvedValue({
+      subject: null,
+      htmlBody: '<p>{{companyName}}</p>',
+      textBody: 'Best regards, {{companyName}}',
+    });
+    const out = await renderCreditSupportFromTemplate(
+      vars({ companyName: companyDisplayName({ companyName: RAZAO, tradeName: 'SQ QUIMICA' }) }),
+    );
+    expect(out.html).toBe('<p>SQ QUIMICA</p>');
+    expect(out.text).toBe('Best regards, SQ QUIMICA');
   });
 });
