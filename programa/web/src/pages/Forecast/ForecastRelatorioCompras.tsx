@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { Fragment, useEffect, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
@@ -12,7 +12,11 @@ import {
   type ForecastItemSemConsumo,
   type ForecastUrgencia,
 } from '@/services/forecast';
+import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
+import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
+import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
+import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
   APOIO_SEM_CONSUMO,
@@ -36,6 +40,24 @@ import {
   type VisaoRelatorio,
 } from './forecastRelatorioUrgencia';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
+import {
+  contarComMesesForaDaMedia,
+  opcoesOutrasComPallet,
+  PARAGRAFO_EMBALAGEM,
+  palletDoDestaque,
+  paragrafoDemandaComercial,
+  paragrafoGruposDeEquivalencia,
+  paragrafoMesesForaDaMedia,
+  paragrafoSobDemanda,
+  resumoCobertosPorGrupo,
+  resumoDemandaComercial,
+  resumoMesesForaDaMedia,
+  resumoSobDemanda,
+  seloDemandaComercial,
+  textoMediaSem,
+  textoObservacao,
+  tituloOutrasEmbalagens,
+} from './forecastRelatorioTextos';
 
 interface Props {
   snapshotId: number;
@@ -53,7 +75,7 @@ interface EmbalagemProps {
 }
 
 function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
-  const { usada, cadastradas, multiplas } = item.embalagem;
+  const { usada, multiplas } = item.embalagem;
   const botao = onEditar && (
     <button
       type="button"
@@ -75,7 +97,8 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
       </span>
     );
   }
-  const outras = cadastradas.filter((e) => e.codigo !== usada.codigo);
+  const outras = opcoesOutrasComPallet(item);
+  const palletUsada = palletDoDestaque(item);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
@@ -83,21 +106,48 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
         {item.quantidadeEmbalagens} × {nome} (código {usada.codigo})
       </span>
       {multiplas && (
-        <span
-          className="badge badge--info"
-          title={`Outras embalagens: ${outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}`}
-        >
+        <span className="badge badge--info" title={tituloOutrasEmbalagens(item)}>
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
-      {multiplas && (
-        <span className="fcr-embalagem__outras">
-          Outras: {outras.map((e) => `${e.codigo} (${kgBr(e.quantidade)} kg)`).join(', ')}
-        </span>
-      )}
+      {palletUsada && <span className="fcr-embalagem__pallet">{palletUsada}</span>}
+      {outras.map(({ texto, pallet }) => (
+        <Fragment key={texto}>
+          <span className="fcr-embalagem__outras">{texto}</span>
+          {pallet && <span className="fcr-embalagem__pallet">{pallet}</span>}
+        </Fragment>
+      ))}
       {botao}
     </span>
   );
+}
+
+// Observacao da quinzena: linha extra na celula Item, so quando ha texto (a maioria dos itens nao tem).
+function Observacao({ obs }: { obs?: string }) {
+  const texto = textoObservacao(obs);
+  return texto ? <span className="fcr-item__obs">{texto}</span> : null;
+}
+
+// Meses atipicos (PR 6c): selo discreto na celula Item quando a media do item nao conta algum mes marcado.
+function MediaSem({ meses }: { meses?: string[] }) {
+  const texto = textoMediaSem(meses);
+  return texto ? (
+    <span className="fcr-item__media" title="A média deste item não conta o mês marcado como venda atípica.">
+      {texto}
+    </span>
+  ) : null;
+}
+
+// Demanda do comercial (PR 6d): selo discreto no item da lista que tem pedido aberto a somar alem do horizonte.
+function SeloDemanda({ kg }: { kg?: number }) {
+  return kg && kg > 0 ? (
+    <span
+      className="fcr-item__demanda"
+      title="Pedido do comercial para programação fora do horizonte: soma ao Forecast, veja a seção Demanda do comercial."
+    >
+      {seloDemandaComercial(kg)}
+    </span>
+  ) : null;
 }
 
 function EmAndamento({ item }: { item: ForecastItemRelatorio }) {
@@ -136,6 +186,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
   const [editando, setEditando] = useState(false);
+  // Colunas da linha (Item, Urgencia, Fonte e as 9 comuns): a sublinha do grupo ocupa todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 9;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
@@ -148,63 +200,77 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
     }
   }, [editando]);
   return (
-    <tr
-      className={
-        urgencia ? `fcr-linha fcr-linha--${urgencia}` : item.vencida ? 'fcr-linha fcr-linha--vencida' : 'fcr-linha'
-      }
-    >
-      <th scope="row">
-        <div className="fcr-item">
-          <span className="fcr-item__nome">{item.item}</span>
-          <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
-          {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
-        </div>
-      </th>
-      {comUrgencia && urgencia && (
+    <>
+      <tr
+        className={
+          urgencia ? `fcr-linha fcr-linha--${urgencia}` : item.vencida ? 'fcr-linha fcr-linha--vencida' : 'fcr-linha'
+        }
+      >
+        <th scope="row">
+          <div className="fcr-item">
+            <span className="fcr-item__nome">{item.item}</span>
+            <SeloGrupo grupo={item.grupo} />
+            <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
+            {item.grupo && <PrincipalDoGrupo grupo={item.grupo} />}
+            {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+            <MediaSem meses={item.mesesForaDaMedia} />
+            <SeloDemanda kg={item.demandaComercialKg} />
+            <Observacao obs={item.obs} />
+          </div>
+        </th>
+        {comUrgencia && urgencia && (
+          <td>
+            <span className="fcr-urgencia">
+              <span className={badgeDaUrgencia(urgencia)}>{rotuloUrgencia(urgencia, diasCritico)}</span>
+              <span className="fcr-urgencia__dias">{textoDiasAteRuptura(item.diasAteRuptura)}</span>
+            </span>
+          </td>
+        )}
+        {fonte !== undefined && (
+          <td>
+            {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
+          </td>
+        )}
+        <td>{STATUS_ROTULO[item.status] ?? item.status}</td>
+        <td className="fcr-num">{d1(item.demanda)}</td>
+        <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
         <td>
-          <span className="fcr-urgencia">
-            <span className={badgeDaUrgencia(urgencia)}>{rotuloUrgencia(urgencia, diasCritico)}</span>
-            <span className="fcr-urgencia__dias">{textoDiasAteRuptura(item.diasAteRuptura)}</span>
+          <Embalagem
+            item={item}
+            botaoRef={botao}
+            onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
+          />
+          {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
+          {editando &&
+            productId !== null &&
+            createPortal(
+              <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
+              document.body,
+            )}
+        </td>
+        <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
+        <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
+        <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
+        <td>
+          <span className="fcr-limite">
+            <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
+              {item.dataLimite ? dataBr(item.dataLimite) : '—'}
+            </span>
+            {item.vencida && <span className="badge badge--danger">Vencida</span>}
           </span>
         </td>
-      )}
-      {fonte !== undefined && (
         <td>
-          {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
+          <EmAndamento item={item} />
         </td>
+      </tr>
+      {item.grupo && (
+        <tr className="fcr-linha-grupo">
+          <td colSpan={colunas}>
+            <SublinhasDoGrupo grupo={item.grupo} />
+          </td>
+        </tr>
       )}
-      <td>{STATUS_ROTULO[item.status] ?? item.status}</td>
-      <td className="fcr-num">{d1(item.demanda)}</td>
-      <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
-      <td>
-        <Embalagem
-          item={item}
-          botaoRef={botao}
-          onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
-        />
-        {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
-        {editando &&
-          productId !== null &&
-          createPortal(
-            <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
-            document.body,
-          )}
-      </td>
-      <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
-      <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
-      <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
-      <td>
-        <span className="fcr-limite">
-          <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
-            {item.dataLimite ? dataBr(item.dataLimite) : '—'}
-          </span>
-          {item.vencida && <span className="badge badge--danger">Vencida</span>}
-        </span>
-      </td>
-      <td>
-        <EmAndamento item={item} />
-      </td>
-    </tr>
+    </>
   );
 }
 
@@ -375,7 +441,10 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                 <th scope="row">
                   <div className="fcr-item">
                     <span className="fcr-item__nome">{i.item}</span>
+                    <SeloGrupo grupo={i.grupo} />
                     <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
+                    <MediaSem meses={i.mesesForaDaMedia} />
+                    <Observacao obs={i.obs} />
                   </div>
                 </th>
                 <td>
@@ -383,7 +452,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                   {i.semLeadTime ? ' (sem lead time)' : ''}
                 </td>
                 <td>{STATUS_ROTULO[i.status] ?? i.status}</td>
-                <td>{textoMotivos(i.motivos)}</td>
+                <td>{textoMotivos(i.motivos, i.sobDemanda === true)}</td>
                 <td className="fcr-num">{d1(i.estoque)}</td>
                 <td>
                   <ListaDeMeses prefixo="Programação" meses={i.programacoes} />
@@ -414,6 +483,10 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   // Estado so desta tela (sem URL); o `key` da quinzena reinicia a visao e o filtro.
   const [visao, setVisao] = useState<VisaoRelatorio>('urgencia');
   const [filtro, setFiltro] = useState<FiltroUrgencia>('todas');
+  // Demanda do comercial (PR 6d): dialogo de lancamento e aviso de status (fica aqui: a secao some com o ultimo pedido).
+  const [lancando, setLancando] = useState(false);
+  const [avisoDemanda, setAvisoDemanda] = useState('');
+  const botaoLancar = useRef<HTMLButtonElement>(null);
 
   if (relatorio.isLoading) {
     return <Spinner />;
@@ -434,6 +507,21 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   const porUrgencia = totais.porUrgencia;
   const diasCritico = dados.urgencia?.diasCritico ?? 0;
   const semConsumo = temSemConsumo(dados) ? dados.semConsumo : undefined;
+  // Compra sob demanda (PR 6a): backend antigo nao manda `sobDemanda`; sem item marcado a secao nao aparece.
+  const sobDemanda = dados.sobDemanda && dados.sobDemanda.itens.length > 0 ? dados.sobDemanda : undefined;
+  // Meses atipicos (PR 6c): so aparece quando algum item usa media sem meses excluidos (backend antigo: nada).
+  const comMesesForaDaMedia = contarComMesesForaDaMedia(dados);
+  // Demanda do comercial (PR 6d): backend antigo nao manda; sem pedido aberto a secao nao aparece.
+  const demandaComercial =
+    dados.demandaComercial && dados.demandaComercial.itens.length > 0 ? dados.demandaComercial : undefined;
+  // Grupos de equivalencia (PR 6b): backend antigo nao manda; sem membro coberto a secao nao aparece.
+  const cobertosPorGrupo =
+    dados.cobertosPorGrupo && dados.cobertosPorGrupo.itens.length > 0 ? dados.cobertosPorGrupo : undefined;
+  const comGrupos = (dados.gruposDeEquivalencia?.length ?? 0) > 0;
+  const fecharLancamento = () => {
+    setLancando(false);
+    window.setTimeout(() => botaoLancar.current?.focus(), 0);
+  };
   const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro) : [];
   const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro) : dados.grupos;
   const totalMostrado = visao === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
@@ -463,6 +551,20 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           >
             Imprimir / Salvar como PDF
           </button>
+          {podeEditar && dados.demandaComercial !== undefined && (
+            <button
+              type="button"
+              ref={botaoLancar}
+              className="ghost-button"
+              aria-haspopup="dialog"
+              onClick={() => {
+                setAvisoDemanda('');
+                setLancando(true);
+              }}
+            >
+              Lançar demanda do comercial
+            </button>
+          )}
           <p id="fcr-dica-impressao" className="fcr-acoes__dica">
             Abre a impressão do navegador; para PDF, escolha “Salvar como PDF” no destino.
           </p>
@@ -476,6 +578,11 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
               XLSX gerado: {xlsx.data.fileName}
             </p>
           )}
+          {avisoDemanda && (
+            <p role="status" className="fcr-acoes__ok">
+              {avisoDemanda}
+            </p>
+          )}
         </div>
         <ul className="fcr-resumo__lista">
           <li className={totais.vencidas > 0 ? 'fcr-forte fcr-resumo__alerta' : undefined}>
@@ -484,6 +591,13 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {comUrgencia && porUrgencia && <li>{resumoDeUrgencia(porUrgencia, diasCritico)}</li>}
           <li>{totais.semEmbalagem} sem embalagem cadastrada</li>
           {totais.multiplasEmbalagens > 0 && <li>{totais.multiplasEmbalagens} com mais de uma embalagem</li>}
+          {(totais.comPallet ?? 0) > 0 && <li>{totais.comPallet} com pallet cadastrado</li>}
+          {sobDemanda && <li>{resumoSobDemanda(fora.sobDemanda ?? sobDemanda.itens.length)}</li>}
+          {comMesesForaDaMedia > 0 && <li>{resumoMesesForaDaMedia(comMesesForaDaMedia)}</li>}
+          {demandaComercial && (
+            <li>{resumoDemandaComercial(demandaComercial.totais.abertas, demandaComercial.totais.sugeridoKg)}</li>
+          )}
+          {cobertosPorGrupo && <li>{resumoCobertosPorGrupo(cobertosPorGrupo.itens.length)}</li>}
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
@@ -539,12 +653,13 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite
             já passou na data de hoje.
           </p>
-          <p>
-            Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da
-            embalagem (a principal; sem principal, a do primeiro código).
-          </p>
+          <p>{PARAGRAFO_EMBALAGEM}</p>
           {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
           {semConsumo && <p>{paragrafoSemConsumo()}</p>}
+          {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
+          {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
+          {demandaComercial && <p>{paragrafoDemandaComercial()}</p>}
+          {comGrupos && <p>{paragrafoGruposDeEquivalencia()}</p>}
         </details>
       </section>
       {dados.grupos.length === 0 ? (
@@ -565,7 +680,22 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} comUrgencia diasCritico={diasCritico} />
         ))
       )}
+      {demandaComercial && (
+        <ForecastRelatorioDemandaComercial
+          dados={demandaComercial}
+          podeEditar={podeEditar}
+          hoje={quinzena.hoje}
+          onConcluido={setAvisoDemanda}
+        />
+      )}
+      {cobertosPorGrupo && <ForecastRelatorioGrupos itens={cobertosPorGrupo.itens} />}
       {semConsumo && semConsumo.itens.length > 0 && <SecaoSemConsumo itens={semConsumo.itens} />}
+      {sobDemanda && <ForecastRelatorioSobDemanda itens={sobDemanda.itens} />}
+      {lancando &&
+        createPortal(
+          <ForecastDemandaComercialModal hoje={quinzena.hoje} onFechar={fecharLancamento} onSalvo={setAvisoDemanda} />,
+          document.body,
+        )}
     </>
   );
 }

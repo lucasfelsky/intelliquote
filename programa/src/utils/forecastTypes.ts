@@ -40,6 +40,9 @@ export interface Entradas {
   leadtime: { fonte: string; total: number | null }[]; // LEADTIME: A fonte, G total
   margem: { codigo: string; margem: number | null }[]; // MARGEM: A código, B margem
   clientesAtivos: string[]; // CLIENTES ATIVOS: coluna C (um código por linha)
+  // Compra em aberto do FUP por código (qualquer linha não CONCLUÍDA). Não é entrada do motor: congelada só para a
+  // regra dos pendentes de cadastro (5C). Ausente em quinzena gravada antes do 5C.
+  comprasEmAberto?: Lancamento[];
 }
 
 export interface Quinzena {
@@ -75,6 +78,10 @@ export interface LinhaCalculada {
   AP: string | null; // data de chegada se pedir hoje (ISO)
   AR: number | string; // margem do primeiro código encontrado
   AS: number; // clientes ativos
+  // PR 6c: so presente quando a linha tem meses marcados como atipicos. Q/R/AG acima ja sao os valores SEM esses meses;
+  // aqui ficam os da planilha (antes/depois). Indices: 0..5 = J..O, 6 = P. `semMesValido`: todos os meses da media
+  // estavam marcados, entao Q (ou R) ficou como a planilha (sem divisao por zero).
+  mediaAjustada?: { meses: number[]; Q: number; R: number; AG: number; semMesValido: boolean };
 }
 
 export const COLUNAS_CONFERIDAS = [

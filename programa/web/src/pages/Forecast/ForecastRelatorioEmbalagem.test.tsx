@@ -141,10 +141,166 @@ describe('ForecastRelatorioCompras - botao de embalagens', () => {
     expect(screen.queryByText('Embalagem não cadastrada')).toBeNull();
   });
 
+  it('uma so embalagem: sem linhas extras de "outras" e sem selo de arredondamento', async () => {
+    mockApi([
+      item({
+        embalagem: {
+          usada: { codigo: 'C0001', quantidade: 200, rotulo: null },
+          cadastradas: [{ codigo: 'C0001', quantidade: 200, rotulo: null }],
+          multiplas: false,
+        },
+        porEmbalagem: [{ codigo: 'C0001', quantidade: 200, rotulo: null, embalagens: 1, quantidadeFinal: 200, destaque: true }],
+        quantidadeEmbalagens: 1,
+        quantidadeFinal: 200,
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    expect(await screen.findByText('1 × 200 kg (código C0001)')).toBeTruthy();
+    expect(container.querySelector('.fcr-embalagem__outras')).toBeNull();
+    expect(screen.queryByText(/Arredondado pela embalagem/)).toBeNull();
+  });
+
+  it('duas embalagens: a quantidade de cada uma, com o rotulo quando existe', async () => {
+    mockApi([
+      item({
+        embalagem: {
+          usada: { codigo: 'C0001', quantidade: 25, rotulo: null },
+          cadastradas: [
+            { codigo: 'C0001', quantidade: 25, rotulo: null },
+            { codigo: 'C0002', quantidade: 200, rotulo: 'Tambor 200 kg' },
+          ],
+          multiplas: true,
+        },
+        porEmbalagem: [
+          { codigo: 'C0001', quantidade: 25, rotulo: null, embalagens: 2, quantidadeFinal: 50, destaque: true },
+          { codigo: 'C0002', quantidade: 200, rotulo: 'Tambor 200 kg', embalagens: 1, quantidadeFinal: 200, destaque: false },
+        ],
+        quantidadeEmbalagens: 2,
+        quantidadeFinal: 50,
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    expect(await screen.findByText('2 × 25 kg (código C0001)')).toBeTruthy();
+    expect(Array.from(container.querySelectorAll('.fcr-embalagem__outras')).map((e) => e.textContent)).toEqual([
+      '1 × Tambor 200 kg (código C0002) = 200 kg',
+    ]);
+  });
+
   it('sem a prop podeEditar o padrao e somente leitura', async () => {
     mockApi([item()]);
     renderRelatorio();
     expect(await screen.findByText('Embalagem não cadastrada')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Cadastrar embalagem/ })).toBeNull();
+  });
+});
+
+describe('ForecastRelatorioCompras - pallet fechado (PR 6e)', () => {
+  const palletDe = (kg: number, abaixo: number, acima: number) => ({
+    kgPorPallet: kg,
+    abaixo: { pallets: abaixo, kg: abaixo * kg },
+    acima: { pallets: acima, kg: acima * kg },
+  });
+  const comPallet = (over: Record<string, unknown> = {}) =>
+    item({
+      quantidadeSugerida: 1400,
+      demanda: -1400,
+      embalagem: {
+        usada: { codigo: 'C0001', quantidade: 25, rotulo: null },
+        cadastradas: [{ codigo: 'C0001', quantidade: 25, rotulo: null }],
+        multiplas: false,
+      },
+      porEmbalagem: [
+        {
+          codigo: 'C0001',
+          quantidade: 25,
+          rotulo: null,
+          embalagens: 56,
+          quantidadeFinal: 1400,
+          destaque: true,
+          pallet: palletDe(600, 2, 3),
+        },
+      ],
+      quantidadeEmbalagens: 56,
+      quantidadeFinal: 1400,
+      ...over,
+    });
+
+  it('mostra os pallets abaixo e acima sob a embalagem; a Qtd. final continua a da embalagem', async () => {
+    mockApi([comPallet()]);
+    const { container } = renderRelatorio();
+    expect(await screen.findByText('56 × 25 kg (código C0001)')).toBeTruthy();
+    const linhas = Array.from(container.querySelectorAll('.fcr-embalagem__pallet')).map((e) => e.textContent);
+    expect(linhas).toEqual(['Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)']);
+  });
+
+  it('duas embalagens: o pallet de cada opcao vem logo abaixo dela (destaque e outras)', async () => {
+    mockApi([
+      comPallet({
+        embalagem: {
+          usada: { codigo: 'C0001', quantidade: 25, rotulo: null },
+          cadastradas: [
+            { codigo: 'C0001', quantidade: 25, rotulo: null },
+            { codigo: 'C0002', quantidade: 1000, rotulo: 'Bag' },
+          ],
+          multiplas: true,
+        },
+        porEmbalagem: [
+          {
+            codigo: 'C0001',
+            quantidade: 25,
+            rotulo: null,
+            embalagens: 56,
+            quantidadeFinal: 1400,
+            destaque: true,
+            pallet: palletDe(600, 2, 3),
+          },
+          {
+            codigo: 'C0002',
+            quantidade: 1000,
+            rotulo: 'Bag',
+            embalagens: 2,
+            quantidadeFinal: 2000,
+            destaque: false,
+            pallet: palletDe(2000, 0, 1),
+          },
+        ],
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    await screen.findByText('56 × 25 kg (código C0001)');
+    const celula = container.querySelector('.fcr-embalagem') as HTMLElement;
+    const textos = Array.from(celula.children).map((e) => e.textContent);
+    expect(textos).toEqual([
+      '56 × 25 kg (código C0001)',
+      'Arredondado pela embalagem do código C0001',
+      'Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)',
+      '2 × Bag (código C0002) = 2.000 kg',
+      'Pallet de 2.000 kg: 1 pallet = 2.000 kg (acima)',
+    ]);
+  });
+
+  it('sem pallet (nulo, ausente ou backend antigo) nada aparece, nem a linha do resumo', async () => {
+    mockApi([comPallet({ porEmbalagem: [{ codigo: 'C0001', quantidade: 25, rotulo: null, embalagens: 56, quantidadeFinal: 1400, destaque: true }] })]);
+    const { container } = renderRelatorio();
+    await screen.findByText('56 × 25 kg (código C0001)');
+    expect(container.querySelector('.fcr-embalagem__pallet')).toBeNull();
+    expect(screen.queryByText(/^\d+ com pallet cadastrado$/)).toBeNull();
+  });
+
+  it('resumo: "N com pallet cadastrado" so com totais.comPallet > 0', async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path.endsWith('/embalagens')) return { data: embalagens };
+      const base = relatorio([comPallet()]);
+      return { data: { ...base, totais: { ...base.totais, comPallet: 1 } } };
+    });
+    renderRelatorio();
+    expect(await screen.findByText('1 com pallet cadastrado')).toBeTruthy();
+  });
+
+  it('o paragrafo das regras fala do pallet', async () => {
+    mockApi([comPallet()]);
+    renderRelatorio();
+    await screen.findByText('56 × 25 kg (código C0001)');
+    expect(screen.getByText(/O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem/)).toBeTruthy();
   });
 });

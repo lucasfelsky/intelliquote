@@ -18,7 +18,9 @@ import {
   FILTROS,
   inteiroBr,
   kgBr,
+  mediaAjustadaDoPainel,
   mesAbrevDoAnoMes,
+  mesesDaJanelaDeVendas,
   mesesDaProjecao,
   nomeDoMes,
   normalizarBusca,
@@ -559,5 +561,184 @@ describe('passosDaMemoria', () => {
     const passos = passosDaMemoria(linha({ Q: 100, projecao: [1000, 250, 300, 400, 50, 0] }), 2, '2026-10-15');
     expect(passos[2]?.tom).toBeNull();
     expect(passos[3]?.meses?.map((m) => m.tom)).toEqual(['atencao', null, null, 'falta', 'falta']);
+  });
+});
+
+describe('meses atipicos (PR 6c)', () => {
+  // Caso A sintetico: J..N = 300 300 300 300 2100 (N = ago/2026), O = 300; sem ago/2026 a media cai de 900 para 300.
+  const MARCA = { anoMes: '2026-08', motivo: 'VENDA ATIPICA SINTETICA', indice: 4 };
+  const atipica = (over: Partial<ForecastLinha> = {}) =>
+    linha({
+      historico: [300, 300, 300, 300, 2100],
+      O: 300,
+      P: 100,
+      Q: 300,
+      R: 300,
+      AG: 300,
+      mesesForaDaMedia: [MARCA],
+      mediaAjustada: { meses: [4], Q: 900, R: 600, AG: 900, semMesValido: false },
+      ...over,
+    });
+
+  it('mesesDaJanelaDeVendas: os 7 meses J..N, O e P', () => {
+    expect(mesesDaJanelaDeVendas('2026-10-15')).toEqual([
+      '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10',
+    ]);
+    expect(mesesDaJanelaDeVendas('2027-02-05')[0]).toBe('2026-08');
+    expect(mesesDaJanelaDeVendas('lixo')).toEqual(['', '', '', '', '', '', '']);
+  });
+
+  it('passo da media trimestral: so os meses restantes entram na conta e a nota diz qual mes saiu', () => {
+    const passos = passosDaMemoria(atipica(), 2, '2026-10-15');
+    expect(passos[0]?.conta).toBe('(300 + 300) ÷ 2');
+    expect(passos[0]?.resultado).toBe('300,0');
+    expect(passos[0]?.nota).toBe('média usa 2 de 3 meses (excluído: ago/2026) · pela planilha seria 900,0');
+    // AG: o maior entre a media e a venda do dia 15; a planilha daria 900,0 -> nota.
+    expect(passos[1]?.conta).toBe('maior entre a média (300,0) e a venda até o dia 15 (100)');
+    expect(passos[1]?.nota).toBe('pela planilha seria 900,0');
+  });
+
+  it('2 meses marcados: "excluídos" no plural e 1 mes restante', () => {
+    const l = atipica({
+      mediaAjustada: { meses: [3, 4], Q: 900, R: 600, AG: 900, semMesValido: false },
+      Q: 300,
+    });
+    const nota = passosDaMemoria(l, 2, '2026-10-15')[0];
+    expect(nota?.conta).toBe('(300) ÷ 1');
+    expect(nota?.nota).toBe('média usa 1 de 3 meses (excluídos: jul/2026, ago/2026) · pela planilha seria 900,0');
+  });
+
+  it('os 3 meses marcados: a conta e a da planilha e a nota avisa que nao ha mes valido', () => {
+    const l = atipica({
+      Q: 900,
+      mediaAjustada: { meses: [3, 4, 5], Q: 900, R: 600, AG: 900, semMesValido: true },
+    });
+    const passo = passosDaMemoria(l, 2, '2026-10-15')[0];
+    expect(passo?.conta).toBe('(300 + 2.100 + 300) ÷ 3');
+    expect(passo?.nota).toBe(
+      'os 3 meses estão marcados como atípicos (jul/2026, ago/2026, set/2026): sem mês válido, a média usa os 3 meses, como a planilha',
+    );
+  });
+
+  it('mes atual marcado: AG igual a media, com a nota da planilha; 1a quinzena mantem o texto', () => {
+    const l = atipica({
+      AG: 300,
+      mediaAjustada: { meses: [4, 6], Q: 900, R: 600, AG: 900, semMesValido: false },
+    });
+    expect(passosDaMemoria(l, 2, '2026-10-15')[1]?.conta).toBe(
+      'mês atual marcado como atípico: igual à média trimestral (300,0), sem a venda até o dia 15 (100)',
+    );
+    expect(passosDaMemoria(l, 1, '2026-10-15')[1]?.conta).toBe('1ª quinzena: igual à média trimestral (300,0)');
+  });
+
+  it('marca so em J/K/L: a conta da trimestral nao muda e nao ha nota', () => {
+    const l = atipica({ mesesForaDaMedia: [{ ...MARCA, anoMes: '2026-04', indice: 0 }], mediaAjustada: { meses: [0], Q: 300, R: 600, AG: 300, semMesValido: false } });
+    const passos = passosDaMemoria(l, 2, '2026-10-15');
+    expect(passos[0]?.conta).toBe('(300 + 2.100 + 300) ÷ 3');
+    expect(passos[0]?.nota).toBeUndefined();
+    expect(passos[1]?.nota).toBeUndefined();
+  });
+
+  it('sem marca: passos identicos aos de antes (sem a chave nota)', () => {
+    const passos = passosDaMemoria(linha(), 2, '2026-10-15');
+    expect(passos.every((p) => !('nota' in p))).toBe(true);
+  });
+
+  it('colunas: celula do mes riscada (classe + title com o motivo), Q e R com asterisco e title da planilha', () => {
+    const colunas = colunasDoPainel(MONTHS, { ocultas: true });
+    const col = (id: string) => colunas.find((c) => c.id === id)!;
+    const l = atipica();
+    expect(col('h4').classe?.(l)).toBe('fc-cell--fora-media');
+    expect(col('h4').titulo?.(l)).toBe('Venda atípica, fora da média: VENDA ATIPICA SINTETICA');
+    expect(col('h3').classe?.(l)).toBe('');
+    expect(col('h3').titulo?.(l)).toBeUndefined();
+    expect(col('Q').texto(l)).toBe('300,0*');
+    expect(col('R').texto(l)).toBe('300,0*');
+    expect(col('Q').titulo?.(l)).toBe('Média sem meses atípicos (ago/2026) · pela planilha seria 900,0');
+    expect(col('R').titulo?.(l)).toBe('Média sem meses atípicos (ago/2026) · pela planilha seria 600,0');
+    // Sem marca: textos de antes, sem classe nem title.
+    const sem = linha({ Q: 100, R: 90 });
+    expect(col('Q').texto(sem)).toBe('100,0');
+    expect(col('R').texto(sem)).toBe('90,0');
+    expect(col('Q').titulo?.(sem)).toBeUndefined();
+    expect(col('h4').classe?.(sem)).toBe('');
+  });
+
+  it('sem mes valido (os 3 meses da trimestral marcados): Q sem asterisco e so o aviso, sem "pela planilha seria"; R segue com asterisco', () => {
+    const colunas = colunasDoPainel(MONTHS, { ocultas: true });
+    const col = (id: string) => colunas.find((c) => c.id === id)!;
+    const l = atipica({
+      Q: 900,
+      R: 600,
+      mesesForaDaMedia: [3, 4, 5].map((indice) => ({ ...MARCA, anoMes: `2026-0${indice + 4}`, indice })),
+      mediaAjustada: { meses: [3, 4, 5], Q: 900, R: 1200, AG: 900, semMesValido: true },
+    });
+    expect(col('Q').texto(l)).toBe('900,0');
+    expect(col('Q').titulo?.(l)).toBe(
+      'Sem mês válido: todos os meses da média estão marcados como atípicos, a média usa todos eles, como a planilha',
+    );
+    expect(col('Q').titulo?.(l)).not.toContain('pela planilha seria');
+    // O semestre ainda tem J, K e L: R mudou e segue marcado com asterisco.
+    expect(col('R').texto(l)).toBe('600,0*');
+    expect(col('R').titulo?.(l)).toBe('Média sem meses atípicos (jul/2026, ago/2026, set/2026) · pela planilha seria 1200,0');
+  });
+
+  it('sem mes valido nos 6 meses da semestral: R tambem sem asterisco e so com o aviso', () => {
+    const colunas = colunasDoPainel(MONTHS, { ocultas: true });
+    const col = (id: string) => colunas.find((c) => c.id === id)!;
+    const l = atipica({
+      Q: 900,
+      R: 1200,
+      mesesForaDaMedia: [0, 1, 2, 3, 4, 5].map((indice) => ({ ...MARCA, anoMes: `2026-0${indice + 4}`, indice })),
+      mediaAjustada: { meses: [0, 1, 2, 3, 4, 5], Q: 900, R: 1200, AG: 900, semMesValido: true },
+    });
+    expect(col('Q').texto(l)).toBe('900,0');
+    expect(col('R').texto(l)).toBe('1200,0');
+    expect(col('R').titulo?.(l)).toMatch(/^Sem mês válido/);
+    expect(col('R').titulo?.(l)).not.toContain('pela planilha seria');
+  });
+
+  it('mes atual marcado risca o P (e mantem o destaque de P acima da media)', () => {
+    const colunas = colunasDoPainel(MONTHS, { ocultas: false });
+    const p = colunas.find((c) => c.id === 'P')!;
+    const l = atipica({
+      P: 5000,
+      Q: 300,
+      mesesForaDaMedia: [{ ...MARCA, anoMes: '2026-10', indice: 6 }],
+      mediaAjustada: { meses: [6], Q: 300, R: 300, AG: 5000, semMesValido: false },
+    });
+    expect(p.classe?.(l)).toBe('fc-cell--acima-media fc-cell--fora-media');
+    // Marcar so o P nao muda a media trimestral: sem asterisco no Q.
+    const q = colunas.find((c) => c.id === 'Q')!;
+    expect(q.texto(l)).toBe('300,0');
+  });
+
+  it('mediaAjustadaDoPainel conta as linhas com media ajustada', () => {
+    expect(mediaAjustadaDoPainel({ linhas: [linha(), atipica(), atipica({ linha: 9 })] })).toEqual({ linhas: 2 });
+    expect(mediaAjustadaDoPainel({ linhas: [linha()] })).toEqual({ linhas: 0 });
+  });
+
+  it('selo: nota da media com conferencia (singular e plural); DBCorp sem a frase da conferencia; sem linhas, nada', () => {
+    const conf = { celulas: 10, batem: 10, porColuna: {}, totalDivergencias: 0, divergencias: [] };
+    const um = textoDoSelo({ conferencia: conf, half: 2 }, { mediaAjustada: { linhas: 1 } });
+    expect(um.notaMedia).toBe(
+      '1 produto tem meses fora da média: o painel e o relatório usam a média sem esses meses. A conferência acima usa a regra da planilha.',
+    );
+    const dois = textoDoSelo({ conferencia: conf, half: 1 }, { mediaAjustada: { linhas: 2 } });
+    expect(dois.notaMedia).toBe(
+      '2 produtos têm meses fora da média: o painel e o relatório usam a média sem esses meses. A conferência acima usa a regra da planilha.',
+    );
+    const dbcorp = textoDoSelo({ conferencia: null, half: 1 }, { mediaAjustada: { linhas: 3 } });
+    expect(dbcorp.tom).toBe('neutro');
+    expect(dbcorp.notaMedia).toBe(
+      '3 produtos têm meses fora da média: o painel e o relatório usam a média sem esses meses.',
+    );
+    // Sem linhas ajustadas o selo e o mesmo de antes (sem a chave notaMedia).
+    expect(textoDoSelo({ conferencia: conf, half: 2 }, { mediaAjustada: { linhas: 0 } })).toEqual({
+      tom: 'ok',
+      titulo: 'Cálculo idêntico ao da planilha',
+      detalhe: '10 de 10 células batem',
+    });
+    expect(textoDoSelo({ conferencia: conf, half: 2 })).not.toHaveProperty('notaMedia');
   });
 });

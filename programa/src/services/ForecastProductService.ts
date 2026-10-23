@@ -1,16 +1,30 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { FORECAST_MAX_DETAIL_WARNINGS } from '../constants/forecast';
+import {
+  FORECAST_MAX_CODES_PER_PRODUCT,
+  FORECAST_MAX_DETAIL_WARNINGS,
+  FORECAST_PRODUCT_ORIGIN_DBCORP,
+  FORECAST_PRODUCT_ORIGIN_PLANILHA,
+} from '../constants/forecast';
 import type { Produto } from '../utils/forecastTypes';
 import {
   normalizeProductCode,
   normalizeProductName,
   normalizeSourceName,
 } from '../utils/forecastWorkbook';
-import { escolherEmbalagem, type EmbalagemCadastrada } from '../utils/forecastRelatorioCompras';
+import { mesesHistorico } from '../utils/forecastMonths';
+import type { CadastroDeCodigos, VendasRecentes } from '../utils/forecastPendentes';
+import {
+  escolherEmbalagem,
+  type EmbalagemCadastrada,
+} from '../utils/forecastRelatorioCompras';
 import { HttpError } from '../utils/http';
 import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
-import type { ForecastEmbalagensPatchInput } from '../validators/forecast';
+import type {
+  ForecastEmbalagensPatchInput,
+  ForecastProductCodeAddInput,
+  ForecastProductCreateInput,
+} from '../validators/forecast';
 import { AuditLogService } from './AuditLogService';
 
 type Db = Prisma.TransactionClient;
@@ -31,6 +45,7 @@ const EMBALAGENS_SELECT = {
       position: true,
       code: true,
       packagingQtyKg: true,
+      packagingPalletKg: true,
       packagingLabel: true,
       packagingIsPrimary: true,
       packagingSource: true,
@@ -48,6 +63,8 @@ export interface ForecastEmbalagensData {
     posicao: number;
     codigo: string;
     quantidadeKg: number | null;
+    /** kg de UM pallet desta embalagem (opcao de compra; nao precisa ser multiplo da quantidade); nulo = sem pallet. */
+    palletKg: number | null;
     rotulo: string | null;
     principal: boolean;
     origem: 'manual' | 'dbcorp' | null;
@@ -64,6 +81,7 @@ function toEmbalagensData(product: ProdutoComEmbalagens): ForecastEmbalagensData
     posicao: c.position,
     codigo: c.code,
     quantidadeKg: qtyToNumber(c.packagingQtyKg),
+    palletKg: qtyToNumber(c.packagingPalletKg),
     rotulo: c.packagingLabel,
     principal: c.packagingIsPrimary,
     origem: c.packagingSource === 'manual' ? 'manual' : c.packagingSource === 'dbcorp' ? 'dbcorp' : null,
@@ -118,6 +136,7 @@ interface ProductFields {
   sampleRequestNote: string | null;
   familyId: number | null;
   isActive: boolean;
+  origin: string; // 'planilha' | 'dbcorp'
 }
 
 interface CodeFields {
@@ -184,7 +203,8 @@ function sameFields(a: ProductFields, b: ProductFields): boolean {
     a.sampleQty === b.sampleQty &&
     a.sampleRequestNote === b.sampleRequestNote &&
     a.familyId === b.familyId &&
-    a.isActive === b.isActive
+    a.isActive === b.isActive &&
+    a.origin === b.origin
   );
 }
 
@@ -283,6 +303,7 @@ export class ForecastProductService {
         sampleRequestNote: draft.sampleRequestNote,
         familyId,
         isActive: true,
+        origin: FORECAST_PRODUCT_ORIGIN_PLANILHA,
       };
 
       if (!found) {
@@ -314,15 +335,39 @@ export class ForecastProductService {
       };
     });
 
-    const inativados = existing
-      .filter((p) => p.isActive && !draftNames.has(p.normalizedName))
+    // Produto cadastrado pela tela (origin 'dbcorp') nunca e inativado pelo import: o Comex o completou e ele
+    // continua ativo mesmo fora da planilha. Se a planilha o trouxer (mesmo nome), ele e ADOTADO ('planilha').
+    const ausentes = existing.filter((p) => p.isActive && !draftNames.has(p.normalizedName));
+    const daTelaAusentes = ausentes.filter((p) => p.origin === FORECAST_PRODUCT_ORIGIN_DBCORP);
+    const inativados = ausentes
+      .filter((p) => p.origin !== FORECAST_PRODUCT_ORIGIN_DBCORP)
       .map((p) => ({ id: p.id, name: p.name, before: ForecastProductService.snapshotOf(p) }));
+    const adotados = items.filter((i) => i.before?.origin === FORECAST_PRODUCT_ORIGIN_DBCORP).length;
+    const avisosCadastro: string[] = [];
+    if (daTelaAusentes.length > 0) {
+      avisosCadastro.push(
+        `${daTelaAusentes.length} produtos cadastrados pela tela a partir do DBCorp não estão na planilha e continuam ativos.`,
+      );
+    }
+    if (adotados > 0) {
+      avisosCadastro.push(
+        `${adotados} produtos cadastrados pela tela passam a vir da planilha: fonte, família e códigos escolhidos na tela serão substituídos pelos da planilha.`,
+      );
+    }
+    const removidos = await ForecastProductService.codigosDaTelaRemovidos(db, items);
+    if (removidos > 0) {
+      avisosCadastro.push(
+        removidos === 1
+          ? '1 código acrescentado pela tela não está na planilha e será removido. Inclua-o na planilha.'
+          : `${removidos} códigos acrescentados pela tela não estão na planilha e serão removidos. Inclua-os na planilha.`,
+      );
+    }
 
     return {
       items,
       inativados,
       codigosMovidos,
-      avisos: capWarnings(avisos),
+      avisos: [...capWarnings(avisos), ...avisosCadastro],
       resumo: {
         produtos: {
           total: items.length,
@@ -339,6 +384,43 @@ export class ForecastProductService {
     };
   }
 
+  // Codigos acrescentados pela tela (AuditLog 'code_add') a produto de origem 'planilha' que a planilha vai
+  // reescrever SEM eles: o import apaga o codigo (e a embalagem gravada nele). Um codigo que a planilha poe em
+  // OUTRO produto e movido (aviso proprio), nao removido. O AuditLog distingue o codigo da tela do que o Comex
+  // tirou da planilha; sem delegate de auditoria (mock) conta 0.
+  private static async codigosDaTelaRemovidos(
+    db: Db,
+    items: ProductPlanItem[],
+  ): Promise<number> {
+    const afetados = items.filter(
+      (i) => i.existingId !== null && i.before?.origin === FORECAST_PRODUCT_ORIGIN_PLANILHA && i.codesChanged,
+    );
+    if (afetados.length === 0) return 0;
+    const rows = await AuditLogService.findMany(
+      {
+        where: {
+          entityType: ENTITY_TYPE,
+          action: 'code_add',
+          entityId: { in: afetados.map((i) => String(i.existingId)) },
+        },
+        take: 5000,
+      },
+      db,
+    );
+    const codeIds = new Set<number>();
+    for (const row of rows as Array<{ metadata?: unknown }>) {
+      const codeId = (row.metadata as { codeId?: unknown } | null)?.codeId;
+      if (typeof codeId === 'number') codeIds.add(codeId);
+    }
+    if (codeIds.size === 0) return 0;
+    const noDraft = new Set(items.flatMap((i) => i.desiredCodes.map((c) => c.code)));
+    const existentes = await db.forecastProductCode.findMany({
+      where: { id: { in: [...codeIds] }, productId: { in: afetados.map((i) => i.existingId as number) } },
+      select: { code: true },
+    });
+    return existentes.filter((c) => !noDraft.has(c.code)).length;
+  }
+
   private static snapshotOf(product: {
     name: string;
     sheetOrder: number | null;
@@ -350,6 +432,7 @@ export class ForecastProductService {
     sampleRequestNote: string | null;
     familyId: number | null;
     isActive: boolean;
+    origin?: string | null;
     source?: { normalizedName: string } | null;
     codes: Array<{ position: number; code: string; catalogItemId: number | null }>;
   }): ProductFields & { codes: CodeFields[] } {
@@ -365,6 +448,10 @@ export class ForecastProductService {
       sampleRequestNote: product.sampleRequestNote,
       familyId: product.familyId,
       isActive: product.isActive,
+      origin:
+        product.origin === FORECAST_PRODUCT_ORIGIN_DBCORP
+          ? FORECAST_PRODUCT_ORIGIN_DBCORP
+          : FORECAST_PRODUCT_ORIGIN_PLANILHA,
       codes: product.codes
         .map((c) => ({ position: c.position, code: c.code, catalogItemId: c.catalogItemId }))
         .sort((a, b) => a.position - b.position),
@@ -444,6 +531,7 @@ export class ForecastProductService {
               code: true,
               productId: true,
               packagingQtyKg: true,
+              packagingPalletKg: true,
               packagingLabel: true,
               packagingIsPrimary: true,
               packagingSource: true,
@@ -470,6 +558,7 @@ export class ForecastProductService {
             code: c.code,
             catalogItemId: c.catalogItemId,
             packagingQtyKg: anterior?.packagingQtyKg ?? null,
+            packagingPalletKg: anterior?.packagingPalletKg ?? null,
             packagingLabel: anterior?.packagingLabel ?? null,
             // A principal e do PRODUTO: codigo movido para outro produto perde a flag (mantem "no maximo uma").
             packagingIsPrimary: anterior?.productId === o.productId && anterior.packagingIsPrimary,
@@ -512,13 +601,20 @@ export class ForecastProductService {
     if (unicos.length === 0) return [];
     const rows = await db.forecastProductCode.findMany({
       where: { code: { in: unicos }, packagingQtyKg: { not: null } },
-      select: { code: true, packagingQtyKg: true, packagingLabel: true, packagingIsPrimary: true },
+      select: {
+        code: true,
+        packagingQtyKg: true,
+        packagingPalletKg: true,
+        packagingLabel: true,
+        packagingIsPrimary: true,
+      },
     });
     return rows.map((r) => ({
       codigo: r.code,
       quantidade: Number(r.packagingQtyKg),
       rotulo: r.packagingLabel,
       principal: r.packagingIsPrimary,
+      palletKg: qtyToNumber(r.packagingPalletKg),
     }));
   }
 
@@ -563,7 +659,16 @@ export class ForecastProductService {
           const edicao = edicoes.get(c.id);
           const quantidade = edicao ? edicao.quantidadeKg : qtyToNumber(c.packagingQtyKg);
           const rotulo = edicao && edicao.rotulo !== undefined ? edicao.rotulo : c.packagingLabel;
-          return { code: c, quantidade, rotulo: quantidade === null ? null : rotulo };
+          // Pallet (PR 6e, ajustado na rodada 5 do Comex): opcao de compra informada pelo cadastro, nao regra; so precisa de
+          // quantidade na embalagem e NAO precisa ser multiplo dela. Quantidade apagada apaga o pallet junto.
+          let pallet = edicao && edicao.palletKg !== undefined ? edicao.palletKg : qtyToNumber(c.packagingPalletKg);
+          if (quantidade === null) {
+            if (edicao?.palletKg != null) {
+              throw new HttpError(400, 'O pallet precisa da quantidade da embalagem.');
+            }
+            pallet = null;
+          }
+          return { code: c, quantidade, pallet, rotulo: quantidade === null ? null : rotulo };
         });
         const quantidadePorId = new Map(desejado.map((d) => [d.code.id, d.quantidade] as const));
 
@@ -583,6 +688,7 @@ export class ForecastProductService {
           .filter(
             (d) =>
               d.quantidade !== qtyToNumber(d.code.packagingQtyKg) ||
+              d.pallet !== qtyToNumber(d.code.packagingPalletKg) ||
               d.rotulo !== d.code.packagingLabel ||
               d.principal !== d.code.packagingIsPrimary,
           );
@@ -600,6 +706,7 @@ export class ForecastProductService {
             where: { id: d.code.id },
             data: {
               packagingQtyKg: d.quantidade,
+              packagingPalletKg: d.pallet,
               packagingLabel: d.rotulo,
               packagingIsPrimary: d.principal,
               packagingSource: 'manual',
@@ -609,6 +716,7 @@ export class ForecastProductService {
         }
 
         const comEmbalagem = desejado.filter((d) => d.quantidade !== null).length;
+        const comPallet = desejado.filter((d) => d.pallet !== null).length;
         await AuditLogService.log(
           {
             entityType: ENTITY_TYPE,
@@ -621,6 +729,7 @@ export class ForecastProductService {
               codigoIdsAlterados: alterados.map((d) => d.code.id),
               comEmbalagem,
               semEmbalagem: desejado.length - comEmbalagem,
+              comPallet,
               principalAntes,
               principalDepois,
             },
@@ -644,6 +753,50 @@ export class ForecastProductService {
       }
       throw error;
     }
+  }
+
+  // Codigos do cadastro, para a lista de pendentes: ativos (nunca pendentes) e de produto inativo (pendente
+  // com o aviso de que o produto existe). 1 query.
+  static async cadastroDeCodigos(db: Db | typeof prisma = prisma): Promise<CadastroDeCodigos> {
+    const rows = await db.forecastProductCode.findMany({
+      select: { code: true, product: { select: { id: true, name: true, isActive: true } } },
+    });
+    const ativos = new Set<string>();
+    const inativos = new Map<string, { productId: number; nome: string }>();
+    for (const row of rows) {
+      if (row.product.isActive) ativos.add(row.code);
+      else inativos.set(row.code, { productId: row.product.id, nome: row.product.name });
+    }
+    return { ativos, inativos };
+  }
+
+  // Soma por codigo das vendas gravadas em `ForecastMonthlySale` nos meses pedidos (so leitura). `ausentes` = meses
+  // sem nenhuma linha no historico.
+  static async vendasAnteriores(
+    db: Db | typeof prisma,
+    yearMonths: string[],
+  ): Promise<{ porCodigo: Map<string, number>; ausentes: string[] }> {
+    const rows = await db.forecastMonthlySale.findMany({
+      where: { yearMonth: { in: yearMonths } },
+      select: { code: true, yearMonth: true, quantity: true },
+    });
+    const porCodigo = new Map<string, number>();
+    const comLinhas = new Set<string>();
+    for (const row of rows) {
+      comLinhas.add(row.yearMonth);
+      const codigo = normalizeProductCode(row.code);
+      porCodigo.set(codigo, (porCodigo.get(codigo) ?? 0) + Number(row.quantity));
+    }
+    return { porCodigo, ausentes: yearMonths.filter((m) => !comLinhas.has(m)) };
+  }
+
+  // Vendas dos 3 meses da regra dos pendentes: base-3 e base-2 do historico gravado; base-1 vem das `Entradas`
+  // (VENDAS do mes anterior). Mesma base da media trimestral do motor.
+  static async vendasRecentes(db: Db | typeof prisma, baseDate: string): Promise<VendasRecentes> {
+    const m = mesesHistorico(baseDate);
+    const doHistorico = [m.historico[3], m.historico[4]];
+    const { porCodigo, ausentes } = await ForecastProductService.vendasAnteriores(db, doHistorico);
+    return { meses: [...doHistorico, m.anterior], anteriores: porCodigo, ausentes };
   }
 
   static async list() {

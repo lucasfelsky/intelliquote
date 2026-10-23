@@ -223,3 +223,162 @@ describe('ForecastEmbalagensModal', () => {
     });
   });
 });
+
+describe('ForecastEmbalagensModal - pallet fechado (PR 6e)', () => {
+  const pallet = (codigo: string) => screen.getByLabelText(`Pallet em kg do código ${codigo}`) as HTMLInputElement;
+
+  beforeEach(() => {
+    atual = dados({
+      codigos: [
+        { id: 11, posicao: 1, codigo: 'C0001', quantidadeKg: 25, palletKg: 600, rotulo: 'Saco', principal: false, origem: 'manual', atualizadoEm: '2026-10-22' },
+        { id: 12, posicao: 2, codigo: 'C0002', quantidadeKg: null, palletKg: null, rotulo: null, principal: false, origem: null, atualizadoEm: null },
+        { id: 13, posicao: 3, codigo: 'C0003', quantidadeKg: 200, palletKg: null, rotulo: null, principal: true, origem: 'dbcorp', atualizadoEm: '2026-10-21' },
+      ],
+    });
+  });
+
+  it('leitura: coluna "Pallet (kg)" com os kg ou traco (admin/comprador editam; os demais so leem)', async () => {
+    renderModal(false);
+    await screen.findByText('PRODUTO 001');
+    expect(screen.getByRole('columnheader', { name: 'Pallet (kg)' })).toBeTruthy();
+    const linhas = screen.getAllByRole('row').slice(1) as HTMLElement[];
+    const celulas = linhas.map((l) => within(l).getAllByRole('cell').map((c) => c.textContent));
+    // celulas: codigo, quantidade, pallet, rotulo, principal, origem
+    expect(celulas[0]?.[2]).toBe('600 kg');
+    expect(celulas[1]?.[2]).toBe('—');
+    expect(celulas[2]?.[2]).toBe('—');
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+  });
+
+  it('edicao: campo "Pallet (kg)" por codigo, preenchido, desabilitado sem quantidade, com a dica da regra', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    expect(screen.getByRole('columnheader', { name: 'Pallet (kg)' })).toBeTruthy();
+    expect(pallet('C0001').value).toBe('600');
+    expect(pallet('C0003').value).toBe('');
+    expect(pallet('C0002').disabled).toBe(true); // sem quantidade
+    expect(pallet('C0001').disabled).toBe(false);
+    expect(screen.getByText(/É uma opção de compra informada pelo cadastro, não uma regra: pode não ser múltiplo da embalagem/)).toBeTruthy();
+    expect(salvar().disabled).toBe(true);
+  });
+
+  it('digitar o pallet e Salvar envia so o pallet do codigo alterado', async () => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0003'), { target: { value: '1.000' } });
+    expect(salvar().disabled).toBe(false);
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [{ codigoId: 13, quantidadeKg: 200, rotulo: null, palletKg: 1000 }],
+    });
+  });
+
+  it('apagar o pallet envia palletKg null; apagar a quantidade apaga o pallet junto', async () => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '' } });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenLastCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletKg: null }],
+    });
+  });
+
+  it('esvaziar a quantidade de um codigo com pallet manda quantidade null e palletKg null; o campo fica vazio e desabilitado', async () => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(qtd('C0001'), { target: { value: '' } });
+    expect(pallet('C0001').disabled).toBe(true);
+    expect(pallet('C0001').value).toBe('');
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenLastCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [{ codigoId: 11, quantidadeKg: null, rotulo: 'Saco', palletKg: null }],
+    });
+  });
+
+  it.each([
+    ['0', 'O pallet deve ser maior que zero.'],
+    ['600,1234', 'O pallet aceita no máximo 3 casas decimais.'],
+    ['1.000.001', 'O pallet aceita no máximo 1.000.000 kg.'],
+    ['abc', 'Informe os kg do pallet só com números (ex.: 600 ou 1.200).'],
+  ])('pallet "%s" mostra o erro no campo e desabilita Salvar (nenhum PATCH)', async (texto, erro) => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: texto } });
+    const campo = pallet('C0001');
+    expect(campo.getAttribute('aria-invalid')).toBe('true');
+    const mensagem = screen.getByText(erro);
+    expect(campo.getAttribute('aria-describedby')).toBe(mensagem.id);
+    expect(salvar().disabled).toBe(true);
+    fireEvent.click(salvar());
+    expect(patch).not.toHaveBeenCalled();
+    fireEvent.change(campo, { target: { value: '1.200' } });
+    expect(screen.queryByText(erro)).toBeNull();
+    expect(salvar().disabled).toBe(false);
+  });
+
+  it.each([
+    ['610', 'O pallet (610 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.'],
+    ['12,5', 'O pallet (12,5 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.'],
+  ])('pallet "%s" que nao e multiplo da embalagem mostra AVISO (polite) e o Salvar continua liberado e envia o valor', async (texto, aviso) => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: texto } });
+    const campo = pallet('C0001');
+    const mensagem = screen.getByText(aviso);
+    expect(campo.getAttribute('aria-invalid')).toBe('false');
+    expect(campo.getAttribute('aria-describedby')).toBe(mensagem.id);
+    expect(mensagem.closest('[aria-live="polite"]')).toBeTruthy();
+    expect(mensagem.getAttribute('role')).toBeNull();
+    expect(salvar().disabled).toBe(false);
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    const corpo = patch.mock.calls[0]?.[1] as { embalagens: Array<{ codigoId: number; palletKg: number | null }> } | undefined;
+    expect(corpo?.embalagens[0]?.palletKg).toBe(Number(texto.replace(',', '.')));
+  });
+
+  it('pallet multiplo exato (e vazio) nao mostra aviso', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '1.200' } });
+    expect(screen.queryByText(/não é múltiplo/)).toBeNull();
+    fireEvent.change(pallet('C0001'), { target: { value: '' } });
+    expect(screen.queryByText(/não é múltiplo/)).toBeNull();
+  });
+
+  it('trocar a quantidade para um valor que deixa de dividir o pallet salvo mostra o aviso (nao bloqueia) e some ao voltar a dividir', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(qtd('C0001'), { target: { value: '7' } });
+    expect(screen.getByText('O pallet (600 kg) não é múltiplo da embalagem (7 kg): confira com o fornecedor.')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(salvar().disabled).toBe(false);
+    fireEvent.change(qtd('C0001'), { target: { value: '20' } });
+    expect(screen.queryByText(/não é múltiplo/)).toBeNull();
+    expect(salvar().disabled).toBe(false);
+  });
+
+  it('backend antigo (sem palletKg nos codigos): o modal abre, o campo fica vazio e nada e enviado sem edicao', async () => {
+    atual = dados(); // codigos sem a chave palletKg
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    expect(pallet('C0001').value).toBe('');
+    expect(salvar().disabled).toBe(true);
+  });
+
+  it('400 do backend sobre o pallet aparece em role="alert" e mantem o texto digitado', async () => {
+    patch.mockRejectedValue(new ApiError(400, { message: 'Mensagem qualquer do servidor.' }));
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '1.200' } });
+    fireEvent.click(salvar());
+    expect((await screen.findByRole('alert')).textContent).toBe('Mensagem qualquer do servidor.');
+    expect(pallet('C0001').value).toBe('1.200');
+  });
+});

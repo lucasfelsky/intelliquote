@@ -246,6 +246,114 @@ describe('Forecast - embalagens por codigo (DB)', () => {
     expect(b1.packagingQtyKg).toBeNull();
   });
 
+  testDbSkip('pallet (PR 6e): grava em A1 (600 kg) e A2 (400 kg), le de volta e o relatorio mostra os multiplos abaixo/acima sem mexer na Qtd. final nem no snapshot', async () => {
+    const antes = await lerSnapshot();
+    const itemAntes = await relatorio();
+    const res = await patch(productA, {
+      embalagens: [
+        { codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 600 },
+        { codigoId: ids[CODE_A2], quantidadeKg: 200, palletKg: 400 },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.data.codigos[0]).toMatchObject({ quantidadeKg: 25, palletKg: 600 });
+    expect(res.body.data.codigos[1]).toMatchObject({ quantidadeKg: 200, palletKg: 400 });
+    expect(res.body.data.codigos[2]).toMatchObject({ quantidadeKg: null, palletKg: null });
+    const get = await request(app).get(`/api/v1/forecast/products/${productA}/embalagens`).set('Cookie', cookies);
+    expect(get.status).toBe(200);
+    expect(get.body.data.codigos.map((c: { palletKg: number | null }) => c.palletKg)).toEqual([600, 400, null]);
+    const a1 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A1 } });
+    expect(Number(a1.packagingPalletKg)).toBe(600);
+
+    type Opcao = {
+      codigo: string;
+      destaque: boolean;
+      pallet: { kgPorPallet: number; abaixo: { pallets: number; kg: number }; acima: { pallets: number; kg: number } } | null;
+    };
+    const rel = await request(app)
+      .get(`/api/v1/forecast/snapshots/${snapshotId}/relatorio-compras?hoje=${HOJE}`)
+      .set('Cookie', cookies);
+    expect(rel.status).toBe(200);
+    const item = rel.body.data.grupos[0].itens[0] as {
+      quantidadeSugerida: number;
+      quantidadeFinal: number;
+      porEmbalagem: Opcao[];
+    };
+    expect(rel.body.data.totais.comPallet).toBe(1);
+    // A Qtd. final e a sugerida nao mudam: o pallet e so informacao.
+    expect(item.quantidadeFinal).toBe(itemAntes.quantidadeFinal);
+    const q = item.quantidadeSugerida;
+    expect(item.porEmbalagem.map((o) => [o.codigo, o.destaque, o.pallet?.kgPorPallet ?? null])).toEqual([
+      [CODE_A1, true, 600],
+      [CODE_A2, false, 400],
+    ]);
+    for (const o of item.porEmbalagem) {
+      const p = o.pallet!;
+      expect(p.abaixo.kg).toBe(p.abaixo.pallets * p.kgPorPallet);
+      expect(p.acima.kg).toBe(p.acima.pallets * p.kgPorPallet);
+      expect(p.abaixo.kg).toBeLessThanOrEqual(q + 1e-9);
+      expect(p.acima.kg).toBeGreaterThanOrEqual(q - 1e-9);
+      expect(p.acima.pallets - p.abaixo.pallets).toBeLessThanOrEqual(1);
+    }
+    expect(await lerSnapshot()).toEqual(antes);
+
+    const logs = await prisma.auditLog.findMany({
+      where: { entityType: 'forecast_product', entityId: String(productA), action: 'packaging_update' },
+      orderBy: { id: 'desc' },
+    });
+    expect(logs[0].metadata).toMatchObject({ source: 'manual_patch', comPallet: 2 });
+    expect(Object.keys(logs[0].metadata as object)).not.toContain('palletKg');
+    expect(logs[0].beforeData).toBeNull();
+    expect(logs[0].afterData).toBeNull();
+  });
+
+  testDbSkip('pallet (PR 6e + rodada 5): nao multiplo da embalagem e aceito e gravado; sem quantidade e valor invalido -> 400 e nada gravado; quantidade apagada apaga o pallet', async () => {
+    // Rodada 5 do Comex: o pallet e uma opcao de compra, nao precisa ser multiplo da embalagem (610 kg com embalagem de 25 kg).
+    const naoMultiplo = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 610 }] });
+    expect(naoMultiplo.status).toBe(200);
+    expect(naoMultiplo.body.data.codigos[0]).toMatchObject({ quantidadeKg: 25, palletKg: 610 });
+    expect(Number((await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A1 } })).packagingPalletKg)).toBe(610);
+    // O relatorio faz a conta em kg do pallet (610 kg), sem exigir multiplo.
+    const relNaoMultiplo = await request(app)
+      .get(`/api/v1/forecast/snapshots/${snapshotId}/relatorio-compras?hoje=${HOJE}`)
+      .set('Cookie', cookies);
+    expect(relNaoMultiplo.status).toBe(200);
+    const opcaoA1 = (relNaoMultiplo.body.data.grupos[0].itens[0] as { porEmbalagem: Array<{ codigo: string; pallet: { kgPorPallet: number } | null }> })
+      .porEmbalagem.find((o) => o.codigo === CODE_A1);
+    expect(opcaoA1?.pallet?.kgPorPallet).toBe(610);
+    // Trocar so a quantidade para um valor que nao divide o pallet salvo tambem e aceito.
+    const quebra = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 7 }] });
+    expect(quebra.status).toBe(200);
+    expect(quebra.body.data.codigos[0]).toMatchObject({ quantidadeKg: 7, palletKg: 610 });
+    // Volta ao estado de partida (A1 25 kg com pallet de 600 kg) para o que vem depois.
+    expect((await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 600 }] })).status).toBe(200);
+    const antes = await prisma.forecastProductCode.findMany({ where: { productId: productA }, orderBy: { id: 'asc' } });
+    const semQuantidade = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: null, palletKg: 50 }] });
+    expect(semQuantidade.status).toBe(400);
+    expect(semQuantidade.body.message).toBe('O pallet precisa da quantidade da embalagem.');
+    const invalido = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 600.1234 }] });
+    expect(invalido.status).toBe(400);
+    expect(await prisma.forecastProductCode.findMany({ where: { productId: productA }, orderBy: { id: 'asc' } })).toEqual(antes);
+
+    // A3: grava quantidade + pallet; depois apaga SO a quantidade e o pallet some junto.
+    expect((await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: 10, palletKg: 50 }] })).status).toBe(200);
+    expect(Number((await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A3 } })).packagingPalletKg)).toBe(50);
+    const apagou = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: null }] });
+    expect(apagou.status).toBe(200);
+    expect(apagou.body.data.codigos[2]).toMatchObject({ quantidadeKg: null, palletKg: null });
+    const a3 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A3 } });
+    expect(a3.packagingQtyKg).toBeNull();
+    expect(a3.packagingPalletKg).toBeNull();
+    // palletKg null apaga so o pallet.
+    expect((await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: 10, palletKg: 50 }] })).status).toBe(200);
+    expect((await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: 10, palletKg: null }] })).status).toBe(200);
+    const a3b = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A3 } });
+    expect(Number(a3b.packagingQtyKg)).toBe(10);
+    expect(a3b.packagingPalletKg).toBeNull();
+    // Volta ao estado de partida do proximo teste (A3 sem embalagem).
+    expect((await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: null }] })).status).toBe(200);
+  });
+
   testDbSkip('o import da planilha preserva a embalagem por codigo (principal so no mesmo produto)', async () => {
     // Estado de partida: A1 principal 25 kg, A2 200 kg (produto A); B2 principal 10 kg (produto B).
     expect((await patch(productA, { principalCodigoId: ids[CODE_A1] })).status).toBe(200);
@@ -287,23 +395,28 @@ describe('Forecast - embalagens por codigo (DB)', () => {
     const a1 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A1 } });
     expect(a1.productId).toBe(productA);
     expect(Number(a1.packagingQtyKg)).toBe(25);
+    // O pallet e do codigo: o import apaga e recria os codigos e tem de devolve-lo (PR 6e).
+    expect(Number(a1.packagingPalletKg)).toBe(600);
     expect(a1.packagingIsPrimary).toBe(true);
     expect(a1.packagingSource).toBe('manual');
     expect(a1.packagingUpdatedAt).toBeInstanceOf(Date);
 
     const a4 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A4 } });
     expect(a4.packagingQtyKg).toBeNull();
+    expect(a4.packagingPalletKg).toBeNull();
     expect(a4.packagingIsPrimary).toBe(false);
 
     const a2 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A2 } });
     expect(a2.productId).not.toBe(productA);
     expect(Number(a2.packagingQtyKg)).toBe(200);
+    expect(Number(a2.packagingPalletKg)).toBe(400); // codigo movido para outro produto: o pallet vai com ele
     expect(a2.packagingLabel).toBe(ROTULO);
     expect(a2.packagingIsPrimary).toBe(false);
 
     const b2 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_B2 } });
     expect(b2.productId).toBe(a2.productId);
     expect(Number(b2.packagingQtyKg)).toBe(10);
+    expect(b2.packagingPalletKg).toBeNull();
     expect(b2.packagingLabel).toBe('Balde');
     expect(b2.packagingIsPrimary).toBe(false);
 
