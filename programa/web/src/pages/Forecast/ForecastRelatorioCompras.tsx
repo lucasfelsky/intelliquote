@@ -15,6 +15,7 @@ import {
 import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
+import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
 import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
@@ -45,8 +46,10 @@ import {
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
   paragrafoDemandaComercial,
+  paragrafoGruposDeEquivalencia,
   paragrafoMesesForaDaMedia,
   paragrafoSobDemanda,
+  resumoCobertosPorGrupo,
   resumoDemandaComercial,
   resumoMesesForaDaMedia,
   resumoSobDemanda,
@@ -183,6 +186,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
   const [editando, setEditando] = useState(false);
+  // Colunas da linha (Item, Urgencia, Fonte e as 9 comuns): a sublinha do grupo ocupa todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 9;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
@@ -195,66 +200,77 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
     }
   }, [editando]);
   return (
-    <tr
-      className={
-        urgencia ? `fcr-linha fcr-linha--${urgencia}` : item.vencida ? 'fcr-linha fcr-linha--vencida' : 'fcr-linha'
-      }
-    >
-      <th scope="row">
-        <div className="fcr-item">
-          <span className="fcr-item__nome">{item.item}</span>
-          <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
-          {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
-          <MediaSem meses={item.mesesForaDaMedia} />
-          <SeloDemanda kg={item.demandaComercialKg} />
-          <Observacao obs={item.obs} />
-        </div>
-      </th>
-      {comUrgencia && urgencia && (
+    <>
+      <tr
+        className={
+          urgencia ? `fcr-linha fcr-linha--${urgencia}` : item.vencida ? 'fcr-linha fcr-linha--vencida' : 'fcr-linha'
+        }
+      >
+        <th scope="row">
+          <div className="fcr-item">
+            <span className="fcr-item__nome">{item.item}</span>
+            <SeloGrupo grupo={item.grupo} />
+            <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
+            {item.grupo && <PrincipalDoGrupo grupo={item.grupo} />}
+            {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+            <MediaSem meses={item.mesesForaDaMedia} />
+            <SeloDemanda kg={item.demandaComercialKg} />
+            <Observacao obs={item.obs} />
+          </div>
+        </th>
+        {comUrgencia && urgencia && (
+          <td>
+            <span className="fcr-urgencia">
+              <span className={badgeDaUrgencia(urgencia)}>{rotuloUrgencia(urgencia, diasCritico)}</span>
+              <span className="fcr-urgencia__dias">{textoDiasAteRuptura(item.diasAteRuptura)}</span>
+            </span>
+          </td>
+        )}
+        {fonte !== undefined && (
+          <td>
+            {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
+          </td>
+        )}
+        <td>{STATUS_ROTULO[item.status] ?? item.status}</td>
+        <td className="fcr-num">{d1(item.demanda)}</td>
+        <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
         <td>
-          <span className="fcr-urgencia">
-            <span className={badgeDaUrgencia(urgencia)}>{rotuloUrgencia(urgencia, diasCritico)}</span>
-            <span className="fcr-urgencia__dias">{textoDiasAteRuptura(item.diasAteRuptura)}</span>
+          <Embalagem
+            item={item}
+            botaoRef={botao}
+            onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
+          />
+          {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
+          {editando &&
+            productId !== null &&
+            createPortal(
+              <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
+              document.body,
+            )}
+        </td>
+        <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
+        <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
+        <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
+        <td>
+          <span className="fcr-limite">
+            <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
+              {item.dataLimite ? dataBr(item.dataLimite) : '—'}
+            </span>
+            {item.vencida && <span className="badge badge--danger">Vencida</span>}
           </span>
         </td>
-      )}
-      {fonte !== undefined && (
         <td>
-          {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
+          <EmAndamento item={item} />
         </td>
+      </tr>
+      {item.grupo && (
+        <tr className="fcr-linha-grupo">
+          <td colSpan={colunas}>
+            <SublinhasDoGrupo grupo={item.grupo} />
+          </td>
+        </tr>
       )}
-      <td>{STATUS_ROTULO[item.status] ?? item.status}</td>
-      <td className="fcr-num">{d1(item.demanda)}</td>
-      <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
-      <td>
-        <Embalagem
-          item={item}
-          botaoRef={botao}
-          onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
-        />
-        {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
-        {editando &&
-          productId !== null &&
-          createPortal(
-            <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
-            document.body,
-          )}
-      </td>
-      <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
-      <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
-      <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
-      <td>
-        <span className="fcr-limite">
-          <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
-            {item.dataLimite ? dataBr(item.dataLimite) : '—'}
-          </span>
-          {item.vencida && <span className="badge badge--danger">Vencida</span>}
-        </span>
-      </td>
-      <td>
-        <EmAndamento item={item} />
-      </td>
-    </tr>
+    </>
   );
 }
 
@@ -425,6 +441,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                 <th scope="row">
                   <div className="fcr-item">
                     <span className="fcr-item__nome">{i.item}</span>
+                    <SeloGrupo grupo={i.grupo} />
                     <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
                     <MediaSem meses={i.mesesForaDaMedia} />
                     <Observacao obs={i.obs} />
@@ -497,6 +514,10 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   // Demanda do comercial (PR 6d): backend antigo nao manda; sem pedido aberto a secao nao aparece.
   const demandaComercial =
     dados.demandaComercial && dados.demandaComercial.itens.length > 0 ? dados.demandaComercial : undefined;
+  // Grupos de equivalencia (PR 6b): backend antigo nao manda; sem membro coberto a secao nao aparece.
+  const cobertosPorGrupo =
+    dados.cobertosPorGrupo && dados.cobertosPorGrupo.itens.length > 0 ? dados.cobertosPorGrupo : undefined;
+  const comGrupos = (dados.gruposDeEquivalencia?.length ?? 0) > 0;
   const fecharLancamento = () => {
     setLancando(false);
     window.setTimeout(() => botaoLancar.current?.focus(), 0);
@@ -576,6 +597,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {demandaComercial && (
             <li>{resumoDemandaComercial(demandaComercial.totais.abertas, demandaComercial.totais.sugeridoKg)}</li>
           )}
+          {cobertosPorGrupo && <li>{resumoCobertosPorGrupo(cobertosPorGrupo.itens.length)}</li>}
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
@@ -637,6 +659,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
           {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
           {demandaComercial && <p>{paragrafoDemandaComercial()}</p>}
+          {comGrupos && <p>{paragrafoGruposDeEquivalencia()}</p>}
         </details>
       </section>
       {dados.grupos.length === 0 ? (
@@ -665,6 +688,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           onConcluido={setAvisoDemanda}
         />
       )}
+      {cobertosPorGrupo && <ForecastRelatorioGrupos itens={cobertosPorGrupo.itens} />}
       {semConsumo && semConsumo.itens.length > 0 && <SecaoSemConsumo itens={semConsumo.itens} />}
       {sobDemanda && <ForecastRelatorioSobDemanda itens={sobDemanda.itens} />}
       {lancando &&

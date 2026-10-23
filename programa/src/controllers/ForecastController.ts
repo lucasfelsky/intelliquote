@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
 import { ForecastDemandaComercialService } from '../services/ForecastDemandaComercialService';
+import { ForecastGrupoEquivalenciaService } from '../services/ForecastGrupoEquivalenciaService';
 import { ForecastImportService } from '../services/ForecastImportService';
 import { ForecastMesesAtipicosService } from '../services/ForecastMesesAtipicosService';
 import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
@@ -16,6 +17,8 @@ import {
   forecastDemandaComercialQuerySchema,
   forecastDbcorpPreviewSchema,
   forecastEmbalagensPatchSchema,
+  forecastGrupoEquivalenciaCreateSchema,
+  forecastGrupoEquivalenciaPatchSchema,
   forecastMesesAtipicosPutSchema,
   forecastProductCodeAddSchema,
   forecastProductCreateSchema,
@@ -268,6 +271,52 @@ export class ForecastController {
       }
       const input = forecastDemandaComercialPatchSchema.parse(req.body);
       const data = await ForecastDemandaComercialService.patch(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async listGruposEquivalencia(_req: Request, res: Response): Promise<Response> {
+    try {
+      const data = await ForecastGrupoEquivalenciaService.list();
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async createGrupoEquivalencia(req: Request, res: Response): Promise<Response> {
+    try {
+      const input = forecastGrupoEquivalenciaCreateSchema.parse(req.body);
+      const data = await ForecastGrupoEquivalenciaService.create(input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async patchGrupoEquivalencia(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Grupo invalido.');
+      }
+      const input = forecastGrupoEquivalenciaPatchSchema.parse(req.body);
+      const data = await ForecastGrupoEquivalenciaService.patch(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async deleteGrupoEquivalencia(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Grupo invalido.');
+      }
+      const data = await ForecastGrupoEquivalenciaService.remove(id, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

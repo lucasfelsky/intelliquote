@@ -475,3 +475,76 @@ export type ForecastDemandaComercialCreateInput = z.infer<typeof forecastDemanda
 export type ForecastDemandaComercialPatchInput = z.infer<typeof forecastDemandaComercialPatchSchema>;
 export type ForecastDemandaComercialQueryInput = z.infer<typeof forecastDemandaComercialQuerySchema>;
 export type ForecastDemandaComercialStatus = (typeof FORECAST_DEMANDA_STATUS)[number];
+
+// Grupos de equivalencia (PR 6b): produtos que sao o MESMO material (nomes ou fontes diferentes) tem o estoque avaliado
+// somado no relatorio de compras. Cadastro por admin/comprador; um produto pertence a um unico grupo. O produto principal
+// (opcional) e o que a compra usa; sem ele, o membro de maior media da quinzena.
+export const FORECAST_GRUPO_NOME_MAX = 120;
+export const FORECAST_GRUPO_OBSERVACAO_MAX = 300;
+export const FORECAST_GRUPO_MEMBROS_MIN = 2;
+export const FORECAST_GRUPO_MEMBROS_MAX = 20;
+
+const grupoProdutoIdField = z
+  .number({ error: 'Produto inválido.' })
+  .int('Produto inválido.')
+  .positive('Produto inválido.')
+  .max(FORECAST_DEMANDA_ID_MAX, 'Produto inválido.');
+
+const grupoNomeField = z
+  .string({ error: 'Informe o nome do grupo.' })
+  .trim()
+  .min(1, 'Informe o nome do grupo.')
+  .max(FORECAST_GRUPO_NOME_MAX, `O nome do grupo aceita no máximo ${FORECAST_GRUPO_NOME_MAX} caracteres.`);
+
+const grupoObservacaoField = z
+  .string({ error: 'A observação deve ser um texto (ou null).' })
+  .trim()
+  .max(FORECAST_GRUPO_OBSERVACAO_MAX, `A observação aceita no máximo ${FORECAST_GRUPO_OBSERVACAO_MAX} caracteres.`)
+  .transform((value) => (value === '' ? null : value))
+  .nullable();
+
+const grupoProdutoIdsField = z
+  .array(grupoProdutoIdField, { error: 'Informe os produtos do grupo.' })
+  .min(FORECAST_GRUPO_MEMBROS_MIN, `Escolha ao menos ${FORECAST_GRUPO_MEMBROS_MIN} produtos para formar um grupo.`)
+  .max(FORECAST_GRUPO_MEMBROS_MAX, `Um grupo aceita no máximo ${FORECAST_GRUPO_MEMBROS_MAX} produtos.`)
+  .refine((ids) => new Set(ids).size === ids.length, 'O mesmo produto aparece mais de uma vez no grupo.');
+
+const PRINCIPAL_FORA_DO_GRUPO = 'O produto principal precisa ser um dos produtos do grupo.';
+
+export const forecastGrupoEquivalenciaCreateSchema = z
+  .object({
+    nome: grupoNomeField,
+    observacao: grupoObservacaoField.optional(),
+    produtoIds: grupoProdutoIdsField,
+    principalProdutoId: grupoProdutoIdField.nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.principalProdutoId != null && !value.produtoIds.includes(value.principalProdutoId)) {
+      ctx.addIssue({ code: 'custom', path: ['principalProdutoId'], message: PRINCIPAL_FORA_DO_GRUPO });
+    }
+  });
+
+// Editar: so os campos enviados mudam. `produtoIds` substitui o conjunto de membros; `principalProdutoId: null` limpa o principal.
+export const forecastGrupoEquivalenciaPatchSchema = z
+  .object({
+    nome: grupoNomeField.optional(),
+    observacao: grupoObservacaoField.optional(),
+    produtoIds: grupoProdutoIdsField.optional(),
+    principalProdutoId: grupoProdutoIdField.nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.nome === undefined &&
+      value.observacao === undefined &&
+      value.produtoIds === undefined &&
+      value.principalProdutoId === undefined
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'Informe o que alterar no grupo.' });
+    }
+    if (value.principalProdutoId != null && value.produtoIds && !value.produtoIds.includes(value.principalProdutoId)) {
+      ctx.addIssue({ code: 'custom', path: ['principalProdutoId'], message: PRINCIPAL_FORA_DO_GRUPO });
+    }
+  });
+
+export type ForecastGrupoEquivalenciaCreateInput = z.infer<typeof forecastGrupoEquivalenciaCreateSchema>;
+export type ForecastGrupoEquivalenciaPatchInput = z.infer<typeof forecastGrupoEquivalenciaPatchSchema>;

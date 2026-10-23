@@ -13,6 +13,7 @@ import {
   type ForecastSnapshotDetail,
 } from '@/services/forecast';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
+import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
@@ -169,6 +170,10 @@ export default function Forecast() {
   const [importada, setImportada] = useState<string | null>(null);
   const botaoImportar = useRef<HTMLButtonElement>(null);
   const importouAntes = useRef(false);
+  // Grupos de equivalencia (PR 6b): todos os papeis COMEX veem; admin/comprador editam.
+  const [gruposAberto, setGruposAberto] = useState(false);
+  const botaoGrupos = useRef<HTMLButtonElement>(null);
+  const gruposAbriuAntes = useRef(false);
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
@@ -193,6 +198,15 @@ export default function Forecast() {
       botaoImportar.current?.focus();
     }
   }, [importando]);
+
+  useEffect(() => {
+    if (gruposAberto) {
+      gruposAbriuAntes.current = true;
+    } else if (gruposAbriuAntes.current) {
+      gruposAbriuAntes.current = false;
+      botaoGrupos.current?.focus();
+    }
+  }, [gruposAberto]);
 
   // Trocar de visao preserva a quinzena da URL.
   const mudarVisao = (proxima: 'painel' | 'compras') => {
@@ -229,7 +243,7 @@ export default function Forecast() {
           <p>{subtitulo}</p>
           <p className="fc-beta-aviso">Em validação: confira os números com a planilha do Forecast.</p>
         </div>
-        {(quinzenas.length > 0 || podeImportar) && (
+        {(quinzenas.length > 0 || podeImportar || lista.isSuccess) && (
           <div className="page-header__actions">
             {quinzenas.length > 0 && (
               <div className="fc-quinzena">
@@ -253,6 +267,15 @@ export default function Forecast() {
                 </select>
               </div>
             )}
+            <button
+              ref={botaoGrupos}
+              type="button"
+              className="ghost-button"
+              aria-haspopup="dialog"
+              onClick={() => setGruposAberto(true)}
+            >
+              Grupos de equivalência
+            </button>
             {podeImportar && (
               <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
                 Importar quinzena
@@ -303,6 +326,7 @@ export default function Forecast() {
       {detail && visao === 'compras' && (
         <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} podeEditar={podeImportar} />
       )}
+      {gruposAberto && <ForecastGruposModal podeEditar={podeImportar} onFechar={() => setGruposAberto(false)} />}
       <ForecastImportModal
         aberto={importando}
         onFechar={() => setImportando(false)}

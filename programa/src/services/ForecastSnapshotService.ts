@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
+import { gruposDasLinhas } from '../utils/forecastGruposEquivalencia';
 import { mapaForaDaMedia, marcasNaJanela } from '../utils/forecastMesesAtipicos';
 import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
@@ -17,6 +18,7 @@ import {
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 import { ForecastDemandaComercialService } from './ForecastDemandaComercialService';
+import { ForecastGrupoEquivalenciaService } from './ForecastGrupoEquivalenciaService';
 import { ForecastMesesAtipicosService } from './ForecastMesesAtipicosService';
 import { ForecastProductService } from './ForecastProductService';
 import { ForecastSobDemandaService } from './ForecastSobDemandaService';
@@ -184,6 +186,8 @@ export class ForecastSnapshotService {
     const productIds = produtos.flatMap((p) => (p.productId != null ? [p.productId] : []));
     // Compra sob demanda: marca do cadastro ATUAL (nao congelada na quinzena), 1 consulta por produto.
     const sobDemanda = await ForecastSobDemandaService.regrasDosProdutos(productIds);
+    // Grupos de equivalencia (PR 6b): vinculo do cadastro ATUAL (nao congelado na quinzena), 1 consulta.
+    const gruposDosProdutos = await ForecastGrupoEquivalenciaService.gruposDosProdutos(productIds);
     // Meses atipicos (PR 6c): marcas do cadastro ATUAL, 1 consulta; so as que cabem na janela de vendas da quinzena
     // entram na media. Sem marca, o calculo e o mesmo de antes.
     const marcas = await ForecastMesesAtipicosService.doProdutos(productIds);
@@ -223,6 +227,7 @@ export class ForecastSnapshotService {
           productId: produto?.productId ?? null,
           sobDemanda: produto?.productId != null && sobDemanda.has(produto.productId),
           sobDemandaMotivo: (produto?.productId != null && sobDemanda.get(produto.productId)?.motivo) || null,
+          grupo: (produto?.productId != null && gruposDosProdutos.get(produto.productId)) || null,
           // Marcas da janela desta quinzena (indice 0..5 = J..O, 6 = P); o motivo e o do cadastro. Vazio sem marca.
           mesesForaDaMedia:
             produto?.productId != null ? marcasNaJanela(quinzena.dataBase, marcas.get(produto.productId) ?? []) : [],
@@ -276,7 +281,11 @@ export class ForecastSnapshotService {
     );
     // Demanda do comercial (PR 6d): pedidos abertos do cadastro ATUAL (nao congelados na quinzena), 1 consulta.
     const demandasComerciais = await ForecastDemandaComercialService.abertas();
-    return montarRelatorioCompras(calc, embalagens, { sobDemanda, demandasComerciais });
+    return montarRelatorioCompras(calc, embalagens, {
+      sobDemanda,
+      demandasComerciais,
+      grupos: gruposDasLinhas(calc.linhas),
+    });
   }
 
   // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.

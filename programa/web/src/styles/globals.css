@@ -3202,3 +3202,53 @@ i.fc-status--preco { background: var(--info); }
   .fcd-form .modal-actions button, .fcd-form .ghost-button { min-height: 44px; }
   .fcd-produto { min-height: 44px; }
 }
+
+/* Grupos de equivalencia (PR 6b): selo, sublinhas dos membros no relatorio, secao dos cobertos e modal de cadastro. Somente tokens do tema. */
+.fcr-item > .fcg-selo { align-self: flex-start; }
+.fcr-item__nome .fcg-selo { margin-left: 8px; vertical-align: middle; }
+.fcr-item__grupo { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcg-selo__nota { display: block; margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.fcr-tabela .fcr-linha-grupo > td { padding: 0 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+/* A celula das sublinhas ocupa a tabela inteira (que rola na horizontal): a caixa fica colada a esquerda e com a largura VISIVEL. */
+.fcr-scroll:has(.fcg-sublinhas) { container-type: inline-size; }
+.fcg-sublinhas { position: sticky; left: 0; box-sizing: border-box; width: min(100%, calc(100vw - 56px)); width: min(100%, calc(100cqw - 20px)); padding: 8px 12px; border-left: 3px solid var(--primary-700); border-radius: var(--radius-sm); background: var(--surface-alt); }
+.fcg-sublinhas__resumo { margin: 0 0 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.fcg-sublinhas__rolagem { overflow-x: auto; }
+.fcg-tabela { min-width: 560px; }
+.fcg-tabela th, .fcg-tabela td { padding: 6px 8px; background: transparent; }
+.fcg-tabela .fcr-item { min-width: 120px; }
+.fcg-motivo { min-width: 240px; overflow-wrap: anywhere; }
+.fcg-form { gap: 14px; }
+.fcg-titulo { margin: 0; font-size: 16px; line-height: 1.3; color: var(--ink); }
+.fcg-titulo:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; }
+.fcg-lista { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.fcg-grupo { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fcg-grupo__nome { margin: 0; font-size: 15px; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.fcg-grupo__acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.fcg-membros { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink); }
+.fcg-membros li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.fcg-selecionados { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcg-selecionado { flex-wrap: wrap; }
+.fcg-selecionado__radio { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.fcg-selecionado__radio input { flex: none; width: 16px; height: 16px; }
+.fcg-selecionados input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 700px) {
+  /* 390 px: cada membro vira um bloco com o rotulo de cada coluna (sem rolagem horizontal dentro da sublinha). */
+  .fcg-tabela { min-width: 0; }
+  .fcg-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fcg-tabela, .fcg-tabela tbody { display: block; }
+  .fcg-tabela tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .fcg-tabela tr:last-child { border-bottom: 0; }
+  .fcg-tabela th, .fcg-tabela td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 2px 0; border-bottom: 0; text-align: right; }
+  .fcg-tabela tbody th { display: block; text-align: left; }
+  .fcg-tabela td::before { content: attr(data-rotulo); flex: none; max-width: 50%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fcg-grupo__acoes .ghost-button, .fcg-lista-corpo .primary-button, .fcg-selecionado .ghost-button { min-height: 44px; }
+  .fcg-selecionado__radio { min-height: 44px; }
+}
+@media print {
+  .fcg-sublinhas { position: static; width: auto; padding: 4px 8px; background: none; border-left-width: 2px; }
+  .fcg-sublinhas__resumo { font-size: 7.5pt; }
+  .fcg-tabela { min-width: 0; }
+  .fcg-sublinhas__rolagem { overflow: visible; }
+  .fcr-item__grupo { font-size: 7.5pt; }
+}

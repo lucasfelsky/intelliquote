@@ -1,15 +1,18 @@
 // Textos puros do relatorio de compras (PR 5B): Observacao e quantidade arredondada para cada embalagem; (PR 6e) pallets;
-// (PR 6c) meses atipicos; (PR 6d) demanda do comercial.
+// (PR 6c) meses atipicos; (PR 6d) demanda do comercial; (PR 6b) grupos de equivalencia.
 // Copia exata em src/utils/forecastRelatorioComprasXlsx.ts (`textoOpcaoDeEmbalagem`, `textoPallet`, `PARAGRAFO_EMBALAGEM_XLSX`);
 // a igualdade tela x XLSX e provada em tests/forecast-relatorio-compras-xlsx.test.ts.
 import type {
+  ForecastDadosDoGrupo,
+  ForecastItemCobertoPorGrupo,
   ForecastItemDemandaComercial,
   ForecastItemRelatorio,
   ForecastOpcaoEmbalagem,
   ForecastPalletDaOpcao,
   ForecastRelatorioCompras,
+  ForecastSituacaoDoGrupo,
 } from '@/services/forecast';
-import { inteiroBr, kgBr, mesAbrevDoAnoMes } from './forecastPainel';
+import { d1, inteiroBr, kgBr, mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Terceiro paragrafo das regras (tela e aba Regras do XLSX). */
 export const PARAGRAFO_EMBALAGEM =
@@ -188,3 +191,69 @@ export const textoSolicitacao = (id: number | null): string => (id === null ? '�
 /** Nota sob a tabela da secao (so na tela). */
 export const APOIO_DEMANDA_COMERCIAL =
   'Sugerido = pedido − saldo livre no mês da necessidade (nunca negativo). Pedido fechado (comprada, virou programação ou cancelada) sai desta seção. Pedido dentro do horizonte de programação não soma.';
+
+// ---- Grupos de equivalencia (PR 6b): copia exata em src/utils/forecastRelatorioComprasXlsx.ts (guarda de paridade no teste) ----
+
+const COBERTURA_BR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** Cobertura do grupo em meses, 1 casa (`8,0 meses`); sem consumo, `sem consumo`. */
+export function textoCobertura(cobertura: number | null): string {
+  return cobertura === null ? 'sem consumo' : `${COBERTURA_BR.format(cobertura)} meses`;
+}
+
+/** Motivo do membro fora da lista de compra: `Coberto pelo grupo X: estoque somado 1.200 kg, cobertura 8,0 meses`. */
+export function textoMotivoCobertoPorGrupo(
+  i: Pick<ForecastItemCobertoPorGrupo, 'grupoNome' | 'estoqueDoGrupo' | 'cobertura'>,
+): string {
+  const base = `Coberto pelo grupo ${i.grupoNome}: estoque somado ${kgBr(i.estoqueDoGrupo)} kg`;
+  return i.cobertura === null ? `${base}, sem consumo no grupo` : `${base}, cobertura ${textoCobertura(i.cobertura)}`;
+}
+
+export function resumoCobertosPorGrupo(n: number): string {
+  return `${n} ${n === 1 ? 'item coberto' : 'itens cobertos'} por grupo de equivalência`;
+}
+
+export function tituloCobertosPorGrupo(n: number): string {
+  return `Cobertos pelo grupo de equivalência · ${n} ${n === 1 ? 'item' : 'itens'}`;
+}
+
+/** Nota sob a tabela da secao (so na tela). */
+export const APOIO_COBERTOS_POR_GRUPO =
+  'Estes itens entrariam na lista de compra sozinhos, mas o estoque somado do grupo os cobre. Se algum produto não for o mesmo material, tire-o do grupo em "Grupos de equivalência".';
+
+export function paragrafoGruposDeEquivalencia(): string {
+  return 'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo.';
+}
+
+/** Linha de apoio sob o item do grupo: `Compra pelo produto principal: PRODUTO 001`. */
+export function textoPrincipalDoGrupo(principalItem: string): string {
+  return `Compra pelo produto principal: ${principalItem}`;
+}
+
+/** Resumo do grupo: `Estoque somado 300 kg · cobertura 2,0 meses · segurança somada 300 kg`. */
+export function textoResumoDoGrupo(g: Pick<ForecastDadosDoGrupo, 'estoque' | 'cobertura' | 'seguranca'>): string {
+  return `Estoque somado ${kgBr(g.estoque)} kg · cobertura ${textoCobertura(g.cobertura)} · segurança somada ${kgBr(g.seguranca)} kg`;
+}
+
+export function textoSituacaoDoGrupo(s: ForecastSituacaoDoGrupo): string {
+  switch (s) {
+    case 'na-lista':
+      return 'Na lista de compra';
+    case 'sob-demanda':
+      return 'Fora da lista: principal sob demanda';
+    case 'coberto':
+      return 'Coberto pelo estoque somado';
+    default:
+      return 'Fora da lista: nenhum membro com lead time';
+  }
+}
+
+/** Demanda individual de um membro (`-300,0`); sem lead time: `sem lead time`. */
+export function textoDemandaIndividual(demanda: number | null): string {
+  return demanda === null ? 'sem lead time' : d1(demanda);
+}
+
+/** Selo do produto na memoria de calculo: `Grupo: GRUPO SINTETICO`. */
+export function textoSeloDoGrupo(nome: string): string {
+  return `Grupo: ${nome}`;
+}

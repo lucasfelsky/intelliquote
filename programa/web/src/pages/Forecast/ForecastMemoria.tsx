@@ -9,7 +9,7 @@ import {
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastMesesAtipicosModal from './ForecastMesesAtipicosModal';
 import { dataBr, mesAbrevDoAnoMes, passosDaMemoria, risco, type TomValor } from './forecastPainel';
-import { textoMotivoSobDemanda } from './forecastRelatorioTextos';
+import { textoMotivoSobDemanda, textoSeloDoGrupo } from './forecastRelatorioTextos';
 
 interface Props {
   linha: ForecastLinha;
@@ -254,6 +254,19 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
               )}
             </dd>
           </div>
+          {/* Grupo de equivalencia (PR 6b): so o selo; a memoria continua POR PRODUTO. Backend antigo nao manda `grupo`. */}
+          {linha.grupo && (
+            <div>
+              <dt>Grupo</dt>
+              <dd>
+                <span className="badge badge--info fcg-selo">{textoSeloDoGrupo(linha.grupo.nome)}</span>
+                <span className="fcg-selo__nota">
+                  Estoque avaliado somado com os outros produtos do grupo no relatório de compras. Os números acima são só
+                  deste produto.
+                </span>
+              </dd>
+            </div>
+          )}
           {/* Backend antigo nao manda `mesesForaDaMedia`: sem o campo, a linha nao mostra o controle. */}
           <div className={linha.productId != null && linha.mesesForaDaMedia !== undefined ? 'fc-compra-item' : undefined}>
             <dt>Meses atípicos</dt>

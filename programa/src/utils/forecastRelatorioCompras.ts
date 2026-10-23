@@ -40,6 +40,13 @@
 // DBCorp) ganham a secao `demandaComercial` (regra pura em forecastDemandaComercial.ts); o item da lista de compra que
 // tem pedido a somar ganha so o selo `demandaComercialKg` (a quantidade dele nao muda). Sem demandas a secao sai vazia.
 //
+// Grupos de equivalencia (PR 6b, Comex): produtos que sao o MESMO material tem o estoque avaliado SOMADO (regra pura em
+// forecastGruposEquivalencia.ts). O grupo vira UMA linha sintetica (dados do produto PRINCIPAL) que passa por este mesmo
+// pipeline: ruptura, embalagem/pallet (do principal), urgencia, sob demanda (so a marca do principal) e demanda do
+// comercial (pedido de qualquer membro usa o saldo do grupo). Os membros saem da lista individual (nunca contam duas
+// vezes); grupo coberto (a linha dele nao entraria) manda os membros que entrariam sozinhos para `cobertosPorGrupo`, com o
+// motivo. Meses atipicos (6c): cada membro ja traz a sua media ajustada (a soma e natural). O motor nao e tocado.
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
@@ -50,6 +57,12 @@ import {
   type DemandaComercialAberta,
   type DemandaComercialDoRelatorio,
 } from './forecastDemandaComercial';
+import {
+  agruparLinhas,
+  linhasParaDemandaComercial,
+  type DadosDoGrupo,
+  type GrupoDeEquivalencia,
+} from './forecastGruposEquivalencia';
 import { somarDias, yearMonthsDaJanela } from './forecastMonths';
 import { daysUntil, isValidDateKey } from './supplierDocumentDates';
 
@@ -155,6 +168,8 @@ export interface ItemRelatorioCompras {
   mesesForaDaMedia: string[];
   /** PR 6d: kg a somar pelos pedidos abertos do comercial (alem do horizonte); ausente = nenhum. */
   demandaComercialKg?: number;
+  /** PR 6b: o item e a linha de um GRUPO de equivalencia (nome do grupo em `item`; os membros vem aqui). */
+  grupo?: DadosDoGrupo;
   ruptura: RupturaEstimada | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -201,6 +216,8 @@ export interface ItemSemConsumo {
   mesesForaDaMedia: string[];
   /** Produto marcado como compra sob demanda (so selo; a lista continua a mesma). */
   sobDemanda: boolean;
+  /** PR 6b: a linha e um grupo de equivalencia (sem consumo no grupo todo). */
+  grupo?: DadosDoGrupo;
 }
 
 // Item sob demanda que entraria na lista de compra: fica fora dela e aparece em secao propria.
@@ -227,6 +244,38 @@ export interface ItemSobDemanda {
   obs: string;
   /** Meses de venda atipica fora da media deste item (PR 6c); vazio = media da planilha. */
   mesesForaDaMedia: string[];
+  /** PR 6b: a linha e um grupo de equivalencia cujo principal esta marcado como sob demanda. */
+  grupo?: DadosDoGrupo;
+}
+
+// Membro que entraria sozinho na lista de compra, mas o estoque SOMADO do grupo o cobre (PR 6b).
+export interface ItemCobertoPorGrupo {
+  linha: number;
+  n: number | null;
+  productId: number;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: string;
+  /** AN do membro sozinho (<= 0): o que a lista de compra sugeriria. */
+  demanda: number;
+  quantidadeSugerida: number;
+  grupoId: number;
+  grupoNome: string;
+  /** Produto principal do grupo (o que compraria se o grupo precisasse). */
+  principalItem: string;
+  /** Estoque somado do grupo (kg) e cobertura em meses ((estoque + chegadas) / media do grupo). */
+  estoqueDoGrupo: number;
+  cobertura: number | null;
+  obs: string;
+  mesesForaDaMedia: string[];
+}
+
+export type SituacaoDoGrupo = 'na-lista' | 'sob-demanda' | 'coberto' | 'sem-lead-time';
+
+/** Grupo formado na quinzena (2 ou mais membros presentes) e o que aconteceu com ele no relatorio. */
+export interface GrupoNoRelatorio extends DadosDoGrupo {
+  situacao: SituacaoDoGrupo;
 }
 
 export interface RelatorioCompras {
@@ -247,12 +296,18 @@ export interface RelatorioCompras {
     semConsumoSemMovimento: number;
     /** Itens que entrariam na lista de compra mas estao marcados como compra sob demanda. */
     sobDemanda: number;
+    /** PR 6b: membros que entrariam sozinhos na lista, mas o estoque somado do grupo cobre. */
+    cobertosPorGrupo: number;
   };
   urgencia: { diasCritico: number };
   semConsumo: { itens: ItemSemConsumo[] };
   sobDemanda: { itens: ItemSobDemanda[] };
   /** PR 6d: pedidos abertos do comercial (lancados a mao); vazio sem pedidos. */
   demandaComercial: DemandaComercialDoRelatorio;
+  /** PR 6b: membros fora da lista de compra por cobertura do grupo; vazio sem grupos. */
+  cobertosPorGrupo: { itens: ItemCobertoPorGrupo[] };
+  /** PR 6b: grupos formados na quinzena (ordem alfabetica), com o destino de cada um; vazio sem grupos. */
+  gruposDeEquivalencia: GrupoNoRelatorio[];
   grupos: GrupoRelatorioCompras[];
 }
 
@@ -518,10 +573,12 @@ export function montarRelatorioCompras(
   embalagens: EmbalagemCadastrada[],
   // `sobDemanda`: chave = productId do cadastro; sem a opcao o resultado e o mesmo de antes (so ganha secao vazia).
   // `demandasComerciais` (PR 6d): pedidos abertos do cadastro; sem a opcao a secao sai vazia.
+  // `grupos` (PR 6b): grupos de equivalencia do cadastro; sem a opcao nada muda (a secao e a lista saem vazias).
   opcoes: {
     diasCritico?: number;
     sobDemanda?: ReadonlyMap<number, { motivo: string | null }>;
     demandasComerciais?: DemandaComercialAberta[];
+    grupos?: GrupoDeEquivalencia[];
   } = {},
 ): RelatorioCompras {
   const diasCritico = opcoes.diasCritico ?? DIAS_RUPTURA_CRITICA;
@@ -537,6 +594,13 @@ export function montarRelatorioCompras(
     throw new Error(`Data invalida: ${String(q.hoje)}`);
   }
   const meses = yearMonthsDaJanela(q.baseDate, 6);
+  // Grupos de equivalencia (PR 6b): o grupo ocupa o lugar do principal; os outros membros saem da lista individual.
+  const agrupado = agruparLinhas(q.linhas, opcoes.grupos ?? []);
+  const grupoDaLinha = new Map(agrupado.grupos.map((g) => [g.linha.linha, g.dados]));
+  const comGrupo = (l: Pick<LinhaParaRelatorio, 'linha'>) => {
+    const grupo = grupoDaLinha.get(l.linha);
+    return grupo ? { grupo } : {};
+  };
 
   let semLeadTime = 0;
   let semConsumoSemFalta = 0;
@@ -570,10 +634,11 @@ export function montarRelatorioCompras(
       obs: (l.obs ?? '').trim(),
       mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
       sobDemanda: regraSobDemanda(l) !== undefined,
+      ...comGrupo(l),
     });
   };
 
-  for (const l of q.linhas) {
+  for (const l of agrupado.linhas) {
     if (l.AN === null) {
       registrarSemConsumo(l);
       semLeadTime += 1;
@@ -607,6 +672,7 @@ export function montarRelatorioCompras(
         programacaoDescoberta: semMenosZero(Math.max(0, arredondar6(programado - l.U - somaChegadas(l)))),
         obs: (l.obs ?? '').trim(),
         mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
+        ...comGrupo(l),
       });
       continue;
     }
@@ -636,6 +702,7 @@ export function montarRelatorioCompras(
       naoFraciona: l.naoFraciona === true,
       obs: (l.obs ?? '').trim(),
       mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
+      ...comGrupo(l),
       ruptura,
       dataLimite,
       vencida: dataLimite !== null && dataLimite < q.hoje,
@@ -686,9 +753,51 @@ export function montarRelatorioCompras(
   semConsumoItens.sort(compararSemConsumo);
   sobDemandaItens.sort(compararSobDemanda);
 
+  // Cobertura pelo grupo (PR 6b): o grupo cuja linha nao entraria na lista cobre os membros que entrariam sozinhos.
+  const cobertosItens: ItemCobertoPorGrupo[] = [];
+  const gruposDeEquivalencia = agrupado.grupos
+    .map<GrupoNoRelatorio>((g) => {
+      const situacao: SituacaoDoGrupo =
+        g.linha.AN === null
+          ? 'sem-lead-time'
+          : !entraNoRelatorio(g.linha)
+            ? 'coberto'
+            : regraSobDemanda(g.linha)
+              ? 'sob-demanda'
+              : 'na-lista';
+      if (situacao === 'coberto') {
+        for (const m of g.membros) {
+          if (m.AN === null || !entraNoRelatorio(m)) continue;
+          cobertosItens.push({
+            linha: m.linha,
+            n: m.n ?? null,
+            productId: m.productId as number,
+            item: m.item,
+            codigos: m.codigos,
+            fonte: m.fonte.trim(),
+            status: m.status,
+            demanda: semMenosZero(m.AN),
+            quantidadeSugerida: semMenosZero(Math.abs(m.AN)),
+            grupoId: g.dados.id,
+            grupoNome: g.dados.nome,
+            principalItem: g.dados.principalItem,
+            estoqueDoGrupo: g.dados.estoque,
+            cobertura: g.dados.cobertura,
+            obs: (m.obs ?? '').trim(),
+            mesesForaDaMedia: mesesForaDaMediaDaLinha(m),
+          });
+        }
+      }
+      return { ...g.dados, situacao };
+    })
+    .sort((a, b) => compararTexto(a.nome, b.nome) || a.id - b.id);
+  cobertosItens.sort(
+    (a, b) => compararTexto(a.grupoNome, b.grupoNome) || compararTexto(a.item, b.item) || a.linha - b.linha,
+  );
+
   const todos = grupos.flatMap((g) => g.itens);
   const demandaComercial = avaliarDemandasComerciais(
-    q.linhas,
+    linhasParaDemandaComercial(q.linhas, agrupado.grupos),
     opcoes.demandasComerciais ?? [],
     q.baseDate,
     new Set(todos.map((i) => i.linha)),
@@ -715,11 +824,19 @@ export function montarRelatorioCompras(
       comPallet: todos.filter((i) => i.porEmbalagem.some((o) => o.pallet !== null)).length,
       porUrgencia: contarPorUrgencia(todos),
     },
-    fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento, sobDemanda: sobDemandaItens.length },
+    fora: {
+      semLeadTime,
+      semConsumoSemFalta,
+      semConsumoSemMovimento,
+      sobDemanda: sobDemandaItens.length,
+      cobertosPorGrupo: cobertosItens.length,
+    },
     urgencia: { diasCritico },
     semConsumo: { itens: semConsumoItens },
     sobDemanda: { itens: sobDemandaItens },
     demandaComercial,
+    cobertosPorGrupo: { itens: cobertosItens },
+    gruposDeEquivalencia,
     grupos,
   };
 }

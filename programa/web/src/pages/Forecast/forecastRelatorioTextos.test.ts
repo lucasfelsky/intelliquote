@@ -8,18 +8,28 @@ import {
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
   paragrafoDemandaComercial,
+  paragrafoGruposDeEquivalencia,
   paragrafoMesesForaDaMedia,
+  resumoCobertosPorGrupo,
   resumoDemandaComercial,
   resumoMesesForaDaMedia,
   seloDemandaComercial,
   textoAvisoDemanda,
+  textoCobertura,
+  textoDemandaIndividual,
   textoMediaSem,
   textoMesesForaDaMedia,
+  textoMotivoCobertoPorGrupo,
   textoObservacao,
   textoOpcaoDeEmbalagem,
   textoPallet,
+  textoPrincipalDoGrupo,
+  textoResumoDoGrupo,
+  textoSeloDoGrupo,
   textoSituacaoDemanda,
+  textoSituacaoDoGrupo,
   textoSolicitacao,
+  tituloCobertosPorGrupo,
   tituloDemandaComercial,
   tituloOutrasEmbalagens,
 } from './forecastRelatorioTextos';
@@ -272,5 +282,52 @@ describe('demanda do comercial (PR 6d)', () => {
   it('solicitacao: numero com # ou traco', () => {
     expect(textoSolicitacao(12)).toBe('#12');
     expect(textoSolicitacao(null)).toBe('—');
+  });
+});
+
+describe('textos dos grupos de equivalencia (PR 6b)', () => {
+  const coberto = { grupoNome: 'GRUPO SINTETICO', estoqueDoGrupo: 1200, cobertura: 8 };
+
+  it('cobertura em meses com 1 casa, ou "sem consumo"', () => {
+    expect(textoCobertura(8)).toBe('8,0 meses');
+    expect(textoCobertura(2.345)).toBe('2,3 meses');
+    expect(textoCobertura(0)).toBe('0,0 meses');
+    expect(textoCobertura(null)).toBe('sem consumo');
+  });
+
+  it('motivo do membro coberto (caso B: estoque somado 1.200 kg, cobertura 8,0 meses)', () => {
+    expect(textoMotivoCobertoPorGrupo(coberto)).toBe(
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses',
+    );
+    expect(textoMotivoCobertoPorGrupo({ ...coberto, cobertura: null })).toBe(
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, sem consumo no grupo',
+    );
+  });
+
+  it('resumo e titulo: singular e plural', () => {
+    expect(resumoCobertosPorGrupo(1)).toBe('1 item coberto por grupo de equivalência');
+    expect(resumoCobertosPorGrupo(3)).toBe('3 itens cobertos por grupo de equivalência');
+    expect(tituloCobertosPorGrupo(1)).toBe('Cobertos pelo grupo de equivalência · 1 item');
+    expect(tituloCobertosPorGrupo(2)).toBe('Cobertos pelo grupo de equivalência · 2 itens');
+  });
+
+  it('paragrafo das regras do grupo', () => {
+    expect(paragrafoGruposDeEquivalencia()).toBe(
+      'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo.',
+    );
+  });
+
+  it('principal, resumo do grupo, situacao, demanda individual e selo da memoria', () => {
+    expect(textoPrincipalDoGrupo('PRODUTO 001')).toBe('Compra pelo produto principal: PRODUTO 001');
+    expect(textoResumoDoGrupo({ estoque: 300, cobertura: 2, seguranca: 300 })).toBe(
+      'Estoque somado 300 kg · cobertura 2,0 meses · segurança somada 300 kg',
+    );
+    expect(textoSituacaoDoGrupo('na-lista')).toBe('Na lista de compra');
+    expect(textoSituacaoDoGrupo('sob-demanda')).toBe('Fora da lista: principal sob demanda');
+    expect(textoSituacaoDoGrupo('coberto')).toBe('Coberto pelo estoque somado');
+    expect(textoSituacaoDoGrupo('sem-lead-time')).toBe('Fora da lista: nenhum membro com lead time');
+    expect(textoDemandaIndividual(-300)).toBe('-300,0');
+    expect(textoDemandaIndividual(null)).toBe('sem lead time');
+    expect(textoSeloDoGrupo('GRUPO SINTETICO')).toBe('Grupo: GRUPO SINTETICO');
   });
 });

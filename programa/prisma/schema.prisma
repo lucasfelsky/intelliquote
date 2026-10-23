@@ -1129,11 +1129,37 @@ model ForecastProduct {
   codes             ForecastProductCode[]
   atypicalMonths    ForecastAtypicalMonth[]
   commercialDemands ForecastCommercialDemand[]
+  // Grupo de equivalencia (PR 6b): produtos que sao o MESMO material (nomes ou fontes diferentes) tem o estoque avaliado
+  // somado no relatorio. Uma coluna garante 1 grupo por produto; fora das colunas que o import da planilha e o cadastro
+  // pela tela gravam, entao nenhum deles apaga o vinculo.
+  equivalenceGroupId Int?
+  equivalenceGroup   ForecastEquivalenceGroup? @relation("ForecastEquivalenceMembers", fields: [equivalenceGroupId], references: [id], onDelete: SetNull)
+  principalOfGroups  ForecastEquivalenceGroup[] @relation("ForecastEquivalencePrincipal")
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
 
   @@index([sourceId])
   @@index([familyId])
+  @@index([equivalenceGroupId])
+}
+
+// Grupo de equivalencia de produtos (PR 6b): o relatorio de compras soma estoque, chegadas, programacoes, medias e a
+// seguranca de cada membro e compra pelo produto PRINCIPAL (quando nulo, o membro de maior media da quinzena). Lido do
+// cadastro ATUAL (nao congelado na quinzena). Desfazer o grupo e DELETE: os membros voltam a avulsos (SetNull) e o
+// AuditLog guarda os ids. `createdById` sem FK: o autor fica no AuditLog.
+model ForecastEquivalenceGroup {
+  id                 Int               @id @default(autoincrement())
+  name               String
+  normalizedName     String            @unique
+  notes              String?
+  principalProductId Int?
+  principalProduct   ForecastProduct?  @relation("ForecastEquivalencePrincipal", fields: [principalProductId], references: [id], onDelete: SetNull)
+  members            ForecastProduct[] @relation("ForecastEquivalenceMembers")
+  createdById        Int?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([principalProductId])
 }
 
 // Mes de venda atipica de um produto (PR 6c): fica FORA das medias trimestral/semestral (o motor divide pelos meses

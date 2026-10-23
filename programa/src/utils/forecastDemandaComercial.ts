@@ -97,7 +97,8 @@ export function avaliarDemandasComerciais(
   const ordenadas = [...demandas].sort(
     (a, b) => (a.necessidade < b.necessidade ? -1 : a.necessidade > b.necessidade ? 1 : 0) || a.id - b.id,
   );
-  // Saldo ja usado por demandas anteriores do mesmo produto (so a parte coberta pelo saldo; o resto foi comprado).
+  // Saldo ja usado por demandas anteriores da mesma LINHA (so a parte coberta pelo saldo; o resto foi comprado). Por linha
+  // e nao por produto: membros de um grupo de equivalencia (PR 6b) dividem o saldo SOMADO do grupo.
   const consumido = new Map<number, number>();
 
   const itens = ordenadas.map<ItemDemandaComercial>((d) => {
@@ -130,10 +131,10 @@ export function avaliarDemandasComerciais(
         sugerido: 0,
       };
     }
-    const usado = consumido.get(d.productId) ?? 0;
+    const usado = consumido.get(l.linha) ?? 0;
     const saldoLivre = semMenosZero(arredondar6(Math.max(0, projecaoNoMes(l, k) - usado)));
     const sugerido = semMenosZero(arredondar6(Math.max(0, d.kg - saldoLivre)));
-    consumido.set(d.productId, usado + arredondar6(d.kg - sugerido));
+    consumido.set(l.linha, usado + arredondar6(d.kg - sugerido));
     return { ...base, situacao: 'alem-do-horizonte', programacaoDoMes: null, saldoLivre, sugerido };
   });
 

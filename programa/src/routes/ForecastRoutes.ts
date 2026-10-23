@@ -113,6 +113,36 @@ router.patch(
   ForecastController.patchDemandaComercial,
 );
 
+// Grupos de equivalencia (PR 6b): produtos que sao o mesmo material tem o estoque avaliado somado no relatorio.
+// Leitura = equipe COMEX; criar, editar e desfazer = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/equivalence-groups',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listGruposEquivalencia,
+);
+
+router.post(
+  '/forecast/equivalence-groups',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createGrupoEquivalencia,
+);
+
+router.patch(
+  '/forecast/equivalence-groups/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchGrupoEquivalencia,
+);
+
+router.delete(
+  '/forecast/equivalence-groups/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteGrupoEquivalencia,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(
