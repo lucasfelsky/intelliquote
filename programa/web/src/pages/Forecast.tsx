@@ -15,6 +15,7 @@ import {
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
+import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
 import {
   casaBusca,
@@ -292,6 +293,9 @@ export default function Forecast() {
             Relatório de compras
           </button>
         </div>
+      )}
+      {detail && detail.origin === 'dbcorp' && (
+        <ForecastPendentesCadastro key={`pendentes-${detail.id}`} snapshotId={detail.id} label={detail.label} podeEditar={podeImportar} />
       )}
       {detail && visao === 'painel' && <Painel key={detail.id} detail={detail} podeEditar={podeImportar} />}
       {detail && visao === 'compras' && (

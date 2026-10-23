@@ -1,5 +1,6 @@
 import { api, ApiError } from '@/api/client';
 import { messageOf } from '@/services/quoteResponses';
+import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
 export type ForecastStatus = 'nao' | 'cotando' | 'confirmado' | 'po' | 'preco';
 export type ForecastOrigin = 'planilha' | 'dbcorp';
@@ -115,6 +116,13 @@ export interface ForecastEmbalagemDoItem {
   rotulo: string | null;
 }
 
+/** Quantidade do item arredondada para UMA embalagem cadastrada (PR 5B); `destaque` = a que gera a Qtd. final. */
+export interface ForecastOpcaoEmbalagem extends ForecastEmbalagemDoItem {
+  embalagens: number;
+  quantidadeFinal: number;
+  destaque: boolean;
+}
+
 /** Faixas de urgencia do relatorio (PR 2D), da mais para a menos urgente. */
 export type ForecastUrgencia = 'sem-estoque' | 'critico' | 'atrasado' | 'no-prazo';
 
@@ -133,9 +141,13 @@ export interface ForecastItemRelatorio {
     cadastradas: ForecastEmbalagemDoItem[];
     multiplas: boolean;
   };
+  /** PR 5B, opcional de proposito: backend antigo nao manda e a tela cai no texto antigo das outras embalagens. */
+  porEmbalagem?: ForecastOpcaoEmbalagem[];
   quantidadeEmbalagens: number | null;
   quantidadeFinal: number;
   naoFraciona: boolean;
+  /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
+  obs?: string;
   ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -175,6 +187,8 @@ export interface ForecastItemSemConsumo {
   programacoes: Array<{ anoMes: string; quantidade: number }>;
   chegadas: Array<{ anoMes: string; quantidade: number }>;
   semLeadTime: boolean;
+  /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
+  obs?: string;
 }
 
 export interface ForecastRelatorioCompras {
@@ -314,10 +328,19 @@ export type ForecastDbcorpFiles = {
   margem?: ForecastArquivoBody;
 };
 
+/** Prazo (dias) das chegadas estimadas do FUP de UMA fonte: DATA PRONTIDAO + n e ETD + n (PR 5A). */
+export interface ForecastPrazoEstimativaBody {
+  sourceId: number;
+  prontidaoDias: number;
+  etdDias: number;
+}
+
 export type ForecastDbcorpBody = {
   label: string;
   baseDate: string;
   files: ForecastDbcorpFiles;
+  /** Prazos por fonte (inteiros 0..365); ausente = o servidor usa o padrao salvo da fonte, senao 35. */
+  prazosEstimativa?: ForecastPrazoEstimativaBody[];
 };
 
 export interface ForecastLinhasKg {
@@ -366,6 +389,8 @@ export interface ForecastRelatorioResumo {
     etaPorProntidaoDias: number;
     excluiEtaFinal: boolean;
     statusExcluidos: string[];
+    /** O prazo de cada fonte vale no lugar dos dias acima, que passam a ser o padrao (backend com PR 5A). */
+    prazoPorFonte?: boolean;
   };
   estimadasPorProntidao?: ForecastLinhasKg;
   excluidas?: {
@@ -381,6 +406,30 @@ export interface ForecastRelatorioResumo {
   };
 }
 
+export interface ForecastPrazoChegada {
+  prontidaoDias: number;
+  etdDias: number;
+}
+
+/** Tabela do prazo por fonte (so fontes com linha estimada). */
+export interface ForecastPrazosEstimativa {
+  padrao: ForecastPrazoChegada;
+  fontes: Array<{
+    sourceId: number;
+    nome: string;
+    /** Padrao salvo na fonte (`null` = nunca salvo: usa o padrao). */
+    salvo: { prontidaoDias: number | null; etdDias: number | null };
+    /** Prazo que esta pre-visualizacao usou. */
+    usado: ForecastPrazoChegada;
+    prontidao: ForecastLinhasKg;
+    etd: ForecastLinhasKg;
+  }>;
+  /** Codigo sem produto ativo ou produto sem fonte: usa o padrao, nao editavel. */
+  semFonte: { prontidao: ForecastLinhasKg; etd: ForecastLinhasKg };
+  /** Fontes cujo prazo usado vira o novo padrao salvo no confirm. */
+  padroesAlterados: number;
+}
+
 /** Resumo do preview dos relatorios DBCorp (`ForecastDbcorpSummary` do backend). */
 export interface ForecastDbcorpSummary {
   label: string;
@@ -394,6 +443,10 @@ export interface ForecastDbcorpSummary {
     mesAnterior: ForecastHistoricoMensal | null;
   };
   relatorios: Partial<Record<ForecastDbcorpSlot, ForecastRelatorioResumo>>;
+  /** Codigos do DBCorp fora do cadastro (PR 3B); ausente/null em backend antigo ou sem quinzena montada. */
+  pendentes?: ForecastPendentesResumo | null;
+  /** Prazo por fonte (PR 5A); ausente/null em backend antigo ou com erro de leitura: a tabela nao aparece. */
+  prazosEstimativa?: ForecastPrazosEstimativa | null;
   avisos: string[];
   erros: string[];
 }

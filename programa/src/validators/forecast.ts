@@ -2,6 +2,9 @@ import { z } from 'zod';
 import {
   FORECAST_BASE64_MAX_LENGTH,
   FORECAST_LABEL_PATTERN,
+  FORECAST_DBCORP_PRAZOS_MAX_FONTES,
+  FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
+  FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
 import { isValidDateKey } from '../utils/supplierDocumentDates';
@@ -51,8 +54,28 @@ const dbcorpFileField = z.object({
   contentBase64: contentBase64Field,
 });
 
+const prazoDiasField = z
+  .number({ error: 'Informe os dias como numero inteiro.' })
+  .int('Informe os dias como numero inteiro.')
+  .min(0, 'Os dias nao podem ser negativos.')
+  .max(
+    FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
+    `Os dias aceitam no maximo ${FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS}.`,
+  );
+
+// Prazo (dias) das chegadas estimadas do FUP, por fonte: DATA PRONTIDAO + n e ETD + n.
+const prazoEstimativaField = z.object({
+  sourceId: z
+    .number({ error: 'Fonte invalida.' })
+    .int('Fonte invalida.')
+    .positive('Fonte invalida.'),
+  prontidaoDias: prazoDiasField,
+  etdDias: prazoDiasField,
+});
+
 // Quinzena a partir dos relatorios DBCorp. O confirm recebe o mesmo corpo do preview (grava sempre a
-// quinzena e o mes anterior do historico; sem opcoes).
+// quinzena e o mes anterior do historico; sem opcoes). `prazosEstimativa` (opcional) viaja nos dois: o confirm
+// repete o calculo do preview com os mesmos prazos.
 export const forecastDbcorpPreviewSchema = z
   .object({
     label: labelField,
@@ -67,8 +90,28 @@ export const forecastDbcorpPreviewSchema = z
       clientesAtivos: dbcorpFileField.optional(),
       margem: dbcorpFileField.optional(),
     }),
+    prazosEstimativa: z
+      .array(prazoEstimativaField)
+      .max(
+        FORECAST_DBCORP_PRAZOS_MAX_FONTES,
+        `Informe no maximo ${FORECAST_DBCORP_PRAZOS_MAX_FONTES} fontes em prazosEstimativa.`,
+      )
+      .optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.prazosEstimativa) {
+      const vistos = new Set<number>();
+      for (const [index, prazo] of value.prazosEstimativa.entries()) {
+        if (vistos.has(prazo.sourceId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['prazosEstimativa', index, 'sourceId'],
+            message: 'Fonte repetida em prazosEstimativa.',
+          });
+        }
+        vistos.add(prazo.sourceId);
+      }
+    }
     if (value.label.endsWith('-2') && !value.files.vendasAtual) {
       ctx.addIssue({
         code: 'custom',
@@ -165,3 +208,37 @@ export type ForecastDbcorpConfirmInput = z.infer<typeof forecastDbcorpConfirmSch
 export type ForecastSourcePatchInput = z.infer<typeof forecastSourcePatchSchema>;
 export type ForecastSnapshotQueryInput = z.infer<typeof forecastSnapshotQuerySchema>;
 export type ForecastEmbalagensPatchInput = z.infer<typeof forecastEmbalagensPatchSchema>;
+
+// Produto novo a partir de um pendente de cadastro (PR 3B): nome, ate 7 codigos, fonte e familia. O lead time
+// pertence a fonte (precisa estar preenchido; a regra e do service).
+const productCodeField = z
+  .string({ error: 'Informe o código do produto.' })
+  .trim()
+  .min(1, 'Informe o código do produto.')
+  .max(40, 'O código aceita no máximo 40 caracteres.')
+  .transform((value) => value.toUpperCase());
+
+const positiveIdField = (message: string) =>
+  z.number({ error: message }).int(message).positive(message);
+
+export const forecastProductCreateSchema = z.object({
+  nome: z
+    .string({ error: 'Informe o nome do produto.' })
+    .trim()
+    .min(1, 'Informe o nome do produto.')
+    .max(200, 'O nome aceita no máximo 200 caracteres.'),
+  codigos: z
+    .array(productCodeField, { error: 'Informe os códigos do produto como lista.' })
+    .min(1, 'Informe ao menos um código.')
+    .max(FORECAST_MAX_CODES_PER_PRODUCT, `Informe no máximo ${FORECAST_MAX_CODES_PER_PRODUCT} códigos.`)
+    .refine((lista) => new Set(lista).size === lista.length, 'Código repetido na lista.'),
+  sourceId: positiveIdField('Fonte inválida.'),
+  familyId: positiveIdField('Família inválida.'),
+});
+
+export const forecastProductCodeAddSchema = z.object({
+  codigo: productCodeField,
+});
+
+export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
+export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;

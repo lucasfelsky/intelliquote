@@ -4,7 +4,8 @@
 //
 // Regra F3 (decidida pelo Lucas em 2026-10-22; revoga a parte da D2 que incluia as atracadas e usava
 // ETA FINAL como data): `ATRAC. AG. LIBERAÇÃO` e linhas com `ETA FINAL` preenchida ficam FORA; chegada =
-// ETA (CHEGADA), senao ETD + 35 dias, senao DATA PRONTIDAO + 35 dias (as duas ultimas marcadas ESTIMADA).
+// ETA (CHEGADA), senao ETD + N dias, senao DATA PRONTIDAO + N dias (as duas ultimas marcadas ESTIMADA). N = prazo da
+// FONTE do codigo (PR 5A: digitado no resumo da importacao > padrao salvo na fonte > 35).
 import {
   FORECAST_DBCORP_ETA_POR_ETD_DIAS,
   FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS,
@@ -18,7 +19,7 @@ import {
 import { rotuloDoYearMonth, somarDias, yearMonthsDaJanela } from './forecastMonths';
 import type { Bruto } from './forecastXlsx';
 import { isValidDateKey } from './supplierDocumentDates';
-import type { LancamentoMensal } from './forecastTypes';
+import type { Lancamento, LancamentoMensal } from './forecastTypes';
 
 // --- Helpers compartilhados com forecastDbcorp.ts ---------------------------------------------------
 
@@ -184,6 +185,171 @@ export interface FupLinha {
 
 export type ChegadaFup = LancamentoMensal & { estimada?: 'etd' | 'prontidao' };
 
+// --- Prazo das chegadas estimadas, por fonte (PR 5A) -------------------------------------------------
+
+// Dias de DATA PRONTIDAO / ETD ate a chegada.
+export interface PrazoChegada {
+  prontidaoDias: number;
+  etdDias: number;
+}
+
+export interface PrazosChegadaFup {
+  padrao: PrazoChegada; // fonte sem prazo proprio e codigo sem fonte
+  fonteDoCodigo: ReadonlyMap<string, number>; // codigo (normalizado) -> id da fonte do produto ativo
+  porFonte: ReadonlyMap<number, PrazoChegada>; // id da fonte -> prazo ja resolvido
+}
+
+export const PRAZO_CHEGADA_PADRAO: PrazoChegada = {
+  prontidaoDias: FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS,
+  etdDias: FORECAST_DBCORP_ETA_POR_ETD_DIAS,
+};
+
+// Sem fontes: todo codigo usa o padrao (35/35), igual a regra F3 original.
+export const PRAZOS_CHEGADA_PADRAO: PrazosChegadaFup = {
+  padrao: PRAZO_CHEGADA_PADRAO,
+  fonteDoCodigo: new Map(),
+  porFonte: new Map(),
+};
+
+export interface PrazoSalvoDaFonte {
+  sourceId: number;
+  prontidaoDias: number | null;
+  etdDias: number | null;
+}
+
+export interface PrazoEditado {
+  sourceId: number;
+  prontidaoDias: number;
+  etdDias: number;
+}
+
+// Precedencia por fonte e por coluna: valor digitado > padrao salvo na fonte > padrao (35).
+export function resolverPrazosChegada(args: {
+  padrao: PrazoChegada;
+  salvos: readonly PrazoSalvoDaFonte[];
+  editados: readonly PrazoEditado[];
+}): Map<number, PrazoChegada> {
+  const editados = new Map(args.editados.map((e) => [e.sourceId, e]));
+  const salvos = new Map(args.salvos.map((s) => [s.sourceId, s]));
+  const resolvido = new Map<number, PrazoChegada>();
+  for (const id of new Set([...salvos.keys(), ...editados.keys()])) {
+    const salvo = salvos.get(id);
+    const editado = editados.get(id);
+    resolvido.set(id, {
+      prontidaoDias: editado?.prontidaoDias ?? salvo?.prontidaoDias ?? args.padrao.prontidaoDias,
+      etdDias: editado?.etdDias ?? salvo?.etdDias ?? args.padrao.etdDias,
+    });
+  }
+  return resolvido;
+}
+
+export interface EstimadasDaFonte {
+  fonteId: number | null; // null = codigo sem produto ativo ou produto sem fonte
+  // Linhas que DEPENDEM do prazo (sem ETA, com ETD / DATA PRONTIDAO valida), antes da janela: o conjunto nao muda
+  // ao editar os dias.
+  prontidao: LinhasKg;
+  etd: LinhasKg;
+}
+
+export interface FontePrazoInfo {
+  sourceId: number;
+  nome: string;
+  salvo: { prontidaoDias: number | null; etdDias: number | null };
+}
+
+export interface ResumoPrazosEstimativa {
+  padrao: PrazoChegada;
+  fontes: Array<{
+    sourceId: number;
+    nome: string;
+    salvo: { prontidaoDias: number | null; etdDias: number | null };
+    usado: PrazoChegada;
+    prontidao: LinhasKg;
+    etd: LinhasKg;
+  }>;
+  semFonte: { prontidao: LinhasKg; etd: LinhasKg };
+  // Fontes do corpo cujo prazo usado difere do padrao salvo (ou 35): serao gravadas no confirm.
+  padroesAlterados: number;
+}
+
+export interface MudancaDePrazo {
+  sourceId: number;
+  arrivalFromReadinessDays?: number;
+  arrivalFromEtdDays?: number;
+}
+
+// Fontes (entre as pedidas) cujo prazo usado difere do que a proxima importacao abriria (salvo ?? padrao): so a
+// coluna que mudou entra.
+export function mudancasDePrazo(args: {
+  padrao: PrazoChegada;
+  fontes: readonly FontePrazoInfo[];
+  porFonte: ReadonlyMap<number, PrazoChegada>;
+  sourceIds: readonly number[];
+}): MudancaDePrazo[] {
+  const pedidas = new Set(args.sourceIds);
+  const mudancas: MudancaDePrazo[] = [];
+  for (const fonte of args.fontes) {
+    if (!pedidas.has(fonte.sourceId)) continue;
+    const usado = args.porFonte.get(fonte.sourceId);
+    if (!usado) continue;
+    const mudanca: MudancaDePrazo = { sourceId: fonte.sourceId };
+    if (usado.prontidaoDias !== (fonte.salvo.prontidaoDias ?? args.padrao.prontidaoDias)) {
+      mudanca.arrivalFromReadinessDays = usado.prontidaoDias;
+    }
+    if (usado.etdDias !== (fonte.salvo.etdDias ?? args.padrao.etdDias)) {
+      mudanca.arrivalFromEtdDays = usado.etdDias;
+    }
+    if (mudanca.arrivalFromReadinessDays !== undefined || mudanca.arrivalFromEtdDays !== undefined) {
+      mudancas.push(mudanca);
+    }
+  }
+  return mudancas;
+}
+
+// Tabela do resumo: so fontes com pelo menos uma linha estimada; ordem kg decrescente (empate: nome).
+export function resumirPrazosEstimativa(args: {
+  padrao: PrazoChegada;
+  fontes: readonly FontePrazoInfo[];
+  porFonte: ReadonlyMap<number, PrazoChegada>;
+  estimadasPorFonte: readonly EstimadasDaFonte[];
+  padroesAlterados: number;
+}): ResumoPrazosEstimativa {
+  const zero = (): LinhasKg => ({ linhas: 0, kg: 0 });
+  const juntar = (alvo: LinhasKg, v: LinhasKg) => {
+    alvo.linhas += v.linhas;
+    alvo.kg += v.kg;
+  };
+  const conhecidas = new Map(args.fontes.map((f) => [f.sourceId, f]));
+  const semFonte = { prontidao: zero(), etd: zero() };
+  const fontes: ResumoPrazosEstimativa['fontes'] = [];
+  for (const e of args.estimadasPorFonte) {
+    const fonte = e.fonteId === null ? undefined : conhecidas.get(e.fonteId);
+    if (!fonte) {
+      juntar(semFonte.prontidao, e.prontidao);
+      juntar(semFonte.etd, e.etd);
+      continue;
+    }
+    fontes.push({
+      sourceId: fonte.sourceId,
+      nome: fonte.nome,
+      salvo: fonte.salvo,
+      usado: args.porFonte.get(fonte.sourceId) ?? args.padrao,
+      prontidao: { linhas: e.prontidao.linhas, kg: round6(e.prontidao.kg) },
+      etd: { linhas: e.etd.linhas, kg: round6(e.etd.kg) },
+    });
+  }
+  fontes.sort((a, b) => b.prontidao.kg + b.etd.kg - (a.prontidao.kg + a.etd.kg) || a.nome.localeCompare(b.nome));
+  return {
+    padrao: args.padrao,
+    fontes,
+    semFonte: {
+      prontidao: { linhas: semFonte.prontidao.linhas, kg: round6(semFonte.prontidao.kg) },
+      etd: { linhas: semFonte.etd.linhas, kg: round6(semFonte.etd.kg) },
+    },
+    padroesAlterados: args.padroesAlterados,
+  };
+}
+
 type PorStatusKg = Array<{ status: string; linhas: number; kg: number }>;
 
 export interface ResultadoRegrasFup extends Omit<ResumoRelatorio, 'erros'> {
@@ -191,6 +357,7 @@ export interface ResultadoRegrasFup extends Omit<ResumoRelatorio, 'erros'> {
   porStatus: Array<{ status: string; incluido: boolean; linhas: number; kg: number }>;
   estimadasPorEtd: LinhasKg;
   estimadasPorProntidao: LinhasKg;
+  estimadasPorFonte: EstimadasDaFonte[];
   vencidasNoMesBase: LinhasKg;
   // Linhas nao concluidas sem ETA (CHEGADA), ETD (EMBARQUE) nem DATA PRONTIDAO: ficam DE FORA.
   semData: LinhasKg & { porStatus: PorStatusKg };
@@ -209,6 +376,8 @@ export interface ResultadoRegrasFup extends Omit<ResumoRelatorio, 'erros'> {
     etaPorProntidaoDias: number;
     excluiEtaFinal: boolean;
     statusExcluidos: string[];
+    // So quando chamada com prazos por fonte (5A): os dias acima passam a ser o padrao; cada fonte pode ter o seu.
+    prazoPorFonte?: true;
   };
 }
 
@@ -216,7 +385,11 @@ const STATUS_CONCLUIDO = normalizeDbcorpText(FORECAST_DBCORP_FUP_STATUS_IGNORADO
 const STATUS_EXCLUIDOS = new Set(FORECAST_DBCORP_FUP_STATUS_EXCLUIDOS.map(normalizeDbcorpText));
 const TEXTO_DETALHE_MAX = 80;
 
-export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: string): ResultadoRegrasFup {
+export function aplicarRegrasFup(
+  linhasFup: readonly FupLinha[],
+  baseDate: string,
+  prazos: PrazosChegadaFup = PRAZOS_CHEGADA_PADRAO,
+): ResultadoRegrasFup {
   const zero = (): LinhasKg => ({ linhas: 0, kg: 0 });
   const somar = (alvo: LinhasKg, kg: number) => {
     alvo.linhas++;
@@ -243,6 +416,12 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
   const etaFinalPorStatus = new Map<string, { status: string; linhas: number; kg: number }>();
   const estimadasEtd = zero();
   const estimadasProntidao = zero();
+  const estimadasPorFonte = new Map<number | null, EstimadasDaFonte>();
+  const estimarDaFonte = (fonteId: number | null, tipo: 'etd' | 'prontidao', kg: number) => {
+    const e = estimadasPorFonte.get(fonteId) ?? { fonteId, prontidao: zero(), etd: zero() };
+    somar(e[tipo], kg);
+    estimadasPorFonte.set(fonteId, e);
+  };
   const vencidas = zero();
   const semData = zero();
   const depois = zero();
@@ -313,16 +492,22 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
     if (chegada === null) {
       const etd = dataValida(l.etd);
       if (etd !== null) {
-        chegada = somarDias(etd, FORECAST_DBCORP_ETA_POR_ETD_DIAS);
+        const fonteId = prazos.fonteDoCodigo.get(l.codigo) ?? null;
+        const dias = (fonteId === null ? undefined : prazos.porFonte.get(fonteId)) ?? prazos.padrao;
+        chegada = somarDias(etd, dias.etdDias);
         estimada = 'etd';
+        estimarDaFonte(fonteId, 'etd', kg);
       }
     }
     if (chegada === null) {
       const dataPo = l.dataPo.tipo === 'data' ? l.dataPo.key : null;
       const prontidao = parseProntidao(l.prontidao, dataPo, baseDate);
       if (prontidao.tipo === 'data') {
-        chegada = somarDias(prontidao.key, FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS);
+        const fonteId = prazos.fonteDoCodigo.get(l.codigo) ?? null;
+        const dias = (fonteId === null ? undefined : prazos.porFonte.get(fonteId)) ?? prazos.padrao;
+        chegada = somarDias(prontidao.key, dias.prontidaoDias);
         estimada = 'prontidao';
+        estimarDaFonte(fonteId, 'prontidao', kg);
       } else if (prontidao.tipo === 'nao_reconhecida') {
         somar(naoReconhecida, kg);
         if (detalhes.length < FORECAST_DBCORP_MAX_DETALHES) {
@@ -380,6 +565,20 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
     lista.map((s) => `${s.status}: ${s.linhas} (${fmtKg(s.kg)} kg)`).join('; ');
   const n = (v: LinhasKg) => `${v.linhas} ${plural(v.linhas, 'linha', 'linhas')} (${fmtKg(v.kg)} kg)`;
   const statusExcluidos = [...FORECAST_DBCORP_FUP_STATUS_EXCLUIDOS] as string[];
+  // Fontes com linha estimada cujo prazo difere do padrao (o aviso so cita "prazo da fonte" quando ha alguma).
+  const comPrazoProprio = (tipo: 'etd' | 'prontidao') =>
+    [...estimadasPorFonte.values()].filter((e) => {
+      if (e.fonteId === null || e[tipo].linhas === 0) return false;
+      const dias = prazos.porFonte.get(e.fonteId);
+      if (!dias) return false;
+      return tipo === 'etd' ? dias.etdDias !== prazos.padrao.etdDias : dias.prontidaoDias !== prazos.padrao.prontidaoDias;
+    }).length;
+  const sufixoDoPrazo = (tipo: 'etd' | 'prontidao') => {
+    const padrao = tipo === 'etd' ? prazos.padrao.etdDias : prazos.padrao.prontidaoDias;
+    const proprios = comPrazoProprio(tipo);
+    if (proprios === 0) return `${padrao} dias`;
+    return `prazo da fonte (padrão ${padrao} dias; ${proprios} ${plural(proprios, 'fonte com prazo próprio', 'fontes com prazo próprio')})`;
+  };
 
   const avisos: string[] = [];
   if (atracadas.linhas > 0) {
@@ -398,12 +597,12 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
   }
   if (estimadasProntidao.linhas > 0) {
     avisos.push(
-      `FUP: ${n(estimadasProntidao)} sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + ${FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS} dias (ESTIMADA).`,
+      `FUP: ${n(estimadasProntidao)} sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + ${sufixoDoPrazo('prontidao')} (ESTIMADA).`,
     );
   }
   if (estimadasEtd.linhas > 0) {
     avisos.push(
-      `FUP: ${n(estimadasEtd)} sem ETA (CHEGADA) usaram ETD (EMBARQUE) + ${FORECAST_DBCORP_ETA_POR_ETD_DIAS} dias (ESTIMADA).`,
+      `FUP: ${n(estimadasEtd)} sem ETA (CHEGADA) usaram ETD (EMBARQUE) + ${sufixoDoPrazo('etd')} (ESTIMADA).`,
     );
   }
   if (naoReconhecida.linhas > 0) {
@@ -443,6 +642,11 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
     porStatus,
     estimadasPorEtd: arredondar(estimadasEtd),
     estimadasPorProntidao: arredondar(estimadasProntidao),
+    estimadasPorFonte: [...estimadasPorFonte.values()].map((e) => ({
+      fonteId: e.fonteId,
+      prontidao: arredondar(e.prontidao),
+      etd: arredondar(e.etd),
+    })),
     vencidasNoMesBase: arredondar(vencidas),
     semData: { ...arredondar(semData), porStatus: semDataStatus },
     depoisDaJanela: arredondar(depois),
@@ -457,10 +661,24 @@ export function aplicarRegrasFup(linhasFup: readonly FupLinha[], baseDate: strin
     prontidaoNaoReconhecida: { ...arredondar(naoReconhecida), detalhes, omitidos },
     regra: {
       id: FORECAST_DBCORP_FUP_REGRA,
-      etaPorEtdDias: FORECAST_DBCORP_ETA_POR_ETD_DIAS,
-      etaPorProntidaoDias: FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS,
+      etaPorEtdDias: prazos.padrao.etdDias,
+      etaPorProntidaoDias: prazos.padrao.prontidaoDias,
       excluiEtaFinal: FORECAST_DBCORP_FUP_EXCLUI_ETA_FINAL,
       statusExcluidos,
+      ...(prazos === PRAZOS_CHEGADA_PADRAO ? {} : { prazoPorFonte: true as const }),
     },
   };
+}
+
+// Compra em aberto do FUP por codigo (regra dos pendentes de cadastro, 5C): TODA linha com codigo e kg numerico cujo
+// status nao e CONCLUIDO. Diferente de `aplicarRegrasFup`, nao olha datas: entram tambem as atracadas, as com ETA FINAL
+// preenchida, sem data, com DATA PRONTIDAO nao reconhecida e depois da janela (continuam sendo compra em aberto).
+export function comprasEmAbertoDoFup(linhas: readonly FupLinha[]): Lancamento[] {
+  const porCodigo = new Map<string, number>();
+  for (const l of linhas) {
+    if (!l.codigo || l.kg === null || !Number.isFinite(l.kg)) continue;
+    if (normalizeDbcorpText(l.status) === STATUS_CONCLUIDO) continue;
+    porCodigo.set(l.codigo, (porCodigo.get(l.codigo) ?? 0) + l.kg);
+  }
+  return [...porCodigo].map(([codigo, qtd]) => ({ codigo, qtd: round6(qtd) }));
 }

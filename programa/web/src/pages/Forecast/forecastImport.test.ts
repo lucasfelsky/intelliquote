@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ForecastLocalError, type ForecastDbcorpSlot, type ForecastRelatorioResumo } from '@/services/forecast';
 import {
+  avisosSemRedundancia,
   bytesDoCorpo,
   checarArquivos,
   checarCorpo,
@@ -23,6 +24,7 @@ import {
   slotsSemLinhasUteis,
   SLOTS_DBCORP,
   tamanhoBase64,
+  textoEntendiProntidao,
   totaisDeposito,
 } from './forecastImport';
 
@@ -183,6 +185,16 @@ describe('corpos', () => {
     expect('vendasAtual' in corpo.files).toBe(false);
   });
 
+  it('DBCorp com prazosEstimativa: a chave entra no fim; sem prazos nao gera a chave', () => {
+    const arquivos = { saldo: arquivo, vendasMes: arquivo, vendasAnual: arquivo, programacao: arquivo, fup: arquivo };
+    const prazos = [{ sourceId: 1, prontidaoDias: 60, etdDias: 0 }];
+    const com = montarCorpoDbcorp('10-1', '2026-10-05', arquivos, prazos);
+    expect(Object.keys(com)).toEqual(['label', 'baseDate', 'files', 'prazosEstimativa']);
+    expect(com.prazosEstimativa).toEqual(prazos);
+    expect('prazosEstimativa' in montarCorpoDbcorp('10-1', '2026-10-05', arquivos)).toBe(false);
+    expect('prazosEstimativa' in montarCorpoDbcorp('10-1', '2026-10-05', arquivos, undefined)).toBe(false);
+  });
+
   it('readFileAsBase64 devolve o base64 sem o prefixo data:', async () => {
     const file = new File([new Uint8Array([1, 2, 3])], 'saldo-teste.xlsx');
     await expect(readFileAsBase64(file)).resolves.toBe('AQID');
@@ -308,9 +320,64 @@ describe('leitura dos arquivos escolhidos', () => {
     expect(corpo.files.saldo).toEqual({ fileName: 'saldo.xlsx', contentBase64: 'AQID' });
   });
 
+  it('lerCorpoDbcorp leva os prazos aplicados quando informados', async () => {
+    const prazos = [{ sourceId: 2, prontidaoDias: 10, etdDias: 20 }];
+    const corpo = await lerCorpoDbcorp({ saldo: pequeno('saldo.xlsx') }, '12-1', '2026-12-05', prazos);
+    expect(corpo.prazosEstimativa).toEqual(prazos);
+    expect('prazosEstimativa' in (await lerCorpoDbcorp({ saldo: pequeno('saldo.xlsx') }, '12-1', '2026-12-05'))).toBe(false);
+  });
+
   it('lerCorpoDbcorp aponta o relatorio com extensao errada', async () => {
     await expect(lerCorpoDbcorp({ saldo: pequeno('saldo.xls') }, '12-1', '2026-12-05')).rejects.toThrow(
       'Envie o relatório SALDO em .xlsx.',
     );
+  });
+});
+
+describe('ajustes do 3A (3B-2): em aberto sem ETA FINAL, singular e aviso unico', () => {
+  const porStatus = [
+    { incluido: true, kg: 1000 },
+    { incluido: false, kg: 500 },
+    { incluido: true, kg: 250 },
+  ];
+
+  it('kgEmAberto subtrai as linhas com ETA FINAL preenchida (excluidas pela F3)', () => {
+    expect(kgEmAberto(porStatus, 400)).toBe(850);
+    expect(kgEmAberto(porStatus, 0)).toBe(1250);
+    // Sem o segundo argumento (backend antigo, sem `excluidas`): igual ao comportamento anterior.
+    expect(kgEmAberto(porStatus)).toBe(1250);
+  });
+
+  it('kgEmAberto nunca fica negativo', () => {
+    expect(kgEmAberto(porStatus, 5000)).toBe(0);
+    expect(kgEmAberto([], 10)).toBe(0);
+  });
+
+  it('o % do em aberto usa o em aberto SEM as linhas com ETA FINAL', () => {
+    // 250 kg sem data: 25% de 1000 (so as 600 de ETA FINAL fora do total de 1600).
+    expect(percentualSemData({ kg: 250 }, kgEmAberto([{ incluido: true, kg: 1600 }], 600))).toBe(25);
+    // Sem o ajuste seria 16%.
+    expect(percentualSemData({ kg: 250 }, kgEmAberto([{ incluido: true, kg: 1600 }]))).toBe(16);
+  });
+
+  it('textoEntendiProntidao: 1 linha no singular, varias no plural', () => {
+    const fmt = (n: number) => String(n);
+    expect(textoEntendiProntidao({ linhas: 1, kg: 300 }, fmt)).toBe(
+      'Entendi que 1 linha (300 kg) do FUP com DATA PRONTIDÃO não reconhecida fica fora das chegadas.',
+    );
+    expect(textoEntendiProntidao({ linhas: 4, kg: 300 }, fmt)).toBe(
+      'Entendi que 4 linhas (300 kg) do FUP com DATA PRONTIDÃO não reconhecida ficam fora das chegadas.',
+    );
+  });
+
+  it('avisosSemRedundancia: sem a coluna DATA PRONTIDAO o aviso de DATA PO ausente some', () => {
+    const prontidao = 'FUP: coluna "DATA PRONTIDÃO" não encontrada - linhas sem ETA nem ETD ficam de fora.';
+    const dataPo = 'FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.';
+    const outro = 'FUP: 2 linhas (100 kg) sem ETA (CHEGADA) usaram ETD (EMBARQUE) + 35 dias (ESTIMADA).';
+    expect(avisosSemRedundancia([outro, prontidao, dataPo])).toEqual([outro, prontidao]);
+    expect(avisosSemRedundancia([dataPo, prontidao])).toEqual([prontidao]);
+    // So a DATA PO ausente (prontidao presente): o aviso continua, ele informa algo.
+    expect(avisosSemRedundancia([outro, dataPo])).toEqual([outro, dataPo]);
+    expect(avisosSemRedundancia([])).toEqual([]);
   });
 });

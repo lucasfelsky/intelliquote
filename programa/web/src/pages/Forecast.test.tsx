@@ -145,11 +145,28 @@ function relatorioDe(id: number) {
   };
 }
 
+// Pendentes de cadastro (PR 3B-2), dados sinteticos: 1 sem cadastro e 1 de produto inativo.
+const PENDENTES = {
+  aplicavel: true,
+  snapshotId: 8,
+  label: '11-1',
+  itens: [
+    { codigo: 'TST0901', situacao: 'sem_cadastro', produtoInativo: null, vendasMes: 20, vendasAtual: 0, vendasAnual: 200, programacao: 0, chegadas: 80, saldo: 0 },
+    { codigo: 'TST0902', situacao: 'produto_inativo', produtoInativo: { id: 9, nome: 'PRODUTO 009' }, vendasMes: 5, vendasAtual: 0, vendasAnual: 50, programacao: 0, chegadas: 0, saldo: 0 },
+  ],
+  totalItens: 2,
+  omitidos: 0,
+  soSaldo: { codigos: 0, kg: 0 },
+};
+
 function mockApi(detalhes: Record<number, unknown> | ((id: number) => unknown), lista: unknown = RESUMOS) {
   get.mockImplementation(async (path: string) => {
     if (path === '/v1/forecast/snapshots') {
       if (lista instanceof Error) throw lista;
       return { data: lista };
+    }
+    if (path.endsWith('/pendentes')) {
+      return { data: { ...PENDENTES, snapshotId: Number(path.split('/')[4]) } };
     }
     if (path.endsWith('/relatorio-compras')) return { data: relatorioDe(Number(path.split('/')[4])) };
     const id = Number(path.split('/').pop());
@@ -173,7 +190,9 @@ function renderPage(url = '/forecast') {
 const detalhesChamados = () =>
   get.mock.calls
     .map((c) => String(c[0]))
-    .filter((p) => p.startsWith('/v1/forecast/snapshots/') && !p.endsWith('/relatorio-compras'));
+    .filter((p) => p.startsWith('/v1/forecast/snapshots/') && !p.endsWith('/relatorio-compras') && !p.endsWith('/pendentes'));
+
+const pendentesChamados = () => get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith('/pendentes'));
 
 const relatoriosChamados = () =>
   get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith('/relatorio-compras'));
@@ -700,5 +719,47 @@ describe('Forecast - embalagens do item na memoria de calculo', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     await waitFor(() => expect(screen.queryByLabelText('Quantidade em kg do código C0001')).toBeNull());
     expect(document.activeElement).toBe(botao);
+  });
+});
+
+describe('Forecast - pendentes de cadastro (PR 3B-2)', () => {
+  const DBCORP = detalhe({ id: 8, label: '11-1', baseDate: '2026-11-05', half: 1, origin: 'dbcorp', conferencia: null });
+
+  it('quinzena DBCorp mostra o painel (so a quinzena aberta consulta); quinzena da planilha nao', async () => {
+    mockApi({ 7: detalhe(), 8: DBCORP });
+    const planilha = renderPage('/forecast?quinzena=7');
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(screen.queryByText(/Pendentes de cadastro/)).toBeNull();
+    expect(pendentesChamados()).toEqual([]);
+    planilha.unmount();
+
+    vi.clearAllMocks();
+    mockApi({ 7: detalhe(), 8: DBCORP });
+    renderPage('/forecast?quinzena=8');
+    expect(await screen.findByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
+    expect(pendentesChamados()).toEqual(['/v1/forecast/snapshots/8/pendentes']);
+    expect(
+      screen.getByText(/Esses códigos ficaram FORA do cálculo da quinzena 11-1\./),
+    ).toBeTruthy();
+  });
+
+  it.each(['admin', 'comprador'])('%s ve "Completar cadastro" so no codigo sem cadastro', async (role) => {
+    mockRole = role;
+    mockApi({ 7: detalhe(), 8: DBCORP });
+    renderPage('/forecast?quinzena=8');
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    expect(screen.getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Completar cadastro do código TST0901' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Completar cadastro do código TST0902' })).toBeNull();
+  });
+
+  it.each(['gestor', 'viewer'])('%s so ve a lista (sem botao nem coluna Acao)', async (role) => {
+    mockRole = role;
+    mockApi({ 7: detalhe(), 8: DBCORP });
+    renderPage('/forecast?quinzena=8');
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    expect(screen.getByText('TST0901')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Completar cadastro/ })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Ação' })).toBeNull();
   });
 });

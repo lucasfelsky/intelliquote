@@ -43,6 +43,7 @@
       "ExchangeRateService.ts",
       "ForecastDbcorpService.ts",
       "ForecastImportService.ts",
+      "ForecastProductCadastroService.ts",
       "ForecastProductService.ts",
       "ForecastSnapshotService.ts",
       "ForecastSourceService.ts",
@@ -168,7 +169,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 60
+    "migrations": 62
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -225,6 +226,7 @@
     "GET /forecast/products/:id/embalagens",
     "GET /forecast/snapshots",
     "GET /forecast/snapshots/:id",
+    "GET /forecast/snapshots/:id/pendentes",
     "GET /forecast/snapshots/:id/relatorio-compras",
     "GET /forecast/snapshots/:id/relatorio-compras/xlsx",
     "GET /forecast/sources",
@@ -296,6 +298,8 @@
     "POST /forecast/import/dbcorp/preview",
     "POST /forecast/import/workbook/confirm",
     "POST /forecast/import/workbook/preview",
+    "POST /forecast/products",
+    "POST /forecast/products/:id/codigos",
     "POST /forwarders",
     "POST /item-families",
     "POST /portal-tokens/:id/regenerate",

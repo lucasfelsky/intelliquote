@@ -40,6 +40,9 @@ export interface Entradas {
   leadtime: { fonte: string; total: number | null }[]; // LEADTIME: A fonte, G total
   margem: { codigo: string; margem: number | null }[]; // MARGEM: A código, B margem
   clientesAtivos: string[]; // CLIENTES ATIVOS: coluna C (um código por linha)
+  // Compra em aberto do FUP por código (qualquer linha não CONCLUÍDA). Não é entrada do motor: congelada só para a
+  // regra dos pendentes de cadastro (5C). Ausente em quinzena gravada antes do 5C.
+  comprasEmAberto?: Lancamento[];
 }
 
 export interface Quinzena {

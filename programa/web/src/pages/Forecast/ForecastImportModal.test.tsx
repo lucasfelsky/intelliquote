@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ForecastImportModal from './ForecastImportModal';
 
 vi.mock('@/api/client', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), del: vi.fn() },
   ApiError: class ApiError extends Error {
     status: number;
     body: unknown;
@@ -19,6 +19,7 @@ vi.mock('@/api/client', () => ({
 import { api, ApiError } from '@/api/client';
 
 const post = vi.mocked(api.post);
+const get = vi.mocked(api.get);
 const MB = 1024 * 1024;
 
 // ---------- dados 100% sinteticos ----------
@@ -903,5 +904,629 @@ describe('ForecastImportModal - privacidade', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect(setItem).not.toHaveBeenCalled();
     for (const spy of consoleSpies) expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
+  const pend = (over: Record<string, unknown>) => ({
+    codigo: 'TST0901',
+    situacao: 'sem_cadastro',
+    produtoInativo: null,
+    vendasMes: 20,
+    vendasAtual: 0,
+    vendasAnual: 1200,
+    vendas3Meses: 50,
+    vendasAnteriores: 30,
+    programacao: 0,
+    chegadas: 80,
+    comprasEmAberto: 80,
+    saldo: 0,
+    ...over,
+  });
+  const inativo = () =>
+    pend({ codigo: 'TST0902', situacao: 'produto_inativo', produtoInativo: { id: 9, nome: 'PRODUTO 009' } });
+  const pendentes = (itens: unknown[] = [pend({}), inativo()]) => ({
+    itens,
+    totalItens: itens.length,
+    omitidos: 0,
+    soSaldo: { codigos: 0, kg: 0 },
+    semVendaRecente: { codigos: 3, vendasAnual: 900 },
+    regra: { mesesVenda: ['2026-10', '2026-11', '2026-12'], historicoAusente: [], compras: 'fup_em_aberto' },
+  });
+  const regiao = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+
+  beforeEach(() => {
+    get.mockReset();
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/forecast/sources') {
+        return { data: [{ id: 3, name: 'FONTE 001', leadTimeDays: 45, clearanceDays: null, isActive: true }] };
+      }
+      if (path === '/v1/item-families') return { data: [{ id: 7, name: 'FAMILIA A', isActive: true }] };
+      if (path === '/v1/forecast/products') {
+        return {
+          data: [
+            { id: 1, name: 'PRODUTO 001', isActive: true, origin: 'planilha', codes: [{ id: 11, position: 1, code: 'TST0001' }] },
+          ],
+        };
+      }
+      throw new Error(`GET inesperado: ${path}`);
+    });
+  });
+
+  it('1 pendente: o texto "FORA do calculo" do bloco vai para o singular', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes([pend({})]) }));
+    expect(
+      regiao().getByText('Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.'),
+    ).toBeTruthy();
+  });
+
+  it('mostra o bloco com a tabela, o texto "FORA do calculo" e um botao por codigo SEM cadastro', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (2)' })).toBeTruthy();
+    expect(
+      regiao().getByText('Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.'),
+    ).toBeTruthy();
+    const tabela = regiao().getByRole('table', { name: /Códigos do DBCorp pendentes de cadastro/ });
+    expect(within(tabela).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
+      'Código',
+      'Situação',
+      'Vendas 3 meses',
+      'Vendas mês atual',
+      'Programação',
+      'Compras em aberto (FUP)',
+      'Ação',
+    ]);
+    // O criterio da regra e a contagem do que ficou fora da lista aparecem sob a tabela.
+    expect(
+      regiao().getByText('Entram na lista: venda em out/2026, nov/2026 ou dez/2026, programação pendente ou compra em aberto no FUP.'),
+    ).toBeTruthy();
+    expect(regiao().getByText('Sem venda nos últimos 3 meses (não listados): 3 códigos · 900 kg de venda anual')).toBeTruthy();
+    expect(regiao().getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);
+    expect(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' })).toBeTruthy();
+  });
+
+  it('codigo de produto INATIVO: nome do produto e explicacao, sem botao', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    const linha = regiao().getByRole('rowheader', { name: 'TST0902' }).closest('tr') as HTMLElement;
+    expect(within(linha).getByText('Produto inativo')).toBeTruthy();
+    expect(within(linha).getByText('PRODUTO 009')).toBeTruthy();
+    expect(within(linha).queryByRole('button')).toBeNull();
+    expect(
+      regiao().getByText(
+        /Reative o produto para o código voltar ao cálculo\. A reativação de produto ainda não está disponível nesta tela\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('sem pendentes (null ou lista vazia): nenhum bloco', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: null }));
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+    cleanup();
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes([]) }));
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+  });
+
+  it('completar: grava, pre-visualiza de novo com os MESMOS arquivos e mostra a mensagem (foco nela)', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    const corpoInicial = post.mock.calls[0]?.[1];
+
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.change(await screen.findByLabelText('Nome do produto'), { target: { value: 'PRODUTO 901' } });
+    fireEvent.change(screen.getByLabelText('Fonte'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Família'), { target: { value: '7' } });
+    // 1o POST depois do preview = o cadastro; 2o = a nova pre-visualizacao (sem o pendente).
+    post.mockResolvedValueOnce({ data: { id: 55 } });
+    post.mockResolvedValueOnce({ data: resumoDbcorp({ pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar produto' }));
+
+    const status = await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    expect(status.getAttribute('role')).toBe('status');
+    expect(post.mock.calls.map((c) => c[0])).toEqual([
+      '/v1/forecast/import/dbcorp/preview',
+      '/v1/forecast/products',
+      '/v1/forecast/import/dbcorp/preview',
+    ]);
+    expect(post.mock.calls[2]?.[1]).toEqual(corpoInicial);
+    await waitFor(() => expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (1)' })).toBeTruthy());
+    expect(regiao().queryByRole('button', { name: /Completar cadastro do código/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Completar cadastro' })).toBeNull();
+    expect(document.activeElement).toBe(status);
+  });
+
+  const semSaldoComPendentes = () =>
+    resumoDbcorp({ pendentes: pendentes() }, { saldo: rel({ usadas: 0, porDeposito: [] }) });
+  const caixaSaldo = () =>
+    screen.getByLabelText(/Entendi que SALDO veio sem linhas úteis/) as HTMLInputElement;
+
+  async function cadastrarCodigoExistente() {
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Adicionar a produto existente' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /PRODUTO 001/ }));
+    post.mockResolvedValueOnce({
+      data: { produtoId: 1, produtoOrigem: 'dbcorp', codigo: { id: 9, posicao: 2, codigo: 'TST0901' } },
+    });
+  }
+
+  it('re-previa com sucesso ZERA a caixa "Entendi": o usuario precisa marcar de novo', async () => {
+    renderModal();
+    await previsualizarDbcorp(semSaldoComPendentes());
+    fireEvent.click(caixaSaldo());
+    expect(caixaSaldo().checked).toBe(true);
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    await cadastrarCodigoExistente();
+    post.mockResolvedValueOnce({
+      data: resumoDbcorp({ pendentes: pendentes([inativo()]) }, { saldo: rel({ usadas: 0, porDeposito: [] }) }),
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    await waitFor(() => expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (1)' })).toBeTruthy());
+    expect(caixaSaldo().checked).toBe(false);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    fireEvent.click(caixaSaldo());
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('a nova pre-visualizacao falhou: descarta a previa antiga e as caixas, sem Confirmar, e diz isso', async () => {
+    renderModal();
+    await previsualizarDbcorp(semSaldoComPendentes());
+    fireEvent.click(caixaSaldo());
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    await cadastrarCodigoExistente();
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText(/Cadastro gravado\. A pré-visualização anterior foi descartada: pré-visualize de novo para poder confirmar\./);
+    // A previa antiga listava TST0901 como FORA: nao pode sobrar nem o resumo, nem o bloco, nem o Confirmar.
+    await waitFor(() => expect(queryBotao('Confirmar importação')).toBeNull());
+    expect(screen.queryByRole('heading', { name: 'Pré-visualização dos relatórios DBCorp' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+    expect(screen.queryByLabelText(/Entendi/)).toBeNull();
+    expect(post.mock.calls.map((c) => c[0])).not.toContain('/v1/forecast/import/dbcorp/confirm');
+
+    // Pre-visualizar de novo: a caixa volta desmarcada.
+    post.mockResolvedValueOnce({ data: semSaldoComPendentes() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByLabelText(/Entendi que SALDO/);
+    expect(caixaSaldo().checked).toBe(false);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    // A faixa de "previa descartada" nao fica ao lado da previa nova e valida.
+    expect(screen.queryByText(/pré-visualização anterior foi descartada/)).toBeNull();
+    expect(screen.getByText('Cadastro gravado. Pré-visualização atualizada.')).toBeTruthy();
+  });
+
+  it('a nova pre-visualizacao falhou e depois deu certo: o aviso PO.COMP.01 da planilha continua na mensagem', async () => {
+    renderModal();
+    await previsualizarDbcorp(semSaldoComPendentes());
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Adicionar a produto existente' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /PRODUTO 001/ }));
+    post.mockResolvedValueOnce({
+      data: { produtoId: 1, produtoOrigem: 'planilha', codigo: { id: 9, posicao: 2, codigo: 'TST0901' } },
+    });
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText(/pré-visualização anterior foi descartada/);
+    await waitFor(() => expect(queryBotao('Confirmar importação')).toBeNull());
+
+    post.mockResolvedValueOnce({ data: semSaldoComPendentes() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByLabelText(/Entendi que SALDO/);
+    expect(screen.queryByText(/pré-visualização anterior foi descartada/)).toBeNull();
+    expect(
+      screen.getByText(
+        /Cadastro gravado. Pré-visualização atualizada. Inclua o código também na planilha PO.COMP.01/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('a nova pre-visualizacao falhou: o cadastro continua gravado e a mensagem diz isso', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    fireEvent.click(regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Adicionar a produto existente' }));
+    fireEvent.click(await screen.findByRole('radio', { name: /PRODUTO 001/ }));
+    post.mockResolvedValueOnce({
+      data: { produtoId: 1, produtoOrigem: 'planilha', codigo: { id: 9, posicao: 2, codigo: 'TST0901' } },
+    });
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    expect(
+      await screen.findByText(
+        /Cadastro gravado\. A pré-visualização anterior foi descartada: pré-visualize de novo para poder confirmar\. Inclua o código também na planilha PO\.COMP\.01/,
+      ),
+    ).toBeTruthy();
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+  });
+
+  it('re-previa apos completar o cadastro manda os prazos JA APLICADOS e mantem o texto digitado', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos({}, { pendentes: pendentes() }));
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes() }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+
+    // Edita de novo (ainda nao aplicado) e completa o cadastro: a re-previa leva o aplicado (60), nao o rascunho (70).
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '70' } });
+    await cadastrarCodigoExistente();
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    const corpos = post.mock.calls.filter((c) => c[0] === '/v1/forecast/import/dbcorp/preview').map((c) => c[1]);
+    expect(corpos).toHaveLength(3);
+    expect((corpos[2] as { prazosEstimativa: unknown }).prazosEstimativa).toEqual(PRAZOS_60);
+    // O texto digitado (70) continua; o Confirmar espera um novo recalculo.
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('70');
+    expect(botao('Confirmar importação').disabled).toBe(true);
+  });
+
+  it('uma nova pre-visualizacao completa tira a mensagem "recalculada" da tela (o recalculo anterior ja nao vale)', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos({}, { pendentes: pendentes() }));
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes() }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+
+    // Sem editar de novo (rascunho == aplicado): so a nova previa completa pode tirar a mensagem.
+    await cadastrarCodigoExistente();
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60) }, { pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Acrescentar código' }));
+    await screen.findByText('Cadastro gravado. Pré-visualização atualizada.');
+    expect(screen.queryByText('Pré-visualização recalculada com os prazos informados.')).toBeNull();
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('60');
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    // Um novo recalculo volta a mostrar a mensagem.
+    fireEvent.change(campoPrazo('Dias do ETD até a chegada - FONTE 002'), { target: { value: '25' } });
+    const fontes25 = fontesComUsado(60).map((f) => (f.sourceId === 2 ? { ...f, usado: { ...f.usado, etdDias: 25 } } : f));
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontes25 }, { pendentes: pendentes([inativo()]) }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+  });
+
+  it('Esc no dialogo de cadastro devolve o foco ao botao "Completar cadastro" e nao fecha a importacao', async () => {
+    const { onFechar } = renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    const gatilho = regiao().getByRole('button', { name: 'Completar cadastro do código TST0901' });
+    gatilho.focus();
+    fireEvent.click(gatilho);
+    await screen.findByRole('heading', { name: 'Completar cadastro' });
+    const dialogos = document.querySelectorAll('dialog');
+    fireEvent(dialogos[dialogos.length - 1] as HTMLDialogElement, new Event('cancel', { cancelable: true }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Completar cadastro' })).toBeNull());
+    expect(document.activeElement).toBe(gatilho);
+    expect(onFechar).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Importar quinzena' })).toBeTruthy();
+    // Nada foi gravado nem pre-visualizado de novo.
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('trocar um arquivo depois do preview descarta o bloco de pendentes', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
+    escolher('fup', arquivo('outro-teste.xlsx'));
+    expect(screen.queryByRole('heading', { name: /Pendentes de cadastro/ })).toBeNull();
+  });
+});
+
+describe('ForecastImportModal - ajustes do 3A (PR 3B-2)', () => {
+  const regiao = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+  const confirmar = () => screen.getByRole('button', { name: 'Confirmar importação' }) as HTMLButtonElement;
+  const fupComEtaFinal = (over: Record<string, unknown> = {}) =>
+    rel({
+      porStatus: [
+        { status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 },
+        { status: 'CONCLUÍDO', incluido: false, linhas: 4, kg: 900 },
+      ],
+      regra: {
+        id: 'F3',
+        etaPorEtdDias: 35,
+        etaPorProntidaoDias: 35,
+        excluiEtaFinal: true,
+        statusExcluidos: ['ATRAC. AG. LIBERAÇÃO'],
+      },
+      semData: { linhas: 2, kg: 1700, porStatus: [{ status: 'STATUS A', linhas: 2, kg: 1700 }] },
+      excluidas: {
+        atracadas: { linhas: 0, kg: 0 },
+        etaFinalPreenchida: {
+          linhas: 3,
+          kg: 3000,
+          porStatus: [{ status: 'STATUS A', linhas: 3, kg: 3000 }],
+          depoisDaDataBase: { linhas: 0, kg: 0 },
+        },
+      },
+      prontidaoNaoReconhecida: { linhas: 0, kg: 0, detalhes: [], omitidos: 0 },
+      ...over,
+    });
+
+  it('"Em aberto" e "% do em aberto" nao contam as linhas com ETA FINAL excluidas pela F3', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({}, { fup: fupComEtaFinal() }));
+    // 8000 do status que entra - 3000 de ETA FINAL = 5000; 1700 sem data = 34% de 5000 (era 21% de 8000).
+    expect(regiao().getByText('Em aberto: 5.000 kg')).toBeTruthy();
+    expect(regiao().getByText('Sem data: 2 linhas · 1.700 kg (34% do em aberto) ficaram FORA das chegadas')).toBeTruthy();
+  });
+
+  it('backend antigo (sem `excluidas`): "Em aberto" como antes', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({}, { fup: rel({ porStatus: [{ status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 }] }) }),
+    );
+    expect(regiao().getByText('Em aberto: 8.000 kg')).toBeTruthy();
+  });
+
+  it('1 linha com DATA PRONTIDAO nao reconhecida: checkbox no singular', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp(
+        {},
+        {
+          fup: fupComEtaFinal({
+            prontidaoNaoReconhecida: {
+              linhas: 1,
+              kg: 40,
+              detalhes: [{ linha: 15, status: 'AG. PAGAMENTO (ANT)', codigo: 'TST0008', kg: 40, texto: 'ASAP' }],
+              omitidos: 0,
+            },
+          }),
+        },
+      ),
+    );
+    const caixa = screen.getByLabelText(
+      'Entendi que 1 linha (40 kg) do FUP com DATA PRONTIDÃO não reconhecida fica fora das chegadas.',
+    ) as HTMLInputElement;
+    expect(caixa.checked).toBe(false);
+    expect(confirmar().disabled).toBe(true);
+    fireEvent.click(caixa);
+    expect(confirmar().disabled).toBe(false);
+  });
+
+  it('sem a coluna DATA PRONTIDAO o aviso de DATA PO ausente nao aparece junto (uma vez so)', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({
+        avisos: [
+          'FUP: coluna "DATA PRONTIDÃO" não encontrada - linhas sem ETA nem ETD ficam de fora.',
+          'FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.',
+        ],
+      }),
+    );
+    expect(regiao().getByText(/coluna "DATA PRONTIDÃO" não encontrada/)).toBeTruthy();
+    expect(regiao().queryByText(/coluna "DATA PO" não encontrada/)).toBeNull();
+  });
+
+  it('so a DATA PO ausente: o aviso continua', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({ avisos: ['FUP: coluna "DATA PO" não encontrada - o ano da DATA PRONTIDÃO usa a data base.'] }),
+    );
+    expect(regiao().getByText(/coluna "DATA PO" não encontrada/)).toBeTruthy();
+  });
+});
+
+// ---------- prazo por fonte (PR 5A) ----------
+const SEM_LINHAS = { linhas: 0, kg: 0 };
+const PRAZOS_60 = [
+  { sourceId: 1, prontidaoDias: 60, etdDias: 35 },
+  { sourceId: 2, prontidaoDias: 50, etdDias: 20 },
+];
+
+function fontesComUsado(prontidao1 = 35) {
+  return [
+    {
+      sourceId: 1,
+      nome: 'FONTE 001',
+      salvo: { prontidaoDias: null, etdDias: null },
+      usado: { prontidaoDias: prontidao1, etdDias: 35 },
+      prontidao: { linhas: 2, kg: 1800 },
+      etd: { linhas: 1, kg: 500 },
+    },
+    {
+      sourceId: 2,
+      nome: 'FONTE 002',
+      salvo: { prontidaoDias: 50, etdDias: 20 },
+      usado: { prontidaoDias: 50, etdDias: 20 },
+      prontidao: SEM_LINHAS,
+      etd: { linhas: 1, kg: 100 },
+    },
+  ];
+}
+
+function prazosDoResumo(over: Record<string, unknown> = {}) {
+  return {
+    padrao: { prontidaoDias: 35, etdDias: 35 },
+    fontes: fontesComUsado(),
+    semFonte: { prontidao: { linhas: 1, kg: 90 }, etd: SEM_LINHAS },
+    padroesAlterados: 0,
+    ...over,
+  };
+}
+
+// FUP com a regra do 5A (`prazoPorFonte`) e as estimadas do calculo atual.
+function resumoComPrazos(prazos: Record<string, unknown> = {}, resumoOver: Record<string, unknown> = {}, fup: Record<string, unknown> = {}) {
+  return resumoDbcorp(
+    { prazosEstimativa: prazosDoResumo(prazos), ...resumoOver },
+    {
+      fup: rel({
+        porStatus: [{ status: 'STATUS A', incluido: true, linhas: 5, kg: 8000 }],
+        regra: {
+          id: 'F3',
+          etaPorEtdDias: 35,
+          etaPorProntidaoDias: 35,
+          excluiEtaFinal: true,
+          statusExcluidos: ['ATRAC. AG. LIBERAÇÃO'],
+          prazoPorFonte: true,
+        },
+        estimadasPorEtd: { linhas: 2, kg: 600 },
+        estimadasPorProntidao: { linhas: 3, kg: 1890 },
+        vencidasNoMesBase: SEM_LINHAS,
+        semData: { linhas: 0, kg: 0, porStatus: [] },
+        depoisDaJanela: SEM_LINHAS,
+        ...fup,
+      }),
+    },
+  );
+}
+
+const campoPrazo = (nome: string) => screen.getByLabelText(nome) as HTMLInputElement;
+const regiaoPrazos = () => within(screen.getByRole('region', { name: 'Pré-visualização dos relatórios DBCorp' }));
+
+describe('ForecastImportModal - prazo das chegadas por fonte (PR 5A)', () => {
+  const TITULO = 'Prazo das chegadas estimadas, por fonte';
+
+  it('backend sem prazosEstimativa (ou null): nenhuma tabela e o fluxo segue como antes', async () => {
+    renderModal();
+    await previsualizarDbcorp();
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Recalcular pré-visualização' })).toBeNull();
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    cleanup();
+
+    renderModal();
+    await previsualizarDbcorp(resumoDbcorp({ prazosEstimativa: null }));
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
+  });
+
+  it('com prazosEstimativa: tabela por fonte logo apos o FUP, regra com "prazo da fonte" e Confirmar liberado', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    const resumo = regiaoPrazos();
+    expect(resumo.getByRole('heading', { name: TITULO })).toBeTruthy();
+    expect(resumo.getByText(/senão ETD \+ prazo da fonte \(padrão 35 dias\), senão DATA PRONTIDÃO \+ prazo da fonte \(padrão 35 dias\) \(estimada\)\./)).toBeTruthy();
+    expect(resumo.getByText(/Estimadas por ETD \+ prazo da fonte \(padrão 35 dias\): 2 linhas · 600 kg/)).toBeTruthy();
+    expect(campoPrazo('Dias do ETD até a chegada - FONTE 002').value).toBe('20');
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    // A 1a previa NAO manda prazos: o servidor abre com o padrao salvo da fonte.
+    expect(Object.keys(post.mock.calls[0]?.[1] as object)).toEqual(['label', 'baseDate', 'files']);
+    // A tabela vem logo depois do bloco do FUP.
+    const blocos = [...document.querySelectorAll('.fci-bloco h4')].map((h) => h.textContent);
+    expect(blocos.indexOf(TITULO)).toBe(blocos.indexOf('FUP por status') + 1);
+  });
+
+  it('editar bloqueia o Confirmar e avisa; recalcular reaproveita o corpo (sem reler arquivos) e o confirm manda os prazos aplicados', async () => {
+    const { onImportada } = renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    const leitura = vi.spyOn(FileReader.prototype, 'readAsDataURL');
+    const corpoInicial = post.mock.calls[0]?.[1] as { files: unknown };
+
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    expect(screen.getByText('Você editou prazos: recalcule a pré-visualização antes de confirmar.')).toBeTruthy();
+    expect(post).toHaveBeenCalledTimes(1); // editar nao chama o servidor
+
+    post.mockResolvedValueOnce({ data: resumoComPrazos({ fontes: fontesComUsado(60), padroesAlterados: 1 }) });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post.mock.calls[1]?.[0]).toBe('/v1/forecast/import/dbcorp/preview');
+    const recalculo = post.mock.calls[1]?.[1] as { files: unknown; prazosEstimativa: unknown };
+    expect(recalculo.files).toEqual(corpoInicial.files);
+    expect(recalculo.prazosEstimativa).toEqual(PRAZOS_60);
+    expect(leitura).not.toHaveBeenCalled(); // nenhum arquivo foi lido de novo
+    expect(botao('Confirmar importação').disabled).toBe(false);
+    expect(screen.getByText('Ao confirmar, 1 fonte terá o padrão salvo alterado.')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByText('Pré-visualização recalculada com os prazos informados.'));
+
+    post.mockResolvedValueOnce({ data: { ...resumoDbcorp(), snapshotId: 8 } });
+    fireEvent.click(botao('Confirmar importação'));
+    await waitFor(() => expect(onImportada).toHaveBeenCalledWith(8, '12-2'));
+    expect(post.mock.calls[2]?.[0]).toBe('/v1/forecast/import/dbcorp/confirm');
+    expect(post.mock.calls[2]?.[1]).toEqual(post.mock.calls[1]?.[1]); // o MESMO corpo do preview, com os prazos
+    expect((post.mock.calls[2]?.[1] as { prazosEstimativa: unknown }).prazosEstimativa).toEqual(PRAZOS_60);
+  });
+
+  it('o recalculo preserva as caixas "Entendi" (dependem dos arquivos, nao dos dias)', async () => {
+    renderModal();
+    const semSaldo = (prazos: Record<string, unknown> = {}) => {
+      const r = resumoComPrazos(prazos);
+      (r.relatorios as Record<string, unknown>).saldo = rel({ usadas: 0, porDeposito: [] });
+      return r;
+    };
+    await previsualizarDbcorp(semSaldo());
+    const caixa = () => screen.getByLabelText(/Entendi que SALDO veio sem linhas úteis/) as HTMLInputElement;
+    fireEvent.click(caixa());
+    expect(botao('Confirmar importação').disabled).toBe(false);
+
+    fireEvent.change(campoPrazo('Dias do ETD até a chegada - FONTE 002'), { target: { value: '25' } });
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    post.mockResolvedValueOnce({
+      data: semSaldo({
+        fontes: fontesComUsado().map((f) =>
+          f.sourceId === 2 ? { ...f, usado: { ...f.usado, etdDias: 25 } } : f,
+        ),
+      }),
+    });
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    await screen.findByText('Pré-visualização recalculada com os prazos informados.');
+    expect(caixa().checked).toBe(true);
+    expect(botao('Confirmar importação').disabled).toBe(false);
+  });
+
+  it('valor invalido: mensagem no campo, Recalcular e Confirmar bloqueados (nenhum POST)', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias do ETD até a chegada - FONTE 001'), { target: { value: '400' } });
+    expect(screen.getByText('No máximo 365 dias.')).toBeTruthy();
+    expect((botao('Recalcular pré-visualização')).disabled).toBe(true);
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('o recalculo falhou: a previa antiga fica, o erro aparece e o Confirmar continua bloqueado', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    fireEvent.click(botao('Recalcular pré-visualização'));
+    expect((await screen.findAllByRole('alert')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: TITULO })).toBeTruthy();
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('60'); // o texto digitado fica
+    expect(botao('Confirmar importação').disabled).toBe(true);
+    expect(botao('Recalcular pré-visualização').disabled).toBe(false); // pode tentar de novo
+  });
+
+  it('dois cliques em Recalcular geram um unico POST', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    post.mockReturnValueOnce(new Promise(() => undefined) as never);
+    const botaoRecalcular = botao('Recalcular pré-visualização');
+    fireEvent.click(botaoRecalcular);
+    fireEvent.click(botaoRecalcular);
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(botao('Pré-visualizando…').disabled).toBe(true);
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').closest('fieldset')?.disabled).toBe(true);
+  });
+
+  it('trocar um arquivo depois do preview descarta a tabela e o rascunho: a nova previa nao manda prazos', async () => {
+    renderModal();
+    await previsualizarDbcorp(resumoComPrazos());
+    fireEvent.change(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001'), { target: { value: '60' } });
+    escolher('fup', arquivo('fup-novo.xlsx'));
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
+
+    post.mockResolvedValueOnce({ data: resumoComPrazos() });
+    fireEvent.click(botao('Pré-visualizar'));
+    await screen.findByRole('heading', { name: TITULO });
+    expect(Object.keys(post.mock.calls[1]?.[1] as object)).toEqual(['label', 'baseDate', 'files']);
+    expect(campoPrazo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('35'); // abre no usado, sem o rascunho velho
+  });
+
+  it('a aba Planilha nao tem a tabela', async () => {
+    renderModal();
+    await previsualizarPlanilha();
+    expect(screen.queryByRole('heading', { name: TITULO })).toBeNull();
   });
 });

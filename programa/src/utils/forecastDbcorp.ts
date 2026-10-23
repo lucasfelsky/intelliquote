@@ -24,6 +24,7 @@ import type { Lancamento, LancamentoMensal } from './forecastTypes';
 import {
   Acumulador,
   aplicarRegrasFup,
+  comprasEmAbertoDoFup,
   dateKeyDaCelula,
   normalizeDbcorpText,
   plural,
@@ -66,7 +67,10 @@ export interface ParsedProgramacao extends ResumoRelatorio {
 }
 
 // Resultado das regras do FUP (forecastDbcorpRegras.ts) + os erros de leitura da planilha.
-export type ParsedFup = ResultadoRegrasFup & Pick<ResumoRelatorio, 'erros'>;
+// `fupLinhas` (linhas ja normalizadas) deixa o servico refazer a regra com o prazo de cada fonte (PR 5A) sem reler o
+// arquivo; `avisosColuna` = avisos de coluna ausente (ja incluidos em `avisos`, que aqui usa o prazo padrao).
+export type ParsedFup = ResultadoRegrasFup &
+  Pick<ResumoRelatorio, 'erros'> & { comprasEmAberto: Lancamento[]; fupLinhas: FupLinha[]; avisosColuna: string[] };
 
 export interface ParsedClientesAtivos extends ResumoRelatorio {
   linhas: string[];
@@ -426,12 +430,19 @@ export async function parseFup(buffer: Buffer, baseDate: string): Promise<Parsed
   if (cDataPo === null) {
     avisosColuna.push(`FUP: coluna "${HEADER_DATA_PO}" não encontrada - o ano da ${HEADER_PRONTIDAO} usa a data base.`);
   }
-  return { ...resultado, avisos: [...avisosColuna, ...resultado.avisos], erros: [] };
+  return {
+    ...resultado,
+    avisos: [...avisosColuna, ...resultado.avisos],
+    erros: [],
+    comprasEmAberto: comprasEmAbertoDoFup(linhasFup),
+    fupLinhas: linhasFup,
+    avisosColuna,
+  };
 }
 
 // FUP que nao pode ser lido (aba grande demais, cabecalho incompleto): sem linhas e com o(s) erro(s).
 function semLinhasFup(baseDate: string, erros: string[]): ParsedFup {
-  return { ...aplicarRegrasFup([], baseDate), erros };
+  return { ...aplicarRegrasFup([], baseDate), erros, comprasEmAberto: [], fupLinhas: [], avisosColuna: [] };
 }
 
 // --- CLIENTES ATIVOS (DS9002), opcional ------------------------------------------------------------

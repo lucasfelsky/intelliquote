@@ -45,6 +45,21 @@ router.patch(
 
 router.get('/forecast/products', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listProducts);
 
+// Produto novo a partir de um pendente de cadastro (3B): cria com fonte/familia/codigos e acrescenta codigo.
+router.post(
+  '/forecast/products',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createProduct,
+);
+
+router.post(
+  '/forecast/products/:id/codigos',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.addProductCode,
+);
+
 router.get(
   '/forecast/products/:id/embalagens',
   requireAuth,
@@ -66,6 +81,13 @@ router.get(
   requireAuth,
   allowRoles(COMEX_ROLES),
   ForecastController.getSnapshot,
+);
+
+router.get(
+  '/forecast/snapshots/:id/pendentes',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getPendentes,
 );
 
 router.get(

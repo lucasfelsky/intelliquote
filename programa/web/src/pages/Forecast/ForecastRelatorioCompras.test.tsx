@@ -154,7 +154,7 @@ describe('ForecastRelatorioCompras', () => {
     expect(within(linha).getByText('-40,0')).toBeTruthy(); // demanda
   });
 
-  it('varias embalagens: destaca a usada e lista as outras', async () => {
+  it('backend antigo (sem porEmbalagem): destaca a usada e lista as outras no texto de antes', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
@@ -165,6 +165,110 @@ describe('ForecastRelatorioCompras', () => {
     expect(within(linha).getByText('Outras: C0004 (200 kg)')).toBeTruthy();
     expect(within(linha).getByText('125,0')).toBeTruthy();
     expect(within(linha).queryByText('Embalagem não cadastrada')).toBeNull();
+  });
+
+  it('varias embalagens: destaca a usada e mostra a quantidade arredondada para CADA uma, uma por linha', async () => {
+    const base = relatorio();
+    const [p2, ...resto] = base.grupos[0]!.itens;
+    const item2 = {
+      ...p2,
+      embalagem: {
+        usada: { codigo: 'C0005', quantidade: 25, rotulo: null },
+        cadastradas: [
+          { codigo: 'C0004', quantidade: 200, rotulo: null },
+          { codigo: 'C0005', quantidade: 25, rotulo: null },
+          { codigo: 'C0006', quantidade: 1000, rotulo: 'Bag' },
+        ],
+        multiplas: true,
+      },
+      porEmbalagem: [
+        { codigo: 'C0004', quantidade: 200, rotulo: null, embalagens: 1, quantidadeFinal: 200, destaque: false },
+        { codigo: 'C0005', quantidade: 25, rotulo: null, embalagens: 5, quantidadeFinal: 125, destaque: true },
+        { codigo: 'C0006', quantidade: 1000, rotulo: 'Bag', embalagens: 1, quantidadeFinal: 1000, destaque: false },
+      ],
+    };
+    get.mockResolvedValue({
+      data: { ...base, grupos: [{ ...base.grupos[0], itens: [item2, ...resto] }, base.grupos[1]] },
+    });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const linha = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    // A usada continua em destaque e a Qtd. final e a dela.
+    expect(within(linha).getByText('5 × 25 kg (código C0005)')).toBeTruthy();
+    expect(within(linha).getByText('125,0')).toBeTruthy();
+    const chip = within(linha).getByText('Arredondado pela embalagem do código C0005');
+    expect(chip.getAttribute('title')).toBe(
+      'Outras embalagens: 1 × 200 kg (código C0004) = 200 kg; 1 × Bag (código C0006) = 1.000 kg',
+    );
+    const outras = Array.from(linha.querySelectorAll('.fcr-embalagem__outras')).map((e) => e.textContent);
+    expect(outras).toEqual(['1 × 200 kg (código C0004) = 200 kg', '1 × Bag (código C0006) = 1.000 kg']);
+    expect(within(linha).queryByText(/^Outras:/)).toBeNull();
+  });
+
+  it('Observação: linha "Obs.: ..." na celula Item, so quando ha texto, sem criar coluna', async () => {
+    const base = relatorio();
+    const [p2, p3] = base.grupos[0]!.itens;
+    get.mockResolvedValue({
+      data: {
+        ...base,
+        grupos: [
+          { ...base.grupos[0], itens: [{ ...p2, obs: 'OBS SINTETICA 002' }, { ...p3, obs: '   ' }] },
+          { ...base.grupos[1]!, itens: [{ ...base.grupos[1]!.itens[0], obs: '' }] },
+        ],
+      },
+    });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const comObs = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    const obs = comObs.querySelector('.fcr-item__obs');
+    expect(obs?.textContent).toBe('Obs.: OBS SINTETICA 002');
+    expect(obs?.closest('th')).toBe(comObs.querySelector('th'));
+    expect(document.querySelectorAll('.fcr-item__obs')).toHaveLength(1);
+    const colunas = within(screen.getAllByRole('table')[0] as HTMLElement)
+      .getAllByRole('columnheader')
+      .map((c) => c.textContent);
+    expect(colunas).toEqual([
+      'Item', 'Status', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Saldo zera', 'Ruptura', 'Data-limite', 'Em andamento',
+    ]);
+  });
+
+  it('Observação tambem aparece na secao "Atencao: sem consumo"', async () => {
+    const sem = (linha: number, obs?: string) => ({
+      linha,
+      n: linha,
+      productId: null,
+      item: 'PRODUTO ' + linha,
+      codigos: ['C' + linha],
+      fonte: 'FONTE 001',
+      status: 'nao',
+      motivos: ['estoque'],
+      estoque: 10,
+      programado: 0,
+      programacoes: [],
+      chegadas: [],
+      semLeadTime: false,
+      ...(obs === undefined ? {} : { obs }),
+    });
+    get.mockResolvedValue({
+      data: relatorio({
+        fora: { semLeadTime: 4, semConsumoSemFalta: 5, semConsumoSemMovimento: 1 },
+        semConsumo: { itens: [sem(101, 'OBS SINTETICA 101'), sem(102, ''), sem(103)] },
+      }),
+    });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const secao = screen.getByRole('region', { name: 'Itens sem consumo' });
+    expect(within(secao).getByText('Obs.: OBS SINTETICA 101')).toBeTruthy();
+    expect(secao.querySelectorAll('.fcr-item__obs')).toHaveLength(1);
+  });
+
+  it('o paragrafo das embalagens nas regras explica a quantidade por embalagem', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    expect(
+      screen.getByText(/Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma/),
+    ).toBeTruthy();
   });
 
   it('"nao fraciona" aparece como marca no item e nao muda a quantidade', async () => {

@@ -3001,3 +3001,78 @@ i.fc-status--preco { background: var(--info); }
   .fcr-linha--sem-estoque th, .fcr-linha--sem-estoque td, .fcr-linha--critico th, .fcr-linha--critico td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .fcr-tabela--compacta { min-width: 0; }
 }
+
+/* ---- Forecast: pendentes de cadastro (PR 3B-2) ---- */
+.fcp { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.fcp__detalhes summary { padding: 12px 16px; font-size: 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.fcp__detalhes summary:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
+.fcp__resumo { font-weight: 400; color: var(--ink-soft); }
+.fcp__corpo { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; }
+.fcp-estado { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcp-nota { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcp-erro__texto { margin: 0 0 8px; }
+.fcp-scroll { overflow-x: auto; }
+.fcp-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
+.fcp-tabela { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fcp-tabela th,
+.fcp-tabela td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--ink); }
+.fcp-tabela thead th { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: var(--ink-soft); background: var(--surface-alt); }
+.fcp-tabela tbody th { font-weight: 700; white-space: nowrap; }
+.fcp-tabela .fcp-num { text-align: right; }
+.fcp-produto-inativo { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-soft); }
+.fcp-tabela .badge { white-space: nowrap; }
+@media (max-width: 700px) {
+  /* A acao fica visivel ao rolar a tabela larga (390 px). */
+  .fcp-tabela .fcp-acao { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px var(--border-strong); }
+  .fcp-tabela thead .fcp-acao { background: var(--surface-alt); }
+}
+
+/* ---- Forecast: dialogo "Completar cadastro" (PR 3B-2) ---- */
+.fcc-modal, .fcc-form { display: flex; flex-direction: column; gap: 12px; }
+.fcc-codigo-pendente { margin: 0; font-size: 15px; color: var(--ink); }
+.fcc-dica { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcc-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.fcc-campo .field-label { margin-bottom: 0; }
+.fcc-input-curto { max-width: 140px; }
+.fcc-codigos legend { padding: 0; }
+.fcc-codigo { display: flex; align-items: center; gap: 8px; }
+.fcc-codigo .input { flex: 1; min-width: 0; }
+.fcc-erro { margin: 0; font-size: 12px; line-height: 1.35; color: var(--danger); }
+.fcc-vazio { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-alt); font-size: 14px; color: var(--ink); }
+.fcc-carregando { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); }
+.fcc-alert__texto { margin: 0 0 8px; }
+.fcc-produtos__lista { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcc-produto { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); cursor: pointer; }
+.fcc-produto:last-child { border-bottom: 0; }
+.fcc-produto:has(input:checked) { background: var(--surface-alt); }
+.fcc-produto--cheio { color: var(--ink-soft); cursor: not-allowed; }
+.fcc-produto input { flex: none; width: 16px; height: 16px; }
+.fcc-produto__nome { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fcc-produto__vagas { flex: none; font-size: 12px; color: var(--ink-soft); }
+.fcc-modal input:focus-visible,
+.fcc-modal select:focus-visible,
+.fcc-modal .tabs-trigger:focus-visible,
+.fcc-modal .tabs-panel:focus-visible,
+.fcc-produto:has(input:focus-visible) { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcc-modal [aria-invalid="true"] { border-color: var(--danger); }
+@media print {
+  body:has(.fcr-resumo) .fcp { display: none !important; }
+}
+
+/* ---- Forecast: relatorio de compras - Observacao na celula Item (PR 5B) ---- */
+.fcr-item__obs { max-width: 320px; font-size: 11px; line-height: 1.35; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media print {
+  .fcr-item__obs { max-width: 70mm; font-size: 7.5pt; }
+}
+
+/* ---- Forecast: prazo das chegadas estimadas por fonte, no resumo da importacao (PR 5A) ---- */
+.fci-prazo__tabela td { vertical-align: middle; white-space: nowrap; }
+.fci-prazo__tabela tbody th { min-width: 150px; max-width: 260px; }
+.fci-prazo__campo { display: flex; flex-direction: column; gap: 4px; }
+.fci-prazo__input { width: 84px; min-height: 36px; padding-top: 6px; padding-bottom: 6px; text-align: right; }
+.fci-prazo__input[aria-invalid="true"] { border-color: var(--danger); }
+.fci-prazo__erro { max-width: 150px; font-size: 12px; line-height: 1.35; white-space: normal; color: var(--danger); }
+.fci-prazo__sem { color: var(--ink-soft); }
+.fci-prazo__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.fci-prazo__retorno:focus-visible,
+.fci-prazo__input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }

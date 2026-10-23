@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { FORECAST_MAX_DIVERGENCES } from '../constants/forecast';
+import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
+import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
 import {
   montarRelatorioCompras,
@@ -15,6 +16,13 @@ import {
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 import { ForecastProductService } from './ForecastProductService';
+
+export interface ForecastPendentesData extends PendentesResultado {
+  // false = quinzena da planilha: nao ha relatorio DBCorp para comparar com o cadastro.
+  aplicavel: boolean;
+  snapshotId: number;
+  label: string;
+}
 
 type Db = Prisma.TransactionClient;
 
@@ -30,6 +38,12 @@ export interface SnapshotFileInfo {
   rows: number;
   // Regra do FUP aplicada (ex.: 'F3'); ausente = D2 (quinzenas antigas).
   regra?: string;
+  // So no arquivo 'fup' (PR 5A): prazo das chegadas estimadas usado no calculo, por fonte (so as fontes com linha
+  // estimada). Ausente = 35 dias para todas.
+  estimativa?: {
+    padrao: { prontidaoDias: number; etdDias: number };
+    porFonte: Array<{ sourceId: number; nome: string; prontidaoDias: number; etdDias: number }>;
+  };
 }
 
 interface SnapshotMonths {
@@ -195,6 +209,36 @@ export class ForecastSnapshotService {
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
     };
+  }
+
+  // Pendentes de cadastro da quinzena: os codigos que o DBCorp trouxe (congelados em `inputs`) comparados com o
+  // cadastro ATUAL - o codigo sai da lista quando entra no cadastro. So leitura (nada e gravado na quinzena).
+  static async getPendentes(id: number): Promise<ForecastPendentesData> {
+    const snapshot = await prisma.forecastSnapshot.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, label: true, origin: true, baseDate: true, inputs: true },
+    });
+    if (!snapshot) {
+      throw new HttpError(404, 'Quinzena nao encontrada.');
+    }
+    if (snapshot.origin !== FORECAST_ORIGIN_DBCORP) {
+      return {
+        aplicavel: false,
+        snapshotId: snapshot.id,
+        label: snapshot.label,
+        itens: [],
+        totalItens: 0,
+        omitidos: 0,
+        soSaldo: { codigos: 0, kg: 0 },
+        semVendaRecente: { codigos: 0, vendasAnual: 0 },
+        regra: { mesesVenda: [], historicoAusente: [], compras: 'chegadas' },
+      };
+    }
+    const cadastro = await ForecastProductService.cadastroDeCodigos();
+    // Historico ATUAL de base-3/base-2 (so leitura): regravar esses meses muda a lista, como o cadastro atual.
+    const vendas = await ForecastProductService.vendasRecentes(prisma, dbDateToKey(snapshot.baseDate));
+    const resultado = codigosPendentes(snapshot.inputs as unknown as Entradas, cadastro, vendas);
+    return { aplicavel: true, snapshotId: snapshot.id, label: snapshot.label, ...resultado };
   }
 
   // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada

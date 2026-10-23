@@ -23,7 +23,18 @@ import {
   type ParsedSaldo,
   type ParsedVendas,
 } from '../utils/forecastDbcorp';
+import {
+  PRAZO_CHEGADA_PADRAO,
+  aplicarRegrasFup,
+  mudancasDePrazo,
+  resolverPrazosChegada,
+  resumirPrazosEstimativa,
+  type MudancaDePrazo,
+  type ResultadoRegrasFup,
+  type ResumoPrazosEstimativa,
+} from '../utils/forecastDbcorpRegras';
 import { mesesHistorico, rotulosDaQuinzena, type RotulosDaQuinzena } from '../utils/forecastMonths';
+import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Quinzena } from '../utils/forecastTypes';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
 import type { ForecastDbcorpConfirmInput, ForecastDbcorpPreviewInput } from '../validators/forecast';
@@ -34,6 +45,8 @@ import {
   summarizeMonthlySales,
   type MonthlySalesResumo,
 } from './ForecastImportService';
+import { ForecastProductService } from './ForecastProductService';
+import { ForecastSourceService } from './ForecastSourceService';
 import {
   ForecastSnapshotService,
   halfDoRotulo,
@@ -57,7 +70,9 @@ interface ParsedDbcorp {
   clientesAtivos: ParsedClientesAtivos | null;
   margem: ParsedMargem | null;
   files: Array<SnapshotFileInfo>;
-  avisos: string[];
+  // Avisos de cada relatorio (o do FUP aqui usa o prazo padrao) e os gerais; juntados por `juntarAvisos`.
+  avisosPorSlot: Partial<Record<ForecastDbcorpSlot, string[]>>;
+  avisosGerais: string[];
   erros: string[];
 }
 
@@ -75,6 +90,13 @@ interface BuiltQuinzena {
     mesAnterior: MonthlySalesResumo | null;
   };
   casamento: Partial<Record<ForecastDbcorpSlot, Casamento>>;
+  // Codigos do DBCorp fora do cadastro ativo (ficam FORA do calculo ate completar o cadastro).
+  pendentes: PendentesResultado | null;
+  // FUP calculado com o prazo de cada fonte (o de `parsed.fup` usa so o padrao). null = cadastro vazio.
+  fup: ResultadoRegrasFup | null;
+  prazosEstimativa: ResumoPrazosEstimativa | null;
+  // Fontes do corpo cujo prazo usado vira o novo padrao no confirm.
+  mudancasDePrazo: MudancaDePrazo[];
   avisos: string[];
   erros: string[];
 }
@@ -87,6 +109,9 @@ export interface ForecastDbcorpSummary {
   produtos: { total: number };
   historico: BuiltQuinzena['historico'];
   relatorios: Partial<Record<ForecastDbcorpSlot, Record<string, unknown>>>;
+  pendentes: PendentesResultado | null;
+  // Prazo das chegadas estimadas por fonte (PR 5A); null quando ha erro de leitura ou cadastro vazio.
+  prazosEstimativa: ResumoPrazosEstimativa | null;
   avisos: string[];
   erros: string[];
 }
@@ -101,10 +126,36 @@ function decodeBase64(slot: ForecastDbcorpSlot, contentBase64: string): Buffer {
   return buffer;
 }
 
-function tirarLinhas<T extends { linhas: unknown }>(parsed: T): Omit<T, 'linhas'> {
-  const { linhas, ...resto } = parsed;
+// Tira do resumo as linhas lidas e o que so serve ao servico (compra em aberto, linhas do FUP, avisos de coluna e
+// estimadas por fonte: o resumo traz `prazosEstimativa`).
+function tirarLinhas<T extends { linhas: unknown }>(
+  parsed: T,
+): Omit<T, 'linhas' | 'comprasEmAberto' | 'fupLinhas' | 'avisosColuna' | 'estimadasPorFonte'> {
+  const { linhas, comprasEmAberto, fupLinhas, avisosColuna, estimadasPorFonte, ...resto } = parsed as T & {
+    comprasEmAberto?: unknown;
+    fupLinhas?: unknown;
+    avisosColuna?: unknown;
+    estimadasPorFonte?: unknown;
+  };
   void linhas;
+  void comprasEmAberto;
+  void fupLinhas;
+  void avisosColuna;
+  void estimadasPorFonte;
   return resto;
+}
+
+// Avisos da importacao na ordem dos relatorios. Com o FUP final (prazo por fonte) o aviso de estimadas dele
+// substitui o do prazo padrao: sem duplicar nem contar duas vezes.
+function juntarAvisos(parsed: ParsedDbcorp, fupFinal: ResultadoRegrasFup | null): string[] {
+  const avisos: string[] = [];
+  for (const slot of SLOT_ORDER) {
+    const doSlot = parsed.avisosPorSlot[slot];
+    if (!doSlot) continue;
+    avisos.push(...(slot === 'fup' && fupFinal ? [...parsed.fup.avisosColuna, ...fupFinal.avisos] : doSlot));
+  }
+  avisos.push(...parsed.avisosGerais);
+  return avisos;
 }
 
 // Quanto do relatorio casa com os codigos dos produtos ativos (e quantos codigos ficam sem produto).
@@ -149,14 +200,15 @@ export class ForecastDbcorpService {
       clientesAtivos,
       margem,
     };
-    const avisos: string[] = [];
+    const avisosPorSlot: ParsedDbcorp['avisosPorSlot'] = {};
+    const avisosGerais: string[] = [];
     const erros: string[] = [];
     const sentFiles: SnapshotFileInfo[] = [];
     for (const slot of SLOT_ORDER) {
       const parsed = parsedPorSlot[slot];
       const buffer = buffers[slot];
       if (!parsed || !buffer) continue;
-      avisos.push(...parsed.avisos);
+      avisosPorSlot[slot] = parsed.avisos;
       erros.push(...parsed.erros);
       sentFiles.push({
         kind: slot,
@@ -169,9 +221,9 @@ export class ForecastDbcorpService {
     const mesDoRotulo = label.slice(0, 2);
     const mesDaData = baseDate.slice(5, 7);
     if (mesDoRotulo !== mesDaData) {
-      avisos.push(`O mes do rotulo (${mesDoRotulo}) difere do mes da data base (${mesDaData}).`);
+      avisosGerais.push(`O mes do rotulo (${mesDoRotulo}) difere do mes da data base (${mesDaData}).`);
     }
-    return { ...parsedPorSlot, files: sentFiles, avisos, erros };
+    return { ...parsedPorSlot, files: sentFiles, avisosPorSlot, avisosGerais, erros };
   }
 
   // Monta a quinzena a partir dos relatorios + cadastro ativo + historico. `db` = prisma (preview)
@@ -189,6 +241,10 @@ export class ForecastDbcorpService {
       produtosTotal: 0,
       historico: { meses: [], ausentes: [], mesAnterior: null },
       casamento: {},
+      pendentes: null,
+      fup: null,
+      prazosEstimativa: null,
+      mudancasDePrazo: [],
       avisos: [],
       erros,
     };
@@ -262,18 +318,78 @@ export class ForecastDbcorpService {
 
     const sources = await db.forecastSource.findMany({
       orderBy: { id: 'asc' },
-      select: { name: true, leadTimeDays: true },
+      select: {
+        id: true,
+        name: true,
+        leadTimeDays: true,
+        isActive: true,
+        arrivalFromReadinessDays: true,
+        arrivalFromEtdDays: true,
+      },
     });
+
+    // Prazo das chegadas estimadas do FUP por fonte: digitado (corpo) > padrao salvo na fonte > 35. A linha se liga a
+    // fonte pelo CODIGO (codigo -> produto ativo -> fonte); codigo sem produto ativo ou sem fonte usa o padrao.
+    const fontes = sources
+      .filter((s) => s.isActive)
+      .map((s) => ({
+        sourceId: s.id,
+        nome: s.name,
+        salvo: { prontidaoDias: s.arrivalFromReadinessDays ?? null, etdDias: s.arrivalFromEtdDays ?? null },
+      }));
+    const idsDeFontes = new Set(fontes.map((f) => f.sourceId));
+    const editados = input.prazosEstimativa ?? [];
+    const editadaInvalida = editados.find((e) => !idsDeFontes.has(e.sourceId));
+    if (editadaInvalida) {
+      throw new HttpError(
+        400,
+        `A fonte ${editadaInvalida.sourceId} do prazo não existe ou está inativa. Pré-visualize de novo.`,
+      );
+    }
+    const fonteDoCodigo = new Map<string, number>();
+    for (const p of products) {
+      if (!p.sourceId || !idsDeFontes.has(p.sourceId)) continue;
+      for (const c of p.codes) {
+        const code = normalizeProductCode(c.code);
+        if (!fonteDoCodigo.has(code)) fonteDoCodigo.set(code, p.sourceId);
+      }
+    }
+    const porFonte = resolverPrazosChegada({
+      padrao: PRAZO_CHEGADA_PADRAO,
+      salvos: fontes.map((f) => ({ sourceId: f.sourceId, ...f.salvo })),
+      editados,
+    });
+    const fup = aplicarRegrasFup(parsed.fup.fupLinhas, baseDate, {
+      padrao: PRAZO_CHEGADA_PADRAO,
+      fonteDoCodigo,
+      porFonte,
+    });
+    built.fup = fup;
+    built.mudancasDePrazo = mudancasDePrazo({
+      padrao: PRAZO_CHEGADA_PADRAO,
+      fontes,
+      porFonte,
+      sourceIds: editados.map((e) => e.sourceId),
+    });
+    built.prazosEstimativa = resumirPrazosEstimativa({
+      padrao: PRAZO_CHEGADA_PADRAO,
+      fontes,
+      porFonte,
+      estimadasPorFonte: fup.estimadasPorFonte,
+      padroesAlterados: built.mudancasDePrazo.length,
+    });
+
     const entradas: Entradas = {
       estoque: parsed.saldo.linhas,
       vendasMes: parsed.vendasMes.linhas,
       vendasAtual: parsed.vendasAtual?.linhas ?? [],
       vendasAnual: parsed.vendasAnual.linhas,
       programacoes: parsed.programacao.linhas,
-      chegadas: parsed.fup.linhas,
+      chegadas: fup.linhas,
       leadtime: sources.map((s) => ({ fonte: s.name, total: s.leadTimeDays })),
       margem: parsed.margem?.linhas ?? [],
       clientesAtivos: parsed.clientesAtivos?.linhas ?? [],
+      comprasEmAberto: parsed.fup.comprasEmAberto,
     };
     const rotulos = rotulosDaQuinzena(baseDate);
     built.quinzena = {
@@ -310,6 +426,22 @@ export class ForecastDbcorpService {
       );
     }
 
+    // Pendentes de cadastro: codigo fora dos produtos ativos com venda nos ultimos 3 meses, programacao ou compra
+    // em aberto no FUP (regra do COMEX).
+    built.pendentes = codigosPendentes(
+      entradas,
+      await ForecastProductService.cadastroDeCodigos(db),
+      await ForecastProductService.vendasRecentes(db, baseDate),
+    );
+    const totalPendentes = built.pendentes.totalItens;
+    if (totalPendentes > 0) {
+      built.avisos.push(
+        totalPendentes === 1
+          ? '1 código com venda nos últimos 3 meses, programação ou compra em aberto no FUP não está no cadastro e fica FORA do cálculo até completar o cadastro.'
+          : `${totalPendentes} códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro e ficam FORA do cálculo até completar o cadastro.`,
+      );
+    }
+
     // Efeito da gravacao do mes base-1 (o mes e substituido por inteiro).
     if (parsed.vendasMes.usadas > 0) {
       built.historico.mesAnterior = await summarizeMonthlySales(
@@ -327,8 +459,12 @@ export class ForecastDbcorpService {
     built: BuiltQuinzena | null,
   ): ForecastDbcorpSummary {
     const relatorios: ForecastDbcorpSummary['relatorios'] = {};
+    const fupFinal = built?.fup ?? null;
     for (const slot of SLOT_ORDER) {
-      const resumo = parsed[slot];
+      const resumo =
+        slot === 'fup' && fupFinal
+          ? { ...parsed.fup, ...fupFinal, avisos: [...parsed.fup.avisosColuna, ...fupFinal.avisos] }
+          : parsed[slot];
       const file = input.files[slot];
       if (!resumo || !file) continue;
       const casamento = built?.casamento[slot];
@@ -347,7 +483,9 @@ export class ForecastDbcorpService {
       produtos: { total: built?.produtosTotal ?? 0 },
       historico: built?.historico ?? { meses: [], ausentes: [], mesAnterior: null },
       relatorios,
-      avisos: [...parsed.avisos, ...(built?.avisos ?? [])],
+      pendentes: built?.pendentes ?? null,
+      prazosEstimativa: built?.prazosEstimativa ?? null,
+      avisos: [...juntarAvisos(parsed, fupFinal), ...(built?.avisos ?? [])],
       erros: [...parsed.erros, ...(built?.erros ?? [])],
     };
   }
@@ -386,11 +524,31 @@ export class ForecastDbcorpService {
           );
         }
 
+        // O FUP gravado e o calculado com o prazo de cada fonte (o de `parsed` usa so o padrao).
+        const fup = built.fup ?? parsed.fup;
+        const prazos = built.prazosEstimativa;
+        const files = parsed.files.map((file) =>
+          file.kind === 'fup'
+            ? {
+                ...file,
+                rows: fup.usadas,
+                estimativa: {
+                  padrao: PRAZO_CHEGADA_PADRAO,
+                  porFonte: (prazos?.fontes ?? []).map((f) => ({
+                    sourceId: f.sourceId,
+                    nome: f.nome,
+                    prontidaoDias: f.usado.prontidaoDias,
+                    etdDias: f.usado.etdDias,
+                  })),
+                },
+              }
+            : file,
+        );
         const snapshot = await ForecastSnapshotService.createFromParsed(
           tx,
           built.quinzena,
           FORECAST_ORIGIN_DBCORP,
-          parsed.files,
+          files,
           userId,
         );
         await AuditLogService.log(
@@ -404,7 +562,7 @@ export class ForecastDbcorpService {
               origin: FORECAST_ORIGIN_DBCORP,
               produtos: built.produtosTotal,
               arquivos: SLOT_ORDER.flatMap((slot) => {
-                const resumo = parsed[slot];
+                const resumo = slot === 'fup' ? fup : parsed[slot];
                 if (!resumo || !input.files[slot]) return [];
                 const ignoradas = Object.values(resumo.ignoradas).reduce((a, b) => a + b, 0);
                 return [{ kind: slot, usadas: resumo.usadas, ignoradas }];
@@ -412,17 +570,25 @@ export class ForecastDbcorpService {
               // So contagem de LINHAS (nunca kg, codigo ou texto do FUP).
               fup: {
                 regra: FORECAST_DBCORP_FUP_REGRA,
-                estimadasEtd: parsed.fup.estimadasPorEtd.linhas,
-                estimadasProntidao: parsed.fup.estimadasPorProntidao.linhas,
-                excluidasAtracadas: parsed.fup.excluidas.atracadas.linhas,
-                excluidasEtaFinal: parsed.fup.excluidas.etaFinalPreenchida.linhas,
-                prontidaoNaoReconhecida: parsed.fup.prontidaoNaoReconhecida.linhas,
-                semData: parsed.fup.semData.linhas,
+                estimadasEtd: fup.estimadasPorEtd.linhas,
+                estimadasProntidao: fup.estimadasPorProntidao.linhas,
+                excluidasAtracadas: fup.excluidas.atracadas.linhas,
+                excluidasEtaFinal: fup.excluidas.etaFinalPreenchida.linhas,
+                prontidaoNaoReconhecida: fup.prontidaoNaoReconhecida.linhas,
+                semData: fup.semData.linhas,
+                fontesComPrazoProprio: (prazos?.fontes ?? []).filter(
+                  (f) =>
+                    f.usado.prontidaoDias !== PRAZO_CHEGADA_PADRAO.prontidaoDias ||
+                    f.usado.etdDias !== PRAZO_CHEGADA_PADRAO.etdDias,
+                ).length,
+                padroesAlterados: built.mudancasDePrazo.length,
               },
             },
           },
           tx,
         );
+        // O prazo usado vira o padrao da fonte para as proximas importacoes (so as colunas que mudaram).
+        await ForecastSourceService.salvarPrazosChegada(tx, built.mudancasDePrazo, userId, input.label);
 
         // A VENDAS do mes anterior e o relatorio completo do mes base-1: substitui o mes inteiro.
         const anterior = mesesHistorico(input.baseDate).anterior;
