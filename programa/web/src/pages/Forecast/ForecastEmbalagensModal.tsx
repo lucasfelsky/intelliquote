@@ -12,7 +12,7 @@ import {
   type ForecastEmbalagensPatch,
 } from '@/services/forecastEmbalagens';
 import { dataBr, kgBr } from './forecastPainel';
-import { erroDoPallet, lerPalletKg, lerQuantidadeKg, montarPatch, quantidadeParaCampo } from './forecastEmbalagens';
+import { avisoDoPallet, erroDoPallet, lerPalletKg, lerQuantidadeKg, montarPatch, quantidadeParaCampo } from './forecastEmbalagens';
 
 interface Props {
   productId: number;
@@ -107,7 +107,8 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
 
   const lidas = dados.codigos.map((c) => ({ c, lida: lerQuantidadeKg(textos[c.id] ?? '') }));
   const quantidadePorId = new Map(lidas.map((l) => [l.c.id, l.lida.ok ? l.lida.valor : undefined] as const));
-  // Pallet: so vale com quantidade valida; o erro (formato ou "nao e multiplo") aparece no proprio campo.
+  // Pallet: so vale com quantidade valida; o erro (formato ou sem quantidade) bloqueia e aparece no proprio campo.
+  // "Nao e multiplo da embalagem" e so AVISO (nao bloqueia o Salvar).
   const palletsLidos = new Map(
     dados.codigos.map((c) => {
       const lida = lerPalletKg(pallets[c.id] ?? '');
@@ -117,7 +118,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
         : typeof quantidade === 'number' && lida.valor !== null
           ? erroDoPallet(quantidade, lida.valor)
           : null;
-      return [c.id, { lida, erro }] as const;
+      const aviso =
+        lida.ok && typeof quantidade === 'number' && lida.valor !== null ? avisoDoPallet(quantidade, lida.valor) : null;
+      return [c.id, { lida, erro, aviso }] as const;
     }),
   );
   const temErro = lidas.some((l) => !l.lida.ok) || [...palletsLidos.values()].some((p) => p.erro !== null);
@@ -169,7 +172,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
             {lidas.map(({ c, lida }) => {
               const erroId = `${baseId}-erro-${c.id}`;
               const erroPalletId = `${baseId}-erro-pallet-${c.id}`;
+              const avisoPalletId = `${baseId}-aviso-pallet-${c.id}`;
               const erroPallet = palletsLidos.get(c.id)?.erro ?? null;
+              const avisoPallet = palletsLidos.get(c.id)?.aviso ?? null;
               const semQuantidade = typeof quantidadePorId.get(c.id) !== 'number';
               return (
                 <tr key={c.id}>
@@ -204,7 +209,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                       onChange={(e) => setPallets((p) => ({ ...p, [c.id]: e.target.value }))}
                       aria-label={`Pallet em kg do código ${c.codigo}`}
                       aria-invalid={erroPallet !== null}
-                      aria-describedby={erroPallet !== null ? erroPalletId : undefined}
+                      aria-describedby={
+                        erroPallet !== null ? erroPalletId : avisoPallet !== null ? avisoPalletId : undefined
+                      }
                       disabled={pendente || semQuantidade}
                     />
                     {erroPallet !== null && (
@@ -212,6 +219,13 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                         {erroPallet}
                       </p>
                     )}
+                    <div aria-live="polite">
+                      {avisoPallet !== null && (
+                        <p className="fce-aviso" id={avisoPalletId}>
+                          {avisoPallet}
+                        </p>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <input
@@ -252,8 +266,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
         Nenhuma (usa o primeiro código)
       </label>
       <p className="fce-dica">
-        Pallet = kg de UM pallet fechado da embalagem (ex.: 24 bombonas de 25 kg = 600 kg), sempre múltiplo da
-        embalagem. O relatório mostra os pallets fechados abaixo e acima da quantidade sugerida.
+        Pallet = kg de UM pallet da embalagem (ex.: 24 bombonas de 25 kg = 600 kg). É uma opção de compra informada
+        pelo cadastro, não uma regra: pode não ser múltiplo da embalagem. O relatório mostra os pallets abaixo e
+        acima da quantidade sugerida.
       </p>
       <p className="fce-dica">
         Valor editado manualmente pode ser substituído quando a integração com o DBCorp estiver ativa.

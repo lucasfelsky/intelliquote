@@ -258,7 +258,7 @@ describe('ForecastEmbalagensModal - pallet fechado (PR 6e)', () => {
     expect(pallet('C0003').value).toBe('');
     expect(pallet('C0002').disabled).toBe(true); // sem quantidade
     expect(pallet('C0001').disabled).toBe(false);
-    expect(screen.getByText(/Pallet = kg de UM pallet fechado da embalagem/)).toBeTruthy();
+    expect(screen.getByText(/É uma opção de compra informada pelo cadastro, não uma regra: pode não ser múltiplo da embalagem/)).toBeTruthy();
     expect(salvar().disabled).toBe(true);
   });
 
@@ -306,8 +306,6 @@ describe('ForecastEmbalagensModal - pallet fechado (PR 6e)', () => {
     ['600,1234', 'O pallet aceita no máximo 3 casas decimais.'],
     ['1.000.001', 'O pallet aceita no máximo 1.000.000 kg.'],
     ['abc', 'Informe os kg do pallet só com números (ex.: 600 ou 1.200).'],
-    ['610', 'O pallet precisa ser múltiplo da embalagem (25 kg).'],
-    ['12,5', 'O pallet precisa ser múltiplo da embalagem (25 kg).'],
   ])('pallet "%s" mostra o erro no campo e desabilita Salvar (nenhum PATCH)', async (texto, erro) => {
     renderModal(true);
     await screen.findByText('PRODUTO 001');
@@ -324,14 +322,45 @@ describe('ForecastEmbalagensModal - pallet fechado (PR 6e)', () => {
     expect(salvar().disabled).toBe(false);
   });
 
-  it('trocar a quantidade para um valor que deixa de dividir o pallet salvo acusa o erro no campo do pallet', async () => {
+  it.each([
+    ['610', 'O pallet (610 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.'],
+    ['12,5', 'O pallet (12,5 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.'],
+  ])('pallet "%s" que nao e multiplo da embalagem mostra AVISO (polite) e o Salvar continua liberado e envia o valor', async (texto, aviso) => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: texto } });
+    const campo = pallet('C0001');
+    const mensagem = screen.getByText(aviso);
+    expect(campo.getAttribute('aria-invalid')).toBe('false');
+    expect(campo.getAttribute('aria-describedby')).toBe(mensagem.id);
+    expect(mensagem.closest('[aria-live="polite"]')).toBeTruthy();
+    expect(mensagem.getAttribute('role')).toBeNull();
+    expect(salvar().disabled).toBe(false);
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    const corpo = patch.mock.calls[0]?.[1] as { embalagens: Array<{ codigoId: number; palletKg: number | null }> } | undefined;
+    expect(corpo?.embalagens[0]?.palletKg).toBe(Number(texto.replace(',', '.')));
+  });
+
+  it('pallet multiplo exato (e vazio) nao mostra aviso', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '1.200' } });
+    expect(screen.queryByText(/não é múltiplo/)).toBeNull();
+    fireEvent.change(pallet('C0001'), { target: { value: '' } });
+    expect(screen.queryByText(/não é múltiplo/)).toBeNull();
+  });
+
+  it('trocar a quantidade para um valor que deixa de dividir o pallet salvo mostra o aviso (nao bloqueia) e some ao voltar a dividir', async () => {
     renderModal(true);
     await screen.findByText('PRODUTO 001');
     fireEvent.change(qtd('C0001'), { target: { value: '7' } });
-    expect(screen.getByText('O pallet precisa ser múltiplo da embalagem (7 kg).')).toBeTruthy();
-    expect(salvar().disabled).toBe(true);
+    expect(screen.getByText('O pallet (600 kg) não é múltiplo da embalagem (7 kg): confira com o fornecedor.')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(salvar().disabled).toBe(false);
     fireEvent.change(qtd('C0001'), { target: { value: '20' } });
-    expect(screen.queryByText(/precisa ser múltiplo/)).toBeNull();
+    expect(screen.queryByText(/não é múltiplo/)).toBeNull();
     expect(salvar().disabled).toBe(false);
   });
 
@@ -344,12 +373,12 @@ describe('ForecastEmbalagensModal - pallet fechado (PR 6e)', () => {
   });
 
   it('400 do backend sobre o pallet aparece em role="alert" e mantem o texto digitado', async () => {
-    patch.mockRejectedValue(new ApiError(400, { message: 'O pallet precisa ser multiplo da embalagem (25 kg).' }));
+    patch.mockRejectedValue(new ApiError(400, { message: 'Mensagem qualquer do servidor.' }));
     renderModal(true);
     await screen.findByText('PRODUTO 001');
     fireEvent.change(pallet('C0001'), { target: { value: '1.200' } });
     fireEvent.click(salvar());
-    expect((await screen.findByRole('alert')).textContent).toBe('O pallet precisa ser multiplo da embalagem (25 kg).');
+    expect((await screen.findByRole('alert')).textContent).toBe('Mensagem qualquer do servidor.');
     expect(pallet('C0001').value).toBe('1.200');
   });
 });

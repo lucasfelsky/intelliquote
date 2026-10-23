@@ -307,19 +307,32 @@ describe('Forecast - embalagens por codigo (DB)', () => {
     expect(logs[0].afterData).toBeNull();
   });
 
-  testDbSkip('pallet (PR 6e): nao multiplo, sem quantidade e valor invalido -> 400 e nada gravado; quantidade apagada apaga o pallet', async () => {
-    const antes = await prisma.forecastProductCode.findMany({ where: { productId: productA }, orderBy: { id: 'asc' } });
+  testDbSkip('pallet (PR 6e + rodada 5): nao multiplo da embalagem e aceito e gravado; sem quantidade e valor invalido -> 400 e nada gravado; quantidade apagada apaga o pallet', async () => {
+    // Rodada 5 do Comex: o pallet e uma opcao de compra, nao precisa ser multiplo da embalagem (610 kg com embalagem de 25 kg).
     const naoMultiplo = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 610 }] });
-    expect(naoMultiplo.status).toBe(400);
-    expect(naoMultiplo.body.message).toBe('O pallet precisa ser multiplo da embalagem (25 kg).');
+    expect(naoMultiplo.status).toBe(200);
+    expect(naoMultiplo.body.data.codigos[0]).toMatchObject({ quantidadeKg: 25, palletKg: 610 });
+    expect(Number((await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A1 } })).packagingPalletKg)).toBe(610);
+    // O relatorio faz a conta em kg do pallet (610 kg), sem exigir multiplo.
+    const relNaoMultiplo = await request(app)
+      .get(`/api/v1/forecast/snapshots/${snapshotId}/relatorio-compras?hoje=${HOJE}`)
+      .set('Cookie', cookies);
+    expect(relNaoMultiplo.status).toBe(200);
+    const opcaoA1 = (relNaoMultiplo.body.data.grupos[0].itens[0] as { porEmbalagem: Array<{ codigo: string; pallet: { kgPorPallet: number } | null }> })
+      .porEmbalagem.find((o) => o.codigo === CODE_A1);
+    expect(opcaoA1?.pallet?.kgPorPallet).toBe(610);
+    // Trocar so a quantidade para um valor que nao divide o pallet salvo tambem e aceito.
+    const quebra = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 7 }] });
+    expect(quebra.status).toBe(200);
+    expect(quebra.body.data.codigos[0]).toMatchObject({ quantidadeKg: 7, palletKg: 610 });
+    // Volta ao estado de partida (A1 25 kg com pallet de 600 kg) para o que vem depois.
+    expect((await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 600 }] })).status).toBe(200);
+    const antes = await prisma.forecastProductCode.findMany({ where: { productId: productA }, orderBy: { id: 'asc' } });
     const semQuantidade = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: null, palletKg: 50 }] });
     expect(semQuantidade.status).toBe(400);
     expect(semQuantidade.body.message).toBe('O pallet precisa da quantidade da embalagem.');
     const invalido = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 25, palletKg: 600.1234 }] });
     expect(invalido.status).toBe(400);
-    // Trocar so a quantidade para um valor que nao divide o pallet salvo tambem e recusado.
-    const quebra = await patch(productA, { embalagens: [{ codigoId: ids[CODE_A1], quantidadeKg: 7 }] });
-    expect(quebra.status).toBe(400);
     expect(await prisma.forecastProductCode.findMany({ where: { productId: productA }, orderBy: { id: 'asc' } })).toEqual(antes);
 
     // A3: grava quantidade + pallet; depois apaga SO a quantidade e o pallet some junto.

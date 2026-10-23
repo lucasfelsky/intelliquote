@@ -90,6 +90,59 @@ router.put(
   ForecastController.putMesesAtipicos,
 );
 
+// Demanda do comercial (PR 6d): compra pedida pelo comercial por programacao futura, lancada a mao pelo COMEX.
+// Leitura = equipe COMEX; lancar, editar e fechar = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/commercial-demands',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listDemandasComerciais,
+);
+
+router.post(
+  '/forecast/commercial-demands',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createDemandaComercial,
+);
+
+router.patch(
+  '/forecast/commercial-demands/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchDemandaComercial,
+);
+
+// Grupos de equivalencia (PR 6b): produtos que sao o mesmo material tem o estoque avaliado somado no relatorio.
+// Leitura = equipe COMEX; criar, editar e desfazer = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/equivalence-groups',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listGruposEquivalencia,
+);
+
+router.post(
+  '/forecast/equivalence-groups',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createGrupoEquivalencia,
+);
+
+router.patch(
+  '/forecast/equivalence-groups/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchGrupoEquivalencia,
+);
+
+router.delete(
+  '/forecast/equivalence-groups/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteGrupoEquivalencia,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(

@@ -95,6 +95,10 @@ function Formulario({ productId, baseDate, linha, onFechar }: Props) {
         Vale para todas as quinzenas cuja janela de vendas contém o mês. A conferência com a planilha continua pela
         regra original.
       </p>
+      <p className="fce-dica">
+        Critério usado pelo Comex: considere atípica a venda que não se repete nos próximos 15 dias ou cujo volume
+        entrou na programação.
+      </p>
       <div className="fce-scroll" role="region" tabIndex={0} aria-label="Meses da quinzena">
         <table className="fce-tabela fca-tabela">
           <caption className="sr-only">Meses de venda da quinzena e marcação de venda atípica</caption>

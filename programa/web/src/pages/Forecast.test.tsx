@@ -1070,3 +1070,73 @@ describe('Forecast - meses atipicos na memoria de calculo (PR 6c)', () => {
     expect(document.querySelectorAll('td[title^="Média sem meses atípicos"]')).toHaveLength(0);
   });
 });
+
+describe('Forecast - grupos de equivalencia (PR 6b)', () => {
+  const GRUPO = {
+    id: 7,
+    nome: 'GRUPO SINTETICO',
+    observacao: null,
+    principalProdutoId: 42,
+    membros: [{ id: 42, nome: 'PRODUTO A', fonte: 'FONTE 1', ativo: true, sobDemanda: false }],
+  };
+  const memoria = () => within(screen.getByRole('region', { name: 'Memória de cálculo' }));
+
+  // O mock padrao devolve o detalhe para qualquer caminho; a lista de grupos tem a sua rota.
+  function mockComGrupos(linhaA: Record<string, unknown> = {}) {
+    mockApi({ 7: detalhe({ linhas: [linha({ productId: 42, ...linhaA }), ...LINHAS.slice(1)] }) });
+    const base = get.getMockImplementation()!;
+    get.mockImplementation(async (path: string, query?: unknown) =>
+      path === '/v1/forecast/equivalence-groups' ? { data: [GRUPO] } : base(path, query as never),
+    );
+  }
+
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao e abre a lista de grupos', async (role) => {
+    mockRole = role;
+    mockComGrupos();
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    fireEvent.click(screen.getByRole('button', { name: 'Grupos de equivalência' }));
+    expect(await screen.findByRole('heading', { name: 'GRUPO SINTETICO' })).toBeTruthy();
+    const podeEditar = role === 'admin' || role === 'comprador';
+    expect(screen.queryByRole('button', { name: 'Novo grupo' }) !== null).toBe(podeEditar);
+  });
+
+  it('ao fechar o modal o foco volta ao botao "Grupos de equivalência"', async () => {
+    mockRole = 'comprador';
+    mockComGrupos();
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    const abrir = screen.getByRole('button', { name: 'Grupos de equivalência' });
+    fireEvent.click(abrir);
+    await screen.findByRole('heading', { name: 'GRUPO SINTETICO' });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'GRUPO SINTETICO' })).toBeNull());
+    expect(document.activeElement).toBe(abrir);
+  });
+
+  it('o botao tambem existe sem quinzena importada (a lista de grupos nao depende dela)', async () => {
+    mockRole = 'viewer';
+    mockApi({}, []);
+    renderPage();
+    await screen.findByText('Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.');
+    expect(screen.getByRole('button', { name: 'Grupos de equivalência' })).toBeTruthy();
+  });
+
+  it('memoria de calculo: selo "Grupo: nome" no produto que esta num grupo; produto avulso e backend antigo sem selo', async () => {
+    mockRole = 'viewer';
+    mockComGrupos({ grupo: { id: 7, nome: 'GRUPO SINTETICO', principalProductId: 42 } });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(memoria().getByText('Grupo: GRUPO SINTETICO')).toBeTruthy();
+    expect(memoria().getByText(/Os números acima são só deste produto/)).toBeTruthy();
+  });
+
+  it('memoria de calculo sem grupo (avulso ou backend antigo): nenhum selo', async () => {
+    mockRole = 'viewer';
+    mockComGrupos({ grupo: null });
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    expect(memoria().queryByText(/^Grupo:/)).toBeNull();
+    expect(memoria().queryByText('Grupo')).toBeNull();
+  });
+});

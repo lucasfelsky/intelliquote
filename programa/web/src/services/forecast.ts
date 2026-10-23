@@ -65,6 +65,8 @@ export interface ForecastLinha {
   mesesForaDaMedia?: ForecastMesForaDaMedia[];
   /** So presente quando a linha tem meses marcados: Q/R/AG acima ja sao SEM esses meses; aqui, os da planilha. */
   mediaAjustada?: ForecastMediaAjustada;
+  /** PR 6b (opcional: backend antigo nao manda): grupo de equivalencia do produto no cadastro ATUAL; nulo = avulso. */
+  grupo?: { id: number; nome: string; principalProductId: number | null } | null;
 }
 
 /** Mes de venda atipica de um produto dentro da janela da quinzena; `indice`: 0..5 = J..O, 6 = P (mes atual). */
@@ -156,6 +158,72 @@ export interface ForecastOpcaoEmbalagem extends ForecastEmbalagemDoItem {
   pallet?: ForecastPalletDaOpcao | null;
 }
 
+/** Um membro de grupo de equivalencia na quinzena, com os componentes que entram na soma (PR 6b). */
+export interface ForecastMembroDoGrupo {
+  linha: number;
+  productId: number;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  principal: boolean;
+  estoque: number;
+  chegadas: number;
+  programado: number;
+  mediaTrimestral: number;
+  /** AN do membro sozinho; nulo = membro sem lead time. */
+  demandaIndividual: number | null;
+  semLeadTime: boolean;
+  obs: string;
+}
+
+/** Totais do grupo de equivalencia (a linha do grupo usa estes numeros) e os membros (PR 6b). */
+export interface ForecastDadosDoGrupo {
+  id: number;
+  nome: string;
+  principalProductId: number;
+  principalItem: string;
+  /** Observacao do grupo no cadastro (opcional: backend antigo nao manda). */
+  observacao?: string;
+  membros: ForecastMembroDoGrupo[];
+  estoque: number;
+  chegadas: number;
+  programado: number;
+  mediaTrimestral: number;
+  seguranca: number;
+  /** Nulo so quando nenhum membro tem lead time. */
+  demanda: number | null;
+  /** (estoque + chegadas) / media, em meses; nulo sem consumo. */
+  cobertura: number | null;
+}
+
+export type ForecastSituacaoDoGrupo = 'na-lista' | 'sob-demanda' | 'coberto' | 'sem-lead-time';
+
+export interface ForecastGrupoNoRelatorio extends ForecastDadosDoGrupo {
+  situacao: ForecastSituacaoDoGrupo;
+}
+
+/** Membro que entraria sozinho na lista de compra, mas o estoque somado do grupo cobre (PR 6b). */
+export interface ForecastItemCobertoPorGrupo {
+  linha: number;
+  n: number | null;
+  productId: number;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: ForecastStatus;
+  demanda: number;
+  quantidadeSugerida: number;
+  grupoId: number;
+  grupoNome: string;
+  principalItem: string;
+  /** Observacao do grupo no cadastro (opcional: backend antigo nao manda). */
+  grupoObservacao?: string;
+  estoqueDoGrupo: number;
+  cobertura: number | null;
+  obs: string;
+  mesesForaDaMedia: string[];
+}
+
 /** Faixas de urgencia do relatorio (PR 2D), da mais para a menos urgente. */
 export type ForecastUrgencia = 'sem-estoque' | 'critico' | 'atrasado' | 'no-prazo';
 
@@ -183,6 +251,10 @@ export interface ForecastItemRelatorio {
   obs?: string;
   /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
   mesesForaDaMedia?: string[];
+  /** PR 6d (opcional: backend antigo nao manda): kg a somar pelos pedidos abertos do comercial; ausente = nenhum. */
+  demandaComercialKg?: number;
+  /** PR 6b (opcional: backend antigo nao manda): o item e a linha de um GRUPO de equivalencia (nome do grupo em `item`). */
+  grupo?: ForecastDadosDoGrupo;
   ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -228,6 +300,8 @@ export interface ForecastItemSemConsumo {
   sobDemanda?: boolean;
   /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
   mesesForaDaMedia?: string[];
+  /** PR 6b (opcional): a linha e um grupo de equivalencia sem consumo. */
+  grupo?: ForecastDadosDoGrupo;
 }
 
 /** Item sob demanda que entraria na lista de compra, mas fica fora dela (PR 6a). */
@@ -252,6 +326,44 @@ export interface ForecastItemSobDemanda {
   obs?: string;
   /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
   mesesForaDaMedia?: string[];
+  /** PR 6b (opcional): a linha e um grupo de equivalencia cujo principal e sob demanda. */
+  grupo?: ForecastDadosDoGrupo;
+}
+
+/** Situacao do pedido do comercial frente ao horizonte de programacao do DBCorp (PR 6d). */
+export type ForecastSituacaoDemandaComercial = 'alem-do-horizonte' | 'no-horizonte' | 'fora-da-quinzena';
+
+/** Pedido aberto do comercial na secao "Demanda do comercial" do relatorio (PR 6d). */
+export interface ForecastItemDemandaComercial {
+  id: number;
+  /** Nulo = produto sem linha nesta quinzena. */
+  linha: number | null;
+  productId: number;
+  item: string;
+  fonte: string;
+  kg: number;
+  /** AAAA-MM-DD. */
+  necessidade: string;
+  /** AAAA-MM do mes da necessidade. */
+  anoMes: string;
+  motivo: string;
+  cliente: string | null;
+  solicitacaoId: number | null;
+  situacao: ForecastSituacaoDemandaComercial;
+  /** Programacao do DBCorp no mes da necessidade (so 'no-horizonte'); nulo nos demais. */
+  programacaoDoMes: number | null;
+  /** Saldo projetado no mes da necessidade (so 'alem-do-horizonte'); nulo nos demais. */
+  saldoLivre: number | null;
+  /** kg a somar ao Forecast; 0 quando nao soma. */
+  sugerido: number;
+  /** O produto tambem esta na lista de compra. */
+  noRelatorio: boolean;
+  obs: string;
+}
+
+export interface ForecastDemandaComercialDoRelatorio {
+  itens: ForecastItemDemandaComercial[];
+  totais: { abertas: number; sugeridoKg: number };
 }
 
 export interface ForecastRelatorioCompras {
@@ -272,11 +384,19 @@ export interface ForecastRelatorioCompras {
     semConsumoSemMovimento?: number;
     /** PR 6a (opcional: backend antigo nao manda): itens que entrariam na lista mas sao compra sob demanda. */
     sobDemanda?: number;
+    /** PR 6b (opcional: backend antigo nao manda): membros fora da lista porque o estoque somado do grupo os cobre. */
+    cobertosPorGrupo?: number;
   };
   urgencia?: { diasCritico: number };
   semConsumo?: { itens: ForecastItemSemConsumo[] };
   /** PR 6a (opcional: backend antigo nao manda). */
   sobDemanda?: { itens: ForecastItemSobDemanda[] };
+  /** PR 6d (opcional: backend antigo nao manda). */
+  demandaComercial?: ForecastDemandaComercialDoRelatorio;
+  /** PR 6b (opcional: backend antigo nao manda). */
+  cobertosPorGrupo?: { itens: ForecastItemCobertoPorGrupo[] };
+  /** PR 6b (opcional: backend antigo nao manda): grupos formados na quinzena e o destino de cada um. */
+  gruposDeEquivalencia?: ForecastGrupoNoRelatorio[];
   grupos: ForecastGrupoRelatorio[];
 }
 

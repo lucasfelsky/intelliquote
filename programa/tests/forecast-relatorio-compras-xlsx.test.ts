@@ -434,14 +434,14 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
 
   it('aba Por urgencia: lista unica na ordem de posicaoUrgencia, com fonte, filtro e cabecalho congelado', async () => {
     const ws = (await abrir()).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(20);
-    expect(linhaComoArrayN(ws, 1, 20)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(21);
+    expect(linhaComoArrayN(ws, 1, 21)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     const lista = itensNaOrdemDeUrgencia(sintetico);
     expect(lista.map((x) => x.item.item)).toEqual(['PRODUTO 004', 'PRODUTO 002', 'PRODUTO 001', 'PRODUTO 003']);
     expect(ws.rowCount).toBe(1 + lista.length);
     lista.forEach(({ item, fonte }, i) => {
       const c = celulasDoItem(item, 15);
-      expect(linhaComoArrayN(ws, i + 2, 20)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
+      expect(linhaComoArrayN(ws, i + 2, 21)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
     });
     expect(ws.autoFilter).toBeTruthy();
     expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
@@ -456,7 +456,7 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
   it('aba Por urgencia sem itens: cabecalho e aviso', async () => {
     const vazio = montarRelatorioCompras(quinzena([]), []);
     const ws = (await carregar(await gerarXlsxRelatorioCompras(vazio))).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(linhaComoArrayN(ws, 1, 20)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(linhaComoArrayN(ws, 1, COLUNAS_POR_URGENCIA_XLSX.length)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     expect(valorDaCelula(ws, 2, 1)).toBe('Nenhum item com demanda ≤ 0 nesta quinzena.');
   });
 
@@ -1115,14 +1115,15 @@ describe('meses atipicos fora da media no XLSX', () => {
   });
 
   it('coluna "Meses fora da média" fica ANTES da Observação, que continua a ultima, nas 4 abas', () => {
-    for (const colunas of [
-      COLUNAS_RELATORIO_XLSX,
-      COLUNAS_POR_URGENCIA_XLSX,
-      COLUNAS_SEM_CONSUMO_XLSX,
-      COLUNAS_SOB_DEMANDA_XLSX,
-    ] as ReadonlyArray<readonly string[]>) {
+    // Nas abas de compra a coluna "Grupo de equivalência" (PR 6b) vem entre as duas; nas outras, "Meses" e a penultima.
+    for (const [colunas, antes] of [
+      [COLUNAS_RELATORIO_XLSX, 3],
+      [COLUNAS_POR_URGENCIA_XLSX, 3],
+      [COLUNAS_SEM_CONSUMO_XLSX, 2],
+      [COLUNAS_SOB_DEMANDA_XLSX, 2],
+    ] as ReadonlyArray<readonly [readonly string[], number]>) {
       expect(colunas.at(-1)).toBe('Observação');
-      expect(colunas.at(-2)).toBe('Meses fora da média');
+      expect(colunas.at(-antes)).toBe('Meses fora da média');
       expect(colunas.filter((c) => c === 'Meses fora da média')).toHaveLength(1);
     }
   });
@@ -1197,5 +1198,531 @@ describe('meses atipicos fora da media no XLSX', () => {
     );
     // A linha da tela e o texto do XLSX usam a mesma lista: "Média sem: " + texto.
     expect(textoMediaSemWeb(['2026-08', '2026-09'])).toBe(`Média sem: ${textoMesesForaDaMedia(['2026-08', '2026-09'])}`);
+  });
+});
+
+// ---- Demanda do comercial no XLSX (PR 6d) ----
+import type { DemandaComercialAberta } from '../src/utils/forecastDemandaComercial';
+import {
+  ABA_DEMANDA_COMERCIAL,
+  COLUNAS_DEMANDA_COMERCIAL_XLSX,
+  celulasDaDemandaComercial,
+  paragrafoDemandaComercial,
+  resumoDemandaComercial,
+  seloDemandaComercial,
+  textoAvisoDemanda,
+  textoSituacaoDemanda,
+  textoSolicitacao,
+  tituloDemandaComercial,
+} from '../src/utils/forecastRelatorioComprasXlsx';
+import {
+  paragrafoDemandaComercial as paragrafoDemandaComercialWeb,
+  resumoDemandaComercial as resumoDemandaComercialWeb,
+  seloDemandaComercial as seloDemandaComercialWeb,
+  textoAvisoDemanda as textoAvisoDemandaWeb,
+  textoSituacaoDemanda as textoSituacaoDemandaWeb,
+  textoSolicitacao as textoSolicitacaoWeb,
+  tituloDemandaComercial as tituloDemandaComercialWeb,
+} from '../web/src/pages/Forecast/forecastRelatorioTextos';
+
+describe('demanda do comercial no XLSX', () => {
+  // PRODUTO 001 (caso E: AN +1.100, fora da lista) com 3 pedidos: alem do horizonte, dentro do horizonte e outro produto
+  // sem linha; PRODUTO 002 esta na lista de compra.
+  const projecaoE = [1700, 1400, 1100, 800, 500, 200];
+  const base = [
+    linha({
+      linha: 1,
+      productId: 1,
+      item: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      Q: 300,
+      AG: 300,
+      U: 2000,
+      AN: 1100,
+      AQ: 60,
+      obs: 'OBS SINTETICA 001',
+      projecao: projecaoE,
+      programacoes: [0, 0, 250, 0],
+    }),
+    linha({ linha: 2, productId: 2, item: 'PRODUTO 002', fonte: 'FONTE 001', AN: -100 }),
+  ];
+  const demandas: DemandaComercialAberta[] = [
+    {
+      id: 11,
+      productId: 1,
+      produto: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      kg: 1600,
+      necessidade: '2027-02-10',
+      motivo: 'MOTIVO SINTETICO',
+      cliente: 'CLIENTE SINTETICO',
+      solicitacaoId: 12,
+    },
+    {
+      id: 12,
+      productId: 1,
+      produto: 'PRODUTO 001',
+      fonte: 'FONTE 001',
+      kg: 800,
+      necessidade: '2026-12-01',
+      motivo: 'MOTIVO DOIS SINTETICO',
+      cliente: null,
+      solicitacaoId: null,
+    },
+    {
+      id: 13,
+      productId: 99,
+      produto: 'PRODUTO 009',
+      fonte: null,
+      kg: 50.5,
+      necessidade: '2027-03-01',
+      motivo: 'MOTIVO TRES SINTETICO',
+      cliente: null,
+      solicitacaoId: null,
+    },
+  ];
+  const com = montarRelatorioCompras(quinzena(base), [], { demandasComerciais: demandas });
+  const sem = montarRelatorioCompras(quinzena(base), []);
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+  const regrasDe = async (r: RelatorioCompras) => {
+    const textos: string[] = [];
+    (await abrir(r)).getWorksheet(ABA_REGRAS)!.eachRow((row) => textos.push(String(row.getCell(1).value)));
+    return textos;
+  };
+
+  it('premissa: 3 pedidos listados (ordem de necessidade) e o sugerido do caso E', () => {
+    expect(com.demandaComercial.itens.map((i) => [i.id, i.situacao, i.sugerido])).toEqual([
+      [12, 'no-horizonte', 0],
+      [11, 'alem-do-horizonte', 1100],
+      [13, 'fora-da-quinzena', 0],
+    ]);
+    expect(com.demandaComercial.totais).toEqual({ abertas: 3, sugeridoKg: 1100 });
+  });
+
+  it('com pedido: aba "Demanda do comercial" depois da de sem consumo e antes das Regras; cabecalho e linhas = celulas', async () => {
+    const wb = await abrir(com);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([
+      ABA_RELATORIO,
+      ABA_POR_URGENCIA,
+      ABA_SEM_CONSUMO,
+      ABA_DEMANDA_COMERCIAL,
+      ABA_REGRAS,
+    ]);
+    const ws = wb.getWorksheet(ABA_DEMANDA_COMERCIAL)!;
+    const n = COLUNAS_DEMANDA_COMERCIAL_XLSX.length;
+    expect(linhaComoArrayN(ws, 1, n)).toEqual([...COLUNAS_DEMANDA_COMERCIAL_XLSX]);
+    com.demandaComercial.itens.forEach((item, i) => {
+      expect(linhaComoArrayN(ws, i + 2, n)).toEqual(celulasDaDemandaComercial(item));
+    });
+    // Caso E, alem do horizonte (linha 3 da aba): kg, saldo e sugerido como numeros.
+    expect(linhaComoArrayN(ws, 3, n)).toEqual([
+      'PRODUTO 001',
+      'FONTE 001',
+      '10/02/2027',
+      1600,
+      500,
+      1100,
+      'MOTIVO SINTETICO',
+      'CLIENTE SINTETICO',
+      '#12',
+      'Além do horizonte: soma ao Forecast',
+      'OBS SINTETICA 001',
+    ]);
+    // Dentro do horizonte: nao soma, traco no saldo e no sugerido, aviso com a programacao do mes na mesma celula.
+    expect(linhaComoArrayN(ws, 2, n)).toEqual([
+      'PRODUTO 001',
+      'FONTE 001',
+      '01/12/2026',
+      800,
+      '—',
+      '—',
+      'MOTIVO DOIS SINTETICO',
+      '—',
+      '—',
+      'Dentro do horizonte: não soma\nProgramação de dez/2026: 250. Confira se já está nas programações; se estiver, marque "virou programação".',
+      'OBS SINTETICA 001',
+    ]);
+    // Produto sem linha na quinzena: nome do cadastro, sem fonte e sem calculo.
+    expect(linhaComoArrayN(ws, 4, n)).toEqual([
+      'PRODUTO 009',
+      'Sem fonte',
+      '01/03/2027',
+      50.5,
+      '—',
+      '—',
+      'MOTIVO TRES SINTETICO',
+      '—',
+      '—',
+      'Fora desta quinzena: sem cálculo\nO produto não tem linha nesta quinzena.',
+      '',
+    ]);
+  });
+
+  it('Observação continua a ULTIMA coluna da aba nova e das 3 existentes', () => {
+    expect(COLUNAS_DEMANDA_COMERCIAL_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_SEM_CONSUMO_XLSX.at(-1)).toBe('Observação');
+  });
+
+  it('numeros sao numericos na planilha (kg com ate 3 casas) e a aba tem filtro e cabecalho congelado', async () => {
+    const ws = (await abrir(com)).getWorksheet(ABA_DEMANDA_COMERCIAL)!;
+    const col = (nome: (typeof COLUNAS_DEMANDA_COMERCIAL_XLSX)[number]) => COLUNAS_DEMANDA_COMERCIAL_XLSX.indexOf(nome) + 1;
+    expect(typeof ws.getRow(3).getCell(col('Pedido (kg)')).value).toBe('number');
+    expect(ws.getRow(3).getCell(col('Pedido (kg)')).numFmt).toBe('#,##0.###');
+    expect(ws.getRow(3).getCell(col('Sugerido')).font?.bold).toBe(true);
+    expect(ws.autoFilter).toBeTruthy();
+    expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+  });
+
+  it('resumo ganha a linha so com pedido aberto; Regras ganha o paragrafo antes da nota de origem', async () => {
+    expect(linhasDoResumo(com)).toContain('3 demandas do comercial abertas (1.100 kg sugeridos)');
+    expect(linhasDoResumo(sem).some((l) => l.includes('do comercial'))).toBe(false);
+    const regras = paragrafosDeRegras(15, false, false, true);
+    expect(regras.at(-2)).toBe(paragrafoDemandaComercial());
+    expect(regras.at(-1)).toBe('Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).');
+    expect(paragrafosDeRegras(15)).toEqual(regras.filter((p) => p !== paragrafoDemandaComercial()));
+    expect(await regrasDe(com)).toEqual(paragrafosDeRegras(15, false, false, true));
+  });
+
+  it('sem pedido: nada muda (4 abas, sem linha no resumo e Regras igual a de antes)', async () => {
+    expect(sem.demandaComercial.itens).toEqual([]);
+    const wb = await abrir(sem);
+    expect(wb.worksheets.map((w) => w.name)).toEqual([ABA_RELATORIO, ABA_POR_URGENCIA, ABA_SEM_CONSUMO, ABA_REGRAS]);
+    expect(await regrasDe(sem)).toEqual(paragrafosDeRegras(15));
+  });
+
+  it('as abas de compra nao mudam: o item que nao aponta falta continua fora delas', async () => {
+    const wb = await abrir(com);
+    for (const nome of [ABA_RELATORIO, ABA_POR_URGENCIA]) {
+      const itens: string[] = [];
+      wb.getWorksheet(nome)!.eachRow((row) => itens.push(String(row.getCell(1).value ?? '')));
+      expect(itens).toContain('PRODUTO 002');
+      expect(itens).not.toContain('PRODUTO 001');
+    }
+  });
+
+  it('paridade tela x XLSX: titulo, resumo, paragrafo, selo, situacao, aviso e solicitacao iguais', () => {
+    for (const n of [1, 3]) expect(tituloDemandaComercial(n)).toBe(tituloDemandaComercialWeb(n));
+    for (const [n, kg] of [[1, 1], [2, 1100], [3, 0], [1, 0.5]] as const) {
+      expect(resumoDemandaComercial(n, kg)).toBe(resumoDemandaComercialWeb(n, kg));
+    }
+    expect(paragrafoDemandaComercial()).toBe(paragrafoDemandaComercialWeb());
+    for (const kg of [1100, 0.5, 25]) expect(seloDemandaComercial(kg)).toBe(seloDemandaComercialWeb(kg));
+    for (const item of com.demandaComercial.itens) {
+      expect(textoSituacaoDemanda(item)).toBe(textoSituacaoDemandaWeb(item));
+      expect(textoAvisoDemanda(item)).toBe(textoAvisoDemandaWeb(item));
+      expect(textoSolicitacao(item.solicitacaoId)).toBe(textoSolicitacaoWeb(item.solicitacaoId));
+      // A celula Situacao do arquivo = situacao + quebra de linha + aviso da tela.
+      const aviso = textoAvisoDemandaWeb(item);
+      expect(celulasDaDemandaComercial(item)[9]).toBe(
+        aviso ? `${textoSituacaoDemandaWeb(item)}\n${aviso}` : textoSituacaoDemandaWeb(item),
+      );
+    }
+    expect(textoSituacaoDemanda({ situacao: 'alem-do-horizonte', sugerido: 0 })).toBe(
+      textoSituacaoDemandaWeb({ situacao: 'alem-do-horizonte', sugerido: 0 }),
+    );
+    // Sem programacao no mes (0) e antes do mes base (nulo): mesmos avisos nos dois lados.
+    for (const programacaoDoMes of [0, null]) {
+      const i = { situacao: 'no-horizonte' as const, programacaoDoMes, anoMes: '2026-12' };
+      expect(textoAvisoDemanda(i)).toBe(textoAvisoDemandaWeb(i));
+    }
+  });
+});
+
+// ---- Fixup do 6d: texto livre na aba nova e selo do comercial nas abas de compra ----
+describe('demanda do comercial no XLSX: texto livre e selo (fixup do 6d)', () => {
+  // PRODUTO 001 ja esta na lista de compra (AN -900) e tem pedido alem do horizonte; PRODUTO 002 nao tem pedido.
+  const linhas = [
+    linha({ linha: 1, productId: 3, item: 'PRODUTO 001', fonte: 'FONTE 001', Q: 300, AG: 300, U: 0, AN: -900, AQ: 60 }),
+    linha({ linha: 2, productId: 4, item: 'PRODUTO 002', fonte: 'FONTE 001', AN: -100 }),
+  ];
+  const demandaDe = (motivo: string, cliente: string | null): DemandaComercialAberta => ({
+    id: 21,
+    productId: 3,
+    produto: 'PRODUTO 001',
+    fonte: 'FONTE 001',
+    kg: 1600,
+    necessidade: '2027-02-10',
+    motivo,
+    cliente,
+    solicitacaoId: null,
+  });
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+
+  it.each(['=', '+', '-', '@'])('motivo e cliente que comecam com "%s" continuam TEXTO na aba nova', async (prefixo) => {
+    const motivo = `${prefixo}MOTIVO SINTETICO`;
+    const cliente = `${prefixo}CLIENTE SINTETICO`;
+    const r = montarRelatorioCompras(quinzena(linhas), [], { demandasComerciais: [demandaDe(motivo, cliente)] });
+    const ws = (await abrir(r)).getWorksheet(ABA_DEMANDA_COMERCIAL)!;
+    const col = (nome: (typeof COLUNAS_DEMANDA_COMERCIAL_XLSX)[number]) => COLUNAS_DEMANDA_COMERCIAL_XLSX.indexOf(nome) + 1;
+    for (const [nome, valor] of [['Motivo', motivo], ['Cliente', cliente]] as const) {
+      const cell = ws.getRow(2).getCell(col(nome));
+      expect(cell.value).toBe(valor);
+      expect(cell.type).toBe(exceljs.ValueType.String);
+    }
+  });
+
+  it('item da lista com pedido a somar: selo da tela na 2a linha da celula Item, nas duas abas de compra', async () => {
+    const r = montarRelatorioCompras(quinzena(linhas), [], { demandasComerciais: [demandaDe('MOTIVO SINTETICO', null)] });
+    const itens = r.grupos.flatMap((g) => g.itens);
+    const item = itens.find((i) => i.item === 'PRODUTO 001')!;
+    const outro = itens.find((i) => i.item === 'PRODUTO 002')!;
+    expect(item.demandaComercialKg).toBe(1600);
+    expect(outro.demandaComercialKg).toBeUndefined();
+    const selo = seloDemandaComercialWeb(1600);
+    expect(selo).toBe('+ 1.600 kg pedidos pelo comercial');
+    expect(celulasDoItem(item, 15)[0]).toBe('PRODUTO 001\n' + selo);
+    expect(celulasDoItem(outro, 15)[0]).toBe('PRODUTO 002');
+
+    const wb = await abrir(r);
+    const { grupos } = mapearLinhas(r);
+    const wsRel = wb.getWorksheet(ABA_RELATORIO)!;
+    r.grupos[0].itens.forEach((it, i) => {
+      expect(linhaComoArray(wsRel, grupos[0].primeiroItem + i)).toEqual(celulasDoItem(it, 15));
+    });
+    // Aba "Por urgencia": mesma celula Item; a coluna Fonte continua depois de Urgencia.
+    const wsUrg = wb.getWorksheet(ABA_POR_URGENCIA)!;
+    const celulasItem = [2, 3].map((n) => String(valorDaCelula(wsUrg, n, 1)));
+    expect(celulasItem).toContain('PRODUTO 001\n' + selo);
+    expect(celulasItem).toContain('PRODUTO 002');
+  });
+
+  it('sem pedido a somar: celula Item e as colunas continuam como antes e Observação segue a ultima', () => {
+    const r = montarRelatorioCompras(quinzena(linhas), []);
+    for (const it of r.grupos.flatMap((g) => g.itens)) {
+      expect(celulasDoItem(it, 15)[0]).toBe(it.item);
+      expect(celulasDoItem(it, 15)).toHaveLength(COLUNAS_RELATORIO_XLSX.length);
+    }
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-1)).toBe('Observação');
+  });
+});
+
+// ---- Grupos de equivalencia no XLSX (PR 6b) ----
+import {
+  ABA_GRUPOS,
+  COLUNAS_GRUPOS_XLSX,
+  celulasDoGrupo,
+  paragrafoGruposDeEquivalencia,
+  resumoCobertosPorGrupo,
+  textoCobertura,
+  textoMembroDoGrupo,
+  textoMotivoCobertoPorGrupo,
+  textoObservacaoDoGrupo,
+  textoPrincipalDoGrupo,
+  textoResumoDoGrupo,
+  textoSituacaoDoGrupo,
+  FRASE_EQUIVALENCIA_NEM_SEMPRE,
+} from '../src/utils/forecastRelatorioComprasXlsx';
+import {
+  paragrafoGruposDeEquivalencia as paragrafoGruposWeb,
+  resumoCobertosPorGrupo as resumoCobertosWeb,
+  textoCobertura as textoCoberturaWeb,
+  textoMotivoCobertoPorGrupo as textoMotivoCobertoWeb,
+  textoObservacaoDoGrupo as textoObservacaoGrupoWeb,
+  FRASE_EQUIVALENCIA_NEM_SEMPRE as FRASE_WEB,
+  textoPrincipalDoGrupo as textoPrincipalWeb,
+  textoResumoDoGrupo as textoResumoWeb,
+  textoSituacaoDoGrupo as textoSituacaoWeb,
+} from '../web/src/pages/Forecast/forecastRelatorioTextos';
+import type { GrupoDeEquivalencia } from '../src/utils/forecastGruposEquivalencia';
+
+describe('grupos de equivalencia no XLSX', () => {
+  // Caso B: PRODUTO 001 (lead 60, Q 100, U 0), PRODUTO 002 (lead 60, Q 50, U 1.000), PRODUTO 003 (sem lead time, U 200).
+  const caso = (u2 = 1000) => [
+    linha({ linha: 1, productId: 1, item: 'PRODUTO 001', fonte: 'FONTE 001', Q: 100, AG: 100, U: 0, AQ: 60, AN: -300, obs: 'OBS SINTETICA 001' }),
+    linha({ linha: 2, productId: 2, item: 'PRODUTO 002', fonte: 'FONTE 002', Q: 50, AG: 50, U: u2, AQ: 60, AN: u2 - 150, projecao: [900, 850, 800, 750, 700, 650] }),
+    linha({ linha: 3, productId: 3, item: 'PRODUTO 003', fonte: 'FONTE 003', Q: 0, AG: 0, U: 200, AQ: null, AN: null, projecao: [200, 200, 200, 200, 200, 200] }),
+  ];
+  const grupo: GrupoDeEquivalencia = { id: 10, nome: 'GRUPO SINTETICO', principalProductId: 1, productIds: [1, 2, 3] };
+  const coberto = montarRelatorioCompras(quinzena(caso()), [], { grupos: [grupo] });
+  const naLista = montarRelatorioCompras(quinzena(caso(100)), [], { grupos: [grupo] });
+  const sem = montarRelatorioCompras(quinzena(caso()), []);
+  const abrir = async (r: RelatorioCompras) => carregar(await gerarXlsxRelatorioCompras(r));
+
+  it('premissas: B coberto (+750) e a variante com U 100 na lista (-150)', () => {
+    expect(coberto.gruposDeEquivalencia.map((g) => [g.situacao, g.demanda])).toEqual([['coberto', 750]]);
+    expect(coberto.cobertosPorGrupo.itens.map((i) => i.item)).toEqual(['PRODUTO 001']);
+    expect(naLista.gruposDeEquivalencia.map((g) => [g.situacao, Math.round(g.demanda as number)])).toEqual([['na-lista', -150]]);
+  });
+
+  it('aba "Grupos de equivalência" depois das de compra e antes das Regras; so existe com grupo formado', async () => {
+    expect((await abrir(coberto)).worksheets.map((w) => w.name)).toEqual([
+      ABA_RELATORIO,
+      ABA_POR_URGENCIA,
+      ABA_SEM_CONSUMO,
+      ABA_GRUPOS,
+      ABA_REGRAS,
+    ]);
+    expect((await abrir(sem)).worksheets.map((w) => w.name)).toEqual([ABA_RELATORIO, ABA_POR_URGENCIA, ABA_SEM_CONSUMO, ABA_REGRAS]);
+  });
+
+  it('caso B coberto: linha "Total do grupo" e um membro por linha, com o motivo no membro que sairia da lista', async () => {
+    const ws = (await abrir(coberto)).getWorksheet(ABA_GRUPOS)!;
+    const n = COLUNAS_GRUPOS_XLSX.length;
+    expect(linhaComoArrayN(ws, 1, n)).toEqual([...COLUNAS_GRUPOS_XLSX]);
+    expect(COLUNAS_GRUPOS_XLSX.at(-1)).toBe('Observação');
+    expect(ws.rowCount).toBe(1 + 1 + 3);
+    expect(linhaComoArrayN(ws, 2, n)).toEqual([
+      'GRUPO SINTETICO',
+      'Coberto pelo estoque somado',
+      'Total do grupo',
+      '',
+      'FONTE 001',
+      1200,
+      0,
+      0,
+      150,
+      750,
+      '',
+      'Compra pelo produto principal: PRODUTO 001\nEstoque somado 1.200 kg · cobertura 8,0 meses · segurança somada 300 kg',
+    ]);
+    expect(linhaComoArrayN(ws, 3, n)).toEqual([
+      'GRUPO SINTETICO',
+      'Coberto pelo estoque somado',
+      'PRODUTO 001',
+      'Sim',
+      'FONTE 001',
+      0,
+      0,
+      0,
+      100,
+      -300,
+      'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.',
+      'OBS SINTETICA 001',
+    ]);
+    expect(linhaComoArrayN(ws, 4, n).slice(2, 11)).toEqual(['PRODUTO 002', '', 'FONTE 002', 1000, 0, 0, 50, 850, '']);
+    // Membro sem lead time: nao perde o estoque (200 entra na soma) e a demanda individual diz por que e nula.
+    expect(linhaComoArrayN(ws, 5, n).slice(2, 11)).toEqual(['PRODUTO 003', '', 'FONTE 003', 200, 0, 0, 0, 'sem lead time', '']);
+    expect(ws.autoFilter).toBeTruthy();
+    expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
+  });
+
+  it('celulasDoGrupo = linhas da aba (o arquivo so formata)', async () => {
+    const ws = (await abrir(coberto)).getWorksheet(ABA_GRUPOS)!;
+    const cobertos = new Map(coberto.cobertosPorGrupo.itens.map((i) => [i.productId, i]));
+    celulasDoGrupo(coberto.gruposDeEquivalencia[0], cobertos).forEach((valores, i) => {
+      expect(linhaComoArrayN(ws, i + 2, COLUNAS_GRUPOS_XLSX.length)).toEqual(valores);
+    });
+  });
+
+  it('grupo na lista: o item e o nome do grupo e a coluna "Grupo de equivalência" traz um membro por linha', async () => {
+    const wb = await abrir(naLista);
+    const { grupos } = mapearLinhas(naLista);
+    const ws = wb.getWorksheet(ABA_RELATORIO)!;
+    const linhaDoGrupo = linhaComoArray(ws, grupos[0].primeiroItem);
+    expect(linhaDoGrupo[0]).toBe('GRUPO SINTETICO');
+    expect(linhaDoGrupo[COL('Grupo de equivalência') - 1]).toBe(
+      'PRODUTO 001 (principal) · FONTE 001\nPRODUTO 002 · FONTE 002\nPRODUTO 003 · FONTE 003',
+    );
+    expect(linhaDoGrupo.at(-1)).toBe('OBS SINTETICA 001'); // Observação segue a ultima (a do principal)
+    expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
+    expect(COLUNAS_RELATORIO_XLSX.at(-2)).toBe('Grupo de equivalência');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-2)).toBe('Grupo de equivalência');
+    // Linha avulsa (sem grupo): celula vazia.
+    const avulsa = montarRelatorioCompras(quinzena(caso(100)), []);
+    expect(celulasDoItem(avulsa.grupos[0].itens[0], 15)[COL('Grupo de equivalência') - 1]).toBe('');
+  });
+
+  it('resumo e Regras ganham so o que pertence a grupo; sem grupo nada muda', async () => {
+    expect(linhasDoResumo(coberto)).toContain('1 item coberto por grupo de equivalência');
+    expect(linhasDoResumo(sem).some((l) => l.includes('grupo de equivalência'))).toBe(false);
+    const regras = paragrafosDeRegras(15, false, false, false, true);
+    expect(regras.at(-2)).toBe(paragrafoGruposDeEquivalencia());
+    expect(regras.at(-1)).toBe('Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).');
+    expect(paragrafosDeRegras(15)).toEqual(regras.filter((p) => p !== paragrafoGruposDeEquivalencia()));
+    const textos: string[] = [];
+    (await abrir(coberto)).getWorksheet(ABA_REGRAS)!.eachRow((row) => textos.push(String(row.getCell(1).value)));
+    expect(textos).toEqual(paragrafosDeRegras(15, false, false, false, true));
+  });
+
+  it('paridade tela x XLSX: motivo, resumo, paragrafo, cobertura, principal, situacao e resumo do grupo', () => {
+    const [item] = coberto.cobertosPorGrupo.itens;
+    expect(textoMotivoCobertoPorGrupo(item)).toBe(textoMotivoCobertoWeb(item));
+    expect(textoMotivoCobertoPorGrupo({ ...item, cobertura: null })).toBe(textoMotivoCobertoWeb({ ...item, cobertura: null }));
+    // Observacao do grupo (rodada 5): com e sem texto, e a frase fixa.
+    const comObs = { ...item, grupoObservacao: 'OBS DO GRUPO SINTETICA' };
+    expect(textoMotivoCobertoPorGrupo(comObs)).toBe(textoMotivoCobertoWeb(comObs));
+    expect(textoMotivoCobertoPorGrupo(comObs)).toContain('Observação do grupo: OBS DO GRUPO SINTETICA');
+    expect(FRASE_EQUIVALENCIA_NEM_SEMPRE).toBe(FRASE_WEB);
+    for (const obs of [null, undefined, '', '   ', ' OBS ']) {
+      expect(textoObservacaoDoGrupo(obs)).toBe(textoObservacaoGrupoWeb(obs));
+    }
+    for (const n of [1, 2]) expect(resumoCobertosPorGrupo(n)).toBe(resumoCobertosWeb(n));
+    expect(paragrafoGruposDeEquivalencia()).toBe(paragrafoGruposWeb());
+    for (const c of [null, 0, 1, 8, 2.345]) expect(textoCobertura(c)).toBe(textoCoberturaWeb(c));
+    expect(textoPrincipalDoGrupo('PRODUTO 001')).toBe(textoPrincipalWeb('PRODUTO 001'));
+    for (const s of ['na-lista', 'sob-demanda', 'coberto', 'sem-lead-time'] as const) {
+      expect(textoSituacaoDoGrupo(s)).toBe(textoSituacaoWeb(s));
+    }
+    const g = coberto.gruposDeEquivalencia[0];
+    expect(textoResumoDoGrupo(g)).toBe(textoResumoWeb(g));
+    expect(textoMembroDoGrupo({ item: 'PRODUTO 001', principal: true, fonte: '' })).toBe('PRODUTO 001 (principal) · Sem fonte');
+  });
+
+  describe('observacao do grupo (rodada 5 do Comex)', () => {
+    const OBS = 'OBS DO GRUPO SINTETICA';
+    const coberto2 = montarRelatorioCompras(quinzena(caso()), [], { grupos: [{ ...grupo, observacao: ` ${OBS} ` }] });
+    const naLista2 = montarRelatorioCompras(quinzena(caso(100)), [], { grupos: [{ ...grupo, observacao: OBS }] });
+
+    it('o relatorio carrega a observacao (so trim) no grupo e no item coberto; sem texto, vazia', () => {
+      expect(coberto2.gruposDeEquivalencia[0].observacao).toBe(OBS);
+      expect(coberto2.cobertosPorGrupo.itens[0].grupoObservacao).toBe(OBS);
+      expect(coberto.gruposDeEquivalencia[0].observacao).toBe('');
+      expect(coberto.cobertosPorGrupo.itens[0].grupoObservacao).toBe('');
+    });
+
+    it('aba Grupos: observacao na celula Observação da linha "Total do grupo" (ultima coluna) e no motivo do coberto', async () => {
+      const ws = (await abrir(coberto2)).getWorksheet(ABA_GRUPOS)!;
+      const n = COLUNAS_GRUPOS_XLSX.length;
+      expect(COLUNAS_GRUPOS_XLSX.at(-1)).toBe('Observação');
+      expect(linhaComoArrayN(ws, 2, n).at(-1)).toBe(
+        'Compra pelo produto principal: PRODUTO 001\nEstoque somado 1.200 kg · cobertura 8,0 meses · segurança somada 300 kg\nObservação do grupo: ' + OBS,
+      );
+      expect(linhaComoArrayN(ws, 3, n)[10]).toBe(
+        'Coberto pelo grupo GRUPO SINTETICO: estoque somado 1.200 kg, cobertura 8,0 meses · Observação do grupo: ' + OBS + ' · ' + FRASE_EQUIVALENCIA_NEM_SEMPRE,
+      );
+      expect(linhaComoArrayN(ws, 3, n).at(-1)).toBe('OBS SINTETICA 001'); // a Observação do produto nao muda
+      celulasDoGrupo(coberto2.gruposDeEquivalencia[0], new Map(coberto2.cobertosPorGrupo.itens.map((i) => [i.productId, i]))).forEach((valores, i) => {
+        expect(linhaComoArrayN(ws, i + 2, n)).toEqual(valores);
+      });
+    });
+
+    it('abas de compra: observacao como ultima linha da celula "Grupo de equivalência"; Observação segue a ultima coluna', async () => {
+      const wb = await abrir(naLista2);
+      const { grupos } = mapearLinhas(naLista2);
+      const linhaDoGrupo = linhaComoArray(wb.getWorksheet(ABA_RELATORIO)!, grupos[0].primeiroItem);
+      expect(linhaDoGrupo[COL('Grupo de equivalência') - 1]).toBe(
+        'PRODUTO 001 (principal) · FONTE 001\nPRODUTO 002 · FONTE 002\nPRODUTO 003 · FONTE 003\nObservação do grupo: ' + OBS,
+      );
+      expect(linhaDoGrupo.at(-1)).toBe('OBS SINTETICA 001');
+      // Sem observacao: celula igual a de antes.
+      const semObs = montarRelatorioCompras(quinzena(caso(100)), [], { grupos: [grupo] });
+      expect(celulasDoItem(semObs.grupos[0].itens[0], 15)[COL('Grupo de equivalência') - 1]).toBe(
+        'PRODUTO 001 (principal) · FONTE 001\nPRODUTO 002 · FONTE 002\nPRODUTO 003 · FONTE 003',
+      );
+    });
+
+    it('Regras: o paragrafo de equivalencia traz a ressalva e o de embalagem diz que o pallet e opcao, nao regra', () => {
+      expect(paragrafoGruposDeEquivalencia()).toContain('A equivalência nem sempre vale para todos os clientes');
+      expect(paragrafoGruposDeEquivalencia()).toContain('alguns clientes têm apenas um item do grupo homologado');
+      expect(PARAGRAFO_EMBALAGEM_XLSX).toContain('O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem');
+      expect(PARAGRAFO_EMBALAGEM_XLSX).not.toContain('pallets fechados');
+    });
+  });
+
+  it.each(['=', '+', '-', '@'])('nome de grupo e de produto que comecam com "%s" continuam TEXTO', async (prefixo) => {
+    const linhas = caso(100).map((l) => ({ ...l, item: `${prefixo}${l.item}` }));
+    const r = montarRelatorioCompras(quinzena(linhas), [], { grupos: [{ ...grupo, nome: `${prefixo}GRUPO SINTETICO` }] });
+    const wb = await abrir(r);
+    const ws = wb.getWorksheet(ABA_GRUPOS)!;
+    for (const [linhaN, coluna] of [[2, 1], [3, 3], [4, 3]] as const) {
+      const cell = ws.getRow(linhaN).getCell(coluna);
+      expect(String(cell.value).startsWith(prefixo)).toBe(true);
+      expect(cell.type).toBe(exceljs.ValueType.String);
+    }
+    const principal = wb.getWorksheet(ABA_RELATORIO)!.getRow(mapearLinhas(r).grupos[0].primeiroItem).getCell(1);
+    expect(principal.type).toBe(exceljs.ValueType.String);
   });
 });

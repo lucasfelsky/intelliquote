@@ -284,7 +284,7 @@ describe('ForecastRelatorioCompras - pallet fechado (PR 6e)', () => {
     const { container } = renderRelatorio();
     await screen.findByText('56 × 25 kg (código C0001)');
     expect(container.querySelector('.fcr-embalagem__pallet')).toBeNull();
-    expect(screen.queryByText(/com pallet cadastrado/)).toBeNull();
+    expect(screen.queryByText(/^\d+ com pallet cadastrado$/)).toBeNull();
   });
 
   it('resumo: "N com pallet cadastrado" so com totais.comPallet > 0', async () => {
@@ -301,6 +301,6 @@ describe('ForecastRelatorioCompras - pallet fechado (PR 6e)', () => {
     mockApi([comPallet()]);
     renderRelatorio();
     await screen.findByText('56 × 25 kg (código C0001)');
-    expect(screen.getByText(/Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida/)).toBeTruthy();
+    expect(screen.getByText(/O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem/)).toBeTruthy();
   });
 });

@@ -7,7 +7,7 @@ export interface ForecastEmbalagemCodigo {
   posicao: number;
   codigo: string;
   quantidadeKg: number | null;
-  /** PR 6e (opcional: backend antigo nao manda): kg de UM pallet fechado, multiplo da quantidade; nulo = sem pallet. */
+  /** PR 6e (opcional: backend antigo nao manda): kg de UM pallet (opcao de compra; nao precisa ser multiplo da quantidade); nulo = sem pallet. */
   palletKg?: number | null;
   rotulo: string | null;
   principal: boolean;

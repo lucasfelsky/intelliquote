@@ -1,4 +1,5 @@
 import type { ForecastItemSobDemanda } from '@/services/forecast';
+import { SeloGrupo } from './ForecastRelatorioGrupos';
 import { d1, inteiroBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
   APOIO_SOB_DEMANDA,
@@ -63,6 +64,7 @@ export default function ForecastRelatorioSobDemanda({ itens }: Props) {
                   <th scope="row">
                     <div className="fcr-item">
                       <span className="fcr-item__nome">{i.item}</span>
+                      <SeloGrupo grupo={i.grupo} />
                       <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
                       {mediaSem && (
                         <span

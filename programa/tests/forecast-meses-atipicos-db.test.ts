@@ -351,16 +351,19 @@ describe('Forecast - meses atipicos fora da media (DB)', () => {
     await wb.xlsx.load(Buffer.from(res.body.data.contentBase64, 'base64') as unknown as ArrayBuffer);
     const ws = wb.getWorksheet('Por urgência')!;
     const cabecalho = (ws.getRow(1).values as Array<string | undefined>).slice(1);
+    // Observacao segue a ULTIMA; "Grupo de equivalência" (PR 6b) vem entre ela e "Meses fora da média".
+    const colMeses = cabecalho.indexOf('Meses fora da média');
     expect(cabecalho.at(-1)).toBe('Observação');
-    expect(cabecalho.at(-2)).toBe('Meses fora da média');
+    expect(cabecalho.at(-2)).toBe('Grupo de equivalência');
+    expect(colMeses).toBe(cabecalho.length - 3);
     const linhas: Array<Array<string | undefined>> = [];
     ws.eachRow((row, n) => {
       if (n > 1) linhas.push((row.values as Array<string | undefined>).slice(1));
     });
     const daA = linhas.find((l) => l[0] === NAME_A)!;
-    expect(daA[cabecalho.length - 2]).toBe('fev/2024');
+    expect(daA[colMeses]).toBe('fev/2024');
     const daB = linhas.find((l) => l[0] === NAME_B)!;
-    expect(daB[cabecalho.length - 2] ?? '').toBe('');
+    expect(daB[colMeses] ?? '').toBe('');
   });
 
   testDbSkip('quinzena nova herda a marca: o mesmo mes vira o M (indice 3) na quinzena 05-1 e a media sai sem ele', async () => {

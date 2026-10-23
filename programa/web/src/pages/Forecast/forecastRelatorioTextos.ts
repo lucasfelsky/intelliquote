@@ -1,18 +1,22 @@
 // Textos puros do relatorio de compras (PR 5B): Observacao e quantidade arredondada para cada embalagem; (PR 6e) pallets;
-// (PR 6c) meses atipicos.
+// (PR 6c) meses atipicos; (PR 6d) demanda do comercial; (PR 6b) grupos de equivalencia.
 // Copia exata em src/utils/forecastRelatorioComprasXlsx.ts (`textoOpcaoDeEmbalagem`, `textoPallet`, `PARAGRAFO_EMBALAGEM_XLSX`);
 // a igualdade tela x XLSX e provada em tests/forecast-relatorio-compras-xlsx.test.ts.
 import type {
+  ForecastDadosDoGrupo,
+  ForecastItemCobertoPorGrupo,
+  ForecastItemDemandaComercial,
   ForecastItemRelatorio,
   ForecastOpcaoEmbalagem,
   ForecastPalletDaOpcao,
   ForecastRelatorioCompras,
+  ForecastSituacaoDoGrupo,
 } from '@/services/forecast';
-import { kgBr, mesAbrevDoAnoMes } from './forecastPainel';
+import { d1, inteiroBr, kgBr, mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Terceiro paragrafo das regras (tela e aba Regras do XLSX). */
 export const PARAGRAFO_EMBALAGEM =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
 
 /** Quantidade do item arredondada para UMA embalagem, ex.: `3 × 200 kg (código C0002) = 600 kg`. */
 export function textoOpcaoDeEmbalagem(op: ForecastOpcaoEmbalagem): string {
@@ -139,4 +143,133 @@ export function resumoMesesForaDaMedia(n: number): string {
 
 export function paragrafoMesesForaDaMedia(): string {
   return 'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.';
+}
+
+// ---- Demanda do comercial (PR 6d): copia exata em src/utils/forecastRelatorioComprasXlsx.ts (guarda de paridade no teste) ----
+
+export function tituloDemandaComercial(n: number): string {
+  return `Demanda do comercial · ${n} ${n === 1 ? 'pedido aberto' : 'pedidos abertos'}`;
+}
+
+export function resumoDemandaComercial(abertas: number, sugeridoKg: number): string {
+  return `${abertas} ${abertas === 1 ? 'demanda do comercial aberta' : 'demandas do comercial abertas'} (${kgBr(sugeridoKg)} kg ${sugeridoKg === 1 ? 'sugerido' : 'sugeridos'})`;
+}
+
+export function paragrafoDemandaComercial(): string {
+  return 'Demanda do comercial: compras pedidas pelo comercial para programações fora do horizonte. Soma ao Forecast o pedido menos o saldo que sobraria no mês da necessidade; dentro do horizonte de programação não soma (deve estar nas programações).';
+}
+
+/** Selo no item da lista de compra: `+ 1.100 kg pedidos pelo comercial`. */
+export function seloDemandaComercial(kg: number): string {
+  return `+ ${kgBr(kg)} kg pedidos pelo comercial`;
+}
+
+export function textoSituacaoDemanda(i: Pick<ForecastItemDemandaComercial, 'situacao' | 'sugerido'>): string {
+  if (i.situacao === 'no-horizonte') return 'Dentro do horizonte: não soma';
+  if (i.situacao === 'fora-da-quinzena') return 'Fora desta quinzena: sem cálculo';
+  return i.sugerido > 0 ? 'Além do horizonte: soma ao Forecast' : 'Além do horizonte: coberta pelo saldo';
+}
+
+export const CONFIRA_PROGRAMACOES = 'Confira se já está nas programações; se estiver, marque "virou programação".';
+
+/** Aviso sob a situacao (nulo = nada a avisar). */
+export function textoAvisoDemanda(
+  i: Pick<ForecastItemDemandaComercial, 'situacao' | 'programacaoDoMes' | 'anoMes'>,
+): string | null {
+  if (i.situacao === 'fora-da-quinzena') return 'O produto não tem linha nesta quinzena.';
+  if (i.situacao !== 'no-horizonte') return null;
+  if (i.programacaoDoMes === null) return CONFIRA_PROGRAMACOES;
+  const mes = mesAbrevDoAnoMes(i.anoMes);
+  return i.programacaoDoMes > 0
+    ? `Programação de ${mes}: ${inteiroBr(i.programacaoDoMes)}. ${CONFIRA_PROGRAMACOES}`
+    : `Sem programação em ${mes}. ${CONFIRA_PROGRAMACOES}`;
+}
+
+/** Numero da Solicitacao do IntelliQuote (so rastreio): `#12`; sem numero, traco. */
+export const textoSolicitacao = (id: number | null): string => (id === null ? '—' : `#${id}`);
+
+/** Nota sob a tabela da secao (so na tela). */
+export const APOIO_DEMANDA_COMERCIAL =
+  'Sugerido = pedido − saldo livre no mês da necessidade (nunca negativo). Pedido fechado (comprada, virou programação ou cancelada) sai desta seção. Pedido dentro do horizonte de programação não soma.';
+
+// ---- Grupos de equivalencia (PR 6b): copia exata em src/utils/forecastRelatorioComprasXlsx.ts (guarda de paridade no teste) ----
+
+const COBERTURA_BR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** Cobertura do grupo em meses, 1 casa (`8,0 meses`); sem consumo, `sem consumo`. */
+export function textoCobertura(cobertura: number | null): string {
+  return cobertura === null ? 'sem consumo' : `${COBERTURA_BR.format(cobertura)} meses`;
+}
+
+/** Frase fixa do motivo de "coberto" (e ressalva da equivalencia): a equivalencia nao vale sempre para todos os clientes. */
+export const FRASE_EQUIVALENCIA_NEM_SEMPRE =
+  'Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.';
+
+/** Observacao do grupo (cadastro) na linha do grupo e no motivo de "coberto"; sem texto, nada. */
+export function textoObservacaoDoGrupo(obs: string | null | undefined): string | null {
+  const texto = (obs ?? '').trim();
+  return texto ? `Observação do grupo: ${texto}` : null;
+}
+
+/**
+ * Motivo do membro fora da lista de compra: `Coberto pelo grupo X: estoque somado 1.200 kg, cobertura 8,0 meses ·
+ * Observação do grupo: ... · Equivalência pode não valer ...` (a observacao so entra quando o grupo tem uma).
+ */
+export function textoMotivoCobertoPorGrupo(
+  i: Pick<ForecastItemCobertoPorGrupo, 'grupoNome' | 'estoqueDoGrupo' | 'cobertura' | 'grupoObservacao'>,
+): string {
+  const base = `Coberto pelo grupo ${i.grupoNome}: estoque somado ${kgBr(i.estoqueDoGrupo)} kg`;
+  const cobertura =
+    i.cobertura === null ? `${base}, sem consumo no grupo` : `${base}, cobertura ${textoCobertura(i.cobertura)}`;
+  const obs = textoObservacaoDoGrupo(i.grupoObservacao);
+  return obs ? `${cobertura} · ${obs} · ${FRASE_EQUIVALENCIA_NEM_SEMPRE}` : `${cobertura} · ${FRASE_EQUIVALENCIA_NEM_SEMPRE}`;
+}
+
+export function resumoCobertosPorGrupo(n: number): string {
+  return `${n} ${n === 1 ? 'item coberto' : 'itens cobertos'} por grupo de equivalência`;
+}
+
+export function tituloCobertosPorGrupo(n: number): string {
+  return `Cobertos pelo grupo de equivalência · ${n} ${n === 1 ? 'item' : 'itens'}`;
+}
+
+/** Nota sob a tabela da secao (so na tela). */
+export const APOIO_COBERTOS_POR_GRUPO =
+  'Estes itens entrariam na lista de compra sozinhos, mas o estoque somado do grupo os cobre. Se algum produto não for o mesmo material, tire-o do grupo em "Grupos de equivalência".';
+
+export function paragrafoGruposDeEquivalencia(): string {
+  return 'Grupos de equivalência: produtos que são o mesmo material (nomes ou fontes diferentes) têm o estoque avaliado somado. A demanda do grupo soma estoque, chegadas, programações, médias e a segurança de cada membro (lead time da fonte de cada um); a compra sai pelo produto principal, com a embalagem e o pallet dele. Compra sob demanda: vale só a marca do produto principal. Meses atípicos: cada membro usa a sua média ajustada. Demanda do comercial: o pedido de qualquer membro usa o saldo somado do grupo. A equivalência nem sempre vale para todos os clientes (depende da demanda do cliente ou do preço; alguns clientes têm apenas um item do grupo homologado): confira a observação do grupo antes de dispensar a compra.';
+}
+
+/** Linha de apoio sob o item do grupo: `Compra pelo produto principal: PRODUTO 001`. */
+export function textoPrincipalDoGrupo(principalItem: string): string {
+  return `Compra pelo produto principal: ${principalItem}`;
+}
+
+/** Resumo do grupo: `Estoque somado 300 kg · cobertura 2,0 meses · segurança somada 300 kg`. */
+export function textoResumoDoGrupo(g: Pick<ForecastDadosDoGrupo, 'estoque' | 'cobertura' | 'seguranca'>): string {
+  return `Estoque somado ${kgBr(g.estoque)} kg · cobertura ${textoCobertura(g.cobertura)} · segurança somada ${kgBr(g.seguranca)} kg`;
+}
+
+export function textoSituacaoDoGrupo(s: ForecastSituacaoDoGrupo): string {
+  switch (s) {
+    case 'na-lista':
+      return 'Na lista de compra';
+    case 'sob-demanda':
+      return 'Fora da lista: principal sob demanda';
+    case 'coberto':
+      return 'Coberto pelo estoque somado';
+    default:
+      return 'Fora da lista: nenhum membro com lead time';
+  }
+}
+
+/** Demanda individual de um membro (`-300,0`); sem lead time: `sem lead time`. */
+export function textoDemandaIndividual(demanda: number | null): string {
+  return demanda === null ? 'sem lead time' : d1(demanda);
+}
+
+/** Selo do produto na memoria de calculo: `Grupo: GRUPO SINTETICO`. */
+export function textoSeloDoGrupo(nome: string): string {
+  return `Grupo: ${nome}`;
 }

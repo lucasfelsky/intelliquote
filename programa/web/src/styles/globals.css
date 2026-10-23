@@ -2844,6 +2844,7 @@ i.fc-status--preco { background: var(--info); }
 .fce-codigo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .fce-codigo .badge { white-space: nowrap; }
 .fce-erro { margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--danger); }
+.fce-aviso { min-width: 200px; margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--warning); }
 .fce-origem { font-size: 12px; white-space: nowrap; color: var(--ink-soft); }
 .fce-nenhuma { padding: 0 10px; }
 .fcr-embalagem__editar { padding: 4px 10px; font-size: 12px; }
@@ -3132,4 +3133,124 @@ i.fc-status--preco { background: var(--info); }
   .fca-tabela .fca-atual { display: block; }
   .fca-motivo { min-width: 0; width: 100%; }
   .fca-linha--marcada { background: var(--tone-warning-bg-soft); }
+}
+
+/* ---- Forecast: demanda do comercial (PR 6d) ---- */
+.fcr-item__demanda { align-self: flex-start; padding: 1px 8px; border-radius: 10px; background: var(--tone-warning-bg); color: var(--warning); font-size: 11px; font-weight: 600; line-height: 1.4; }
+.fcd-tabela { min-width: 1040px; }
+.fcd-tabela th, .fcd-tabela td { padding-left: 8px; padding-right: 8px; }
+.fcd-tabela .fcr-item { min-width: 150px; }
+.fcd-fonte { min-width: 80px; }
+.fcd-data { white-space: nowrap; }
+.fcd-texto { min-width: 130px; max-width: 260px; overflow-wrap: anywhere; }
+.fcd-cliente { min-width: 90px; }
+.fcd-situacao { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+.fcd-aviso { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcd-acoes { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 130px; }
+.fcd-acoes .ghost-button { padding: 3px 10px; font-size: 12px; text-align: left; }
+/* Rolando a tabela larga, a coluna de acoes fica visivel. */
+@media (min-width: 701px) {
+  .fcd-tabela .fcd-col-acoes { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px var(--border-strong); }
+  .fcd-tabela thead .fcd-col-acoes { background: var(--surface-alt); }
+}
+.fcd-acoes .ghost-button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcd-form { display: flex; flex-direction: column; gap: 12px; }
+.fcd-dica { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcd-produto { margin: 0; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.fcd-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.fcd-campo .field-label { margin-bottom: 0; }
+.fcd-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fcd-input-num { text-align: right; font-variant-numeric: tabular-nums; }
+.fcd-motivo { resize: vertical; min-height: 56px; }
+.fcd-erro { margin: 0; font-size: 12px; line-height: 1.35; color: var(--danger); }
+.fcd-carregando { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); }
+.fcd-alert__texto { margin: 0 0 8px; }
+.fcd-produtos { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcd-produto { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); cursor: pointer; }
+.fcd-produto:last-child { border-bottom: 0; }
+.fcd-produto:has(input:checked) { background: var(--surface-alt); }
+.fcd-produto input { flex: none; width: 16px; height: 16px; }
+.fcd-produto__nome { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fcd-produto__fonte { flex: none; font-size: 12px; color: var(--ink-soft); }
+.fcd-form input:focus-visible,
+.fcd-form textarea:focus-visible,
+.fcd-produto:has(input:focus-visible) { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcd-form [aria-invalid="true"] { border-color: var(--danger); }
+@media print {
+  .fcr-item__demanda { padding: 0; background: none; font-size: 7.5pt; }
+  .fcd-tabela { min-width: 0; }
+  .fcd-col-acoes { display: none !important; }
+  .fcd-texto, .fcd-cliente, .fcd-fonte, .fcd-situacao { max-width: none; min-width: 0; }
+}
+/* 390 px: cada pedido vira um bloco (sem rolagem horizontal), com o rotulo de cada coluna. */
+@media (max-width: 700px) {
+  .fcd-grade { grid-template-columns: minmax(0, 1fr); }
+  .fcd-tabela { min-width: 0; }
+  .fcd-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fcd-tabela, .fcd-tabela tbody { display: block; }
+  .fcd-tabela tr { display: block; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .fcd-tabela th, .fcd-tabela td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 4px 0; border-bottom: 0; text-align: right; }
+  .fcd-tabela tbody th { display: block; text-align: left; }
+  .fcd-tabela td::before { content: attr(data-rotulo); flex: none; max-width: 45%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fcd-tabela .fcd-texto, .fcd-tabela .fcd-cliente, .fcd-tabela .fcd-fonte { min-width: 0; max-width: none; }
+  .fcd-tabela .fcd-data { white-space: normal; }
+  .fcd-tabela .fcd-situacao { min-width: 0; align-items: flex-end; text-align: right; }
+  .fcd-tabela .fcd-col-acoes { display: block; }
+  .fcd-tabela .fcd-col-acoes::before { display: block; margin-bottom: 4px; }
+  .fcd-acoes { flex-direction: row; flex-wrap: wrap; min-width: 0; }
+  .fcd-acoes .ghost-button { min-height: 44px; }
+  /* Dialogos de lancar, editar e fechar: botoes e linhas de produto com alvo de toque de 44 px. */
+  .fcd-form .modal-actions button, .fcd-form .ghost-button { min-height: 44px; }
+  .fcd-produto { min-height: 44px; }
+}
+
+/* Grupos de equivalencia (PR 6b): selo, sublinhas dos membros no relatorio, secao dos cobertos e modal de cadastro. Somente tokens do tema. */
+.fcr-item > .fcg-selo { align-self: flex-start; }
+.fcr-item__nome .fcg-selo { margin-left: 8px; vertical-align: middle; }
+.fcr-item__grupo { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcg-obs { max-width: 320px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fcg-selo__nota { display: block; margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.fcr-tabela .fcr-linha-grupo > td { padding: 0 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+/* A celula das sublinhas ocupa a tabela inteira (que rola na horizontal): a caixa fica colada a esquerda e com a largura VISIVEL. */
+.fcr-scroll:has(.fcg-sublinhas) { container-type: inline-size; }
+.fcg-sublinhas { position: sticky; left: 0; box-sizing: border-box; width: min(100%, calc(100vw - 56px)); width: min(100%, calc(100cqw - 20px)); padding: 8px 12px; border-left: 3px solid var(--primary-700); border-radius: var(--radius-sm); background: var(--surface-alt); }
+.fcg-sublinhas__resumo { margin: 0 0 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.fcg-sublinhas__rolagem { overflow-x: auto; }
+.fcg-tabela { min-width: 560px; }
+.fcg-tabela th, .fcg-tabela td { padding: 6px 8px; background: transparent; }
+.fcg-tabela .fcr-item { min-width: 120px; }
+.fcg-motivo { min-width: 240px; overflow-wrap: anywhere; }
+.fcg-form { gap: 14px; }
+.fcg-titulo { margin: 0; font-size: 16px; line-height: 1.3; color: var(--ink); }
+.fcg-titulo:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; }
+.fcg-lista { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.fcg-grupo { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fcg-grupo__nome { margin: 0; font-size: 15px; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.fcg-grupo__acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.fcg-membros { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink); }
+.fcg-membros li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.fcg-selecionados { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcg-selecionado { flex-wrap: wrap; }
+.fcg-selecionado__radio { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.fcg-selecionado__radio input { flex: none; width: 16px; height: 16px; }
+.fcg-selecionados input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 700px) {
+  /* 390 px: cada membro vira um bloco com o rotulo de cada coluna (sem rolagem horizontal dentro da sublinha). */
+  .fcg-tabela { min-width: 0; }
+  .fcg-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fcg-tabela, .fcg-tabela tbody { display: block; }
+  .fcg-tabela tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .fcg-tabela tr:last-child { border-bottom: 0; }
+  .fcg-tabela th, .fcg-tabela td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 2px 0; border-bottom: 0; text-align: right; }
+  .fcg-tabela tbody th { display: block; text-align: left; }
+  .fcg-tabela td::before { content: attr(data-rotulo); flex: none; max-width: 50%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fcg-grupo__acoes .ghost-button, .fcg-lista-corpo .primary-button, .fcg-selecionado .ghost-button { min-height: 44px; }
+  .fcg-selecionado__radio { min-height: 44px; }
+}
+@media print {
+  .fcg-sublinhas { position: static; width: auto; padding: 4px 8px; background: none; border-left-width: 2px; }
+  .fcg-sublinhas__resumo { font-size: 7.5pt; }
+  .fcg-tabela { min-width: 0; }
+  .fcg-sublinhas__rolagem { overflow: visible; }
+  .fcr-item__grupo { font-size: 7.5pt; }
 }
