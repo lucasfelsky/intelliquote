@@ -280,7 +280,8 @@ describe('ForecastRelatorioCompras - urgencia (PR 2D)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Por fonte' }));
     const tabelas = screen.getAllByRole('table');
     expect(tabelas).toHaveLength(3); // 2 fontes + sem consumo
-    const [a, b] = [tabelas[0], tabelas[1]] as HTMLElement[];
+    const a = tabelas[0] as HTMLElement;
+    const b = tabelas[1] as HTMLElement;
     expect(within(a).getAllByRole('columnheader').map((h) => h.textContent).slice(0, 2)).toEqual(['Item', 'Urgência']);
     expect(within(a).queryByRole('columnheader', { name: 'Fonte' })).toBeNull();
     const criticos = (t: HTMLElement) =>
