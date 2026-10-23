@@ -489,4 +489,31 @@ describe('Forecast - importacao da planilha (DB)', () => {
     expect(res.body.message).toMatch(/em 2 produtos/);
     expect(await prisma.forecastSnapshot.count({ where: { label: '03-2', createdById: adminId } })).toBe(0);
   });
+
+  testDbSkip('reimportar com os codigos reordenados recria os codigos e PRESERVA quantidade e pallet da embalagem (PR 6e)', async () => {
+    await prisma.forecastProductCode.update({
+      where: { code: CODE_A1 },
+      data: { packagingQtyKg: 25, packagingPalletKg: 600 },
+    });
+    const q = quinzena({
+      label: '03-2',
+      produtos: [produto(3, NAME_A, [CODE_A2, CODE_A1], SOURCE_1)],
+      vendasMes: [[CODE_A1, 60]],
+    });
+    const res = await post('confirm', {
+      contentBase64: await workbookBase64(q),
+      fileName: 'sintetica-reordenada.xlsx',
+      label: '03-2',
+      baseDate: BASE_DATE,
+      options: { atualizarCadastro: true, gravarHistorico: false, criarQuinzena: false },
+    });
+    expect(res.status).toBe(201);
+    const a1 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A1 } });
+    expect(a1.position).toBe(2); // o codigo foi apagado e recriado na nova posicao
+    expect(Number(a1.packagingQtyKg)).toBe(25);
+    expect(Number(a1.packagingPalletKg)).toBe(600);
+    const a2 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A2 } });
+    expect(a2.position).toBe(1);
+    expect(a2.packagingPalletKg).toBeNull();
+  });
 });

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
+import { mapaForaDaMedia, marcasNaJanela } from '../utils/forecastMesesAtipicos';
 import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
 import {
@@ -15,7 +16,9 @@ import {
 } from '../utils/forecastRelatorioComprasXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
+import { ForecastMesesAtipicosService } from './ForecastMesesAtipicosService';
 import { ForecastProductService } from './ForecastProductService';
+import { ForecastSobDemandaService } from './ForecastSobDemandaService';
 
 export interface ForecastPendentesData extends PendentesResultado {
   // false = quinzena da planilha: nao ha relatorio DBCorp para comparar com o cadastro.
@@ -63,7 +66,8 @@ export interface ForecastConferencia {
 // Conferencia motor x valores que o Excel gravou. Compara SEMPRE com a regra da planilha (AG = maior
 // entre Q e P, quinzena 2) e a regra AL da planilha (sem somar a chegada do 5o mes): o Excel nao conhece
 // a regra "1a quinzena" nem a regra AL do Comex, entao comparar com elas geraria divergencia que nao e
-// erro do motor.
+// erro do motor. Pelo mesmo motivo NAO passa `mesesForaDaMedia` (PR 6c): a marca de mes atipico e decisao do Comex, nao
+// do Excel; a conferencia continua sobre as medias da planilha, com ou sem marcas no cadastro.
 export function conferenciaDaQuinzena(q: Quinzena, hoje: string): ForecastConferencia {
   const linhas = calcular(q, { hoje, quinzena: 2, somarChegada5oMes: false });
   const resultado = conferir(q, linhas);
@@ -175,8 +179,19 @@ export class ForecastSnapshotService {
 
     const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
     const half: 1 | 2 = snapshot.half === 1 ? 1 : 2;
-    const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half });
     const produtoPorLinha = new Map(produtos.map((p) => [p.linha, p]));
+    const productIds = produtos.flatMap((p) => (p.productId != null ? [p.productId] : []));
+    // Compra sob demanda: marca do cadastro ATUAL (nao congelada na quinzena), 1 consulta por produto.
+    const sobDemanda = await ForecastSobDemandaService.regrasDosProdutos(productIds);
+    // Meses atipicos (PR 6c): marcas do cadastro ATUAL, 1 consulta; so as que cabem na janela de vendas da quinzena
+    // entram na media. Sem marca, o calculo e o mesmo de antes.
+    const marcas = await ForecastMesesAtipicosService.doProdutos(productIds);
+    const mesesForaDaMedia = mapaForaDaMedia(
+      produtos,
+      new Map([...marcas].map(([id, lista]) => [id, lista.map((m) => m.anoMes)])),
+      quinzena.dataBase,
+    );
+    const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half, mesesForaDaMedia });
 
     return {
       id: snapshot.id,
@@ -205,6 +220,11 @@ export class ForecastSnapshotService {
           status: produto?.status ?? 'nao',
           analiseForecast: produto?.analiseForecast ?? null,
           productId: produto?.productId ?? null,
+          sobDemanda: produto?.productId != null && sobDemanda.has(produto.productId),
+          sobDemandaMotivo: (produto?.productId != null && sobDemanda.get(produto.productId)?.motivo) || null,
+          // Marcas da janela desta quinzena (indice 0..5 = J..O, 6 = P); o motivo e o do cadastro. Vazio sem marca.
+          mesesForaDaMedia:
+            produto?.productId != null ? marcasNaJanela(quinzena.dataBase, marcas.get(produto.productId) ?? []) : [],
         };
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
@@ -248,7 +268,12 @@ export class ForecastSnapshotService {
     const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
       calc.linhas.flatMap((l) => l.codigos),
     );
-    return montarRelatorioCompras(calc, embalagens);
+    const sobDemanda = new Map(
+      calc.linhas.flatMap((l) =>
+        l.productId != null && l.sobDemanda ? [[l.productId, { motivo: l.sobDemandaMotivo }] as const] : [],
+      ),
+    );
+    return montarRelatorioCompras(calc, embalagens, { sobDemanda });
   }
 
   // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.

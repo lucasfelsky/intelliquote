@@ -58,6 +58,30 @@ export interface ForecastLinha {
   precoFixo?: boolean;
   /** Flag X da coluna AX ("nao fraciona"). */
   naoFraciona?: boolean;
+  /** PR 6a (opcionais: backend antigo nao manda): produto marcado como compra sob demanda no cadastro ATUAL. */
+  sobDemanda?: boolean;
+  sobDemandaMotivo?: string | null;
+  /** PR 6c (opcionais: backend antigo nao manda): marcas de mes atipico da janela desta quinzena (cadastro ATUAL). */
+  mesesForaDaMedia?: ForecastMesForaDaMedia[];
+  /** So presente quando a linha tem meses marcados: Q/R/AG acima ja sao SEM esses meses; aqui, os da planilha. */
+  mediaAjustada?: ForecastMediaAjustada;
+}
+
+/** Mes de venda atipica de um produto dentro da janela da quinzena; `indice`: 0..5 = J..O, 6 = P (mes atual). */
+export interface ForecastMesForaDaMedia {
+  anoMes: string;
+  motivo: string;
+  indice: number;
+}
+
+/** Valores DA PLANILHA (antes) das medias que mudaram por causa dos meses atipicos. */
+export interface ForecastMediaAjustada {
+  meses: number[];
+  Q: number;
+  R: number;
+  AG: number;
+  /** Todos os meses da media estavam marcados: a media ficou como a da planilha (sem divisao por zero). */
+  semMesValido: boolean;
 }
 
 export interface ForecastDivergencia {
@@ -116,11 +140,20 @@ export interface ForecastEmbalagemDoItem {
   rotulo: string | null;
 }
 
+/** Pallets fechados ao redor da quantidade sugerida (PR 6e); `abaixo` e `acima` coincidem no multiplo exato. */
+export interface ForecastPalletDaOpcao {
+  kgPorPallet: number;
+  abaixo: { pallets: number; kg: number };
+  acima: { pallets: number; kg: number };
+}
+
 /** Quantidade do item arredondada para UMA embalagem cadastrada (PR 5B); `destaque` = a que gera a Qtd. final. */
 export interface ForecastOpcaoEmbalagem extends ForecastEmbalagemDoItem {
   embalagens: number;
   quantidadeFinal: number;
   destaque: boolean;
+  /** PR 6e (opcional: backend antigo nao manda): pallets abaixo/acima; nulo/ausente = embalagem sem pallet. */
+  pallet?: ForecastPalletDaOpcao | null;
 }
 
 /** Faixas de urgencia do relatorio (PR 2D), da mais para a menos urgente. */
@@ -148,6 +181,8 @@ export interface ForecastItemRelatorio {
   naoFraciona: boolean;
   /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
   obs?: string;
+  /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
+  mesesForaDaMedia?: string[];
   ruptura: { indiceMes: number; anoMes: string; data: string; jaNaDataBase: boolean } | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -189,6 +224,34 @@ export interface ForecastItemSemConsumo {
   semLeadTime: boolean;
   /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
   obs?: string;
+  /** PR 6a (opcional: backend antigo nao manda): produto marcado como compra sob demanda (so selo). */
+  sobDemanda?: boolean;
+  /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
+  mesesForaDaMedia?: string[];
+}
+
+/** Item sob demanda que entraria na lista de compra, mas fica fora dela (PR 6a). */
+export interface ForecastItemSobDemanda {
+  linha: number;
+  n: number | null;
+  productId: number | null;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: ForecastStatus;
+  /** Motivo cadastrado ao marcar; nulo = sem motivo (a tela mostra so o texto padrao). */
+  motivo: string | null;
+  demanda: number;
+  quantidadeSugerida: number;
+  estoque: number;
+  chegadas: Array<{ anoMes: string; quantidade: number }>;
+  programacoes: Array<{ anoMes: string; quantidade: number }>;
+  programado: number;
+  /** max(0, programacoes - estoque - chegadas). */
+  programacaoDescoberta: number;
+  obs?: string;
+  /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */
+  mesesForaDaMedia?: string[];
 }
 
 export interface ForecastRelatorioCompras {
@@ -199,11 +262,21 @@ export interface ForecastRelatorioCompras {
     vencidas: number;
     semEmbalagem: number;
     multiplasEmbalagens: number;
+    /** PR 6e (opcional: backend antigo nao manda): itens com pallet cadastrado em alguma embalagem. */
+    comPallet?: number;
     porUrgencia?: Record<ForecastUrgencia, number>;
   };
-  fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento?: number };
+  fora: {
+    semLeadTime: number;
+    semConsumoSemFalta: number;
+    semConsumoSemMovimento?: number;
+    /** PR 6a (opcional: backend antigo nao manda): itens que entrariam na lista mas sao compra sob demanda. */
+    sobDemanda?: number;
+  };
   urgencia?: { diasCritico: number };
   semConsumo?: { itens: ForecastItemSemConsumo[] };
+  /** PR 6a (opcional: backend antigo nao manda). */
+  sobDemanda?: { itens: ForecastItemSobDemanda[] };
   grupos: ForecastGrupoRelatorio[];
 }
 

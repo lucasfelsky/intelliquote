@@ -18,7 +18,8 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     // forecastSnapshot SEM update/upsert/updateMany de proposito: o historico nunca e editado.
     forecastSnapshot: { findFirst: vi.fn() },
-    forecastProduct: { findUnique: vi.fn() },
+    forecastProduct: { findUnique: vi.fn(), findMany: vi.fn() },
+    forecastAtypicalMonth: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     $transaction: vi.fn(),
   };
@@ -35,7 +36,8 @@ const prismaMock = prisma as unknown as {
   session: { create: Mock; findUnique: Mock; update: Mock; updateMany: Mock };
   auditLog: { create: Mock };
   forecastSnapshot: Record<string, Mock>;
-  forecastProduct: { findUnique: Mock };
+  forecastProduct: { findUnique: Mock; findMany: Mock };
+  forecastAtypicalMonth: { findMany: Mock };
   forecastProductCode: { findMany: Mock; update: Mock; updateMany: Mock };
   $transaction: Mock;
 };
@@ -54,6 +56,7 @@ interface CodigoMock {
   position: number;
   code: string;
   packagingQtyKg: Prisma.Decimal | null;
+  packagingPalletKg: Prisma.Decimal | null;
   packagingLabel: string | null;
   packagingIsPrimary: boolean;
   packagingSource: string | null;
@@ -65,6 +68,7 @@ const codigo = (id: number, extra: Partial<CodigoMock> = {}): CodigoMock => ({
   position: id - 10,
   code: `C000${id - 10}`,
   packagingQtyKg: null,
+  packagingPalletKg: null,
   packagingLabel: null,
   packagingIsPrimary: false,
   packagingSource: null,
@@ -88,6 +92,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
   prismaMock.forecastProduct.findUnique.mockResolvedValue(produto());
+  prismaMock.forecastProduct.findMany.mockResolvedValue([]);
+  prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
   prismaMock.forecastProductCode.update.mockResolvedValue({});
   prismaMock.forecastProductCode.updateMany.mockResolvedValue({ count: 0 });
   prismaMock.forecastProductCode.findMany.mockResolvedValue([]);
@@ -383,6 +389,148 @@ describe('Forecast embalagens - PATCH (regras de servico)', () => {
   });
 });
 
+describe('Forecast embalagens - pallet fechado (PR 6e)', () => {
+  const um = (palletKg: unknown, extra: Record<string, unknown> = {}) => ({
+    embalagens: [{ codigoId: 11, quantidadeKg: 25, palletKg, ...extra }],
+  });
+  const comCodigo11 = (extra: Partial<CodigoMock> = {}) =>
+    prismaMock.forecastProduct.findUnique.mockResolvedValue(
+      produto([codigo(11, { packagingQtyKg: dec('25'), ...extra }), codigo(12), codigo(13)]),
+    );
+
+  const invalidos: Array<[string, unknown, string]> = [
+    ['pallet 0', um(0), 'O pallet deve ser maior que zero.'],
+    ['pallet negativo', um(-600), 'O pallet deve ser maior que zero.'],
+    ['pallet acima de 1.000.000', um(1000000.001), 'O pallet aceita no maximo 1.000.000 kg.'],
+    ['pallet com 4 casas decimais', um(600.1234), 'O pallet aceita no maximo 3 casas decimais.'],
+    ['pallet texto', um('600'), 'Informe os kg do pallet (ou null).'],
+  ];
+
+  it.each(invalidos)('%s -> 400 com a mensagem do contrato (nada gravado)', async (_nome, body, mensagem) => {
+    const cookies = await loginAs('admin');
+    const response = await request(app).patch(PATH).set('Cookie', cookies).send(body as object);
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(mensagem);
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+  });
+
+  it.each(['admin', 'comprador'] as Role[])('%s grava o pallet (multiplo da embalagem) e o GET devolve palletKg', async (role) => {
+    const antes = produto([codigo(11, { packagingQtyKg: dec('25') }), codigo(12), codigo(13)]);
+    const depois = produto([codigo(11, { packagingQtyKg: dec('25'), packagingPalletKg: dec('600') }), codigo(12), codigo(13)]);
+    prismaMock.forecastProduct.findUnique.mockResolvedValueOnce(antes).mockResolvedValueOnce(depois);
+    const cookies = await loginAs(role);
+    const response = await request(app).patch(PATH).set('Cookie', cookies).send(um(600));
+    expect(response.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 11 },
+        data: expect.objectContaining({ packagingQtyKg: 25, packagingPalletKg: 600, packagingSource: 'manual' }),
+      }),
+    );
+    expect(response.body.data.codigos[0]).toMatchObject({ quantidadeKg: 25, palletKg: 600 });
+    expect(response.body.data.codigos[1]).toMatchObject({ quantidadeKg: null, palletKg: null });
+    // 3 casas e aceito (multiplo de 0,125 kg).
+    comCodigo11();
+    const tresCasas = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 0.125, palletKg: 3.125 }] });
+    expect(tresCasas.status).toBe(200);
+  });
+
+  it('viewer e gestor nao gravam pallet (403)', async () => {
+    for (const role of ['viewer', 'gestor'] as Role[]) {
+      const cookies = await loginAs(role);
+      expect((await request(app).patch(PATH).set('Cookie', cookies).send(um(600))).status).toBe(403);
+    }
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+  });
+
+  it('pallet sem quantidade da embalagem -> 400 (quantidade nula no mesmo pedido)', async () => {
+    const cookies = await loginAs('admin');
+    const a = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: null, palletKg: 600 }] });
+    expect(a.status).toBe(400);
+    expect(a.body.message).toBe('O pallet precisa da quantidade da embalagem.');
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+  });
+
+  it('pallet que nao e multiplo da embalagem (ou menor que ela) -> 400', async () => {
+    const cookies = await loginAs('admin');
+    for (const pallet of [610, 12.5, 600.001]) {
+      const response = await request(app).patch(PATH).set('Cookie', cookies).send(um(pallet));
+      expect(response.status, String(pallet)).toBe(400);
+      expect(response.body.message).toBe('O pallet precisa ser multiplo da embalagem (25 kg).');
+    }
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+  });
+
+  it('trocar so a quantidade de um codigo com pallet que deixa de ser multiplo -> 400; multiplo continua valendo', async () => {
+    comCodigo11({ packagingPalletKg: dec('600') });
+    const cookies = await loginAs('admin');
+    const ruim = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 7 }] });
+    expect(ruim.status).toBe(400);
+    expect(ruim.body.message).toBe('O pallet precisa ser multiplo da embalagem (7 kg).');
+    const boa = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 20 }] });
+    expect(boa.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ packagingQtyKg: 20, packagingPalletKg: 600 }) }),
+    );
+  });
+
+  it('palletKg null apaga o pallet; quantidade apagada apaga o pallet junto; ausente mantem', async () => {
+    comCodigo11({ packagingPalletKg: dec('600') });
+    const cookies = await loginAs('admin');
+    const apagar = await request(app).patch(PATH).set('Cookie', cookies).send(um(null));
+    expect(apagar.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ packagingQtyKg: 25, packagingPalletKg: null }) }),
+    );
+
+    const semQuantidade = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: null }] });
+    expect(semQuantidade.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ packagingQtyKg: null, packagingPalletKg: null }) }),
+    );
+
+    prismaMock.forecastProductCode.update.mockClear();
+    const mantem = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 25 }] });
+    expect(mantem.status).toBe(200);
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled(); // nada mudou
+  });
+
+  it('o AuditLog ganha so a contagem comPallet (nunca os kg do pallet)', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app).patch(PATH).set('Cookie', cookies).send(um(612.5, { quantidadeKg: 12.5 }));
+    expect(response.status).toBe(200);
+    const arg = prismaMock.auditLog.create.mock.calls[0][0];
+    expect(arg.data.metadata).toEqual({
+      source: 'manual_patch',
+      codigoIdsAlterados: [11],
+      comEmbalagem: 1,
+      semEmbalagem: 2,
+      comPallet: 1,
+      principalAntes: null,
+      principalDepois: null,
+    });
+    expect(JSON.stringify(arg)).not.toContain('612');
+  });
+});
+
 describe('Forecast embalagens - AuditLog e historico', () => {
   it('grava so ids e contagens: sem before/after e sem quantidade nem rotulo', async () => {
     const cookies = await loginAs('admin');
@@ -403,13 +551,14 @@ describe('Forecast embalagens - AuditLog e historico', () => {
     expect(arg.data.beforeData).toBeUndefined();
     expect(arg.data.afterData).toBeUndefined();
     expect(Object.keys(arg.data.metadata).sort()).toEqual(
-      ['codigoIdsAlterados', 'comEmbalagem', 'principalAntes', 'principalDepois', 'semEmbalagem', 'source'].sort(),
+      ['codigoIdsAlterados', 'comEmbalagem', 'comPallet', 'principalAntes', 'principalDepois', 'semEmbalagem', 'source'].sort(),
     );
     expect(arg.data.metadata).toEqual({
       source: 'manual_patch',
       codigoIdsAlterados: [11, 12],
       comEmbalagem: 2,
       semEmbalagem: 1,
+      comPallet: 0,
       principalAntes: null,
       principalDepois: 12,
     });
@@ -457,7 +606,13 @@ describe('Forecast embalagens - relatorio de compras usa o cadastro atual', () =
       createdAt: new Date('2026-10-20T12:00:00.000Z'),
     });
     prismaMock.forecastProductCode.findMany.mockResolvedValue([
-      { code: 'C0018', packagingQtyKg: new Prisma.Decimal('25'), packagingLabel: null, packagingIsPrimary: false },
+      {
+        code: 'C0018',
+        packagingQtyKg: new Prisma.Decimal('25'),
+        packagingPalletKg: new Prisma.Decimal('200'),
+        packagingLabel: null,
+        packagingIsPrimary: false,
+      },
     ]);
 
     const cookies = await loginAs('viewer');
@@ -485,6 +640,15 @@ describe('Forecast embalagens - relatorio de compras usa o cadastro atual', () =
     expect(com.productId).toBe(707);
     expect(itens.find((i) => i.linha === 4)!.productId).toBe(704);
     expect(data.totais.semEmbalagem).toBe(data.totais.itens - 1);
+    // Pallet de 200 kg (PR 6e): demanda 181,11 -> nada abaixo de 1 pallet, 1 pallet (200 kg) acima; Qtd. final inalterada.
+    expect(data.totais.comPallet).toBe(1);
+    const opcao = (com as unknown as { porEmbalagem: Array<{ destaque: boolean; pallet: unknown }> }).porEmbalagem[0]!;
+    expect(opcao.destaque).toBe(true);
+    expect(opcao.pallet).toEqual({
+      kgPorPallet: 200,
+      abaixo: { pallets: 0, kg: 0 },
+      acima: { pallets: 1, kg: 200 },
+    });
   });
 });
 

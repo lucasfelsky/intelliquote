@@ -22,6 +22,19 @@
 // codigo cadastrado). Com mais de uma embalagem cadastrada o item ainda traz a quantidade arredondada para CADA
 // uma (`porEmbalagem`), so para o comprador escolher na compra: nada disso muda a Qtd. final nem e persistido.
 // Observacao (PR 5B): texto livre da quinzena (coluna AT da planilha), repassado como esta (so trim).
+// Pallet fechado (PR 6e, Comex): o cadastro pode dizer quantos kg tem UM pallet da embalagem (`palletKg`, multiplo
+// da embalagem). Cada opcao de embalagem traz entao os pallets fechados ABAIXO e ACIMA da quantidade sugerida
+// (`pallet`), so para o comprador escolher na compra: a Qtd. final continua sendo a da embalagem em destaque e nada
+// disso e persistido.
+//
+// Compra sob demanda (PR 6a, Comex): produto marcado so e comprado quando o cliente envia a programacao. A linha que
+// entraria na lista de compra NAO vira item: vai para `sobDemanda.itens` (com o motivo e a programacao ainda nao coberta
+// por estoque e chegadas) e conta em `fora.sobDemanda`; nunca volta sozinha para a lista principal. Linha sob demanda
+// que nao entraria nao muda; sem consumo so ganha o selo. O motor nao e tocado: a marca vem do cadastro ATUAL.
+//
+// Meses atipicos (PR 6c, Comex): o motor ja entrega Q/AN/projecao SEM os meses marcados; o relatorio so repassa QUAIS
+// meses ficaram fora da media (`mesesForaDaMedia`, 'YYYY-MM' em ordem cronologica) para tela e XLSX avisarem. Sem marca
+// o item sai como antes (lista vazia).
 //
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
@@ -49,6 +62,10 @@ export interface LinhaParaRelatorio {
   naoFraciona?: boolean;
   /** Observacao congelada da quinzena (AT da planilha / notas do produto); ausente = ''. */
   obs?: string;
+  /** PR 6c: meses de venda atipica que ficaram fora da media da linha (ja na janela da quinzena); ausente = nenhum. */
+  mesesForaDaMedia?: Array<{ anoMes: string; /** 0..5 = J..O, 6 = P; ausente = conta como mes que muda a compra. */ indice?: number }>;
+  /** PR 6c: Q e AG DA PLANILHA (todos os meses), so presentes com marca; comparados com Q/AG para saber se a marca mudou a compra. */
+  mediaAjustada?: { Q: number; AG: number };
 }
 
 export interface QuinzenaParaRelatorio {
@@ -66,6 +83,8 @@ export interface EmbalagemCadastrada {
   quantidade: number;
   rotulo?: string | null;
   principal?: boolean;
+  /** kg de UM pallet fechado desta embalagem; ausente/nulo = sem pallet. */
+  palletKg?: number | null;
 }
 
 export interface RupturaEstimada {
@@ -79,6 +98,15 @@ export interface EmbalagemDoItem {
   codigo: string;
   quantidade: number;
   rotulo: string | null;
+  /** So quando o cadastro tem pallet (item sem pallet sai com o mesmo formato de antes). */
+  palletKg?: number;
+}
+
+/** Pallets fechados ao redor da quantidade sugerida; `abaixo` e `acima` coincidem quando o multiplo e exato. */
+export interface PalletDaOpcao {
+  kgPorPallet: number;
+  abaixo: { pallets: number; kg: number };
+  acima: { pallets: number; kg: number };
 }
 
 export interface EscolhaDeEmbalagem {
@@ -88,10 +116,12 @@ export interface EscolhaDeEmbalagem {
 }
 
 /** Quantidade do item arredondada para UMA embalagem cadastrada; `destaque` = a que gera a Qtd. final. */
-export interface OpcaoDeEmbalagem extends EmbalagemDoItem {
+export interface OpcaoDeEmbalagem extends Omit<EmbalagemDoItem, 'palletKg'> {
   embalagens: number;
   quantidadeFinal: number;
   destaque: boolean;
+  /** Multiplos de pallet abaixo/acima da quantidade sugerida; nulo = embalagem sem pallet (ou nada a comprar). */
+  pallet: PalletDaOpcao | null;
 }
 
 export interface ItemRelatorioCompras {
@@ -111,6 +141,8 @@ export interface ItemRelatorioCompras {
   naoFraciona: boolean;
   /** Observacao da quinzena ('' quando nao ha). */
   obs: string;
+  /** Meses de venda atipica fora da media deste item (PR 6c), 'YYYY-MM' cronologico; vazio = media da planilha. */
+  mesesForaDaMedia: string[];
   ruptura: RupturaEstimada | null;
   dataLimite: string | null;
   vencida: boolean;
@@ -153,6 +185,36 @@ export interface ItemSemConsumo {
   semLeadTime: boolean;
   /** Observacao da quinzena ('' quando nao ha). */
   obs: string;
+  /** Meses de venda atipica fora da media deste item (PR 6c); vazio = media da planilha. */
+  mesesForaDaMedia: string[];
+  /** Produto marcado como compra sob demanda (so selo; a lista continua a mesma). */
+  sobDemanda: boolean;
+}
+
+// Item sob demanda que entraria na lista de compra: fica fora dela e aparece em secao propria.
+export interface ItemSobDemanda {
+  linha: number;
+  n: number | null;
+  productId: number | null;
+  item: string;
+  codigos: string[];
+  fonte: string;
+  status: string;
+  /** Motivo cadastrado ao marcar o produto; nulo = marcado sem motivo. */
+  motivo: string | null;
+  /** AN do motor (<= 0), so informativo: a quantidade que a lista de compra sugeriria. */
+  demanda: number;
+  quantidadeSugerida: number;
+  estoque: number;
+  chegadas: Array<{ anoMes: string; quantidade: number }>;
+  programacoes: Array<{ anoMes: string; quantidade: number }>;
+  programado: number;
+  /** max(0, programacoes - estoque - chegadas): o que a programacao do cliente ainda nao tem de cobertura. */
+  programacaoDescoberta: number;
+  /** Observacao da quinzena ('' quando nao ha): o item sai da lista de compra, a nota vai junto. */
+  obs: string;
+  /** Meses de venda atipica fora da media deste item (PR 6c); vazio = media da planilha. */
+  mesesForaDaMedia: string[];
 }
 
 export interface RelatorioCompras {
@@ -163,11 +225,20 @@ export interface RelatorioCompras {
     vencidas: number;
     semEmbalagem: number;
     multiplasEmbalagens: number;
+    /** Itens com pallet cadastrado em ao menos uma embalagem. */
+    comPallet: number;
     porUrgencia: Record<UrgenciaId, number>;
   };
-  fora: { semLeadTime: number; semConsumoSemFalta: number; semConsumoSemMovimento: number };
+  fora: {
+    semLeadTime: number;
+    semConsumoSemFalta: number;
+    semConsumoSemMovimento: number;
+    /** Itens que entrariam na lista de compra mas estao marcados como compra sob demanda. */
+    sobDemanda: number;
+  };
   urgencia: { diasCritico: number };
   semConsumo: { itens: ItemSemConsumo[] };
+  sobDemanda: { itens: ItemSobDemanda[] };
   grupos: GrupoRelatorioCompras[];
 }
 
@@ -188,6 +259,8 @@ const EPS = 1e-9;
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 const semMenosZero = (n: number) => (n === 0 ? 0 : n);
+
+const arredondar6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
 // Item com demanda a comprar: lead time conhecido, demanda <= 0 e (consumo > 0 ou falta real).
 // Fora: sem lead time (AN nulo) e sem consumo com demanda = 0. Sem consumo com demanda < 0 entra.
@@ -244,6 +317,7 @@ export function escolherEmbalagem(codigos: string[], embalagens: EmbalagemCadast
     if (!codigo || !emb || vistos.has(chave)) continue;
     vistos.add(chave);
     const dado: EmbalagemDoItem = { codigo, quantidade: emb.quantidade, rotulo: emb.rotulo ?? null };
+    if (emb.palletKg != null && Number.isFinite(emb.palletKg) && emb.palletKg > 0) dado.palletKg = emb.palletKg;
     cadastradas.push(dado);
     if (principal === null && emb.principal === true) principal = dado;
   }
@@ -266,16 +340,39 @@ export function arredondarPorEmbalagem(
   return { embalagens: semMenosZero(embalagens), quantidade: semMenosZero(embalagens * porEmbalagem) };
 }
 
+// Pallets fechados abaixo e acima da quantidade (kg). A base e a quantidade SUGERIDA, nao a Qtd. final ja
+// arredondada pela embalagem. Multiplo exato: abaixo == acima.
+export function opcoesDePallet(quantidade: number, kgPorPallet: number): PalletDaOpcao {
+  if (!Number.isFinite(kgPorPallet) || kgPorPallet <= 0) {
+    throw new Error('Quantidade por pallet invalida.');
+  }
+  const pallets = (n: number) => ({ pallets: semMenosZero(n), kg: semMenosZero(arredondar6(n * kgPorPallet)) });
+  return {
+    kgPorPallet,
+    abaixo: pallets(Math.max(0, Math.floor(quantidade / kgPorPallet + EPS))),
+    acima: pallets(Math.max(0, Math.ceil(quantidade / kgPorPallet - EPS))),
+  };
+}
+
+// O pallet precisa caber um numero inteiro de vezes a embalagem (tolerancia de 1e-6 kg para os decimais).
+export function palletEMultiploDaEmbalagem(palletKg: number, embalagemKg: number): boolean {
+  if (!Number.isFinite(palletKg) || !Number.isFinite(embalagemKg) || palletKg <= 0 || embalagemKg <= 0) return false;
+  const vezes = Math.round(palletKg / embalagemKg);
+  return vezes >= 1 && Math.abs(palletKg - vezes * embalagemKg) <= 1e-6;
+}
+
 // Uma opcao por embalagem cadastrada (mesma ordem de `escolha.cadastradas`), cada uma com a quantidade do item
 // arredondada para cima nos multiplos dela. A `destaque` e a `escolha.usada`: mesmos numeros de quantidadeFinal.
+// Com pallet cadastrado (e algo a comprar) a opcao traz tambem os pallets fechados abaixo e acima da quantidade.
 export function arredondarParaCadaEmbalagem(quantidade: number, escolha: EscolhaDeEmbalagem): OpcaoDeEmbalagem[] {
-  return escolha.cadastradas.map((e) => {
+  return escolha.cadastradas.map(({ palletKg, ...e }) => {
     const arredondado = arredondarPorEmbalagem(quantidade, e.quantidade);
     return {
       ...e,
       embalagens: arredondado.embalagens,
       quantidadeFinal: arredondado.quantidade,
       destaque: e.codigo === escolha.usada?.codigo,
+      pallet: palletKg !== undefined && quantidade > 0 ? opcoesDePallet(quantidade, palletKg) : null,
     };
   });
 }
@@ -287,6 +384,22 @@ function mesesComValor(valores: number[], anoMes: string[]): Array<{ anoMes: str
   });
   return saida;
 }
+
+// So avisa no relatorio quando a marca MUDA a compra: marca em J/K/L muda so R (nao entra em T, AN nem na projecao), e
+// marca que nao altera Q/AG (ex.: os 3 meses do trimestre marcados = sem mes valido) deixa a linha igual a da planilha.
+// A memoria de calculo da tela continua mostrando todas as marcas.
+const MIN_INDICE_QUE_MUDA_A_COMPRA = 3; // M, N, O (Q) e P (AG)
+const mesmoValor = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+const mesesForaDaMediaDaLinha = (
+  l: Pick<LinhaParaRelatorio, 'mesesForaDaMedia' | 'mediaAjustada' | 'Q' | 'AG'>,
+): string[] => {
+  const relevantes = (l.mesesForaDaMedia ?? []).filter(
+    (m) => m.indice === undefined || m.indice >= MIN_INDICE_QUE_MUDA_A_COMPRA,
+  );
+  if (relevantes.length === 0) return [];
+  if (l.mediaAjustada && mesmoValor(l.mediaAjustada.Q, l.Q) && mesmoValor(l.mediaAjustada.AG, l.AG)) return [];
+  return relevantes.map((m) => m.anoMes);
+};
 
 const compararTexto = (a: string, b: string) => a.localeCompare(b, 'pt-BR');
 
@@ -368,6 +481,18 @@ export function motivosSemConsumo(
   return motivos;
 }
 
+const somaChegadas = (l: Pick<LinhaParaRelatorio, 'chegadas'>) =>
+  l.chegadas.slice(0, 5).reduce((total, v) => total + v, 0);
+
+function compararSobDemanda(a: ItemSobDemanda, b: ItemSobDemanda): number {
+  return (
+    b.programacaoDescoberta - a.programacaoDescoberta ||
+    compararTexto(a.fonte, b.fonte) ||
+    compararTexto(a.item, b.item) ||
+    a.linha - b.linha
+  );
+}
+
 function compararSemConsumo(a: ItemSemConsumo, b: ItemSemConsumo): number {
   const pa = a.motivos.includes('programacao') ? 0 : 1;
   const pb = b.motivos.includes('programacao') ? 0 : 1;
@@ -377,9 +502,12 @@ function compararSemConsumo(a: ItemSemConsumo, b: ItemSemConsumo): number {
 export function montarRelatorioCompras(
   q: QuinzenaParaRelatorio,
   embalagens: EmbalagemCadastrada[],
-  opcoes: { diasCritico?: number } = {},
+  // `sobDemanda`: chave = productId do cadastro; sem a opcao o resultado e o mesmo de antes (so ganha secao vazia).
+  opcoes: { diasCritico?: number; sobDemanda?: ReadonlyMap<number, { motivo: string | null }> } = {},
 ): RelatorioCompras {
   const diasCritico = opcoes.diasCritico ?? DIAS_RUPTURA_CRITICA;
+  const regraSobDemanda = (l: Pick<LinhaParaRelatorio, 'productId'>) =>
+    l.productId != null ? opcoes.sobDemanda?.get(l.productId) : undefined;
   if (!Number.isInteger(diasCritico) || diasCritico < 0) {
     throw new Error('Limite de dias da faixa critica invalido.');
   }
@@ -395,6 +523,7 @@ export function montarRelatorioCompras(
   let semConsumoSemFalta = 0;
   let semConsumoSemMovimento = 0;
   const semConsumoItens: ItemSemConsumo[] = [];
+  const sobDemandaItens: ItemSobDemanda[] = [];
   const porFonte = new Map<string, { fonte: string; leadTimeDias: number; itens: ItemRelatorioCompras[] }>();
 
   // Fora da lista de compra: sem consumo com estoque ou programacao vai para a secao de atencao; sem nada, so conta.
@@ -420,6 +549,8 @@ export function montarRelatorioCompras(
       chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
       semLeadTime: l.AN === null,
       obs: (l.obs ?? '').trim(),
+      mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
+      sobDemanda: regraSobDemanda(l) !== undefined,
     });
   };
 
@@ -432,6 +563,32 @@ export function montarRelatorioCompras(
     if (!entraNoRelatorio(l)) {
       registrarSemConsumo(l);
       if (l.AN <= 0) semConsumoSemFalta += 1;
+      continue;
+    }
+
+    // Compra sob demanda: o item que entraria sai da lista de compra e vai para a secao propria, com o motivo.
+    const sob = regraSobDemanda(l);
+    if (sob) {
+      const programado = somaProgramacoes(l);
+      sobDemandaItens.push({
+        linha: l.linha,
+        n: l.n ?? null,
+        productId: l.productId ?? null,
+        item: l.item,
+        codigos: l.codigos,
+        fonte: l.fonte.trim(),
+        status: l.status,
+        motivo: sob.motivo,
+        demanda: semMenosZero(l.AN),
+        quantidadeSugerida: semMenosZero(Math.abs(l.AN)),
+        estoque: l.U,
+        chegadas: mesesComValor(l.chegadas.slice(0, 5), meses),
+        programacoes: mesesComValor(l.programacoes.slice(0, 4), meses),
+        programado,
+        programacaoDescoberta: semMenosZero(Math.max(0, arredondar6(programado - l.U - somaChegadas(l)))),
+        obs: (l.obs ?? '').trim(),
+        mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
+      });
       continue;
     }
 
@@ -459,6 +616,7 @@ export function montarRelatorioCompras(
       quantidadeFinal: arredondado ? arredondado.quantidade : quantidadeSugerida,
       naoFraciona: l.naoFraciona === true,
       obs: (l.obs ?? '').trim(),
+      mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
       ruptura,
       dataLimite,
       vencida: dataLimite !== null && dataLimite < q.hoje,
@@ -507,6 +665,7 @@ export function montarRelatorioCompras(
   });
   grupos.sort((a, b) => a.itens[0].posicaoUrgencia - b.itens[0].posicaoUrgencia);
   semConsumoItens.sort(compararSemConsumo);
+  sobDemandaItens.sort(compararSobDemanda);
 
   const todos = grupos.flatMap((g) => g.itens);
   return {
@@ -524,11 +683,13 @@ export function montarRelatorioCompras(
       vencidas: todos.filter((i) => i.vencida).length,
       semEmbalagem: todos.filter((i) => i.embalagem.usada === null).length,
       multiplasEmbalagens: todos.filter((i) => i.embalagem.multiplas).length,
+      comPallet: todos.filter((i) => i.porEmbalagem.some((o) => o.pallet !== null)).length,
       porUrgencia: contarPorUrgencia(todos),
     },
-    fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento },
+    fora: { semLeadTime, semConsumoSemFalta, semConsumoSemMovimento, sobDemanda: sobDemandaItens.length },
     urgencia: { diasCritico },
     semConsumo: { itens: semConsumoItens },
+    sobDemanda: { itens: sobDemandaItens },
     grupos,
   };
 }

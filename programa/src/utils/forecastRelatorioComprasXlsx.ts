@@ -9,8 +9,10 @@ import type {
   GrupoRelatorioCompras,
   ItemRelatorioCompras,
   ItemSemConsumo,
+  ItemSobDemanda,
   MotivoSemConsumo,
   OpcaoDeEmbalagem,
+  PalletDaOpcao,
   RelatorioCompras,
   UrgenciaId,
 } from './forecastRelatorioCompras';
@@ -18,10 +20,11 @@ import type {
 export const ABA_RELATORIO = 'Relatório de compras';
 export const ABA_POR_URGENCIA = 'Por urgência';
 export const ABA_SEM_CONSUMO = 'Atenção sem consumo';
+export const ABA_SOB_DEMANDA = 'Sob demanda';
 export const ABA_REGRAS = 'Regras';
 
 // As colunas da tela (+ Urgencia e Dias ate a ruptura); Item / Embalagem / Data-limite desdobradas em colunas filtraveis.
-// Colunas novas entram SEMPRE no fim (nenhuma posicao existente muda): Observacao (PR 5B).
+// Colunas novas entram no fim, mas a Observacao (PR 5B) continua a ULTIMA: 'Meses fora da média' (PR 6c) entra antes dela.
 export const COLUNAS_RELATORIO_XLSX = [
   'Item',
   'Urgência',
@@ -40,6 +43,7 @@ export const COLUNAS_RELATORIO_XLSX = [
   'Data-limite',
   'Vencida',
   'Em andamento',
+  'Meses fora da média',
   'Observação',
 ] as const;
 
@@ -61,6 +65,23 @@ export const COLUNAS_SEM_CONSUMO_XLSX = [
   'Programado',
   'Programações',
   'Chegadas',
+  'Meses fora da média',
+  'Observação',
+] as const;
+
+// Aba "Sob demanda" (PR 6a): so existe quando ha item sob demanda; Observacao segue a ultima coluna.
+export const COLUNAS_SOB_DEMANDA_XLSX = [
+  'Item',
+  'Códigos',
+  'Fonte',
+  'Status',
+  'Motivo',
+  'Demanda',
+  'Programações',
+  'Programação descoberta',
+  'Estoque',
+  'Chegadas',
+  'Meses fora da média',
   'Observação',
 ] as const;
 
@@ -90,12 +111,14 @@ const NOMES_TEXTO_QUEBRA = [
   'Outras embalagens',
   'Ruptura',
   'Em andamento',
+  'Meses fora da média',
   'Observação',
 ] as const;
 const NOMES_NUMERICOS = ['Demanda', 'Qtd. sugerida', 'Qtd. final'] as const;
-const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 40];
+const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 20, 40];
 const LARGURAS_POR_URGENCIA = [34, 22, 24, ...LARGURAS.slice(2)];
-const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 40];
+const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 20, 40];
+const LARGURAS_SOB_DEMANDA = [34, 22, 24, 24, 40, 11, 30, 14, 11, 30, 20, 40];
 
 const plural = (n: number, singular: string, pluralForm: string) => (n === 1 ? singular : pluralForm);
 
@@ -159,8 +182,52 @@ export function paragrafoUrgencia(diasCritico: number): string {
   return `Urgência: "Sem estoque agora" = a ruptura cai na data-base ou já passou na data de hoje; ${critica}"Atrasado" = a data-limite do pedido já passou; "No prazo" = o restante, inclusive sem ruptura em 6 meses. A lista segue essa ordem e, dentro de cada faixa, os dias até a ruptura e depois a data-limite.`;
 }
 
-export function textoMotivos(motivos: MotivoSemConsumo[]): string {
-  return motivos.map((m) => (m === 'programacao' ? 'tem programação' : 'tem estoque')).join(' · ');
+export function textoMotivos(motivos: MotivoSemConsumo[], sobDemanda = false): string {
+  const textos: string[] = motivos.map((m) => (m === 'programacao' ? 'tem programação' : 'tem estoque'));
+  if (sobDemanda) textos.push('compra sob demanda');
+  return textos.join(' · ');
+}
+
+// Copia EXATA de web/src/pages/Forecast/forecastRelatorioTextos.ts (guarda de paridade no teste): compra sob demanda.
+export const MOTIVO_SOB_DEMANDA_PADRAO = 'Compra sob programação do cliente';
+
+export function textoMotivoSobDemanda(motivo: string | null): string {
+  return motivo ? `${MOTIVO_SOB_DEMANDA_PADRAO}: ${motivo}` : MOTIVO_SOB_DEMANDA_PADRAO;
+}
+
+export function resumoSobDemanda(n: number): string {
+  return `${n} sob demanda (fora da lista de compra)`;
+}
+
+export function paragrafoSobDemanda(): string {
+  return 'Itens marcados como "compra sob demanda" saem da lista de compra: só se compra com programação do cliente. A seção mostra a programação ainda não coberta por estoque e chegadas.';
+}
+
+// ---- Meses atipicos (PR 6c): copia EXATA de web/src/pages/Forecast/forecastRelatorioTextos.ts (guarda de paridade no teste) ----
+
+// Meses fora da media do item, ex.: 'ago/2026, set/2026' (vazio = nenhum; a celula fica vazia).
+export function textoMesesForaDaMedia(anoMeses: string[]): string {
+  return anoMeses.map(mesAbrev).join(', ');
+}
+
+// Itens (lista de compra, sem consumo e sob demanda) cuja media usa meses excluidos.
+export function contarComMesesForaDaMedia(
+  r: Pick<RelatorioCompras, 'grupos' | 'semConsumo' | 'sobDemanda'>,
+): number {
+  const itens: Array<{ mesesForaDaMedia: string[] }> = [
+    ...r.grupos.flatMap((g) => g.itens),
+    ...r.semConsumo.itens,
+    ...r.sobDemanda.itens,
+  ];
+  return itens.filter((i) => i.mesesForaDaMedia.length > 0).length;
+}
+
+export function resumoMesesForaDaMedia(n: number): string {
+  return `${n} ${n === 1 ? 'item usa' : 'itens usam'} média sem meses atípicos`;
+}
+
+export function paragrafoMesesForaDaMedia(): string {
+  return 'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.';
 }
 
 export function resumoSemConsumo(emAtencao: number, semMovimento: number): string {
@@ -196,8 +263,18 @@ export function linhasDoResumo(r: RelatorioCompras): string[] {
   if (totais.multiplasEmbalagens > 0) {
     linhas.push(`${totais.multiplasEmbalagens} com mais de uma embalagem`);
   }
+  if (totais.comPallet > 0) {
+    linhas.push(`${totais.comPallet} com pallet cadastrado`);
+  }
   linhas.push(`Fora do relatório: ${fora.semLeadTime} sem lead time, ${fora.semConsumoSemFalta} sem consumo e sem falta`);
   linhas.push(resumoSemConsumo(r.semConsumo.itens.length, fora.semConsumoSemMovimento));
+  if (fora.sobDemanda > 0) {
+    linhas.push(resumoSobDemanda(fora.sobDemanda));
+  }
+  const comMesesForaDaMedia = contarComMesesForaDaMedia(r);
+  if (comMesesForaDaMedia > 0) {
+    linhas.push(resumoMesesForaDaMedia(comMesesForaDaMedia));
+  }
   return linhas;
 }
 
@@ -207,7 +284,10 @@ function textoEmbalagem(item: ItemRelatorioCompras): string {
     return 'Embalagem não cadastrada';
   }
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
-  return `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
+  const principal = `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
+  // Pallet da embalagem em destaque: linha extra na mesma celula (sem coluna nova; Observacao segue a ultima).
+  const pallet = item.porEmbalagem.find((o) => o.destaque)?.pallet;
+  return pallet ? `${principal}\n${textoPallet(pallet)}` : principal;
 }
 
 // Copia EXATA de textoOpcaoDeEmbalagem (web/src/pages/Forecast/forecastRelatorioTextos.ts; guarda de paridade no teste):
@@ -217,9 +297,21 @@ export function textoOpcaoDeEmbalagem(op: OpcaoDeEmbalagem): string {
   return `${op.embalagens} × ${nome} (código ${op.codigo}) = ${kgBr(op.quantidadeFinal)} kg`;
 }
 
+// Copia EXATA de textoPallet (web/.../forecastRelatorioTextos.ts; guarda de paridade no teste): pallets fechados
+// abaixo e acima da quantidade sugerida, ex.: 'Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)'.
+// Multiplo exato: so '(exato)'; nada abaixo de 1 pallet: so '(acima)'.
+export function textoPallet(p: PalletDaOpcao): string {
+  const parte = (v: { pallets: number; kg: number }, marca: string) =>
+    `${v.pallets} ${v.pallets === 1 ? 'pallet' : 'pallets'} = ${kgBr(v.kg)} kg (${marca})`;
+  const inicio = `Pallet de ${kgBr(p.kgPorPallet)} kg: `;
+  if (p.abaixo.pallets === p.acima.pallets) return inicio + parte(p.acima, 'exato');
+  if (p.abaixo.pallets === 0) return inicio + parte(p.acima, 'acima');
+  return `${inicio}${parte(p.abaixo, 'abaixo')} · ${parte(p.acima, 'acima')}`;
+}
+
 // Copia EXATA de PARAGRAFO_EMBALAGEM (web/.../forecastRelatorioTextos.ts); e o 3o paragrafo da aba Regras.
 export const PARAGRAFO_EMBALAGEM_XLSX =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. Com pallet cadastrado, mostra também os pallets fechados abaixo e acima da quantidade sugerida; a Qtd. final continua pela embalagem.';
 
 const linhasChegada = (chegadas: Array<{ anoMes: string; quantidade: number }>) =>
   chegadas.map((c) => `Chegada ${mesAbrev(c.anoMes)}: ${inteiroBr(c.quantidade)}`);
@@ -232,12 +324,18 @@ function textoEmAndamento(item: ItemRelatorioCompras): string {
   return juntarLinhas([...linhasChegada(chegadas), ...linhasProgramacao(programacoes)]);
 }
 
-// 18 valores, na ordem de COLUNAS_RELATORIO_XLSX.
+// 19 valores, na ordem de COLUNAS_RELATORIO_XLSX.
 export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): Array<string | number> {
   const { usada, multiplas } = item.embalagem;
   const { ruptura } = item;
-  // Uma linha por opcao nao destacada (a destacada ja esta em Embalagem e Qtd. final).
-  const outras = multiplas && usada ? item.porEmbalagem.filter((o) => !o.destaque).map(textoOpcaoDeEmbalagem).join('\n') : '';
+  // Uma linha por opcao nao destacada (a destacada ja esta em Embalagem e Qtd. final); o pallet da opcao vem logo abaixo.
+  const outras =
+    multiplas && usada
+      ? item.porEmbalagem
+          .filter((o) => !o.destaque)
+          .flatMap((o) => (o.pallet ? [textoOpcaoDeEmbalagem(o), textoPallet(o.pallet)] : [textoOpcaoDeEmbalagem(o)]))
+          .join('\n')
+      : '';
   const rupturaTexto = ruptura
     ? ruptura.jaNaDataBase
       ? 'já na data-base'
@@ -261,6 +359,7 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
     item.dataLimite ? dataBr(item.dataLimite) : TRACO,
     item.vencida ? 'Vencida' : '',
     textoEmAndamento(item),
+    textoMesesForaDaMedia(item.mesesForaDaMedia),
     item.obs,
   ];
 }
@@ -271,11 +370,30 @@ export function celulasDoItemSemConsumo(item: ItemSemConsumo): Array<string | nu
     item.codigos.join(' · '),
     `${item.fonte || 'Sem fonte'}${item.semLeadTime ? ' (sem lead time)' : ''}`,
     STATUS_ROTULO_XLSX[item.status] ?? item.status,
-    textoMotivos(item.motivos),
+    textoMotivos(item.motivos, item.sobDemanda),
     item.estoque,
     item.programado,
     juntarLinhas(linhasProgramacao(item.programacoes)),
     juntarLinhas(linhasChegada(item.chegadas)),
+    textoMesesForaDaMedia(item.mesesForaDaMedia),
+    item.obs,
+  ];
+}
+
+// 12 valores, na ordem de COLUNAS_SOB_DEMANDA_XLSX.
+export function celulasDoItemSobDemanda(item: ItemSobDemanda): Array<string | number> {
+  return [
+    item.item,
+    item.codigos.join(' · '),
+    item.fonte || 'Sem fonte',
+    STATUS_ROTULO_XLSX[item.status] ?? item.status,
+    textoMotivoSobDemanda(item.motivo),
+    item.demanda,
+    juntarLinhas(linhasProgramacao(item.programacoes)),
+    item.programacaoDescoberta,
+    item.estoque,
+    juntarLinhas(linhasChegada(item.chegadas)),
+    textoMesesForaDaMedia(item.mesesForaDaMedia),
     item.obs,
   ];
 }
@@ -286,13 +404,19 @@ export function nomeArquivoRelatorioCompras(q: { label: string; hoje: string }):
 }
 
 // Texto da aba Regras: os paragrafos do <details> da tela + nota de origem do arquivo.
-export function paragrafosDeRegras(diasCritico: number): string[] {
+export function paragrafosDeRegras(
+  diasCritico: number,
+  comSobDemanda = false,
+  comMesesForaDaMedia = false,
+): string[] {
   return [
     'O saldo zera no primeiro mês em que a projeção do estoque fica negativa. O dia da ruptura é uma estimativa: o consumo do mês é distribuído de forma linear (no mês base, a partir da data-base).',
     'Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite já passou na data de hoje.',
     PARAGRAFO_EMBALAGEM_XLSX,
     paragrafoUrgencia(diasCritico),
     paragrafoSemConsumo(),
+    ...(comSobDemanda ? [paragrafoSobDemanda()] : []),
+    ...(comMesesForaDaMedia ? [paragrafoMesesForaDaMedia()] : []),
     'Arquivo gerado do mesmo relatório exibido na tela (quinzena calculada).',
   ];
 }
@@ -408,11 +532,35 @@ function adicionarAbaSemConsumo(workbook: exceljs.Workbook, r: RelatorioCompras)
   for (const item of r.semConsumo.itens) {
     const row = ws.addRow(celulasDoItemSemConsumo(item));
     row.alignment = { vertical: 'top' };
-    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Observação'] as const) {
+    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Meses fora da média', 'Observação'] as const) {
       row.getCell(col(nome)).alignment = { vertical: 'top', wrapText: true };
     }
     row.getCell(col('Estoque')).numFmt = '0.0';
     row.getCell(col('Programado')).numFmt = '0.0';
+  }
+}
+
+function adicionarAbaSobDemanda(workbook: exceljs.Workbook, r: RelatorioCompras): void {
+  const ws = workbook.addWorksheet(ABA_SOB_DEMANDA);
+  ws.columns = LARGURAS_SOB_DEMANDA.map((width) => ({ width }));
+  ws.pageSetup = { ...PAGINA_PAISAGEM };
+  estilizarCabecalho(ws.addRow([...COLUNAS_SOB_DEMANDA_XLSX]));
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUNAS_SOB_DEMANDA_XLSX.length } };
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const col = (nome: (typeof COLUNAS_SOB_DEMANDA_XLSX)[number]) => COLUNAS_SOB_DEMANDA_XLSX.indexOf(nome) + 1;
+  for (const item of r.sobDemanda.itens) {
+    const row = ws.addRow(celulasDoItemSobDemanda(item));
+    row.alignment = { vertical: 'top' };
+    for (const nome of ['Item', 'Códigos', 'Fonte', 'Status', 'Motivo', 'Programações', 'Chegadas', 'Meses fora da média', 'Observação'] as const) {
+      row.getCell(col(nome)).alignment = { vertical: 'top', wrapText: true };
+    }
+    row.getCell(col('Demanda')).numFmt = '0.0';
+    row.getCell(col('Programação descoberta')).numFmt = '0.0';
+    row.getCell(col('Estoque')).numFmt = '0.0';
+    if (item.programacaoDescoberta > 0) {
+      row.getCell(col('Programação descoberta')).font = { bold: true, color: { argb: COR_VENCIDA_TEXTO } };
+    }
   }
 }
 
@@ -440,10 +588,14 @@ export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Bu
 
   adicionarAbaPorUrgencia(workbook, r);
   adicionarAbaSemConsumo(workbook, r);
+  const comSobDemanda = r.sobDemanda.itens.length > 0;
+  if (comSobDemanda) {
+    adicionarAbaSobDemanda(workbook, r);
+  }
 
   const regras = workbook.addWorksheet(ABA_REGRAS);
   regras.columns = [{ width: 120 }];
-  paragrafosDeRegras(r.urgencia.diasCritico).forEach((texto) => {
+  paragrafosDeRegras(r.urgencia.diasCritico, comSobDemanda, contarComMesesForaDaMedia(r) > 0).forEach((texto) => {
     const row = regras.addRow([texto]);
     row.getCell(1).alignment = { vertical: 'top', wrapText: true };
   });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { Fragment, useEffect, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
@@ -13,6 +13,7 @@ import {
   type ForecastUrgencia,
 } from '@/services/forecast';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
+import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
   APOIO_SEM_CONSUMO,
@@ -37,8 +38,15 @@ import {
 } from './forecastRelatorioUrgencia';
 import { forcarClaroNaImpressao } from './impressaoEmClaro';
 import {
-  linhasOutrasEmbalagens,
+  contarComMesesForaDaMedia,
+  opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
+  palletDoDestaque,
+  paragrafoMesesForaDaMedia,
+  paragrafoSobDemanda,
+  resumoMesesForaDaMedia,
+  resumoSobDemanda,
+  textoMediaSem,
   textoObservacao,
   tituloOutrasEmbalagens,
 } from './forecastRelatorioTextos';
@@ -81,7 +89,8 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
       </span>
     );
   }
-  const outras = linhasOutrasEmbalagens(item);
+  const outras = opcoesOutrasComPallet(item);
+  const palletUsada = palletDoDestaque(item);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
@@ -93,10 +102,12 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
-      {outras.map((linha) => (
-        <span key={linha} className="fcr-embalagem__outras">
-          {linha}
-        </span>
+      {palletUsada && <span className="fcr-embalagem__pallet">{palletUsada}</span>}
+      {outras.map(({ texto, pallet }) => (
+        <Fragment key={texto}>
+          <span className="fcr-embalagem__outras">{texto}</span>
+          {pallet && <span className="fcr-embalagem__pallet">{pallet}</span>}
+        </Fragment>
       ))}
       {botao}
     </span>
@@ -107,6 +118,16 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
 function Observacao({ obs }: { obs?: string }) {
   const texto = textoObservacao(obs);
   return texto ? <span className="fcr-item__obs">{texto}</span> : null;
+}
+
+// Meses atipicos (PR 6c): selo discreto na celula Item quando a media do item nao conta algum mes marcado.
+function MediaSem({ meses }: { meses?: string[] }) {
+  const texto = textoMediaSem(meses);
+  return texto ? (
+    <span className="fcr-item__media" title="A média deste item não conta o mês marcado como venda atípica.">
+      {texto}
+    </span>
+  ) : null;
 }
 
 function EmAndamento({ item }: { item: ForecastItemRelatorio }) {
@@ -167,6 +188,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <span className="fcr-item__nome">{item.item}</span>
           <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
           {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+          <MediaSem meses={item.mesesForaDaMedia} />
           <Observacao obs={item.obs} />
         </div>
       </th>
@@ -386,6 +408,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                   <div className="fcr-item">
                     <span className="fcr-item__nome">{i.item}</span>
                     <span className="fcr-item__codigos">{i.codigos.join(' · ')}</span>
+                    <MediaSem meses={i.mesesForaDaMedia} />
                     <Observacao obs={i.obs} />
                   </div>
                 </th>
@@ -394,7 +417,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
                   {i.semLeadTime ? ' (sem lead time)' : ''}
                 </td>
                 <td>{STATUS_ROTULO[i.status] ?? i.status}</td>
-                <td>{textoMotivos(i.motivos)}</td>
+                <td>{textoMotivos(i.motivos, i.sobDemanda === true)}</td>
                 <td className="fcr-num">{d1(i.estoque)}</td>
                 <td>
                   <ListaDeMeses prefixo="Programação" meses={i.programacoes} />
@@ -445,6 +468,10 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   const porUrgencia = totais.porUrgencia;
   const diasCritico = dados.urgencia?.diasCritico ?? 0;
   const semConsumo = temSemConsumo(dados) ? dados.semConsumo : undefined;
+  // Compra sob demanda (PR 6a): backend antigo nao manda `sobDemanda`; sem item marcado a secao nao aparece.
+  const sobDemanda = dados.sobDemanda && dados.sobDemanda.itens.length > 0 ? dados.sobDemanda : undefined;
+  // Meses atipicos (PR 6c): so aparece quando algum item usa media sem meses excluidos (backend antigo: nada).
+  const comMesesForaDaMedia = contarComMesesForaDaMedia(dados);
   const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro) : [];
   const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro) : dados.grupos;
   const totalMostrado = visao === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
@@ -495,6 +522,9 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {comUrgencia && porUrgencia && <li>{resumoDeUrgencia(porUrgencia, diasCritico)}</li>}
           <li>{totais.semEmbalagem} sem embalagem cadastrada</li>
           {totais.multiplasEmbalagens > 0 && <li>{totais.multiplasEmbalagens} com mais de uma embalagem</li>}
+          {(totais.comPallet ?? 0) > 0 && <li>{totais.comPallet} com pallet cadastrado</li>}
+          {sobDemanda && <li>{resumoSobDemanda(fora.sobDemanda ?? sobDemanda.itens.length)}</li>}
+          {comMesesForaDaMedia > 0 && <li>{resumoMesesForaDaMedia(comMesesForaDaMedia)}</li>}
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
@@ -553,6 +583,8 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           <p>{PARAGRAFO_EMBALAGEM}</p>
           {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
           {semConsumo && <p>{paragrafoSemConsumo()}</p>}
+          {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
+          {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
         </details>
       </section>
       {dados.grupos.length === 0 ? (
@@ -574,6 +606,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
         ))
       )}
       {semConsumo && semConsumo.itens.length > 0 && <SecaoSemConsumo itens={semConsumo.itens} />}
+      {sobDemanda && <ForecastRelatorioSobDemanda itens={sobDemanda.itens} />}
     </>
   );
 }

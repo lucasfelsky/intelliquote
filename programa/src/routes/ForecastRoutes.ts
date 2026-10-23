@@ -74,6 +74,22 @@ router.patch(
   ForecastController.patchEmbalagens,
 );
 
+// Marca "compra sob demanda" do produto (PR 6a): sai da lista de compra do relatorio, com o motivo.
+router.patch(
+  '/forecast/products/:id/compra-sob-demanda',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchSobDemanda,
+);
+
+// Meses de venda atipica do produto (PR 6c): ficam fora das medias trimestral/semestral. Substitui o conjunto.
+router.put(
+  '/forecast/products/:id/meses-atipicos',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putMesesAtipicos,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(

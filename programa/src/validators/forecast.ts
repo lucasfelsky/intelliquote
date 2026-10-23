@@ -7,7 +7,7 @@ import {
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
-import { isValidDateKey } from '../utils/supplierDocumentDates';
+import { isValidDateKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 
 const contentBase64Field = z
   .string({ error: 'Envie a planilha em contentBase64.' })
@@ -160,6 +160,17 @@ const packagingQtyField = z
   })
   .nullable();
 
+// Pallet fechado (PR 6e): mesmas regras da quantidade. As regras entre campos (precisa de quantidade, multiplo dela)
+// dependem do estado do codigo e ficam no service.
+const packagingPalletField = z
+  .number({ error: 'Informe os kg do pallet (ou null).' })
+  .positive('O pallet deve ser maior que zero.')
+  .max(1000000, 'O pallet aceita no maximo 1.000.000 kg.')
+  .refine((v) => /^\d+(\.\d{1,3})?$/.test(String(v)), {
+    message: 'O pallet aceita no maximo 3 casas decimais.',
+  })
+  .nullable();
+
 const packagingLabelField = z
   .string({ error: 'Rotulo invalido.' })
   .trim()
@@ -183,6 +194,8 @@ export const forecastEmbalagensPatchSchema = z
           codigoId: codigoIdField,
           quantidadeKg: packagingQtyField,
           rotulo: packagingLabelField,
+          // Ausente = mantem; null = sem pallet; numero = kg de um pallet fechado (multiplo da embalagem).
+          palletKg: packagingPalletField.optional(),
         }),
         { error: 'Informe as embalagens como lista.' },
       )
@@ -242,3 +255,97 @@ export const forecastProductCodeAddSchema = z.object({
 
 export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
 export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;
+
+// Compra sob demanda (PR 6a): marca por produto. `motivo` e opcional (vazio = sem motivo); `sobDemanda: false`
+// limpa o motivo no service, qualquer que seja o valor enviado.
+export const FORECAST_SOB_DEMANDA_MOTIVO_MIN = 3;
+export const FORECAST_SOB_DEMANDA_MOTIVO_MAX = 300;
+
+export const forecastSobDemandaPatchSchema = z
+  .object({
+    sobDemanda: z.boolean({ error: 'Informe se a compra é sob demanda (true/false).' }),
+    motivo: z
+      .string({ error: 'O motivo deve ser um texto (ou null).' })
+      .trim()
+      .max(
+        FORECAST_SOB_DEMANDA_MOTIVO_MAX,
+        `O motivo aceita no máximo ${FORECAST_SOB_DEMANDA_MOTIVO_MAX} caracteres.`,
+      )
+      .transform((value) => (value === '' ? null : value))
+      .nullable()
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.motivo != null && value.motivo.length < FORECAST_SOB_DEMANDA_MOTIVO_MIN) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['motivo'],
+        message: `O motivo precisa ter ao menos ${FORECAST_SOB_DEMANDA_MOTIVO_MIN} caracteres.`,
+      });
+    }
+  });
+
+export type ForecastSobDemandaPatchInput = z.infer<typeof forecastSobDemandaPatchSchema>;
+
+// Meses de venda atipica (PR 6c): `meses` substitui o conjunto do produto. `janela` (opcional) limita a substituicao aos
+// meses que a tela mostrou: marcas de outros meses (de outras quinzenas) ficam como estao. Cada mes marcado precisa de
+// motivo (3 a 300 caracteres); o mes nao pode ser futuro (calendario de Sao Paulo) nem repetido.
+export const FORECAST_MESES_ATIPICOS_MOTIVO_MIN = 3;
+export const FORECAST_MESES_ATIPICOS_MOTIVO_MAX = 300;
+export const FORECAST_MESES_ATIPICOS_MAX = 24;
+
+const FORECAST_ANO_MES_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const anoMesField = z
+  .string({ error: 'Informe o mês no formato AAAA-MM.' })
+  .trim()
+  .regex(FORECAST_ANO_MES_PATTERN, 'Informe o mês no formato AAAA-MM (ex.: 2026-08).');
+
+export const forecastMesesAtipicosPutSchema = z
+  .object({
+    meses: z
+      .array(
+        z.object({
+          anoMes: anoMesField,
+          motivo: z
+            .string({ error: 'Informe o motivo de cada mês atípico.' })
+            .trim()
+            .min(
+              FORECAST_MESES_ATIPICOS_MOTIVO_MIN,
+              `O motivo precisa ter ao menos ${FORECAST_MESES_ATIPICOS_MOTIVO_MIN} caracteres.`,
+            )
+            .max(
+              FORECAST_MESES_ATIPICOS_MOTIVO_MAX,
+              `O motivo aceita no máximo ${FORECAST_MESES_ATIPICOS_MOTIVO_MAX} caracteres.`,
+            ),
+        }),
+        { error: 'Informe a lista de meses atípicos.' },
+      )
+      .max(FORECAST_MESES_ATIPICOS_MAX, `Informe no máximo ${FORECAST_MESES_ATIPICOS_MAX} meses atípicos.`),
+    janela: z
+      .array(anoMesField, { error: 'A janela deve ser uma lista de meses (AAAA-MM).' })
+      .max(FORECAST_MESES_ATIPICOS_MAX, `A janela aceita no máximo ${FORECAST_MESES_ATIPICOS_MAX} meses.`)
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    const atual = todayKeyInSaoPaulo(new Date()).slice(0, 7);
+    const vistos = new Set<string>();
+    value.meses.forEach((m, i) => {
+      if (vistos.has(m.anoMes)) {
+        ctx.addIssue({ code: 'custom', path: ['meses', i, 'anoMes'], message: `O mês ${m.anoMes} foi informado mais de uma vez.` });
+      }
+      vistos.add(m.anoMes);
+      if (m.anoMes > atual) {
+        ctx.addIssue({ code: 'custom', path: ['meses', i, 'anoMes'], message: `O mês ${m.anoMes} é futuro: marque só meses que já tiveram venda.` });
+      }
+    });
+    if (value.janela) {
+      const janela = new Set(value.janela);
+      value.meses.forEach((m, i) => {
+        if (!janela.has(m.anoMes)) {
+          ctx.addIssue({ code: 'custom', path: ['meses', i, 'anoMes'], message: `O mês ${m.anoMes} está fora da janela informada.` });
+        }
+      });
+    }
+  });
+
+export type ForecastMesesAtipicosPutInput = z.infer<typeof forecastMesesAtipicosPutSchema>;

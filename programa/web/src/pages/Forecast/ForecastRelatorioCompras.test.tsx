@@ -437,3 +437,83 @@ describe('ForecastRelatorioCompras - exportacao e impressao', () => {
     expect(html.dataset.theme).toBe('dark');
   });
 });
+
+describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () => {
+  const com = () =>
+    relatorio({
+      grupos: [
+        {
+          fonte: 'FONTE 001',
+          leadTimeDias: 90,
+          dataLimiteMaisUrgente: '2026-10-22',
+          vencidas: 0,
+          itens: [
+            item({ linha: 5, item: 'PRODUTO 002', mesesForaDaMedia: ['2026-08', '2026-09'], obs: 'OBS SINTETICA' }),
+            item({ linha: 6, item: 'PRODUTO 003' }),
+          ],
+        },
+      ],
+      semConsumo: {
+        itens: [
+          {
+            linha: 8,
+            n: 3,
+            productId: 8,
+            item: 'PRODUTO 005',
+            codigos: ['C0005'],
+            fonte: 'FONTE 001',
+            status: 'nao',
+            motivos: ['estoque'],
+            estoque: 100,
+            programado: 0,
+            programacoes: [],
+            chegadas: [],
+            semLeadTime: false,
+            mesesForaDaMedia: ['2026-08'],
+          },
+        ],
+      },
+      fora: { semLeadTime: 0, semConsumoSemFalta: 0, semConsumoSemMovimento: 0 },
+    });
+
+  it('selo "Média sem: ..." na celula Item, antes da observacao, so nos itens com meses marcados', async () => {
+    get.mockResolvedValue({ data: com() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const selo = screen.getAllByText('Média sem: ago/2026, set/2026');
+    expect(selo).toHaveLength(1);
+    expect(selo[0]?.className).toBe('fcr-item__media');
+    expect(selo[0]?.getAttribute('title')).toBe('A média deste item não conta o mês marcado como venda atípica.');
+    // Ordem na celula Item: nome, codigos, selo da media, observacao.
+    const celula = selo[0]?.parentElement as HTMLElement;
+    expect(Array.from(celula.children).map((c) => c.className)).toEqual([
+      'fcr-item__nome',
+      'fcr-item__codigos',
+      'fcr-item__media',
+      'fcr-item__obs',
+    ]);
+    // PRODUTO 003 (sem marca) nao ganha o selo; a secao sem consumo mostra o do item dela.
+    expect(screen.getByText('Média sem: ago/2026')).toBeTruthy();
+    expect(screen.getAllByText(/^Média sem:/)).toHaveLength(2);
+  });
+
+  it('resumo e paragrafo das regras so quando ha item com meses fora da media', async () => {
+    get.mockResolvedValue({ data: com() });
+    const { unmount } = renderRelatorio();
+    expect(await screen.findByText('2 itens usam média sem meses atípicos')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.',
+      ),
+    ).toBeTruthy();
+    unmount();
+
+    // Sem marca (ou backend antigo, sem o campo): nada novo na tela.
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByText(/usam média sem meses atípicos|usa média sem meses atípicos/)).toBeNull();
+    expect(screen.queryByText(/Média sem:/)).toBeNull();
+    expect(screen.queryByText(/fora das médias trimestral e semestral/)).toBeNull();
+  });
+});
