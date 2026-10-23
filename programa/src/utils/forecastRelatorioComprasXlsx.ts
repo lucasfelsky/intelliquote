@@ -127,26 +127,6 @@ export const COLUNAS_GRUPOS_XLSX = [
   'Observação',
 ] as const;
 
-// Aba "Por urgencia": lista unica; ganha a coluna Fonte depois de Urgencia.
-export const COLUNAS_POR_URGENCIA_XLSX = [
-  'Item',
-  'Urgência',
-  'Fonte',
-  ...COLUNAS_RELATORIO_XLSX.slice(COLUNAS_RELATORIO_XLSX.indexOf('Códigos')),
-] as const;
-
-export const COLUNAS_SEM_CONSUMO_XLSX = [
-  'Item',
-  'Códigos',
-  'Fonte',
-  'Status',
-  'Motivo',
-  'Estoque',
-  'Programado',
-  'Programações',
-  'Chegadas',
-] as const;
-
 // Copia exata de STATUS_ROTULO (web/src/pages/Forecast/forecastPainel.ts).
 export const STATUS_ROTULO_XLSX: Record<string, string> = {
   nao: 'Cotação não enviada',
