@@ -15,6 +15,7 @@ import type { CreditSupportForwardInput } from '../validators/domain';
 import { AuditLogService } from './AuditLogService';
 import {
   CompanyProfileService,
+  companyDisplayName,
   excludeComercialRecipients,
   readDispatchCc,
 } from './CompanyProfileService';
@@ -616,7 +617,7 @@ export class CreditSupportService {
           partnerName: partner.name,
           supplierName: response.supplier.name,
           supplierCountry: response.supplier.country ?? '',
-          companyName: profile.companyName,
+          companyName: companyDisplayName(profile),
           currency: snapshot.currency,
           incoterm: snapshot.offeredIncoterm,
           itemsCount: snapshot.items.length,
@@ -750,7 +751,7 @@ export class CreditSupportService {
       partnerName: partner.name,
       supplierName: response.supplier.name,
       supplierCountry: response.supplier.country ?? '',
-      companyName: profile.companyName,
+      companyName: companyDisplayName(profile),
       currency: snapshot.currency,
       incoterm: snapshot.offeredIncoterm,
       itemsCount: snapshot.items.length,
@@ -997,7 +998,7 @@ export class CreditSupportService {
       partnerName: request.creditPartner.name,
       supplierName: request.supplier.name,
       supplierCountry: request.supplier.country ?? '',
-      companyName: profile.companyName,
+      companyName: companyDisplayName(profile),
       currency: updated.currency,
       incoterm: updated.offeredIncoterm,
       itemsCount: request.items.length,
