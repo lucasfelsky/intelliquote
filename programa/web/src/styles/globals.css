@@ -2844,6 +2844,7 @@ i.fc-status--preco { background: var(--info); }
 .fce-codigo { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .fce-codigo .badge { white-space: nowrap; }
 .fce-erro { margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--danger); }
+.fce-aviso { min-width: 200px; margin: 4px 0 0; font-size: 12px; line-height: 1.35; text-align: left; color: var(--warning); }
 .fce-origem { font-size: 12px; white-space: nowrap; color: var(--ink-soft); }
 .fce-nenhuma { padding: 0 10px; }
 .fcr-embalagem__editar { padding: 4px 10px; font-size: 12px; }
@@ -3000,4 +3001,256 @@ i.fc-status--preco { background: var(--info); }
   body:has(.fcr-resumo) .fcr-controles { display: none !important; }
   .fcr-linha--sem-estoque th, .fcr-linha--sem-estoque td, .fcr-linha--critico th, .fcr-linha--critico td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .fcr-tabela--compacta { min-width: 0; }
+}
+
+/* ---- Forecast: pendentes de cadastro (PR 3B-2) ---- */
+.fcp { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.fcp__detalhes summary { padding: 12px 16px; font-size: 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.fcp__detalhes summary:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
+.fcp__resumo { font-weight: 400; color: var(--ink-soft); }
+.fcp__corpo { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; }
+.fcp-estado { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcp-nota { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcp-erro__texto { margin: 0 0 8px; }
+.fcp-scroll { overflow-x: auto; }
+.fcp-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
+.fcp-tabela { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fcp-tabela th,
+.fcp-tabela td { padding: 8px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); color: var(--ink); }
+.fcp-tabela thead th { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: var(--ink-soft); background: var(--surface-alt); }
+.fcp-tabela tbody th { font-weight: 700; white-space: nowrap; }
+.fcp-tabela .fcp-num { text-align: right; }
+.fcp-produto-inativo { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-soft); }
+.fcp-tabela .badge { white-space: nowrap; }
+@media (max-width: 700px) {
+  /* A acao fica visivel ao rolar a tabela larga (390 px). */
+  .fcp-tabela .fcp-acao { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px var(--border-strong); }
+  .fcp-tabela thead .fcp-acao { background: var(--surface-alt); }
+}
+
+/* ---- Forecast: dialogo "Completar cadastro" (PR 3B-2) ---- */
+.fcc-modal, .fcc-form { display: flex; flex-direction: column; gap: 12px; }
+.fcc-codigo-pendente { margin: 0; font-size: 15px; color: var(--ink); }
+.fcc-dica { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcc-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.fcc-campo .field-label { margin-bottom: 0; }
+.fcc-input-curto { max-width: 140px; }
+.fcc-codigos legend { padding: 0; }
+.fcc-codigo { display: flex; align-items: center; gap: 8px; }
+.fcc-codigo .input { flex: 1; min-width: 0; }
+.fcc-erro { margin: 0; font-size: 12px; line-height: 1.35; color: var(--danger); }
+.fcc-vazio { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-alt); font-size: 14px; color: var(--ink); }
+.fcc-carregando { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); }
+.fcc-alert__texto { margin: 0 0 8px; }
+.fcc-produtos__lista { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcc-produto { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); cursor: pointer; }
+.fcc-produto:last-child { border-bottom: 0; }
+.fcc-produto:has(input:checked) { background: var(--surface-alt); }
+.fcc-produto--cheio { color: var(--ink-soft); cursor: not-allowed; }
+.fcc-produto input { flex: none; width: 16px; height: 16px; }
+.fcc-produto__nome { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fcc-produto__vagas { flex: none; font-size: 12px; color: var(--ink-soft); }
+.fcc-modal input:focus-visible,
+.fcc-modal select:focus-visible,
+.fcc-modal .tabs-trigger:focus-visible,
+.fcc-modal .tabs-panel:focus-visible,
+.fcc-produto:has(input:focus-visible) { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcc-modal [aria-invalid="true"] { border-color: var(--danger); }
+@media print {
+  body:has(.fcr-resumo) .fcp { display: none !important; }
+}
+
+/* ---- Forecast: relatorio de compras - Observacao na celula Item (PR 5B) ---- */
+.fcr-item__obs { max-width: 320px; font-size: 11px; line-height: 1.35; color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media print {
+  .fcr-item__obs { max-width: 70mm; font-size: 7.5pt; }
+}
+
+/* ---- Forecast: prazo das chegadas estimadas por fonte, no resumo da importacao (PR 5A) ---- */
+.fci-prazo__tabela td { vertical-align: middle; white-space: nowrap; }
+.fci-prazo__tabela tbody th { min-width: 150px; max-width: 260px; }
+.fci-prazo__campo { display: flex; flex-direction: column; gap: 4px; }
+.fci-prazo__input { width: 84px; min-height: 36px; padding-top: 6px; padding-bottom: 6px; text-align: right; }
+.fci-prazo__input[aria-invalid="true"] { border-color: var(--danger); }
+.fci-prazo__erro { max-width: 150px; font-size: 12px; line-height: 1.35; white-space: normal; color: var(--danger); }
+.fci-prazo__sem { color: var(--ink-soft); }
+.fci-prazo__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.fci-prazo__retorno:focus-visible,
+.fci-prazo__input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+
+/* ---- Forecast: pallet fechado (PR 6e) ---- */
+.fcr-embalagem__pallet { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+/* O modal de embalagens ganhou a coluna Pallet (kg): colunas mais justas para caber no dialogo de 760 px. */
+.fce-tabela { min-width: 700px; }
+.fce-tabela th, .fce-tabela td { padding-left: 7px; padding-right: 7px; }
+.fce-tabela .fce-input-qtd { min-width: 84px; }
+.fce-input-rotulo { min-width: 100px; }
+
+/* ---- Forecast: compra sob demanda (PR 6a) ---- */
+.fc-lado__lista > .fc-compra-item { flex-direction: column; align-items: stretch; }
+.fc-compra-item dd { text-align: left; }
+.fc-compra { display: flex; flex-direction: column; gap: 8px; }
+.fc-compra .checkbox-field { align-items: flex-start; }
+.fc-compra .checkbox-field input { flex: none; margin-top: 2px; }
+.fc-compra .field-label { margin-bottom: 0; }
+.fc-compra .input:disabled { opacity: 0.6; cursor: not-allowed; }
+.fc-compra .input[aria-invalid="true"] { border-color: var(--danger); }
+.fc-compra__salvar { align-self: flex-start; }
+.fc-compra__salvar[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.fc-compra input:focus-visible,
+.fc-compra__salvar:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcr-tabela td.fcr-descoberta { color: var(--danger); }
+
+/* ---- Forecast: meses atipicos fora da media (PR 6c) ---- */
+.fc-grid .fc-cell--fora-media { color: var(--ink-soft); text-decoration: line-through; }
+.fc-passo__nota { color: var(--ink-soft); font-size: 12px; line-height: 1.4; }
+.fc-atipicos { margin: 0 0 8px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.fc-atipicos li { overflow-wrap: anywhere; }
+.fc-atipicos__editar { align-self: flex-start; }
+.fcr-item__media { align-self: flex-start; padding: 1px 8px; border-radius: 10px; background: var(--tone-info-bg); color: var(--info); font-size: 11px; font-weight: 600; line-height: 1.4; }
+@media print {
+  .fcr-item__media { padding: 0; background: none; font-size: 7.5pt; }
+}
+.fca-tabela { min-width: 640px; }
+.fca-linha--marcada th, .fca-linha--marcada td { background: var(--tone-warning-bg-soft); }
+.fca-atual { font-weight: 400; color: var(--ink-soft); }
+.fca-motivo { min-width: 220px; }
+.fca-motivo:disabled { opacity: 0.6; cursor: not-allowed; }
+.fca-tabela input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fca-tabela [aria-invalid="true"] { border-color: var(--danger); }
+/* Telas estreitas: cada mes vira um bloco (mes + venda na 1a linha; caixa + motivo na 2a), sem rolagem horizontal. */
+@media (max-width: 560px) {
+  .fca-tabela { min-width: 0; }
+  .fca-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fca-tabela, .fca-tabela tbody { display: block; }
+  .fca-tabela tr { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .fca-tabela th, .fca-tabela td { display: block; padding: 4px 0; border-bottom: 0; }
+  .fca-tabela tr > :nth-child(1) { grid-column: 1; }
+  .fca-tabela tr > :nth-child(2) { grid-column: 2; text-align: right; }
+  .fca-tabela td.fce-num::before { content: 'Venda (kg): '; color: var(--ink-soft); }
+  .fca-tabela tr > :nth-child(3) { grid-column: 1; }
+  .fca-tabela tr > :nth-child(4) { grid-column: 2; }
+  .fca-tabela .fca-atual { display: block; }
+  .fca-motivo { min-width: 0; width: 100%; }
+  .fca-linha--marcada { background: var(--tone-warning-bg-soft); }
+}
+
+/* ---- Forecast: demanda do comercial (PR 6d) ---- */
+.fcr-item__demanda { align-self: flex-start; padding: 1px 8px; border-radius: 10px; background: var(--tone-warning-bg); color: var(--warning); font-size: 11px; font-weight: 600; line-height: 1.4; }
+.fcd-tabela { min-width: 1040px; }
+.fcd-tabela th, .fcd-tabela td { padding-left: 8px; padding-right: 8px; }
+.fcd-tabela .fcr-item { min-width: 150px; }
+.fcd-fonte { min-width: 80px; }
+.fcd-data { white-space: nowrap; }
+.fcd-texto { min-width: 130px; max-width: 260px; overflow-wrap: anywhere; }
+.fcd-cliente { min-width: 90px; }
+.fcd-situacao { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+.fcd-aviso { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcd-acoes { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 130px; }
+.fcd-acoes .ghost-button { padding: 3px 10px; font-size: 12px; text-align: left; }
+/* Rolando a tabela larga, a coluna de acoes fica visivel. */
+@media (min-width: 701px) {
+  .fcd-tabela .fcd-col-acoes { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px var(--border-strong); }
+  .fcd-tabela thead .fcd-col-acoes { background: var(--surface-alt); }
+}
+.fcd-acoes .ghost-button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcd-form { display: flex; flex-direction: column; gap: 12px; }
+.fcd-dica { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fcd-produto { margin: 0; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.fcd-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.fcd-campo .field-label { margin-bottom: 0; }
+.fcd-grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.fcd-input-num { text-align: right; font-variant-numeric: tabular-nums; }
+.fcd-motivo { resize: vertical; min-height: 56px; }
+.fcd-erro { margin: 0; font-size: 12px; line-height: 1.35; color: var(--danger); }
+.fcd-carregando { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-soft); }
+.fcd-alert__texto { margin: 0 0 8px; }
+.fcd-produtos { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcd-produto { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--ink); cursor: pointer; }
+.fcd-produto:last-child { border-bottom: 0; }
+.fcd-produto:has(input:checked) { background: var(--surface-alt); }
+.fcd-produto input { flex: none; width: 16px; height: 16px; }
+.fcd-produto__nome { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fcd-produto__fonte { flex: none; font-size: 12px; color: var(--ink-soft); }
+.fcd-form input:focus-visible,
+.fcd-form textarea:focus-visible,
+.fcd-produto:has(input:focus-visible) { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcd-form [aria-invalid="true"] { border-color: var(--danger); }
+@media print {
+  .fcr-item__demanda { padding: 0; background: none; font-size: 7.5pt; }
+  .fcd-tabela { min-width: 0; }
+  .fcd-col-acoes { display: none !important; }
+  .fcd-texto, .fcd-cliente, .fcd-fonte, .fcd-situacao { max-width: none; min-width: 0; }
+}
+/* 390 px: cada pedido vira um bloco (sem rolagem horizontal), com o rotulo de cada coluna. */
+@media (max-width: 700px) {
+  .fcd-grade { grid-template-columns: minmax(0, 1fr); }
+  .fcd-tabela { min-width: 0; }
+  .fcd-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fcd-tabela, .fcd-tabela tbody { display: block; }
+  .fcd-tabela tr { display: block; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .fcd-tabela th, .fcd-tabela td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 4px 0; border-bottom: 0; text-align: right; }
+  .fcd-tabela tbody th { display: block; text-align: left; }
+  .fcd-tabela td::before { content: attr(data-rotulo); flex: none; max-width: 45%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fcd-tabela .fcd-texto, .fcd-tabela .fcd-cliente, .fcd-tabela .fcd-fonte { min-width: 0; max-width: none; }
+  .fcd-tabela .fcd-data { white-space: normal; }
+  .fcd-tabela .fcd-situacao { min-width: 0; align-items: flex-end; text-align: right; }
+  .fcd-tabela .fcd-col-acoes { display: block; }
+  .fcd-tabela .fcd-col-acoes::before { display: block; margin-bottom: 4px; }
+  .fcd-acoes { flex-direction: row; flex-wrap: wrap; min-width: 0; }
+  .fcd-acoes .ghost-button { min-height: 44px; }
+  /* Dialogos de lancar, editar e fechar: botoes e linhas de produto com alvo de toque de 44 px. */
+  .fcd-form .modal-actions button, .fcd-form .ghost-button { min-height: 44px; }
+  .fcd-produto { min-height: 44px; }
+}
+
+/* Grupos de equivalencia (PR 6b): selo, sublinhas dos membros no relatorio, secao dos cobertos e modal de cadastro. Somente tokens do tema. */
+.fcr-item > .fcg-selo { align-self: flex-start; }
+.fcr-item__nome .fcg-selo { margin-left: 8px; vertical-align: middle; }
+.fcr-item__grupo { font-size: 11px; line-height: 1.35; color: var(--ink-soft); }
+.fcg-obs { max-width: 320px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fcg-selo__nota { display: block; margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.fcr-tabela .fcr-linha-grupo > td { padding: 0 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+/* A celula das sublinhas ocupa a tabela inteira (que rola na horizontal): a caixa fica colada a esquerda e com a largura VISIVEL. */
+.fcr-scroll:has(.fcg-sublinhas) { container-type: inline-size; }
+.fcg-sublinhas { position: sticky; left: 0; box-sizing: border-box; width: min(100%, calc(100vw - 56px)); width: min(100%, calc(100cqw - 20px)); padding: 8px 12px; border-left: 3px solid var(--primary-700); border-radius: var(--radius-sm); background: var(--surface-alt); }
+.fcg-sublinhas__resumo { margin: 0 0 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.fcg-sublinhas__rolagem { overflow-x: auto; }
+.fcg-tabela { min-width: 560px; }
+.fcg-tabela th, .fcg-tabela td { padding: 6px 8px; background: transparent; }
+.fcg-tabela .fcr-item { min-width: 120px; }
+.fcg-motivo { min-width: 240px; overflow-wrap: anywhere; }
+.fcg-form { gap: 14px; }
+.fcg-titulo { margin: 0; font-size: 16px; line-height: 1.3; color: var(--ink); }
+.fcg-titulo:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; }
+.fcg-lista { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.fcg-grupo { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fcg-grupo__nome { margin: 0; font-size: 15px; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.fcg-grupo__acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.fcg-membros { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--ink); }
+.fcg-membros li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.fcg-selecionados { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fcg-selecionado { flex-wrap: wrap; }
+.fcg-selecionado__radio { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.fcg-selecionado__radio input { flex: none; width: 16px; height: 16px; }
+.fcg-selecionados input:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 700px) {
+  /* 390 px: cada membro vira um bloco com o rotulo de cada coluna (sem rolagem horizontal dentro da sublinha). */
+  .fcg-tabela { min-width: 0; }
+  .fcg-tabela thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fcg-tabela, .fcg-tabela tbody { display: block; }
+  .fcg-tabela tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .fcg-tabela tr:last-child { border-bottom: 0; }
+  .fcg-tabela th, .fcg-tabela td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 2px 0; border-bottom: 0; text-align: right; }
+  .fcg-tabela tbody th { display: block; text-align: left; }
+  .fcg-tabela td::before { content: attr(data-rotulo); flex: none; max-width: 50%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fcg-grupo__acoes .ghost-button, .fcg-lista-corpo .primary-button, .fcg-selecionado .ghost-button { min-height: 44px; }
+  .fcg-selecionado__radio { min-height: 44px; }
+}
+@media print {
+  .fcg-sublinhas { position: static; width: auto; padding: 4px 8px; background: none; border-left-width: 2px; }
+  .fcg-sublinhas__resumo { font-size: 7.5pt; }
+  .fcg-tabela { min-width: 0; }
+  .fcg-sublinhas__rolagem { overflow: visible; }
+  .fcr-item__grupo { font-size: 7.5pt; }
 }

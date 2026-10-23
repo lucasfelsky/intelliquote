@@ -6,6 +6,12 @@ export const ERRO_QTD_POSITIVA = 'A quantidade da embalagem deve ser maior que z
 export const ERRO_QTD_MAXIMA = 'A quantidade da embalagem aceita no máximo 1.000.000 kg.';
 export const ERRO_QTD_CASAS = 'A quantidade da embalagem aceita no máximo 3 casas decimais.';
 
+export const ERRO_PALLET_FORMATO = 'Informe os kg do pallet só com números (ex.: 600 ou 1.200).';
+export const ERRO_PALLET_POSITIVO = 'O pallet deve ser maior que zero.';
+export const ERRO_PALLET_MAXIMO = 'O pallet aceita no máximo 1.000.000 kg.';
+export const ERRO_PALLET_CASAS = 'O pallet aceita no máximo 3 casas decimais.';
+export const ERRO_PALLET_SEM_QUANTIDADE = 'O pallet precisa da quantidade da embalagem.';
+
 const LIMITE_KG = 1_000_000;
 
 export type QuantidadeLida = { ok: true; valor: number | null } | { ok: false; erro: string };
@@ -33,6 +39,48 @@ export function lerQuantidadeKg(texto: string): QuantidadeLida {
   return { ok: true, valor };
 }
 
+/** Mesmas regras da quantidade (formato brasileiro, ate 3 casas, ate 1.000.000 kg), com as mensagens do pallet. */
+export function lerPalletKg(texto: string): QuantidadeLida {
+  const lida = lerQuantidadeKg(texto);
+  if (lida.ok) return lida;
+  const erro =
+    lida.erro === ERRO_QTD_POSITIVA
+      ? ERRO_PALLET_POSITIVO
+      : lida.erro === ERRO_QTD_MAXIMA
+        ? ERRO_PALLET_MAXIMO
+        : lida.erro === ERRO_QTD_CASAS
+          ? ERRO_PALLET_CASAS
+          : ERRO_PALLET_FORMATO;
+  return { ok: false, erro };
+}
+
+/**
+ * Regra entre os dois campos do mesmo codigo (o backend revalida): pallet exige quantidade na embalagem. Nao exige
+ * que seja multiplo dela (rodada 5 do Comex: o pallet e uma opcao de compra do cadastro, nao uma regra). `null` = valido.
+ */
+export function erroDoPallet(quantidadeKg: number | null, palletKg: number | null): string | null {
+  if (palletKg === null) return null;
+  if (quantidadeKg === null) return ERRO_PALLET_SEM_QUANTIDADE;
+  return null;
+}
+
+/** Espelha `palletEMultiploDaEmbalagem` do backend: multiplo inteiro (>= 1) da embalagem, tolerancia de 1e-6 kg. */
+export function palletEMultiplo(palletKg: number, quantidadeKg: number): boolean {
+  if (!(palletKg > 0) || !(quantidadeKg > 0)) return false;
+  const vezes = Math.round(palletKg / quantidadeKg);
+  return vezes >= 1 && Math.abs(palletKg - vezes * quantidadeKg) <= 1e-6;
+}
+
+/**
+ * Aviso NAO bloqueante: pallet que nao e multiplo da embalagem. O Salvar continua liberado; so pede para conferir
+ * com o fornecedor. `null` = sem aviso (sem pallet, sem quantidade ou multiplo exato).
+ */
+export function avisoDoPallet(quantidadeKg: number | null, palletKg: number | null): string | null {
+  if (palletKg === null || quantidadeKg === null) return null;
+  if (palletEMultiplo(palletKg, quantidadeKg)) return null;
+  return `O pallet (${quantidadeParaCampo(palletKg)} kg) não é múltiplo da embalagem (${quantidadeParaCampo(quantidadeKg)} kg): confira com o fornecedor.`;
+}
+
 /** Quantidade para o campo de texto (virgula decimal, sem milhar: o que `lerQuantidadeKg` le de volta). */
 export function quantidadeParaCampo(valor: number | null): string {
   return valor === null ? '' : String(valor).replace('.', ',');
@@ -42,6 +90,8 @@ export interface EmbalagemEditada {
   codigoId: number;
   quantidadeKg: number | null;
   rotulo: string | null;
+  /** kg do pallet; `undefined` = nao informado (mantem o do cadastro). */
+  palletKg?: number | null;
 }
 
 export interface EdicaoDeEmbalagens {
@@ -65,8 +115,16 @@ export function montarPatch(original: ForecastEmbalagens, editado: EdicaoDeEmbal
     const antes = porId.get(e.codigoId);
     if (!antes) continue;
     const rotulo = rotuloOuNulo(e.rotulo);
-    if (e.quantidadeKg !== antes.quantidadeKg || rotulo !== rotuloOuNulo(antes.rotulo)) {
-      embalagens.push({ codigoId: e.codigoId, quantidadeKg: e.quantidadeKg, rotulo });
+    const palletAntes = antes.palletKg ?? null;
+    const palletMudou = e.palletKg !== undefined && e.palletKg !== palletAntes;
+    if (e.quantidadeKg !== antes.quantidadeKg || rotulo !== rotuloOuNulo(antes.rotulo) || palletMudou) {
+      // O pallet so vai no corpo quando mudou (quantidade apagada tambem apaga o pallet no servidor).
+      embalagens.push({
+        codigoId: e.codigoId,
+        quantidadeKg: e.quantidadeKg,
+        rotulo,
+        ...(palletMudou ? { palletKg: e.palletKg } : {}),
+      });
     }
   }
   const principalAntes = original.codigos.find((c) => c.principal)?.id ?? null;
@@ -82,7 +140,12 @@ export function montarPatch(original: ForecastEmbalagens, editado: EdicaoDeEmbal
 /** Estado inicial da edicao a partir do cadastro lido. */
 export function edicaoInicial(original: ForecastEmbalagens): EdicaoDeEmbalagens {
   return {
-    codigos: original.codigos.map((c) => ({ codigoId: c.id, quantidadeKg: c.quantidadeKg, rotulo: c.rotulo })),
+    codigos: original.codigos.map((c) => ({
+      codigoId: c.id,
+      quantidadeKg: c.quantidadeKg,
+      rotulo: c.rotulo,
+      palletKg: c.palletKg ?? null,
+    })),
     principalCodigoId: original.codigos.find((c) => c.principal)?.id ?? null,
   };
 }

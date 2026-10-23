@@ -154,7 +154,7 @@ describe('ForecastRelatorioCompras', () => {
     expect(within(linha).getByText('-40,0')).toBeTruthy(); // demanda
   });
 
-  it('varias embalagens: destaca a usada e lista as outras', async () => {
+  it('backend antigo (sem porEmbalagem): destaca a usada e lista as outras no texto de antes', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
@@ -165,6 +165,110 @@ describe('ForecastRelatorioCompras', () => {
     expect(within(linha).getByText('Outras: C0004 (200 kg)')).toBeTruthy();
     expect(within(linha).getByText('125,0')).toBeTruthy();
     expect(within(linha).queryByText('Embalagem não cadastrada')).toBeNull();
+  });
+
+  it('varias embalagens: destaca a usada e mostra a quantidade arredondada para CADA uma, uma por linha', async () => {
+    const base = relatorio();
+    const [p2, ...resto] = base.grupos[0]!.itens;
+    const item2 = {
+      ...p2,
+      embalagem: {
+        usada: { codigo: 'C0005', quantidade: 25, rotulo: null },
+        cadastradas: [
+          { codigo: 'C0004', quantidade: 200, rotulo: null },
+          { codigo: 'C0005', quantidade: 25, rotulo: null },
+          { codigo: 'C0006', quantidade: 1000, rotulo: 'Bag' },
+        ],
+        multiplas: true,
+      },
+      porEmbalagem: [
+        { codigo: 'C0004', quantidade: 200, rotulo: null, embalagens: 1, quantidadeFinal: 200, destaque: false },
+        { codigo: 'C0005', quantidade: 25, rotulo: null, embalagens: 5, quantidadeFinal: 125, destaque: true },
+        { codigo: 'C0006', quantidade: 1000, rotulo: 'Bag', embalagens: 1, quantidadeFinal: 1000, destaque: false },
+      ],
+    };
+    get.mockResolvedValue({
+      data: { ...base, grupos: [{ ...base.grupos[0], itens: [item2, ...resto] }, base.grupos[1]] },
+    });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const linha = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    // A usada continua em destaque e a Qtd. final e a dela.
+    expect(within(linha).getByText('5 × 25 kg (código C0005)')).toBeTruthy();
+    expect(within(linha).getByText('125,0')).toBeTruthy();
+    const chip = within(linha).getByText('Arredondado pela embalagem do código C0005');
+    expect(chip.getAttribute('title')).toBe(
+      'Outras embalagens: 1 × 200 kg (código C0004) = 200 kg; 1 × Bag (código C0006) = 1.000 kg',
+    );
+    const outras = Array.from(linha.querySelectorAll('.fcr-embalagem__outras')).map((e) => e.textContent);
+    expect(outras).toEqual(['1 × 200 kg (código C0004) = 200 kg', '1 × Bag (código C0006) = 1.000 kg']);
+    expect(within(linha).queryByText(/^Outras:/)).toBeNull();
+  });
+
+  it('Observação: linha "Obs.: ..." na celula Item, so quando ha texto, sem criar coluna', async () => {
+    const base = relatorio();
+    const [p2, p3] = base.grupos[0]!.itens;
+    get.mockResolvedValue({
+      data: {
+        ...base,
+        grupos: [
+          { ...base.grupos[0], itens: [{ ...p2, obs: 'OBS SINTETICA 002' }, { ...p3, obs: '   ' }] },
+          { ...base.grupos[1]!, itens: [{ ...base.grupos[1]!.itens[0], obs: '' }] },
+        ],
+      },
+    });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const comObs = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    const obs = comObs.querySelector('.fcr-item__obs');
+    expect(obs?.textContent).toBe('Obs.: OBS SINTETICA 002');
+    expect(obs?.closest('th')).toBe(comObs.querySelector('th'));
+    expect(document.querySelectorAll('.fcr-item__obs')).toHaveLength(1);
+    const colunas = within(screen.getAllByRole('table')[0] as HTMLElement)
+      .getAllByRole('columnheader')
+      .map((c) => c.textContent);
+    expect(colunas).toEqual([
+      'Item', 'Status', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Saldo zera', 'Ruptura', 'Data-limite', 'Em andamento',
+    ]);
+  });
+
+  it('Observação tambem aparece na secao "Atencao: sem consumo"', async () => {
+    const sem = (linha: number, obs?: string) => ({
+      linha,
+      n: linha,
+      productId: null,
+      item: 'PRODUTO ' + linha,
+      codigos: ['C' + linha],
+      fonte: 'FONTE 001',
+      status: 'nao',
+      motivos: ['estoque'],
+      estoque: 10,
+      programado: 0,
+      programacoes: [],
+      chegadas: [],
+      semLeadTime: false,
+      ...(obs === undefined ? {} : { obs }),
+    });
+    get.mockResolvedValue({
+      data: relatorio({
+        fora: { semLeadTime: 4, semConsumoSemFalta: 5, semConsumoSemMovimento: 1 },
+        semConsumo: { itens: [sem(101, 'OBS SINTETICA 101'), sem(102, ''), sem(103)] },
+      }),
+    });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const secao = screen.getByRole('region', { name: 'Itens sem consumo' });
+    expect(within(secao).getByText('Obs.: OBS SINTETICA 101')).toBeTruthy();
+    expect(secao.querySelectorAll('.fcr-item__obs')).toHaveLength(1);
+  });
+
+  it('o paragrafo das embalagens nas regras explica a quantidade por embalagem', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    expect(
+      screen.getByText(/Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma/),
+    ).toBeTruthy();
   });
 
   it('"nao fraciona" aparece como marca no item e nao muda a quantidade', async () => {
@@ -331,5 +435,209 @@ describe('ForecastRelatorioCompras - exportacao e impressao', () => {
       window.dispatchEvent(new Event('beforeprint'));
     });
     expect(html.dataset.theme).toBe('dark');
+  });
+});
+
+describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () => {
+  const com = () =>
+    relatorio({
+      grupos: [
+        {
+          fonte: 'FONTE 001',
+          leadTimeDias: 90,
+          dataLimiteMaisUrgente: '2026-10-22',
+          vencidas: 0,
+          itens: [
+            item({ linha: 5, item: 'PRODUTO 002', mesesForaDaMedia: ['2026-08', '2026-09'], obs: 'OBS SINTETICA' }),
+            item({ linha: 6, item: 'PRODUTO 003' }),
+          ],
+        },
+      ],
+      semConsumo: {
+        itens: [
+          {
+            linha: 8,
+            n: 3,
+            productId: 8,
+            item: 'PRODUTO 005',
+            codigos: ['C0005'],
+            fonte: 'FONTE 001',
+            status: 'nao',
+            motivos: ['estoque'],
+            estoque: 100,
+            programado: 0,
+            programacoes: [],
+            chegadas: [],
+            semLeadTime: false,
+            mesesForaDaMedia: ['2026-08'],
+          },
+        ],
+      },
+      fora: { semLeadTime: 0, semConsumoSemFalta: 0, semConsumoSemMovimento: 0 },
+    });
+
+  it('selo "Média sem: ..." na celula Item, antes da observacao, so nos itens com meses marcados', async () => {
+    get.mockResolvedValue({ data: com() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const selo = screen.getAllByText('Média sem: ago/2026, set/2026');
+    expect(selo).toHaveLength(1);
+    expect(selo[0]?.className).toBe('fcr-item__media');
+    expect(selo[0]?.getAttribute('title')).toBe('A média deste item não conta o mês marcado como venda atípica.');
+    // Ordem na celula Item: nome, codigos, selo da media, observacao.
+    const celula = selo[0]?.parentElement as HTMLElement;
+    expect(Array.from(celula.children).map((c) => c.className)).toEqual([
+      'fcr-item__nome',
+      'fcr-item__codigos',
+      'fcr-item__media',
+      'fcr-item__obs',
+    ]);
+    // PRODUTO 003 (sem marca) nao ganha o selo; a secao sem consumo mostra o do item dela.
+    expect(screen.getByText('Média sem: ago/2026')).toBeTruthy();
+    expect(screen.getAllByText(/^Média sem:/)).toHaveLength(2);
+  });
+
+  it('resumo e paragrafo das regras so quando ha item com meses fora da media', async () => {
+    get.mockResolvedValue({ data: com() });
+    const { unmount } = renderRelatorio();
+    expect(await screen.findByText('2 itens usam média sem meses atípicos')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.',
+      ),
+    ).toBeTruthy();
+    unmount();
+
+    // Sem marca (ou backend antigo, sem o campo): nada novo na tela.
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByText(/usam média sem meses atípicos|usa média sem meses atípicos/)).toBeNull();
+    expect(screen.queryByText(/Média sem:/)).toBeNull();
+    expect(screen.queryByText(/fora das médias trimestral e semestral/)).toBeNull();
+  });
+});
+
+describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
+  const pedido = (over: Record<string, unknown> = {}) => ({
+    id: 1,
+    linha: 7,
+    productId: 70,
+    item: 'PRODUTO 004',
+    fonte: 'FONTE 002',
+    kg: 1600,
+    necessidade: '2027-02-10',
+    anoMes: '2027-02',
+    motivo: 'MOTIVO SINTETICO',
+    cliente: 'CLIENTE SINTETICO',
+    solicitacaoId: null,
+    situacao: 'alem-do-horizonte',
+    programacaoDoMes: null,
+    saldoLivre: 500,
+    sugerido: 1100,
+    noRelatorio: false,
+    obs: '',
+    ...over,
+  });
+  const comPedidos = () =>
+    relatorio({
+      demandaComercial: { itens: [pedido()], totais: { abertas: 1, sugeridoKg: 1100 } },
+    });
+
+  function renderComPermissao(podeEditar: boolean) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <ForecastRelatorioCompras snapshotId={7} podeEditar={podeEditar} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('secao, resumo e paragrafo das regras aparecem com pedido aberto, depois da lista de compra', async () => {
+    get.mockResolvedValue({ data: comPedidos() });
+    renderComPermissao(false);
+    expect(await screen.findByText('1 demanda do comercial aberta (1.100 kg sugeridos)')).toBeTruthy();
+    const secao = screen.getByRole('region', { name: 'Demanda do comercial' });
+    expect(within(secao).getByText('Demanda do comercial · 1 pedido aberto')).toBeTruthy();
+    expect(within(secao).getByText('Além do horizonte: soma ao Forecast')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Demanda do comercial: compras pedidas pelo comercial para programações fora do horizonte. Soma ao Forecast o pedido menos o saldo que sobraria no mês da necessidade; dentro do horizonte de programação não soma (deve estar nas programações).',
+      ),
+    ).toBeTruthy();
+    // A secao vem depois das tabelas por urgencia/fonte.
+    const tabelas = Array.from(document.querySelectorAll('section.fcr-grupo'));
+    expect(tabelas.at(-1)).toBe(secao);
+  });
+
+  it('o item da lista de compra com pedido a somar ganha o selo, depois dos selos de media e antes da observacao', async () => {
+    const dados = relatorio({
+      demandaComercial: { itens: [pedido({ linha: 6, noRelatorio: true })], totais: { abertas: 1, sugeridoKg: 1100 } },
+    });
+    (dados.grupos[0]!.itens[1] as Record<string, unknown>).demandaComercialKg = 1100;
+    (dados.grupos[0]!.itens[1] as Record<string, unknown>).obs = 'OBS SINTETICA';
+    get.mockResolvedValue({ data: dados });
+    renderComPermissao(false);
+    await screen.findByText('3 itens em 2 fontes');
+    const selo = screen.getAllByText('+ 1.100 kg pedidos pelo comercial');
+    expect(selo).toHaveLength(1);
+    expect(selo[0]?.className).toBe('fcr-item__demanda');
+    const celula = selo[0]?.parentElement as HTMLElement;
+    expect(Array.from(celula.children).map((c) => c.className)).toEqual([
+      'fcr-item__nome',
+      'fcr-item__codigos',
+      'badge badge--warning',
+      'fcr-item__demanda',
+      'fcr-item__obs',
+    ]);
+  });
+
+  it('backend antigo ou sem pedido aberto: nada novo na tela (sem secao, sem linha no resumo e sem botao)', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    const { unmount } = renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByRole('region', { name: 'Demanda do comercial' })).toBeNull();
+    expect(screen.queryByText(/demandas? do comercial/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lançar demanda do comercial' })).toBeNull();
+    unmount();
+
+    // Backend novo sem pedido: so o botao (admin/comprador) aparece; a secao continua oculta.
+    get.mockResolvedValue({
+      data: relatorio({ demandaComercial: { itens: [], totais: { abertas: 0, sugeridoKg: 0 } } }),
+    });
+    renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByRole('region', { name: 'Demanda do comercial' })).toBeNull();
+    expect(screen.queryByText(/demandas? do comercial aberta/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Lançar demanda do comercial' })).toBeTruthy();
+  });
+
+  it('o botao "Lançar demanda do comercial" so aparece para quem pode editar', async () => {
+    get.mockResolvedValue({ data: comPedidos() });
+    const { unmount } = renderComPermissao(false);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.queryByRole('button', { name: 'Lançar demanda do comercial' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Ações' })).toBeNull();
+    unmount();
+
+    renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.getByRole('button', { name: 'Lançar demanda do comercial' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Ações' })).toBeTruthy();
+  });
+
+  it('o botao abre o dialogo de lancamento, Cancelar fecha e o foco volta ao botao', async () => {
+    get.mockImplementation(async (url: string) =>
+      url === '/v1/forecast/products' ? { data: [] } : { data: comPedidos() },
+    );
+    renderComPermissao(true);
+    await screen.findByText('3 itens em 2 fontes');
+    const botao = screen.getByRole('button', { name: 'Lançar demanda do comercial' });
+    botao.focus();
+    fireEvent.click(botao);
+    expect(await screen.findByRole('heading', { name: 'Lançar demanda do comercial' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Lançar demanda do comercial' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(botao));
   });
 });

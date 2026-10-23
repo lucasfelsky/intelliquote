@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FORECAST_SHEETS, FORECAST_TOO_LARGE_MESSAGE } from '../src/constants/forecast';
 import type { Quinzena } from '../src/utils/forecastTypes';
 import { hashPassword } from '../src/utils/password';
+import { forecastDbcorpConfirmSchema, forecastDbcorpPreviewSchema } from '../src/validators/forecast';
 
 // O arquivo faz dezenas de logins: sobe o limite do rate limit de /auth/login.
 vi.hoisted(() => {
@@ -19,6 +20,8 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     forecastSource: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     forecastProduct: { findMany: vi.fn() },
+    forecastAtypicalMonth: { findMany: vi.fn() },
+    forecastCommercialDemand: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn() },
     forecastSnapshot: { findMany: vi.fn(), findFirst: vi.fn() },
     forecastMonthlySale: { findMany: vi.fn() },
@@ -41,6 +44,8 @@ const prismaMock = prisma as unknown as {
   auditLog: { create: Mock };
   forecastSource: { findMany: Mock; findUnique: Mock; update: Mock };
   forecastProduct: { findMany: Mock };
+  forecastAtypicalMonth: { findMany: Mock };
+  forecastCommercialDemand: { findMany: Mock };
   forecastProductCode: { findMany: Mock };
   forecastSnapshot: { findMany: Mock; findFirst: Mock };
   forecastMonthlySale: { findMany: Mock };
@@ -254,6 +259,67 @@ describe('Forecast routes - validacao (Zod)', () => {
     expect(prismaMock.forecastProduct.findMany).not.toHaveBeenCalled();
   });
 
+  it('dbcorp: prazosEstimativa invalido -> 400 (preview e confirm), sem tocar no banco', async () => {
+    const cookies = await loginAs('comprador');
+    const prazo = (over: object = {}) => ({ sourceId: 1, prontidaoDias: 35, etdDias: 35, ...over });
+    const casos: Array<[string, unknown, RegExp]> = [
+      ['fonte repetida', [prazo(), prazo({ prontidaoDias: 20 })], /Fonte repetida/],
+      ['366 dias (prontidao)', [prazo({ prontidaoDias: 366 })], /no maximo 365/],
+      ['366 dias (etd)', [prazo({ etdDias: 366 })], /no maximo 365/],
+      ['dias negativos', [prazo({ etdDias: -1 })], /negativos/],
+      ['dias fracionarios', [prazo({ prontidaoDias: 12.5 })], /inteiro/],
+      ['dias em texto', [prazo({ prontidaoDias: '20' })], /inteiro/],
+      ['sourceId zero', [prazo({ sourceId: 0 })], /Fonte invalida/],
+      ['sourceId fracionario', [prazo({ sourceId: 1.5 })], /Fonte invalida/],
+      ['sem dias de ETD', [{ sourceId: 1, prontidaoDias: 35 }], /inteiro/],
+      ['nao e lista', { sourceId: 1 }, /./],
+      [
+        '501 fontes',
+        Array.from({ length: 501 }, (_, i) => prazo({ sourceId: i + 1 })),
+        /no maximo 500/,
+      ],
+    ];
+    for (const path of ['preview', 'confirm']) {
+      for (const [nome, prazosEstimativa, mensagem] of casos) {
+        const response = await request(app)
+          .post(`/api/v1/forecast/import/dbcorp/${path}`)
+          .set('Cookie', cookies)
+          .send({ ...validDbcorpBody, prazosEstimativa });
+        expect(response.status, `${path}: ${nome}`).toBe(400);
+        expect(response.body.message, `${path}: ${nome}`).toMatch(mensagem);
+      }
+    }
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProduct.findMany).not.toHaveBeenCalled();
+  });
+
+  it('dbcorp: prazosEstimativa valido (ou ausente) passa do Zod e o Zod NAO descarta o campo', async () => {
+    const cookies = await loginAs('admin');
+    const prazosEstimativa = [
+      { sourceId: 1, prontidaoDias: 0, etdDias: 365 },
+      { sourceId: 2, prontidaoDias: 20, etdDias: 35 },
+    ];
+    // Arquivos-lixo: passa da validacao e so falha na leitura do .xlsx (400 com outra mensagem).
+    for (const path of ['preview', 'confirm']) {
+      for (const body of [{ ...validDbcorpBody, prazosEstimativa }, validDbcorpBody, { ...validDbcorpBody, prazosEstimativa: [] }]) {
+        const response = await request(app)
+          .post(`/api/v1/forecast/import/dbcorp/${path}`)
+          .set('Cookie', cookies)
+          .send(body);
+        expect(response.status, path).toBe(400);
+        expect(response.body.message, path).toMatch(/invalido \(envie \.xlsx\)/);
+      }
+    }
+    // O schema compartilhado pelo preview e pelo confirm mantem a lista (o confirm repete o calculo do preview).
+    expect(forecastDbcorpPreviewSchema.parse({ ...validDbcorpBody, prazosEstimativa }).prazosEstimativa).toEqual(
+      prazosEstimativa,
+    );
+    expect(forecastDbcorpConfirmSchema.parse({ ...validDbcorpBody, prazosEstimativa }).prazosEstimativa).toEqual(
+      prazosEstimativa,
+    );
+    expect(forecastDbcorpPreviewSchema.parse(validDbcorpBody).prazosEstimativa).toBeUndefined();
+  });
+
   it('PATCH /sources/:id: id e corpo invalidos -> 400', async () => {
     const cookies = await loginAs('comprador');
     const patch = (path: string, body: unknown) =>
@@ -366,6 +432,8 @@ describe('Forecast routes - validacao (Zod)', () => {
 describe('Forecast routes - quinzena calculada', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Meses atipicos (PR 6c): sem marca por padrao.
+    prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
   });
 
   it('GET /snapshots/:id devolve as linhas do motor e a conferencia com o Excel', async () => {
@@ -417,6 +485,55 @@ describe('Forecast routes - quinzena calculada', () => {
     expect(data.conferencia.celulas).toBe(5 * 28);
     expect(data.conferencia.batem).toBe(data.conferencia.celulas);
     expect(data.conferencia.divergencias).toEqual([]);
+  });
+
+  it('mes atipico marcado: a linha usa a media sem o mes e a conferencia continua pela planilha (5 x 28)', async () => {
+    const cookies = await loginAs('viewer');
+    const produtos = fixture.produtos.slice(0, 5);
+    const linhasDe = new Set(produtos.map((p) => String(p.linha)));
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 7,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'planilha',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: produtos.map((p, i) => ({ ...p, productId: 100 + i })),
+      inputs: fixture.entradas,
+      expected: Object.fromEntries(Object.entries(fixture.esperado).filter(([linha]) => linhasDe.has(linha))),
+      files: [{ kind: 'planilha', fileName: 'quinzena.xlsx', sha256: 'abc', rows: 5 }],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+    // 2026-08 = N (indice 4) na quinzena 10-2; 2025-01 esta fora da janela (a marca continua gravada, sem efeito aqui).
+    prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([
+      { productId: 100, yearMonth: '2025-01', reason: 'MOTIVO ANTIGO SINTETICO' },
+      { productId: 100, yearMonth: '2026-08', reason: 'MOTIVO SINTETICO' },
+    ]);
+
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7?hoje=2026-10-20')
+      .set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+    const { data } = response.body;
+    expect(prismaMock.forecastAtypicalMonth.findMany).toHaveBeenCalledTimes(1);
+    const marcada = data.linhas[0];
+    expect(marcada.mesesForaDaMedia).toEqual([{ anoMes: '2026-08', motivo: 'MOTIVO SINTETICO', indice: 4 }]);
+    const [, , , M] = produtos[0].historico;
+    expect(marcada.Q).toBeCloseTo((M + marcada.O) / 2, 9);
+    expect(marcada.mediaAjustada).toMatchObject({ meses: [4], semMesValido: false });
+    expect(marcada.mediaAjustada.Q).toBeCloseTo((M + produtos[0].historico[4] + marcada.O) / 3, 9);
+    for (const outra of data.linhas.slice(1) as Array<{ mesesForaDaMedia: unknown[]; mediaAjustada?: unknown }>) {
+      expect(outra.mesesForaDaMedia).toEqual([]);
+      expect(outra.mediaAjustada).toBeUndefined();
+    }
+    // A conferencia compara com as medias da planilha: segue 100%, com marca no cadastro.
+    expect(data.conferencia.celulas).toBe(5 * 28);
+    expect(data.conferencia.batem).toBe(data.conferencia.celulas);
   });
 
   it('sem expected (origem dbcorp) a conferencia vem nula; 1a quinzena usa AG = Q', async () => {
@@ -495,6 +612,9 @@ describe('Forecast routes - quinzena calculada', () => {
 describe('Forecast routes - relatorio de compras', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
+    // Demanda do comercial (PR 6d): sem pedido aberto por padrao.
+    prismaMock.forecastCommercialDemand.findMany.mockResolvedValue([]);
     // O relatorio le a embalagem do cadastro por codigo (PR 2C); aqui nenhum codigo tem embalagem.
     prismaMock.forecastProductCode.findMany.mockResolvedValue([]);
     const produtos = fixture.produtos.slice(0, 5);
@@ -536,6 +656,58 @@ describe('Forecast routes - relatorio de compras', () => {
       expect(item.embalagem.usada).toBeNull();
     }
     expect(data.totais.semEmbalagem).toBe(data.totais.itens);
+  });
+
+  it('relatorio traz a secao Demanda do comercial com os pedidos abertos do cadastro (1 consulta)', async () => {
+    const cookies = await loginAs('viewer');
+    const [primeiro, ...resto] = fixture.produtos.slice(0, 5);
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      id: 7,
+      label: '10-2',
+      baseDate: new Date('2026-10-15T00:00:00.000Z'),
+      half: 2,
+      origin: 'dbcorp',
+      months: {
+        consumo: fixture.mesesConsumo,
+        chegada: fixture.mesesChegada,
+        programacao: fixture.mesesProgramacao,
+      },
+      products: [{ ...primeiro, productId: 31 }, ...resto],
+      inputs: fixture.entradas,
+      expected: null,
+      files: [],
+      createdAt: new Date('2026-10-20T12:00:00.000Z'),
+    });
+    prismaMock.forecastCommercialDemand.findMany.mockResolvedValue([
+      {
+        id: 4,
+        productId: 31,
+        quantityKg: '1000',
+        neededBy: new Date('2099-01-10T00:00:00.000Z'),
+        reason: 'MOTIVO SINTETICO',
+        customerName: 'CLIENTE SINTETICO',
+        commercialRequestId: 12,
+        product: { name: 'PRODUTO 001', source: { name: 'FONTE 001' } },
+      },
+    ]);
+    const response = await request(app)
+      .get('/api/v1/forecast/snapshots/7/relatorio-compras?hoje=2026-10-20')
+      .set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    const { demandaComercial } = response.body.data;
+    expect(demandaComercial.totais.abertas).toBe(1);
+    expect(demandaComercial.itens[0]).toMatchObject({
+      id: 4,
+      productId: 31,
+      kg: 1000,
+      necessidade: '2099-01-10',
+      situacao: 'alem-do-horizonte',
+      motivo: 'MOTIVO SINTETICO',
+      cliente: 'CLIENTE SINTETICO',
+      solicitacaoId: 12,
+    });
+    expect(prismaMock.forecastCommercialDemand.findMany).toHaveBeenCalledTimes(1);
+    expect(prismaMock.forecastCommercialDemand.findMany.mock.calls[0][0].where).toEqual({ status: 'aberta' });
   });
 
   it('a flag "nao fraciona" (coluna AX) chega ao relatorio como booleano', async () => {

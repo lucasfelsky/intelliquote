@@ -47,8 +47,10 @@ export function paragrafoUrgencia(diasCritico: number): string {
   return `Urgência: "Sem estoque agora" = a ruptura cai na data-base ou já passou na data de hoje; ${critica}"Atrasado" = a data-limite do pedido já passou; "No prazo" = o restante, inclusive sem ruptura em 6 meses. A lista segue essa ordem e, dentro de cada faixa, os dias até a ruptura e depois a data-limite.`;
 }
 
-export function textoMotivos(motivos: Array<'programacao' | 'estoque'>): string {
-  return motivos.map((m) => (m === 'programacao' ? 'tem programação' : 'tem estoque')).join(' · ');
+export function textoMotivos(motivos: Array<'programacao' | 'estoque'>, sobDemanda = false): string {
+  const textos: string[] = motivos.map((m) => (m === 'programacao' ? 'tem programação' : 'tem estoque'));
+  if (sobDemanda) textos.push('compra sob demanda');
+  return textos.join(' · ');
 }
 
 export function resumoSemConsumo(emAtencao: number, semMovimento: number): string {

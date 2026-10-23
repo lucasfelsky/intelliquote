@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import type { ForecastSourcePatchInput } from '../validators/forecast';
 import { HttpError } from '../utils/http';
+import type { MudancaDePrazo } from '../utils/forecastDbcorpRegras';
 import type { ForecastWorkbookSource } from '../utils/forecastWorkbook';
 import { normalizeSupplierName } from '../utils/supplierImport';
 import { AuditLogService } from './AuditLogService';
@@ -165,6 +166,29 @@ export class ForecastSourceService {
       }
     }
     return ids;
+  }
+
+  // Prazo das chegadas estimadas do FUP (PR 5A): o prazo usado no confirm da importacao DBCorp vira o padrao da fonte.
+  // Roda dentro da transacao do confirm; so as colunas que mudaram. Auditoria so com ids e nomes de campo (sem dias).
+  static async salvarPrazosChegada(
+    tx: Db,
+    mudancas: readonly MudancaDePrazo[],
+    userId: number | null,
+    label: string,
+  ): Promise<void> {
+    for (const { sourceId, ...dias } of mudancas) {
+      await tx.forecastSource.update({ where: { id: sourceId }, data: dias });
+      await AuditLogService.log(
+        {
+          entityType: ENTITY_TYPE,
+          entityId: sourceId,
+          action: 'update',
+          performedById: userId,
+          metadata: { source: 'dbcorp_import_prazo', label, campos: Object.keys(dias) },
+        },
+        tx,
+      );
+    }
   }
 
   static async list() {

@@ -18,6 +18,15 @@ import {
   type ForecastWorkbookBody,
 } from '@/services/forecast';
 import { inteiroBr } from './forecastPainel';
+import { inativosDosPendentes, useDialogoCompletar } from './ForecastPendentesCadastro';
+import ForecastPrazosPorFonte from './ForecastPrazosPorFonte';
+import {
+  corpoDosPrazos,
+  mesclarRascunho,
+  prazosMudaram,
+  type CampoPrazo,
+  type RascunhoPrazos,
+} from './forecastPrazosChegada';
 import ForecastResumoDbcorp from './ForecastResumoDbcorp';
 import ForecastResumoPlanilha from './ForecastResumoPlanilha';
 import {
@@ -31,7 +40,10 @@ import {
   rotuloDoSlot,
   slotsSemLinhasUteis,
   SLOTS_DBCORP,
+  textoEntendiProntidao,
 } from './forecastImport';
+import { mensagemCadastroNaPrevia, type EstadoPrevia } from './forecastPendentes';
+import type { ResultadoCadastro } from './ForecastCompletarCadastroModal';
 
 type Aba = 'planilha' | 'dbcorp';
 type Fase = 'lendo' | 'previa' | 'gravando' | null;
@@ -76,10 +88,17 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [entendi, setEntendi] = useState(false);
   const [entendiProntidao, setEntendiProntidao] = useState(false);
+  // Prazo por fonte (PR 5A): texto digitado na tabela do resumo (null = ainda nao ha previa) e quantos recalculos ja
+  // terminaram. O corpo da previa guarda os prazos APLICADOS; o rascunho so vira corpo ao recalcular.
+  const [rascunho, setRascunho] = useState<RascunhoPrazos | null>(null);
+  const [recalculos, setRecalculos] = useState(0);
   const [opcoes, setOpcoes] = useState<ForecastImportOptions>(OPCOES_INICIAIS);
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState('');
   const [fase, setFase] = useState<Fase>(null);
+  // Retorno do "Completar cadastro" dentro do import: o cadastro gravou e a pre-visualizacao roda de novo.
+  const [cadastro, setCadastro] = useState<{ resultado: ResultadoCadastro; estado: EstadoPrevia } | null>(null);
+  const cadastroRef = useRef<HTMLDivElement>(null);
   // Muda a `key` do <input type="file"> ao remover: o campo volta vazio e reescolher o mesmo arquivo dispara `change`.
   const [versoesInput, setVersoesInput] = useState<Record<string, number>>({});
   const emCurso = useRef(false);
@@ -90,12 +109,30 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     if (erro) erroRef.current?.scrollIntoView?.({ block: 'nearest' });
   }, [erro]);
 
+  // O botao do codigo some quando ele sai da lista: o foco vai para a mensagem de retorno (aria-live).
+  useEffect(() => {
+    if (cadastro?.estado === 'atualizando') cadastroRef.current?.focus();
+  }, [cadastro?.estado]);
+
   const rotulo = rotuloDaQuinzena(baseDate, quinzena);
   const rotuloExiste = rotulo !== '' && quinzenasExistentes.includes(rotulo);
   const ocupado = fase !== null;
 
-  const descartar = () => {
+  // A nova pre-visualizacao pos-cadastro falhou: a previa antiga ainda lista como FORA o codigo que acabou de ser
+  // cadastrado e o confirm (que re-le os arquivos) ja o incluiria. Descarta a previa e as caixas "Entendi".
+  useEffect(() => {
+    if (cadastro?.estado !== 'falhou') return;
     setPrevia(null);
+    setRascunho(null);
+    setEntendi(false);
+    setEntendiProntidao(false);
+  }, [cadastro?.estado]);
+
+  const descartar = () => {
+    setCadastro(null);
+    setPrevia(null);
+    setRascunho(null);
+    setRecalculos(0);
     setEntendi(false);
     setEntendiProntidao(false);
     setErro('');
@@ -110,6 +147,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const aoFalhar = {
     onError: (err: unknown) => {
       setErro(forecastImportErrorMessage(err, rotulo));
+      setCadastro((c) => (c?.estado === 'atualizando' ? { ...c, estado: 'falhou' } : c));
       avisarSeInconclusivo(err);
     },
     onSettled: () => {
@@ -129,14 +167,37 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
         setFase('previa');
         return { aba: 'planilha', corpo, resumo: await previewForecastWorkbook(corpo) };
       }
-      const corpo = await lerCorpoDbcorp(relatorios, rotulo, baseDate);
+      // Pre-visualizar de novo com a tabela de prazos ja aplicada (ex.: apos completar o cadastro): mesmos prazos.
+      const aplicados = previa?.aba === 'dbcorp' ? previa.corpo.prazosEstimativa : undefined;
+      const corpo = await lerCorpoDbcorp(relatorios, rotulo, baseDate, aplicados);
       setFase('previa');
       return { aba: 'dbcorp', corpo, resumo: await previewForecastDbcorp(corpo) };
     },
     onSuccess: (pronta) => {
       setPrevia(pronta);
+      guardarRascunho(pronta);
+      // Previa completa nova: a mensagem "recalculada" (e o foco nela) valia so para o recalculo anterior.
+      setRecalculos(0);
       setEntendi(false);
       setEntendiProntidao(false);
+      // 'falhou' tambem sai do estado: a previa nova e valida e a faixa de "previa descartada" nao pode ficar ao lado dela.
+      setCadastro((c) => (c && c.estado !== 'atualizada' ? { ...c, estado: 'atualizada' } : c));
+    },
+    ...aoFalhar,
+  });
+
+  // Recalcula a pre-visualizacao com os prazos digitados reaproveitando o corpo JA LIDO (nenhum arquivo e relido). As
+  // caixas "Entendi" dependem dos arquivos, nao dos dias: ficam como estao.
+  const recalcular = useMutation({
+    gcTime: 0,
+    mutationFn: async (corpo: ForecastDbcorpBody): Promise<Previa> => {
+      setFase('previa');
+      return { aba: 'dbcorp', corpo, resumo: await previewForecastDbcorp(corpo) };
+    },
+    onSuccess: (pronta) => {
+      setPrevia(pronta);
+      guardarRascunho(pronta);
+      setRecalculos((n) => n + 1);
     },
     ...aoFalhar,
   });
@@ -160,6 +221,12 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     },
     ...aoFalhar,
   });
+
+  // Previa nova: fonte ja editada mantem o texto digitado; fonte nova entra com o prazo usado.
+  function guardarRascunho(pronta: Previa) {
+    const prazos = pronta.aba === 'dbcorp' ? pronta.resumo.prazosEstimativa : null;
+    setRascunho((atual) => (prazos ? mesclarRascunho(atual, prazos) : null));
+  }
 
   const historicoGravavel = (r: ForecastImportSummary) => r.historico.linhas > 0 && r.historico.yearMonth !== null;
   function opcoesEfetivas(r: ForecastImportSummary): ForecastImportOptions {
@@ -205,6 +272,32 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     previsualizar.mutate();
   };
 
+  // Cadastro gravado: pre-visualiza de novo com os MESMOS arquivos (o backend re-le; nada vem do cliente).
+  const dialogo = useDialogoCompletar((resultado) => {
+    if (emCurso.current) return;
+    emCurso.current = true;
+    setErro('');
+    setCadastro({ resultado, estado: 'atualizando' });
+    setFase('lendo');
+    previsualizar.mutate();
+  });
+
+  const aoRecalcular = () => {
+    if (emCurso.current || previa?.aba !== 'dbcorp' || !rascunho) return;
+    const prazos = previa.resumo.prazosEstimativa;
+    const corpoPrazos = prazos ? corpoDosPrazos(rascunho, prazos) : null;
+    if (!corpoPrazos) return;
+    emCurso.current = true;
+    setErro('');
+    setFase('previa');
+    recalcular.mutate({ ...previa.corpo, prazosEstimativa: corpoPrazos });
+  };
+
+  const mudarPrazo = (sourceId: number, campo: CampoPrazo, texto: string) =>
+    setRascunho((atual) =>
+      atual && atual[sourceId] ? { ...atual, [sourceId]: { ...atual[sourceId], [campo]: texto } } : atual,
+    );
+
   const aoConfirmar = () => {
     if (emCurso.current || !previa) return;
     emCurso.current = true;
@@ -215,13 +308,16 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
 
   const semLinhas = previa?.aba === 'dbcorp' ? slotsSemLinhasUteis(previa.resumo) : [];
   const prontidao = previa?.aba === 'dbcorp' ? prontidaoPendente(previa.resumo) : null;
+  const prazos = previa?.aba === 'dbcorp' ? (previa.resumo.prazosEstimativa ?? null) : null;
+  const prazosEditados = prazos !== null && prazosMudaram(rascunho, prazos);
   const efetivas = previa?.aba === 'planilha' ? opcoesEfetivas(previa.resumo) : null;
   const nenhumaOpcao = efetivas !== null && !efetivas.atualizarCadastro && !efetivas.gravarHistorico && !efetivas.criarQuinzena;
   const confirmarBloqueado =
     !previa ||
     previa.resumo.erros.length > 0 ||
     nenhumaOpcao ||
-    (previa.aba === 'dbcorp' && (rotuloExiste || (semLinhas.length > 0 && !entendi) || (prontidao !== null && !entendiProntidao)));
+    (previa.aba === 'dbcorp' &&
+      (rotuloExiste || (semLinhas.length > 0 && !entendi) || (prontidao !== null && !entendiProntidao) || prazosEditados));
   const rotuloDoBotao =
     fase === 'lendo' ? 'Lendo arquivos…' : fase === 'previa' ? 'Pré-visualizando…' : fase === 'gravando' ? 'Gravando…' : null;
 
@@ -349,7 +445,29 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
             {faltas.length > 0 && <p className="fci-faltam">Faltam: {faltas.join(', ')}</p>}
 
             {previa?.aba === 'planilha' && <ForecastResumoPlanilha resumo={previa.resumo} />}
-            {previa?.aba === 'dbcorp' && <ForecastResumoDbcorp resumo={previa.resumo} />}
+            {cadastro && (
+              <div ref={cadastroRef} className="alert alert--success" role="status" tabIndex={-1}>
+                {mensagemCadastroNaPrevia(cadastro.resultado, cadastro.estado)}
+              </div>
+            )}
+            {previa?.aba === 'dbcorp' && (
+              <ForecastResumoDbcorp
+                resumo={previa.resumo}
+                onCompletar={dialogo.abrir}
+                prazos={
+                  prazos && rascunho ? (
+                    <ForecastPrazosPorFonte
+                      prazos={prazos}
+                      rascunho={rascunho}
+                      onMudar={mudarPrazo}
+                      onRecalcular={aoRecalcular}
+                      ocupado={ocupado}
+                      recalculos={recalculos}
+                    />
+                  ) : undefined
+                }
+              />
+            )}
 
             {previa?.aba === 'planilha' && efetivas && (
               <fieldset className="fci-opcoes" disabled={ocupado}>
@@ -394,10 +512,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                   disabled={ocupado}
                   onChange={(e) => setEntendiProntidao(e.target.checked)}
                 />
-                <span>
-                  Entendi que {inteiroBr(prontidao.linhas)} linhas ({inteiroBr(prontidao.kg)} kg) do FUP com DATA PRONTIDÃO
-                  não reconhecida ficam fora das chegadas.
-                </span>
+                <span>{textoEntendiProntidao(prontidao, inteiroBr)}</span>
               </label>
             )}
 
@@ -420,6 +535,11 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
               )}
             </div>
           </>
+        )}
+        {dialogo.renderizar(
+          previa?.aba === 'dbcorp' && previa.resumo.pendentes
+            ? inativosDosPendentes(previa.resumo.pendentes.itens)
+            : undefined,
         )}
       </div>
     </Modal>

@@ -3,6 +3,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
+import { ForecastSourceService } from '../src/services/ForecastSourceService';
 import { hashPassword } from '../src/utils/password';
 
 const testDbSkip = process.env.RUN_DB_TESTS !== 'true' ? it.skip : it;
@@ -89,6 +90,26 @@ const fupRow = (status: string, codigo: string, kg: number, etd: Cell, eta: Cell
   eta,
   etaFinal,
 ];
+
+// FUP do prazo por fonte (PR 5A): so linhas que dependem do prazo. A1 pertence a fonte do teste; B1 (produto sem fonte)
+// e o codigo sem produto caem em "Sem fonte" (padrao 35).
+const FUP_PRAZO_HEADERS = [...FUP_HEADERS, 'DATA PO', 'DATA PRONTIDÃO'];
+async function fupPrazos() {
+  const row = (status: string, codigo: string, kg: number, etd: Cell, prontidao: Cell): Cell[] => [
+    ...fupRow(status, codigo, kg, etd, VAZIO, VAZIO),
+    null,
+    prontidao,
+  ];
+  return file(
+    'fup.xlsx',
+    await xlsxBase64(FUP_PRAZO_HEADERS, [
+      row('AG. EMBARQUE', CODE_A1, 400, d('2033-09-30'), null), // ETD + 35 = 2033-11-04
+      row('AG. EMBARQUE', CODE_B1, 90, d('2033-09-30'), null),
+      row('AG. EMBARQUE', CODE_SEM_PRODUTO, 10, d('2033-09-30'), null),
+      row('AG. PRONT. DA CARGA', CODE_A1, 200, VAZIO, '2033-10-01'), // + 35 = 2033-11-05
+    ]),
+  );
+}
 
 async function reports(options: { vendasMes?: Cell[][]; withVendasAtual?: boolean } = {}) {
   const files: Record<string, { fileName: string; contentBase64: string }> = {
@@ -363,6 +384,8 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
       excluidasEtaFinal: 0,
       prontidaoNaoReconhecida: 0,
       semData: 1,
+      fontesComPrazoProprio: 0,
+      padroesAlterados: 0,
     });
     const auditSales = audits.find((l) => l.entityType === 'forecast_sales' && l.entityId === ANTERIOR)!;
     expect(auditSales.action).toBe('replace_month');
@@ -448,5 +471,210 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
       (l) => l.productId === productA.id,
     )!;
     expect(a.AG).toBe(a.Q);
+  });
+
+  // --- Prazo das chegadas estimadas por fonte (PR 5A) ---------------------------------------------------
+
+  const BASE_PRAZO = '2033-09-15';
+  const LABEL_PRAZO = '09-2';
+  const prazoDaFonte = () =>
+    prisma.forecastSource.findUniqueOrThrow({
+      where: { id: sourceId },
+      select: { arrivalFromReadinessDays: true, arrivalFromEtdDays: true, updatedAt: true },
+    });
+  const auditoriasDePrazo = async () =>
+    (await prisma.auditLog.findMany({ where: { performedById: adminId, entityType: 'forecast_source' } })).filter(
+      (l) => (l.metadata as { source?: string } | null)?.source === 'dbcorp_import_prazo',
+    );
+  const corpoPrazo = async (prazosEstimativa?: unknown, label = LABEL_PRAZO, baseDate = BASE_PRAZO) => ({
+    label,
+    baseDate,
+    files: { ...(await reports({ withVendasAtual: label.endsWith('-2') })), fup: await fupPrazos() },
+    ...(prazosEstimativa === undefined ? {} : { prazosEstimativa }),
+  });
+
+  testDbSkip('prazo por fonte: preview sem prazos abre no padrao 35, liga o FUP a fonte pelo codigo e nao duplica avisos', async () => {
+    const res = await post('preview', await corpoPrazo());
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.erros).toEqual([]);
+    expect(data.prazosEstimativa).toEqual({
+      padrao: { prontidaoDias: 35, etdDias: 35 },
+      fontes: [
+        {
+          sourceId,
+          nome: SOURCE_NAME,
+          salvo: { prontidaoDias: null, etdDias: null },
+          usado: { prontidaoDias: 35, etdDias: 35 },
+          prontidao: { linhas: 1, kg: 200 },
+          etd: { linhas: 1, kg: 400 },
+        },
+      ],
+      semFonte: { prontidao: { linhas: 0, kg: 0 }, etd: { linhas: 2, kg: 100 } },
+      padroesAlterados: 0,
+    });
+    expect(data.relatorios.fup.estimadasPorEtd).toEqual({ linhas: 3, kg: 500 });
+    expect(data.relatorios.fup.estimadasPorProntidao).toEqual({ linhas: 1, kg: 200 });
+    // Campos internos do servico nao vazam para a resposta.
+    for (const campo of ['fupLinhas', 'avisosColuna', 'estimadasPorFonte', 'comprasEmAberto', 'linhas']) {
+      expect(data.relatorios.fup[campo], campo).toBeUndefined();
+    }
+    // O FUP e calculado duas vezes no servidor (padrao no parse, final com as fontes): cada aviso aparece UMA vez.
+    const estimadas = (data.avisos as string[]).filter((a) => a.includes('(ESTIMADA)'));
+    expect(estimadas).toEqual([
+      'FUP: 1 linha (200 kg) sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + 35 dias (ESTIMADA).',
+      'FUP: 3 linhas (500 kg) sem ETA (CHEGADA) usaram ETD (EMBARQUE) + 35 dias (ESTIMADA).',
+    ]);
+    expect((data.avisos as string[]).filter((a) => a.includes('coluna "DATA')).length).toBe(0);
+    expect(data.relatorios.fup.regra).toMatchObject({ etaPorEtdDias: 35, etaPorProntidaoDias: 35, prazoPorFonte: true });
+  });
+
+  testDbSkip('prazo por fonte: preview com prazos recalcula, nao grava nada e o corpo vence o padrao', async () => {
+    const antes = await prazoDaFonte();
+    const auditoriasAntes = (await auditoriasDePrazo()).length;
+    const res = await post('preview', await corpoPrazo([{ sourceId, prontidaoDias: 60, etdDias: 20 }]));
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.prazosEstimativa.fontes[0]).toMatchObject({
+      sourceId,
+      salvo: { prontidaoDias: null, etdDias: null },
+      usado: { prontidaoDias: 60, etdDias: 20 },
+    });
+    expect(data.prazosEstimativa.padroesAlterados).toBe(1);
+    // O conjunto de linhas da tabela nao muda ao editar os dias.
+    expect(data.prazosEstimativa.fontes[0]).toMatchObject({ prontidao: { linhas: 1, kg: 200 }, etd: { linhas: 1, kg: 400 } });
+    const estimadas = (data.avisos as string[]).filter((a) => a.includes('(ESTIMADA)'));
+    expect(estimadas).toEqual([
+      'FUP: 1 linha (200 kg) sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + prazo da fonte (padrão 35 dias; 1 fonte com prazo próprio) (ESTIMADA).',
+      'FUP: 3 linhas (500 kg) sem ETA (CHEGADA) usaram ETD (EMBARQUE) + prazo da fonte (padrão 35 dias; 1 fonte com prazo próprio) (ESTIMADA).',
+    ]);
+    // Preview nunca grava: nem a coluna, nem auditoria, nem snapshot.
+    expect(await prazoDaFonte()).toEqual(antes);
+    expect((await auditoriasDePrazo()).length).toBe(auditoriasAntes);
+    expect(await prisma.forecastSnapshot.count({ where: { label: LABEL_PRAZO, createdById: adminId } })).toBe(0);
+  });
+
+  testDbSkip('prazo por fonte: confirm usa o corpo, grava so o que mudou como padrao da fonte e audita ids e contagens', async () => {
+    const res = await post('confirm', await corpoPrazo([{ sourceId, prontidaoDias: 60, etdDias: 20 }]));
+    expect(res.status).toBe(201);
+
+    const fonte = await prazoDaFonte();
+    expect(fonte).toMatchObject({ arrivalFromReadinessDays: 60, arrivalFromEtdDays: 20 });
+
+    const snapshot = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: res.body.data.snapshotId } });
+    // chegadas congeladas com o prazo da fonte: A1 ETD 2033-09-30 + 20 = 2033-10-20; prontidao 2033-10-01 + 60 = 2033-11-30;
+    // sem fonte (B1, codigo sem produto): ETD + 35 = 2033-11-04.
+    const chegadas = (snapshot.inputs as unknown as { chegadas: Array<{ codigo: string; qtd: number; mes: string; estimada?: string }> })
+      .chegadas;
+    expect(chegadas).toEqual([
+      { codigo: CODE_A1, qtd: 400, mes: '10', estimada: 'etd' },
+      { codigo: CODE_B1, qtd: 90, mes: '11', estimada: 'etd' },
+      { codigo: CODE_SEM_PRODUTO, qtd: 10, mes: '11', estimada: 'etd' },
+      { codigo: CODE_A1, qtd: 200, mes: '11', estimada: 'prontidao' },
+    ]);
+    const filesDoSnapshot = snapshot.files as unknown as Array<{
+      kind: string;
+      rows: number;
+      estimativa?: { padrao: unknown; porFonte: unknown[] };
+    }>;
+    const fup = filesDoSnapshot.find((f) => f.kind === 'fup')!;
+    expect(fup.rows).toBe(4); // as usadas do calculo FINAL
+    expect(fup.estimativa).toEqual({
+      padrao: { prontidaoDias: 35, etdDias: 35 },
+      porFonte: [{ sourceId, nome: SOURCE_NAME, prontidaoDias: 60, etdDias: 20 }],
+    });
+    expect(filesDoSnapshot.filter((f) => f.kind !== 'fup').every((f) => f.estimativa === undefined)).toBe(true);
+
+    const auditorias = await auditoriasDePrazo();
+    expect(auditorias).toHaveLength(1);
+    expect(auditorias[0]).toMatchObject({ action: 'update', entityId: String(sourceId) });
+    expect(auditorias[0].metadata).toEqual({
+      source: 'dbcorp_import_prazo',
+      label: LABEL_PRAZO,
+      campos: ['arrivalFromReadinessDays', 'arrivalFromEtdDays'],
+    });
+    const audit = (await prisma.auditLog.findMany({ where: { performedById: adminId, entityType: 'forecast_snapshot' } })).find(
+      (l) => l.entityId === String(snapshot.id),
+    )!;
+    expect((audit.metadata as { fup: unknown }).fup).toEqual({
+      regra: 'F3',
+      estimadasEtd: 3,
+      estimadasProntidao: 1,
+      excluidasAtracadas: 0,
+      excluidasEtaFinal: 0,
+      prontidaoNaoReconhecida: 0,
+      semData: 0,
+      fontesComPrazoProprio: 1,
+      padroesAlterados: 1,
+    });
+  });
+
+  testDbSkip('prazo por fonte: a proxima pre-visualizacao abre com o padrao salvo; o corpo ainda vence', async () => {
+    const aberta = await post('preview', await corpoPrazo(undefined, LABEL_2, BASE_DATE_2));
+    expect(aberta.status).toBe(200);
+    expect(aberta.body.data.prazosEstimativa.fontes[0]).toMatchObject({
+      sourceId,
+      salvo: { prontidaoDias: 60, etdDias: 20 },
+      usado: { prontidaoDias: 60, etdDias: 20 },
+    });
+    expect(aberta.body.data.prazosEstimativa.padroesAlterados).toBe(0);
+
+    const volta = await post('preview', await corpoPrazo([{ sourceId, prontidaoDias: 35, etdDias: 20 }], LABEL_2, BASE_DATE_2));
+    expect(volta.body.data.prazosEstimativa.fontes[0]).toMatchObject({
+      salvo: { prontidaoDias: 60, etdDias: 20 },
+      usado: { prontidaoDias: 35, etdDias: 20 },
+    });
+    // 35 difere do salvo 60: sera gravado; o ETD (20 = salvo) nao.
+    expect(volta.body.data.prazosEstimativa.padroesAlterados).toBe(1);
+  });
+
+  testDbSkip('prazo por fonte: confirm com os mesmos prazos ja salvos nao grava nem audita de novo', async () => {
+    const antes = await prazoDaFonte();
+    const auditoriasAntes = (await auditoriasDePrazo()).length;
+    const res = await post(
+      'confirm',
+      await corpoPrazo([{ sourceId, prontidaoDias: 60, etdDias: 20 }], '07-1', '2033-07-05'),
+    );
+    expect(res.status).toBe(201);
+    expect(await prazoDaFonte()).toEqual(antes);
+    expect((await auditoriasDePrazo()).length).toBe(auditoriasAntes);
+  });
+
+  testDbSkip('prazo por fonte: o import da PLANILHA (ForecastSourceService.apply) nao zera os prazos salvos', async () => {
+    const draft = {
+      name: SOURCE_NAME,
+      normalizedName: SOURCE_NAME,
+      readinessDays: 7,
+      holidaysDays: 0,
+      shippingDays: 3,
+      transitDays: 30,
+      clearanceDays: 5,
+      total: 45,
+    };
+    const plano = await ForecastSourceService.plan(prisma, [draft]);
+    expect(plano.items[0].change).toBe('alterada');
+    await prisma.$transaction((tx) => ForecastSourceService.apply(tx, plano, adminId));
+    const fonte = await prisma.forecastSource.findUniqueOrThrow({ where: { id: sourceId } });
+    expect(fonte).toMatchObject({ leadTimeDays: 45, readinessDays: 7, arrivalFromReadinessDays: 60, arrivalFromEtdDays: 20 });
+  });
+
+  testDbSkip('prazo por fonte: fonte inexistente ou inativa no corpo -> 400 (preview e confirm), sem snapshot', async () => {
+    const inativa = await prisma.forecastSource.create({
+      data: { name: `${SOURCE_NAME} INATIVA`, normalizedName: `${SOURCE_NAME} INATIVA`, isActive: false },
+    });
+    try {
+      for (const id of [inativa.id, 2_000_000_000]) {
+        const prazos = [{ sourceId: id, prontidaoDias: 10, etdDias: 10 }];
+        const preview = await post('preview', await corpoPrazo(prazos));
+        expect(preview.status).toBe(400);
+        expect(preview.body.message).toBe(`A fonte ${id} do prazo não existe ou está inativa. Pré-visualize de novo.`);
+        const confirm = await post('confirm', await corpoPrazo(prazos, '08-1', '2033-08-05'));
+        expect(confirm.status).toBe(400);
+        expect(confirm.body.message).toMatch(/não existe ou está inativa/);
+      }
+      expect(await prisma.forecastSnapshot.count({ where: { label: '08-1', createdById: adminId } })).toBe(0);
+    } finally {
+      await prisma.forecastSource.delete({ where: { id: inativa.id } });
+    }
   });
 });

@@ -12,7 +12,7 @@ import {
   type ForecastEmbalagensPatch,
 } from '@/services/forecastEmbalagens';
 import { dataBr, kgBr } from './forecastPainel';
-import { lerQuantidadeKg, montarPatch, quantidadeParaCampo } from './forecastEmbalagens';
+import { avisoDoPallet, erroDoPallet, lerPalletKg, lerQuantidadeKg, montarPatch, quantidadeParaCampo } from './forecastEmbalagens';
 
 interface Props {
   productId: number;
@@ -27,6 +27,10 @@ function origemTexto(c: ForecastEmbalagemCodigo): string {
   if (!c.origem) return '—';
   return c.atualizadoEm ? `${ORIGEM_ROTULO[c.origem]} · ${dataBr(c.atualizadoEm)}` : ORIGEM_ROTULO[c.origem];
 }
+
+// Valor lido do campo de pallet (vazio = sem pallet); invalido nunca chega aqui (bloqueia o Salvar antes).
+const palletValor = (lida: ReturnType<typeof lerPalletKg> | undefined): number | null =>
+  lida?.ok ? lida.valor : null;
 
 function CodigoCelula({ c, usada }: { c: ForecastEmbalagemCodigo; usada: boolean }) {
   return (
@@ -49,6 +53,9 @@ function Leitura({ dados }: { dados: ForecastEmbalagens }) {
             <th scope="col" className="fce-num">
               Quantidade (kg)
             </th>
+            <th scope="col" className="fce-num">
+              Pallet (kg)
+            </th>
             <th scope="col">Rótulo</th>
             <th scope="col">Principal</th>
             <th scope="col">Origem</th>
@@ -62,6 +69,7 @@ function Leitura({ dados }: { dados: ForecastEmbalagens }) {
                 <CodigoCelula c={c} usada={c.id === dados.usadaCodigoId} />
               </td>
               <td className="fce-num">{c.quantidadeKg === null ? '—' : `${kgBr(c.quantidadeKg)} kg`}</td>
+              <td className="fce-num">{c.palletKg == null ? '—' : `${kgBr(c.palletKg)} kg`}</td>
               <td>{c.rotulo ?? '—'}</td>
               <td>{c.principal ? 'Sim' : '—'}</td>
               <td className="fce-origem">{origemTexto(c)}</td>
@@ -87,6 +95,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
   const [textos, setTextos] = useState<Record<number, string>>(() =>
     Object.fromEntries(dados.codigos.map((c) => [c.id, quantidadeParaCampo(c.quantidadeKg)])),
   );
+  const [pallets, setPallets] = useState<Record<number, string>>(() =>
+    Object.fromEntries(dados.codigos.map((c) => [c.id, quantidadeParaCampo(c.palletKg ?? null)])),
+  );
   const [rotulos, setRotulos] = useState<Record<number, string>>(() =>
     Object.fromEntries(dados.codigos.map((c) => [c.id, c.rotulo ?? ''])),
   );
@@ -95,8 +106,24 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
   );
 
   const lidas = dados.codigos.map((c) => ({ c, lida: lerQuantidadeKg(textos[c.id] ?? '') }));
-  const temErro = lidas.some((l) => !l.lida.ok);
   const quantidadePorId = new Map(lidas.map((l) => [l.c.id, l.lida.ok ? l.lida.valor : undefined] as const));
+  // Pallet: so vale com quantidade valida; o erro (formato ou sem quantidade) bloqueia e aparece no proprio campo.
+  // "Nao e multiplo da embalagem" e so AVISO (nao bloqueia o Salvar).
+  const palletsLidos = new Map(
+    dados.codigos.map((c) => {
+      const lida = lerPalletKg(pallets[c.id] ?? '');
+      const quantidade = quantidadePorId.get(c.id);
+      const erro = !lida.ok
+        ? lida.erro
+        : typeof quantidade === 'number' && lida.valor !== null
+          ? erroDoPallet(quantidade, lida.valor)
+          : null;
+      const aviso =
+        lida.ok && typeof quantidade === 'number' && lida.valor !== null ? avisoDoPallet(quantidade, lida.valor) : null;
+      return [c.id, { lida, erro, aviso }] as const;
+    }),
+  );
+  const temErro = lidas.some((l) => !l.lida.ok) || [...palletsLidos.values()].some((p) => p.erro !== null);
   // A principal precisa de quantidade: sem ela (campo vazio ou invalido) deixa de valer.
   const principal =
     principalEscolhida !== null && typeof quantidadePorId.get(principalEscolhida) === 'number'
@@ -109,6 +136,8 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
           codigoId: c.id,
           quantidadeKg: lida.ok ? lida.valor : c.quantidadeKg,
           rotulo: rotulos[c.id] ?? null,
+          // Sem quantidade o pallet some junto (o servidor tambem apaga).
+          palletKg: !lida.ok || lida.valor === null ? null : palletValor(palletsLidos.get(c.id)?.lida),
         })),
         principalCodigoId: principal,
       });
@@ -131,6 +160,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
               <th scope="col" className="fce-num">
                 Quantidade (kg)
               </th>
+              <th scope="col" className="fce-num">
+                Pallet (kg)
+              </th>
               <th scope="col">Rótulo</th>
               <th scope="col">Principal</th>
               <th scope="col">Origem</th>
@@ -139,6 +171,10 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
           <tbody>
             {lidas.map(({ c, lida }) => {
               const erroId = `${baseId}-erro-${c.id}`;
+              const erroPalletId = `${baseId}-erro-pallet-${c.id}`;
+              const avisoPalletId = `${baseId}-aviso-pallet-${c.id}`;
+              const erroPallet = palletsLidos.get(c.id)?.erro ?? null;
+              const avisoPallet = palletsLidos.get(c.id)?.aviso ?? null;
               const semQuantidade = typeof quantidadePorId.get(c.id) !== 'number';
               return (
                 <tr key={c.id}>
@@ -164,9 +200,36 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                       </p>
                     )}
                   </td>
+                  <td className="fce-num">
+                    <input
+                      className="input fce-input-qtd"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={semQuantidade ? '' : (pallets[c.id] ?? '')}
+                      onChange={(e) => setPallets((p) => ({ ...p, [c.id]: e.target.value }))}
+                      aria-label={`Pallet em kg do código ${c.codigo}`}
+                      aria-invalid={erroPallet !== null}
+                      aria-describedby={
+                        erroPallet !== null ? erroPalletId : avisoPallet !== null ? avisoPalletId : undefined
+                      }
+                      disabled={pendente || semQuantidade}
+                    />
+                    {erroPallet !== null && (
+                      <p className="fce-erro" id={erroPalletId}>
+                        {erroPallet}
+                      </p>
+                    )}
+                    <div aria-live="polite">
+                      {avisoPallet !== null && (
+                        <p className="fce-aviso" id={avisoPalletId}>
+                          {avisoPallet}
+                        </p>
+                      )}
+                    </div>
+                  </td>
                   <td>
                     <input
-                      className="input"
+                      className="input fce-input-rotulo"
                       maxLength={60}
                       autoComplete="off"
                       value={rotulos[c.id] ?? ''}
@@ -202,6 +265,11 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
         />
         Nenhuma (usa o primeiro código)
       </label>
+      <p className="fce-dica">
+        Pallet = kg de UM pallet da embalagem (ex.: 24 bombonas de 25 kg = 600 kg). É uma opção de compra informada
+        pelo cadastro, não uma regra: pode não ser múltiplo da embalagem. O relatório mostra os pallets abaixo e
+        acima da quantidade sugerida.
+      </p>
       <p className="fce-dica">
         Valor editado manualmente pode ser substituído quando a integração com o DBCorp estiver ativa.
       </p>

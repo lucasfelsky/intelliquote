@@ -1,7 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { FORECAST_MAX_DIVERGENCES } from '../constants/forecast';
+import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
+import { gruposDasLinhas } from '../utils/forecastGruposEquivalencia';
+import { mapaForaDaMedia, marcasNaJanela } from '../utils/forecastMesesAtipicos';
+import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
 import {
   montarRelatorioCompras,
@@ -14,7 +17,18 @@ import {
 } from '../utils/forecastRelatorioComprasXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
+import { ForecastDemandaComercialService } from './ForecastDemandaComercialService';
+import { ForecastGrupoEquivalenciaService } from './ForecastGrupoEquivalenciaService';
+import { ForecastMesesAtipicosService } from './ForecastMesesAtipicosService';
 import { ForecastProductService } from './ForecastProductService';
+import { ForecastSobDemandaService } from './ForecastSobDemandaService';
+
+export interface ForecastPendentesData extends PendentesResultado {
+  // false = quinzena da planilha: nao ha relatorio DBCorp para comparar com o cadastro.
+  aplicavel: boolean;
+  snapshotId: number;
+  label: string;
+}
 
 type Db = Prisma.TransactionClient;
 
@@ -30,6 +44,12 @@ export interface SnapshotFileInfo {
   rows: number;
   // Regra do FUP aplicada (ex.: 'F3'); ausente = D2 (quinzenas antigas).
   regra?: string;
+  // So no arquivo 'fup' (PR 5A): prazo das chegadas estimadas usado no calculo, por fonte (so as fontes com linha
+  // estimada). Ausente = 35 dias para todas.
+  estimativa?: {
+    padrao: { prontidaoDias: number; etdDias: number };
+    porFonte: Array<{ sourceId: number; nome: string; prontidaoDias: number; etdDias: number }>;
+  };
 }
 
 interface SnapshotMonths {
@@ -49,7 +69,8 @@ export interface ForecastConferencia {
 // Conferencia motor x valores que o Excel gravou. Compara SEMPRE com a regra da planilha (AG = maior
 // entre Q e P, quinzena 2) e a regra AL da planilha (sem somar a chegada do 5o mes): o Excel nao conhece
 // a regra "1a quinzena" nem a regra AL do Comex, entao comparar com elas geraria divergencia que nao e
-// erro do motor.
+// erro do motor. Pelo mesmo motivo NAO passa `mesesForaDaMedia` (PR 6c): a marca de mes atipico e decisao do Comex, nao
+// do Excel; a conferencia continua sobre as medias da planilha, com ou sem marcas no cadastro.
 export function conferenciaDaQuinzena(q: Quinzena, hoje: string): ForecastConferencia {
   const linhas = calcular(q, { hoje, quinzena: 2, somarChegada5oMes: false });
   const resultado = conferir(q, linhas);
@@ -161,8 +182,21 @@ export class ForecastSnapshotService {
 
     const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
     const half: 1 | 2 = snapshot.half === 1 ? 1 : 2;
-    const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half });
     const produtoPorLinha = new Map(produtos.map((p) => [p.linha, p]));
+    const productIds = produtos.flatMap((p) => (p.productId != null ? [p.productId] : []));
+    // Compra sob demanda: marca do cadastro ATUAL (nao congelada na quinzena), 1 consulta por produto.
+    const sobDemanda = await ForecastSobDemandaService.regrasDosProdutos(productIds);
+    // Grupos de equivalencia (PR 6b): vinculo do cadastro ATUAL (nao congelado na quinzena), 1 consulta.
+    const gruposDosProdutos = await ForecastGrupoEquivalenciaService.gruposDosProdutos(productIds);
+    // Meses atipicos (PR 6c): marcas do cadastro ATUAL, 1 consulta; so as que cabem na janela de vendas da quinzena
+    // entram na media. Sem marca, o calculo e o mesmo de antes.
+    const marcas = await ForecastMesesAtipicosService.doProdutos(productIds);
+    const mesesForaDaMedia = mapaForaDaMedia(
+      produtos,
+      new Map([...marcas].map(([id, lista]) => [id, lista.map((m) => m.anoMes)])),
+      quinzena.dataBase,
+    );
+    const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half, mesesForaDaMedia });
 
     return {
       id: snapshot.id,
@@ -191,10 +225,46 @@ export class ForecastSnapshotService {
           status: produto?.status ?? 'nao',
           analiseForecast: produto?.analiseForecast ?? null,
           productId: produto?.productId ?? null,
+          sobDemanda: produto?.productId != null && sobDemanda.has(produto.productId),
+          sobDemandaMotivo: (produto?.productId != null && sobDemanda.get(produto.productId)?.motivo) || null,
+          grupo: (produto?.productId != null && gruposDosProdutos.get(produto.productId)) || null,
+          // Marcas da janela desta quinzena (indice 0..5 = J..O, 6 = P); o motivo e o do cadastro. Vazio sem marca.
+          mesesForaDaMedia:
+            produto?.productId != null ? marcasNaJanela(quinzena.dataBase, marcas.get(produto.productId) ?? []) : [],
         };
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
     };
+  }
+
+  // Pendentes de cadastro da quinzena: os codigos que o DBCorp trouxe (congelados em `inputs`) comparados com o
+  // cadastro ATUAL - o codigo sai da lista quando entra no cadastro. So leitura (nada e gravado na quinzena).
+  static async getPendentes(id: number): Promise<ForecastPendentesData> {
+    const snapshot = await prisma.forecastSnapshot.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, label: true, origin: true, baseDate: true, inputs: true },
+    });
+    if (!snapshot) {
+      throw new HttpError(404, 'Quinzena nao encontrada.');
+    }
+    if (snapshot.origin !== FORECAST_ORIGIN_DBCORP) {
+      return {
+        aplicavel: false,
+        snapshotId: snapshot.id,
+        label: snapshot.label,
+        itens: [],
+        totalItens: 0,
+        omitidos: 0,
+        soSaldo: { codigos: 0, kg: 0 },
+        semVendaRecente: { codigos: 0, vendasAnual: 0 },
+        regra: { mesesVenda: [], historicoAusente: [], compras: 'chegadas' },
+      };
+    }
+    const cadastro = await ForecastProductService.cadastroDeCodigos();
+    // Historico ATUAL de base-3/base-2 (so leitura): regravar esses meses muda a lista, como o cadastro atual.
+    const vendas = await ForecastProductService.vendasRecentes(prisma, dbDateToKey(snapshot.baseDate));
+    const resultado = codigosPendentes(snapshot.inputs as unknown as Entradas, cadastro, vendas);
+    return { aplicavel: true, snapshotId: snapshot.id, label: snapshot.label, ...resultado };
   }
 
   // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada
@@ -204,7 +274,18 @@ export class ForecastSnapshotService {
     const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
       calc.linhas.flatMap((l) => l.codigos),
     );
-    return montarRelatorioCompras(calc, embalagens);
+    const sobDemanda = new Map(
+      calc.linhas.flatMap((l) =>
+        l.productId != null && l.sobDemanda ? [[l.productId, { motivo: l.sobDemandaMotivo }] as const] : [],
+      ),
+    );
+    // Demanda do comercial (PR 6d): pedidos abertos do cadastro ATUAL (nao congelados na quinzena), 1 consulta.
+    const demandasComerciais = await ForecastDemandaComercialService.abertas();
+    return montarRelatorioCompras(calc, embalagens, {
+      sobDemanda,
+      demandasComerciais,
+      grupos: gruposDasLinhas(calc.linhas),
+    });
   }
 
   // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.

@@ -1,15 +1,29 @@
 import { Request, Response } from 'express';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
+import { ForecastDemandaComercialService } from '../services/ForecastDemandaComercialService';
+import { ForecastGrupoEquivalenciaService } from '../services/ForecastGrupoEquivalenciaService';
 import { ForecastImportService } from '../services/ForecastImportService';
+import { ForecastMesesAtipicosService } from '../services/ForecastMesesAtipicosService';
+import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
 import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
+import { ForecastSobDemandaService } from '../services/ForecastSobDemandaService';
 import { ForecastSourceService } from '../services/ForecastSourceService';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
 import {
   forecastDbcorpConfirmSchema,
+  forecastDemandaComercialCreateSchema,
+  forecastDemandaComercialPatchSchema,
+  forecastDemandaComercialQuerySchema,
   forecastDbcorpPreviewSchema,
   forecastEmbalagensPatchSchema,
+  forecastGrupoEquivalenciaCreateSchema,
+  forecastGrupoEquivalenciaPatchSchema,
+  forecastMesesAtipicosPutSchema,
+  forecastProductCodeAddSchema,
+  forecastProductCreateSchema,
   forecastSnapshotQuerySchema,
+  forecastSobDemandaPatchSchema,
   forecastSourcePatchSchema,
   forecastWorkbookConfirmSchema,
   forecastWorkbookPreviewSchema,
@@ -120,6 +134,34 @@ export class ForecastController {
     }
   }
 
+  static async patchSobDemanda(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const input = forecastSobDemandaPatchSchema.parse(req.body);
+      const data = await ForecastSobDemandaService.patch(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async putMesesAtipicos(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const input = forecastMesesAtipicosPutSchema.parse(req.body);
+      const data = await ForecastMesesAtipicosService.substituir(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
   static async listSnapshots(_req: Request, res: Response): Promise<Response> {
     try {
       const data = await ForecastSnapshotService.list();
@@ -145,6 +187,43 @@ export class ForecastController {
     }
   }
 
+  static async getPendentes(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const data = await ForecastSnapshotService.getPendentes(id);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async createProduct(req: Request, res: Response): Promise<Response> {
+    try {
+      const input = forecastProductCreateSchema.parse(req.body);
+      const data = await ForecastProductCadastroService.create(input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async addProductCode(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const input = forecastProductCodeAddSchema.parse(req.body);
+      const data = await ForecastProductCadastroService.addCode(id, input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
   static async getRelatorioCompras(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseId(req.params.id);
@@ -155,6 +234,89 @@ export class ForecastController {
         hoje: typeof req.query.hoje === 'string' ? req.query.hoje : undefined,
       });
       const data = await ForecastSnapshotService.getRelatorioCompras(id, query.hoje);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async listDemandasComerciais(req: Request, res: Response): Promise<Response> {
+    try {
+      const query = forecastDemandaComercialQuerySchema.parse({
+        status: typeof req.query.status === 'string' ? req.query.status : undefined,
+        productId: typeof req.query.productId === 'string' ? Number(req.query.productId) : undefined,
+      });
+      const data = await ForecastDemandaComercialService.list(query);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async createDemandaComercial(req: Request, res: Response): Promise<Response> {
+    try {
+      const input = forecastDemandaComercialCreateSchema.parse(req.body);
+      const data = await ForecastDemandaComercialService.create(input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async patchDemandaComercial(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Demanda invalida.');
+      }
+      const input = forecastDemandaComercialPatchSchema.parse(req.body);
+      const data = await ForecastDemandaComercialService.patch(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async listGruposEquivalencia(_req: Request, res: Response): Promise<Response> {
+    try {
+      const data = await ForecastGrupoEquivalenciaService.list();
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async createGrupoEquivalencia(req: Request, res: Response): Promise<Response> {
+    try {
+      const input = forecastGrupoEquivalenciaCreateSchema.parse(req.body);
+      const data = await ForecastGrupoEquivalenciaService.create(input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async patchGrupoEquivalencia(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Grupo invalido.');
+      }
+      const input = forecastGrupoEquivalenciaPatchSchema.parse(req.body);
+      const data = await ForecastGrupoEquivalenciaService.patch(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async deleteGrupoEquivalencia(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Grupo invalido.');
+      }
+      const data = await ForecastGrupoEquivalenciaService.remove(id, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

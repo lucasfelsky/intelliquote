@@ -7,6 +7,7 @@ import {
   DIAS_RUPTURA_CRITICA,
   REGRA_EMBALAGEM,
   URGENCIAS,
+  arredondarParaCadaEmbalagem,
   arredondarPorEmbalagem,
   dataDeRuptura,
   dataLimiteDoPedido,
@@ -124,6 +125,57 @@ describe('escolherEmbalagem', () => {
   });
 });
 
+describe('arredondarParaCadaEmbalagem (PR 5B)', () => {
+  const codigos = ['C0001', 'C0002', 'C0003'];
+
+  it('uma opcao por embalagem cadastrada, na ordem EMB.1..7; o destaque e a usada (principal fora da 1a posicao)', () => {
+    const escolha = escolherEmbalagem(codigos, [
+      { codigo: 'C0001', quantidade: 200 },
+      { codigo: 'C0002', quantidade: 25 },
+      { codigo: 'C0003', quantidade: 1000, rotulo: 'Bag', principal: true },
+    ]);
+    const opcoes = arredondarParaCadaEmbalagem(450, escolha);
+    expect(opcoes).toEqual([
+      { codigo: 'C0001', quantidade: 200, rotulo: null, embalagens: 3, quantidadeFinal: 600, destaque: false, pallet: null },
+      { codigo: 'C0002', quantidade: 25, rotulo: null, embalagens: 18, quantidadeFinal: 450, destaque: false, pallet: null },
+      { codigo: 'C0003', quantidade: 1000, rotulo: 'Bag', embalagens: 1, quantidadeFinal: 1000, destaque: true, pallet: null },
+    ]);
+    expect(opcoes.filter((o) => o.destaque).map((o) => o.codigo)).toEqual([escolha.usada?.codigo]);
+  });
+
+  it('sem principal o destaque e a 1a cadastrada; sem embalagem devolve vazio', () => {
+    const escolha = escolherEmbalagem(codigos, [
+      { codigo: 'C0003', quantidade: 200 },
+      { codigo: 'C0002', quantidade: 25 },
+    ]);
+    expect(arredondarParaCadaEmbalagem(10, escolha).map((o) => [o.codigo, o.destaque])).toEqual([
+      ['C0002', true],
+      ['C0003', false],
+    ]);
+    expect(arredondarParaCadaEmbalagem(10, escolherEmbalagem(codigos, []))).toEqual([]);
+  });
+
+  it('kg fracionado e quantidade 0 (0 embalagens, sem -0)', () => {
+    const escolha = escolherEmbalagem(codigos, [
+      { codigo: 'C0001', quantidade: 0.5 },
+      { codigo: 'C0002', quantidade: 2.125 },
+    ]);
+    expect(arredondarParaCadaEmbalagem(3, escolha).map((o) => [o.embalagens, o.quantidadeFinal])).toEqual([
+      [6, 3],
+      [2, 4.25],
+    ]);
+    const zero = arredondarParaCadaEmbalagem(0, escolha);
+    expect(zero.map((o) => [o.embalagens, o.quantidadeFinal])).toEqual([
+      [0, 0],
+      [0, 0],
+    ]);
+    for (const o of zero) {
+      expect(Object.is(o.embalagens, 0)).toBe(true);
+      expect(Object.is(o.quantidadeFinal, 0)).toBe(true);
+    }
+  });
+});
+
 describe('entraNoRelatorio', () => {
   it('lead time desconhecido, demanda positiva e sem consumo sem falta ficam fora', () => {
     expect(entraNoRelatorio({ AN: null, Q: 10 })).toBe(false);
@@ -186,6 +238,47 @@ describe('montarRelatorioCompras (sintetico)', () => {
   ];
   const r = montarRelatorioCompras(sintetica(linhas), embalagens);
 
+  it('porEmbalagem: a opcao em destaque tem os mesmos numeros da Qtd. final; sem embalagem e vazio (PR 5B)', () => {
+    const itens = r.grupos.flatMap((g) => g.itens);
+    for (const item of itens) {
+      if (item.embalagem.usada === null) {
+        expect(item.porEmbalagem).toEqual([]);
+        continue;
+      }
+      expect(item.porEmbalagem.map((o) => o.codigo)).toEqual(item.embalagem.cadastradas.map((e) => e.codigo));
+      const [destaque, ...demais] = item.porEmbalagem.filter((o) => o.destaque);
+      expect(demais).toEqual([]);
+      expect(destaque.embalagens).toBe(item.quantidadeEmbalagens);
+      expect(destaque.quantidadeFinal).toBe(item.quantidadeFinal);
+    }
+    const p3 = itens.find((i) => i.item === 'PRODUTO 003')!;
+    // 101 kg: principal C0002 (25 kg) = 5 x 25 = 125 (Qtd. final); C0001 (200 kg) = 1 x 200.
+    expect(p3.quantidadeFinal).toBe(125);
+    expect(p3.porEmbalagem.map((o) => [o.codigo, o.embalagens, o.quantidadeFinal, o.destaque])).toEqual([
+      ['C0001', 1, 200, false],
+      ['C0002', 5, 125, true],
+    ]);
+  });
+
+  it('obs: texto da linha com trim; ausente vira vazio, no item e no sem consumo (PR 5B)', () => {
+    const q = montarRelatorioCompras(
+      sintetica([
+        linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE A', obs: '  OBS SINTETICA 001 ' }),
+        linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE A' }),
+        linha({ linha: 3, item: 'PRODUTO 003', fonte: 'FONTE B', Q: 0, AG: 0, U: 10, AN: 10, obs: 'OBS SINTETICA 003' }),
+        linha({ linha: 4, item: 'PRODUTO 004', fonte: 'FONTE B', Q: 0, AG: 0, U: 10, AN: 10 }),
+      ]),
+      [],
+    );
+    const porNome = new Map(q.grupos.flatMap((g) => g.itens).map((i) => [i.item, i.obs] as const));
+    expect(porNome.get('PRODUTO 001')).toBe('OBS SINTETICA 001');
+    expect(porNome.get('PRODUTO 002')).toBe('');
+    expect(q.semConsumo.itens.map((i) => [i.item, i.obs])).toEqual([
+      ['PRODUTO 003', 'OBS SINTETICA 003'],
+      ['PRODUTO 004', ''],
+    ]);
+  });
+
   it('agrupa por fonte (sem diferenciar caixa/espacos) e ordena grupos pelo item mais urgente', () => {
     expect(r.grupos.map((g) => g.fonte)).toEqual(['FONTE A', 'FONTE B', 'FONTE C']);
     expect(r.grupos.map((g) => g.dataLimiteMaisUrgente)).toEqual(['2026-09-15', '2026-08-23', null]);
@@ -204,9 +297,10 @@ describe('montarRelatorioCompras (sintetico)', () => {
       vencidas: 2,
       semEmbalagem: 3,
       multiplasEmbalagens: 1,
+      comPallet: 0,
       porUrgencia: { 'sem-estoque': 1, critico: 0, atrasado: 1, 'no-prazo': 2 },
     });
-    expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2, semConsumoSemMovimento: 2 });
+    expect(r.fora).toEqual({ semLeadTime: 1, semConsumoSemFalta: 2, semConsumoSemMovimento: 2, sobDemanda: 0, cobertosPorGrupo: 0 });
     expect(r.semConsumo.itens).toEqual([]);
     expect(r.urgencia).toEqual({ diasCritico: 15 });
     const porItem = new Map(r.grupos.flatMap((g) => g.itens).map((i) => [i.item, i] as const));
@@ -339,6 +433,8 @@ describe('montarRelatorioCompras (fixture anonimizada, hoje 2026-10-20)', () => 
   it('sem embalagem cadastrada nenhum item arredonda', () => {
     for (const item of r.grupos.flatMap((g) => g.itens)) {
       expect(item.embalagem.usada).toBeNull();
+      expect(item.porEmbalagem).toEqual([]);
+      expect(item.obs).toBe('');
       expect(item.quantidadeFinal).toBe(item.quantidadeSugerida);
     }
   });
@@ -559,7 +655,7 @@ describe('sem consumo (sintetico)', () => {
       linha({ linha: 2, item: 'PRODUTO 002', fonte: 'FONTE A', Q: 0, AG: 0, U: 0, AN: 100, chegadas: [0, 0, 100, 0, 0] }),
     ]);
     expect(r.semConsumo.itens).toEqual([]);
-    expect(r.fora).toEqual({ semLeadTime: 0, semConsumoSemFalta: 1, semConsumoSemMovimento: 2 });
+    expect(r.fora).toEqual({ semLeadTime: 0, semConsumoSemFalta: 1, semConsumoSemMovimento: 2, sobDemanda: 0, cobertosPorGrupo: 0 });
   });
 
   it('sem lead time com estoque entra na secao e continua em fora.semLeadTime', () => {

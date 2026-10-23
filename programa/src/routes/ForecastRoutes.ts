@@ -45,6 +45,21 @@ router.patch(
 
 router.get('/forecast/products', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listProducts);
 
+// Produto novo a partir de um pendente de cadastro (3B): cria com fonte/familia/codigos e acrescenta codigo.
+router.post(
+  '/forecast/products',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createProduct,
+);
+
+router.post(
+  '/forecast/products/:id/codigos',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.addProductCode,
+);
+
 router.get(
   '/forecast/products/:id/embalagens',
   requireAuth,
@@ -59,6 +74,75 @@ router.patch(
   ForecastController.patchEmbalagens,
 );
 
+// Marca "compra sob demanda" do produto (PR 6a): sai da lista de compra do relatorio, com o motivo.
+router.patch(
+  '/forecast/products/:id/compra-sob-demanda',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchSobDemanda,
+);
+
+// Meses de venda atipica do produto (PR 6c): ficam fora das medias trimestral/semestral. Substitui o conjunto.
+router.put(
+  '/forecast/products/:id/meses-atipicos',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putMesesAtipicos,
+);
+
+// Demanda do comercial (PR 6d): compra pedida pelo comercial por programacao futura, lancada a mao pelo COMEX.
+// Leitura = equipe COMEX; lancar, editar e fechar = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/commercial-demands',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listDemandasComerciais,
+);
+
+router.post(
+  '/forecast/commercial-demands',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createDemandaComercial,
+);
+
+router.patch(
+  '/forecast/commercial-demands/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchDemandaComercial,
+);
+
+// Grupos de equivalencia (PR 6b): produtos que sao o mesmo material tem o estoque avaliado somado no relatorio.
+// Leitura = equipe COMEX; criar, editar e desfazer = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/equivalence-groups',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listGruposEquivalencia,
+);
+
+router.post(
+  '/forecast/equivalence-groups',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createGrupoEquivalencia,
+);
+
+router.patch(
+  '/forecast/equivalence-groups/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchGrupoEquivalencia,
+);
+
+router.delete(
+  '/forecast/equivalence-groups/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteGrupoEquivalencia,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(
@@ -66,6 +150,13 @@ router.get(
   requireAuth,
   allowRoles(COMEX_ROLES),
   ForecastController.getSnapshot,
+);
+
+router.get(
+  '/forecast/snapshots/:id/pendentes',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getPendentes,
 );
 
 router.get(
