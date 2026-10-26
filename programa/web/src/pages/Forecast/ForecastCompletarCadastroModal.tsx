@@ -188,7 +188,7 @@ function NovoProduto({ codigo, inativos, onFechar, onConcluido, onGravando }: Pr
     return (
       <div className="fcc-vazio" role="status">
         {fontes.length === 0
-          ? 'Não há fonte ativa no cadastro. Importe a planilha do Forecast para cadastrar as fontes antes de criar o produto.'
+          ? 'Não há fonte ativa no cadastro. As fontes são cadastradas pelo administrador, na importação da planilha do Forecast; sem fonte ativa não dá para criar o produto.'
           : 'Não há família ativa. Cadastre a família em “Famílias” antes de criar o produto.'}
       </div>
     );

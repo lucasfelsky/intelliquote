@@ -15,6 +15,7 @@ vi.mock('@/api/client', () => ({
 
 import { api, ApiError } from '@/api/client';
 import {
+  FORECAST_IMPORT_403_PLANILHA,
   FORECAST_XLSX_MIME,
   baixarForecastRelatorioXlsx,
   confirmForecastDbcorp,
@@ -202,6 +203,14 @@ describe('forecastImportErrorMessage', () => {
     expect(msg(new ApiError(404, null))).toBe(
       'O servidor ainda não tem esta importação. Aguarde a atualização do sistema.',
     );
+  });
+
+  it('403 da planilha explica que e so do administrador; DBCorp e sem origem mantem o texto', () => {
+    expect(forecastImportErrorMessage(new ApiError(403, null), '12-2', 'planilha')).toBe(FORECAST_IMPORT_403_PLANILHA);
+    expect(forecastImportErrorMessage(new ApiError(403, null), '12-2', 'dbcorp')).toBe(
+      'Só administradores e compradores podem importar quinzenas.',
+    );
+    expect(msg(new ApiError(403, null))).toBe('Só administradores e compradores podem importar quinzenas.');
   });
 
   it('409 cita o rotulo e 413 tem texto fixo (mesmo com corpo)', () => {

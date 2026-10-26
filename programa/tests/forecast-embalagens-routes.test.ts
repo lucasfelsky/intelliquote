@@ -23,6 +23,7 @@ vi.mock('../src/lib/prisma', () => {
     forecastCommercialDemand: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
     $transaction: vi.fn(),
   };
 
@@ -43,6 +44,7 @@ const prismaMock = prisma as unknown as {
   forecastCommercialDemand: { findMany: Mock };
   forecastProductCode: { findMany: Mock; update: Mock; updateMany: Mock };
   $queryRaw: Mock;
+  $executeRaw: Mock;
   $transaction: Mock;
 };
 
@@ -277,7 +279,7 @@ describe('Forecast embalagens - PATCH (regras de servico)', () => {
     expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
   });
 
-  it('a 1a instrucao da transacao e a trava FOR NO KEY UPDATE, antes de ler os codigos', async () => {
+  it('a trava FOR NO KEY UPDATE vem antes de ler os codigos', async () => {
     const cookies = await loginAs('comprador');
     const response = await request(app)
       .patch(PATH)

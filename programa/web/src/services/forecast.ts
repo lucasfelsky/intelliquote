@@ -690,14 +690,19 @@ export async function confirmForecastDbcorp(body: ForecastDbcorpBody): Promise<F
 /** Falha detectada no navegador antes de qualquer POST (limite, extensao, arquivo vazio, leitura). */
 export class ForecastLocalError extends Error {}
 
+/** 403 da importacao pela planilha (so admin): o comprador precisa saber que o caminho dele e o DBCorp. */
+export const FORECAST_IMPORT_403_PLANILHA =
+  'A importação pela planilha é exclusiva do administrador. Use os relatórios DBCorp ou acione um administrador.';
+
 /** Mensagem em portugues para a importacao (a de leitura, `forecastErrorMessage`, fala de acesso ao painel). */
-export function forecastImportErrorMessage(err: unknown, label: string): string {
+export function forecastImportErrorMessage(err: unknown, label: string, origem?: 'planilha' | 'dbcorp'): string {
   if (err instanceof ForecastLocalError) return err.message;
   if (err instanceof ApiError) {
     switch (err.status) {
       case 401:
         return 'Sua sessão expirou. Entre de novo.';
       case 403:
+        if (origem === 'planilha') return FORECAST_IMPORT_403_PLANILHA;
         return 'Só administradores e compradores podem importar quinzenas.';
       case 404:
         return 'O servidor ainda não tem esta importação. Aguarde a atualização do sistema.';

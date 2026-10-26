@@ -17,6 +17,9 @@ export const FORECAST_MAX_PRODUCTS = 500;
 // Teto de linhas por aba (a maior aba real, CLIENTES ATIVOS, tem ~2.400).
 export const FORECAST_MAX_SHEET_ROWS = 50_000;
 
+// Observacao (coluna AT) por produto: texto livre exibido no relatorio e no XLSX (a maior real tem 165).
+export const FORECAST_OBS_MAX_CHARS = 1000;
+
 // Quantidade maxima de divergencias devolvidas na conferencia (a contagem total vai sempre).
 export const FORECAST_MAX_DIVERGENCES = 50;
 
