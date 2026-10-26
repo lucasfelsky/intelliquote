@@ -19,7 +19,9 @@ import {
   baixarForecastRelatorioXlsx,
   confirmForecastDbcorp,
   confirmForecastWorkbook,
+  excluirForecastSnapshot,
   forecastErrorMessage,
+  forecastExcluirErrorMessage,
   forecastImportErrorMessage,
   forecastKeys,
   ForecastLocalError,
@@ -230,5 +232,35 @@ describe('forecastImportErrorMessage', () => {
     expect(msg(new ForecastLocalError('Não foi possível ler o arquivo a.xlsx.'))).toBe(
       'Não foi possível ler o arquivo a.xlsx.',
     );
+  });
+});
+
+describe('excluir quinzena', () => {
+  const del = vi.mocked(api.del);
+
+  it('chama DELETE /v1/forecast/snapshots/:id e desembrulha { data }', async () => {
+    del.mockResolvedValue({ data: { id: 7, label: '10-2', excluida: true } });
+    await expect(excluirForecastSnapshot(7)).resolves.toEqual({ id: 7, label: '10-2', excluida: true });
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(del).toHaveBeenCalledWith('/v1/forecast/snapshots/7');
+  });
+
+  it('mensagens por status, rede e status inesperado', () => {
+    const msg = (e: unknown) => forecastExcluirErrorMessage(e, '10-2');
+    expect(msg(new ApiError(401, null))).toBe('Sua sessão expirou. Entre de novo.');
+    expect(msg(new ApiError(403, null))).toBe('Só administradores e compradores podem excluir quinzenas.');
+    expect(msg(new ApiError(404, null))).toBe(
+      'A quinzena 10-2 já foi excluída ou não existe mais. A lista foi atualizada.',
+    );
+    expect(msg(new ApiError(503, null))).toBe(
+      'Há uma importação do Forecast em andamento. Tente de novo em instantes; nada foi excluído.',
+    );
+    expect(msg(new ApiError(504, null))).toBe(
+      'O servidor demorou para responder. Confira a lista de quinzenas antes de tentar de novo.',
+    );
+    expect(msg(new ApiError(500, { message: 'detalhe interno' }))).toBe(
+      'Não foi possível excluir a quinzena (HTTP 500).',
+    );
+    expect(msg(new TypeError('Failed to fetch'))).toBe('Sem conexão com o servidor. Tente de novo.');
   });
 });

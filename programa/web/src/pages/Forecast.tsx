@@ -11,8 +11,11 @@ import {
   type ForecastDivergencia,
   type ForecastOrigin,
   type ForecastSnapshotDetail,
+  type ForecastSnapshotSummary,
 } from '@/services/forecast';
+import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
+import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
@@ -171,6 +174,14 @@ export default function Forecast() {
   const [importada, setImportada] = useState<string | null>(null);
   const botaoImportar = useRef<HTMLButtonElement>(null);
   const importouAntes = useRef(false);
+  // Excluir quinzena: o alvo e capturado ao abrir (a lista pode mudar por baixo do dialogo).
+  const [excluirAlvo, setExcluirAlvo] = useState<ForecastSnapshotSummary | null>(null);
+  const [excluida, setExcluida] = useState<string | null>(null);
+  const botaoExcluir = useRef<HTMLButtonElement>(null);
+  const seletor = useRef<HTMLSelectElement>(null);
+  const excluirAbriuAntes = useRef(false);
+  const focoAposExcluir = useRef<'seletor' | 'importar' | null>(null);
+  const excluirAberto = excluirAlvo !== null;
   // Grupos de equivalencia (PR 6b): todos os papeis COMEX veem; admin/comprador editam.
   const [gruposAberto, setGruposAberto] = useState(false);
   const botaoGrupos = useRef<HTMLButtonElement>(null);
@@ -205,6 +216,19 @@ export default function Forecast() {
   }, [importando]);
 
   useEffect(() => {
+    if (excluirAberto) {
+      excluirAbriuAntes.current = true;
+    } else if (excluirAbriuAntes.current) {
+      excluirAbriuAntes.current = false;
+      const alvo = focoAposExcluir.current;
+      focoAposExcluir.current = null;
+      if (alvo === 'seletor') seletor.current?.focus();
+      else if (alvo === 'importar') botaoImportar.current?.focus();
+      else botaoExcluir.current?.focus();
+    }
+  }, [excluirAberto]);
+
+  useEffect(() => {
     if (gruposAberto) {
       gruposAbriuAntes.current = true;
     } else if (gruposAbriuAntes.current) {
@@ -235,9 +259,35 @@ export default function Forecast() {
       setImportando(false);
       await queryClient.invalidateQueries({ queryKey: ['forecast'] });
       setParams({ quinzena: String(snapshotId) });
+      setExcluida(null);
       setImportada(label);
     },
     [queryClient, setParams],
+  );
+
+  // Exclusao confirmada: a quinzena some da lista na hora, as consultas dela saem do cache (um GET so daria 404),
+  // a tela passa para a mais recente que sobrou (ou para o estado vazio) e o resto do modulo e revalidado.
+  const aoExcluir = useCallback(
+    async (id: number, label: string) => {
+      const restantes = (queryClient.getQueryData<ForecastSnapshotSummary[]>(forecastKeys.snapshots) ?? []).filter(
+        (q) => q.id !== id,
+      );
+      queryClient.setQueryData(forecastKeys.snapshots, restantes);
+      queryClient.removeQueries({ queryKey: forecastKeys.snapshot(id) });
+      queryClient.removeQueries({ queryKey: forecastKeys.relatorio(id) });
+      queryClient.removeQueries({ queryKey: forecastPendentesKeys.snapshot(id) });
+      focoAposExcluir.current = restantes.length > 0 ? 'seletor' : 'importar';
+      setImportada(null);
+      setExcluida(label);
+      setExcluirAlvo(null);
+      const proxima = restantes[0];
+      const proximos: Record<string, string> = {};
+      if (proxima) proximos.quinzena = String(proxima.id);
+      if (visao === 'compras') proximos.visao = visao;
+      setParams(proximos);
+      await queryClient.invalidateQueries({ queryKey: ['forecast'] });
+    },
+    [queryClient, setParams, visao],
   );
 
   const subtitulo = escolhida
@@ -265,11 +315,13 @@ export default function Forecast() {
                   Quinzena
                 </label>
                 <select
+                  ref={seletor}
                   id="fc-quinzena"
                   className="select"
                   value={escolhidaId}
                   onChange={(e) => {
                     setImportada(null);
+                    setExcluida(null);
                     setParams(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
                   }}
                 >
@@ -304,6 +356,17 @@ export default function Forecast() {
                 Importar quinzena
               </button>
             )}
+            {podeImportar && escolhida && (
+              <button
+                ref={botaoExcluir}
+                type="button"
+                className="ghost-button danger-button fcx-gatilho"
+                aria-haspopup="dialog"
+                onClick={() => setExcluirAlvo(escolhida)}
+              >
+                Excluir quinzena
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -311,6 +374,11 @@ export default function Forecast() {
       {importada && (
         <div className="alert alert--success" role="status">
           Quinzena {importada} importada.
+        </div>
+      )}
+      {excluida && (
+        <div className="alert alert--success" role="status">
+          Quinzena {excluida} excluída.
         </div>
       )}
       {lista.isLoading && <Spinner />}
@@ -351,6 +419,14 @@ export default function Forecast() {
       )}
       {gruposAberto && <ForecastGruposModal podeEditar={podeImportar} onFechar={() => setGruposAberto(false)} />}
       {fontesAberto && <ForecastFontesModal podeEditar={podeImportar} onFechar={() => setFontesAberto(false)} />}
+      {excluirAlvo && (
+        <ForecastExcluirQuinzenaModal
+          quinzena={excluirAlvo}
+          produtos={detail && detail.id === excluirAlvo.id ? detail.linhas.length : null}
+          onFechar={() => setExcluirAlvo(null)}
+          onExcluida={aoExcluir}
+        />
+      )}
       <ForecastImportModal
         aberto={importando}
         onFechar={() => setImportando(false)}

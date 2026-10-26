@@ -274,6 +274,11 @@ export const forecastProductCodeAddSchema = z.object({
 export const forecastProductReativarSchema = z.strictObject({});
 
 export type ForecastProductReativarInput = z.infer<typeof forecastProductReativarSchema>;
+
+// Excluir quinzena (soft delete): sem corpo (campo extra = 400).
+export const forecastSnapshotDeleteSchema = z.strictObject({});
+
+export type ForecastSnapshotDeleteInput = z.infer<typeof forecastSnapshotDeleteSchema>;
 export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
 export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;
 

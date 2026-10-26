@@ -518,4 +518,70 @@ describe('Forecast - importacao da planilha (DB)', () => {
     expect(a2.packagingPalletKg).toBeNull();
     expect(a2.packagingPalletExtraKg).toEqual([]);
   });
+
+  testDbSkip('excluir a quinzena e reimportar a mesma quinzena', async () => {
+    const vendasAntes = await prisma.forecastMonthlySale.findMany({
+      where: { yearMonth: YEAR_MONTH },
+      orderBy: { id: 'asc' },
+      select: { id: true, code: true, quantity: true },
+    });
+    expect(vendasAntes.length).toBeGreaterThan(0);
+
+    const del = await request(app).delete(`/api/v1/forecast/snapshots/${snapshotId}`).set('Cookie', cookies);
+    expect(del.status).toBe(200);
+    expect(del.body.data).toEqual({ id: snapshotId, label: '03-1', excluida: true });
+
+    // Soft delete: a linha continua no banco, com deletedAt.
+    const linha = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: snapshotId } });
+    expect(linha.deletedAt).not.toBeNull();
+
+    // Some de todas as leituras; a 2a exclusao nao encontra mais.
+    const list = await request(app).get('/api/v1/forecast/snapshots').set('Cookie', cookies);
+    expect((list.body.data as Array<{ id: number }>).map((s) => s.id)).not.toContain(snapshotId);
+    const detalhe = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}`).set('Cookie', cookies);
+    expect(detalhe.status).toBe(404);
+    const pendentes = await request(app)
+      .get(`/api/v1/forecast/snapshots/${snapshotId}/pendentes`)
+      .set('Cookie', cookies);
+    expect(pendentes.status).toBe(404);
+    const denovo = await request(app).delete(`/api/v1/forecast/snapshots/${snapshotId}`).set('Cookie', cookies);
+    expect(denovo.status).toBe(404);
+
+    // Auditoria: uma so, com metadata minima (sem dados da quinzena).
+    const audits = await prisma.auditLog.findMany({
+      where: { entityType: 'forecast_snapshot', entityId: String(snapshotId), action: 'soft_delete' },
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0].metadata).toEqual({ label: '03-1', baseDate: BASE_DATE, origin: 'planilha', half: 1 });
+    expect(audits[0].beforeData).toBeNull();
+    expect(audits[0].afterData).toBeNull();
+
+    // A exclusao nao desfaz o que a importacao gravou: o historico do mes continua igual.
+    const vendasDepois = await prisma.forecastMonthlySale.findMany({
+      where: { yearMonth: YEAR_MONTH },
+      orderBy: { id: 'asc' },
+      select: { id: true, code: true, quantity: true },
+    });
+    expect(vendasDepois).toEqual(vendasAntes);
+
+    // Reimportar a mesma quinzena (mesmo rotulo): 201 com id novo; a lista tem exatamente uma 03-1.
+    const res = await post('confirm', {
+      contentBase64: await workbookBase64(qCompleta),
+      fileName: 'sintetica-reimport.xlsx',
+      label: '03-1',
+      baseDate: BASE_DATE,
+      options: { atualizarCadastro: false, gravarHistorico: false, criarQuinzena: true },
+    });
+    expect(res.status).toBe(201);
+    expect(typeof res.body.data.snapshotId).toBe('number');
+    expect(res.body.data.snapshotId).not.toBe(snapshotId);
+
+    const depois = await request(app).get('/api/v1/forecast/snapshots').set('Cookie', cookies);
+    const mesmoRotulo = (depois.body.data as Array<{ id: number; label: string }>).filter((s) => s.label === '03-1');
+    expect(mesmoRotulo.map((s) => s.id)).toEqual([res.body.data.snapshotId]);
+    const do03 = await prisma.forecastSnapshot.count({
+      where: { label: '03-1', createdById: adminId, deletedAt: null },
+    });
+    expect(do03).toBe(1);
+  });
 });

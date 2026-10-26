@@ -18,9 +18,11 @@ import {
 import { gerarXlsxForecastMacro, nomeArquivoForecastMacro } from '../utils/forecastMacroXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
+import { AuditLogService } from './AuditLogService';
 import { ForecastDemandaComercialService } from './ForecastDemandaComercialService';
 import { ForecastGrupoEquivalenciaService } from './ForecastGrupoEquivalenciaService';
 import { ForecastMesesAtipicosService } from './ForecastMesesAtipicosService';
+import { CADASTRO_TX_OPTIONS, isCadastroOcupado } from './ForecastProductCadastroService';
 import { ForecastProductService } from './ForecastProductService';
 import { ForecastSobDemandaService } from './ForecastSobDemandaService';
 
@@ -138,6 +140,53 @@ export class ForecastSnapshotService {
         createdById: userId,
       },
     });
+  }
+
+  // Exclui a quinzena (soft delete: deletedAt). Mesma advisory lock dos dois imports, que criam quinzenas: um import em
+  // andamento termina antes (e a exclusao ve a quinzena recem-criada) ou comeca depois (e ve o rotulo livre). Nao
+  // desfaz o que a importacao gravou (cadastro, historico de vendas, prazos). Ja excluida/inexistente = 404 sem gravar
+  // nem auditar. O AuditLog guarda so rotulo (NN-q), data base, origem e metade: nunca dados da quinzena (estoque,
+  // vendas, nomes de produto e observacoes sao texto livre).
+  static async excluir(id: number, userId: number | null) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'forecast:import'}))`;
+
+        const atual = await tx.forecastSnapshot.findFirst({
+          where: { id, deletedAt: null },
+          select: { id: true, label: true, baseDate: true, origin: true, half: true },
+        });
+        if (!atual) throw new HttpError(404, 'Quinzena nao encontrada.');
+
+        const { count } = await tx.forecastSnapshot.updateMany({
+          where: { id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        if (count === 0) throw new HttpError(404, 'Quinzena nao encontrada.');
+
+        await AuditLogService.log(
+          {
+            entityType: 'forecast_snapshot',
+            entityId: id,
+            action: 'soft_delete',
+            performedById: userId,
+            metadata: {
+              label: atual.label,
+              baseDate: dbDateToKey(atual.baseDate),
+              origin: atual.origin,
+              half: atual.half,
+            },
+          },
+          tx,
+        );
+        return { id, label: atual.label, excluida: true as const };
+      }, CADASTRO_TX_OPTIONS);
+    } catch (error) {
+      if (isCadastroOcupado(error)) {
+        throw new HttpError(503, 'Há uma importação do Forecast em andamento. Tente de novo em instantes.');
+      }
+      throw error;
+    }
   }
 
   // Lista sem os Json grandes (products/inputs/expected).

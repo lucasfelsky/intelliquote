@@ -198,6 +198,7 @@
     "DELETE /catalog-items/:id",
     "DELETE /credit-partners/:id",
     "DELETE /forecast/equivalence-groups/:id",
+    "DELETE /forecast/snapshots/:id",
     "DELETE /forwarders/:id",
     "DELETE /quote-request-items/:id",
     "DELETE /quote-request-purchase-orders/:id",

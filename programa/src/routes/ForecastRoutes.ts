@@ -162,6 +162,14 @@ router.get(
   ForecastController.getSnapshot,
 );
 
+// Excluir quinzena = soft delete; admin/comprador.
+router.delete(
+  '/forecast/snapshots/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteSnapshot,
+);
+
 router.get(
   '/forecast/snapshots/:id/pendentes',
   requireAuth,
