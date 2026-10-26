@@ -258,10 +258,23 @@ export interface ContextoFormula {
 
 // Curinga (* ? ~) no valor de uma celula vira criterio de SUMIF/SUMIFS/COUNTIF/VLOOKUP: escapa com ~ so quando o valor
 // tem curinga. Escapar sempre trocaria a celula vazia por "" (criterio que casa celulas vazias) e quebraria a paridade.
+// O Excel trata o ~ de modo DIFERENTE por funcao (medido no Excel desktop):
+// - VLOOKUP: ~~ sempre vira o til literal e ~ antes de outro caractere e descartado; "A~B" acharia "AB". Codigo com ~
+//   precisa do escape completo.
+// - SUMIF/SUMIFS/COUNTIF: so processam o escape ~ quando o criterio tem * ou ?. Sem eles o criterio e comparado como
+//   texto puro, e "C9~~03" NAO casa "C9~03". Codigo so com ~ vai como referencia pura; com * ou ? vai escapado.
 export const TEM_CURINGA = /[*?~]/;
+export const TEM_CURINGA_DE_PADRAO = /[*?]/;
+const ESCAPE_COMPLETO = (ref: string): string => `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(${ref},"~","~~"),"*","~*"),"?","~?")`;
+// VLOOKUP (colunas AQ e AR).
 export function criterioLiteral(ref: string, valor: string | null | undefined): string {
   if (!valor || !TEM_CURINGA.test(valor)) return ref;
-  return `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(${ref},"~","~~"),"*","~*"),"?","~?")`;
+  return ESCAPE_COMPLETO(ref);
+}
+// SUMIF / SUMIFS / COUNTIF.
+export function criterioLiteralIf(ref: string, valor: string | null | undefined): string {
+  if (!valor || !TEM_CURINGA_DE_PADRAO.test(valor)) return ref;
+  return ESCAPE_COMPLETO(ref);
 }
 
 const porCodigo = (
@@ -270,7 +283,7 @@ const porCodigo = (
   ancora = '',
   codigos?: readonly string[],
 ): string =>
-  `SUM(${COLUNAS_CODIGO.map((c, i) => corpo(criterioLiteral(`${ancora}${c}${r}`, codigos?.[i]))).join(',')})`;
+  `SUM(${COLUNAS_CODIGO.map((c, i) => corpo(criterioLiteralIf(`${ancora}${c}${r}`, codigos?.[i]))).join(',')})`;
 
 const somaIf = (aba: string, colCodigo: string, colQtd: string, r: number, codigos?: readonly string[]): string =>
   porCodigo(
@@ -348,7 +361,7 @@ export function formulaDaColuna(col: ColunaComFormula, r: number, ctx: ContextoF
     case 'AQ': return `VLOOKUP(${criterioLiteral(`AU${r}`, ctx.fonte)},${ABA.leadtime}!A:G,7,0)`;
     case 'AR': return formulaAR(r, ctx.ultimaLinhaMargem, ctx.codigos);
     case 'AS':
-      return COLUNAS_CODIGO.map((c, i) => `COUNTIF(${INTERVALO_CLIENTES},${criterioLiteral(`${c}${r}`, ctx.codigos?.[i])})`).join('+');
+      return COLUNAS_CODIGO.map((c, i) => `COUNTIF(${INTERVALO_CLIENTES},${criterioLiteralIf(`${c}${r}`, ctx.codigos?.[i])})`).join('+');
   }
 }
 
