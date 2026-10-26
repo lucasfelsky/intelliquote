@@ -27,6 +27,7 @@ import {
   type CampoPrazo,
   type RascunhoPrazos,
 } from './forecastPrazosChegada';
+import ForecastImportarComoTeste from './ForecastImportarComoTeste';
 import ForecastResumoDbcorp from './ForecastResumoDbcorp';
 import ForecastResumoPlanilha from './ForecastResumoPlanilha';
 import {
@@ -42,6 +43,7 @@ import {
   SLOTS_DBCORP,
   textoEntendiProntidao,
 } from './forecastImport';
+import { NOTA_DBCORP_SEM_TESTE, opcoesComModoTeste, textoBloqueioModoTeste } from './forecastModoTeste';
 import { mensagemCadastroNaPrevia, type EstadoPrevia } from './forecastPendentes';
 import type { ResultadoCadastro } from './ForecastCompletarCadastroModal';
 
@@ -93,6 +95,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
   const [rascunho, setRascunho] = useState<RascunhoPrazos | null>(null);
   const [recalculos, setRecalculos] = useState(0);
   const [opcoes, setOpcoes] = useState<ForecastImportOptions>(OPCOES_INICIAIS);
+  // Atalho "Importar como teste": preferencia a parte; as opcoes efetivas sao derivadas, entao desligar restaura `opcoes`.
+  const [modoTeste, setModoTeste] = useState(false);
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState('');
   const [fase, setFase] = useState<Fase>(null);
@@ -230,10 +234,11 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
 
   const historicoGravavel = (r: ForecastImportSummary) => r.historico.linhas > 0 && r.historico.yearMonth !== null;
   function opcoesEfetivas(r: ForecastImportSummary): ForecastImportOptions {
+    const base = opcoesComModoTeste(opcoes, modoTeste);
     return {
-      atualizarCadastro: opcoes.atualizarCadastro,
-      gravarHistorico: opcoes.gravarHistorico && historicoGravavel(r),
-      criarQuinzena: opcoes.criarQuinzena && !rotuloExiste,
+      atualizarCadastro: base.atualizarCadastro,
+      gravarHistorico: base.gravarHistorico && historicoGravavel(r),
+      criarQuinzena: base.criarQuinzena && !rotuloExiste,
     };
   }
 
@@ -403,6 +408,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                   }} />}
                 </TabPanel>
                 <TabPanel value="dbcorp">
+                  <p className="fit-nota-dbcorp">{NOTA_DBCORP_SEM_TESTE}</p>
                   <div className="fci-slots">
                     {SLOTS_DBCORP.map((slot) => {
                       const file = relatorios[slot.id];
@@ -444,7 +450,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
 
             {faltas.length > 0 && <p className="fci-faltam">Faltam: {faltas.join(', ')}</p>}
 
-            {previa?.aba === 'planilha' && <ForecastResumoPlanilha resumo={previa.resumo} />}
+            {previa?.aba === 'planilha' && <ForecastResumoPlanilha resumo={previa.resumo} modoTeste={modoTeste} />}
             {cadastro && (
               <div ref={cadastroRef} className="alert alert--success" role="status" tabIndex={-1}>
                 {mensagemCadastroNaPrevia(cadastro.resultado, cadastro.estado)}
@@ -472,6 +478,12 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
             {previa?.aba === 'planilha' && efetivas && (
               <fieldset className="fci-opcoes" disabled={ocupado}>
                 <legend className="field-label">O que gravar</legend>
+                <ForecastImportarComoTeste
+                  ligado={modoTeste}
+                  onMudar={setModoTeste}
+                  rotulo={rotulo}
+                  yearMonth={previa.resumo.historico.yearMonth}
+                />
                 {(
                   [
                     ['atualizarCadastro', 'Atualizar cadastro (produtos, códigos e fontes)', false],
@@ -483,14 +495,17 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                     <input
                       type="checkbox"
                       checked={efetivas[chave]}
-                      disabled={desabilitada}
+                      disabled={desabilitada || modoTeste}
+                      aria-describedby={modoTeste ? 'fit-aviso' : undefined}
                       onChange={(e) => setOpcoes({ ...opcoes, [chave]: e.target.checked })}
                     />
                     {texto}
                   </label>
                 ))}
                 {rotuloExiste && <p className="fci-faltam">Já existe a quinzena {rotulo}: ela não pode ser criada de novo.</p>}
-                {nenhumaOpcao && <p className="fci-faltam">Marque ao menos uma opção.</p>}
+                {nenhumaOpcao && (
+                  <p className="fci-faltam">{modoTeste ? textoBloqueioModoTeste(rotulo) : 'Marque ao menos uma opção.'}</p>
+                )}
               </fieldset>
             )}
 
@@ -526,7 +541,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
               </button>
               {previa ? (
                 <button type="button" className="primary-button" onClick={aoConfirmar} disabled={confirmarBloqueado || ocupado}>
-                  {rotuloDoBotao ?? 'Confirmar importação'}
+                  {rotuloDoBotao ?? (previa.aba === 'planilha' && modoTeste ? 'Importar como teste' : 'Confirmar importação')}
                 </button>
               ) : (
                 <button type="button" className="primary-button" onClick={aoPrevisualizar} disabled={faltas.length > 0 || ocupado}>
