@@ -1,6 +1,6 @@
 // Avaliador de formulas de TESTE para o XLSX da aba FORECAST (MACRO). Cobre EXATAMENTE o subconjunto que o gerador
 // escreve (SUM, SUMIF, SUMIFS, COUNTIF, VLOOKUP exato, IF, IFERROR, DATE, SUBSTITUTE, aritmetica e comparacoes) e o
-// escape `~` de curinga nos criterios; qualquer outra coisa LANCA erro, para o teste falhar alto em vez de imitar o Excel pela metade. O resultado gravado em cache nas
+// escape `~` de curinga nos criterios (com a semantica REAL do Excel: SUMIF-like e VLOOKUP tratam o ~ de modo diferente); qualquer outra coisa LANCA erro, para o teste falhar alto em vez de imitar o Excel pela metade. O resultado gravado em cache nas
 // celulas e IGNORADO: o que vale e a formula. Nao e codigo de producao (nao entra no build).
 import type exceljs from 'exceljs';
 
@@ -314,6 +314,12 @@ export function criarAvaliador(wb: exceljs.Workbook): {
     return saida;
   }
 
+  // Criterio de SUMIF/SUMIFS/COUNTIF. Medido no Excel desktop: o escape ~ so e processado quando o criterio tem * ou ?;
+  // sem eles o criterio e texto puro ("C9~~03" NAO casa "C9~03" e "C9~03" casa "C9~03"). O VLOOKUP e diferente (abaixo).
+  function literalDoCriterioIf(s: string): string | null {
+    return /[*?]/.test(s) ? literalDoCriterio(s) : s;
+  }
+
   // Posicoes (dentro do intervalo) cujas celulas casam com o criterio; ErroXl se o criterio for erro.
   function casam(iv: Intervalo, criterio: Valor): number[] | ErroXl {
     if (eIntervalo(criterio)) throw new Error('Criterio como intervalo nao suportado');
@@ -325,7 +331,7 @@ export function criarAvaliador(wb: exceljs.Workbook): {
     if (criterio === '' || /^[<>=]/.test(criterio)) {
       throw new Error(`Criterio nao suportado (operador/vazio): "${criterio}"`);
     }
-    const literal = literalDoCriterio(criterio);
+    const literal = literalDoCriterioIf(criterio);
     if (literal === null) throw new Error(`Criterio nao suportado (curinga sem escape): "${criterio}"`);
     const achados = new Set(idx.get(`t:${literal.toLowerCase()}`) ?? []);
     if (RE_NUMERICO.test(literal)) for (const i of idx.get(`n:${Number(literal)}`) ?? []) achados.add(i);

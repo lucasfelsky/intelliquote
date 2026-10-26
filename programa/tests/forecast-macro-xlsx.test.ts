@@ -200,7 +200,7 @@ describe('avaliador de formulas do teste', () => {
     expect(av.valor('S', 'A4')).toBe('sim');
   });
 
-  it('escape ~ casa o caractere literal; SUBSTITUTE com celula vazia e com numero; til sem curinga lanca', async () => {
+  it('escape ~ so vale com * ou ? no criterio de SUMIF (medido no Excel); SUBSTITUTE com celula vazia e com numero; til em VLOOKUP e sempre escape', async () => {
     const av = await planilhaSintetica((wb) => {
       const d = wb.addWorksheet('D');
       ['C*1', 'C11', 'C~1'].forEach((t, i) => {
@@ -218,13 +218,35 @@ describe('avaliador de formulas do teste', () => {
         result: 0,
       };
       s.getCell('A6').value = { formula: 'SUMIF(D!A:A,"C~1",D!B:B)', result: 0 };
+      s.getCell('A7').value = { formula: 'COUNTIF(D!A:A,"C~~1")', result: 0 };
+      s.getCell('A8').value = { formula: 'SUMIFS(D!B:B,D!A:A,"C~1")', result: 0 };
+      s.getCell('A9').value = { formula: 'VLOOKUP("C~~1",D!A:B,2,0)', result: 0 };
+      s.getCell('A10').value = { formula: 'SUMIF(D!A:A,"C~~~*1",D!B:B)', result: 0 };
     });
     expect(av.valor('S', 'A1')).toBe(5);
-    expect(av.valor('S', 'A2')).toBe(11);
+    // sem * ou ? o ~ e texto puro: "C~~1" NAO casa "C~1" (no Excel real o resultado e 0), e "C~1" casa "C~1"
+    expect(av.valor('S', 'A2')).toBe(0);
+    expect(av.valor('S', 'A6')).toBe(11);
+    expect(av.valor('S', 'A7')).toBe(0);
+    expect(av.valor('S', 'A8')).toBe(11);
+    // VLOOKUP e diferente: ~~ e sempre o til literal
+    expect(av.valor('S', 'A9')).toBe(11);
     expect(av.valor('S', 'A3')).toBe('');
     expect(av.valor('S', 'A4')).toBe('x2');
     expect(av.valor('S', 'A5')).toBe(5);
-    expect(() => av.valor('S', 'A6')).toThrow(/til sem curinga/);
+    // com * ou ? o escape volta a valer
+    expect(av.valor('S', 'A10')).toBe(0); // ~~ + ~* = "C~*1", que nao existe
+  });
+
+  it('til solto junto de curinga no criterio (escape incompleto) lanca', async () => {
+    const av = await planilhaSintetica((wb) => {
+      const d = wb.addWorksheet('D');
+      d.getCell('A1').value = 'C~1';
+      d.getCell('B1').value = 1;
+      const s = wb.addWorksheet('S');
+      s.getCell('A1').value = { formula: 'SUMIF(D!A:A,"C~1*",D!B:B)', result: 0 };
+    });
+    expect(() => av.valor('S', 'A1')).toThrow(/til sem curinga/);
   });
 
   it('funcao fora do subconjunto e curinga lancam (falha alto)', async () => {
@@ -805,6 +827,10 @@ describe('casos sinteticos', () => {
     const u3 = formulaDe(ws, 'U3')!;
     expect(u3).toContain(`SUMIF(ESTOQUE!A:A,${escape('B3')},ESTOQUE!E:E)`);
     expect(u3).toContain('SUMIF(ESTOQUE!A:A,E3,ESTOQUE!E:E)'); // celula vazia: referencia pura (senao "" casaria vazias)
+    // D3 (C9~03) tem so til: no SUMIF o Excel nao processa ~ sem * ou ?, entao "C9~~03" nao casaria; vai como referencia pura
+    expect(u3).toContain('SUMIF(ESTOQUE!A:A,D3,ESTOQUE!E:E)');
+    expect(u3).not.toContain(escape('D3'));
+    expect(formulaDe(ws, 'O3')).toContain("SUMIF('VENDAS MENSAL'!B:B,D3,'VENDAS MENSAL'!D:D)");
     expect(formulaDe(ws, 'U4')).toBe(
       `SUM(${['B', 'C', 'D', 'E', 'F', 'G', 'H'].map((c) => `SUMIF(ESTOQUE!A:A,${c}4,ESTOQUE!E:E)`).join(',')})`,
     );
@@ -820,6 +846,57 @@ describe('casos sinteticos', () => {
     expect(av.valor(MACRO, 'AR3')).toBe(0.1);
     expect(av.valor(MACRO, 'AS3')).toBe(3);
     expect(av.valor(MACRO, 'AS4')).toBe(1);
+    const p = paridade(wb, q, e);
+    expect(p.resultado.divergencias.slice(0, 5)).toEqual([]);
+    expect(p.resultado.batem).toBe(p.resultado.celulas);
+  });
+
+  it('codigo e fonte so com til (~): SUMIF/COUNTIF recebem a referencia pura e VLOOKUP o escape completo', async () => {
+    const q = quinzena(
+      [produto(3, { codigos: ['C9~05', '', '', '', '', '', ''], fonte: 'FONTE ~7' })],
+      entradas({
+        estoque: [
+          { codigo: 'C9~05', qtd: 3 },
+          { codigo: 'C905', qtd: 100 },
+          { codigo: 'C9~~05', qtd: 1000 },
+        ],
+        vendasMes: [
+          { codigo: 'C9~05', qtd: 30 },
+          { codigo: 'C905', qtd: 300 },
+          { codigo: 'C9~~05', qtd: 3000 },
+        ],
+        vendasAtual: [{ codigo: 'C9~05', qtd: 5 }],
+        vendasAnual: [{ codigo: 'C9~05', qtd: 110 }],
+        programacoes: [{ codigo: 'C9~05', qtd: 2, mes: '10' }],
+        chegadas: [{ codigo: 'C9~05', qtd: 20, mes: '11' }],
+        margem: [
+          { codigo: 'C905', margem: 0.9 },
+          { codigo: 'C9~05', margem: 0.25 },
+        ],
+        clientesAtivos: ['C9~05', 'C905', 'C9~05'],
+        leadtime: [
+          { fonte: 'FONTE 7', total: 99 },
+          { fonte: 'FONTE ~7', total: 12 },
+        ],
+      }),
+    );
+    const { e, wb } = await gerar(q);
+    const ws = wb.getWorksheet(MACRO)!;
+    const escape = (ref: string) => `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(${ref},"~","~~"),"*","~*"),"?","~?")`;
+    expect(formulaDe(ws, 'U3')).toContain('SUMIF(ESTOQUE!A:A,B3,ESTOQUE!E:E)');
+    expect(formulaDe(ws, 'U3')).not.toContain('SUBSTITUTE');
+    expect(formulaDe(ws, 'O3')).toContain("SUMIF('VENDAS MENSAL'!B:B,B3,'VENDAS MENSAL'!D:D)");
+    expect(formulaDe(ws, 'AS3')).toContain("COUNTIF('CLIENTES ATIVOS'!$C$6:$C$100000,B3)");
+    expect(formulaDe(ws, 'AS3')).not.toContain('SUBSTITUTE');
+    // VLOOKUP ignora o ~ solto ("C9~05" acharia "C905"): continua com o escape completo
+    expect(formulaDe(ws, 'AQ3')).toBe(`VLOOKUP(${escape('AU3')},LEADTIME!A:G,7,0)`);
+    expect(formulaDe(ws, 'AR3')).toContain(`VLOOKUP(${escape('B3')},MARGEM!$A$2:$B$413,2,0)`);
+    const av = criarAvaliador(wb);
+    expect(av.valor(MACRO, 'U3')).toBe(3); // so C9~05, sem C905 nem C9~~05
+    expect(av.valor(MACRO, 'O3')).toBe(30);
+    expect(av.valor(MACRO, 'AS3')).toBe(2);
+    expect(av.valor(MACRO, 'AQ3')).toBe(12);
+    expect(av.valor(MACRO, 'AR3')).toBe(0.25);
     const p = paridade(wb, q, e);
     expect(p.resultado.divergencias.slice(0, 5)).toEqual([]);
     expect(p.resultado.batem).toBe(p.resultado.celulas);
