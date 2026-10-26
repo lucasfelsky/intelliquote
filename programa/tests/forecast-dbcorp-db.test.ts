@@ -677,4 +677,63 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
       await prisma.forecastSource.delete({ where: { id: inativa.id } });
     }
   });
+
+  // --- Prazo real medio por fonte (3C) ------------------------------------------------------------------
+
+  testDbSkip('prazo real (3C): confirm congela prazosFup e GET /forecast/sources/prazo-real calcula pela fonte do produto', async () => {
+    const label = '10-1';
+    const baseDate = '2033-10-05';
+    // 3 chegadas CONCLUIDAS de A1 (DATA PO, ETD e ETA FINAL antes da base) + 1 linha sem ETA FINAL (nao e amostra).
+    const row = (status: string, etd: Cell, dataPo: Cell, etaFinal: Cell): Cell[] => [
+      ...fupRow(status, CODE_A1, 100, etd, VAZIO, etaFinal),
+      dataPo,
+      null,
+    ];
+    const fup = file(
+      'fup.xlsx',
+      await xlsxBase64(FUP_PRAZO_HEADERS, [
+        row('CONCLUÍDO', d('2033-03-01'), d('2033-01-01'), d('2033-04-10')),
+        row('CONCLUÍDO', d('2033-04-01'), d('2033-02-01'), d('2033-05-15')),
+        row('CONCLUÍDO', d('2033-05-01'), d('2033-03-01'), d('2033-06-20')),
+        row('AG. EMBARQUE', d('2033-10-30'), null, VAZIO),
+      ]),
+    );
+    try {
+      const res = await post('confirm', {
+        label,
+        baseDate,
+        files: { ...(await reports({ withVendasAtual: false })), fup },
+      });
+      expect(res.status).toBe(201);
+
+      const snapshot = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: res.body.data.snapshotId } });
+      expect((snapshot.inputs as unknown as { prazosFup: unknown[] }).prazosFup).toEqual([
+        { codigo: CODE_A1, etaFinal: '2033-04-10', poDias: 99, etdDias: 40 },
+        { codigo: CODE_A1, etaFinal: '2033-05-15', poDias: 103, etdDias: 44 },
+        { codigo: CODE_A1, etaFinal: '2033-06-20', poDias: 111, etdDias: 50 },
+      ]);
+
+      // A ultima quinzena DBCorp deste arquivo e a mais nova pela data base: as demais saem da leitura.
+      await prisma.forecastSnapshot.updateMany({
+        where: { createdById: adminId, id: { not: snapshot.id } },
+        data: { deletedAt: new Date() },
+      });
+      const antes = await prisma.forecastSource.findMany({ select: { id: true, updatedAt: true }, orderBy: { id: 'asc' } });
+
+      const get = await request(app).get('/api/v1/forecast/sources/prazo-real').set('Cookie', cookies);
+      expect(get.status).toBe(200);
+      expect(get.body.data.disponivel).toBe(true);
+      expect(get.body.data.quinzena).toMatchObject({ id: snapshot.id, label, baseDate });
+      const fonte = (get.body.data.fontes as Array<{ sourceId: number; real: { po: unknown; etd: unknown } }>).find(
+        (f) => f.sourceId === sourceId,
+      )!;
+      expect(fonte.real.po).toEqual({ chegadas: 3, media: 104, mediana: 103, min: 99, max: 111, poucasChegadas: false });
+      expect(fonte.real.etd).toMatchObject({ chegadas: 3, media: 45, mediana: 44 });
+
+      const depois = await prisma.forecastSource.findMany({ select: { id: true, updatedAt: true }, orderBy: { id: 'asc' } });
+      expect(depois).toEqual(antes);
+    } finally {
+      await prisma.forecastMonthlySale.deleteMany({ where: { yearMonth: '2033-09' } });
+    }
+  });
 });

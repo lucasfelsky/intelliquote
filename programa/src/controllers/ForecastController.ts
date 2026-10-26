@@ -84,6 +84,15 @@ export class ForecastController {
     }
   }
 
+  static async getPrazoReal(_req: Request, res: Response): Promise<Response> {
+    try {
+      const data = await ForecastSourceService.prazoReal();
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
   static async patchSource(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseId(req.params.id);

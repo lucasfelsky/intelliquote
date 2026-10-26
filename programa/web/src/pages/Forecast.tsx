@@ -13,6 +13,7 @@ import {
   type ForecastSnapshotDetail,
 } from '@/services/forecast';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
+import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
@@ -174,6 +175,10 @@ export default function Forecast() {
   const [gruposAberto, setGruposAberto] = useState(false);
   const botaoGrupos = useRef<HTMLButtonElement>(null);
   const gruposAbriuAntes = useRef(false);
+  // Fontes e lead time (3C): todos os papeis COMEX veem; admin/comprador editam o lead time.
+  const [fontesAberto, setFontesAberto] = useState(false);
+  const botaoFontes = useRef<HTMLButtonElement>(null);
+  const fontesAbriuAntes = useRef(false);
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
@@ -207,6 +212,15 @@ export default function Forecast() {
       botaoGrupos.current?.focus();
     }
   }, [gruposAberto]);
+
+  useEffect(() => {
+    if (fontesAberto) {
+      fontesAbriuAntes.current = true;
+    } else if (fontesAbriuAntes.current) {
+      fontesAbriuAntes.current = false;
+      botaoFontes.current?.focus();
+    }
+  }, [fontesAberto]);
 
   // Trocar de visao preserva a quinzena da URL.
   const mudarVisao = (proxima: 'painel' | 'compras') => {
@@ -268,6 +282,15 @@ export default function Forecast() {
               </div>
             )}
             <button
+              ref={botaoFontes}
+              type="button"
+              className="ghost-button"
+              aria-haspopup="dialog"
+              onClick={() => setFontesAberto(true)}
+            >
+              Fontes e lead time
+            </button>
+            <button
               ref={botaoGrupos}
               type="button"
               className="ghost-button"
@@ -327,6 +350,7 @@ export default function Forecast() {
         <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} podeEditar={podeImportar} />
       )}
       {gruposAberto && <ForecastGruposModal podeEditar={podeImportar} onFechar={() => setGruposAberto(false)} />}
+      {fontesAberto && <ForecastFontesModal podeEditar={podeImportar} onFechar={() => setFontesAberto(false)} />}
       <ForecastImportModal
         aberto={importando}
         onFechar={() => setImportando(false)}

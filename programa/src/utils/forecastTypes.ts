@@ -43,6 +43,17 @@ export interface Entradas {
   // Compra em aberto do FUP por código (qualquer linha não CONCLUÍDA). Não é entrada do motor: congelada só para a
   // regra dos pendentes de cadastro (5C). Ausente em quinzena gravada antes do 5C.
   comprasEmAberto?: Lancamento[];
+  // Nao e entrada do motor: amostras do FUP (linhas com ETA FINAL) congeladas so para o prazo real por fonte (3C).
+  // Ausente em quinzena gravada antes do 3C e na planilha.
+  prazosFup?: AmostraPrazoFup[];
+}
+
+// Amostra de prazo de uma chegada do FUP (linha com ETA FINAL): dias DATA PO -> ETA FINAL e ETD -> ETA FINAL.
+export interface AmostraPrazoFup {
+  codigo: string;
+  etaFinal: string; // yyyy-mm-dd
+  poDias: number | null;
+  etdDias: number | null;
 }
 
 export interface Quinzena {

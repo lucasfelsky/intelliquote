@@ -1139,4 +1139,36 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     expect(memoria().queryByText(/^Grupo:/)).toBeNull();
     expect(memoria().queryByText('Grupo')).toBeNull();
   });
+
+  it('viewer abre "Fontes e lead time" e fechar devolve o foco ao botao', async () => {
+    mockRole = 'viewer';
+    mockApi({ 7: detalhe() });
+    // O ramo generico de mockApi faz Number(path.split('/').pop()): a rota do prazo real responde ANTES dele.
+    const base = get.getMockImplementation()!;
+    get.mockImplementation(async (path: string, query?: unknown) =>
+      path === '/v1/forecast/sources/prazo-real'
+        ? {
+            data: {
+              quinzena: { id: 7, label: '10-2', baseDate: '2026-10-20' },
+              disponivel: false,
+              motivo: 'quinzena_sem_historico',
+              janelaDias: 365,
+              minChegadas: 3,
+              padraoEtdDias: 35,
+              fontes: [{ sourceId: 1, nome: 'FONTE SINTETICA', leadTimeDays: 90, clearanceDays: 7, etdDiasUsado: 35, real: null }],
+              semFonte: { chegadas: 0 },
+            },
+          }
+        : base(path, query as never),
+    );
+    renderPage();
+    await screen.findByText('Cálculo idêntico ao da planilha');
+    const abrir = screen.getByRole('button', { name: 'Fontes e lead time' });
+    fireEvent.click(abrir);
+    expect(await screen.findByRole('table', { name: 'Lead time cadastrado e prazo real por fonte' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Editar lead time/ })).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);
+    await waitFor(() => expect(screen.queryByRole('table', { name: /Lead time cadastrado/ })).toBeNull());
+    expect(document.activeElement).toBe(abrir);
+  });
 });

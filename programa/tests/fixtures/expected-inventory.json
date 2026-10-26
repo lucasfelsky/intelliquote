@@ -240,6 +240,7 @@
     "GET /forecast/snapshots/:id/relatorio-compras",
     "GET /forecast/snapshots/:id/relatorio-compras/xlsx",
     "GET /forecast/sources",
+    "GET /forecast/sources/prazo-real",
     "GET /forwarders",
     "GET /help/articles",
     "GET /item-families",

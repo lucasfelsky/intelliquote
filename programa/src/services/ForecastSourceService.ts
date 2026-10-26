@@ -1,9 +1,18 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import {
+  FORECAST_DBCORP_ETA_POR_ETD_DIAS,
+  FORECAST_ORIGIN_DBCORP,
+  FORECAST_PRAZO_REAL_JANELA_DIAS,
+  FORECAST_PRAZO_REAL_MIN_CHEGADAS,
+} from '../constants/forecast';
 import type { ForecastSourcePatchInput } from '../validators/forecast';
 import { HttpError } from '../utils/http';
 import type { MudancaDePrazo } from '../utils/forecastDbcorpRegras';
-import type { ForecastWorkbookSource } from '../utils/forecastWorkbook';
+import { prazoRealPorFonte, type PrazoRealDaFonte } from '../utils/forecastPrazoReal';
+import type { AmostraPrazoFup } from '../utils/forecastTypes';
+import { dbDateToKey } from '../utils/supplierDocumentDates';
+import { normalizeProductCode, type ForecastWorkbookSource } from '../utils/forecastWorkbook';
 import { normalizeSupplierName } from '../utils/supplierImport';
 import { AuditLogService } from './AuditLogService';
 
@@ -63,6 +72,33 @@ function sameFields(a: SourceFields, b: SourceFields): boolean {
     a.leadTimeDays === b.leadTimeDays &&
     a.supplierId === b.supplierId
   );
+}
+
+// `inputs.prazosFup` ausente (quinzena gravada antes do 3C) -> null; lista vazia e historico valido.
+function amostrasDoSnapshot(inputs: unknown): AmostraPrazoFup[] | null {
+  if (typeof inputs !== 'object' || inputs === null) return null;
+  const prazos = (inputs as { prazosFup?: unknown }).prazosFup;
+  return Array.isArray(prazos) ? (prazos as AmostraPrazoFup[]) : null;
+}
+
+export type ForecastPrazoRealMotivo = 'sem_quinzena_dbcorp' | 'quinzena_sem_historico';
+
+export interface ForecastPrazoRealData {
+  quinzena: { id: number; label: string; baseDate: string } | null;
+  disponivel: boolean;
+  motivo: ForecastPrazoRealMotivo | null;
+  janelaDias: number;
+  minChegadas: number;
+  padraoEtdDias: number;
+  fontes: Array<{
+    sourceId: number;
+    nome: string;
+    leadTimeDays: number | null;
+    clearanceDays: number | null;
+    etdDiasUsado: number;
+    real: PrazoRealDaFonte | null;
+  }>;
+  semFonte: { chegadas: number };
 }
 
 export class ForecastSourceService {
@@ -199,6 +235,68 @@ export class ForecastSourceService {
         _count: { select: { products: true } },
       },
     });
+  }
+
+  // Prazo real medio por fonte, calculado EM LEITURA da ultima quinzena DBCorp (amostras congeladas em
+  // `inputs.prazosFup`) e do cadastro ATUAL (codigo -> produto ativo -> fonte ativa). Nada e gravado.
+  static async prazoReal(): Promise<ForecastPrazoRealData> {
+    const [snapshot, sources, products] = await Promise.all([
+      prisma.forecastSnapshot.findFirst({
+        where: { origin: FORECAST_ORIGIN_DBCORP, deletedAt: null },
+        orderBy: [{ baseDate: 'desc' }, { id: 'desc' }],
+        select: { id: true, label: true, baseDate: true, inputs: true },
+      }),
+      prisma.forecastSource.findMany({
+        where: { isActive: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, leadTimeDays: true, clearanceDays: true, arrivalFromEtdDays: true },
+      }),
+      prisma.forecastProduct.findMany({
+        where: { isActive: true, sourceId: { not: null } },
+        orderBy: [{ sheetOrder: 'asc' }, { id: 'asc' }],
+        select: { sourceId: true, codes: { select: { code: true } } },
+      }),
+    ]);
+
+    const amostras = amostrasDoSnapshot(snapshot?.inputs);
+    const disponivel = amostras !== null;
+    const motivo: ForecastPrazoRealMotivo | null = !snapshot
+      ? 'sem_quinzena_dbcorp'
+      : amostras === null
+        ? 'quinzena_sem_historico'
+        : null;
+
+    // Mesma regra de ForecastDbcorpService.buildQuinzena: so fontes ativas, primeiro produto vence.
+    const idsDeFontes = new Set(sources.map((s) => s.id));
+    const fonteDoCodigo = new Map<string, number>();
+    for (const p of products) {
+      if (!p.sourceId || !idsDeFontes.has(p.sourceId)) continue;
+      for (const c of p.codes) {
+        const code = normalizeProductCode(c.code);
+        if (!fonteDoCodigo.has(code)) fonteDoCodigo.set(code, p.sourceId);
+      }
+    }
+    const agrupado = amostras ? prazoRealPorFonte(amostras, fonteDoCodigo) : null;
+
+    return {
+      quinzena: snapshot
+        ? { id: snapshot.id, label: snapshot.label, baseDate: dbDateToKey(snapshot.baseDate) }
+        : null,
+      disponivel,
+      motivo,
+      janelaDias: FORECAST_PRAZO_REAL_JANELA_DIAS,
+      minChegadas: FORECAST_PRAZO_REAL_MIN_CHEGADAS,
+      padraoEtdDias: FORECAST_DBCORP_ETA_POR_ETD_DIAS,
+      fontes: sources.map((s) => ({
+        sourceId: s.id,
+        nome: s.name,
+        leadTimeDays: s.leadTimeDays,
+        clearanceDays: s.clearanceDays,
+        etdDiasUsado: s.arrivalFromEtdDays ?? FORECAST_DBCORP_ETA_POR_ETD_DIAS,
+        real: agrupado ? (agrupado.porFonte.get(s.id) ?? { po: null, etd: null }) : null,
+      })),
+      semFonte: agrupado ? agrupado.semFonte : { chegadas: 0 },
+    };
   }
 
   static async patch(id: number, input: ForecastSourcePatchInput, userId: number | null) {

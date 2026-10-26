@@ -35,6 +35,8 @@ router.post(
 );
 
 router.get('/forecast/sources', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSources);
+// Prazo real medio por fonte (3C): so leitura, calculado da ultima quinzena DBCorp.
+router.get('/forecast/sources/prazo-real', requireAuth, allowRoles(COMEX_ROLES), ForecastController.getPrazoReal);
 
 router.patch(
   '/forecast/sources/:id',

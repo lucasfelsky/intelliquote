@@ -35,6 +35,7 @@ import {
 } from '../utils/forecastDbcorpRegras';
 import { mesesHistorico, rotulosDaQuinzena, type RotulosDaQuinzena } from '../utils/forecastMonths';
 import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
+import { amostrasDePrazo } from '../utils/forecastPrazoReal';
 import type { Entradas, Quinzena } from '../utils/forecastTypes';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
 import type { ForecastDbcorpConfirmInput, ForecastDbcorpPreviewInput } from '../validators/forecast';
@@ -390,6 +391,7 @@ export class ForecastDbcorpService {
       margem: parsed.margem?.linhas ?? [],
       clientesAtivos: parsed.clientesAtivos?.linhas ?? [],
       comprasEmAberto: parsed.fup.comprasEmAberto,
+      prazosFup: amostrasDePrazo(parsed.fup.fupLinhas, baseDate),
     };
     const rotulos = rotulosDaQuinzena(baseDate);
     built.quinzena = {
