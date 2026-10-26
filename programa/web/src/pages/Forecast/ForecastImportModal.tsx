@@ -36,6 +36,8 @@ import {
   lerCorpoDbcorp,
   lerCorpoPlanilha,
   mesAno,
+  NOTA_DBCORP_CONFIRMACAO,
+  NOTA_PLANILHA_ADMIN,
   prontidaoPendente,
   rotuloDaQuinzena,
   rotuloDoSlot,
@@ -59,6 +61,8 @@ interface Props {
   /** Rotulos (`MM-q`) das quinzenas que a pagina ja carregou. */
   quinzenasExistentes: string[];
   onImportada: (snapshotId: number, label: string) => void;
+  /** Sem a ferramenta da planilha (todo papel que nao e admin): so os relatorios DBCorp, sem barra de abas. */
+  somenteDbcorp?: boolean;
 }
 
 const ACCEPT = '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -80,9 +84,9 @@ function ArquivoEscolhido({ file, onRemover }: { file: File; onRemover: () => vo
   );
 }
 
-function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props, 'aberto'>) {
+function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp = false }: Omit<Props, 'aberto'>) {
   const queryClient = useQueryClient();
-  const [aba, setAba] = useState<Aba>('planilha');
+  const [aba, setAba] = useState<Aba>(somenteDbcorp ? 'dbcorp' : 'planilha');
   const [baseDate, setBaseDate] = useState('');
   const [quinzena, setQuinzena] = useState<1 | 2 | null>(null);
   const [planilha, setPlanilha] = useState<File | null>(null);
@@ -255,6 +259,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
 
   const trocarAba = (valor: string) => {
     if (ocupado || (valor !== 'planilha' && valor !== 'dbcorp')) return;
+    if (somenteDbcorp && valor === 'planilha') return;
     setAba(valor);
     descartar();
   };
@@ -336,6 +341,44 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
     descartar();
   }
 
+  const slotsDbcorp = (
+    <div className="fci-slots">
+      {SLOTS_DBCORP.map((slot) => {
+        const file = relatorios[slot.id];
+        const obrigatorio = slot.obrigatorio(quinzena);
+        return (
+          <div key={slot.id} className="fci-slot">
+            <div className="fci-slot__topo">
+              <label className="field-label" htmlFor={`fci-slot-${slot.id}`}>
+                {slot.rotulo}
+              </label>
+              <span className={obrigatorio ? 'badge badge--info' : 'badge badge--muted'}>
+                {obrigatorio ? 'obrigatório' : 'opcional'}
+              </span>
+            </div>
+            {(slot.origem || slot.ajuda) && (
+              <p className="fci-slot__ajuda">
+                {[slot.origem ? `DBCORP · ${slot.origem}` : '', slot.ajuda ?? ''].filter(Boolean).join(' — ')}
+              </p>
+            )}
+            <input
+              key={`${slot.id}-${versoesInput[slot.id] ?? 0}`}
+              id={`fci-slot-${slot.id}`}
+              className="file-input"
+              type="file"
+              accept={ACCEPT}
+              onChange={(e) => escolherSlot(slot.id, e.target.files?.[0] ?? null)}
+            />
+            {file && <ArquivoEscolhido file={file} onRemover={() => {
+              limparInput(slot.id);
+              escolherSlot(slot.id, null);
+            }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <Modal isOpen onClose={fechar} title="Importar quinzena" size="xl">
       <div className="fci-modal" aria-busy={ocupado}>
@@ -385,67 +428,42 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada }: Omit<Props,
                 <div className="alert alert--error" role="alert">Já existe a quinzena {rotulo}. A confirmação será recusada.</div>
               )}
 
-              <Tabs value={aba} onValueChange={trocarAba} baseId="fci">
-                <TabList aria-label="Origem dos dados">
-                  <Tab value="planilha">Planilha (.xlsx)</Tab>
-                  <Tab value="dbcorp">Relatórios DBCorp</Tab>
-                </TabList>
-                <TabPanel value="planilha">
-                  <label className="field-label" htmlFor="fci-planilha">
-                    Arquivo da planilha
-                  </label>
-                  <input
-                    key={`planilha-${versoesInput.planilha ?? 0}`}
-                    id="fci-planilha"
-                    className="file-input"
-                    type="file"
-                    accept={ACCEPT}
-                    onChange={(e) => alterar(() => setPlanilha(e.target.files?.[0] ?? null))}
-                  />
-                  {planilha && <ArquivoEscolhido file={planilha} onRemover={() => {
-                    limparInput('planilha');
-                    alterar(() => setPlanilha(null));
-                  }} />}
-                </TabPanel>
-                <TabPanel value="dbcorp">
-                  <p className="fit-nota-dbcorp">{NOTA_DBCORP_SEM_TESTE}</p>
-                  <div className="fci-slots">
-                    {SLOTS_DBCORP.map((slot) => {
-                      const file = relatorios[slot.id];
-                      const obrigatorio = slot.obrigatorio(quinzena);
-                      return (
-                        <div key={slot.id} className="fci-slot">
-                          <div className="fci-slot__topo">
-                            <label className="field-label" htmlFor={`fci-slot-${slot.id}`}>
-                              {slot.rotulo}
-                            </label>
-                            <span className={obrigatorio ? 'badge badge--info' : 'badge badge--muted'}>
-                              {obrigatorio ? 'obrigatório' : 'opcional'}
-                            </span>
-                          </div>
-                          {(slot.origem || slot.ajuda) && (
-                            <p className="fci-slot__ajuda">
-                              {[slot.origem ? `DBCORP · ${slot.origem}` : '', slot.ajuda ?? ''].filter(Boolean).join(' — ')}
-                            </p>
-                          )}
-                          <input
-                            key={`${slot.id}-${versoesInput[slot.id] ?? 0}`}
-                            id={`fci-slot-${slot.id}`}
-                            className="file-input"
-                            type="file"
-                            accept={ACCEPT}
-                            onChange={(e) => escolherSlot(slot.id, e.target.files?.[0] ?? null)}
-                          />
-                          {file && <ArquivoEscolhido file={file} onRemover={() => {
-                    limparInput(slot.id);
-                    escolherSlot(slot.id, null);
-                  }} />}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </TabPanel>
-              </Tabs>
+              {somenteDbcorp ? (
+                <section className="fci-origem" aria-labelledby="fci-origem-dbcorp">
+                  <h3 id="fci-origem-dbcorp">Relatórios DBCorp</h3>
+                  <p className="fit-nota-dbcorp">{NOTA_DBCORP_CONFIRMACAO}</p>
+                  {slotsDbcorp}
+                </section>
+              ) : (
+                <Tabs value={aba} onValueChange={trocarAba} baseId="fci">
+                  <TabList aria-label="Origem dos dados">
+                    <Tab value="planilha">Planilha (.xlsx)</Tab>
+                    <Tab value="dbcorp">Relatórios DBCorp</Tab>
+                  </TabList>
+                  <TabPanel value="planilha">
+                    <p className="fci-nota-origem">{NOTA_PLANILHA_ADMIN}</p>
+                    <label className="field-label" htmlFor="fci-planilha">
+                      Arquivo da planilha
+                    </label>
+                    <input
+                      key={`planilha-${versoesInput.planilha ?? 0}`}
+                      id="fci-planilha"
+                      className="file-input"
+                      type="file"
+                      accept={ACCEPT}
+                      onChange={(e) => alterar(() => setPlanilha(e.target.files?.[0] ?? null))}
+                    />
+                    {planilha && <ArquivoEscolhido file={planilha} onRemover={() => {
+                      limparInput('planilha');
+                      alterar(() => setPlanilha(null));
+                    }} />}
+                  </TabPanel>
+                  <TabPanel value="dbcorp">
+                    <p className="fit-nota-dbcorp">{NOTA_DBCORP_SEM_TESTE}</p>
+                    {slotsDbcorp}
+                  </TabPanel>
+                </Tabs>
+              )}
             </fieldset>
 
             {faltas.length > 0 && <p className="fci-faltam">Faltam: {faltas.join(', ')}</p>}

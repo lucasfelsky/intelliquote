@@ -384,7 +384,7 @@ describe('Forecast - excluir quinzena', () => {
     expect(await screen.findByText('Quinzena 10-2 excluída.')).toBeTruthy();
     expect(
       await screen.findByText(
-        'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp.',
+        'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar os relatórios do DBCorp.',
       ),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Excluir quinzena' })).toBeNull();

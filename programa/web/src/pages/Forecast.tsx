@@ -390,7 +390,7 @@ export default function Forecast() {
       {lista.isSuccess && quinzenas.length === 0 && (
         <div className="empty-state">
           {podeImportar
-            ? 'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp.'
+            ? 'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar os relatórios do DBCorp.'
             : 'Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.'}
         </div>
       )}
@@ -432,6 +432,7 @@ export default function Forecast() {
         onFechar={() => setImportando(false)}
         quinzenasExistentes={quinzenas.map((q) => q.label)}
         onImportada={aoImportar}
+        somenteDbcorp={user?.role !== 'admin'}
       />
     </div>
   );

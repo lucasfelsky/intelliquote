@@ -211,7 +211,7 @@ describe('Forecast', () => {
     renderPage();
     expect(
       await screen.findByText(
-        'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp.',
+        'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar os relatórios do DBCorp.',
       ),
     ).toBeTruthy();
     expect(detalhesChamados()).toEqual([]);
@@ -494,7 +494,7 @@ describe('Forecast - importar quinzena', () => {
 
     mockApi({}, []);
     renderPage();
-    expect(await screen.findByText(/Use “Importar quinzena” para enviar a planilha ou os relatórios do DBCorp\./)).toBeTruthy();
+    expect(await screen.findByText(/Use “Importar quinzena” para enviar os relatórios do DBCorp\./)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Importar quinzena' })).toBeTruthy();
   });
 
@@ -542,6 +542,7 @@ describe('Forecast - importar quinzena', () => {
   });
 
   it('fluxo integrado: planilha -> preview -> confirm 201 abre a quinzena nova', async () => {
+    mockRole = 'admin';
     const novo = {
       id: 9,
       label: '12-2',
