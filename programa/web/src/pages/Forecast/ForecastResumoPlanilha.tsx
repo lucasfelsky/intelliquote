@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ForecastImportSummary } from '@/services/forecast';
 import { mesAno } from './forecastImport';
+import { NOTA_RESUMO_MODO_TESTE } from './forecastModoTeste';
 import { dataBr, inteiroBr, textoDoSelo } from './forecastPainel';
 
 /** Erros (bloqueiam o Confirmar) e avisos (texto do backend, como vem). */
@@ -42,7 +43,13 @@ export function useFocoNoTitulo() {
   return ref;
 }
 
-export default function ForecastResumoPlanilha({ resumo }: { resumo: ForecastImportSummary }) {
+export default function ForecastResumoPlanilha({
+  resumo,
+  modoTeste = false,
+}: {
+  resumo: ForecastImportSummary;
+  modoTeste?: boolean;
+}) {
   const tituloRef = useFocoNoTitulo();
   const { produtos, codigos, fontes, historico } = resumo;
   const selo = resumo.erros.length === 0 ? textoDoSelo({ conferencia: resumo.conferencia, half: resumo.half }, { comGrade: false }) : null;
@@ -55,6 +62,7 @@ export default function ForecastResumoPlanilha({ resumo }: { resumo: ForecastImp
       <p className="fci-resumo__sub">
         Quinzena {resumo.label} · base {dataBr(resumo.baseDate)} · {resumo.half}ª quinzena
       </p>
+      {modoTeste && <p className="fit-resumo-nota">{NOTA_RESUMO_MODO_TESTE}</p>}
       <AvisosEErros erros={resumo.erros} avisos={resumo.avisos} />
       <div className="table-wrapper">
         <table className="table">

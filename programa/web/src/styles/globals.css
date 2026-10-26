@@ -3305,3 +3305,49 @@ i.fc-status--preco { background: var(--info); }
     min-height: 44px;
   }
 }
+/* Importar como teste: alternancia, aviso e notas. Somente tokens do tema. */
+.fit-alternancia {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--tone-warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--tone-warning-bg-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+.fit-dica {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.fit-status {
+  margin: 0;
+}
+.fit-aviso {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warning);
+  background: var(--tone-warning-bg-soft);
+  color: var(--tone-warning-fg-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.fit-resumo-nota {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tone-warning-fg-strong);
+}
+.fit-nota-dbcorp {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+@media (max-width: 700px) {
+  .fit-alternancia {
+    min-height: 44px;
+  }
+}
