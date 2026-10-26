@@ -67,6 +67,9 @@ export interface ForecastLinha {
   mediaAjustada?: ForecastMediaAjustada;
   /** PR 6b (opcional: backend antigo nao manda): grupo de equivalencia do produto no cadastro ATUAL; nulo = avulso. */
   grupo?: { id: number; nome: string; principalProductId: number | null } | null;
+  /** PR4 (opcionais: backend antigo nao manda): colunas AY (amostra por pacote) e AZ (pedir amostra) congeladas na quinzena; nulo = vazio. */
+  qtdAmostra?: string | null;
+  solicitarAmostra?: string | null;
 }
 
 /** Mes de venda atipica de um produto dentro da janela da quinzena; `indice`: 0..5 = J..O, 6 = P (mes atual). */
