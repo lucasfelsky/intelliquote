@@ -10,13 +10,21 @@ import {
   ERRO_PALLET_CASAS,
   ERRO_PALLET_FORMATO,
   ERRO_PALLET_MAXIMO,
+  ERRO_PALLET_MUITOS,
   ERRO_PALLET_POSITIVO,
+  ERRO_PALLET_REPETIDO,
   ERRO_PALLET_SEM_QUANTIDADE,
   ERRO_QTD_POSITIVA,
+  avisoDosPallets,
   erroDoPallet,
+  erroDosPallets,
   lerPalletKg,
+  lerPalletsKg,
   lerQuantidadeKg,
+  MAX_PALLETS_POR_CODIGO,
   montarPatch,
+  palletsDoCodigo,
+  palletsParaCampo,
   quantidadeParaCampo,
 } from './forecastEmbalagens';
 
@@ -189,5 +197,94 @@ describe('montarPatch com pallet (PR 6e)', () => {
   it('palletKg undefined (nao informado) nao conta como mudanca; backend antigo sem o campo = sem pallet', () => {
     expect(montarPatch(comPallet, editar(base, 0, { palletKg: undefined }))).toBeNull();
     expect(montarPatch(original, edicaoInicial(original))).toBeNull();
+  });
+});
+
+describe('varios tamanhos de pallet (Etapa B)', () => {
+  it('lerPalletsKg: vazio = []; separa por ponto e virgula; parte vazia e ignorada; um so valor = lerPalletKg', () => {
+    expect(lerPalletsKg('')).toEqual({ ok: true, valores: [] });
+    expect(lerPalletsKg('   ')).toEqual({ ok: true, valores: [] });
+    expect(lerPalletsKg('600')).toEqual({ ok: true, valores: [600] });
+    expect(lerPalletsKg('1.000; 1.200')).toEqual({ ok: true, valores: [1000, 1200] });
+    expect(lerPalletsKg('1.000;1.250,5;')).toEqual({ ok: true, valores: [1000, 1250.5] });
+    expect(lerPalletsKg('1.000; ; 1.200')).toEqual({ ok: true, valores: [1000, 1200] });
+  });
+
+  it('lerPalletsKg: erro da primeira parte invalida, repetido e mais de 5 tamanhos', () => {
+    expect(lerPalletsKg('abc')).toEqual({ ok: false, erro: ERRO_PALLET_FORMATO });
+    expect(lerPalletsKg('1.000; 0')).toEqual({ ok: false, erro: ERRO_PALLET_POSITIVO });
+    expect(lerPalletsKg('1.000; 600,1234')).toEqual({ ok: false, erro: ERRO_PALLET_CASAS });
+    expect(lerPalletsKg('1.000; 1.000.001')).toEqual({ ok: false, erro: ERRO_PALLET_MAXIMO });
+    expect(lerPalletsKg('1.000; 1000')).toEqual({ ok: false, erro: ERRO_PALLET_REPETIDO });
+    expect(lerPalletsKg('1; 2; 3; 4; 5')).toEqual({ ok: true, valores: [1, 2, 3, 4, 5] });
+    expect(lerPalletsKg('1; 2; 3; 4; 5; 6')).toEqual({ ok: false, erro: ERRO_PALLET_MUITOS });
+    expect(MAX_PALLETS_POR_CODIGO).toBe(5);
+  });
+
+  it('palletsDoCodigo e palletsParaCampo: lista ausente cai em [palletKg]; o campo volta a ser lido igual', () => {
+    expect(palletsDoCodigo({ palletKg: 600 })).toEqual([600]);
+    expect(palletsDoCodigo({ palletKg: null })).toEqual([]);
+    expect(palletsDoCodigo({})).toEqual([]);
+    expect(palletsDoCodigo({ palletKg: 1000, palletsKg: [1000, 1200] })).toEqual([1000, 1200]);
+    expect(palletsParaCampo([1000, 1250.5])).toBe('1000; 1250,5');
+    expect(palletsParaCampo([])).toBe('');
+    expect(lerPalletsKg(palletsParaCampo([1000, 1250.5]))).toEqual({ ok: true, valores: [1000, 1250.5] });
+  });
+
+  it('erroDosPallets e avisoDosPallets: sem quantidade bloqueia; aviso por tamanho (1 = texto de hoje)', () => {
+    expect(erroDosPallets(null, [1000, 1200])).toBe(ERRO_PALLET_SEM_QUANTIDADE);
+    expect(erroDosPallets(null, [])).toBeNull();
+    expect(erroDosPallets(25, [1000, 1200])).toBeNull();
+    expect(avisoDosPallets(25, [1000, 1200])).toBeNull();
+    expect(avisoDosPallets(25, [610])).toBe(avisoDoPallet(25, 610));
+    expect(avisoDosPallets(25, [1000, 610])).toBe(avisoDoPallet(25, 610));
+    expect(avisoDosPallets(25, [610, 12.5])).toBe(
+      'Os pallets (610 kg; 12,5 kg) não são múltiplos da embalagem (25 kg): confira com o fornecedor.',
+    );
+    expect(avisoDosPallets(null, [610])).toBeNull();
+  });
+
+  describe('montarPatch', () => {
+    const com = (palletKg: number | null, palletsKg?: number[]): ForecastEmbalagens => ({
+      ...original,
+      codigos: original.codigos.map((c, i) => (i === 0 ? { ...c, palletKg, ...(palletsKg ? { palletsKg } : {}) } : c)),
+    });
+
+    it('edicaoInicial: com 0/1 tamanho e a de antes (sem palletsKg); com 2+ carrega a lista', () => {
+      expect(edicaoInicial(com(600)).codigos[0]).not.toHaveProperty('palletsKg');
+      expect(edicaoInicial(com(null)).codigos[0]).not.toHaveProperty('palletsKg');
+      expect(edicaoInicial(com(1000, [1000, 1200])).codigos[0]).toMatchObject({ palletKg: 1000, palletsKg: [1000, 1200] });
+      expect(montarPatch(com(1000, [1000, 1200]), edicaoInicial(com(1000, [1000, 1200])))).toBeNull();
+    });
+
+    it('lista igual a atual nao conta como mudanca', () => {
+      expect(montarPatch(com(600), editar(edicaoInicial(com(600)), 0, { palletsKg: [600] }))).toBeNull();
+      expect(montarPatch(com(null), editar(edicaoInicial(com(null)), 0, { palletsKg: [] }))).toBeNull();
+    });
+
+    it('0/1 tamanho antes e depois: vai palletKg como sempre foi (backend antigo so le esse campo)', () => {
+      expect(montarPatch(com(null), editar(edicaoInicial(com(null)), 0, { palletsKg: [600] }))).toEqual({
+        embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletKg: 600 }],
+      });
+      expect(montarPatch(com(600), editar(edicaoInicial(com(600)), 0, { palletsKg: [] }))).toEqual({
+        embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletKg: null }],
+      });
+      expect(montarPatch(com(600), editar(edicaoInicial(com(600)), 0, { palletsKg: [900] }))).toEqual({
+        embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletKg: 900 }],
+      });
+    });
+
+    it('2+ tamanhos (antes ou depois): vai palletsKg com a lista inteira, em ordem', () => {
+      expect(montarPatch(com(600), editar(edicaoInicial(com(600)), 0, { palletsKg: [600, 900] }))).toEqual({
+        embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletsKg: [600, 900] }],
+      });
+      const dois = com(1000, [1000, 1200]);
+      expect(montarPatch(dois, editar(edicaoInicial(dois), 0, { palletsKg: [1200, 1000] }))).toEqual({
+        embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletsKg: [1200, 1000] }],
+      });
+      expect(montarPatch(dois, editar(edicaoInicial(dois), 0, { palletsKg: [] }))).toEqual({
+        embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletsKg: [] }],
+      });
+    });
   });
 });

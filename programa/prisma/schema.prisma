@@ -1218,8 +1218,10 @@ model ForecastProductCode {
   catalogItem        CatalogItem?    @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   // Quantidade de UMA embalagem do codigo, em kg (nulo = sem embalagem). 18,6 = precisao de TbEmbalagemItem.EmbalagemQuant (DBCorp).
   packagingQtyKg     Decimal?        @db.Decimal(18, 6)
-  // kg de UM pallet fechado desta embalagem (ex.: 24 bombonas de 25 kg = 600); nulo = sem pallet. Multiplo da quantidade.
+  // kg de UM pallet fechado desta embalagem (1o tamanho; ex.: 24 bombonas de 25 kg = 600); nulo = sem pallet. Multiplo da quantidade.
   packagingPalletKg  Decimal?        @db.Decimal(18, 6)
+  // Tamanhos de pallet ALEM do primeiro (packagingPalletKg), em kg, na ordem do cadastro; vazio = 0 ou 1 tamanho.
+  packagingPalletExtraKg Decimal[]   @default([]) @db.Decimal(18, 6)
   packagingLabel     String?
   // Embalagem principal do PRODUTO.
   // Indice unico parcial (so na migration): no maximo uma packagingIsPrimary = true por productId.

@@ -156,6 +156,8 @@ export interface ForecastOpcaoEmbalagem extends ForecastEmbalagemDoItem {
   destaque: boolean;
   /** PR 6e (opcional: backend antigo nao manda): pallets abaixo/acima; nulo/ausente = embalagem sem pallet. */
   pallet?: ForecastPalletDaOpcao | null;
+  /** Etapa B (opcional: backend antigo nao manda; so existe com 2+ tamanhos): pallets dos demais tamanhos do codigo. */
+  outrosPallets?: ForecastPalletDaOpcao[];
 }
 
 /** Um membro de grupo de equivalencia na quinzena, com os componentes que entram na soma (PR 6b). */

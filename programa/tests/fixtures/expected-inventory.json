@@ -176,7 +176,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 67
+    "migrations": 68
   },
   "emailTemplates": [
     "commercial_request_created@pt",

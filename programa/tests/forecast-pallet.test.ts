@@ -12,7 +12,14 @@ import {
   type LinhaParaRelatorio,
   type QuinzenaParaRelatorio,
 } from '../src/utils/forecastRelatorioCompras';
-import { textoPallet } from '../src/utils/forecastRelatorioComprasXlsx';
+import { FORECAST_MAX_PALLETS_POR_CODIGO } from '../src/constants/forecast';
+import { colunasDePallet, palletsDesejados, palletsDoCadastro } from '../src/utils/forecastPallets';
+import {
+  celulasDoItem,
+  COLUNAS_RELATORIO_XLSX,
+  linhasDePallet,
+  textoPallet,
+} from '../src/utils/forecastRelatorioComprasXlsx';
 import type { Quinzena } from '../src/utils/forecastTypes';
 
 // Repo PUBLICO: so dados sinteticos (PRODUTO 001, C0001...) e a fixture anonimizada. Caso D da validacao do Comex
@@ -237,5 +244,143 @@ describe('relatorio de compras com pallet (PR 6e, caso D)', () => {
     expect(opcoes.every((o) => o.pallet === null)).toBe(true);
     expect(r.totais.comPallet).toBe(0);
     expect(montarRelatorioCompras(q, cadastro(null))).toEqual(r);
+  });
+});
+
+describe('forecastPallets (tamanhos de pallet por codigo)', () => {
+  it('palletsDoCadastro: 1o + extras na ordem, sem nulos, invalidos nem repetidos', () => {
+    expect(palletsDoCadastro(1000, [1200, 1500])).toEqual([1000, 1200, 1500]);
+    expect(palletsDoCadastro(null, [])).toEqual([]);
+    expect(palletsDoCadastro(600, [])).toEqual([600]);
+    expect(palletsDoCadastro(1000, [0, -5, Number.NaN, 1000, 1200, 1200])).toEqual([1000, 1200]);
+    expect(palletsDoCadastro(null, [1200])).toEqual([1200]);
+  });
+
+  it('colunasDePallet: 1o tamanho na coluna antiga, o resto no array; vazio = nulo + []', () => {
+    expect(colunasDePallet([1000, 1200, 1500])).toEqual({ packagingPalletKg: 1000, packagingPalletExtraKg: [1200, 1500] });
+    expect(colunasDePallet([600])).toEqual({ packagingPalletKg: 600, packagingPalletExtraKg: [] });
+    expect(colunasDePallet([])).toEqual({ packagingPalletKg: null, packagingPalletExtraKg: [] });
+  });
+
+  it('palletsDesejados: ausente mantem; palletsKg substitui; legado troca so o 1o; null apaga tudo', () => {
+    const atual = [1000, 1200, 1500];
+    expect(palletsDesejados(atual, undefined)).toEqual(atual);
+    expect(palletsDesejados(atual, {})).toEqual(atual);
+    expect(palletsDesejados(atual, { palletsKg: [800, 900] })).toEqual([800, 900]);
+    expect(palletsDesejados(atual, { palletsKg: [] })).toEqual([]);
+    expect(palletsDesejados(atual, { palletKg: 900 })).toEqual([900, 1200, 1500]);
+    expect(palletsDesejados(atual, { palletKg: 1200 })).toEqual([1200, 1500]);
+    expect(palletsDesejados(atual, { palletKg: null })).toEqual([]);
+    expect(palletsDesejados([], { palletKg: 600 })).toEqual([600]);
+    expect(palletsDesejados([], { palletKg: null })).toEqual([]);
+  });
+
+  it('o limite de tamanhos por codigo e 5', () => {
+    expect(FORECAST_MAX_PALLETS_POR_CODIGO).toBe(5);
+  });
+});
+
+describe('varios tamanhos de pallet no relatorio e no XLSX (Etapa B)', () => {
+  const dois = (): EmbalagemCadastrada[] => [{ codigo: 'C0001', quantidade: 25, palletKg: 1000, palletsKg: [1000, 1200] }];
+  const colunaDe = (nome: (typeof COLUNAS_RELATORIO_XLSX)[number]) => COLUNAS_RELATORIO_XLSX.indexOf(nome);
+
+  it('escolherEmbalagem: palletKg e o 1o; os demais vao em outrosPalletsKg (so com 2+)', () => {
+    const escolha = escolherEmbalagem(['C0001'], dois());
+    expect(escolha.usada).toEqual({ codigo: 'C0001', quantidade: 25, rotulo: null, palletKg: 1000, outrosPalletsKg: [1200] });
+    // Lista de 1 e palletKg legado: o objeto e o de antes (sem a chave nova).
+    const um = escolherEmbalagem(['C0001'], [{ codigo: 'C0001', quantidade: 25, palletsKg: [600] }]);
+    const legado = escolherEmbalagem(['C0001'], [{ codigo: 'C0001', quantidade: 25, palletKg: 600 }]);
+    expect(um).toEqual(legado);
+    expect(um.usada).toEqual({ codigo: 'C0001', quantidade: 25, rotulo: null, palletKg: 600 });
+    expect(um.usada).not.toHaveProperty('outrosPalletsKg');
+    // palletsKg vazio = sem pallet, mesmo com palletKg antigo no cadastro.
+    expect(escolherEmbalagem(['C0001'], [{ codigo: 'C0001', quantidade: 25, palletKg: 600, palletsKg: [] }]).usada).toEqual({
+      codigo: 'C0001',
+      quantidade: 25,
+      rotulo: null,
+    });
+  });
+
+  it('arredondarParaCadaEmbalagem com 1.000 e 1.200 kg: pallet = 1.000 e outrosPallets = [1.200]', () => {
+    const [opcao] = arredondarParaCadaEmbalagem(1400, escolherEmbalagem(['C0001'], dois()));
+    expect(opcao.pallet).toEqual({ kgPorPallet: 1000, abaixo: { pallets: 1, kg: 1000 }, acima: { pallets: 2, kg: 2000 } });
+    expect(opcao.outrosPallets).toEqual([
+      { kgPorPallet: 1200, abaixo: { pallets: 1, kg: 1200 }, acima: { pallets: 2, kg: 2400 } },
+    ]);
+    expect(opcao).not.toHaveProperty('outrosPalletsKg');
+  });
+
+  it('com 0 ou 1 tamanho o objeto da opcao NAO ganha a chave outrosPallets (formato de hoje)', () => {
+    for (const cadastro of [
+      [{ codigo: 'C0001', quantidade: 25 }],
+      [{ codigo: 'C0001', quantidade: 25, palletKg: 600 }],
+      [{ codigo: 'C0001', quantidade: 25, palletKg: 600, palletsKg: [600] }],
+    ] as EmbalagemCadastrada[][]) {
+      const [opcao] = arredondarParaCadaEmbalagem(1400, escolherEmbalagem(['C0001'], cadastro));
+      expect(opcao).not.toHaveProperty('outrosPallets');
+    }
+  });
+
+  it('nada a comprar (quantidade 0): sem pallet e sem outrosPallets, mesmo com 2 tamanhos', () => {
+    const [opcao] = arredondarParaCadaEmbalagem(0, escolherEmbalagem(['C0001'], dois()));
+    expect(opcao.pallet).toBeNull();
+    expect(opcao).not.toHaveProperty('outrosPallets');
+  });
+
+  it('montarRelatorioCompras: 2 tamanhos contam 1 item em comPallet; 1 tamanho via lista = relatorio de hoje', () => {
+    const q = quinzena([linha({ linha: 1, item: 'PRODUTO 001', AN: -1400 })]);
+    const r2 = montarRelatorioCompras(q, dois());
+    expect(item(r2).porEmbalagem[0].outrosPallets).toHaveLength(1);
+    expect(item(r2).embalagem.usada?.outrosPalletsKg).toEqual([1200]);
+    expect(r2.totais.comPallet).toBe(1);
+    expect(item(r2).quantidadeFinal).toBe(1400); // a Qtd. final continua pela embalagem
+    const legado = montarRelatorioCompras(q, [{ codigo: 'C0001', quantidade: 25, palletKg: 600 }]);
+    const lista = montarRelatorioCompras(q, [{ codigo: 'C0001', quantidade: 25, palletKg: 600, palletsKg: [600] }]);
+    expect(lista).toEqual(legado);
+  });
+
+  it('linhasDePallet: uma linha por tamanho (1o e demais); sem pallet = []; com 1 tamanho = 1 linha como antes', () => {
+    const [dupla] = arredondarParaCadaEmbalagem(1400, escolherEmbalagem(['C0001'], dois()));
+    expect(linhasDePallet(dupla)).toEqual([
+      'Pallet de 1.000 kg: 1 pallet = 1.000 kg (abaixo) · 2 pallets = 2.000 kg (acima)',
+      'Pallet de 1.200 kg: 1 pallet = 1.200 kg (abaixo) · 2 pallets = 2.400 kg (acima)',
+    ]);
+    const [simples] = arredondarParaCadaEmbalagem(1400, escolherEmbalagem(['C0001'], [{ codigo: 'C0001', quantidade: 25, palletKg: 600 }]));
+    expect(linhasDePallet(simples)).toEqual([textoPallet(simples.pallet!)]);
+    const [sem] = arredondarParaCadaEmbalagem(1400, escolherEmbalagem(['C0001'], [{ codigo: 'C0001', quantidade: 25 }]));
+    expect(linhasDePallet(sem)).toEqual([]);
+    expect(linhasDePallet(undefined)).toEqual([]);
+  });
+
+  it('celulasDoItem: a celula Embalagem tem 2 linhas "Pallet de ..." com 2 tamanhos e a de hoje com 1', () => {
+    const q = quinzena([linha({ linha: 1, item: 'PRODUTO 001', AN: -1400 })]);
+    const comDois = celulasDoItem(item(montarRelatorioCompras(q, dois())), 15)[colunaDe('Embalagem')] as string;
+    expect(comDois.split('\n')).toEqual([
+      '56 × 25 kg (código C0001)',
+      'Pallet de 1.000 kg: 1 pallet = 1.000 kg (abaixo) · 2 pallets = 2.000 kg (acima)',
+      'Pallet de 1.200 kg: 1 pallet = 1.200 kg (abaixo) · 2 pallets = 2.400 kg (acima)',
+    ]);
+    const comUm = celulasDoItem(item(montarRelatorioCompras(q, [{ codigo: 'C0001', quantidade: 25, palletKg: 600 }])), 15)[
+      colunaDe('Embalagem')
+    ] as string;
+    expect(comUm).toBe(`56 × 25 kg (código C0001)\n${textoPallet(opcoesDePallet(1400, 600))}`);
+    const semPallet = celulasDoItem(item(montarRelatorioCompras(q, [{ codigo: 'C0001', quantidade: 25 }])), 15)[
+      colunaDe('Embalagem')
+    ] as string;
+    expect(semPallet).toBe('56 × 25 kg (código C0001)');
+  });
+
+  it('celulasDoItem: as outras opcoes tambem listam todos os tamanhos (1 linha por tamanho abaixo da opcao)', () => {
+    const q = quinzena([linha({ linha: 1, item: 'PRODUTO 001', codigos: ['C0001', 'C0002'], AN: -1400 })]);
+    const cadastro: EmbalagemCadastrada[] = [
+      { codigo: 'C0001', quantidade: 25, principal: true },
+      { codigo: 'C0002', quantidade: 200, palletKg: 1000, palletsKg: [1000, 1200] },
+    ];
+    const outras = celulasDoItem(item(montarRelatorioCompras(q, cadastro)), 15)[colunaDe('Outras embalagens')] as string;
+    expect(outras.split('\n')).toEqual([
+      '7 × 200 kg (código C0002) = 1.400 kg',
+      'Pallet de 1.000 kg: 1 pallet = 1.000 kg (abaixo) · 2 pallets = 2.000 kg (acima)',
+      'Pallet de 1.200 kg: 1 pallet = 1.200 kg (abaixo) · 2 pallets = 2.400 kg (acima)',
+    ]);
   });
 });

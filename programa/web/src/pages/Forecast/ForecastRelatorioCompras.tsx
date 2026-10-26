@@ -44,7 +44,7 @@ import {
   contarComMesesForaDaMedia,
   opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
-  palletDoDestaque,
+  palletsDoDestaque,
   paragrafoDemandaComercial,
   paragrafoGruposDeEquivalencia,
   paragrafoMesesForaDaMedia,
@@ -98,7 +98,7 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
     );
   }
   const outras = opcoesOutrasComPallet(item);
-  const palletUsada = palletDoDestaque(item);
+  const palletsUsada = palletsDoDestaque(item);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
     <span className="fcr-embalagem">
@@ -110,11 +110,20 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
           Arredondado pela embalagem do código {usada.codigo}
         </span>
       )}
-      {palletUsada && <span className="fcr-embalagem__pallet">{palletUsada}</span>}
-      {outras.map(({ texto, pallet }) => (
+      {palletsUsada.map((texto) => (
+        <span key={texto} className="fcr-embalagem__pallet">
+          {texto}
+        </span>
+      ))}
+      {outras.map(({ texto, pallet, outrosPallets }) => (
         <Fragment key={texto}>
           <span className="fcr-embalagem__outras">{texto}</span>
           {pallet && <span className="fcr-embalagem__pallet">{pallet}</span>}
+          {outrosPallets.map((p) => (
+            <span key={p} className="fcr-embalagem__pallet">
+              {p}
+            </span>
+          ))}
         </Fragment>
       ))}
       {botao}

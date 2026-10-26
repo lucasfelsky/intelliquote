@@ -304,3 +304,111 @@ describe('ForecastRelatorioCompras - pallet fechado (PR 6e)', () => {
     expect(screen.getByText(/O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem/)).toBeTruthy();
   });
 });
+
+describe('ForecastRelatorioCompras - varios tamanhos de pallet (Etapa B)', () => {
+  const palletDe = (kg: number, abaixo: number, acima: number) => ({
+    kgPorPallet: kg,
+    abaixo: { pallets: abaixo, kg: abaixo * kg },
+    acima: { pallets: acima, kg: acima * kg },
+  });
+  const comDoisTamanhos = (over: Record<string, unknown> = {}) =>
+    item({
+      quantidadeSugerida: 1400,
+      demanda: -1400,
+      embalagem: {
+        usada: { codigo: 'C0001', quantidade: 25, rotulo: null, palletKg: 1000, outrosPalletsKg: [1200] },
+        cadastradas: [{ codigo: 'C0001', quantidade: 25, rotulo: null, palletKg: 1000, outrosPalletsKg: [1200] }],
+        multiplas: false,
+      },
+      porEmbalagem: [
+        {
+          codigo: 'C0001',
+          quantidade: 25,
+          rotulo: null,
+          embalagens: 56,
+          quantidadeFinal: 1400,
+          destaque: true,
+          pallet: palletDe(1000, 1, 2),
+          outrosPallets: [palletDe(1200, 1, 2)],
+        },
+      ],
+      quantidadeEmbalagens: 56,
+      quantidadeFinal: 1400,
+      ...over,
+    });
+
+  it('item com 2 tamanhos mostra as 2 linhas de pallet sob a embalagem, na ordem do cadastro', async () => {
+    mockApi([comDoisTamanhos()]);
+    const { container } = renderRelatorio();
+    expect(await screen.findByText('56 × 25 kg (código C0001)')).toBeTruthy();
+    const linhas = Array.from(container.querySelectorAll('.fcr-embalagem__pallet')).map((e) => e.textContent);
+    expect(linhas).toEqual([
+      'Pallet de 1.000 kg: 1 pallet = 1.000 kg (abaixo) · 2 pallets = 2.000 kg (acima)',
+      'Pallet de 1.200 kg: 1 pallet = 1.200 kg (abaixo) · 2 pallets = 2.400 kg (acima)',
+    ]);
+  });
+
+  it('duas embalagens: os tamanhos de cada opcao vem logo abaixo dela (destaque e outras)', async () => {
+    mockApi([
+      comDoisTamanhos({
+        embalagem: {
+          usada: { codigo: 'C0001', quantidade: 25, rotulo: null },
+          cadastradas: [
+            { codigo: 'C0001', quantidade: 25, rotulo: null },
+            { codigo: 'C0002', quantidade: 1000, rotulo: 'Bag' },
+          ],
+          multiplas: true,
+        },
+        porEmbalagem: [
+          {
+            codigo: 'C0001',
+            quantidade: 25,
+            rotulo: null,
+            embalagens: 56,
+            quantidadeFinal: 1400,
+            destaque: true,
+            pallet: palletDe(1000, 1, 2),
+            outrosPallets: [palletDe(1200, 1, 2)],
+          },
+          {
+            codigo: 'C0002',
+            quantidade: 1000,
+            rotulo: 'Bag',
+            embalagens: 2,
+            quantidadeFinal: 2000,
+            destaque: false,
+            pallet: palletDe(2000, 0, 1),
+            outrosPallets: [palletDe(4000, 0, 1)],
+          },
+        ],
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    await screen.findByText('56 × 25 kg (código C0001)');
+    const celula = container.querySelector('.fcr-embalagem') as HTMLElement;
+    const textos = Array.from(celula.children).map((e) => e.textContent);
+    expect(textos).toEqual([
+      '56 × 25 kg (código C0001)',
+      'Arredondado pela embalagem do código C0001',
+      'Pallet de 1.000 kg: 1 pallet = 1.000 kg (abaixo) · 2 pallets = 2.000 kg (acima)',
+      'Pallet de 1.200 kg: 1 pallet = 1.200 kg (abaixo) · 2 pallets = 2.400 kg (acima)',
+      '2 × Bag (código C0002) = 2.000 kg',
+      'Pallet de 2.000 kg: 1 pallet = 2.000 kg (acima)',
+      'Pallet de 4.000 kg: 1 pallet = 4.000 kg (acima)',
+    ]);
+  });
+
+  it('com 1 tamanho (sem outrosPallets) a celula e a de hoje: uma so linha de pallet', async () => {
+    mockApi([
+      comDoisTamanhos({
+        porEmbalagem: [
+          { codigo: 'C0001', quantidade: 25, rotulo: null, embalagens: 56, quantidadeFinal: 1400, destaque: true, pallet: palletDe(600, 2, 3) },
+        ],
+      }),
+    ]);
+    const { container } = renderRelatorio();
+    await screen.findByText('56 × 25 kg (código C0001)');
+    const linhas = Array.from(container.querySelectorAll('.fcr-embalagem__pallet')).map((e) => e.textContent);
+    expect(linhas).toEqual(['Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)']);
+  });
+});

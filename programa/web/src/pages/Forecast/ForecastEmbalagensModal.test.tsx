@@ -382,3 +382,123 @@ describe('ForecastEmbalagensModal - pallet fechado (PR 6e)', () => {
     expect(pallet('C0001').value).toBe('1.200');
   });
 });
+
+describe('ForecastEmbalagensModal - varios tamanhos de pallet (Etapa B)', () => {
+  const pallet = (codigo: string) => screen.getByLabelText(`Pallet em kg do código ${codigo}`) as HTMLInputElement;
+
+  beforeEach(() => {
+    atual = dados({
+      codigos: [
+        { id: 11, posicao: 1, codigo: 'C0001', quantidadeKg: 25, palletKg: 1000, palletsKg: [1000, 1200], rotulo: 'Saco', principal: false, origem: 'manual', atualizadoEm: '2026-10-22' },
+        { id: 12, posicao: 2, codigo: 'C0002', quantidadeKg: 25, palletKg: 600, palletsKg: [600], rotulo: null, principal: false, origem: 'manual', atualizadoEm: '2026-10-22' },
+        { id: 13, posicao: 3, codigo: 'C0003', quantidadeKg: 200, palletKg: null, palletsKg: [], rotulo: null, principal: true, origem: 'dbcorp', atualizadoEm: '2026-10-21' },
+      ],
+    });
+  });
+
+  it('leitura: a coluna Pallet lista os tamanhos separados por ponto e virgula (1, 2 ou nenhum)', async () => {
+    renderModal(false);
+    await screen.findByText('PRODUTO 001');
+    const linhas = screen.getAllByRole('row').slice(1) as HTMLElement[];
+    const celulas = linhas.map((l) => within(l).getAllByRole('cell').map((c) => c.textContent));
+    expect(celulas[0]?.[2]).toBe('1.000 kg; 1.200 kg');
+    expect(celulas[1]?.[2]).toBe('600 kg');
+    expect(celulas[2]?.[2]).toBe('—');
+  });
+
+  it('edicao: um campo por codigo com os tamanhos separados por "; " e a dica ligada por aria-describedby', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    expect(pallet('C0001').value).toBe('1000; 1200');
+    expect(pallet('C0002').value).toBe('600');
+    expect(pallet('C0003').value).toBe('');
+    const dica = screen.getByText('Mais de um tamanho: separe com ponto e vírgula (ex.: 1.000; 1.200).');
+    expect(pallet('C0001').getAttribute('aria-describedby')).toBe(dica.id);
+    expect(salvar().disabled).toBe(true);
+  });
+
+  it('digitar "1.000; 1.200" num codigo sem pallet envia palletsKg [1000, 1200]', async () => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0003'), { target: { value: '1.000; 1.200' } });
+    expect(salvar().disabled).toBe(false);
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [{ codigoId: 13, quantidadeKg: 200, rotulo: null, palletsKg: [1000, 1200] }],
+    });
+  });
+
+  it('um tamanho a mais num codigo com 1 tamanho e um a menos num com 2 mandam a lista inteira', async () => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0002'), { target: { value: '600; 900' } });
+    fireEvent.change(pallet('C0001'), { target: { value: '1000' } });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [
+        { codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletsKg: [1000] },
+        { codigoId: 12, quantidadeKg: 25, rotulo: null, palletsKg: [600, 900] },
+      ],
+    });
+  });
+
+  it('repetido e mais de 5 tamanhos mostram o erro no campo e bloqueiam o Salvar (nenhum PATCH)', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '1.000; 1000' } });
+    const erro = screen.getByText('Tamanho de pallet repetido no mesmo código.');
+    expect(pallet('C0001').getAttribute('aria-invalid')).toBe('true');
+    expect(pallet('C0001').getAttribute('aria-describedby')).toBe(erro.id);
+    expect(salvar().disabled).toBe(true);
+    fireEvent.change(pallet('C0001'), { target: { value: '100; 200; 300; 400; 500; 600' } });
+    expect(screen.getByText('Informe no máximo 5 tamanhos de pallet por código.')).toBeTruthy();
+    expect(salvar().disabled).toBe(true);
+    fireEvent.click(salvar());
+    expect(patch).not.toHaveBeenCalled();
+    fireEvent.change(pallet('C0001'), { target: { value: '100; 200; 300; 400; 500' } });
+    expect(screen.queryByText(/no máximo 5 tamanhos/)).toBeNull();
+    expect(salvar().disabled).toBe(false);
+  });
+
+  it('aviso de nao multiplo e por tamanho (nao bloqueia o Salvar)', async () => {
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '1000; 1210' } });
+    expect(screen.getByText('O pallet (1210 kg) não é múltiplo da embalagem (25 kg): confira com o fornecedor.')).toBeTruthy();
+    expect(salvar().disabled).toBe(false);
+  });
+
+  it('backend antigo (so palletKg): o campo abre com o valor e acrescentar um tamanho manda palletsKg', async () => {
+    patch.mockResolvedValue({ data: atual });
+    atual = dados({
+      codigos: [
+        { id: 11, posicao: 1, codigo: 'C0001', quantidadeKg: 25, palletKg: 600, rotulo: 'Saco', principal: false, origem: 'manual', atualizadoEm: '2026-10-22' },
+      ],
+    });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    expect(pallet('C0001').value).toBe('600');
+    fireEvent.change(pallet('C0001'), { target: { value: '600; 900' } });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletsKg: [600, 900] }],
+    });
+  });
+
+  it('apagar o campo de um codigo com 2 tamanhos manda palletsKg []', async () => {
+    patch.mockResolvedValue({ data: atual });
+    renderModal(true);
+    await screen.findByText('PRODUTO 001');
+    fireEvent.change(pallet('C0001'), { target: { value: '' } });
+    fireEvent.click(salvar());
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenLastCalledWith('/v1/forecast/products/5/embalagens', {
+      embalagens: [{ codigoId: 11, quantidadeKg: 25, rotulo: 'Saco', palletsKg: [] }],
+    });
+  });
+});

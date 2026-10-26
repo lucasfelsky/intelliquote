@@ -3,10 +3,12 @@ import type { ForecastItemDemandaComercial, ForecastOpcaoEmbalagem } from '@/ser
 import {
   CONFIRA_PROGRAMACOES,
   contarComMesesForaDaMedia,
+  linhasDePallet,
   linhasOutrasEmbalagens,
   opcoesOutrasComPallet,
   PARAGRAFO_EMBALAGEM,
   palletDoDestaque,
+  palletsDoDestaque,
   paragrafoDemandaComercial,
   paragrafoGruposDeEquivalencia,
   paragrafoMesesForaDaMedia,
@@ -150,7 +152,7 @@ describe('textoPallet', () => {
   });
 });
 
-describe('palletDoDestaque / opcoesOutrasComPallet', () => {
+describe('palletsDoDestaque / opcoesOutrasComPallet', () => {
   const usada = { codigo: 'C0001', quantidade: 25, rotulo: null };
   const outra = { codigo: 'C0002', quantidade: 200, rotulo: null };
   const item = {
@@ -162,9 +164,9 @@ describe('palletDoDestaque / opcoesOutrasComPallet', () => {
   };
 
   it('o pallet da embalagem em destaque e o das outras, logo abaixo de cada uma', () => {
-    expect(palletDoDestaque(item)).toBe('Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)');
+    expect(palletsDoDestaque(item)).toEqual(['Pallet de 600 kg: 2 pallets = 1.200 kg (abaixo) · 3 pallets = 1.800 kg (acima)']);
     expect(opcoesOutrasComPallet(item)).toEqual([
-      { texto: '7 × 200 kg (código C0002) = 1.400 kg', pallet: 'Pallet de 1.400 kg: 1 pallet = 1.400 kg (exato)' },
+      { texto: '7 × 200 kg (código C0002) = 1.400 kg', pallet: 'Pallet de 1.400 kg: 1 pallet = 1.400 kg (exato)', outrosPallets: [] },
     ]);
   });
 
@@ -173,17 +175,17 @@ describe('palletDoDestaque / opcoesOutrasComPallet', () => {
       embalagem: item.embalagem,
       porEmbalagem: item.porEmbalagem.map((o) => ({ ...o, pallet: null })),
     };
-    expect(palletDoDestaque(sem)).toBeNull();
-    expect(opcoesOutrasComPallet(sem)).toEqual([{ texto: '7 × 200 kg (código C0002) = 1.400 kg', pallet: null }]);
-    expect(palletDoDestaque({})).toBeNull();
-    expect(opcoesOutrasComPallet({ embalagem: item.embalagem })).toEqual([{ texto: 'Outras: C0002 (200 kg)', pallet: null }]);
+    expect(palletsDoDestaque(sem)).toEqual([]);
+    expect(opcoesOutrasComPallet(sem)).toEqual([{ texto: '7 × 200 kg (código C0002) = 1.400 kg', pallet: null, outrosPallets: [] }]);
+    expect(palletsDoDestaque({})).toEqual([]);
+    expect(opcoesOutrasComPallet({ embalagem: item.embalagem })).toEqual([{ texto: 'Outras: C0002 (200 kg)', pallet: null, outrosPallets: [] }]);
     expect(linhasOutrasEmbalagens(item)).toEqual(['7 × 200 kg (código C0002) = 1.400 kg']); // inalterada
     expect(tituloOutrasEmbalagens(item)).toBe('Outras embalagens: 7 × 200 kg (código C0002) = 1.400 kg');
   });
 
   it('PARAGRAFO_EMBALAGEM explica o pallet e que a Qtd. final continua pela embalagem', () => {
     expect(PARAGRAFO_EMBALAGEM).toContain(
-      'O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.',
+      'O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado (um ou mais tamanhos por código), mostra também, para cada tamanho, os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.',
     );
     expect(PARAGRAFO_EMBALAGEM).not.toContain('pallets fechados');
   });
@@ -343,5 +345,66 @@ describe('textos dos grupos de equivalencia (PR 6b)', () => {
     expect(textoDemandaIndividual(-300)).toBe('-300,0');
     expect(textoDemandaIndividual(null)).toBe('sem lead time');
     expect(textoSeloDoGrupo('GRUPO SINTETICO')).toBe('Grupo: GRUPO SINTETICO');
+  });
+});
+
+describe('varios tamanhos de pallet (Etapa B)', () => {
+  const usada = { codigo: 'C0001', quantidade: 25, rotulo: null };
+  const outra = { codigo: 'C0002', quantidade: 200, rotulo: null };
+  const item = {
+    embalagem: { usada, cadastradas: [usada, outra], multiplas: true },
+    porEmbalagem: [
+      opcao({
+        codigo: 'C0001',
+        quantidade: 25,
+        embalagens: 56,
+        quantidadeFinal: 1400,
+        destaque: true,
+        pallet: pallet(1000, 1, 2),
+        outrosPallets: [pallet(1200, 1, 2)],
+      }),
+      opcao({
+        codigo: 'C0002',
+        quantidade: 200,
+        embalagens: 7,
+        quantidadeFinal: 1400,
+        pallet: pallet(1400, 1, 1),
+        outrosPallets: [pallet(700, 2, 2), pallet(2800, 0, 1)],
+      }),
+    ],
+  };
+
+  it('palletsDoDestaque: uma linha por tamanho, na ordem; as outras opcoes trazem os demais tamanhos', () => {
+    expect(palletsDoDestaque(item)).toEqual([
+      'Pallet de 1.000 kg: 1 pallet = 1.000 kg (abaixo) · 2 pallets = 2.000 kg (acima)',
+      'Pallet de 1.200 kg: 1 pallet = 1.200 kg (abaixo) · 2 pallets = 2.400 kg (acima)',
+    ]);
+    expect(opcoesOutrasComPallet(item)).toEqual([
+      {
+        texto: '7 × 200 kg (código C0002) = 1.400 kg',
+        pallet: 'Pallet de 1.400 kg: 1 pallet = 1.400 kg (exato)',
+        outrosPallets: ['Pallet de 700 kg: 2 pallets = 1.400 kg (exato)', 'Pallet de 2.800 kg: 1 pallet = 2.800 kg (acima)'],
+      },
+    ]);
+  });
+
+  it('linhasDePallet: sem pallet = []; 1 tamanho = 1 linha (formato de hoje); backend antigo sem outrosPallets', () => {
+    expect(linhasDePallet(undefined)).toEqual([]);
+    expect(linhasDePallet(opcao({ pallet: null }))).toEqual([]);
+    expect(linhasDePallet(opcao({ pallet: pallet(600, 2, 3) }))).toEqual([textoPallet(pallet(600, 2, 3))]);
+    const dupla = item.porEmbalagem[0];
+    expect(linhasDePallet(dupla)).toEqual(palletsDoDestaque(item));
+    // palletDoDestaque: as mesmas linhas em um texto (como na celula do XLSX); null sem pallet.
+    expect(palletDoDestaque(item)).toBe(palletsDoDestaque(item).join(String.fromCharCode(10)));
+    expect(palletDoDestaque({ porEmbalagem: [opcao({ destaque: true, pallet: pallet(600, 2, 3) })] })).toBe(textoPallet(pallet(600, 2, 3)));
+    expect(palletDoDestaque({})).toBeNull();
+  });
+
+  it('PARAGRAFO_EMBALAGEM fala de um ou mais tamanhos por codigo e de cada tamanho', () => {
+    expect(PARAGRAFO_EMBALAGEM).toContain(
+      'com pallet cadastrado (um ou mais tamanhos por código), mostra também, para cada tamanho, os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.',
+    );
+    expect(PARAGRAFO_EMBALAGEM).toContain('O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem');
+    expect(PARAGRAFO_EMBALAGEM).not.toContain('pallets fechados');
   });
 });

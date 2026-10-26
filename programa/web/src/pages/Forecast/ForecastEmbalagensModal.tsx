@@ -12,7 +12,16 @@ import {
   type ForecastEmbalagensPatch,
 } from '@/services/forecastEmbalagens';
 import { dataBr, kgBr } from './forecastPainel';
-import { avisoDoPallet, erroDoPallet, lerPalletKg, lerQuantidadeKg, montarPatch, quantidadeParaCampo } from './forecastEmbalagens';
+import {
+  avisoDosPallets,
+  erroDosPallets,
+  lerPalletsKg,
+  lerQuantidadeKg,
+  montarPatch,
+  palletsDoCodigo,
+  palletsParaCampo,
+  quantidadeParaCampo,
+} from './forecastEmbalagens';
 
 interface Props {
   productId: number;
@@ -28,9 +37,8 @@ function origemTexto(c: ForecastEmbalagemCodigo): string {
   return c.atualizadoEm ? `${ORIGEM_ROTULO[c.origem]} · ${dataBr(c.atualizadoEm)}` : ORIGEM_ROTULO[c.origem];
 }
 
-// Valor lido do campo de pallet (vazio = sem pallet); invalido nunca chega aqui (bloqueia o Salvar antes).
-const palletValor = (lida: ReturnType<typeof lerPalletKg> | undefined): number | null =>
-  lida?.ok ? lida.valor : null;
+// Tamanhos lidos do campo de pallet (vazio = []); invalido nunca chega aqui (bloqueia o Salvar antes).
+const palletValores = (lida: ReturnType<typeof lerPalletsKg> | undefined): number[] => (lida?.ok ? lida.valores : []);
 
 function CodigoCelula({ c, usada }: { c: ForecastEmbalagemCodigo; usada: boolean }) {
   return (
@@ -69,7 +77,9 @@ function Leitura({ dados }: { dados: ForecastEmbalagens }) {
                 <CodigoCelula c={c} usada={c.id === dados.usadaCodigoId} />
               </td>
               <td className="fce-num">{c.quantidadeKg === null ? '—' : `${kgBr(c.quantidadeKg)} kg`}</td>
-              <td className="fce-num">{c.palletKg == null ? '—' : `${kgBr(c.palletKg)} kg`}</td>
+              <td className="fce-num">
+                {palletsDoCodigo(c).length === 0 ? '—' : palletsDoCodigo(c).map((p) => `${kgBr(p)} kg`).join('; ')}
+              </td>
               <td>{c.rotulo ?? '—'}</td>
               <td>{c.principal ? 'Sim' : '—'}</td>
               <td className="fce-origem">{origemTexto(c)}</td>
@@ -92,11 +102,12 @@ interface FormProps {
 
 function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormProps) {
   const baseId = useId();
+  const dicaPalletId = `${baseId}-dica-pallet`;
   const [textos, setTextos] = useState<Record<number, string>>(() =>
     Object.fromEntries(dados.codigos.map((c) => [c.id, quantidadeParaCampo(c.quantidadeKg)])),
   );
   const [pallets, setPallets] = useState<Record<number, string>>(() =>
-    Object.fromEntries(dados.codigos.map((c) => [c.id, quantidadeParaCampo(c.palletKg ?? null)])),
+    Object.fromEntries(dados.codigos.map((c) => [c.id, palletsParaCampo(palletsDoCodigo(c))])),
   );
   const [rotulos, setRotulos] = useState<Record<number, string>>(() =>
     Object.fromEntries(dados.codigos.map((c) => [c.id, c.rotulo ?? ''])),
@@ -111,15 +122,17 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
   // "Nao e multiplo da embalagem" e so AVISO (nao bloqueia o Salvar).
   const palletsLidos = new Map(
     dados.codigos.map((c) => {
-      const lida = lerPalletKg(pallets[c.id] ?? '');
+      const lida = lerPalletsKg(pallets[c.id] ?? '');
       const quantidade = quantidadePorId.get(c.id);
       const erro = !lida.ok
         ? lida.erro
-        : typeof quantidade === 'number' && lida.valor !== null
-          ? erroDoPallet(quantidade, lida.valor)
+        : typeof quantidade === 'number' && lida.valores.length > 0
+          ? erroDosPallets(quantidade, lida.valores)
           : null;
       const aviso =
-        lida.ok && typeof quantidade === 'number' && lida.valor !== null ? avisoDoPallet(quantidade, lida.valor) : null;
+        lida.ok && typeof quantidade === 'number' && lida.valores.length > 0
+          ? avisoDosPallets(quantidade, lida.valores)
+          : null;
       return [c.id, { lida, erro, aviso }] as const;
     }),
   );
@@ -137,7 +150,7 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
           quantidadeKg: lida.ok ? lida.valor : c.quantidadeKg,
           rotulo: rotulos[c.id] ?? null,
           // Sem quantidade o pallet some junto (o servidor tambem apaga).
-          palletKg: !lida.ok || lida.valor === null ? null : palletValor(palletsLidos.get(c.id)?.lida),
+          palletsKg: !lida.ok || lida.valor === null ? [] : palletValores(palletsLidos.get(c.id)?.lida),
         })),
         principalCodigoId: principal,
       });
@@ -203,14 +216,13 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                   <td className="fce-num">
                     <input
                       className="input fce-input-qtd"
-                      inputMode="decimal"
                       autoComplete="off"
                       value={semQuantidade ? '' : (pallets[c.id] ?? '')}
                       onChange={(e) => setPallets((p) => ({ ...p, [c.id]: e.target.value }))}
                       aria-label={`Pallet em kg do código ${c.codigo}`}
                       aria-invalid={erroPallet !== null}
                       aria-describedby={
-                        erroPallet !== null ? erroPalletId : avisoPallet !== null ? avisoPalletId : undefined
+                        erroPallet !== null ? erroPalletId : avisoPallet !== null ? avisoPalletId : dicaPalletId
                       }
                       disabled={pendente || semQuantidade}
                     />
@@ -269,6 +281,9 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
         Pallet = kg de UM pallet da embalagem (ex.: 24 bombonas de 25 kg = 600 kg). É uma opção de compra informada
         pelo cadastro, não uma regra: pode não ser múltiplo da embalagem. O relatório mostra os pallets abaixo e
         acima da quantidade sugerida.
+      </p>
+      <p className="fce-dica" id={dicaPalletId}>
+        Mais de um tamanho: separe com ponto e vírgula (ex.: 1.000; 1.200).
       </p>
       <p className="fce-dica">
         Valor editado manualmente pode ser substituído quando a integração com o DBCorp estiver ativa.

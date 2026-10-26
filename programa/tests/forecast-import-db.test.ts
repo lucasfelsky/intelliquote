@@ -493,7 +493,7 @@ describe('Forecast - importacao da planilha (DB)', () => {
   testDbSkip('reimportar com os codigos reordenados recria os codigos e PRESERVA quantidade e pallet da embalagem (PR 6e)', async () => {
     await prisma.forecastProductCode.update({
       where: { code: CODE_A1 },
-      data: { packagingQtyKg: 25, packagingPalletKg: 600 },
+      data: { packagingQtyKg: 25, packagingPalletKg: 600, packagingPalletExtraKg: [1200] },
     });
     const q = quinzena({
       label: '03-2',
@@ -512,8 +512,10 @@ describe('Forecast - importacao da planilha (DB)', () => {
     expect(a1.position).toBe(2); // o codigo foi apagado e recriado na nova posicao
     expect(Number(a1.packagingQtyKg)).toBe(25);
     expect(Number(a1.packagingPalletKg)).toBe(600);
+    expect(a1.packagingPalletExtraKg.map(Number)).toEqual([1200]); // os tamanhos extras tambem sobrevivem ao deleteMany/createMany
     const a2 = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: CODE_A2 } });
     expect(a2.position).toBe(1);
     expect(a2.packagingPalletKg).toBeNull();
+    expect(a2.packagingPalletExtraKg).toEqual([]);
   });
 });
