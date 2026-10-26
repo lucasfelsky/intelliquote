@@ -14,6 +14,8 @@ import {
   type CampoDemanda,
   type ForecastProdutoParaDemanda,
 } from '@/services/forecastDemandaComercial';
+import ForecastPuxarSolicitacao from './ForecastPuxarSolicitacao';
+import type { PreenchimentoSolicitacao } from './forecastDemandaSolicitacao';
 import { kgBr } from './forecastPainel';
 
 /** Pedido ja existente (edicao): o produto nao muda; para trocar de produto, cancele e lance de novo. */
@@ -122,6 +124,17 @@ function Formulario({ hoje, demanda, onFechar, onSalvo }: Props) {
     setErros((e) => (e[campo] ? { ...e, [campo]: undefined } : e));
   };
 
+  const aplicarSolicitacao = (p: PreenchimentoSolicitacao) => {
+    gravar.reset();
+    setErros((e) => ({ ...e, produto: undefined, kg: undefined, cliente: undefined, solicitacao: undefined }));
+    setBusca(p.busca); // o produto precisa ficar VISIVEL na lista filtrada
+    setEscolhido(p.productId);
+    setKg(p.kgTexto);
+    setCliente(p.cliente);
+    setSolicitacao(p.solicitacao);
+    (p.pedeKg ? refs.kg : refs.necessidade).current?.focus();
+  };
+
   const aoEnviar = (evento: FormEvent) => {
     evento.preventDefault();
     if (pendente) return;
@@ -152,6 +165,7 @@ function Formulario({ hoje, demanda, onFechar, onSalvo }: Props) {
         necessidade é posterior ao último mês de programação do DBCorp; antes disso a programação já deve conter o
         pedido.
       </p>
+      {!editando && <ForecastPuxarSolicitacao disabled={pendente} onEscolher={aplicarSolicitacao} />}
 
       {editando ? (
         <p className="fcd-dica">Para trocar o produto, cancele este pedido e lance outro.</p>
