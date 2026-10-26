@@ -658,7 +658,8 @@ export class ForecastProductService {
   ): Promise<ForecastEmbalagensData> {
     try {
       return await prisma.$transaction(async (tx) => {
-        // Trava a linha do produto ANTES de ler os codigos: dois PATCH do mesmo produto se serializam.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'forecast:import'}))`;
+        // Mesma advisory lock dos imports (1a instrucao): o import da planilha apaga e recria os codigos e devolveria a embalagem lida ANTES desta edicao (L77). Depois, a trava da linha do produto serializa dois PATCH do mesmo produto.
         if (!(await lockForecastProduct(tx, productId))) throw new HttpError(404, 'Produto nao encontrado.');
         const product = await tx.forecastProduct.findUnique({
           where: { id: productId },

@@ -1,6 +1,6 @@
 // Avaliador de formulas de TESTE para o XLSX da aba FORECAST (MACRO). Cobre EXATAMENTE o subconjunto que o gerador
-// escreve (SUM, SUMIF, SUMIFS, COUNTIF, VLOOKUP exato, IF, IFERROR, DATE, SUBSTITUTE, aritmetica e comparacoes) e o
-// escape `~` de curinga nos criterios (com a semantica REAL do Excel: SUMIF-like e VLOOKUP tratam o ~ de modo diferente); qualquer outra coisa LANCA erro, para o teste falhar alto em vez de imitar o Excel pela metade. O resultado gravado em cache nas
+// escreve (SUM, SUMIF, SUMIFS, COUNTIF, VLOOKUP exato, IF, IFERROR, DATE, SUBSTITUTE, aritmetica, concatenacao `&` e
+// comparacoes) e o escape `~` de curinga nos criterios, mais o criterio `=texto` (com a semantica REAL do Excel: SUMIF-like e VLOOKUP tratam o ~ de modo diferente); qualquer outra coisa LANCA erro, para o teste falhar alto em vez de imitar o Excel pela metade. O resultado gravado em cache nas
 // celulas e IGNORADO: o que vale e a formula. Nao e codigo de producao (nao entra no build).
 import type exceljs from 'exceljs';
 
@@ -42,7 +42,7 @@ const RE_REF = new RegExp(`^(${PREFIXO})(${CELULA}(?::${CELULA})?|${COLUNA}:${CO
 const RE_FUNC = /^([A-Za-z][A-Za-z0-9.]*)\(/;
 const RE_STR = /^"((?:[^"]|"")*)"/;
 const RE_NUM = /^\d+(?:\.\d+)?/;
-const RE_OP = /^(<=|>=|<>|[+\-*/=<>(),])/;
+const RE_OP = /^(<=|>=|<>|[+\-*/=<>(),&])/;
 
 function tokenizar(formula: string): Token[] {
   const tokens: Token[] = [];
@@ -108,7 +108,7 @@ function parseRef(texto: string): No {
   throw new Error(`Referencia invalida: ${texto}`);
 }
 
-// ---- Parser (comparacao < + - < * / < unario -) ----
+// ---- Parser (comparacao < & < + - < * / < unario -) ----
 function parse(formula: string): No {
   const tokens = tokenizar(formula);
   let i = 0;
@@ -120,11 +120,19 @@ function parse(formula: string): No {
   };
 
   function comparacao(): No {
-    const a = soma();
+    const a = concatenacao();
     const t = olhar();
     if (t && t.k === 'op' && ['=', '<', '>', '<=', '>=', '<>'].includes(t.v)) {
       i++;
-      return { t: 'bin', op: t.v, a, b: soma() };
+      return { t: 'bin', op: t.v, a, b: concatenacao() };
+    }
+    return a;
+  }
+  function concatenacao(): No {
+    let a = soma();
+    for (let t = olhar(); t && t.k === 'op' && t.v === '&'; t = olhar()) {
+      i++;
+      a = { t: 'bin', op: '&', a, b: soma() };
     }
     return a;
   }
@@ -328,10 +336,12 @@ export function criarAvaliador(wb: exceljs.Workbook): {
     if (criterio === null) return idx.get('v:0') ?? [];
     if (typeof criterio === 'boolean') throw new Error('Criterio booleano nao suportado');
     if (typeof criterio === 'number') return idx.get(`n:${criterio}`) ?? [];
-    if (criterio === '' || /^[<>=]/.test(criterio)) {
+    // "=texto" (1 caractere de operador + resto) e igualdade com o texto; '', '=' sozinho, '<...' e '>...' seguem recusados.
+    const igualdade = criterio.length > 1 && criterio.startsWith('=');
+    if (criterio === '' || (!igualdade && /^[<>=]/.test(criterio))) {
       throw new Error(`Criterio nao suportado (operador/vazio): "${criterio}"`);
     }
-    const literal = literalDoCriterioIf(criterio);
+    const literal = literalDoCriterioIf(igualdade ? criterio.slice(1) : criterio);
     if (literal === null) throw new Error(`Criterio nao suportado (curinga sem escape): "${criterio}"`);
     const achados = new Set(idx.get(`t:${literal.toLowerCase()}`) ?? []);
     if (RE_NUMERICO.test(literal)) for (const i of idx.get(`n:${Number(literal)}`) ?? []) achados.add(i);
@@ -481,6 +491,7 @@ export function criarAvaliador(wb: exceljs.Workbook): {
         const a = avaliar(no.a, aba);
         const b = avaliar(no.b, aba);
         if (['=', '<', '>', '<=', '>=', '<>'].includes(no.op)) return comparar(no.op, a, b);
+        if (no.op === '&') return concatenar(a, b);
         const x = aritmetico(a);
         if (x instanceof ErroXl) return x;
         const y = aritmetico(b);
@@ -493,6 +504,22 @@ export function criarAvaliador(wb: exceljs.Workbook): {
         }
       }
     }
+  }
+
+  function textoParaConcatenar(v: Valor): string | ErroXl {
+    if (eIntervalo(v)) throw new Error('Concatenacao com intervalo');
+    if (v instanceof ErroXl) return v;
+    if (typeof v === 'boolean') throw new Error('Concatenacao com booleano nao suportada');
+    if (v === null) return '';
+    return typeof v === 'number' ? String(v) : v;
+  }
+
+  function concatenar(a: Valor, b: Valor): Escalar {
+    const x = textoParaConcatenar(a);
+    if (x instanceof ErroXl) return x;
+    const y = textoParaConcatenar(b);
+    if (y instanceof ErroXl) return y;
+    return x + y;
   }
 
   function comparar(op: string, a: Valor, b: Valor): Escalar {

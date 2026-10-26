@@ -7,6 +7,7 @@ import {
   FORECAST_MARGEM_LAST_ROW,
   FORECAST_MAX_PRODUCTS,
   FORECAST_MAX_SHEET_ROWS,
+  FORECAST_OBS_MAX_CHARS,
   FORECAST_SHEETS,
   FORECAST_STATUS_COLORS,
 } from '../constants/forecast';
@@ -277,6 +278,9 @@ export async function parseForecastWorkbook(
   const nomes = new Map<string, number>();
   const codigos = new Map<string, number>();
   for (const p of produtos) {
+    if (p.obs.length > FORECAST_OBS_MAX_CHARS) {
+      erros.push(`Observacao (coluna AT) da linha ${p.linha} tem ${p.obs.length} caracteres (limite de ${FORECAST_OBS_MAX_CHARS}).`);
+    }
     const nome = normalizeProductName(p.item);
     const nomeAnterior = nomes.get(nome);
     if (nomeAnterior !== undefined) {

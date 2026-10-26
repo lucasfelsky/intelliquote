@@ -263,8 +263,12 @@ export interface ContextoFormula {
 //   precisa do escape completo.
 // - SUMIF/SUMIFS/COUNTIF: so processam o escape ~ quando o criterio tem * ou ?. Sem eles o criterio e comparado como
 //   texto puro, e "C9~~03" NAO casa "C9~03". Codigo so com ~ vai como referencia pura; com * ou ? vai escapado.
+// - SUMIF/SUMIFS/COUNTIF leem = < > no INICIO do criterio como operador (medido no Excel desktop: "=C9001" casava "C9001"
+//   e "<C9002" somava tudo que vem antes). Codigo que comeca com = < > vai como "="&ref (o 1o = e o operador, o resto e
+//   texto). So nesses codigos: celula vazia continua referencia pura.
 export const TEM_CURINGA = /[*?~]/;
 export const TEM_CURINGA_DE_PADRAO = /[*?]/;
+export const COMECA_COM_OPERADOR = /^[=<>]/;
 const ESCAPE_COMPLETO = (ref: string): string => `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(${ref},"~","~~"),"*","~*"),"?","~?")`;
 // VLOOKUP (colunas AQ e AR).
 export function criterioLiteral(ref: string, valor: string | null | undefined): string {
@@ -273,8 +277,9 @@ export function criterioLiteral(ref: string, valor: string | null | undefined): 
 }
 // SUMIF / SUMIFS / COUNTIF.
 export function criterioLiteralIf(ref: string, valor: string | null | undefined): string {
-  if (!valor || !TEM_CURINGA_DE_PADRAO.test(valor)) return ref;
-  return ESCAPE_COMPLETO(ref);
+  if (!valor) return ref;
+  const base = TEM_CURINGA_DE_PADRAO.test(valor) ? ESCAPE_COMPLETO(ref) : ref;
+  return COMECA_COM_OPERADOR.test(valor) ? `"="&${base}` : base;
 }
 
 const porCodigo = (

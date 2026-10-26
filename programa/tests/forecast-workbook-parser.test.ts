@@ -245,6 +245,18 @@ describe('parseForecastWorkbook - casos pontuais', () => {
     expect(valor(cell(null))).toBeNull();
   });
 
+  it('Observacao (coluna AT) acima de 1.000 caracteres e erro; com 1.000 passa', async () => {
+    const comObs = (tamanho: number): Quinzena => {
+      const q = smallQuinzena();
+      q.produtos[0] = { ...q.produtos[0], obs: 'X'.repeat(tamanho) };
+      return q;
+    };
+    const longa = await parse(await buildWorkbook(comObs(1001)));
+    expect(longa.erros.some((e) => /Observacao \(coluna AT\) da linha \d+ tem 1001 caracteres \(limite de 1000\)/.test(e))).toBe(true);
+    const limite = await parse(await buildWorkbook(comObs(1000)));
+    expect(limite.erros.some((e) => e.includes('Observacao'))).toBe(false);
+  });
+
   it('coluna MES lida como data de serie volta para o texto MM', async () => {
     const q = smallQuinzena();
     expect(q.entradas.chegadas.length).toBeGreaterThan(0);

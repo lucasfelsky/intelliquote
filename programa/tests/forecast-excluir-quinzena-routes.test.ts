@@ -159,6 +159,25 @@ describe('DELETE /forecast/snapshots/:id - efeito', () => {
     expect(res.status).toBe(503);
     expect(res.body.message).toBe('Há uma importação do Forecast em andamento. Tente de novo em instantes.');
   });
+
+  it.each([
+    ['P2034', new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: 'test' })],
+    [
+      'P2010 (SQL cru) com 40P01',
+      new Prisma.PrismaClientKnownRequestError('raw query failed', {
+        code: 'P2010',
+        clientVersion: 'test',
+        meta: { code: '40P01', message: 'deadlock detected' },
+      }),
+    ],
+  ])('deadlock (%s) -> 503 com a mensagem de importacao e sem AuditLog', async (_nome, erro) => {
+    prismaMock.$transaction.mockRejectedValue(erro);
+    const cookies = await loginAs('admin');
+    const res = await request(app).delete(PATH).set('Cookie', cookies);
+    expect(res.status).toBe(503);
+    expect(res.body.message).toBe('Há uma importação do Forecast em andamento. Tente de novo em instantes.');
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
 });
 
 async function loginAs(role: Role) {
