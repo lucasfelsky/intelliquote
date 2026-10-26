@@ -331,7 +331,7 @@ function Formulario({ hoje, demanda, onFechar, onSalvo }: Props) {
             disabled={pendente}
           />
           <p className="fcd-dica" id={id('solicitacao-dica')}>
-            Só para rastreio: a solicitação não é consultada nem alterada.
+            Só para rastreio: o número precisa existir em Solicitações (a solicitação não é alterada).
           </p>
           <Erro id={id('solicitacao-erro')} texto={erros.solicitacao} />
         </div>

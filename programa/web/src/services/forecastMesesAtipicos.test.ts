@@ -60,4 +60,20 @@ describe('servico de meses atipicos do Forecast', () => {
     ).toBe('O mês 2099-01 é futuro: marque só meses que já tiveram venda.');
     expect(forecastMesesAtipicosErrorMessage(new ApiError(400, null))).toBe('Pedido recusado pelo servidor (HTTP 400).');
   });
+
+  it('409 (corrida) e 503 (cadastro ocupado por importacao) repassam a mensagem do backend', () => {
+    expect(
+      forecastMesesAtipicosErrorMessage(
+        new ApiError(409, {
+          message: 'Os meses atípicos deste produto foram alterados por outra pessoa. Recarregue e tente de novo.',
+        }),
+      ),
+    ).toBe('Os meses atípicos deste produto foram alterados por outra pessoa. Recarregue e tente de novo.');
+    expect(
+      forecastMesesAtipicosErrorMessage(
+        new ApiError(503, { message: 'O cadastro está ocupado por uma importação. Tente novamente em instantes.' }),
+      ),
+    ).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
+    expect(forecastMesesAtipicosErrorMessage(new ApiError(503, null))).toBe('Pedido recusado pelo servidor (HTTP 503).');
+  });
 });

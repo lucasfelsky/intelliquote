@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   forecastPendentesErrorMessage,
   forecastPendentesKeys,
   getForecastPendentes,
+  postForecastReativarProduto,
   type ForecastPendente,
   type ForecastPendentesResumo,
 } from '@/services/forecastPendentes';
@@ -14,11 +15,13 @@ import {
   criterioTexto,
   historicoAusenteTexto,
   mensagemCadastroGravado,
+  mensagemProdutoReativado,
   nenhumPendenteTexto,
   semVendaRecenteTexto,
   situacaoTexto,
   soSaldoTexto,
   TEXTO_REATIVACAO_INDISPONIVEL,
+  TEXTO_REATIVACAO_NO_PAINEL,
   textoEntradaNoCalculo,
   textoProdutoInativo,
 } from './forecastPendentes';
@@ -42,6 +45,10 @@ interface TabelaProps {
   /** Quem completa (admin/comprador) ve a coluna Acao; os demais so leem. */
   podeCompletar: boolean;
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
+  /** So o painel da quinzena passa: com ele a linha de produto inativo ganha o botao "Reativar produto". */
+  onReativar?: (productId: number, nome: string) => void;
+  /** Produto cuja reativacao esta gravando (o botao fica desabilitado). */
+  reativandoId?: number | null;
   legenda: string;
 }
 
@@ -54,6 +61,8 @@ export function TabelaPendentes({
   semVendaRecente,
   podeCompletar,
   onCompletar,
+  onReativar,
+  reativandoId = null,
   legenda,
 }: TabelaProps) {
   const mostrarSaldo = itens.some((p) => p.saldo !== 0);
@@ -124,6 +133,17 @@ export function TabelaPendentes({
                       >
                         Completar cadastro
                       </button>
+                    ) : onReativar && p.produtoInativo ? (
+                      <button
+                        type="button"
+                        className="ghost-button ghost-button--sm"
+                        aria-label={`Reativar produto ${p.produtoInativo.nome} (código ${p.codigo})`}
+                        disabled={reativandoId !== null}
+                        aria-busy={reativandoId === p.produtoInativo.id ? true : undefined}
+                        onClick={() => onReativar(p.produtoInativo!.id, p.produtoInativo!.nome)}
+                      >
+                        Reativar produto
+                      </button>
                     ) : (
                       <span className="fcp-nota">Reativar o produto</span>
                     )}
@@ -143,7 +163,7 @@ export function TabelaPendentes({
       {historicoTexto && <p className="fcp-nota">{historicoTexto}</p>}
       {temInativo && (
         <p className="fcp-nota">
-          {textoProdutoInativo(null)} {TEXTO_REATIVACAO_INDISPONIVEL}
+          {textoProdutoInativo(null)} {onReativar ? TEXTO_REATIVACAO_NO_PAINEL : TEXTO_REATIVACAO_INDISPONIVEL}
         </p>
       )}
     </>
@@ -208,9 +228,25 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
     queryFn: () => getForecastPendentes(snapshotId),
     staleTime: 30_000,
   });
+  const queryClient = useQueryClient();
   const [mensagem, setMensagem] = useState('');
+  const [erroReativar, setErroReativar] = useState('');
   const statusRef = useRef<HTMLDivElement>(null);
   const dialogo = useDialogoCompletar((resultado) => setMensagem(mensagemCadastroGravado(resultado)));
+  const reativar = useMutation({
+    gcTime: 0,
+    mutationFn: (entrada: { productId: number; nome: string }) => postForecastReativarProduto(entrada.productId),
+    onSuccess: (resultado) => {
+      setErroReativar('');
+      setMensagem(mensagemProdutoReativado(resultado));
+      // Os pendentes sao recalculados na leitura com o cadastro atual: o codigo sai da lista.
+      void queryClient.invalidateQueries({ queryKey: ['forecast'] });
+    },
+    onError: (err) => {
+      setMensagem('');
+      setErroReativar(forecastPendentesErrorMessage(err, 'Não foi possível reativar o produto'));
+    },
+  });
 
   // Depois de gravar, o foco vai para a mensagem (o botao do codigo some da lista).
   useEffect(() => {
@@ -221,6 +257,11 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
   const status = mensagem ? (
     <div ref={statusRef} className="alert alert--success" role="status" tabIndex={-1}>
       {mensagem}
+    </div>
+  ) : null;
+  const alertaReativar = erroReativar ? (
+    <div className="alert alert--error" role="alert">
+      {erroReativar}
     </div>
   ) : null;
 
@@ -247,6 +288,7 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
     return (
       <section className="fcp" aria-label="Pendentes de cadastro">
         {status}
+        {alertaReativar}
         <p className="fcp-estado">{nenhumPendenteTexto(dados.regra)}</p>
         {[semVendaRecenteTexto(dados.semVendaRecente, inteiroBr), historicoAusenteTexto(dados.regra)].map(
           (nota) => nota && <p key={nota} className="fcp-nota">{nota}</p>,
@@ -258,6 +300,7 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
   return (
     <section className="fcp" aria-label="Pendentes de cadastro">
       {status}
+      {alertaReativar}
       <details className="fc-card fcp__detalhes">
         <summary>
           Pendentes de cadastro ({inteiroBr(dados.totalItens)})
@@ -273,6 +316,12 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
             semVendaRecente={dados.semVendaRecente}
             podeCompletar={podeEditar}
             onCompletar={dialogo.abrir}
+            onReativar={(productId, nome) => {
+              setErroReativar('');
+              setMensagem('');
+              reativar.mutate({ productId, nome });
+            }}
+            reativandoId={reativar.isPending ? reativar.variables.productId : null}
             legenda={`Códigos pendentes de cadastro da quinzena ${label}`}
           />
         </div>

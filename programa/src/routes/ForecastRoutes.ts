@@ -62,6 +62,14 @@ router.post(
   ForecastController.addProductCode,
 );
 
+// Reativa produto inativo (ex.: inativado pelo import da planilha); so o flag, sem mexer em codigos nem marcas.
+router.post(
+  '/forecast/products/:id/reativar',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.reativarProduto,
+);
+
 router.get(
   '/forecast/products/:id/embalagens',
   requireAuth,

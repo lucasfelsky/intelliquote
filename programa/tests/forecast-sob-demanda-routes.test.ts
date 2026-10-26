@@ -41,8 +41,11 @@ const tx = {
   auditLog: { create: vi.fn() },
 };
 
-const produto = (extra: Partial<{ purchaseOnDemand: boolean; purchaseOnDemandNote: string | null }> = {}) => ({
+const produto = (
+  extra: Partial<{ isActive: boolean; purchaseOnDemand: boolean; purchaseOnDemandNote: string | null }> = {},
+) => ({
   id: 5,
+  isActive: true,
   purchaseOnDemand: false,
   purchaseOnDemandNote: null,
   ...extra,
@@ -127,6 +130,24 @@ describe('PATCH /forecast/products/:id/compra-sob-demanda - validacao e erros', 
     const response = await request(app).patch(PATH).set('Cookie', cookies).send({ sobDemanda: true });
     expect(response.status).toBe(404);
     expect(response.body.message).toBe('Produto nao encontrado.');
+    expect(tx.forecastProduct.update).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /forecast/products/:id/compra-sob-demanda - produto inativo', () => {
+  it.each([
+    ['marcar', { sobDemanda: true, motivo: 'SOB DEMANDA SINTETICO' }, {}],
+    ['mudar o motivo', { sobDemanda: true, motivo: 'OUTRO MOTIVO SINTETICO' }, { purchaseOnDemand: true, purchaseOnDemandNote: 'MOTIVO' }],
+    ['desmarcar', { sobDemanda: false }, { purchaseOnDemand: true, purchaseOnDemandNote: 'MOTIVO' }],
+  ])('%s em produto inativo -> 400 com o caminho (reativar), sem gravar nem auditar', async (_nome, corpo, extra) => {
+    tx.forecastProduct.findUnique.mockResolvedValue(produto({ isActive: false, ...extra }));
+    const cookies = await loginAs('admin');
+    const response = await request(app).patch(PATH).set('Cookie', cookies).send(corpo);
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      'Produto inativo: reative o produto no cadastro do Forecast antes de marcar compra sob demanda.',
+    );
     expect(tx.forecastProduct.update).not.toHaveBeenCalled();
     expect(tx.auditLog.create).not.toHaveBeenCalled();
   });

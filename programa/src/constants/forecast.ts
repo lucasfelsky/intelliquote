@@ -26,6 +26,9 @@ export const FORECAST_MAX_DETAIL_WARNINGS = 20;
 // Ate 7 codigos por produto (EMB.1..EMB.7 = colunas B..H).
 export const FORECAST_MAX_CODES_PER_PRODUCT = 7;
 
+// Tamanhos de pallet por codigo (o 1o em packagingPalletKg, os demais em packagingPalletExtraKg).
+export const FORECAST_MAX_PALLETS_POR_CODIGO = 5;
+
 // Rotulo da quinzena: `NN-q` (mes + quinzena 1 ou 2), ex.: 10-2.
 export const FORECAST_LABEL_PATTERN = /^\d{2}-[12]$/;
 

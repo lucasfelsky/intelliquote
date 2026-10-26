@@ -64,6 +64,7 @@ import {
   type GrupoDeEquivalencia,
 } from './forecastGruposEquivalencia';
 import { somarDias, yearMonthsDaJanela } from './forecastMonths';
+import { palletsDoCadastro } from './forecastPallets';
 import { daysUntil, isValidDateKey } from './supplierDocumentDates';
 
 export interface LinhaParaRelatorio {
@@ -108,6 +109,8 @@ export interface EmbalagemCadastrada {
   principal?: boolean;
   /** kg de UM pallet fechado desta embalagem; ausente/nulo = sem pallet. */
   palletKg?: number | null;
+  /** TODOS os tamanhos de pallet do codigo, o 1o primeiro; ausente = usa so `palletKg`. */
+  palletsKg?: number[] | null;
 }
 
 export interface RupturaEstimada {
@@ -121,8 +124,10 @@ export interface EmbalagemDoItem {
   codigo: string;
   quantidade: number;
   rotulo: string | null;
-  /** So quando o cadastro tem pallet (item sem pallet sai com o mesmo formato de antes). */
+  /** So quando o cadastro tem pallet (item sem pallet sai com o mesmo formato de antes). E o 1o tamanho. */
   palletKg?: number;
+  /** Demais tamanhos de pallet do codigo; so existe com 2 ou mais tamanhos (com 0/1 a saida e a de antes). */
+  outrosPalletsKg?: number[];
 }
 
 /** Pallets fechados ao redor da quantidade sugerida; `abaixo` e `acima` coincidem quando o multiplo e exato. */
@@ -139,12 +144,14 @@ export interface EscolhaDeEmbalagem {
 }
 
 /** Quantidade do item arredondada para UMA embalagem cadastrada; `destaque` = a que gera a Qtd. final. */
-export interface OpcaoDeEmbalagem extends Omit<EmbalagemDoItem, 'palletKg'> {
+export interface OpcaoDeEmbalagem extends Omit<EmbalagemDoItem, 'palletKg' | 'outrosPalletsKg'> {
   embalagens: number;
   quantidadeFinal: number;
   destaque: boolean;
   /** Multiplos de pallet abaixo/acima da quantidade sugerida; nulo = embalagem sem pallet (ou nada a comprar). */
   pallet: PalletDaOpcao | null;
+  /** Pallets dos demais tamanhos (mesma ordem do cadastro); so com 2+ tamanhos e algo a comprar. */
+  outrosPallets?: PalletDaOpcao[];
 }
 
 export interface ItemRelatorioCompras {
@@ -388,7 +395,10 @@ export function escolherEmbalagem(codigos: string[], embalagens: EmbalagemCadast
     if (!codigo || !emb || vistos.has(chave)) continue;
     vistos.add(chave);
     const dado: EmbalagemDoItem = { codigo, quantidade: emb.quantidade, rotulo: emb.rotulo ?? null };
-    if (emb.palletKg != null && Number.isFinite(emb.palletKg) && emb.palletKg > 0) dado.palletKg = emb.palletKg;
+    // Lista completa informada (`palletsKg`) manda e o 1o dela e o palletKg; sem ela vale so `palletKg`.
+    const pallets = emb.palletsKg ? palletsDoCadastro(null, emb.palletsKg) : palletsDoCadastro(emb.palletKg ?? null, []);
+    if (pallets.length > 0) dado.palletKg = pallets[0];
+    if (pallets.length > 1) dado.outrosPalletsKg = pallets.slice(1);
     cadastradas.push(dado);
     if (principal === null && emb.principal === true) principal = dado;
   }
@@ -437,15 +447,19 @@ export function palletEMultiploDaEmbalagem(palletKg: number, embalagemKg: number
 // arredondada para cima nos multiplos dela. A `destaque` e a `escolha.usada`: mesmos numeros de quantidadeFinal.
 // Com pallet cadastrado (e algo a comprar) a opcao traz tambem os pallets fechados abaixo e acima da quantidade.
 export function arredondarParaCadaEmbalagem(quantidade: number, escolha: EscolhaDeEmbalagem): OpcaoDeEmbalagem[] {
-  return escolha.cadastradas.map(({ palletKg, ...e }) => {
+  return escolha.cadastradas.map(({ palletKg, outrosPalletsKg, ...e }) => {
     const arredondado = arredondarPorEmbalagem(quantidade, e.quantidade);
-    return {
+    const opcao: OpcaoDeEmbalagem = {
       ...e,
       embalagens: arredondado.embalagens,
       quantidadeFinal: arredondado.quantidade,
       destaque: e.codigo === escolha.usada?.codigo,
       pallet: palletKg !== undefined && quantidade > 0 ? opcoesDePallet(quantidade, palletKg) : null,
     };
+    if (outrosPalletsKg && outrosPalletsKg.length > 0 && quantidade > 0) {
+      opcao.outrosPallets = outrosPalletsKg.map((kg) => opcoesDePallet(quantidade, kg));
+    }
+    return opcao;
   });
 }
 

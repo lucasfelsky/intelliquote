@@ -13,6 +13,7 @@ import {
   normalizeSourceName,
 } from '../utils/forecastWorkbook';
 import { mesesHistorico } from '../utils/forecastMonths';
+import { colunasDePallet, palletsDesejados, palletsDoCadastro } from '../utils/forecastPallets';
 import type { CadastroDeCodigos, VendasRecentes } from '../utils/forecastPendentes';
 import {
   escolherEmbalagem,
@@ -26,6 +27,12 @@ import type {
   ForecastProductCreateInput,
 } from '../validators/forecast';
 import { AuditLogService } from './AuditLogService';
+import {
+  CADASTRO_OCUPADO_MESSAGE,
+  CADASTRO_TX_OPTIONS,
+  isCadastroOcupado,
+  lockForecastProduct,
+} from './ForecastProductCadastroService';
 
 type Db = Prisma.TransactionClient;
 
@@ -46,6 +53,7 @@ const EMBALAGENS_SELECT = {
       code: true,
       packagingQtyKg: true,
       packagingPalletKg: true,
+      packagingPalletExtraKg: true,
       packagingLabel: true,
       packagingIsPrimary: true,
       packagingSource: true,
@@ -65,6 +73,8 @@ export interface ForecastEmbalagensData {
     quantidadeKg: number | null;
     /** kg de UM pallet desta embalagem (opcao de compra; nao precisa ser multiplo da quantidade); nulo = sem pallet. */
     palletKg: number | null;
+    /** TODOS os tamanhos de pallet do codigo, o 1o primeiro (`palletKg` = o 1o); vazio = sem pallet. */
+    palletsKg: number[];
     rotulo: string | null;
     principal: boolean;
     origem: 'manual' | 'dbcorp' | null;
@@ -75,6 +85,10 @@ export interface ForecastEmbalagensData {
 
 const qtyToNumber = (value: Prisma.Decimal | null): number | null => (value === null ? null : Number(value));
 
+// Tamanhos de pallet do codigo: o 1o (packagingPalletKg) e os demais (packagingPalletExtraKg; `?? []` aceita linha sem a coluna).
+const palletsDoCodigo = (c: { packagingPalletKg: Prisma.Decimal | null; packagingPalletExtraKg?: Prisma.Decimal[] | null }) =>
+  palletsDoCadastro(qtyToNumber(c.packagingPalletKg), (c.packagingPalletExtraKg ?? []).map(Number));
+
 function toEmbalagensData(product: ProdutoComEmbalagens): ForecastEmbalagensData {
   const codigos: ForecastEmbalagensData['codigos'] = product.codes.map((c) => ({
     id: c.id,
@@ -82,6 +96,7 @@ function toEmbalagensData(product: ProdutoComEmbalagens): ForecastEmbalagensData
     codigo: c.code,
     quantidadeKg: qtyToNumber(c.packagingQtyKg),
     palletKg: qtyToNumber(c.packagingPalletKg),
+    palletsKg: palletsDoCodigo(c),
     rotulo: c.packagingLabel,
     principal: c.packagingIsPrimary,
     origem: c.packagingSource === 'manual' ? 'manual' : c.packagingSource === 'dbcorp' ? 'dbcorp' : null,
@@ -519,6 +534,24 @@ export class ForecastProductService {
       }
     }
 
+    // Inativa ANTES de apagar/recriar codigos: a linha do produto e travada antes das dos codigos, na mesma ordem de
+    // patchEmbalagens/substituir (lockForecastProduct), o que evita o deadlock 40P01 no cruzamento com o import.
+    for (const gone of plan.inativados) {
+      await tx.forecastProduct.update({ where: { id: gone.id }, data: { isActive: false } });
+      await AuditLogService.log(
+        {
+          entityType: ENTITY_TYPE,
+          entityId: gone.id,
+          action: 'deactivate',
+          performedById: userId,
+          beforeData: gone.before,
+          afterData: { ...gone.before, isActive: false },
+          metadata: { source: 'workbook_import', reason: 'ausente da planilha' },
+        },
+        tx,
+      );
+    }
+
     if (codeOwners.length > 0) {
       const allCodes = codeOwners.flatMap((o) => o.codes.map((c) => c.code));
       // A embalagem e do CODIGO: le antes do deleteMany para devolve-la na recriacao. Um codigo que saiu da
@@ -532,6 +565,7 @@ export class ForecastProductService {
               productId: true,
               packagingQtyKg: true,
               packagingPalletKg: true,
+              packagingPalletExtraKg: true,
               packagingLabel: true,
               packagingIsPrimary: true,
               packagingSource: true,
@@ -559,6 +593,7 @@ export class ForecastProductService {
             catalogItemId: c.catalogItemId,
             packagingQtyKg: anterior?.packagingQtyKg ?? null,
             packagingPalletKg: anterior?.packagingPalletKg ?? null,
+            packagingPalletExtraKg: anterior?.packagingPalletExtraKg ?? [],
             packagingLabel: anterior?.packagingLabel ?? null,
             // A principal e do PRODUTO: codigo movido para outro produto perde a flag (mantem "no maximo uma").
             packagingIsPrimary: anterior?.productId === o.productId && anterior.packagingIsPrimary,
@@ -570,22 +605,6 @@ export class ForecastProductService {
       if (rows.length > 0) {
         await tx.forecastProductCode.createMany({ data: rows });
       }
-    }
-
-    for (const gone of plan.inativados) {
-      await tx.forecastProduct.update({ where: { id: gone.id }, data: { isActive: false } });
-      await AuditLogService.log(
-        {
-          entityType: ENTITY_TYPE,
-          entityId: gone.id,
-          action: 'deactivate',
-          performedById: userId,
-          beforeData: gone.before,
-          afterData: { ...gone.before, isActive: false },
-          metadata: { source: 'workbook_import', reason: 'ausente da planilha' },
-        },
-        tx,
-      );
     }
 
     return productIds;
@@ -605,6 +624,7 @@ export class ForecastProductService {
         code: true,
         packagingQtyKg: true,
         packagingPalletKg: true,
+        packagingPalletExtraKg: true,
         packagingLabel: true,
         packagingIsPrimary: true,
       },
@@ -615,6 +635,7 @@ export class ForecastProductService {
       rotulo: r.packagingLabel,
       principal: r.packagingIsPrimary,
       palletKg: qtyToNumber(r.packagingPalletKg),
+      palletsKg: palletsDoCodigo(r),
     }));
   }
 
@@ -637,6 +658,8 @@ export class ForecastProductService {
   ): Promise<ForecastEmbalagensData> {
     try {
       return await prisma.$transaction(async (tx) => {
+        // Trava a linha do produto ANTES de ler os codigos: dois PATCH do mesmo produto se serializam.
+        if (!(await lockForecastProduct(tx, productId))) throw new HttpError(404, 'Produto nao encontrado.');
         const product = await tx.forecastProduct.findUnique({
           where: { id: productId },
           select: EMBALAGENS_SELECT,
@@ -660,15 +683,16 @@ export class ForecastProductService {
           const quantidade = edicao ? edicao.quantidadeKg : qtyToNumber(c.packagingQtyKg);
           const rotulo = edicao && edicao.rotulo !== undefined ? edicao.rotulo : c.packagingLabel;
           // Pallet (PR 6e, ajustado na rodada 5 do Comex): opcao de compra informada pelo cadastro, nao regra; so precisa de
-          // quantidade na embalagem e NAO precisa ser multiplo dela. Quantidade apagada apaga o pallet junto.
-          let pallet = edicao && edicao.palletKg !== undefined ? edicao.palletKg : qtyToNumber(c.packagingPalletKg);
+          // quantidade na embalagem e NAO precisa ser multiplo dela. Quantidade apagada apaga os pallets junto. Varios
+          // tamanhos por codigo: `palletKg` (legado) troca so o 1o; `palletsKg` substitui a lista (utils/forecastPallets).
+          let pallets = palletsDesejados(palletsDoCodigo(c), edicao);
           if (quantidade === null) {
-            if (edicao?.palletKg != null) {
+            if (edicao?.palletKg != null || (edicao?.palletsKg?.length ?? 0) > 0) {
               throw new HttpError(400, 'O pallet precisa da quantidade da embalagem.');
             }
-            pallet = null;
+            pallets = [];
           }
-          return { code: c, quantidade, pallet, rotulo: quantidade === null ? null : rotulo };
+          return { code: c, quantidade, pallets, rotulo: quantidade === null ? null : rotulo };
         });
         const quantidadePorId = new Map(desejado.map((d) => [d.code.id, d.quantidade] as const));
 
@@ -688,7 +712,7 @@ export class ForecastProductService {
           .filter(
             (d) =>
               d.quantidade !== qtyToNumber(d.code.packagingQtyKg) ||
-              d.pallet !== qtyToNumber(d.code.packagingPalletKg) ||
+              d.pallets.join(';') !== palletsDoCodigo(d.code).join(';') ||
               d.rotulo !== d.code.packagingLabel ||
               d.principal !== d.code.packagingIsPrimary,
           );
@@ -706,7 +730,7 @@ export class ForecastProductService {
             where: { id: d.code.id },
             data: {
               packagingQtyKg: d.quantidade,
-              packagingPalletKg: d.pallet,
+              ...colunasDePallet(d.pallets),
               packagingLabel: d.rotulo,
               packagingIsPrimary: d.principal,
               packagingSource: 'manual',
@@ -716,7 +740,8 @@ export class ForecastProductService {
         }
 
         const comEmbalagem = desejado.filter((d) => d.quantidade !== null).length;
-        const comPallet = desejado.filter((d) => d.pallet !== null).length;
+        const comPallet = desejado.filter((d) => d.pallets.length > 0).length;
+        const comVariosPallets = desejado.filter((d) => d.pallets.length > 1).length;
         await AuditLogService.log(
           {
             entityType: ENTITY_TYPE,
@@ -730,6 +755,7 @@ export class ForecastProductService {
               comEmbalagem,
               semEmbalagem: desejado.length - comEmbalagem,
               comPallet,
+              comVariosPallets,
               principalAntes,
               principalDepois,
             },
@@ -743,8 +769,9 @@ export class ForecastProductService {
         });
         if (!atualizado) throw new HttpError(404, 'Produto nao encontrado.');
         return toEmbalagensData(atualizado);
-      });
+      }, CADASTRO_TX_OPTIONS);
     } catch (error) {
+      if (isCadastroOcupado(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(
           409,

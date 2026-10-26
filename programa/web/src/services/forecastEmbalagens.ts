@@ -9,6 +9,8 @@ export interface ForecastEmbalagemCodigo {
   quantidadeKg: number | null;
   /** PR 6e (opcional: backend antigo nao manda): kg de UM pallet (opcao de compra; nao precisa ser multiplo da quantidade); nulo = sem pallet. */
   palletKg?: number | null;
+  /** Etapa B (opcional: backend antigo nao manda): TODOS os tamanhos de pallet do codigo, o 1o primeiro; ausente = usar `[palletKg]`. */
+  palletsKg?: number[];
   rotulo: string | null;
   principal: boolean;
   origem: 'manual' | 'dbcorp' | null;
@@ -27,8 +29,10 @@ export type ForecastEmbalagemEdicao = {
   codigoId: number;
   quantidadeKg: number | null;
   rotulo?: string | null;
-  /** Ausente = mantem; null = sem pallet; numero = kg de um pallet fechado. */
+  /** Ausente = mantem; null = sem pallet (apaga todos os tamanhos); numero = troca so o 1o tamanho. */
   palletKg?: number | null;
+  /** Varios tamanhos: substitui a lista inteira ([] = sem pallet). Nunca junto com `palletKg`. */
+  palletsKg?: number[];
 };
 
 export type ForecastEmbalagensPatch = {
@@ -55,7 +59,7 @@ export async function patchForecastEmbalagens(
   return response.data;
 }
 
-/** Mensagem em portugues para o usuario; 400/409 repassam a mensagem do backend. */
+/** Mensagem em portugues para o usuario; 400/409/503 repassam a mensagem do backend. */
 export function forecastEmbalagensErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -66,7 +70,8 @@ export function forecastEmbalagensErrorMessage(err: unknown): string {
       case 404:
         return 'Produto não encontrado no cadastro do Forecast.';
       case 400:
-      case 409: {
+      case 409:
+      case 503: {
         const message = messageOf(err);
         return message && message !== `HTTP ${err.status}`
           ? message

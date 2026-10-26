@@ -76,7 +76,9 @@ describe('ForecastDemandaComercialModal - lancar', () => {
     expect(screen.getByText(/Só soma ao Forecast quando a data de necessidade é posterior ao último mês de programação/)).toBeTruthy();
     // A data nova nao pode ser anterior a hoje: o campo ja nasce com o minimo.
     expect(campo('Data de necessidade').getAttribute('min')).toBe('2026-10-20');
-    expect(campo(/Nº da Solicitação/).closest('.fcd-campo')?.textContent).toContain('não é consultada nem alterada');
+    expect(campo(/Nº da Solicitação/).closest('.fcd-campo')?.textContent).toContain(
+      'o número precisa existir em Solicitações (a solicitação não é alterada)',
+    );
   });
 
   it('a busca filtra a lista; a escolha que sai da lista e desfeita', async () => {
@@ -187,6 +189,23 @@ describe('ForecastDemandaComercialModal - lancar', () => {
     expect(alerta.textContent).toContain('Produto inativo');
     expect(onFechar).not.toHaveBeenCalled();
     expect(campo('Quantidade pedida (kg)').value).toBe('1600');
+  });
+
+  it('Solicitacao inexistente (400 do backend): a mensagem com o numero aparece no alerta e o dialogo segue aberto', async () => {
+    const mensagem = 'Solicitação nº 77 não encontrada no módulo Solicitações. Confira o número ou deixe o campo vazio.';
+    post.mockRejectedValue(new ApiError(400, { message: mensagem }));
+    renderModal();
+    await screen.findByText('2 produtos');
+    fireEvent.click(screen.getByRole('radio', { name: /PRODUTO 001/ }));
+    preencher('Quantidade pedida (kg)', '1600');
+    preencher('Data de necessidade', '2027-02-10');
+    preencher('Motivo do pedido', 'MOTIVO SINTETICO');
+    preencher(/Nº da Solicitação/, '77');
+    fireEvent.click(screen.getByRole('button', { name: 'Lançar demanda' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe(mensagem);
+    expect(onFechar).not.toHaveBeenCalled();
+    expect(campo(/Nº da Solicitação/).value).toBe('77');
   });
 
   it('falha ao carregar os produtos: mensagem e "Tentar de novo"', async () => {

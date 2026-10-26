@@ -22,6 +22,7 @@ import {
   forecastMesesAtipicosPutSchema,
   forecastProductCodeAddSchema,
   forecastProductCreateSchema,
+  forecastProductReativarSchema,
   forecastRelatorioXlsxQuerySchema,
   forecastSnapshotQuerySchema,
   forecastSobDemandaPatchSchema,
@@ -229,6 +230,20 @@ export class ForecastController {
       const input = forecastProductCodeAddSchema.parse(req.body);
       const data = await ForecastProductCadastroService.addCode(id, input, req.user?.id ?? null);
       return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async reativarProduto(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto inválido.');
+      }
+      forecastProductReativarSchema.parse(req.body ?? {});
+      const data = await ForecastProductCadastroService.reativar(id, req.user?.id ?? null);
+      return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
     }

@@ -16,7 +16,7 @@ import { d1, inteiroBr, kgBr, mesAbrevDoAnoMes } from './forecastPainel';
 
 /** Terceiro paragrafo das regras (tela e aba Regras do XLSX). */
 export const PARAGRAFO_EMBALAGEM =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado (um ou mais tamanhos por código), mostra também, para cada tamanho, os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
 
 /** Quantidade do item arredondada para UMA embalagem, ex.: `3 × 200 kg (código C0002) = 600 kg`. */
 export function textoOpcaoDeEmbalagem(op: ForecastOpcaoEmbalagem): string {
@@ -50,22 +50,38 @@ export function textoPallet(p: ForecastPalletDaOpcao | null | undefined): string
   return `${inicio}${parte(p.abaixo, 'abaixo')} · ${parte(p.acima, 'acima')}`;
 }
 
-/** Pallet da embalagem em destaque (a que gera a Qtd. final); null sem pallet ou com backend antigo. */
+// Textos dos demais tamanhos de pallet da opcao (vazio com 0/1 tamanho ou backend antigo).
+const textosOutrosPallets = (o: Pick<ForecastOpcaoEmbalagem, 'outrosPallets'>): string[] =>
+  (o.outrosPallets ?? []).flatMap((p) => textoPallet(p) ?? []);
+
+/** Copia exata de `linhasDePallet` do XLSX: uma linha `Pallet de ...` por tamanho (o 1o e os demais). */
+export function linhasDePallet(o: ForecastOpcaoEmbalagem | undefined): string[] {
+  if (!o) return [];
+  const primeiro = textoPallet(o.pallet);
+  return [...(primeiro ? [primeiro] : []), ...textosOutrosPallets(o)];
+}
+
+/** Pallets da embalagem em destaque (a que gera a Qtd. final), um texto por tamanho; vazio sem pallet ou com backend antigo. */
+export function palletsDoDestaque(item: Pick<ForecastItemRelatorio, 'porEmbalagem'>): string[] {
+  return linhasDePallet(item.porEmbalagem?.find((o) => o.destaque));
+}
+
+/** Os mesmos pallets do destaque em um so texto (uma linha por tamanho, como na celula do XLSX); null sem pallet. */
 export function palletDoDestaque(item: Pick<ForecastItemRelatorio, 'porEmbalagem'>): string | null {
-  return textoPallet(item.porEmbalagem?.find((o) => o.destaque)?.pallet);
+  return palletsDoDestaque(item).join('\n') || null;
 }
 
 /** Cada embalagem que NAO esta em destaque com o pallet dela logo abaixo (mesma ordem de `linhasOutrasEmbalagens`). */
 export function opcoesOutrasComPallet(
   item: Pick<ForecastItemRelatorio, 'embalagem' | 'porEmbalagem'>,
-): Array<{ texto: string; pallet: string | null }> {
+): Array<{ texto: string; pallet: string | null; outrosPallets: string[] }> {
   const { usada, multiplas } = item.embalagem;
   if (!multiplas || !usada || !item.porEmbalagem) {
-    return linhasOutrasEmbalagens(item).map((texto) => ({ texto, pallet: null }));
+    return linhasOutrasEmbalagens(item).map((texto) => ({ texto, pallet: null, outrosPallets: [] }));
   }
   return item.porEmbalagem
     .filter((o) => !o.destaque)
-    .map((o) => ({ texto: textoOpcaoDeEmbalagem(o), pallet: textoPallet(o.pallet) }));
+    .map((o) => ({ texto: textoOpcaoDeEmbalagem(o), pallet: textoPallet(o.pallet), outrosPallets: textosOutrosPallets(o) }));
 }
 
 /** `title` do selo "Arredondado pela embalagem do codigo ...": as mesmas opcoes que aparecem na celula. */

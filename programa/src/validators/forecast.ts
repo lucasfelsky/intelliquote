@@ -5,6 +5,7 @@ import {
   FORECAST_DBCORP_PRAZOS_MAX_FONTES,
   FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
   FORECAST_MAX_CODES_PER_PRODUCT,
+  FORECAST_MAX_PALLETS_POR_CODIGO,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
 import { isValidDateKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
@@ -162,14 +163,14 @@ const packagingQtyField = z
 
 // Pallet (PR 6e): mesmas regras da quantidade. Nao precisa ser multiplo da embalagem (rodada 5 do Comex); a regra
 // entre campos (precisa de quantidade na embalagem) depende do estado do codigo e fica no service.
-const packagingPalletField = z
+const packagingPalletValue = z
   .number({ error: 'Informe os kg do pallet (ou null).' })
   .positive('O pallet deve ser maior que zero.')
   .max(1000000, 'O pallet aceita no maximo 1.000.000 kg.')
   .refine((v) => /^\d+(\.\d{1,3})?$/.test(String(v)), {
     message: 'O pallet aceita no maximo 3 casas decimais.',
-  })
-  .nullable();
+  });
+const packagingPalletField = packagingPalletValue.nullable();
 
 const packagingLabelField = z
   .string({ error: 'Rotulo invalido.' })
@@ -190,13 +191,22 @@ export const forecastEmbalagensPatchSchema = z
   .object({
     embalagens: z
       .array(
-        z.object({
-          codigoId: codigoIdField,
-          quantidadeKg: packagingQtyField,
-          rotulo: packagingLabelField,
-          // Ausente = mantem; null = sem pallet; numero = kg de um pallet (opcao de compra; nao precisa ser multiplo da embalagem).
-          palletKg: packagingPalletField.optional(),
-        }),
+        z
+          .object({
+            codigoId: codigoIdField,
+            quantidadeKg: packagingQtyField,
+            rotulo: packagingLabelField,
+            // Ausente = mantem; null = sem pallet; numero = kg de um pallet (opcao de compra; nao precisa ser multiplo da embalagem).
+            // Legado: troca SO o 1o tamanho (os demais ficam) e null apaga todos.
+            palletKg: packagingPalletField.optional(),
+            // Varios tamanhos: substitui a lista inteira ([] = sem pallet). Nao vai junto com `palletKg`.
+            palletsKg: z
+              .array(packagingPalletValue, { error: 'Informe os pallets como lista de kg.' })
+              .max(FORECAST_MAX_PALLETS_POR_CODIGO, `Informe no máximo ${FORECAST_MAX_PALLETS_POR_CODIGO} tamanhos de pallet por código.`)
+              .refine((lista) => new Set(lista).size === lista.length, 'Tamanho de pallet repetido no mesmo código.')
+              .optional(),
+          })
+          .refine((e) => e.palletKg === undefined || e.palletsKg === undefined, 'Informe palletKg ou palletsKg, não os dois.'),
         { error: 'Informe as embalagens como lista.' },
       )
       .min(1, 'Informe ao menos uma embalagem ou a principal.')
@@ -260,6 +270,10 @@ export const forecastProductCodeAddSchema = z.object({
   codigo: productCodeField,
 });
 
+// Reativar produto inativo: sem corpo (campo extra = 400).
+export const forecastProductReativarSchema = z.strictObject({});
+
+export type ForecastProductReativarInput = z.infer<typeof forecastProductReativarSchema>;
 export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
 export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;
 
@@ -359,7 +373,7 @@ export type ForecastMesesAtipicosPutInput = z.infer<typeof forecastMesesAtipicos
 
 // Demanda do comercial (PR 6d): lancamento manual no Forecast (admin/comprador). Compra pedida pelo comercial por uma
 // programacao futura de cliente fora do horizonte do DBCorp. Fechada (comprada, cancelada, virou_programacao) nao reabre.
-// `solicitacaoId` e so o numero da Solicitacao do IntelliQuote para rastreio (o modulo de Solicitacoes nao e consultado).
+// `solicitacaoId` e so o numero da Solicitacao do IntelliQuote para rastreio (a Solicitacao precisa existir: consulta por id, sem FK).
 export const FORECAST_DEMANDA_STATUS = ['aberta', 'comprada', 'cancelada', 'virou_programacao'] as const;
 export const FORECAST_DEMANDA_FECHAMENTOS = ['comprada', 'cancelada', 'virou_programacao'] as const;
 export const FORECAST_DEMANDA_KG_MAX = 10_000_000;

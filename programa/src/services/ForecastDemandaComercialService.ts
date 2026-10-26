@@ -60,6 +60,18 @@ function paraDados(r: LinhaComProduto): ForecastDemandaComercialData {
   };
 }
 
+// A Solicitacao precisa existir (so leitura por id, sem FK nem migration; CommercialRequest nao tem soft-delete). So o
+// numero vai na mensagem: nada da Solicitacao vaza para o Forecast.
+async function assertSolicitacaoExiste(tx: Prisma.TransactionClient, id: number): Promise<void> {
+  const solicitacao = await tx.commercialRequest.findUnique({ where: { id }, select: { id: true } });
+  if (!solicitacao) {
+    throw new HttpError(
+      400,
+      `Solicitação nº ${id} não encontrada no módulo Solicitações. Confira o número ou deixe o campo vazio.`,
+    );
+  }
+}
+
 // Demanda do comercial (PR 6d): compra pedida pelo comercial por programacao futura de cliente, lancada a mao pelo COMEX.
 // O AuditLog guarda so ids, kg, data, status e contagens: nunca o texto do motivo, da nota nem o nome do cliente.
 export class ForecastDemandaComercialService {
@@ -112,6 +124,7 @@ export class ForecastDemandaComercialService {
       if (!produto.isActive) {
         throw new HttpError(400, 'Produto inativo: reative o produto no cadastro do Forecast antes de lancar a demanda.');
       }
+      if (typeof input.solicitacaoId === 'number') await assertSolicitacaoExiste(tx, input.solicitacaoId);
       const criada = await tx.forecastCommercialDemand.create({
         data: {
           productId: input.productId,
@@ -208,6 +221,8 @@ export class ForecastDemandaComercialService {
           alterados.push('cliente');
         }
         if (input.solicitacaoId !== undefined && input.solicitacaoId !== atual.commercialRequestId) {
+          // So a TROCA para um numero novo valida: demanda antiga com numero legado continua editavel; null limpa.
+          if (input.solicitacaoId !== null) await assertSolicitacaoExiste(tx, input.solicitacaoId);
           data.commercialRequestId = input.solicitacaoId;
           alterados.push('solicitacaoId');
         }

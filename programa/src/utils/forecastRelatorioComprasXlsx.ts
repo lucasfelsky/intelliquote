@@ -443,9 +443,9 @@ function textoEmbalagem(item: ItemRelatorioCompras): string {
   }
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   const principal = `${item.quantidadeEmbalagens} × ${nome} (código ${usada.codigo})`;
-  // Pallet da embalagem em destaque: linha extra na mesma celula (sem coluna nova; Observacao segue a ultima).
-  const pallet = item.porEmbalagem.find((o) => o.destaque)?.pallet;
-  return pallet ? `${principal}\n${textoPallet(pallet)}` : principal;
+  // Pallet(s) da embalagem em destaque: linhas extras na mesma celula (sem coluna nova; Observacao segue a ultima).
+  const pallets = linhasDePallet(item.porEmbalagem.find((o) => o.destaque));
+  return pallets.length > 0 ? `${principal}\n${pallets.join('\n')}` : principal;
 }
 
 // Copia EXATA de textoOpcaoDeEmbalagem (web/src/pages/Forecast/forecastRelatorioTextos.ts; guarda de paridade no teste):
@@ -467,9 +467,14 @@ export function textoPallet(p: PalletDaOpcao): string {
   return `${inicio}${parte(p.abaixo, 'abaixo')} · ${parte(p.acima, 'acima')}`;
 }
 
+// Uma linha `Pallet de ...` por tamanho cadastrado da opcao (o 1o e os demais); com 0/1 tamanho, 0/1 linha como antes.
+export function linhasDePallet(o: OpcaoDeEmbalagem | undefined): string[] {
+  return o ? [o.pallet, ...(o.outrosPallets ?? [])].flatMap((p) => (p ? [textoPallet(p)] : [])) : [];
+}
+
 // Copia EXATA de PARAGRAFO_EMBALAGEM (web/.../forecastRelatorioTextos.ts); e o 3o paragrafo da aba Regras.
 export const PARAGRAFO_EMBALAGEM_XLSX =
-  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado, mostra também os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
+  'Quantidade sugerida = demanda em módulo. Com embalagem cadastrada, arredonda para cima em múltiplos da embalagem (a principal; sem principal, a do primeiro código). Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma, para o comprador escolher na compra; a Qtd. final usa a embalagem em destaque. O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem: com pallet cadastrado (um ou mais tamanhos por código), mostra também, para cada tamanho, os pallets abaixo e acima da quantidade sugerida (a conta é em kg do pallet); a Qtd. final continua pela embalagem.';
 
 const linhasChegada = (chegadas: Array<{ anoMes: string; quantidade: number }>) =>
   chegadas.map((c) => `Chegada ${mesAbrev(c.anoMes)}: ${inteiroBr(c.quantidade)}`);
@@ -491,7 +496,7 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
     multiplas && usada
       ? item.porEmbalagem
           .filter((o) => !o.destaque)
-          .flatMap((o) => (o.pallet ? [textoOpcaoDeEmbalagem(o), textoPallet(o.pallet)] : [textoOpcaoDeEmbalagem(o)]))
+          .flatMap((o) => [textoOpcaoDeEmbalagem(o), ...linhasDePallet(o)])
           .join('\n')
       : '';
   const rupturaTexto = ruptura
