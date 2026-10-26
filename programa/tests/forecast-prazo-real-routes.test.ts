@@ -171,6 +171,43 @@ describe('GET /forecast/sources/prazo-real - conteudo', () => {
     expect(response.body.data.motivo).toBeNull();
   });
 
+  it('prazosFup corrompido: elementos fora do formato sao ignorados (200, sem 500)', async () => {
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue(
+      snapshot({
+        prazosFup: [
+          null,
+          42,
+          'x',
+          [],
+          { codigo: 7, etaFinal: '2033-04-10', poDias: 1, etdDias: 1 },
+          { ...amostra('TST0001', 60, 30), poDias: '60' },
+          { ...amostra('TST0001', 60, 30), etdDias: {} },
+          { ...amostra('TST0001', 60, 30), etaFinal: '2033-13-40' },
+          { codigo: '', etaFinal: '2033-04-10', poDias: 1, etdDias: 1 },
+          amostra('TST0001', 70, 35),
+        ],
+      }),
+    );
+    const cookies = await loginAs('admin');
+    const response = await request(app).get(PATH).set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    const data = response.body.data;
+    expect(data.disponivel).toBe(true);
+    expect(data.motivo).toBeNull();
+    expect(data.semFonte).toEqual({ chegadas: 0 });
+    expect(data.fontes[0].real.po).toEqual({ chegadas: 1, media: 70, mediana: 70, min: 70, max: 70, poucasChegadas: true });
+    expect(data.fontes[0].real.etd).toMatchObject({ chegadas: 1, media: 35 });
+  });
+
+  it('prazosFup que nao e lista: quinzena_sem_historico', async () => {
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue(snapshot({ prazosFup: 'texto' }));
+    const cookies = await loginAs('admin');
+    const response = await request(app).get(PATH).set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    expect(response.body.data.disponivel).toBe(false);
+    expect(response.body.data.motivo).toBe('quinzena_sem_historico');
+  });
+
   it('busca a ultima quinzena DBCorp nao apagada e so fontes/produtos ativos', async () => {
     const cookies = await loginAs('comprador');
     await request(app).get(`${PATH}?qualquer=coisa`).set('Cookie', cookies);
