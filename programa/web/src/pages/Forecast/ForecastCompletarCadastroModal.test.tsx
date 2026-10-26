@@ -330,6 +330,7 @@ describe('ForecastCompletarCadastroModal - novo produto', () => {
     fontes = [fonte(5, 'FONTE 003', 10, false)];
     renderModal();
     expect(await screen.findByText(/Não há fonte ativa no cadastro/)).toBeTruthy();
+    expect(screen.queryByText(/Importe a planilha/)).toBeNull();
     expect(screen.queryByLabelText('Nome do produto')).toBeNull();
   });
 

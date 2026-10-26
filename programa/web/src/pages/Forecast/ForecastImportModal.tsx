@@ -7,7 +7,9 @@ import {
   confirmForecastDbcorp,
   confirmForecastWorkbook,
   forecastImportErrorMessage,
+  forecastKeys,
   ForecastLocalError,
+  listForecastSnapshots,
   previewForecastDbcorp,
   previewForecastWorkbook,
   type ForecastDbcorpBody,
@@ -154,7 +156,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
 
   const aoFalhar = {
     onError: (err: unknown) => {
-      setErro(forecastImportErrorMessage(err, rotulo));
+      setErro(forecastImportErrorMessage(err, rotulo, aba));
       setCadastro((c) => (c?.estado === 'atualizando' ? { ...c, estado: 'falhou' } : c));
       avisarSeInconclusivo(err);
     },
@@ -210,6 +212,21 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
     ...aoFalhar,
   });
 
+  // L62: o confirm pode estourar o tempo do caminho Hosting -> Cloud Run (502/503/504) com a quinzena ja gravada.
+  async function quinzenaCriadaApesarDoErro(err: unknown, congelada: Previa): Promise<{ id: number; label: string } | null> {
+    if (!(err instanceof ApiError) || ![502, 503, 504].includes(err.status)) return null;
+    const { label } = congelada.corpo;
+    if (quinzenasExistentes.includes(label)) return null;
+    if (congelada.aba === 'planilha' && !opcoesEfetivas(congelada.resumo).criarQuinzena) return null;
+    try {
+      const lista = await queryClient.fetchQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots, staleTime: 0, retry: false });
+      const achada = lista.find((q) => q.label === label);
+      return achada ? { id: achada.id, label: achada.label } : null;
+    } catch {
+      return null;
+    }
+  }
+
   const confirmar = useMutation({
     gcTime: 0,
     mutationFn: async (congelada: Previa) => {
@@ -228,6 +245,14 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
       onImportada(dados.snapshotId, congelada.corpo.label);
     },
     ...aoFalhar,
+    onError: async (err, congelada) => {
+      const criada = await quinzenaCriadaApesarDoErro(err, congelada);
+      if (criada) {
+        onImportada(criada.id, criada.label);
+        return;
+      }
+      aoFalhar.onError(err);
+    },
   });
 
   // Previa nova: fonte ja editada mantem o texto digitado; fonte nova entra com o prazo usado.
