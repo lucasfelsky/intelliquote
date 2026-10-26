@@ -4,6 +4,7 @@
 // entrega a quinzena, a data do calculo e as marcas de mes atipico.
 import exceljs from 'exceljs';
 import {
+  FORECAST_MARGEM_LAST_ROW,
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_ORIGIN_DBCORP,
   FORECAST_SHEETS,
@@ -97,6 +98,7 @@ export interface ContextoRegrasMacro {
   hoje: string;
   somarChegada5oMes: boolean;
   produtosComMarca: number;
+  linhasMargem?: number; // codigos escritos na aba MARGEM
 }
 
 export function PARAGRAFOS_REGRAS_MACRO(ctx: ContextoRegrasMacro): string[] {
@@ -124,6 +126,12 @@ export function PARAGRAFOS_REGRAS_MACRO(ctx: ContextoRegrasMacro): string[] {
     `Cor da célula do item: verde = ${STATUS_ROTULO_XLSX.po}; laranja = ${STATUS_ROTULO_XLSX.confirmado}; amarelo = ${STATUS_ROTULO_XLSX.cotando}; azul = ${STATUS_ROTULO_XLSX.preco}; sem cor = ${STATUS_ROTULO_XLSX.nao}.`,
     'MARGEM traz só a margem que a coluna AR usa; CLIENTES ATIVOS, só os códigos dos produtos; preço fechado aparece só como X. As abas de entrada têm só as colunas usadas pelas fórmulas.',
   );
+  const n = ctx.linhasMargem ?? 0;
+  if (n + 1 > FORECAST_MARGEM_LAST_ROW) {
+    paragrafos.push(
+      `A aba MARGEM tem ${n} códigos (linhas 2 a ${n + 1}) e a coluna AR procura até a linha ${n + 1}. O PO.COMP.01 e o importador do IntelliQuote leem a MARGEM só até a linha ${FORECAST_MARGEM_LAST_ROW}: ao reimportar este arquivo, os códigos abaixo dessa linha ficam sem margem e o selo de conferência aponta diferença na coluna AR desses produtos.`,
+    );
+  }
   return paragrafos;
 }
 
@@ -269,7 +277,15 @@ function escreverAbaMacro(
   let comMarca = 0;
   q.produtos.forEach((p, i) => {
     const fora = e.mesesForaDaMedia?.get(p.linha);
-    const ctx: ContextoFormula = { half: e.half, somarChegada5oMes, hoje: e.hoje, fora, ultimaLinhaMargem };
+    const ctx: ContextoFormula = {
+      half: e.half,
+      somarChegada5oMes,
+      hoje: e.hoje,
+      fora,
+      ultimaLinhaMargem,
+      codigos: p.codigos,
+      fonte: p.fonte,
+    };
     if (fora && [...fora].some((m) => Number.isInteger(m) && m >= 0 && m <= 6)) comMarca++;
     escreverProduto(ws, p, linhas[i], PRIMEIRA_LINHA_PRODUTO + i, ctx);
   });
@@ -509,6 +525,7 @@ export async function gerarXlsxForecastMacro(e: EntradaForecastMacro): Promise<B
       hoje: e.hoje,
       somarChegada5oMes,
       produtosComMarca,
+      linhasMargem: margens.length,
     }),
   );
 

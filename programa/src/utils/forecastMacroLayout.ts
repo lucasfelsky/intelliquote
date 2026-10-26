@@ -252,25 +252,57 @@ export interface ContextoFormula {
   hoje: string; // YYYY-MM-DD
   fora?: ReadonlySet<number>; // indices 0..6 marcados (J..P)
   ultimaLinhaMargem: number;
+  codigos?: readonly string[]; // 7 posicoes alinhadas a B..H: valor da celula, para escapar curinga no criterio
+  fonte?: string; // valor da celula AU, idem (criterio do VLOOKUP da AQ)
 }
 
-const porCodigo = (r: number, corpo: (ref: string) => string, ancora = ''): string =>
-  `SUM(${COLUNAS_CODIGO.map((c) => corpo(`${ancora}${c}${r}`)).join(',')})`;
+// Curinga (* ? ~) no valor de uma celula vira criterio de SUMIF/SUMIFS/COUNTIF/VLOOKUP: escapa com ~ so quando o valor
+// tem curinga. Escapar sempre trocaria a celula vazia por "" (criterio que casa celulas vazias) e quebraria a paridade.
+export const TEM_CURINGA = /[*?~]/;
+export function criterioLiteral(ref: string, valor: string | null | undefined): string {
+  if (!valor || !TEM_CURINGA.test(valor)) return ref;
+  return `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(${ref},"~","~~"),"*","~*"),"?","~?")`;
+}
 
-const somaIf = (aba: string, colCodigo: string, colQtd: string, r: number): string =>
-  porCodigo(r, (ref) => `SUMIF(${aba}!${colCodigo}:${colCodigo},${ref},${aba}!${colQtd}:${colQtd})`);
+const porCodigo = (
+  r: number,
+  corpo: (ref: string) => string,
+  ancora = '',
+  codigos?: readonly string[],
+): string =>
+  `SUM(${COLUNAS_CODIGO.map((c, i) => corpo(criterioLiteral(`${ancora}${c}${r}`, codigos?.[i]))).join(',')})`;
 
-const somaIfs = (aba: string, colQtd: string, colCodigo: string, colMes: string, cabecalho: string, r: number): string =>
+const somaIf = (aba: string, colCodigo: string, colQtd: string, r: number, codigos?: readonly string[]): string =>
+  porCodigo(
+    r,
+    (ref) => `SUMIF(${aba}!${colCodigo}:${colCodigo},${ref},${aba}!${colQtd}:${colQtd})`,
+    '',
+    codigos,
+  );
+
+const somaIfs = (
+  aba: string,
+  colQtd: string,
+  colCodigo: string,
+  colMes: string,
+  cabecalho: string,
+  r: number,
+  codigos?: readonly string[],
+): string =>
   porCodigo(
     r,
     (ref) =>
       `SUMIFS(${aba}!$${colQtd}:$${colQtd},${aba}!$${colCodigo}:$${colCodigo},${ref},${aba}!$${colMes}:$${colMes},${cabecalho})`,
     '$',
+    codigos,
   );
 
-function formulaAR(r: number, ultimaLinhaMargem: number): string {
+function formulaAR(r: number, ultimaLinhaMargem: number, codigos?: readonly string[]): string {
   const tabela = `${ABA.margem}!$A$2:$B$${ultimaLinhaMargem}`;
-  const procura = (c: string) => `VLOOKUP(${c}${r},${tabela},2,0)`;
+  const procura = (c: string) => {
+    const i = COLUNAS_CODIGO.indexOf(c as (typeof COLUNAS_CODIGO)[number]);
+    return `VLOOKUP(${criterioLiteral(`${c}${r}`, codigos?.[i])},${tabela},2,0)`;
+  };
   let formula = `IFERROR(${procura('H')},"")`;
   for (const c of ['G', 'F', 'E', 'D', 'C', 'B']) formula = `IFERROR(${procura(c)},${formula})`;
   return formula;
@@ -285,8 +317,8 @@ function formulaAP(hoje: string, r: number): string {
 export function formulaDaColuna(col: ColunaComFormula, r: number, ctx: ContextoFormula): string {
   const fora = ctx.fora;
   switch (col) {
-    case 'O': return somaIf(ABA.vendasMes, 'B', 'D', r);
-    case 'P': return somaIf(ABA.vendasAtual, 'B', 'D', r);
+    case 'O': return somaIf(ABA.vendasMes, 'B', 'D', r, ctx.codigos);
+    case 'P': return somaIf(ABA.vendasAtual, 'B', 'D', r, ctx.codigos);
     case 'Q': {
       const cols = colunasDaMedia(['M', 'N', 'O'], 3, fora);
       return `(${cols.map((c) => `${c}${r}`).join('+')})/${cols.length}`;
@@ -295,14 +327,14 @@ export function formulaDaColuna(col: ColunaComFormula, r: number, ctx: ContextoF
       const cols = colunasDaMedia(['J', 'K', 'L', 'M', 'N', 'O'], 0, fora);
       return `(${cols.map((c) => `${c}${r}`).join('+')})/${cols.length}`;
     }
-    case 'S': return `(${somaIf(ABA.vendasAnual, 'B', 'D', r)})/11`;
+    case 'S': return `(${somaIf(ABA.vendasAnual, 'B', 'D', r, ctx.codigos)})/11`;
     case 'T': return `Q${r}/30*AQ${r}`;
-    case 'U': return somaIf(ABA.estoque, 'A', 'E', r);
+    case 'U': return somaIf(ABA.estoque, 'A', 'E', r, ctx.codigos);
     case 'V': case 'W': case 'X': case 'Y': case 'Z':
-      return somaIfs(ABA.chegadas, 'L', 'E', 'Z', `${col}$2`, r);
+      return somaIfs(ABA.chegadas, 'L', 'E', 'Z', `${col}$2`, r, ctx.codigos);
     case 'AA': return `IF(Q${r}=0,"0",SUM(U${r}:Z${r})/Q${r})`;
     case 'AC': case 'AD': case 'AE': case 'AF':
-      return somaIfs(ABA.programacoes, 'D', 'A', 'I', `${col}$2`, r);
+      return somaIfs(ABA.programacoes, 'D', 'A', 'I', `${col}$2`, r, ctx.codigos);
     case 'AG':
       return ctx.half === 1 || fora?.has(6) ? `Q${r}` : `IF(Q${r}<P${r},P${r},Q${r})`;
     case 'AH': return `U${r}+V${r}-AC${r}-AG${r}`;
@@ -313,9 +345,10 @@ export function formulaDaColuna(col: ColunaComFormula, r: number, ctx: ContextoF
     case 'AM': return `AL${r}-Q${r}`;
     case 'AN': return `(SUM(U${r}:Z${r})-T${r})-Q${r}-(SUM(AC${r}:AF${r}))`;
     case 'AP': return formulaAP(ctx.hoje, r);
-    case 'AQ': return `VLOOKUP(AU${r},${ABA.leadtime}!A:G,7,0)`;
-    case 'AR': return formulaAR(r, ctx.ultimaLinhaMargem);
-    case 'AS': return COLUNAS_CODIGO.map((c) => `COUNTIF(${INTERVALO_CLIENTES},${c}${r})`).join('+');
+    case 'AQ': return `VLOOKUP(${criterioLiteral(`AU${r}`, ctx.fonte)},${ABA.leadtime}!A:G,7,0)`;
+    case 'AR': return formulaAR(r, ctx.ultimaLinhaMargem, ctx.codigos);
+    case 'AS':
+      return COLUNAS_CODIGO.map((c, i) => `COUNTIF(${INTERVALO_CLIENTES},${criterioLiteral(`${c}${r}`, ctx.codigos?.[i])})`).join('+');
   }
 }
 

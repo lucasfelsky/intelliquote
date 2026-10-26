@@ -1,6 +1,6 @@
 // Avaliador de formulas de TESTE para o XLSX da aba FORECAST (MACRO). Cobre EXATAMENTE o subconjunto que o gerador
-// escreve (SUM, SUMIF, SUMIFS, COUNTIF, VLOOKUP exato, IF, IFERROR, DATE, aritmetica e comparacoes); qualquer outra
-// coisa LANCA erro, para o teste falhar alto em vez de imitar o Excel pela metade. O resultado gravado em cache nas
+// escreve (SUM, SUMIF, SUMIFS, COUNTIF, VLOOKUP exato, IF, IFERROR, DATE, SUBSTITUTE, aritmetica e comparacoes) e o
+// escape `~` de curinga nos criterios; qualquer outra coisa LANCA erro, para o teste falhar alto em vez de imitar o Excel pela metade. O resultado gravado em cache nas
 // celulas e IGNORADO: o que vale e a formula. Nao e codigo de producao (nao entra no build).
 import type exceljs from 'exceljs';
 
@@ -295,6 +295,25 @@ export function criarAvaliador(wb: exceljs.Workbook): {
     return v;
   }
 
+  // Texto literal de um criterio com escape: ~* ~? ~~ viram o caractere; null = curinga de verdade (* ou ? sem escape).
+  function literalDoCriterio(s: string): string | null {
+    let saida = '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (c === '~') {
+        const prox = s[i + 1];
+        if (prox !== '*' && prox !== '?' && prox !== '~') throw new Error(`Criterio com til sem curinga nao suportado: "${s}"`);
+        saida += prox;
+        i++;
+      } else if (c === '*' || c === '?') {
+        return null;
+      } else {
+        saida += c;
+      }
+    }
+    return saida;
+  }
+
   // Posicoes (dentro do intervalo) cujas celulas casam com o criterio; ErroXl se o criterio for erro.
   function casam(iv: Intervalo, criterio: Valor): number[] | ErroXl {
     if (eIntervalo(criterio)) throw new Error('Criterio como intervalo nao suportado');
@@ -303,11 +322,13 @@ export function criarAvaliador(wb: exceljs.Workbook): {
     if (criterio === null) return idx.get('v:0') ?? [];
     if (typeof criterio === 'boolean') throw new Error('Criterio booleano nao suportado');
     if (typeof criterio === 'number') return idx.get(`n:${criterio}`) ?? [];
-    if (criterio === '' || /^[<>=]/.test(criterio) || /[*?~]/.test(criterio)) {
-      throw new Error(`Criterio nao suportado (curinga/operador/vazio): "${criterio}"`);
+    if (criterio === '' || /^[<>=]/.test(criterio)) {
+      throw new Error(`Criterio nao suportado (operador/vazio): "${criterio}"`);
     }
-    const achados = new Set(idx.get(`t:${criterio.toLowerCase()}`) ?? []);
-    if (RE_NUMERICO.test(criterio)) for (const i of idx.get(`n:${Number(criterio)}`) ?? []) achados.add(i);
+    const literal = literalDoCriterio(criterio);
+    if (literal === null) throw new Error(`Criterio nao suportado (curinga sem escape): "${criterio}"`);
+    const achados = new Set(idx.get(`t:${literal.toLowerCase()}`) ?? []);
+    if (RE_NUMERICO.test(literal)) for (const i of idx.get(`n:${Number(literal)}`) ?? []) achados.add(i);
     return [...achados];
   }
 
@@ -391,15 +412,30 @@ export function criarAvaliador(wb: exceljs.Workbook): {
         if (procurado instanceof ErroXl) return procurado;
         if (procurado === null || procurado === '') return new ErroXl('#N/A');
         if (typeof procurado === 'boolean') throw new Error('VLOOKUP: valor booleano nao suportado');
-        if (typeof procurado === 'string' && /[*?~]/.test(procurado)) {
-          throw new Error(`VLOOKUP: curinga nao suportado: "${procurado}"`);
+        let literal: string | null = null;
+        if (typeof procurado === 'string') {
+          literal = literalDoCriterio(procurado);
+          if (literal === null) throw new Error(`VLOOKUP: curinga nao suportado: "${procurado}"`);
         }
         const idx = indiceDaColuna({ ...tabela, c2: tabela.c1 });
-        const chave = typeof procurado === 'number' ? `n:${procurado}` : `t:${procurado.toLowerCase()}`;
+        const chave = typeof procurado === 'number' ? `n:${procurado}` : `t:${(literal ?? '').toLowerCase()}`;
         const primeira = idx.get(chave)?.[0];
         if (primeira === undefined) return new ErroXl('#N/A');
         const v = celula(tabela.aba, tabela.c1 + col - 1, tabela.r1 + primeira);
         return v === null ? 0 : v;
+      }
+      case 'SUBSTITUTE': {
+        if (args.length !== 3) throw new Error('SUBSTITUTE: esperava 3 argumentos');
+        const bruto = arg(0);
+        if (eIntervalo(bruto)) throw new Error('SUBSTITUTE: texto como intervalo');
+        if (bruto instanceof ErroXl) return bruto;
+        if (typeof bruto === 'boolean') throw new Error('SUBSTITUTE: booleano nao suportado');
+        const texto = bruto === null ? '' : String(bruto);
+        const velho = arg(1);
+        const novo = arg(2);
+        if (typeof velho !== 'string' || typeof novo !== 'string') throw new Error('SUBSTITUTE: old/new devem ser texto');
+        if (velho === '') throw new Error('SUBSTITUTE: old vazio nao suportado');
+        return texto.split(velho).join(novo);
       }
       case 'IF': {
         const cond = arg(0);

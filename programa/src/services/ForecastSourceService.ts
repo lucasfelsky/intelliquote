@@ -11,7 +11,7 @@ import { HttpError } from '../utils/http';
 import type { MudancaDePrazo } from '../utils/forecastDbcorpRegras';
 import { prazoRealPorFonte, type PrazoRealDaFonte } from '../utils/forecastPrazoReal';
 import type { AmostraPrazoFup } from '../utils/forecastTypes';
-import { dbDateToKey } from '../utils/supplierDocumentDates';
+import { dbDateToKey, isValidDateKey } from '../utils/supplierDocumentDates';
 import { normalizeProductCode, type ForecastWorkbookSource } from '../utils/forecastWorkbook';
 import { normalizeSupplierName } from '../utils/supplierImport';
 import { AuditLogService } from './AuditLogService';
@@ -74,11 +74,27 @@ function sameFields(a: SourceFields, b: SourceFields): boolean {
   );
 }
 
-// `inputs.prazosFup` ausente (quinzena gravada antes do 3C) -> null; lista vazia e historico valido.
+// Elemento de `inputs.prazosFup` no formato esperado: JSON corrompido nao pode derrubar a rota (500).
+function ehAmostraPrazoFup(v: unknown): v is AmostraPrazoFup {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+  const a = v as Record<string, unknown>;
+  const dias = (x: unknown) => x === null || (typeof x === 'number' && Number.isFinite(x));
+  return (
+    typeof a.codigo === 'string' &&
+    a.codigo !== '' &&
+    typeof a.etaFinal === 'string' &&
+    isValidDateKey(a.etaFinal) &&
+    dias(a.poDias) &&
+    dias(a.etdDias)
+  );
+}
+
+// `inputs.prazosFup` ausente (quinzena gravada antes do 3C) -> null; lista vazia e historico valido; elemento fora
+// do formato e descartado (so reduz as chegadas).
 function amostrasDoSnapshot(inputs: unknown): AmostraPrazoFup[] | null {
   if (typeof inputs !== 'object' || inputs === null) return null;
   const prazos = (inputs as { prazosFup?: unknown }).prazosFup;
-  return Array.isArray(prazos) ? (prazos as AmostraPrazoFup[]) : null;
+  return Array.isArray(prazos) ? prazos.filter(ehAmostraPrazoFup) : null;
 }
 
 export type ForecastPrazoRealMotivo = 'sem_quinzena_dbcorp' | 'quinzena_sem_historico';

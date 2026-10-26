@@ -40,12 +40,14 @@ const HOJE = '2026-10-20';
 const MACRO = FORECAST_SHEETS.macro;
 const SERIE_BASE = Date.UTC(1899, 11, 30);
 
-// Marcas sinteticas de mes atipico em 4 linhas da fixture: so M, so P (mes atual), todas do trimestre, J e O.
+// Marcas sinteticas de mes atipico em 5 linhas da fixture: so M, so P (mes atual), todas do trimestre, J e O, e P na
+// linha 13.
 const MARCAS: ReadonlyMap<number, ReadonlySet<number>> = new Map([
   [3, new Set([3])],
   [4, new Set([6])],
   [5, new Set([3, 4, 5])],
   [6, new Set([0, 5])],
+  [13, new Set([6])], // linha 13: P > Q; com o mes atual marcado AG e Q, sem a marca seria P
 ]);
 
 const OPCOES_A: EntradaForecastMacro = {
@@ -198,6 +200,33 @@ describe('avaliador de formulas do teste', () => {
     expect(av.valor('S', 'A4')).toBe('sim');
   });
 
+  it('escape ~ casa o caractere literal; SUBSTITUTE com celula vazia e com numero; til sem curinga lanca', async () => {
+    const av = await planilhaSintetica((wb) => {
+      const d = wb.addWorksheet('D');
+      ['C*1', 'C11', 'C~1'].forEach((t, i) => {
+        d.getCell(`A${i + 1}`).value = t;
+        d.getCell(`B${i + 1}`).value = [5, 7, 11][i];
+      });
+      d.getCell('C1').value = 12;
+      const s = wb.addWorksheet('S');
+      s.getCell('A1').value = { formula: 'SUMIF(D!A:A,"C~*1",D!B:B)', result: 0 };
+      s.getCell('A2').value = { formula: 'SUMIF(D!A:A,"C~~1",D!B:B)', result: 0 };
+      s.getCell('A3').value = { formula: 'SUBSTITUTE(E1,"a","b")', result: 0 };
+      s.getCell('A4').value = { formula: 'SUBSTITUTE(D!C1,"1","x")', result: 0 };
+      s.getCell('A5').value = {
+        formula: `SUMIF(D!A:A,SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(D!A1,"~","~~"),"*","~*"),"?","~?"),D!B:B)`,
+        result: 0,
+      };
+      s.getCell('A6').value = { formula: 'SUMIF(D!A:A,"C~1",D!B:B)', result: 0 };
+    });
+    expect(av.valor('S', 'A1')).toBe(5);
+    expect(av.valor('S', 'A2')).toBe(11);
+    expect(av.valor('S', 'A3')).toBe('');
+    expect(av.valor('S', 'A4')).toBe('x2');
+    expect(av.valor('S', 'A5')).toBe(5);
+    expect(() => av.valor('S', 'A6')).toThrow(/til sem curinga/);
+  });
+
   it('funcao fora do subconjunto e curinga lancam (falha alto)', async () => {
     const av = await planilhaSintetica((wb) => {
       const d = wb.addWorksheet('D');
@@ -216,7 +245,7 @@ describe('avaliador de formulas do teste', () => {
 
 // ---- 4.2 Paridade das formulas com o motor (criterio central) ----
 describe('paridade formula x motor: 9.464 celulas por cenario', () => {
-  it('(a) 2a quinzena, regra AL do Comex e 4 linhas com mes atipico marcado', () => {
+  it('(a) 2a quinzena, regra AL do Comex e 5 linhas com mes atipico marcado', () => {
     const { resultado, aps } = paridade(wbA, fixture, OPCOES_A);
     expect(resultado.divergencias.slice(0, 5)).toEqual([]);
     expect(resultado.celulas).toBe(9464);
@@ -360,6 +389,11 @@ describe('texto das formulas', () => {
     expect(formulaDe(w, 'R5')).toBe('(J5+K5+L5)/3');
     expect(formulaDe(w, 'Q6')).toBe('(M6+N6)/2'); // marcas em J e O
     expect(formulaDe(w, 'R6')).toBe('(K6+L6+M6+N6)/4');
+    // Linha 13 tem P > Q: com a marca no mes atual, AG e Q (sem a marca, AG seria P).
+    expect(formulaDe(w, 'AG13')).toBe('Q13');
+    const av = criarAvaliador(wbA);
+    expect(av.valor(MACRO, 'P13') as number).toBeGreaterThan(av.valor(MACRO, 'Q13') as number);
+    expect(av.valor(MACRO, 'AG13')).toBe(av.valor(MACRO, 'Q13'));
   });
 
   it('1a quinzena e regra da planilha na AL', () => {
@@ -547,7 +581,7 @@ describe('layout da aba FORECAST (MACRO)', () => {
     });
     expect(textos).toEqual(esperado);
     expect(textos[0]).toContain('quinzena 10-2 (planilha), data-base 15/10/2026, calculada em 20/10/2026');
-    expect(textos.some((t) => t.startsWith('4 produto(s) com mês de venda atípico'))).toBe(true);
+    expect(textos.some((t) => t.startsWith('5 produto(s) com mês de venda atípico'))).toBe(true);
     expect(textos.at(-2)).toBe(
       'Cor da célula do item: verde = PO enviada; laranja = Confirmado, aguarda PO; amarelo = Cotando; azul = Só atualização de preço; sem cor = Cotação não enviada.',
     );
@@ -709,6 +743,135 @@ describe('casos sinteticos', () => {
     await expect(
       gerarXlsxForecastMacro({ quinzena: quinzena([produto(3)]), hoje: '2026-13-01', half: 2, origin: 'planilha' }),
     ).rejects.toThrow('Data invalida');
+  });
+
+  it('codigo e fonte com curinga (* ? ~): escapa so onde ha curinga e soma so o codigo exato', async () => {
+    const q = quinzena(
+      [
+        produto(3, { codigos: ['C9*01', 'C9?02', 'C9~03', '', '', '', ''], fonte: 'FONTE 9*1' }),
+        produto(4, { codigos: ['C9101', 'C9X02', '', '', '', '', ''], fonte: 'FONTE 901' }),
+      ],
+      entradas({
+        estoque: [
+          { codigo: 'C9*01', qtd: 1 },
+          { codigo: 'C9?02', qtd: 2 },
+          { codigo: 'C9~03', qtd: 4 },
+          { codigo: 'C9101', qtd: 8 },
+          { codigo: 'C9X02', qtd: 16 },
+        ],
+        vendasMes: [
+          { codigo: 'C9*01', qtd: 100 },
+          { codigo: 'C9?02', qtd: 200 },
+          { codigo: 'C9~03', qtd: 400 },
+          { codigo: 'C9101', qtd: 800 },
+          { codigo: 'C9X02', qtd: 1600 },
+        ],
+        vendasAtual: [
+          { codigo: 'C9*01', qtd: 10 },
+          { codigo: 'C9?02', qtd: 20 },
+          { codigo: 'C9~03', qtd: 40 },
+          { codigo: 'C9101', qtd: 80 },
+          { codigo: 'C9X02', qtd: 160 },
+        ],
+        vendasAnual: [
+          { codigo: 'C9*01', qtd: 1100 },
+          { codigo: 'C9?02', qtd: 2200 },
+          { codigo: 'C9~03', qtd: 4400 },
+          { codigo: 'C9101', qtd: 8800 },
+          { codigo: 'C9X02', qtd: 17600 },
+        ],
+        programacoes: [
+          { codigo: 'C9*01', qtd: 3, mes: '10' },
+          { codigo: 'C9101', qtd: 5, mes: '10' },
+        ],
+        chegadas: [
+          { codigo: 'C9?02', qtd: 30, mes: '11' },
+          { codigo: 'C9X02', qtd: 50, mes: '11' },
+        ],
+        margem: [
+          { codigo: 'C9*01', margem: 0.1 },
+          { codigo: 'C9101', margem: 0.4 },
+        ],
+        clientesAtivos: ['C9*01', 'C9*01', 'C9*01', 'C9101'],
+        leadtime: [
+          { fonte: 'FONTE 9*1', total: 45 },
+          { fonte: 'FONTE 901', total: 30 },
+        ],
+      }),
+    );
+    const { e, wb } = await gerar(q);
+    const ws = wb.getWorksheet(MACRO)!;
+    const escape = (ref: string) => `SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(${ref},"~","~~"),"*","~*"),"?","~?")`;
+    const u3 = formulaDe(ws, 'U3')!;
+    expect(u3).toContain(`SUMIF(ESTOQUE!A:A,${escape('B3')},ESTOQUE!E:E)`);
+    expect(u3).toContain('SUMIF(ESTOQUE!A:A,E3,ESTOQUE!E:E)'); // celula vazia: referencia pura (senao "" casaria vazias)
+    expect(formulaDe(ws, 'U4')).toBe(
+      `SUM(${['B', 'C', 'D', 'E', 'F', 'G', 'H'].map((c) => `SUMIF(ESTOQUE!A:A,${c}4,ESTOQUE!E:E)`).join(',')})`,
+    );
+    expect(formulaDe(ws, 'AQ3')).toBe(`VLOOKUP(${escape('AU3')},LEADTIME!A:G,7,0)`);
+    expect(formulaDe(ws, 'AQ4')).toBe('VLOOKUP(AU4,LEADTIME!A:G,7,0)');
+    expect(formulaDe(ws, 'AR3')).toContain(`VLOOKUP(${escape('B3')},MARGEM!$A$2:$B$413,2,0)`);
+    expect(formulaDe(ws, 'AS3')).toContain(`COUNTIF('CLIENTES ATIVOS'!$C$6:$C$100000,${escape('B3')})`);
+    const av = criarAvaliador(wb);
+    expect(av.valor(MACRO, 'U3')).toBe(7); // so C9*01 + C9?02 + C9~03, sem C9101/C9X02
+    expect(av.valor(MACRO, 'U4')).toBe(24);
+    expect(av.valor(MACRO, 'O3')).toBe(700);
+    expect(av.valor(MACRO, 'AQ3')).toBe(45);
+    expect(av.valor(MACRO, 'AR3')).toBe(0.1);
+    expect(av.valor(MACRO, 'AS3')).toBe(3);
+    expect(av.valor(MACRO, 'AS4')).toBe(1);
+    const p = paridade(wb, q, e);
+    expect(p.resultado.divergencias.slice(0, 5)).toEqual([]);
+    expect(p.resultado.batem).toBe(p.resultado.celulas);
+  });
+
+  describe('MARGEM com mais de 412 codigos', () => {
+    const base = {
+      label: '10-2',
+      origin: 'planilha',
+      dataBase: '2026-10-15',
+      hoje: HOJE,
+      somarChegada5oMes: false,
+      produtosComMarca: 0,
+    };
+    const AVISO = (n: number) =>
+      `A aba MARGEM tem ${n} códigos (linhas 2 a ${n + 1}) e a coluna AR procura até a linha ${n + 1}. O PO.COMP.01 e o importador do IntelliQuote leem a MARGEM só até a linha 413: ao reimportar este arquivo, os códigos abaixo dessa linha ficam sem margem e o selo de conferência aponta diferença na coluna AR desses produtos.`;
+
+    it('o paragrafo so aparece quando a MARGEM passa da linha 413', () => {
+      expect(PARAGRAFOS_REGRAS_MACRO({ ...base, linhasMargem: 412 }).some((t) => t.startsWith('A aba MARGEM'))).toBe(false);
+      expect(PARAGRAFOS_REGRAS_MACRO(base).some((t) => t.startsWith('A aba MARGEM'))).toBe(false);
+      expect(PARAGRAFOS_REGRAS_MACRO({ ...base, linhasMargem: 413 }).at(-1)).toBe(AVISO(413));
+      expect(AVISO(413)).toContain('linhas 2 a 414');
+    });
+
+    it('413 produtos: AR olha ate a linha 414, aviso na aba Regras, paridade ok e o importador le so 412', async () => {
+      const codigo = (i: number) => `C9${String(i).padStart(4, '0')}`;
+      const produtos = Array.from({ length: 413 }, (_, i) =>
+        produto(3 + i, { codigos: [codigo(i + 1), '', '', '', '', '', ''] }),
+      );
+      const q = quinzena(
+        produtos,
+        entradas({
+          estoque: [],
+          vendasMes: [],
+          vendasAtual: [],
+          vendasAnual: [],
+          programacoes: [],
+          chegadas: [],
+          clientesAtivos: [],
+          margem: produtos.map((_, i) => ({ codigo: codigo(i + 1), margem: 0.5 })),
+        }),
+      );
+      const { e, buffer, wb } = await gerar(q);
+      expect(formulaDe(wb.getWorksheet(MACRO)!, 'AR3')).toContain('MARGEM!$A$2:$B$414');
+      const textos: string[] = [];
+      wb.getWorksheet('Regras')!.eachRow((row) => textos.push(String(row.getCell('A').value)));
+      expect(textos.at(-1)).toBe(AVISO(413));
+      const p = paridade(wb, q, e);
+      expect(p.resultado.batem).toBe(p.resultado.celulas);
+      const r = await parseForecastWorkbook(buffer, { label: '10-2', baseDate: '2026-10-15' });
+      expect(r.quinzena.entradas.margem).toHaveLength(412); // limite do importador (FORECAST_MARGEM_LAST_ROW)
+    }, 60_000);
   });
 
   it('nome do arquivo e sanitizado', () => {
