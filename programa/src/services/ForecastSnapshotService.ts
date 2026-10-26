@@ -98,6 +98,9 @@ export function halfDoRotulo(label: string): 1 | 2 {
 
 const asJson = (value: unknown) => value as Prisma.InputJsonValue;
 
+// Texto congelado com trim; vazio, so espacos ou ausente -> null.
+const textoOuNulo = (value: string | undefined): string | null => value?.trim() || null;
+
 export class ForecastSnapshotService {
   // 409 quando ja existe quinzena nao deletada com o mesmo rotulo (o Prisma nao expressa unique parcial).
   static async assertLabelFree(db: Db, label: string): Promise<void> {
@@ -280,6 +283,9 @@ export class ForecastSnapshotService {
           obs: produto?.obs ?? '',
           // So o selo (flag X da coluna AV); o valor do preco fechado nao sai da API.
           precoFixo: (produto?.precoFechado ?? '').trim().toUpperCase() === 'X',
+          // Colunas AY/AZ congeladas na quinzena (texto livre do Comex); vazio ou ausente (quinzena antiga) = null.
+          qtdAmostra: textoOuNulo(produto?.qtdAmostra),
+          solicitarAmostra: textoOuNulo(produto?.solicitarAmostra),
           // Flag X da coluna AX: o relatorio de compras so sinaliza, nao muda o arredondamento.
           naoFraciona: (produto?.naoFraciona ?? '').trim().toUpperCase() === 'X',
           codigos: (produto?.codigos ?? []).filter((c) => c !== ''),

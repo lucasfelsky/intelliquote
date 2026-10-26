@@ -9,6 +9,7 @@ import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
 import { ForecastSobDemandaService } from '../services/ForecastSobDemandaService';
 import { ForecastSourceService } from '../services/ForecastSourceService';
+import { ForecastUltimoPrecoService } from '../services/ForecastUltimoPrecoService';
 import { handleControllerError, HttpError, parseId } from '../utils/http';
 import {
   forecastDbcorpConfirmSchema,
@@ -126,6 +127,19 @@ export class ForecastController {
         throw new HttpError(400, 'Produto invalido.');
       }
       const data = await ForecastProductService.getEmbalagens(id);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async getUltimoPreco(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Produto invalido.');
+      }
+      const data = await ForecastUltimoPrecoService.doProduto(id);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
