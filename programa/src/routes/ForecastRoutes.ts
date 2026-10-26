@@ -5,18 +5,18 @@ import { COMEX_ROLES } from '../constants/roles';
 
 const router = Router();
 
-// Escrita (importar, editar fonte, editar embalagem) = admin/comprador; leitura = equipe COMEX. `comercial` nao entra.
+// Importar pela planilha (.xlsx) = so admin (ferramenta de validacao/migracao); importar DBCorp e as demais escritas = admin/comprador; leitura = equipe COMEX. `comercial` nao entra.
 router.post(
   '/forecast/import/workbook/preview',
   requireAuth,
-  allowRoles(['admin', 'comprador']),
+  allowRoles(['admin']),
   ForecastController.previewWorkbook,
 );
 
 router.post(
   '/forecast/import/workbook/confirm',
   requireAuth,
-  allowRoles(['admin', 'comprador']),
+  allowRoles(['admin']),
   ForecastController.confirmWorkbook,
 );
 

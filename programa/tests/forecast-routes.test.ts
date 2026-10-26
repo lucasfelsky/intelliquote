@@ -158,17 +158,36 @@ describe('Forecast routes - autenticacao e papeis', () => {
     }
   });
 
-  it.each(WRITE_ROLES)('%s: passa do RBAC na escrita (corpo invalido -> 400, nao 403)', async (role) => {
+  it.each(WRITE_ROLES)('%s: passa do RBAC no import DBCorp (corpo invalido -> 400, nao 403)', async (role) => {
     const cookies = await loginAs(role);
-    for (const path of [
-      'import/workbook/preview',
-      'import/workbook/confirm',
-      'import/dbcorp/preview',
-      'import/dbcorp/confirm',
-    ]) {
+    for (const path of ['import/dbcorp/preview', 'import/dbcorp/confirm']) {
       const response = await request(app).post(`/api/v1/forecast/${path}`).set('Cookie', cookies).send({});
       expect(response.status, path).toBe(400);
     }
+  });
+
+  it('admin: passa do RBAC no import da planilha (corpo invalido -> 400, nao 403)', async () => {
+    const cookies = await loginAs('admin');
+    for (const path of ['import/workbook/preview', 'import/workbook/confirm']) {
+      const response = await request(app).post(`/api/v1/forecast/${path}`).set('Cookie', cookies).send({});
+      expect(response.status, path).toBe(400);
+    }
+  });
+
+  it('comprador: import da planilha -> 403 (so admin), sem tocar no banco', async () => {
+    const cookies = await loginAs('comprador');
+    const preview = await request(app)
+      .post('/api/v1/forecast/import/workbook/preview')
+      .set('Cookie', cookies)
+      .send(validPreviewBody);
+    expect(preview.status, 'import/workbook/preview').toBe(403);
+    const confirm = await request(app)
+      .post('/api/v1/forecast/import/workbook/confirm')
+      .set('Cookie', cookies)
+      .send(validConfirmBody);
+    expect(confirm.status, 'import/workbook/confirm').toBe(403);
+    expect(prismaMock.forecastSource.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -178,7 +197,7 @@ describe('Forecast routes - validacao (Zod)', () => {
   });
 
   it('preview: corpo vazio, rotulo e data invalidos -> 400', async () => {
-    const cookies = await loginAs('comprador');
+    const cookies = await loginAs('admin');
     const post = (body: unknown) =>
       request(app).post('/api/v1/forecast/import/workbook/preview').set('Cookie', cookies).send(body as object);
 
@@ -840,7 +859,7 @@ describe('Forecast routes - trava de vendas vazias (planilha)', () => {
   });
 
   it('preview com a mesma planilha -> 200 com o aviso (cadastro/quinzena continuam possiveis)', async () => {
-    const cookies = await loginAs('comprador');
+    const cookies = await loginAs('admin');
     const response = await request(app)
       .post('/api/v1/forecast/import/workbook/preview')
       .set('Cookie', cookies)

@@ -321,3 +321,9 @@ export async function lerCorpoDbcorp(
   if (grande) throw new ForecastLocalError(grande);
   return corpo;
 }
+
+export const NOTA_DBCORP_CONFIRMACAO =
+  'Na confirmação dos relatórios DBCorp a quinzena é sempre criada, o histórico do mês anterior é sempre substituído e os prazos alterados na tabela viram o padrão da fonte.';
+
+export const NOTA_PLANILHA_ADMIN =
+  'Ferramenta do administrador para validação e migração (conferência com a planilha e cadastro inicial). No dia a dia, importe os relatórios DBCorp.';

@@ -3351,3 +3351,13 @@ i.fc-status--preco { background: var(--info); }
     min-height: 44px;
   }
 }
+
+/* Importar quinzena: origem unica (DBCorp) e nota da ferramenta da planilha. */
+.fci-origem h3 {
+  margin: 0 0 8px;
+}
+.fci-nota-origem {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
