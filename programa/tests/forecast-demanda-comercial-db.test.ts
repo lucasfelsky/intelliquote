@@ -51,6 +51,8 @@ describe('Forecast - demanda do comercial (DB)', () => {
   let productB = 0;
   let productInativo = 0;
   let snapshot = 0;
+  // Solicitacao SINTETICA: a demanda so aceita numero de Solicitacao que existe (consulta por id, sem FK).
+  let solicitacaoId = 0;
 
   const base = '/api/v1/forecast/commercial-demands';
   const post = (body: object) => request(app).post(base).set('Cookie', cookies).send(body);
@@ -108,6 +110,7 @@ describe('Forecast - demanda do comercial (DB)', () => {
       },
     });
     adminId = user.id;
+    solicitacaoId = (await prisma.commercialRequest.create({ data: { requestedById: adminId } })).id;
     const login = await request(app).post('/api/v1/auth/login').send({ email: user.email, password: 'Test1234!' });
     cookies = login.headers['set-cookie'];
 
@@ -162,6 +165,8 @@ describe('Forecast - demanda do comercial (DB)', () => {
 
     await prisma.forecastCommercialDemand.deleteMany({ where: { product: { name: { contains: U } } } });
     await prisma.forecastSnapshot.deleteMany({ where: { createdById: adminId } });
+    // A Solicitacao sintetica sai ANTES do usuario (requestedBy e onDelete: Restrict).
+    await prisma.commercialRequest.deleteMany({ where: { requestedById: adminId } });
     await prisma.forecastProduct.deleteMany({ where: { name: { contains: U } } });
     await prisma.forecastSource.deleteMany({ where: { name: { contains: U } } });
     await prisma.auditLog.deleteMany({ where: { performedById: adminId } });
@@ -182,7 +187,7 @@ describe('Forecast - demanda do comercial (DB)', () => {
   });
 
   testDbSkip('lanca o pedido do caso E: 201, linha gravada (data sem fuso, kg exato) e 1 AuditLog sem motivo nem cliente', async () => {
-    const res = await post(corpo({ solicitacaoId: 12 }));
+    const res = await post(corpo({ solicitacaoId }));
     expect(res.status).toBe(201);
     idCasoE = res.body.data.id;
     expect(res.body.data).toMatchObject({
@@ -193,14 +198,14 @@ describe('Forecast - demanda do comercial (DB)', () => {
       necessidade: '2027-02-10',
       motivo: MOTIVO,
       cliente: CLIENTE,
-      solicitacaoId: 12,
+      solicitacaoId,
       status: 'aberta',
       fechadaEm: null,
     });
     const row = await prisma.forecastCommercialDemand.findUniqueOrThrow({ where: { id: idCasoE } });
     expect(Number(row.quantityKg)).toBe(1600);
     expect(row.neededBy.toISOString().slice(0, 10)).toBe('2027-02-10');
-    expect(row).toMatchObject({ status: 'aberta', createdById: adminId, closedAt: null, closedById: null, commercialRequestId: 12 });
+    expect(row).toMatchObject({ status: 'aberta', createdById: adminId, closedAt: null, closedById: null, commercialRequestId: solicitacaoId });
 
     const registros = await logs(idCasoE);
     expect(registros).toHaveLength(1);
@@ -210,7 +215,7 @@ describe('Forecast - demanda do comercial (DB)', () => {
       quantidadeKg: 1600,
       necessidade: '2027-02-10',
       status: 'aberta',
-      solicitacaoId: 12,
+      solicitacaoId,
     });
     expect(JSON.stringify(registros[0])).not.toContain(U);
   });
@@ -229,7 +234,7 @@ describe('Forecast - demanda do comercial (DB)', () => {
       noRelatorio: false,
       motivo: MOTIVO,
       cliente: CLIENTE,
-      solicitacaoId: 12,
+      solicitacaoId,
     });
     expect(r.totais.itens).toBe(0);
   });
@@ -376,6 +381,30 @@ describe('Forecast - demanda do comercial (DB)', () => {
     expect((await post(corpo({ necessidade: '2020-01-01' }))).status).toBe(400);
     expect((await patch(2147483000, { motivo: 'NOVO MOTIVO' })).status).toBe(404);
     expect(await prisma.forecastCommercialDemand.count({ where: { product: { name: { contains: U } } } })).toBe(antes);
+  });
+
+  testDbSkip('Solicitacao inexistente -> 400 sem gravar (create e patch); troca para a existente e limpar com null funcionam', async () => {
+    const inexistente = 2147483000;
+    // Demanda ABERTA propria (a do caso E ja foi fechada acima e fechada nao e editavel).
+    const idAberta = (await post(corpo({ motivo: `${MOTIVO} SOLICITACAO`, cliente: undefined, solicitacaoId }))).body.data.id as number;
+    const antes = await prisma.forecastCommercialDemand.count({ where: { product: { name: { contains: U } } } });
+    const criar = await post(corpo({ solicitacaoId: inexistente }));
+    expect(criar.status).toBe(400);
+    expect(criar.body.message).toBe(
+      `Solicitação nº ${inexistente} não encontrada no módulo Solicitações. Confira o número ou deixe o campo vazio.`,
+    );
+    expect(await prisma.forecastCommercialDemand.count({ where: { product: { name: { contains: U } } } })).toBe(antes);
+
+    const trocar = await patch(idAberta, { solicitacaoId: inexistente });
+    expect(trocar.status).toBe(400);
+    expect((await prisma.forecastCommercialDemand.findUniqueOrThrow({ where: { id: idAberta } })).commercialRequestId).toBe(
+      solicitacaoId,
+    );
+
+    const limpar = await patch(idAberta, { solicitacaoId: null });
+    expect(limpar.status).toBe(200);
+    expect((await prisma.forecastCommercialDemand.findUniqueOrThrow({ where: { id: idAberta } })).commercialRequestId).toBeNull();
+    expect((await patch(idAberta, { solicitacaoId })).status).toBe(200);
   });
 
   testDbSkip('FK Restrict: produto com demanda nao pode ser apagado; sem demanda apaga normalmente', async () => {

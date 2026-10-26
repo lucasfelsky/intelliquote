@@ -70,4 +70,13 @@ describe('servico de embalagens do Forecast', () => {
     ).toBe('A embalagem principal foi alterada por outra pessoa. Recarregue e tente de novo.');
     expect(forecastEmbalagensErrorMessage(new ApiError(400, null))).toBe('Pedido recusado pelo servidor (HTTP 400).');
   });
+
+  it('503 (cadastro ocupado por importacao) repassa a mensagem do backend', () => {
+    expect(
+      forecastEmbalagensErrorMessage(
+        new ApiError(503, { message: 'O cadastro está ocupado por uma importação. Tente novamente em instantes.' }),
+      ),
+    ).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
+    expect(forecastEmbalagensErrorMessage(new ApiError(503, null))).toBe('Pedido recusado pelo servidor (HTTP 503).');
+  });
 });

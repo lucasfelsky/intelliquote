@@ -316,6 +316,7 @@
     "POST /forecast/import/workbook/preview",
     "POST /forecast/products",
     "POST /forecast/products/:id/codigos",
+    "POST /forecast/products/:id/reativar",
     "POST /forwarders",
     "POST /item-families",
     "POST /portal-tokens/:id/regenerate",

@@ -27,9 +27,16 @@ export class ForecastSobDemandaService {
     return prisma.$transaction(async (tx) => {
       const product = await tx.forecastProduct.findUnique({
         where: { id: productId },
-        select: { id: true, purchaseOnDemand: true, purchaseOnDemandNote: true },
+        select: { id: true, isActive: true, purchaseOnDemand: true, purchaseOnDemandNote: true },
       });
       if (!product) throw new HttpError(404, 'Produto nao encontrado.');
+      // Marca em produto inativo e recusada (a leitura continua valendo): reative o produto antes de mexer nela.
+      if (!product.isActive) {
+        throw new HttpError(
+          400,
+          'Produto inativo: reative o produto no cadastro do Forecast antes de marcar compra sob demanda.',
+        );
+      }
 
       const sobDemanda = input.sobDemanda;
       const motivo = sobDemanda ? (input.motivo ?? null) : null;

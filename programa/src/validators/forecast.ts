@@ -260,6 +260,10 @@ export const forecastProductCodeAddSchema = z.object({
   codigo: productCodeField,
 });
 
+// Reativar produto inativo: sem corpo (campo extra = 400).
+export const forecastProductReativarSchema = z.strictObject({});
+
+export type ForecastProductReativarInput = z.infer<typeof forecastProductReativarSchema>;
 export type ForecastProductCreateInput = z.infer<typeof forecastProductCreateSchema>;
 export type ForecastProductCodeAddInput = z.infer<typeof forecastProductCodeAddSchema>;
 
@@ -359,7 +363,7 @@ export type ForecastMesesAtipicosPutInput = z.infer<typeof forecastMesesAtipicos
 
 // Demanda do comercial (PR 6d): lancamento manual no Forecast (admin/comprador). Compra pedida pelo comercial por uma
 // programacao futura de cliente fora do horizonte do DBCorp. Fechada (comprada, cancelada, virou_programacao) nao reabre.
-// `solicitacaoId` e so o numero da Solicitacao do IntelliQuote para rastreio (o modulo de Solicitacoes nao e consultado).
+// `solicitacaoId` e so o numero da Solicitacao do IntelliQuote para rastreio (a Solicitacao precisa existir: consulta por id, sem FK).
 export const FORECAST_DEMANDA_STATUS = ['aberta', 'comprada', 'cancelada', 'virou_programacao'] as const;
 export const FORECAST_DEMANDA_FECHAMENTOS = ['comprada', 'cancelada', 'virou_programacao'] as const;
 export const FORECAST_DEMANDA_KG_MAX = 10_000_000;

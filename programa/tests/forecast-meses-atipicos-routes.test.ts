@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/utils/password';
@@ -39,7 +40,8 @@ const PATH = '/api/v1/forecast/products/5/meses-atipicos';
 
 // Cliente transacional distinto do `prisma`: prova que a gravacao e o AuditLog usam o `tx`.
 const tx = {
-  forecastProduct: { findUnique: vi.fn() },
+  // Trava FOR NO KEY UPDATE da linha do produto (1a instrucao da transacao): devolve id/isActive.
+  $queryRaw: vi.fn(),
   forecastAtypicalMonth: { findMany: vi.fn(), deleteMany: vi.fn(), update: vi.fn(), createMany: vi.fn() },
   auditLog: { create: vi.fn() },
 };
@@ -51,7 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   banco = [];
   prismaMock.$transaction.mockImplementation(async (fn: (client: unknown) => unknown) => fn(tx));
-  tx.forecastProduct.findUnique.mockResolvedValue({ id: 5 });
+  tx.$queryRaw.mockResolvedValue([{ id: 5, isActive: true }]);
   tx.forecastAtypicalMonth.findMany.mockImplementation(async () => banco.map((b) => ({ ...b })));
   tx.forecastAtypicalMonth.deleteMany.mockImplementation(async ({ where }: { where: { id: { in: number[] } } }) => {
     banco = banco.filter((b) => !where.id.in.includes(b.id));
@@ -156,14 +158,52 @@ describe('PUT /forecast/products/:id/meses-atipicos - validacao e erros', () => 
     expect(lista.body.data.meses).toHaveLength(24);
   });
 
-  it('produto INATIVO aceita a marca: o service so procura o produto por id, sem filtrar isActive', async () => {
+  it('produto INATIVO -> 400 com o caminho (reativar), sem gravar nem auditar', async () => {
     const cookies = await loginAs('admin');
-    tx.forecastProduct.findUnique.mockResolvedValue({ id: 5, isActive: false });
+    tx.$queryRaw.mockResolvedValue([{ id: 5, isActive: false }]);
+    const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(
+      'Produto inativo: reative o produto no cadastro do Forecast antes de marcar meses atípicos.',
+    );
+    expect(tx.forecastAtypicalMonth.createMany).not.toHaveBeenCalled();
+    expect(tx.forecastAtypicalMonth.deleteMany).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('a 1a instrucao da transacao e a trava FOR NO KEY UPDATE do produto, antes de ler as marcas', async () => {
+    const cookies = await loginAs('admin');
     const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
     expect(response.status).toBe(200);
-    expect(response.body.data.meses).toEqual([{ anoMes: '2024-08', motivo: 'MOTIVO SINTETICO' }]);
-    expect(tx.forecastProduct.findUnique).toHaveBeenCalledWith({ where: { id: 5 }, select: { id: true } });
-    expect(tx.forecastAtypicalMonth.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0][0].join('?')).toContain('FOR NO KEY UPDATE');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.forecastAtypicalMonth.findMany.mock.invocationCallOrder[0],
+    );
+    // E as opcoes de transacao de cadastro (30 s / 10 s): a trava pode esperar o import.
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 30_000, maxWait: 10_000 });
+  });
+
+  it('corrida no unique (productId, yearMonth): P2002 -> 409 com a mensagem, nunca 500', async () => {
+    const cookies = await loginAs('admin');
+    tx.forecastAtypicalMonth.createMany.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'test' }),
+    );
+    const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
+    expect(response.status).toBe(409);
+    expect(response.body.message).toBe(
+      'Os meses atípicos deste produto foram alterados por outra pessoa. Recarregue e tente de novo.',
+    );
+  });
+
+  it('P2028 (esperando o import da planilha) -> 503 com a mensagem de ocupado', async () => {
+    const cookies = await loginAs('admin');
+    prismaMock.$transaction.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('timeout', { code: 'P2028', clientVersion: 'test' }),
+    );
+    const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
   });
 
   it('id invalido -> 400; produto inexistente -> 404 sem gravar', async () => {
@@ -174,7 +214,7 @@ describe('PUT /forecast/products/:id/meses-atipicos - validacao e erros', () => 
       .send(corpo());
     expect(ruim.status).toBe(400);
 
-    tx.forecastProduct.findUnique.mockResolvedValue(null);
+    tx.$queryRaw.mockResolvedValue([]);
     const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
     expect(response.status).toBe(404);
     expect(response.body.message).toBe('Produto nao encontrado.');

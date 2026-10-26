@@ -10,6 +10,7 @@ import {
   lerLeadTime,
   mensagemCadastroGravado,
   mensagemCadastroNaPrevia,
+  mensagemProdutoReativado,
   montarCorpoNovoProduto,
   nenhumPendenteTexto,
   normalizarCodigo,
@@ -22,6 +23,8 @@ import {
   soSaldoTexto,
   textoEntradaNoCalculo,
   textoForaDoCalculoPrevia,
+  TEXTO_REATIVACAO_INDISPONIVEL,
+  TEXTO_REATIVACAO_NO_PAINEL,
   textoProdutoInativo,
   vagasTexto,
   validarNovoProduto,
@@ -155,6 +158,20 @@ describe('textos', () => {
     expect(mensagemCadastroGravado({ tipo: 'codigo', produtoOrigem: 'planilha' })).toBe(
       'Cadastro gravado. Inclua o código também na planilha PO.COMP.01: o próximo import da planilha remove os códigos que não estão nela.',
     );
+  });
+
+  it('mensagemProdutoReativado: o aviso do proximo import so vem para produto da planilha', () => {
+    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'dbcorp' })).toBe(
+      'Produto PRODUTO 009 reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada.',
+    );
+    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'planilha' })).toBe(
+      'Produto PRODUTO 009 reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada. Se ele não estiver na próxima planilha importada, o import o inativa de novo.',
+    );
+  });
+
+  it('textos de reativacao: no painel usa o botao da linha; na previa continua indisponivel', () => {
+    expect(TEXTO_REATIVACAO_NO_PAINEL).toBe('Use "Reativar produto" na linha do código.');
+    expect(TEXTO_REATIVACAO_INDISPONIVEL).toBe('A reativação de produto ainda não está disponível nesta tela.');
   });
 
   it('mensagemCadastroNaPrevia: 3 estados', () => {

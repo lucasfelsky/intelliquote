@@ -26,6 +26,12 @@ import type {
   ForecastProductCreateInput,
 } from '../validators/forecast';
 import { AuditLogService } from './AuditLogService';
+import {
+  CADASTRO_OCUPADO_MESSAGE,
+  CADASTRO_TX_OPTIONS,
+  isTransactionTimeout,
+  lockForecastProduct,
+} from './ForecastProductCadastroService';
 
 type Db = Prisma.TransactionClient;
 
@@ -637,6 +643,8 @@ export class ForecastProductService {
   ): Promise<ForecastEmbalagensData> {
     try {
       return await prisma.$transaction(async (tx) => {
+        // Trava a linha do produto ANTES de ler os codigos: dois PATCH do mesmo produto se serializam.
+        if (!(await lockForecastProduct(tx, productId))) throw new HttpError(404, 'Produto nao encontrado.');
         const product = await tx.forecastProduct.findUnique({
           where: { id: productId },
           select: EMBALAGENS_SELECT,
@@ -743,8 +751,9 @@ export class ForecastProductService {
         });
         if (!atualizado) throw new HttpError(404, 'Produto nao encontrado.');
         return toEmbalagensData(atualizado);
-      });
+      }, CADASTRO_TX_OPTIONS);
     } catch (error) {
+      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(
           409,

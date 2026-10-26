@@ -4,6 +4,12 @@ import type { ForecastMesesAtipicosPutInput } from '../validators/forecast';
 import type { MesMarcado } from '../utils/forecastMesesAtipicos';
 import { HttpError } from '../utils/http';
 import { AuditLogService } from './AuditLogService';
+import {
+  CADASTRO_OCUPADO_MESSAGE,
+  CADASTRO_TX_OPTIONS,
+  isTransactionTimeout,
+  lockForecastProduct,
+} from './ForecastProductCadastroService';
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -28,9 +34,33 @@ export class ForecastMesesAtipicosService {
     input: ForecastMesesAtipicosPutInput,
     userId: number | null,
   ): Promise<ForecastMesesAtipicosData> {
+    try {
+      return await this.substituirNaTransacao(productId, input, userId);
+    } catch (error) {
+      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new HttpError(409, 'Os meses atípicos deste produto foram alterados por outra pessoa. Recarregue e tente de novo.');
+      }
+      throw error;
+    }
+  }
+
+  private static async substituirNaTransacao(
+    productId: number,
+    input: ForecastMesesAtipicosPutInput,
+    userId: number | null,
+  ): Promise<ForecastMesesAtipicosData> {
     return prisma.$transaction(async (tx) => {
-      const produto = await tx.forecastProduct.findUnique({ where: { id: productId }, select: { id: true } });
+      // Trava a linha do produto ANTES de ler as marcas: dois PUT do mesmo produto se serializam (sem P2002 nem
+      // perda de marca). Marca em produto inativo e recusada; a leitura (doProdutos) continua valendo.
+      const produto = await lockForecastProduct(tx, productId);
       if (!produto) throw new HttpError(404, 'Produto nao encontrado.');
+      if (!produto.isActive) {
+        throw new HttpError(
+          400,
+          'Produto inativo: reative o produto no cadastro do Forecast antes de marcar meses atípicos.',
+        );
+      }
 
       const atuais = await tx.forecastAtypicalMonth.findMany({
         where: { productId },
@@ -82,7 +112,7 @@ export class ForecastMesesAtipicosService {
         select: { yearMonth: true, reason: true },
       });
       return { productId, meses: rows.map((r) => ({ anoMes: r.yearMonth, motivo: r.reason })).sort(porAnoMes) };
-    });
+    }, CADASTRO_TX_OPTIONS);
   }
 
   // Marcas dos produtos informados (1 consulta; lista vazia = sem consulta). Marca em produto inativo continua valendo.

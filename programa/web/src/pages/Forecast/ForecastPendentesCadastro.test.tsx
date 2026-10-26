@@ -243,16 +243,18 @@ describe('ForecastPendentesCadastro - lista', () => {
     expect(screen.getByText(/… e mais 2 códigos/)).toBeTruthy();
   });
 
-  it('codigo de produto INATIVO: mostra o nome, explica a reativacao e NAO tem botao', async () => {
+  it('admin ve o botao Reativar produto e o texto novo na linha do codigo de produto INATIVO', async () => {
     renderPainel();
     await screen.findByText(/Pendentes de cadastro \(2\)/);
     const linha = screen.getByRole('rowheader', { name: 'TST0902' }).closest('tr') as HTMLElement;
     expect(within(linha).getByText('Produto inativo')).toBeTruthy();
     expect(within(linha).getByText('PRODUTO 009')).toBeTruthy();
-    expect(within(linha).queryByRole('button')).toBeNull();
+    const botao = within(linha).getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' });
+    expect(botao.textContent).toBe('Reativar produto');
     expect(
-      screen.getByText(/Reative o produto para o código voltar ao cálculo\. A reativação de produto ainda não está disponível nesta tela\./),
+      screen.getByText(/Reative o produto para o código voltar ao cálculo\. Use "Reativar produto" na linha do código\./),
     ).toBeTruthy();
+    expect(screen.queryByText(/ainda não está disponível nesta tela/)).toBeNull();
   });
 
   it('sem permissao de editar (gestor/viewer): lista sem coluna Acao nem botoes', async () => {
@@ -261,6 +263,78 @@ describe('ForecastPendentesCadastro - lista', () => {
     expect(screen.getByText('TST0901')).toBeTruthy();
     expect(screen.queryByRole('columnheader', { name: 'Ação' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Completar cadastro/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reativar/ })).toBeNull();
+  });
+});
+
+describe('ForecastPendentesCadastro - reativar produto', () => {
+  const chamadasDePendentes = () => get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots/8/pendentes').length;
+
+  it('clique chama o POST com o productId certo, mostra a mensagem com foco e refaz a consulta', async () => {
+    post.mockResolvedValue({ data: { id: 9, nome: 'PRODUTO 009', ativo: true, origem: 'dbcorp', alterado: true } });
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    const antes = chamadasDePendentes();
+    // A lista nova ja vem sem o codigo reativado.
+    pendentes = dados({ itens: [dados().itens[0]], totalItens: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' }));
+    const status = await screen.findByText(
+      'Produto PRODUTO 009 reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada.',
+    );
+    expect(post).toHaveBeenCalledWith('/v1/forecast/products/9/reativar', {});
+    expect(status.getAttribute('role')).toBe('status');
+    await waitFor(() => expect(document.activeElement).toBe(status));
+    await waitFor(() => expect(screen.getByText(/Pendentes de cadastro \(1\)/)).toBeTruthy());
+    expect(chamadasDePendentes()).toBeGreaterThan(antes);
+    expect(screen.queryByRole('button', { name: /Reativar o produto/ })).toBeNull();
+  });
+
+  it('produto da PLANILHA: a mensagem avisa que o proximo import pode inativar de novo', async () => {
+    post.mockResolvedValue({ data: { id: 9, nome: 'PRODUTO 009', ativo: true, origem: 'planilha', alterado: true } });
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' }));
+    expect(
+      await screen.findByText(/Se ele não estiver na próxima planilha importada, o import o inativa de novo\./),
+    ).toBeTruthy();
+  });
+
+  it('enquanto grava, o botao fica desabilitado com aria-busy (sem clique duplo)', async () => {
+    let resolver: (v: unknown) => void = () => {};
+    post.mockReturnValue(new Promise((r) => (resolver = r)) as never);
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    const botao = screen.getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' });
+    fireEvent.click(botao);
+    await waitFor(() => expect(botao.hasAttribute('disabled')).toBe(true));
+    expect(botao.getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(botao);
+    expect(post).toHaveBeenCalledTimes(1);
+    resolver({ data: { id: 9, nome: 'PRODUTO 009', ativo: true, origem: 'dbcorp', alterado: true } });
+    await screen.findByRole('status');
+  });
+
+  it('erro 503 (cadastro ocupado por importacao): alerta com a mensagem do backend e a lista segue', async () => {
+    post.mockRejectedValue(
+      new ApiError(503, { message: 'O cadastro está ocupado por uma importação. Tente novamente em instantes.' }),
+    );
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
+    expect(screen.getByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it('erro generico: alerta em portugues com o HTTP', async () => {
+    post.mockRejectedValue(new ApiError(500, null));
+    renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar o produto PRODUTO 009 (código TST0902)' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Não foi possível reativar o produto (HTTP 500).');
   });
 });
 

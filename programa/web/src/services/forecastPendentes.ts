@@ -4,7 +4,7 @@ import { messageOf } from '@/services/quoteResponses';
 /** Espelha `PendenteCadastro` (src/utils/forecastPendentes.ts). */
 export interface ForecastPendente {
   codigo: string;
-  /** `produto_inativo` = o codigo pertence a um produto com `isActive: false` (sem rota de reativacao nesta fase). */
+  /** `produto_inativo` = o codigo pertence a um produto com `isActive: false` (reativa por `POST /forecast/products/:id/reativar`). */
   situacao: 'sem_cadastro' | 'produto_inativo';
   produtoInativo: { id: number; nome: string } | null;
   vendasMes: number;
@@ -76,6 +76,17 @@ export interface ForecastCodigoAdicionado {
   codigo: { id: number; posicao: number; codigo: string };
 }
 
+/** `POST /forecast/products/:id/reativar` */
+export interface ForecastProdutoReativado {
+  id: number;
+  nome: string;
+  ativo: true;
+  /** 'planilha' | 'dbcorp': produto da planilha que nao esta na proxima planilha e inativado de novo pelo import. */
+  origem: 'planilha' | 'dbcorp';
+  /** false = o produto ja estava ativo (nada foi gravado). */
+  alterado: boolean;
+}
+
 /** Produto do cadastro (`GET /forecast/products`), so o que o seletor usa. */
 export interface ForecastProdutoCadastro {
   id: number;
@@ -111,6 +122,12 @@ export async function addForecastProductCode(productId: number, codigo: string):
   const response = await api.post<{ data: ForecastCodigoAdicionado }>(`/v1/forecast/products/${productId}/codigos`, {
     codigo,
   });
+  return response.data;
+}
+
+/** Reativa um produto inativo (so o flag; marcas, codigos e embalagens ficam como estao). */
+export async function postForecastReativarProduto(productId: number): Promise<ForecastProdutoReativado> {
+  const response = await api.post<{ data: ForecastProdutoReativado }>(`/v1/forecast/products/${productId}/reativar`, {});
   return response.data;
 }
 

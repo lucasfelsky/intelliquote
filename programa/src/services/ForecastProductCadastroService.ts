@@ -23,8 +23,22 @@ export const CADASTRO_TX_OPTIONS = { timeout: 30_000, maxWait: 10_000 } as const
 export const CADASTRO_OCUPADO_MESSAGE = 'O cadastro está ocupado por uma importação. Tente novamente em instantes.';
 
 // P2028 (transacao expirou ou sem conexao a tempo) vira 503 claro em vez de 500 generico.
-function isTransactionTimeout(error: unknown): boolean {
+export function isTransactionTimeout(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028';
+}
+
+// Trava a linha do produto (FOR NO KEY UPDATE) e devolve id/isActive, ou null se nao existe. Serializa as escritas
+// do MESMO produto entre si (meses atipicos, embalagens) sem bloquear INSERT com FK (KEY SHARE) de outras tabelas.
+// Mesmo racional de lockQuoteRequestForPurchaseOrders (QuotePurchaseOrderService). DEVE ser a PRIMEIRA instrucao da
+// transacao, antes de ler marcas/codigos: lock depois de ler ou escrever codigos pode dar deadlock com o import.
+export async function lockForecastProduct(
+  tx: Db,
+  productId: number,
+): Promise<{ id: number; isActive: boolean } | null> {
+  const rows = await tx.$queryRaw<Array<{ id: number; isActive: boolean }>>`
+    SELECT id, "isActive" FROM "ForecastProduct" WHERE id = ${productId} FOR NO KEY UPDATE
+  `;
+  return rows[0] ?? null;
 }
 
 export interface ForecastProductCriado {
@@ -35,6 +49,16 @@ export interface ForecastProductCriado {
   fonteId: number;
   familiaId: number;
   codigos: Array<{ id: number; posicao: number; codigo: string }>;
+}
+
+export interface ForecastProductReativado {
+  id: number;
+  nome: string;
+  ativo: true;
+  // 'planilha' | 'dbcorp'. Produto 'planilha' que nao esta na proxima planilha e inativado de novo pelo import.
+  origem: 'planilha' | 'dbcorp';
+  // false = o produto ja estava ativo (nada gravado nem auditado).
+  alterado: boolean;
 }
 
 export interface ForecastProductCodigoAdicionado {
@@ -161,6 +185,51 @@ export class ForecastProductCadastroService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(409, 'Já existe um produto com esse nome ou código.');
       }
+      throw error;
+    }
+  }
+
+  // Reativa um produto inativo (so o flag isActive: origem, fonte, codigos, embalagens, marcas e grupo ficam como
+  // estao). Mesma advisory lock do import, para nao cruzar com uma importacao que inativa/adota o produto. Ja ativo =
+  // 'alterado: false', sem gravar nem auditar. O AuditLog guarda so ids e flags: nunca nome, codigo ou observacao.
+  static async reativar(productId: number, userId: number | null): Promise<ForecastProductReativado> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'forecast:import'}))`;
+
+        const product = await tx.forecastProduct.findUnique({
+          where: { id: productId },
+          select: { id: true, name: true, isActive: true, origin: true },
+        });
+        if (!product) throw new HttpError(404, 'Produto não encontrado.');
+        const origem =
+          product.origin === FORECAST_PRODUCT_ORIGIN_DBCORP
+            ? FORECAST_PRODUCT_ORIGIN_DBCORP
+            : FORECAST_PRODUCT_ORIGIN_PLANILHA;
+        const base = { id: product.id, nome: product.name, ativo: true, origem } as const;
+        if (product.isActive) return { ...base, alterado: false };
+
+        const { count } = await tx.forecastProduct.updateMany({
+          where: { id: productId, isActive: false },
+          data: { isActive: true },
+        });
+        if (count === 0) return { ...base, alterado: false };
+
+        await AuditLogService.log(
+          {
+            entityType: ENTITY_TYPE,
+            entityId: productId,
+            action: 'reactivate',
+            performedById: userId,
+            // So flags e origem: nunca nome de produto, codigo DBCorp nem observacao.
+            metadata: { source: 'manual', origem, antes: false, depois: true },
+          },
+          tx,
+        );
+        return { ...base, alterado: true };
+      }, CADASTRO_TX_OPTIONS);
+    } catch (error) {
+      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       throw error;
     }
   }

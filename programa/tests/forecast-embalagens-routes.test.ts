@@ -22,6 +22,7 @@ vi.mock('../src/lib/prisma', () => {
     forecastAtypicalMonth: { findMany: vi.fn() },
     forecastCommercialDemand: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
 
@@ -41,6 +42,7 @@ const prismaMock = prisma as unknown as {
   forecastAtypicalMonth: { findMany: Mock };
   forecastCommercialDemand: { findMany: Mock };
   forecastProductCode: { findMany: Mock; update: Mock; updateMany: Mock };
+  $queryRaw: Mock;
   $transaction: Mock;
 };
 
@@ -93,6 +95,8 @@ const dec = (v: string) => new Prisma.Decimal(v);
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
+  // Trava FOR NO KEY UPDATE da linha do produto (1a instrucao do PATCH).
+  prismaMock.$queryRaw.mockResolvedValue([{ id: 5, isActive: true }]);
   prismaMock.forecastProduct.findUnique.mockResolvedValue(produto());
   prismaMock.forecastProduct.findMany.mockResolvedValue([]);
   prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
@@ -257,8 +261,8 @@ describe('Forecast embalagens - PATCH (validacao Zod)', () => {
 });
 
 describe('Forecast embalagens - PATCH (regras de servico)', () => {
-  it('produto inexistente -> 404', async () => {
-    prismaMock.forecastProduct.findUnique.mockResolvedValue(null);
+  it('produto inexistente -> 404 (a trava nao acha a linha) sem ler nem gravar codigos', async () => {
+    prismaMock.$queryRaw.mockResolvedValue([]);
     const cookies = await loginAs('comprador');
     const response = await request(app)
       .patch(PATH)
@@ -266,6 +270,38 @@ describe('Forecast embalagens - PATCH (regras de servico)', () => {
       .send({ embalagens: [{ codigoId: 11, quantidadeKg: 25 }] });
     expect(response.status).toBe(404);
     expect(response.body.message).toBe('Produto nao encontrado.');
+    expect(prismaMock.forecastProduct.findUnique).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('a 1a instrucao da transacao e a trava FOR NO KEY UPDATE, antes de ler os codigos', async () => {
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 25 }] });
+    expect(response.status).toBe(200);
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prismaMock.$queryRaw.mock.calls[0][0].join('?')).toContain('FOR NO KEY UPDATE');
+    expect(prismaMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prismaMock.forecastProduct.findUnique.mock.invocationCallOrder[0],
+    );
+    // Opcoes de transacao de cadastro (30 s / 10 s): a trava pode esperar o import da planilha.
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 30_000, maxWait: 10_000 });
+  });
+
+  it('P2028 (esperando o import da planilha) -> 503 com a mensagem de ocupado, nunca 500', async () => {
+    prismaMock.$transaction.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('timeout', { code: 'P2028', clientVersion: 'test' }),
+    );
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 25 }] });
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
   });
 
   it('codigoId (ou principal) de outro produto -> 400 e nenhuma gravacao', async () => {

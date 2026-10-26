@@ -29,9 +29,11 @@ const U = runId.toUpperCase();
 const CODE_A = `${U}A1`;
 const CODE_B = `${U}B1`;
 const CODE_D = `${U}D1`;
+const CODE_E = `${U}E1`;
 const NAME_A = `PRODUTO ${U} A`;
 const NAME_B = `PRODUTO ${U} B`;
 const NAME_D = `PRODUTO ${U} D`;
+const NAME_E = `PRODUTO ${U} E`;
 const FONTE = `FONTE ${U}`;
 const MOTIVO = `VENDA ATIPICA SINTETICA ${U}`;
 
@@ -427,14 +429,27 @@ describe('Forecast - meses atipicos fora da media (DB)', () => {
     expect(linhaDe(await calculada(snapshot1), productA).Q).toBe(900);
   });
 
-  testDbSkip('produto INATIVO aceita a marca e ela vale na quinzena que ainda o referencia', async () => {
-    await prisma.forecastProduct.update({ where: { id: productB }, data: { isActive: false } });
+  testDbSkip('produto INATIVO: a marca gravada antes continua valendo, o PUT e recusado (400) e volta a valer ao reativar', async () => {
+    // Marca gravada com o produto ATIVO; depois o produto e inativado (como faria o import da planilha).
     expect((await put(productB, { meses: [{ anoMes: MES_ATIPICO, motivo: MOTIVO }] })).status).toBe(200);
+    await prisma.forecastProduct.update({ where: { id: productB }, data: { isActive: false } });
+    // A leitura nao muda: a marca vale na quinzena que ainda referencia o produto inativo (mesmos numeros de antes).
     const b = linhaDe(await calculada(snapshot1), productB);
     expect(b).toMatchObject({ Q: 300, AN: -1700 });
-    // Reativar mantem a marca.
-    await prisma.forecastProduct.update({ where: { id: productB }, data: { isActive: true } });
+
+    const bloqueado = await put(productB, { meses: [] });
+    expect(bloqueado.status).toBe(400);
+    expect(bloqueado.body.message).toBe(
+      'Produto inativo: reative o produto no cadastro do Forecast antes de marcar meses atípicos.',
+    );
     expect(await prisma.forecastAtypicalMonth.count({ where: { productId: productB } })).toBe(1);
+
+    // Reativa pela rota nova: a marca segue la e o PUT volta a funcionar.
+    const reativar = await request(app).post(`/api/v1/forecast/products/${productB}/reativar`).set('Cookie', cookies).send({});
+    expect(reativar.status).toBe(200);
+    expect(await prisma.forecastAtypicalMonth.count({ where: { productId: productB } })).toBe(1);
+    expect(linhaDe(await calculada(snapshot1), productB)).toMatchObject({ Q: 300, AN: -1700 });
+    expect((await put(productB, { meses: [{ anoMes: MES_ATIPICO, motivo: MOTIVO }] })).status).toBe(200);
   });
 
   testDbSkip('todos os meses do trimestre marcados: Q e a media da planilha (sem divisao por zero) e semMesValido avisa', async () => {
@@ -466,5 +481,47 @@ describe('Forecast - meses atipicos fora da media (DB)', () => {
       (await put(productA, { meses: [{ anoMes: MES_ATIPICO, motivo: MOTIVO }, { anoMes: MES_ATIPICO, motivo: MOTIVO }] })).status,
     ).toBe(400);
     expect(await prisma.forecastAtypicalMonth.count({ where: { productId: productA } })).toBe(antes);
+  });
+
+  // Trava FOR NO KEY UPDATE na linha do produto: dois PUT do mesmo produto se serializam.
+  describe('PUT simultaneos no mesmo produto', () => {
+    let productE = 0;
+
+    beforeAll(async () => {
+      if (process.env.RUN_DB_TESTS !== 'true') return;
+      productE = (
+        await prisma.forecastProduct.create({
+          data: {
+            name: NAME_E,
+            normalizedName: normalizeProductName(NAME_E),
+            codes: { create: [{ position: 1, code: CODE_E }] },
+          },
+        })
+      ).id;
+    });
+
+    const mesesDe = async () =>
+      (await prisma.forecastAtypicalMonth.findMany({ where: { productId: productE }, orderBy: { yearMonth: 'asc' } })).map(
+        (m) => m.yearMonth,
+      );
+
+    testDbSkip('conjuntos DIFERENTES sem janela: 2x 200 e o conjunto final e EXATAMENTE um dos dois (nem uniao, nem vazio)', async () => {
+      const um = { meses: [{ anoMes: '2024-01', motivo: MOTIVO }] };
+      const outro = { meses: [{ anoMes: '2024-03', motivo: MOTIVO }] };
+      const [r1, r2] = await Promise.all([put(productE, um), put(productE, outro)]);
+      expect([r1.status, r2.status]).toEqual([200, 200]);
+      const final = await mesesDe();
+      expect([['2024-01'], ['2024-03']]).toContainEqual(final);
+    });
+
+    testDbSkip('MESMO mes com motivos diferentes: 2x 200 (nenhum 500/P2002) e 1 linha', async () => {
+      await put(productE, { meses: [] });
+      const [r1, r2] = await Promise.all([
+        put(productE, { meses: [{ anoMes: '2024-02', motivo: `MOTIVO UM ${U}` }] }),
+        put(productE, { meses: [{ anoMes: '2024-02', motivo: `MOTIVO DOIS ${U}` }] }),
+      ]);
+      expect([r1.status, r2.status]).toEqual([200, 200]);
+      expect(await mesesDe()).toEqual(['2024-02']);
+    });
   });
 });

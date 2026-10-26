@@ -55,7 +55,7 @@ export async function patchForecastEmbalagens(
   return response.data;
 }
 
-/** Mensagem em portugues para o usuario; 400/409 repassam a mensagem do backend. */
+/** Mensagem em portugues para o usuario; 400/409/503 repassam a mensagem do backend. */
 export function forecastEmbalagensErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -66,7 +66,8 @@ export function forecastEmbalagensErrorMessage(err: unknown): string {
       case 404:
         return 'Produto não encontrado no cadastro do Forecast.';
       case 400:
-      case 409: {
+      case 409:
+      case 503: {
         const message = messageOf(err);
         return message && message !== `HTTP ${err.status}`
           ? message

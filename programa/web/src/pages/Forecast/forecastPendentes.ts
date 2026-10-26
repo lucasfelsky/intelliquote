@@ -7,6 +7,7 @@ import type {
   ForecastPendentesResumo,
   ForecastProdutoCadastro,
   ForecastProdutoNovoBody,
+  ForecastProdutoReativado,
 } from '@/services/forecastPendentes';
 import { mesAbrevDoAnoMes } from './forecastPainel';
 
@@ -31,14 +32,28 @@ export function situacaoTexto(p: Pick<ForecastPendente, 'situacao' | 'produtoIna
   return p.situacao === 'produto_inativo' ? 'Produto inativo' : 'Sem cadastro';
 }
 
-/** Explicacao para codigo de produto INATIVO (a reativacao nao existe nesta fase: so mensagem, sem botao). */
+/** Explicacao para codigo de produto INATIVO (no painel da quinzena a linha tem o botao "Reativar produto"). */
 export function textoProdutoInativo(nome: string | null | undefined): string {
   return nome
     ? `O produto “${nome}” está inativo no cadastro. Reative o produto para o código voltar ao cálculo.`
     : 'O produto deste código está inativo no cadastro. Reative o produto para o código voltar ao cálculo.';
 }
 
+/** Pre-visualizacao do import: a reativacao so existe no painel da quinzena. */
 export const TEXTO_REATIVACAO_INDISPONIVEL = 'A reativação de produto ainda não está disponível nesta tela.';
+
+/** Painel da quinzena: quem edita reativa pela propria linha do codigo. */
+export const TEXTO_REATIVACAO_NO_PAINEL = 'Use "Reativar produto" na linha do código.';
+
+/** Mensagem de sucesso depois de reativar (painel da quinzena). Produto da planilha: o proximo import pode inativar de novo. */
+export function mensagemProdutoReativado(r: Pick<ForecastProdutoReativado, 'nome' | 'origem'>): string {
+  return [
+    `Produto ${r.nome} reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada.`,
+    r.origem === 'planilha' ? 'Se ele não estiver na próxima planilha importada, o import o inativa de novo.' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
 
 /** Texto fixo do painel da quinzena: quando o codigo passa a entrar no calculo (singular com 1 pendente). */
 export function textoEntradaNoCalculo(label: string, totalItens: number): string {

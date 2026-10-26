@@ -23,6 +23,7 @@ import {
   getForecastPendentes,
   listFamiliasAtivas,
   listProdutosAtivos,
+  postForecastReativarProduto,
 } from './forecastPendentes';
 
 const get = vi.mocked(api.get);
@@ -53,6 +54,13 @@ describe('servico de pendentes de cadastro do Forecast', () => {
     const r = await addForecastProductCode(5, 'TST0903');
     expect(r.produtoOrigem).toBe('planilha');
     expect(post).toHaveBeenCalledWith('/v1/forecast/products/5/codigos', { codigo: 'TST0903' });
+  });
+
+  it('reativa o produto com POST /v1/forecast/products/:id/reativar, corpo vazio, e desembrulha { data }', async () => {
+    const dados = { id: 9, nome: 'PRODUTO 009', ativo: true, origem: 'planilha', alterado: true };
+    post.mockResolvedValue({ data: dados });
+    await expect(postForecastReativarProduto(9)).resolves.toEqual(dados);
+    expect(post).toHaveBeenCalledWith('/v1/forecast/products/9/reativar', {});
   });
 
   it('familias: so as ativas, so id e nome', async () => {

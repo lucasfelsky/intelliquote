@@ -40,6 +40,8 @@ const BASE = '/api/v1/forecast/commercial-demands';
 // Cliente transacional distinto do `prisma`: prova que a gravacao e o AuditLog usam o `tx`.
 const tx = {
   forecastProduct: { findUnique: vi.fn() },
+  // So leitura por id: a Solicitacao informada precisa existir (sem FK).
+  commercialRequest: { findUnique: vi.fn() },
   forecastCommercialDemand: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
   auditLog: { create: vi.fn() },
 };
@@ -78,6 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$transaction.mockImplementation(async (fn: (client: unknown) => unknown) => fn(tx));
   tx.forecastProduct.findUnique.mockResolvedValue({ id: 5, isActive: true });
+  tx.commercialRequest.findUnique.mockImplementation(async ({ where }: { where: { id: number } }) => ({ id: where.id }));
   tx.forecastCommercialDemand.create.mockImplementation(async () => linhaDoBanco());
   tx.forecastCommercialDemand.findUnique.mockResolvedValue(linhaDoBanco());
   tx.forecastCommercialDemand.updateMany.mockResolvedValue({ count: 1 });
@@ -464,6 +467,76 @@ describe('PATCH /forecast/commercial-demands/:id - papeis, edicao e fechamento',
     const editar = await request(app).patch(PATH).set('Cookie', cookies).send({ motivo: 'NOVO MOTIVO' });
     expect(editar.status).toBe(409);
     expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+});
+
+const MENSAGEM_SOLICITACAO = (id: number) =>
+  `Solicitação nº ${id} não encontrada no módulo Solicitações. Confira o número ou deixe o campo vazio.`;
+
+describe('Forecast demanda do comercial - Solicitacao precisa existir (sem FK)', () => {
+  it('create com solicitacao inexistente -> 400 com a mensagem, sem gravar nem auditar', async () => {
+    tx.commercialRequest.findUnique.mockResolvedValue(null);
+    const cookies = await loginAs('admin');
+    const response = await request(app).post(BASE).set('Cookie', cookies).send(corpo({ solicitacaoId: 77 }));
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(MENSAGEM_SOLICITACAO(77));
+    expect(tx.commercialRequest.findUnique).toHaveBeenCalledWith({ where: { id: 77 }, select: { id: true } });
+    expect(tx.forecastCommercialDemand.create).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('create com solicitacao existente -> 201; sem solicitacao (ou null) nao consulta', async () => {
+    const cookies = await loginAs('comprador');
+    expect((await request(app).post(BASE).set('Cookie', cookies).send(corpo({ solicitacaoId: 12 }))).status).toBe(201);
+    expect(tx.commercialRequest.findUnique).toHaveBeenCalledTimes(1);
+
+    tx.commercialRequest.findUnique.mockClear();
+    expect((await request(app).post(BASE).set('Cookie', cookies).send(corpo())).status).toBe(201);
+    expect((await request(app).post(BASE).set('Cookie', cookies).send(corpo({ solicitacaoId: null }))).status).toBe(201);
+    expect(tx.commercialRequest.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('patch mudando para solicitacao inexistente -> 400 sem gravar nem auditar', async () => {
+    tx.commercialRequest.findUnique.mockResolvedValue(null);
+    const cookies = await loginAs('admin');
+    const response = await request(app).patch(`${BASE}/9`).set('Cookie', cookies).send({ solicitacaoId: 88 });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe(MENSAGEM_SOLICITACAO(88));
+    expect(tx.forecastCommercialDemand.updateMany).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('patch mudando para solicitacao existente -> 200 e consulta por id', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app).patch(`${BASE}/9`).set('Cookie', cookies).send({ solicitacaoId: 44 });
+    expect(response.status).toBe(200);
+    expect(tx.commercialRequest.findUnique).toHaveBeenCalledWith({ where: { id: 44 }, select: { id: true } });
+    expect(tx.forecastCommercialDemand.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('patch que nao muda o numero (legado inexistente) NAO consulta e segue editavel; null limpa sem consulta', async () => {
+    tx.commercialRequest.findUnique.mockResolvedValue(null);
+    tx.forecastCommercialDemand.findUnique.mockResolvedValue(linhaDoBanco({ commercialRequestId: 44 }));
+    const cookies = await loginAs('admin');
+    const mesmoNumero = await request(app)
+      .patch(`${BASE}/9`)
+      .set('Cookie', cookies)
+      .send({ solicitacaoId: 44, motivo: 'NOVO MOTIVO' });
+    expect(mesmoNumero.status).toBe(200);
+    const soOutroCampo = await request(app).patch(`${BASE}/9`).set('Cookie', cookies).send({ motivo: 'OUTRO MOTIVO' });
+    expect(soOutroCampo.status).toBe(200);
+    const limpar = await request(app).patch(`${BASE}/9`).set('Cookie', cookies).send({ solicitacaoId: null });
+    expect(limpar.status).toBe(200);
+    expect(tx.commercialRequest.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('fechar a demanda nao consulta a solicitacao', async () => {
+    tx.commercialRequest.findUnique.mockResolvedValue(null);
+    tx.forecastCommercialDemand.findUnique.mockResolvedValue(linhaDoBanco({ commercialRequestId: 44 }));
+    const cookies = await loginAs('admin');
+    const response = await request(app).patch(`${BASE}/9`).set('Cookie', cookies).send({ status: 'comprada' });
+    expect(response.status).toBe(200);
+    expect(tx.commercialRequest.findUnique).not.toHaveBeenCalled();
   });
 });
 

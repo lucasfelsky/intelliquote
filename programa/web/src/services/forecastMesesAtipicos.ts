@@ -29,7 +29,7 @@ export async function putForecastMesesAtipicos(
   return response.data;
 }
 
-/** Mensagem em portugues para o usuario; 400 repassa a mensagem do backend. */
+/** Mensagem em portugues para o usuario; 400/409/503 repassam a mensagem do backend. */
 export function forecastMesesAtipicosErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -39,7 +39,9 @@ export function forecastMesesAtipicosErrorMessage(err: unknown): string {
         return 'Seu perfil não pode marcar meses atípicos.';
       case 404:
         return 'Produto não encontrado no cadastro do Forecast.';
-      case 400: {
+      case 400:
+      case 409:
+      case 503: {
         const message = messageOf(err);
         return message && message !== `HTTP ${err.status}`
           ? message

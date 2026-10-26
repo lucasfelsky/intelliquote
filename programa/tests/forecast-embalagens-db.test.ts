@@ -225,6 +225,36 @@ describe('Forecast - embalagens por codigo (DB)', () => {
     expect(item.embalagem.usada).toMatchObject({ codigo: CODE_A1, quantidade: 25 });
   });
 
+  testDbSkip('2 PATCH simultaneos trocando a principal para codigos DIFERENTES: nenhum 500 (a trava serializa) e no maximo 1 principal', async () => {
+    // Prepara 3 codigos com embalagem (A3 volta a ficar sem no fim, para nao mexer nos testes seguintes).
+    expect(
+      (
+        await patch(productA, {
+          embalagens: [
+            { codigoId: ids[CODE_A1], quantidadeKg: 25 },
+            { codigoId: ids[CODE_A2], quantidadeKg: 200 },
+            { codigoId: ids[CODE_A3], quantidadeKg: 10 },
+          ],
+          principalCodigoId: ids[CODE_A1],
+        })
+      ).status,
+    ).toBe(200);
+
+    const [r1, r2] = await Promise.all([
+      patch(productA, { principalCodigoId: ids[CODE_A2] }),
+      patch(productA, { principalCodigoId: ids[CODE_A3] }),
+    ]);
+    expect([r1.status, r2.status]).toEqual([200, 200]);
+    const principais = await prisma.forecastProductCode.findMany({ where: { productId: productA, packagingIsPrimary: true } });
+    expect(principais.length).toBeLessThanOrEqual(1);
+    expect([ids[CODE_A2], ids[CODE_A3]]).toContain(principais[0]?.id);
+
+    expect(
+      (await patch(productA, { embalagens: [{ codigoId: ids[CODE_A3], quantidadeKg: null }], principalCodigoId: ids[CODE_A1] })).status,
+    ).toBe(200);
+    expect(await prisma.forecastProductCode.count({ where: { productId: productA, packagingIsPrimary: true } })).toBe(1);
+  });
+
   testDbSkip('o indice parcial existe e o banco recusa duas principais no mesmo produto (P2002)', async () => {
     const rows = await prisma.$queryRaw<Array<{ indexname: string }>>(
       Prisma.sql`SELECT indexname FROM pg_indexes WHERE indexname = 'ForecastProductCode_single_primary_packaging_per_product'`,
