@@ -505,7 +505,9 @@ export class ForecastDbcorpService {
   static async confirm(
     input: ForecastDbcorpConfirmInput,
     userId: number | null,
-  ): Promise<ForecastDbcorpSummary & { snapshotId: number }> {
+  ): Promise<ForecastDbcorpSummary & { snapshotId: number; modoTeste: boolean }> {
+    // Modo teste: cria a quinzena com o MESMO calculo, mas nao grava o historico do mes anterior nem os prazos.
+    const modoTeste = input.modoTeste === true;
     // Re-parse no servidor: nunca confia em linhas vindas do cliente.
     const parsed = await ForecastDbcorpService.parseAll(input);
     if (parsed.erros.length > 0) {
@@ -585,30 +587,44 @@ export class ForecastDbcorpService {
                 ).length,
                 padroesAlterados: built.mudancasDePrazo.length,
               },
+              // So booleanos/contagens, e so no modo teste (sem a chave, o metadata fica como na importacao normal).
+              ...(modoTeste
+                ? {
+                    modoTeste: true,
+                    padroesNaoGravados: built.mudancasDePrazo.length,
+                    historicoNaoGravado: true,
+                  }
+                : {}),
             },
           },
           tx,
         );
         // O prazo usado vira o padrao da fonte para as proximas importacoes (so as colunas que mudaram).
-        await ForecastSourceService.salvarPrazosChegada(tx, built.mudancasDePrazo, userId, input.label);
+        // No modo teste vale so para esta quinzena (ja entrou no calculo por `input.prazosEstimativa`).
+        if (!modoTeste) {
+          await ForecastSourceService.salvarPrazosChegada(tx, built.mudancasDePrazo, userId, input.label);
+        }
 
         // A VENDAS do mes anterior e o relatorio completo do mes base-1: substitui o mes inteiro.
-        const anterior = mesesHistorico(input.baseDate).anterior;
-        const rows = aggregateSales(parsed.vendasMes.linhas);
-        const resumoMes = built.historico.mesAnterior ?? (await summarizeMonthlySales(tx, anterior, rows));
-        await replaceMonthlySales(
-          tx,
-          {
-            yearMonth: anterior,
-            rows,
-            sourceLabel: `dbcorp ${input.label}`,
-            snapshotId: snapshot.id,
-            resumo: resumoMes,
-          },
-          userId,
-        );
+        // No modo teste o historico fica intacto (as VENDAS do mes ja entraram em memoria no calculo).
+        if (!modoTeste) {
+          const anterior = mesesHistorico(input.baseDate).anterior;
+          const rows = aggregateSales(parsed.vendasMes.linhas);
+          const resumoMes = built.historico.mesAnterior ?? (await summarizeMonthlySales(tx, anterior, rows));
+          await replaceMonthlySales(
+            tx,
+            {
+              yearMonth: anterior,
+              rows,
+              sourceLabel: `dbcorp ${input.label}`,
+              snapshotId: snapshot.id,
+              resumo: resumoMes,
+            },
+            userId,
+          );
+        }
 
-        return { ...ForecastDbcorpService.summarize(input, parsed, built), snapshotId: snapshot.id };
+        return { ...ForecastDbcorpService.summarize(input, parsed, built), snapshotId: snapshot.id, modoTeste };
       },
       { timeout: 120_000, maxWait: 10_000 },
     );

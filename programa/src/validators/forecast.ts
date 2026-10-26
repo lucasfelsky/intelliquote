@@ -75,54 +75,62 @@ const prazoEstimativaField = z.object({
 });
 
 // Quinzena a partir dos relatorios DBCorp. O confirm recebe o mesmo corpo do preview (grava sempre a
-// quinzena e o mes anterior do historico; sem opcoes). `prazosEstimativa` (opcional) viaja nos dois: o confirm
-// repete o calculo do preview com os mesmos prazos.
-export const forecastDbcorpPreviewSchema = z
-  .object({
-    label: labelField,
-    baseDate: dateKeyField('Data base invalida (use AAAA-MM-DD).'),
-    files: z.object({
-      saldo: dbcorpFileField,
-      vendasMes: dbcorpFileField,
-      vendasAtual: dbcorpFileField.optional(),
-      vendasAnual: dbcorpFileField,
-      programacao: dbcorpFileField,
-      fup: dbcorpFileField,
-      clientesAtivos: dbcorpFileField.optional(),
-      margem: dbcorpFileField.optional(),
-    }),
-    prazosEstimativa: z
-      .array(prazoEstimativaField)
-      .max(
-        FORECAST_DBCORP_PRAZOS_MAX_FONTES,
-        `Informe no maximo ${FORECAST_DBCORP_PRAZOS_MAX_FONTES} fontes em prazosEstimativa.`,
-      )
-      .optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.prazosEstimativa) {
-      const vistos = new Set<number>();
-      for (const [index, prazo] of value.prazosEstimativa.entries()) {
-        if (vistos.has(prazo.sourceId)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['prazosEstimativa', index, 'sourceId'],
-            message: 'Fonte repetida em prazosEstimativa.',
-          });
-        }
-        vistos.add(prazo.sourceId);
-      }
-    }
-    if (value.label.endsWith('-2') && !value.files.vendasAtual) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['files', 'vendasAtual'],
-        message: 'Na 2a quinzena envie o relatorio de vendas do mes atual (ate o dia 15).',
-      });
-    }
-  });
+// quinzena; o mes anterior do historico e os prazos alterados so sem `modoTeste`). `prazosEstimativa` (opcional)
+// viaja nos dois: o confirm repete o calculo do preview com os mesmos prazos. `modoTeste` (opcional) so existe no
+// confirm: o preview descarta a chave.
+const forecastDbcorpBaseSchema = z.object({
+  label: labelField,
+  baseDate: dateKeyField('Data base invalida (use AAAA-MM-DD).'),
+  files: z.object({
+    saldo: dbcorpFileField,
+    vendasMes: dbcorpFileField,
+    vendasAtual: dbcorpFileField.optional(),
+    vendasAnual: dbcorpFileField,
+    programacao: dbcorpFileField,
+    fup: dbcorpFileField,
+    clientesAtivos: dbcorpFileField.optional(),
+    margem: dbcorpFileField.optional(),
+  }),
+  prazosEstimativa: z
+    .array(prazoEstimativaField)
+    .max(
+      FORECAST_DBCORP_PRAZOS_MAX_FONTES,
+      `Informe no maximo ${FORECAST_DBCORP_PRAZOS_MAX_FONTES} fontes em prazosEstimativa.`,
+    )
+    .optional(),
+});
 
-export const forecastDbcorpConfirmSchema = forecastDbcorpPreviewSchema;
+function regrasDbcorp(
+  value: z.infer<typeof forecastDbcorpBaseSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (value.prazosEstimativa) {
+    const vistos = new Set<number>();
+    for (const [index, prazo] of value.prazosEstimativa.entries()) {
+      if (vistos.has(prazo.sourceId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['prazosEstimativa', index, 'sourceId'],
+          message: 'Fonte repetida em prazosEstimativa.',
+        });
+      }
+      vistos.add(prazo.sourceId);
+    }
+  }
+  if (value.label.endsWith('-2') && !value.files.vendasAtual) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['files', 'vendasAtual'],
+      message: 'Na 2a quinzena envie o relatorio de vendas do mes atual (ate o dia 15).',
+    });
+  }
+}
+
+export const forecastDbcorpPreviewSchema = forecastDbcorpBaseSchema.superRefine(regrasDbcorp);
+
+export const forecastDbcorpConfirmSchema = forecastDbcorpBaseSchema
+  .extend({ modoTeste: z.boolean({ error: 'Informe modoTeste (true/false).' }).optional() })
+  .superRefine(regrasDbcorp);
 
 const leadTimeDaysField = z
   .number({ error: 'Informe um numero inteiro de dias (ou null).' })
