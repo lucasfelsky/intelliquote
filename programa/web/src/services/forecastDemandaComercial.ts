@@ -89,7 +89,7 @@ export interface ForecastProdutoParaDemanda {
   name: string;
   isActive: boolean;
   source: { name: string } | null;
-  codes: Array<{ code: string }>;
+  codes: Array<{ code: string; catalogItemId?: number | null }>;
 }
 
 export async function listForecastProdutosParaDemanda(): Promise<ForecastProdutoParaDemanda[]> {
@@ -99,7 +99,7 @@ export async function listForecastProdutosParaDemanda(): Promise<ForecastProduto
     name: p.name,
     isActive: p.isActive,
     source: p.source ? { name: p.source.name } : null,
-    codes: (p.codes ?? []).map((c) => ({ code: c.code })),
+    codes: (p.codes ?? []).map((c) => ({ code: c.code, catalogItemId: c.catalogItemId ?? null })),
   }));
 }
 
