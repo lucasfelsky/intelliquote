@@ -57,6 +57,7 @@ import {
   type DemandaComercialAberta,
   type DemandaComercialDoRelatorio,
 } from './forecastDemandaComercial';
+import type { DecisaoCompraData } from './forecastDecisaoCompra';
 import {
   agruparLinhas,
   linhasParaDemandaComercial,
@@ -177,6 +178,8 @@ export interface ItemRelatorioCompras {
   demandaComercialKg?: number;
   /** PR 6b: o item e a linha de um GRUPO de equivalencia (nome do grupo em `item`; os membros vem aqui). */
   grupo?: DadosDoGrupo;
+  /** PR3: so no XLSX (anexado em ForecastSnapshotService); ausente na rota JSON. */
+  decisao?: DecisaoCompraData | null;
   ruptura: RupturaEstimada | null;
   dataLimite: string | null;
   vencida: boolean;

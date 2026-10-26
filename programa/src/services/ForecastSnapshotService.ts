@@ -1,6 +1,12 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
+import {
+  anexarDecisoesAoRelatorio,
+  paraDecisaoCompraData,
+  produtosComDecisao,
+  type DecisaoCompraData,
+} from '../utils/forecastDecisaoCompra';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
 import { gruposDasLinhas } from '../utils/forecastGruposEquivalencia';
 import { mapaForaDaMedia, marcasNaJanela } from '../utils/forecastMesesAtipicos';
@@ -350,18 +356,27 @@ export class ForecastSnapshotService {
     });
   }
 
-  // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras); a planilha so formata.
+  // Decisoes de compra da quinzena (PR3), por productId: 1 consulta. So os caminhos XLSX leem; a rota JSON do relatorio e o
+  // calculo nao mudam (a tela busca as decisoes em rota propria).
+  private static async decisoesDaQuinzena(id: number): Promise<Map<number, DecisaoCompraData>> {
+    const rows = await prisma.forecastPurchaseDecision.findMany({ where: { snapshotId: id } });
+    return new Map(rows.map((r) => [r.productId, paraDecisaoCompraData(r)] as const));
+  }
+
+  // XLSX do relatorio: o MESMO objeto da tela (getRelatorioCompras) + as decisoes de compra (3 colunas); a planilha so formata.
   static async getRelatorioComprasXlsx(
     id: number,
     hoje?: string,
   ): Promise<{ fileName: string; contentBase64: string }> {
     const relatorio = await ForecastSnapshotService.getRelatorioCompras(id, hoje);
-    const buffer = await gerarXlsxRelatorioCompras(relatorio);
+    const decisoes = await ForecastSnapshotService.decisoesDaQuinzena(id);
+    const buffer = await gerarXlsxRelatorioCompras(anexarDecisoesAoRelatorio(relatorio, decisoes));
     return { fileName: nomeArquivoRelatorioCompras(relatorio.quinzena), contentBase64: buffer.toString('base64') };
   }
 
   // XLSX no layout da aba FORECAST (MACRO): a quinzena congelada + as marcas de mes atipico do cadastro ATUAL (como a
-  // tela); formulas vivas com o resultado do motor em cache. Nao consulta cadastro, grupos nem demanda; so leitura.
+  // tela); formulas vivas com o resultado do motor em cache. Nao consulta cadastro, grupos nem demanda; so consulta as
+  // decisoes de compra (PR3): a coluna AO recebe a decisao, senao o analiseForecast congelado. So leitura.
   static async getRelatorioComprasXlsxMacro(
     id: number,
     hoje?: string,
@@ -369,8 +384,9 @@ export class ForecastSnapshotService {
     const { snapshot, produtos, quinzena, half } = await ForecastSnapshotService.carregarQuinzena(id);
     const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
     const { mesesForaDaMedia } = await ForecastSnapshotService.marcasDaQuinzena(produtos, quinzena.dataBase);
+    const decisoes = await ForecastSnapshotService.decisoesDaQuinzena(id);
     const buffer = await gerarXlsxForecastMacro({
-      quinzena,
+      quinzena: { ...quinzena, produtos: produtosComDecisao(quinzena.produtos, decisoes) },
       hoje: hojeKey,
       half,
       origin: snapshot.origin,

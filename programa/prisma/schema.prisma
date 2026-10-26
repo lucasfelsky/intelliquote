@@ -1129,6 +1129,7 @@ model ForecastProduct {
   codes             ForecastProductCode[]
   atypicalMonths    ForecastAtypicalMonth[]
   commercialDemands ForecastCommercialDemand[]
+  purchaseDecisions ForecastPurchaseDecision[]
   // Grupo de equivalencia (PR 6b): produtos que sao o MESMO material (nomes ou fontes diferentes) tem o estoque avaliado
   // somado no relatorio. Uma coluna garante 1 grupo por produto; fora das colunas que o import da planilha e o cadastro
   // pela tela gravam, entao nenhum deles apaga o vinculo.
@@ -1268,7 +1269,34 @@ model ForecastSnapshot {
   createdAt   DateTime              @default(now())
   deletedAt   DateTime?
   sales       ForecastMonthlySale[]
+  purchaseDecisions ForecastPurchaseDecision[]
 
   @@index([baseDate])
   @@index([deletedAt])
+}
+
+// Quantidade decidida de compra por item e quinzena (PR3 do piloto do Forecast; coluna AO "ANALISE FORECAST" da planilha).
+// Chave (quinzena, produto); quantityKg >= 0 (0 = decidiu nao comprar). `suggestedKg` (Qtd. final do relatorio) e `demandKg`
+// (AN do motor, sinal da planilha: <= 0 = falta) sao CONGELADOS ao criar e a cada mudanca de quantidade (o backtest nao
+// depende do cadastro atual). `status` = vocabulario da cor do item na planilha (nao/cotando/preco/confirmado/po): String +
+// Zod, sem enum, como ForecastCommercialDemand. `note` e texto livre: nunca vai ao AuditLog. FKs Restrict: excluir a
+// quinzena e soft delete (a decisao fica); nenhum fluxo apaga quinzena ou produto fisicamente. `decidedById` sem FK: o
+// autor fica no AuditLog.
+model ForecastPurchaseDecision {
+  id          Int              @id @default(autoincrement())
+  snapshotId  Int
+  snapshot    ForecastSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  productId   Int
+  product     ForecastProduct  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityKg  Decimal          @db.Decimal(18, 6)
+  status      String           @default("nao")
+  note        String?
+  suggestedKg Decimal          @db.Decimal(18, 6)
+  demandKg    Decimal          @db.Decimal(18, 6)
+  decidedById Int?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([snapshotId, productId])
+  @@index([productId])
 }
