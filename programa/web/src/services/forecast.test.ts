@@ -106,6 +106,28 @@ describe('baixarForecastRelatorioXlsx', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
   });
 
+  it('layout macro: manda layout=macro na query e baixa com o nome devolvido', async () => {
+    const bytes = new Uint8Array([80, 75, 3, 4]);
+    get.mockResolvedValue({
+      data: { fileName: 'forecast-macro-10-2-2026-10-20.xlsx', contentBase64: btoa(String.fromCharCode(...bytes)) },
+    });
+    const links: HTMLAnchorElement[] = [];
+    click.mockImplementation(function (this: HTMLAnchorElement) {
+      links.push(this);
+    });
+
+    await expect(baixarForecastRelatorioXlsx(7, '2026-10-20', 'macro')).resolves.toEqual({
+      fileName: 'forecast-macro-10-2-2026-10-20.xlsx',
+    });
+
+    expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7/relatorio-compras/xlsx', {
+      hoje: '2026-10-20',
+      layout: 'macro',
+    });
+    expect(links[0]?.download).toBe('forecast-macro-10-2-2026-10-20.xlsx');
+    expect(click).toHaveBeenCalledTimes(1);
+  });
+
   it('erro do servidor propaga e nenhum arquivo e criado', async () => {
     get.mockRejectedValue(new ApiError(404, null));
     await expect(baixarForecastRelatorioXlsx(7, '2026-10-20')).rejects.toBeInstanceOf(ApiError);

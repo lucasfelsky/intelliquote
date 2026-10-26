@@ -406,6 +406,33 @@ describe('ForecastRelatorioCompras - exportacao e impressao', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('o grupo "Exportar relatório" tem o botao "Baixar planilha MACRO (XLSX)"', async () => {
+    rotear(async () => ({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } }));
+    renderRelatorio();
+    const grupo = await screen.findByRole('group', { name: 'Exportar relatório' });
+    expect(within(grupo).getByRole('button', { name: 'Baixar planilha MACRO (XLSX)' })).toBeTruthy();
+  });
+
+  it('"Baixar planilha MACRO (XLSX)" pede layout=macro com a data da tela e mostra o nome gerado', async () => {
+    const NOME_MACRO = 'forecast-macro-10-2-2026-10-20.xlsx';
+    rotear(async () => ({ data: { fileName: NOME_MACRO, contentBase64: btoa('x') } }));
+    renderRelatorio();
+    fireEvent.click(await screen.findByRole('button', { name: 'Baixar planilha MACRO (XLSX)' }));
+    const ok = await screen.findByRole('status');
+    expect(ok.textContent).toBe(`Planilha MACRO gerada: ${NOME_MACRO}`);
+    expect(get).toHaveBeenCalledWith(PATH_XLSX, { hoje: '2026-10-20', layout: 'macro' });
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
+  });
+
+  it('erro 404 da planilha MACRO: alerta com a mensagem do servico', async () => {
+    rotear(() => Promise.reject(new ApiError(404, null)));
+    renderRelatorio();
+    fireEvent.click(await screen.findByRole('button', { name: 'Baixar planilha MACRO (XLSX)' }));
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe('Quinzena não encontrada (pode ter sido removida).');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('"Imprimir / Salvar como PDF" chama window.print e aponta para a dica', async () => {
     rotear(async () => ({ data: { fileName: NOME_XLSX, contentBase64: btoa('x') } }));
     const print = vi.spyOn(window, 'print').mockImplementation(() => {});

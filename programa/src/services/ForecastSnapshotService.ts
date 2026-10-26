@@ -15,6 +15,7 @@ import {
   gerarXlsxRelatorioCompras,
   nomeArquivoRelatorioCompras,
 } from '../utils/forecastRelatorioComprasXlsx';
+import { gerarXlsxForecastMacro, nomeArquivoForecastMacro } from '../utils/forecastMacroXlsx';
 import { dateKeyToDbDate, dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { HttpError } from '../utils/http';
 import { ForecastDemandaComercialService } from './ForecastDemandaComercialService';
@@ -158,8 +159,8 @@ export class ForecastSnapshotService {
     });
   }
 
-  // Quinzena calculada pelo motor (+ conferencia com o Excel quando a origem e a planilha).
-  static async getCalculated(id: number, hoje?: string) {
+  // Quinzena congelada (nao deletada) montada para o motor; 404 quando nao existe. So leitura.
+  private static async carregarQuinzena(id: number) {
     const snapshot = await prisma.forecastSnapshot.findFirst({ where: { id, deletedAt: null } });
     if (!snapshot) {
       throw new HttpError(404, 'Quinzena nao encontrada.');
@@ -179,23 +180,35 @@ export class ForecastSnapshotService {
       entradas: snapshot.inputs as unknown as Entradas,
       esperado: (snapshot.expected ?? {}) as unknown as Quinzena['esperado'],
     };
+    const half: 1 | 2 = snapshot.half === 1 ? 1 : 2;
+    return { snapshot, months, produtos, files, quinzena, half };
+  }
+
+  // Meses atipicos (PR 6c): marcas do cadastro ATUAL, 1 consulta; so as que cabem na janela de vendas da quinzena
+  // entram na media. Sem marca, o calculo e o mesmo de antes.
+  private static async marcasDaQuinzena(produtos: FrozenProduct[], dataBase: string) {
+    const productIds = produtos.flatMap((p) => (p.productId != null ? [p.productId] : []));
+    const marcas = await ForecastMesesAtipicosService.doProdutos(productIds);
+    const mesesForaDaMedia = mapaForaDaMedia(
+      produtos,
+      new Map([...marcas].map(([id, lista]) => [id, lista.map((m) => m.anoMes)])),
+      dataBase,
+    );
+    return { marcas, mesesForaDaMedia };
+  }
+
+  // Quinzena calculada pelo motor (+ conferencia com o Excel quando a origem e a planilha).
+  static async getCalculated(id: number, hoje?: string) {
+    const { snapshot, months, produtos, files, quinzena, half } = await ForecastSnapshotService.carregarQuinzena(id);
 
     const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
-    const half: 1 | 2 = snapshot.half === 1 ? 1 : 2;
     const produtoPorLinha = new Map(produtos.map((p) => [p.linha, p]));
     const productIds = produtos.flatMap((p) => (p.productId != null ? [p.productId] : []));
     // Compra sob demanda: marca do cadastro ATUAL (nao congelada na quinzena), 1 consulta por produto.
     const sobDemanda = await ForecastSobDemandaService.regrasDosProdutos(productIds);
     // Grupos de equivalencia (PR 6b): vinculo do cadastro ATUAL (nao congelado na quinzena), 1 consulta.
     const gruposDosProdutos = await ForecastGrupoEquivalenciaService.gruposDosProdutos(productIds);
-    // Meses atipicos (PR 6c): marcas do cadastro ATUAL, 1 consulta; so as que cabem na janela de vendas da quinzena
-    // entram na media. Sem marca, o calculo e o mesmo de antes.
-    const marcas = await ForecastMesesAtipicosService.doProdutos(productIds);
-    const mesesForaDaMedia = mapaForaDaMedia(
-      produtos,
-      new Map([...marcas].map(([id, lista]) => [id, lista.map((m) => m.anoMes)])),
-      quinzena.dataBase,
-    );
+    const { marcas, mesesForaDaMedia } = await ForecastSnapshotService.marcasDaQuinzena(produtos, quinzena.dataBase);
     const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half, mesesForaDaMedia });
 
     return {
@@ -296,5 +309,27 @@ export class ForecastSnapshotService {
     const relatorio = await ForecastSnapshotService.getRelatorioCompras(id, hoje);
     const buffer = await gerarXlsxRelatorioCompras(relatorio);
     return { fileName: nomeArquivoRelatorioCompras(relatorio.quinzena), contentBase64: buffer.toString('base64') };
+  }
+
+  // XLSX no layout da aba FORECAST (MACRO): a quinzena congelada + as marcas de mes atipico do cadastro ATUAL (como a
+  // tela); formulas vivas com o resultado do motor em cache. Nao consulta cadastro, grupos nem demanda; so leitura.
+  static async getRelatorioComprasXlsxMacro(
+    id: number,
+    hoje?: string,
+  ): Promise<{ fileName: string; contentBase64: string }> {
+    const { snapshot, produtos, quinzena, half } = await ForecastSnapshotService.carregarQuinzena(id);
+    const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
+    const { mesesForaDaMedia } = await ForecastSnapshotService.marcasDaQuinzena(produtos, quinzena.dataBase);
+    const buffer = await gerarXlsxForecastMacro({
+      quinzena,
+      hoje: hojeKey,
+      half,
+      origin: snapshot.origin,
+      mesesForaDaMedia,
+    });
+    return {
+      fileName: nomeArquivoForecastMacro({ label: quinzena.id, hoje: hojeKey }),
+      contentBase64: buffer.toString('base64'),
+    };
   }
 }
