@@ -24,6 +24,7 @@ import {
   forecastProductCreateSchema,
   forecastProductReativarSchema,
   forecastRelatorioXlsxQuerySchema,
+  forecastSnapshotDeleteSchema,
   forecastSnapshotQuerySchema,
   forecastSobDemandaPatchSchema,
   forecastSourcePatchSchema,
@@ -192,6 +193,20 @@ export class ForecastController {
         hoje: typeof req.query.hoje === 'string' ? req.query.hoje : undefined,
       });
       const data = await ForecastSnapshotService.getCalculated(id, query.hoje);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async deleteSnapshot(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      forecastSnapshotDeleteSchema.parse(req.body ?? {});
+      const data = await ForecastSnapshotService.excluir(id, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

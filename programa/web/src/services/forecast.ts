@@ -719,3 +719,39 @@ export function forecastImportErrorMessage(err: unknown, label: string): string 
   }
   return 'Sem conexão com o servidor. Tente de novo.';
 }
+
+// ---------- excluir quinzena (soft delete) ----------
+
+/** Resposta de `DELETE /forecast/snapshots/:id`. */
+export interface ForecastSnapshotExcluida {
+  id: number;
+  label: string;
+  excluida: true;
+}
+
+/** Exclui a quinzena (some das telas; nao desfaz cadastro, historico nem prazos gravados na importacao). */
+export async function excluirForecastSnapshot(id: number): Promise<ForecastSnapshotExcluida> {
+  const response = await api.del<{ data: ForecastSnapshotExcluida }>(`/v1/forecast/snapshots/${id}`);
+  return response.data;
+}
+
+export function forecastExcluirErrorMessage(err: unknown, label: string): string {
+  if (err instanceof ApiError) {
+    switch (err.status) {
+      case 401:
+        return 'Sua sessão expirou. Entre de novo.';
+      case 403:
+        return 'Só administradores e compradores podem excluir quinzenas.';
+      case 404:
+        return `A quinzena ${label} já foi excluída ou não existe mais. A lista foi atualizada.`;
+      case 503:
+        return 'Há uma importação do Forecast em andamento. Tente de novo em instantes; nada foi excluído.';
+      case 502:
+      case 504:
+        return 'O servidor demorou para responder. Confira a lista de quinzenas antes de tentar de novo.';
+      default:
+        return `Não foi possível excluir a quinzena (HTTP ${err.status}).`;
+    }
+  }
+  return 'Sem conexão com o servidor. Tente de novo.';
+}
