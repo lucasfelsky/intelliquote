@@ -153,3 +153,11 @@ export const FORECAST_PRODUCT_ORIGIN_DBCORP = 'dbcorp';
 
 // Maximo de codigos pendentes devolvidos (a contagem total e o resto omitido vao sempre).
 export const FORECAST_PENDENTES_MAX_ITENS = 200;
+
+// --- Prazo real medio por fonte (3C) ---
+// Janela: so entram chegadas com ETA FINAL entre (base - 365 dias) e a base.
+export const FORECAST_PRAZO_REAL_JANELA_DIAS = 365;
+// Intervalo acima disso entre duas datas do FUP e tratado como erro de digitacao e descartado.
+export const FORECAST_PRAZO_REAL_MAX_DIAS = 365;
+// Abaixo desse numero de chegadas a media e marcada como "poucas chegadas".
+export const FORECAST_PRAZO_REAL_MIN_CHEGADAS = 3;

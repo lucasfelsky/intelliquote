@@ -214,12 +214,19 @@ export const forecastSnapshotQuerySchema = z.object({
   hoje: dateKeyField('Data invalida (use AAAA-MM-DD).').optional(),
 });
 
+// XLSX da quinzena: 'relatorio' (padrao, o relatorio de compras) ou 'macro' (layout da aba FORECAST (MACRO)).
+export const FORECAST_XLSX_LAYOUTS = ['relatorio', 'macro'] as const;
+export const forecastRelatorioXlsxQuerySchema = forecastSnapshotQuerySchema.extend({
+  layout: z.enum(FORECAST_XLSX_LAYOUTS, { error: 'Layout invalido (use relatorio ou macro).' }).optional(),
+});
+
 export type ForecastWorkbookPreviewInput = z.infer<typeof forecastWorkbookPreviewSchema>;
 export type ForecastWorkbookConfirmInput = z.infer<typeof forecastWorkbookConfirmSchema>;
 export type ForecastDbcorpPreviewInput = z.infer<typeof forecastDbcorpPreviewSchema>;
 export type ForecastDbcorpConfirmInput = z.infer<typeof forecastDbcorpConfirmSchema>;
 export type ForecastSourcePatchInput = z.infer<typeof forecastSourcePatchSchema>;
 export type ForecastSnapshotQueryInput = z.infer<typeof forecastSnapshotQuerySchema>;
+export type ForecastRelatorioXlsxQueryInput = z.infer<typeof forecastRelatorioXlsxQuerySchema>;
 export type ForecastEmbalagensPatchInput = z.infer<typeof forecastEmbalagensPatchSchema>;
 
 // Produto novo a partir de um pendente de cadastro (PR 3B): nome, ate 7 codigos, fonte e familia. O lead time

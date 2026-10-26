@@ -409,14 +409,22 @@ export async function getForecastRelatorioCompras(id: number): Promise<ForecastR
 
 export const FORECAST_XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+/** Layout alternativo do XLSX da quinzena: a aba FORECAST (MACRO) do PO.COMP.01 (`?layout=macro`). */
+export type ForecastXlsxLayout = 'macro';
+
 /**
  * Baixa o XLSX do relatorio de compras (JSON base64 -> Blob -> <a download>, como downloadSupplierDocument).
  * `hoje` e o da tela (quinzena.hoje): o arquivo sai igual ao que esta exibido.
+ * Com `layout: 'macro'` baixa a planilha no layout da aba FORECAST (MACRO); sem layout, o relatorio de compras.
  */
-export async function baixarForecastRelatorioXlsx(id: number, hoje: string): Promise<{ fileName: string }> {
+export async function baixarForecastRelatorioXlsx(
+  id: number,
+  hoje: string,
+  layout?: ForecastXlsxLayout,
+): Promise<{ fileName: string }> {
   const response = await api.get<{ data: { fileName: string; contentBase64: string } }>(
     `/v1/forecast/snapshots/${id}/relatorio-compras/xlsx`,
-    { hoje },
+    layout ? { hoje, layout } : { hoje },
   );
   const { fileName, contentBase64 } = response.data;
   const binary = atob(contentBase64);

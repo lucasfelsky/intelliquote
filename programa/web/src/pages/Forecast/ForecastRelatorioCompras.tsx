@@ -480,6 +480,10 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   const xlsx = useMutation({
     mutationFn: (hoje: string) => baixarForecastRelatorioXlsx(snapshotId, hoje),
   });
+  // Planilha no layout da aba FORECAST (MACRO) do PO.COMP.01 (mesma rota, ?layout=macro).
+  const macro = useMutation({
+    mutationFn: (hoje: string) => baixarForecastRelatorioXlsx(snapshotId, hoje, 'macro'),
+  });
   // Estado so desta tela (sem URL); o `key` da quinzena reinicia a visao e o filtro.
   const [visao, setVisao] = useState<VisaoRelatorio>('urgencia');
   const [filtro, setFiltro] = useState<FiltroUrgencia>('todas');
@@ -546,6 +550,15 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           <button
             type="button"
             className="ghost-button"
+            onClick={() => macro.mutate(quinzena.hoje)}
+            disabled={macro.isPending}
+            aria-busy={macro.isPending}
+          >
+            {macro.isPending ? 'Gerando planilha MACRO…' : 'Baixar planilha MACRO (XLSX)'}
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
             onClick={() => window.print()}
             aria-describedby="fcr-dica-impressao"
           >
@@ -576,6 +589,16 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {xlsx.isSuccess && (
             <p role="status" className="fcr-acoes__ok">
               XLSX gerado: {xlsx.data.fileName}
+            </p>
+          )}
+          {macro.isError && (
+            <p role="alert" className="fcr-acoes__erro">
+              {forecastErrorMessage(macro.error)}
+            </p>
+          )}
+          {macro.isSuccess && (
+            <p role="status" className="fcr-acoes__ok">
+              Planilha MACRO gerada: {macro.data.fileName}
             </p>
           )}
           {avisoDemanda && (

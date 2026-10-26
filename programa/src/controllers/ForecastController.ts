@@ -22,6 +22,7 @@ import {
   forecastMesesAtipicosPutSchema,
   forecastProductCodeAddSchema,
   forecastProductCreateSchema,
+  forecastRelatorioXlsxQuerySchema,
   forecastSnapshotQuerySchema,
   forecastSobDemandaPatchSchema,
   forecastSourcePatchSchema,
@@ -78,6 +79,15 @@ export class ForecastController {
   static async listSources(_req: Request, res: Response): Promise<Response> {
     try {
       const data = await ForecastSourceService.list();
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async getPrazoReal(_req: Request, res: Response): Promise<Response> {
+    try {
+      const data = await ForecastSourceService.prazoReal();
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
@@ -329,10 +339,14 @@ export class ForecastController {
       if (id === null) {
         throw new HttpError(400, 'Quinzena invalida.');
       }
-      const query = forecastSnapshotQuerySchema.parse({
+      const query = forecastRelatorioXlsxQuerySchema.parse({
         hoje: typeof req.query.hoje === 'string' ? req.query.hoje : undefined,
+        layout: typeof req.query.layout === 'string' ? req.query.layout : undefined,
       });
-      const data = await ForecastSnapshotService.getRelatorioComprasXlsx(id, query.hoje);
+      const data =
+        query.layout === 'macro'
+          ? await ForecastSnapshotService.getRelatorioComprasXlsxMacro(id, query.hoje)
+          : await ForecastSnapshotService.getRelatorioComprasXlsx(id, query.hoje);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
