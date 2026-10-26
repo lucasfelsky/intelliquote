@@ -304,6 +304,27 @@ describe('Forecast embalagens - PATCH (regras de servico)', () => {
     expect(response.body.message).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
   });
 
+  it.each([
+    ['P2034', new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: 'test' })],
+    [
+      'P2010 (SQL cru) com 40P01',
+      new Prisma.PrismaClientKnownRequestError('raw query failed', {
+        code: 'P2010',
+        clientVersion: 'test',
+        meta: { code: '40P01', message: 'deadlock detected' },
+      }),
+    ],
+  ])('deadlock (%s) -> 503 com a mesma mensagem de ocupado, nunca 500', async (_nome, erro) => {
+    prismaMock.$transaction.mockRejectedValue(erro);
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .patch(PATH)
+      .set('Cookie', cookies)
+      .send({ embalagens: [{ codigoId: 11, quantidadeKg: 25 }] });
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
+  });
+
   it('codigoId (ou principal) de outro produto -> 400 e nenhuma gravacao', async () => {
     const cookies = await loginAs('admin');
     const a = await request(app)

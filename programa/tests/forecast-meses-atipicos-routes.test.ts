@@ -206,6 +206,24 @@ describe('PUT /forecast/products/:id/meses-atipicos - validacao e erros', () => 
     expect(response.body.message).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
   });
 
+  it.each([
+    ['P2034', new Prisma.PrismaClientKnownRequestError('deadlock', { code: 'P2034', clientVersion: 'test' })],
+    [
+      'P2010 (SQL cru) com 40P01',
+      new Prisma.PrismaClientKnownRequestError('raw query failed', {
+        code: 'P2010',
+        clientVersion: 'test',
+        meta: { code: '40P01', message: 'deadlock detected' },
+      }),
+    ],
+  ])('deadlock (%s) -> 503 com a mesma mensagem de ocupado, nunca 500', async (_nome, erro) => {
+    const cookies = await loginAs('admin');
+    prismaMock.$transaction.mockRejectedValue(erro);
+    const response = await request(app).put(PATH).set('Cookie', cookies).send(corpo(['2024-08', 'MOTIVO SINTETICO']));
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('O cadastro está ocupado por uma importação. Tente novamente em instantes.');
+  });
+
   it('id invalido -> 400; produto inexistente -> 404 sem gravar', async () => {
     const cookies = await loginAs('admin');
     const ruim = await request(app)

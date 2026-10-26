@@ -137,7 +137,7 @@ export function TabelaPendentes({
                       <button
                         type="button"
                         className="ghost-button ghost-button--sm"
-                        aria-label={`Reativar o produto ${p.produtoInativo.nome} (código ${p.codigo})`}
+                        aria-label={`Reativar produto ${p.produtoInativo.nome} (código ${p.codigo})`}
                         disabled={reativandoId !== null}
                         aria-busy={reativandoId === p.produtoInativo.id ? true : undefined}
                         onClick={() => onReativar(p.produtoInativo!.id, p.produtoInativo!.nome)}

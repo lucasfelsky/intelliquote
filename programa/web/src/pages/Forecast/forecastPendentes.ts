@@ -46,7 +46,9 @@ export const TEXTO_REATIVACAO_INDISPONIVEL = 'A reativação de produto ainda n�
 export const TEXTO_REATIVACAO_NO_PAINEL = 'Use "Reativar produto" na linha do código.';
 
 /** Mensagem de sucesso depois de reativar (painel da quinzena). Produto da planilha: o proximo import pode inativar de novo. */
-export function mensagemProdutoReativado(r: Pick<ForecastProdutoReativado, 'nome' | 'origem'>): string {
+export function mensagemProdutoReativado(r: Pick<ForecastProdutoReativado, 'nome' | 'origem' | 'alterado'>): string {
+  // Outra pessoa (ou o import) ja o reativou: nada foi gravado, entao o texto nao diz "reativado".
+  if (!r.alterado) return `Produto ${r.nome} já estava ativo.`;
   return [
     `Produto ${r.nome} reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada.`,
     r.origem === 'planilha' ? 'Se ele não estiver na próxima planilha importada, o import o inativa de novo.' : '',

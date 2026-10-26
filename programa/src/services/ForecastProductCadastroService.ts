@@ -27,6 +27,20 @@ export function isTransactionTimeout(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028';
 }
 
+// Deadlock (Postgres 40P01): o Prisma devolve P2034 em escrita comum e P2010 (meta.code 40P01) em SQL cru. Cruzamento
+// raro entre o import (deleteMany dos codigos) e as travas de linha do produto; tentar de novo resolve.
+export function isDeadlock(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === 'P2034') return true;
+  const metaCode = (error.meta as { code?: unknown } | undefined)?.code;
+  return metaCode === '40P01' || error.message.includes('40P01') || error.message.includes('deadlock detected');
+}
+
+// Timeout ou deadlock: ambos viram 503 "tente novamente" (nunca 500) nas escritas que travam a linha do produto.
+export function isCadastroOcupado(error: unknown): boolean {
+  return isTransactionTimeout(error) || isDeadlock(error);
+}
+
 // Trava a linha do produto (FOR NO KEY UPDATE) e devolve id/isActive, ou null se nao existe. Serializa as escritas
 // do MESMO produto entre si (meses atipicos, embalagens) sem bloquear INSERT com FK (KEY SHARE) de outras tabelas.
 // Mesmo racional de lockQuoteRequestForPurchaseOrders (QuotePurchaseOrderService). DEVE ser a PRIMEIRA instrucao da

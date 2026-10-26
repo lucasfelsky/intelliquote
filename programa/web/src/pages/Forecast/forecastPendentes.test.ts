@@ -161,11 +161,17 @@ describe('textos', () => {
   });
 
   it('mensagemProdutoReativado: o aviso do proximo import so vem para produto da planilha', () => {
-    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'dbcorp' })).toBe(
+    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'dbcorp', alterado: true })).toBe(
       'Produto PRODUTO 009 reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada.',
     );
-    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'planilha' })).toBe(
+    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'planilha', alterado: true })).toBe(
       'Produto PRODUTO 009 reativado. Os códigos dele entram no cálculo a partir da próxima quinzena importada. Se ele não estiver na próxima planilha importada, o import o inativa de novo.',
+    );
+  });
+
+  it('mensagemProdutoReativado: alterado false = texto neutro, sem "reativado" nem aviso de import', () => {
+    expect(mensagemProdutoReativado({ nome: 'PRODUTO 009', origem: 'planilha', alterado: false })).toBe(
+      'Produto PRODUTO 009 já estava ativo.',
     );
   });
 

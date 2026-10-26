@@ -7,7 +7,7 @@ import { AuditLogService } from './AuditLogService';
 import {
   CADASTRO_OCUPADO_MESSAGE,
   CADASTRO_TX_OPTIONS,
-  isTransactionTimeout,
+  isCadastroOcupado,
   lockForecastProduct,
 } from './ForecastProductCadastroService';
 
@@ -37,7 +37,7 @@ export class ForecastMesesAtipicosService {
     try {
       return await this.substituirNaTransacao(productId, input, userId);
     } catch (error) {
-      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
+      if (isCadastroOcupado(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(409, 'Os meses atípicos deste produto foram alterados por outra pessoa. Recarregue e tente de novo.');
       }

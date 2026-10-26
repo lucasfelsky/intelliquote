@@ -29,7 +29,7 @@ import { AuditLogService } from './AuditLogService';
 import {
   CADASTRO_OCUPADO_MESSAGE,
   CADASTRO_TX_OPTIONS,
-  isTransactionTimeout,
+  isCadastroOcupado,
   lockForecastProduct,
 } from './ForecastProductCadastroService';
 
@@ -525,6 +525,24 @@ export class ForecastProductService {
       }
     }
 
+    // Inativa ANTES de apagar/recriar codigos: a linha do produto e travada antes das dos codigos, na mesma ordem de
+    // patchEmbalagens/substituir (lockForecastProduct), o que evita o deadlock 40P01 no cruzamento com o import.
+    for (const gone of plan.inativados) {
+      await tx.forecastProduct.update({ where: { id: gone.id }, data: { isActive: false } });
+      await AuditLogService.log(
+        {
+          entityType: ENTITY_TYPE,
+          entityId: gone.id,
+          action: 'deactivate',
+          performedById: userId,
+          beforeData: gone.before,
+          afterData: { ...gone.before, isActive: false },
+          metadata: { source: 'workbook_import', reason: 'ausente da planilha' },
+        },
+        tx,
+      );
+    }
+
     if (codeOwners.length > 0) {
       const allCodes = codeOwners.flatMap((o) => o.codes.map((c) => c.code));
       // A embalagem e do CODIGO: le antes do deleteMany para devolve-la na recriacao. Um codigo que saiu da
@@ -576,22 +594,6 @@ export class ForecastProductService {
       if (rows.length > 0) {
         await tx.forecastProductCode.createMany({ data: rows });
       }
-    }
-
-    for (const gone of plan.inativados) {
-      await tx.forecastProduct.update({ where: { id: gone.id }, data: { isActive: false } });
-      await AuditLogService.log(
-        {
-          entityType: ENTITY_TYPE,
-          entityId: gone.id,
-          action: 'deactivate',
-          performedById: userId,
-          beforeData: gone.before,
-          afterData: { ...gone.before, isActive: false },
-          metadata: { source: 'workbook_import', reason: 'ausente da planilha' },
-        },
-        tx,
-      );
     }
 
     return productIds;
@@ -753,7 +755,7 @@ export class ForecastProductService {
         return toEmbalagensData(atualizado);
       }, CADASTRO_TX_OPTIONS);
     } catch (error) {
-      if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
+      if (isCadastroOcupado(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new HttpError(
           409,
