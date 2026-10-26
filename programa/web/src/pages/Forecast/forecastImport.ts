@@ -323,7 +323,7 @@ export async function lerCorpoDbcorp(
 }
 
 export const NOTA_DBCORP_CONFIRMACAO =
-  'Na confirmação dos relatórios DBCorp a quinzena é sempre criada, o histórico do mês anterior é sempre substituído e os prazos alterados na tabela viram o padrão da fonte.';
+  'Na confirmação dos relatórios DBCorp a quinzena é sempre criada. Na importação normal o histórico do mês anterior é substituído e os prazos alterados na tabela viram o padrão da fonte; no modo teste, oferecido na pré-visualização, nenhum dos dois é gravado.';
 
 export const NOTA_PLANILHA_ADMIN =
   'Ferramenta do administrador para validação e migração (conferência com a planilha e cadastro inicial). No dia a dia, importe os relatórios DBCorp.';

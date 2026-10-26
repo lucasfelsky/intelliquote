@@ -13,6 +13,7 @@ import {
   previewForecastDbcorp,
   previewForecastWorkbook,
   type ForecastDbcorpBody,
+  type ForecastDbcorpConfirmResult,
   type ForecastDbcorpSlot,
   type ForecastDbcorpSummary,
   type ForecastImportOptions,
@@ -47,7 +48,17 @@ import {
   SLOTS_DBCORP,
   textoEntendiProntidao,
 } from './forecastImport';
-import { NOTA_DBCORP_SEM_TESTE, opcoesComModoTeste, textoBloqueioModoTeste } from './forecastModoTeste';
+import {
+  DICA_MODO_TESTE_DBCORP,
+  NOTA_DBCORP_SEM_TESTE,
+  opcoesComModoTeste,
+  servidorAplicouModoTeste,
+  textoAvisoModoTesteDbcorp,
+  textoBloqueioModoTeste,
+  textoCaixaModoTesteDbcorp,
+  textoEcoAusente,
+  textoModoTesteNaoConfirmado,
+} from './forecastModoTeste';
 import { mensagemCadastroNaPrevia, type EstadoPrevia } from './forecastPendentes';
 import type { ResultadoCadastro } from './ForecastCompletarCadastroModal';
 
@@ -105,6 +116,9 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
   const [modoTeste, setModoTeste] = useState(false);
   const [erro, setErro] = useState('');
   const [resultado, setResultado] = useState('');
+  // Quinzena DBCorp criada em modo teste que NAO se pode dar por teste (sem eco do servidor ou resposta perdida):
+  // painel de alerta; o "Concluir" leva a quinzena (nunca e excluida sozinha).
+  const [alerta, setAlerta] = useState<{ texto: string; snapshotId: number; label: string } | null>(null);
   const [fase, setFase] = useState<Fase>(null);
   // Retorno do "Completar cadastro" dentro do import: o cadastro gravou e a pre-visualizacao roda de novo.
   const [cadastro, setCadastro] = useState<{ resultado: ResultadoCadastro; estado: EstadoPrevia } | null>(null);
@@ -213,11 +227,15 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
   });
 
   // L62: o confirm pode estourar o tempo do caminho Hosting -> Cloud Run (502/503/504) com a quinzena ja gravada.
-  async function quinzenaCriadaApesarDoErro(err: unknown, congelada: Previa): Promise<{ id: number; label: string } | null> {
+  async function quinzenaCriadaApesarDoErro(
+    err: unknown,
+    congelada: Previa,
+    teste: boolean,
+  ): Promise<{ id: number; label: string } | null> {
     if (!(err instanceof ApiError) || ![502, 503, 504].includes(err.status)) return null;
     const { label } = congelada.corpo;
     if (quinzenasExistentes.includes(label)) return null;
-    if (congelada.aba === 'planilha' && !opcoesEfetivas(congelada.resumo).criarQuinzena) return null;
+    if (congelada.aba === 'planilha' && !opcoesEfetivas(congelada.resumo, teste).criarQuinzena) return null;
     try {
       const lista = await queryClient.fetchQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots, staleTime: 0, retry: false });
       const achada = lista.find((q) => q.label === label);
@@ -227,27 +245,50 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
     }
   }
 
+  const mesAnteriorDaPrevia = (p: Previa): string | null =>
+    p.aba === 'dbcorp' ? (p.resumo.historico.mesAnterior?.yearMonth ?? null) : null;
+
+  // O pedido e CONGELADO no clique (previa + modo teste): nada aqui le o estado depois, mesmo que a tela mude.
   const confirmar = useMutation({
     gcTime: 0,
-    mutationFn: async (congelada: Previa) => {
+    mutationFn: async ({ congelada, teste }: { congelada: Previa; teste: boolean }) => {
       setFase('gravando');
       if (congelada.aba === 'planilha') {
-        return confirmForecastWorkbook(congelada.corpo, opcoesEfetivas(congelada.resumo));
+        return confirmForecastWorkbook(congelada.corpo, opcoesEfetivas(congelada.resumo, teste));
       }
-      return confirmForecastDbcorp(congelada.corpo);
+      return confirmForecastDbcorp(congelada.corpo, teste);
     },
-    onSuccess: (dados, congelada) => {
+    onSuccess: (dados, { congelada, teste }) => {
       if (dados.snapshotId === null) {
         void queryClient.invalidateQueries({ queryKey: ['forecast'] });
         setResultado('Importação concluída. Nenhuma quinzena nova foi criada.');
         return;
       }
+      // DBCorp em teste: so e teste se o servidor ecoou `modoTeste: true` (backend antigo descarta a chave e importa de verdade).
+      if (congelada.aba === 'dbcorp' && teste && !servidorAplicouModoTeste(dados as ForecastDbcorpConfirmResult)) {
+        void queryClient.invalidateQueries({ queryKey: ['forecast'] });
+        setAlerta({
+          texto: textoEcoAusente(congelada.corpo.label, mesAnteriorDaPrevia(congelada)),
+          snapshotId: dados.snapshotId,
+          label: congelada.corpo.label,
+        });
+        return;
+      }
       onImportada(dados.snapshotId, congelada.corpo.label);
     },
     ...aoFalhar,
-    onError: async (err, congelada) => {
-      const criada = await quinzenaCriadaApesarDoErro(err, congelada);
+    onError: async (err, { congelada, teste }) => {
+      const criada = await quinzenaCriadaApesarDoErro(err, congelada, teste);
       if (criada) {
+        if (congelada.aba === 'dbcorp' && teste) {
+          void queryClient.invalidateQueries({ queryKey: ['forecast'] });
+          setAlerta({
+            texto: textoModoTesteNaoConfirmado(criada.label, mesAnteriorDaPrevia(congelada)),
+            snapshotId: criada.id,
+            label: criada.label,
+          });
+          return;
+        }
         onImportada(criada.id, criada.label);
         return;
       }
@@ -262,8 +303,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
   }
 
   const historicoGravavel = (r: ForecastImportSummary) => r.historico.linhas > 0 && r.historico.yearMonth !== null;
-  function opcoesEfetivas(r: ForecastImportSummary): ForecastImportOptions {
-    const base = opcoesComModoTeste(opcoes, modoTeste);
+  function opcoesEfetivas(r: ForecastImportSummary, teste = modoTeste): ForecastImportOptions {
+    const base = opcoesComModoTeste(opcoes, teste);
     return {
       atualizarCadastro: base.atualizarCadastro,
       gravarHistorico: base.gravarHistorico && historicoGravavel(r),
@@ -287,6 +328,8 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
     if (somenteDbcorp && valor === 'planilha') return;
     setAba(valor);
     descartar();
+    // "Importar como teste" e opt-in por origem: nao atravessa a troca de aba.
+    setModoTeste(false);
   };
 
   const faltas = [
@@ -338,7 +381,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
     emCurso.current = true;
     setErro('');
     setFase('gravando');
-    confirmar.mutate(previa);
+    confirmar.mutate({ congelada: previa, teste: modoTeste });
   };
 
   const semLinhas = previa?.aba === 'dbcorp' ? slotsSemLinhasUteis(previa.resumo) : [];
@@ -412,6 +455,15 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
             <div className="alert alert--success" role="status">{resultado}</div>
             <div className="modal-actions">
               <button type="button" className="primary-button" onClick={onFechar}>Concluir</button>
+            </div>
+          </>
+        ) : alerta ? (
+          <>
+            <div className="alert alert--error" role="alert">{alerta.texto}</div>
+            <div className="modal-actions">
+              <button type="button" className="primary-button" onClick={() => onImportada(alerta.snapshotId, alerta.label)}>
+                Concluir
+              </button>
             </div>
           </>
         ) : (
@@ -503,6 +555,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
               <ForecastResumoDbcorp
                 resumo={previa.resumo}
                 onCompletar={dialogo.abrir}
+                modoTeste={modoTeste}
                 prazos={
                   prazos && rascunho ? (
                     <ForecastPrazosPorFonte
@@ -512,10 +565,26 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
                       onRecalcular={aoRecalcular}
                       ocupado={ocupado}
                       recalculos={recalculos}
+                      modoTeste={modoTeste}
                     />
                   ) : undefined
                 }
               />
+            )}
+
+            {previa?.aba === 'dbcorp' && (
+              <fieldset className="fci-opcoes" disabled={ocupado}>
+                <legend className="field-label">O que gravar</legend>
+                <ForecastImportarComoTeste
+                  ligado={modoTeste}
+                  onMudar={setModoTeste}
+                  rotulo={rotulo}
+                  yearMonth={mesAnteriorDaPrevia(previa)}
+                  texto={textoCaixaModoTesteDbcorp(mesAnteriorDaPrevia(previa))}
+                  dica={DICA_MODO_TESTE_DBCORP}
+                  aviso={textoAvisoModoTesteDbcorp(rotulo, mesAnteriorDaPrevia(previa))}
+                />
+              </fieldset>
             )}
 
             {previa?.aba === 'planilha' && efetivas && (
@@ -584,7 +653,7 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
               </button>
               {previa ? (
                 <button type="button" className="primary-button" onClick={aoConfirmar} disabled={confirmarBloqueado || ocupado}>
-                  {rotuloDoBotao ?? (previa.aba === 'planilha' && modoTeste ? 'Importar como teste' : 'Confirmar importação')}
+                  {rotuloDoBotao ?? (modoTeste ? 'Importar como teste' : 'Confirmar importação')}
                 </button>
               ) : (
                 <button type="button" className="primary-button" onClick={aoPrevisualizar} disabled={faltas.length > 0 || ocupado}>
