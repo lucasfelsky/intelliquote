@@ -17,6 +17,8 @@ import {
   commercialRequestListQuerySchema,
   commercialRequestRejectSchema,
 } from '../validators/domain';
+import { commercialRequestLinkCatalogSchema } from '../validators/commercialRequestDevelopment';
+import { normalizeItemNameKey } from '../utils/commercialItemName';
 import {
   buildPaginatedResponse,
   handleControllerError,
@@ -44,6 +46,7 @@ const commercialSelect = {
   fulfillmentNote: true,
   createdAt: true,
   statusChangedAt: true,
+  isDevelopment: true,
   quoteRequestId: true,
   quoteRequest: { select: { requestCode: true, deletedAt: true } },
   items: {
@@ -51,6 +54,9 @@ const commercialSelect = {
     select: {
       id: true,
       catalogItemId: true,
+      // proposedName so alimenta o fallback do nome; a projecao do comercial nao o emite a parte.
+      proposedName: true,
+      notes: true,
       quantity: true,
       unit: true,
       targetPrice: true,
@@ -71,6 +77,7 @@ const comexSelect = {
   fulfillmentNote: true,
   createdAt: true,
   statusChangedAt: true,
+  isDevelopment: true,
   requestedBy: { select: { id: true, name: true, email: true } },
   statusChangedBy: { select: { id: true, name: true } },
   quoteRequest: { select: { id: true, requestCode: true, status: true, deletedAt: true } },
@@ -79,6 +86,8 @@ const comexSelect = {
     select: {
       id: true,
       catalogItemId: true,
+      proposedName: true,
+      notes: true,
       quantity: true,
       unit: true,
       targetPrice: true,
@@ -113,16 +122,21 @@ function serializeForCommercial(row: CommercialRow, prices: Map<number, FinalPri
     fulfillmentNote: row.fulfillmentNote,
     createdAt: row.createdAt,
     statusChangedAt: row.statusChangedAt,
+    // `?? false` / `?? null`: tolera linhas de mocks anteriores a esta coluna.
+    isDevelopment: row.isDevelopment ?? false,
     quote:
       row.quoteRequest && row.quoteRequest.deletedAt === null
         ? { requestCode: row.quoteRequest.requestCode }
         : null,
     items: row.items.map((item) => {
       const price = prices.get(item.id) ?? null;
+      const proposedName = item.proposedName ?? null;
       return {
         id: item.id,
         catalogItemId: item.catalogItemId,
-        commercialName: item.catalogItem.commercialName,
+        commercialName: item.catalogItem?.commercialName ?? proposedName ?? '',
+        isNewItem: proposedName !== null,
+        notes: item.notes ?? null,
         quantity: item.quantity,
         unit: item.unit,
         targetPrice: serializePrice(item.targetPrice),
@@ -150,6 +164,7 @@ function serializeForComex(row: ComexRow) {
     fulfillmentNote: row.fulfillmentNote,
     createdAt: row.createdAt,
     statusChangedAt: row.statusChangedAt,
+    isDevelopment: row.isDevelopment ?? false,
     requestedBy: row.requestedBy,
     statusChangedBy: row.statusChangedBy,
     quoteRequest:
@@ -160,18 +175,24 @@ function serializeForComex(row: ComexRow) {
             status: row.quoteRequest.status,
           }
         : null,
-    items: row.items.map((item) => ({
-      id: item.id,
-      catalogItemId: item.catalogItemId,
-      commercialName: item.catalogItem.commercialName,
-      marketName: item.catalogItem.marketName,
-      dbcorpCode: item.catalogItem.dbcorpCode,
-      quantity: item.quantity,
-      unit: item.unit,
-      targetPrice: serializePrice(item.targetPrice),
-      targetCurrency: item.targetCurrency,
-      quoteRequestItemId: item.quoteRequestItemId,
-    })),
+    items: row.items.map((item) => {
+      const proposedName = item.proposedName ?? null;
+      return {
+        id: item.id,
+        catalogItemId: item.catalogItemId,
+        commercialName: item.catalogItem?.commercialName ?? proposedName ?? '',
+        proposedName,
+        isNewItem: proposedName !== null,
+        notes: item.notes ?? null,
+        marketName: item.catalogItem?.marketName ?? null,
+        dbcorpCode: item.catalogItem?.dbcorpCode ?? null,
+        quantity: item.quantity,
+        unit: item.unit,
+        targetPrice: serializePrice(item.targetPrice),
+        targetCurrency: item.targetCurrency,
+        quoteRequestItemId: item.quoteRequestItemId,
+      };
+    }),
   };
 }
 
@@ -269,14 +290,44 @@ export class CommercialRequestController {
       const userId = requireUserId(req);
       const input = commercialRequestCreateSchema.parse(req.body);
 
-      const catalogIds = input.items.map((item) => item.catalogItemId);
-      const activeItems = await prisma.catalogItem.findMany({
-        where: { id: { in: catalogIds }, isActive: true },
-        select: { id: true },
-      });
-      if (activeItems.length !== catalogIds.length) {
-        throw new HttpError(400, 'Um ou mais itens nao existem ou estao inativos.');
+      // Linhas de catalogo x linhas novas (o schema garante exatamente uma das duas por item).
+      const catalogIds = input.items.flatMap((item) =>
+        item.catalogItemId !== undefined ? [item.catalogItemId] : [],
+      );
+      const newNames = input.items.flatMap((item) =>
+        item.proposedName !== undefined ? [item.proposedName] : [],
+      );
+
+      if (catalogIds.length > 0) {
+        const activeItems = await prisma.catalogItem.findMany({
+          where: { id: { in: catalogIds }, isActive: true },
+          select: { id: true },
+        });
+        if (activeItems.length !== catalogIds.length) {
+          throw new HttpError(400, 'Um ou mais itens nao existem ou estao inativos.');
+        }
       }
+
+      // Item novo com o nome de um item ATIVO do catalogo: o comercial deve selecionar o item
+      // (o servidor nao normaliza acento: sem unaccent; a UI cobre o caso com acento).
+      if (newNames.length > 0) {
+        const alreadyInCatalog = await prisma.catalogItem.findMany({
+          where: {
+            isActive: true,
+            OR: newNames.map((name) => ({
+              commercialName: { equals: name, mode: 'insensitive' as const },
+            })),
+          },
+          select: { id: true },
+        });
+        if (alreadyInCatalog.length > 0) {
+          throw new HttpError(
+            400,
+            'Um item novo ja esta cadastrado no catalogo: selecione-o na lista.',
+          );
+        }
+      }
+      const isDevelopment = newNames.length > 0;
 
       const created = await prisma.$transaction(async (tx) => {
         const request = await tx.commercialRequest.create({
@@ -285,11 +336,16 @@ export class CommercialRequestController {
             customerName: input.customerName ?? null,
             notes: input.notes ?? null,
             status: 'pending',
+            isDevelopment,
             items: {
               create: input.items.map((item) => {
                 const hasPrice = item.targetPrice !== undefined && item.targetPrice !== null;
+                const isNew = item.proposedName !== undefined;
                 return {
-                  catalogItemId: item.catalogItemId,
+                  catalogItemId: isNew ? null : (item.catalogItemId ?? null),
+                  proposedName: isNew ? (item.proposedName ?? null) : null,
+                  proposedNameKey: isNew && item.proposedName ? normalizeItemNameKey(item.proposedName) : null,
+                  notes: item.notes ?? null,
                   quantity: item.quantity,
                   unit: item.unit,
                   targetPrice: hasPrice ? item.targetPrice : null,
@@ -312,8 +368,11 @@ export class CommercialRequestController {
             afterData: {
               status: request.status,
               customerName: request.customerName,
+              // Sem texto livre dos campos novos: nada de proposedName/notes do item.
+              isDevelopment,
               items: request.items.map((item) => ({
                 catalogItemId: item.catalogItemId,
+                isNewItem: item.proposedName !== null,
                 quantity: item.quantity,
                 unit: item.unit,
               })),
@@ -410,11 +469,14 @@ export class CommercialRequestController {
 
   static async list(req: Request, res: Response): Promise<Response> {
     try {
-      const { status, requestedById } = commercialRequestListQuerySchema.parse(req.query);
+      const { status, requestedById, quoteRequestId } = commercialRequestListQuerySchema.parse(
+        req.query,
+      );
       const pagination = parsePagination(req);
       const where: Prisma.CommercialRequestWhereInput = {
         ...(status ? { status } : {}),
         ...(requestedById ? { requestedById } : {}),
+        ...(quoteRequestId ? { quoteRequestId } : {}),
       };
 
       const [rows, total] = await Promise.all([
@@ -472,6 +534,25 @@ export class CommercialRequestController {
         userId,
       );
       return await respondWithComexRow(res, id, changes);
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Vincula um item novo ao catalogo (Comex), antes de cotar. Sem notificacao ao comercial.
+  static async linkItemToCatalog(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = requireRequestId(req);
+      const itemId = parseId(req.params.itemId);
+      if (!itemId || itemId > MAX_DB_INT) {
+        throw new HttpError(400, 'Identificador invalido.');
+      }
+      const userId = requireUserId(req);
+      const { catalogItemId } = commercialRequestLinkCatalogSchema.parse(req.body ?? {});
+
+      await CommercialRequestWorkflowService.linkItemToCatalog(id, itemId, catalogItemId, userId);
+      return await respondWithComexRow(res, id, []);
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

@@ -53,6 +53,11 @@ commercialRequestRoutes.post(
   CommercialRequestController.linkQuote,
 );
 commercialRequestRoutes.post(
+  '/commercial-requests/:id/items/:itemId/catalog',
+  ...comexAct,
+  CommercialRequestController.linkItemToCatalog,
+);
+commercialRequestRoutes.post(
   '/commercial-requests/:id/reject',
   ...comexAct,
   CommercialRequestController.reject,

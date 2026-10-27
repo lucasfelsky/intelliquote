@@ -75,6 +75,7 @@
       "traceId.ts"
     ],
     "validators": [
+      "commercialRequestDevelopment.ts",
       "domain.ts",
       "forecast.ts",
       "supplierDocuments.ts",
@@ -310,6 +311,7 @@
     "POST /catalog-items/import/confirm",
     "POST /commercial-requests",
     "POST /commercial-requests/:id/fulfill",
+    "POST /commercial-requests/:id/items/:itemId/catalog",
     "POST /commercial-requests/:id/link-quote",
     "POST /commercial-requests/:id/reject",
     "POST /credit-partners",
