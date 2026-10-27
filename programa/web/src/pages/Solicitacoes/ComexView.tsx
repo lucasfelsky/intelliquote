@@ -6,13 +6,19 @@ import { useAuth } from '@/auth/AuthProvider';
 import { Pagination } from '@/components/Pagination';
 import {
   COMMERCIAL_REQUEST_STATUS_LABELS,
+  CommercialRequestForComex,
+  CommercialRequestItemForComex,
   CommercialRequestStatus,
+  customerLabel,
   formatCommercialPrice,
   formatCommercialQuantity,
   listCommercialRequesters,
   listCommercialRequests,
 } from '@/services/commercialRequests';
+import { AnexosLista } from './AnexosTecnicos';
 import { CommercialRequestActions } from './ComexActions';
+import { DEVELOPMENT_BADGE, NEW_ITEM_BADGE } from './itemNovo';
+import { VincularCatalogoModal } from './VincularCatalogoModal';
 
 const STATUS_OPTIONS: CommercialRequestStatus[] = ['pending', 'quoting', 'fulfilled', 'rejected'];
 
@@ -54,6 +60,10 @@ export default function ComexView() {
   const [requestedById, setRequestedById] = useState<number | ''>('');
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [linkTarget, setLinkTarget] = useState<{
+    request: CommercialRequestForComex;
+    item: CommercialRequestItemForComex;
+  } | null>(null);
 
   const requesters = useQuery({
     queryKey: ['commercial-requests', 'requesters'],
@@ -155,8 +165,16 @@ export default function ComexView() {
                         <td data-label="Solicitação">#{request.id}</td>
                         <td data-label="Criada em">{formatDate(request.createdAt)}</td>
                         <td data-label="Solicitante">{request.requestedBy.name}</td>
-                        <td data-label="Cliente">{request.customerName ?? '—'}</td>
-                        <td data-label="Itens">{request.items.length}</td>
+                        <td data-label="Cliente">{customerLabel(request.customerName)}</td>
+                        <td data-label="Itens">
+                          {request.items.length}
+                          {request.isDevelopment && (
+                            <>
+                              {' '}
+                              <span className="badge badge--info">{DEVELOPMENT_BADGE}</span>
+                            </>
+                          )}
+                        </td>
                         <td className="col-status" data-label="Status">
                           <span className={statusBadgeClass(request.status)}>
                             {COMMERCIAL_REQUEST_STATUS_LABELS[request.status]}
@@ -213,30 +231,73 @@ export default function ComexView() {
                               <thead>
                                 <tr>
                                   <th>Nome comercial</th>
+                                  <th>Item novo</th>
                                   <th>Nome de mercado</th>
                                   <th>Código DBCorp</th>
                                   <th>Quantidade</th>
                                   <th>Preço-alvo</th>
+                                  <th>Observação do item</th>
                                   <th>Na cotação</th>
+                                  {canAct && request.status === 'pending' && request.isDevelopment && (
+                                    <th>
+                                      <span className="sr-only">Catálogo</span>
+                                    </th>
+                                  )}
                                 </tr>
                               </thead>
                               <tbody>
                                 {request.items.map((item) => (
                                   <tr key={item.id}>
                                     <td data-label="Nome comercial">{item.commercialName}</td>
-                                    <td data-label="Nome de mercado">{item.marketName}</td>
+                                    <td data-label="Item novo">
+                                      {item.isNewItem ? (
+                                        <>
+                                          <span className="badge badge--info">{NEW_ITEM_BADGE}</span>{' '}
+                                          {item.proposedName ?? item.commercialName}
+                                        </>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
+                                    <td data-label="Nome de mercado">{item.marketName ?? '—'}</td>
                                     <td data-label="Código DBCorp">{item.dbcorpCode ?? '—'}</td>
                                     <td data-label="Quantidade">{formatCommercialQuantity(item.quantity)} {item.unit}</td>
                                     <td data-label="Preço-alvo">
                                       {formatCommercialPrice(item.targetPrice, item.targetCurrency)}
                                     </td>
+                                    <td data-label="Observação do item">{item.notes ?? '—'}</td>
                                     <td data-label="Na cotação">
                                       {item.quoteRequestItemId !== null ? 'Sim' : 'Não'}
                                     </td>
+                                    {canAct && request.status === 'pending' && request.isDevelopment && (
+                                      <td className="sol-cell-actions" data-label="Catálogo">
+                                        {item.isNewItem && (
+                                          <button
+                                            type="button"
+                                            className="ghost-button ghost-button--sm"
+                                            onClick={() => setLinkTarget({ request, item })}
+                                          >
+                                            {item.catalogItemId === null ? 'Vincular ao catálogo' : 'Trocar vínculo'}
+                                          </button>
+                                        )}
+                                      </td>
+                                    )}
                                   </tr>
                                 ))}
                               </tbody>
                             </table>
+                            {(request.attachments ?? []).length > 0 ? (
+                              <div style={{ marginTop: 12 }}>
+                                <strong className="text-sm">Anexos técnicos</strong>
+                                <AnexosLista requestId={request.id} attachments={request.attachments} />
+                              </div>
+                            ) : (
+                              request.isDevelopment && (
+                                <p className="text-sm" style={{ marginTop: 12, color: 'var(--ink-soft)' }}>
+                                  Sem anexos técnicos.
+                                </p>
+                              )
+                            )}
                           </td>
                         </tr>
                       )}
@@ -259,6 +320,17 @@ export default function ComexView() {
           />
         )}
       </section>
+
+      {linkTarget && (
+        // O <dialog> herda text-align do td do card mobile (direita): fixa a esquerda.
+        <div style={{ textAlign: 'left' }}>
+          <VincularCatalogoModal
+            request={linkTarget.request}
+            item={linkTarget.item}
+            onClose={() => setLinkTarget(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

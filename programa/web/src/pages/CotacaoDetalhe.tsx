@@ -22,6 +22,7 @@ import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData'
 import { RespostasTab } from './CotacaoTabs/RespostasTab';
 import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
 import { ItensTab } from './CotacaoTabs/ItensTab';
+import { SolicitacaoDesenvolvimentoPanel } from './CotacaoTabs/SolicitacaoDesenvolvimentoPanel';
 import type { PurchaseOrder } from '@/services/purchaseOrders';
 
 type QuoteStatus = 'open' | 'closed';
@@ -43,6 +44,8 @@ interface QuoteRequest {
   updatedAt: string;
   closedAt: string | null;
   createdById: number | null;
+  /** Veio de solicitacao de desenvolvimento do comercial (item novo). */
+  isDevelopment?: boolean;
   items?: QuoteRequestItem[];
   purchaseOrders?: PurchaseOrder[];
   dispatchCount?: number;
@@ -1114,6 +1117,7 @@ export default function CotacaoDetalhe() {
           <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
             {qr.status === 'open' ? 'Aberta' : 'Fechada'}
           </span>
+          {qr.isDevelopment && <span className="badge badge--info">Desenvolvimento</span>}
           {canDispatch && qr.status === 'open' && items.length > 0 && (
             <button
               type="button"
@@ -1181,6 +1185,8 @@ export default function CotacaoDetalhe() {
           )}
         </div>
       </div>
+
+      {qr.isDevelopment && <SolicitacaoDesenvolvimentoPanel quoteRequestId={qr.id} />}
 
       {actionError && (
         <p style={{ color: 'var(--danger)', marginBottom: 12 }} className="text-sm">{actionError}</p>

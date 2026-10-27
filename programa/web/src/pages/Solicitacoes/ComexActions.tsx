@@ -291,6 +291,9 @@ export function CommercialRequestActions({ request, role }: ActionsProps) {
   if (request.status !== 'pending' && request.status !== 'quoting') return null;
 
   const close = () => setModal(null);
+  // Item novo sem catalogo bloqueia criar/vincular cotacao (o backend tambem responde 409).
+  const pendingNewItems = request.items.some((item) => item.catalogItemId === null);
+  const newItemHint = 'Vincule os itens novos ao catálogo antes de cotar';
 
   return (
     <>
@@ -300,6 +303,8 @@ export function CommercialRequestActions({ request, role }: ActionsProps) {
             <button
               type="button"
               className="ghost-button ghost-button--sm"
+              disabled={pendingNewItems}
+              title={pendingNewItems ? newItemHint : undefined}
               onClick={() => navigate(`/cotacoes/nova?fromCommercialRequest=${request.id}`)}
             >
               Criar cotação
@@ -307,10 +312,17 @@ export function CommercialRequestActions({ request, role }: ActionsProps) {
             <button
               type="button"
               className="ghost-button ghost-button--sm"
+              disabled={pendingNewItems}
+              title={pendingNewItems ? newItemHint : undefined}
               onClick={() => setModal('link')}
             >
               Vincular a cotação
             </button>
+            {pendingNewItems && (
+              <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+                {newItemHint}
+              </span>
+            )}
           </>
         )}
         {request.status === 'quoting' && (

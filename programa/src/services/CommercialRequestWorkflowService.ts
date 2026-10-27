@@ -51,6 +51,34 @@ function transitionConflict(requestId: number): HttpError {
   );
 }
 
+// Item novo (desenvolvimento) ainda sem catalogo nao pode virar item de cotacao: o casamento
+// solicitacao -> cotacao e por catalogItemId. A Comex vincula o item antes (linkItemToCatalog).
+// Devolve os itens com o tipo estreitado (catalogItemId: number).
+function assertAllItemsInCatalog<T extends { catalogItemId: number | null }>(
+  requestId: number,
+  items: T[],
+): Array<T & { catalogItemId: number }> {
+  if (items.some((item) => item.catalogItemId === null)) {
+    throw new HttpError(
+      409,
+      `A solicitacao #${requestId} tem item novo sem cadastro no catalogo. Vincule-o em Solicitacoes antes de cotar.`,
+    );
+  }
+  return items as Array<T & { catalogItemId: number }>;
+}
+
+// Trava as linhas de CommercialRequest (FOR NO KEY UPDATE, ids em ordem crescente para nao
+// gerar deadlock entre transacoes) ANTES de ler itens/status. E o mesmo lock de linkItemToCatalog:
+// serializa a troca do vinculo de catalogo com a criacao/vinculo de cotacao, sem bloquear FKs filhas.
+async function lockCommercialRequests(
+  tx: Prisma.TransactionClient,
+  requestIds: number[],
+): Promise<void> {
+  const ids = [...new Set(requestIds)].sort((a, b) => a - b);
+  if (ids.length === 0) return;
+  await tx.$queryRaw`SELECT id FROM "CommercialRequest" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR NO KEY UPDATE`;
+}
+
 function decimalToNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(String(value));
@@ -77,9 +105,17 @@ export class CommercialRequestWorkflowService {
     const commercialNameById = new Map(catalogItems.map((ci) => [ci.id, ci.commercialName]));
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Mesmo lock de linkItemToCatalog, antes de ler itens/status das solicitacoes.
+      await lockCommercialRequests(tx, requestIds);
+
       const requests = await tx.commercialRequest.findMany({
         where: { id: { in: requestIds } },
-        select: { id: true, status: true, items: { select: { id: true, catalogItemId: true } } },
+        select: {
+          id: true,
+          status: true,
+          isDevelopment: true,
+          items: { select: { id: true, catalogItemId: true } },
+        },
       });
       const byId = new Map(requests.map((row) => [row.id, row]));
       for (const id of requestIds) {
@@ -91,11 +127,16 @@ export class CommercialRequestWorkflowService {
         }
       }
 
+      // Item novo sem vinculo ao catalogo bloqueia a cotacao (409), antes de criar qualquer coisa.
+      const itemsById = new Map(
+        requestIds.map((id) => [id, assertAllItemsInCatalog(id, byId.get(id)!.items)] as const),
+      );
+
       const payloadCatalogIds = new Set(catalogIds);
       for (const id of requestIds) {
-        const matched = byId
+        const matched = itemsById
           .get(id)!
-          .items.filter((item) => payloadCatalogIds.has(item.catalogItemId));
+          .filter((item) => payloadCatalogIds.has(item.catalogItemId));
         if (matched.length === 0) {
           throw new HttpError(400, `A solicitacao #${id} nao tem nenhum item nesta cotacao.`);
         }
@@ -114,6 +155,7 @@ export class CommercialRequestWorkflowService {
           deadlineAt: payload.deadlineAt ?? null,
           status: QuoteRequestStatus.open,
           createdById: userId,
+          isDevelopment: requests.some((row) => row.isDevelopment === true),
         },
       });
 
@@ -178,7 +220,7 @@ export class CommercialRequestWorkflowService {
 
         const linkedItemIds: number[] = [];
         const unlinkedItemIds: number[] = [];
-        for (const crItem of byId.get(id)!.items) {
+        for (const crItem of itemsById.get(id)!) {
           const quoteItemId = createdItemIdByCatalog.get(crItem.catalogItemId);
           if (quoteItemId === undefined) {
             unlinkedItemIds.push(crItem.id);
@@ -262,11 +304,15 @@ export class CommercialRequestWorkflowService {
         throw new HttpError(409, 'Somente cotacoes abertas aceitam vinculo.');
       }
 
+      // Mesmo lock de linkItemToCatalog, antes de ler itens/status da solicitacao.
+      await lockCommercialRequests(tx, [requestId]);
+
       const request = await tx.commercialRequest.findUnique({
         where: { id: requestId },
         select: {
           id: true,
           status: true,
+          isDevelopment: true,
           items: {
             orderBy: { id: 'asc' },
             select: {
@@ -284,6 +330,8 @@ export class CommercialRequestWorkflowService {
       if (request.status !== 'pending') {
         throw new HttpError(409, `A solicitacao #${requestId} nao esta mais pendente.`);
       }
+      // Item novo sem vinculo ao catalogo bloqueia o vinculo (409).
+      const requestItems = assertAllItemsInCatalog(requestId, request.items);
 
       // Item igual (mesmo catalogItemId, nao excluido): reaproveita o mais antigo, sem somar
       // quantidade nem alterar alvo.
@@ -291,7 +339,7 @@ export class CommercialRequestWorkflowService {
         where: {
           quoteRequestId,
           deletedAt: null,
-          catalogItemId: { in: request.items.map((item) => item.catalogItemId) },
+          catalogItemId: { in: requestItems.map((item) => item.catalogItemId) },
         },
         select: { id: true, catalogItemId: true },
         orderBy: { id: 'asc' },
@@ -303,7 +351,7 @@ export class CommercialRequestWorkflowService {
         }
       }
 
-      const toCreate = request.items.filter((item) => !existingByCatalog.has(item.catalogItemId));
+      const toCreate = requestItems.filter((item) => !existingByCatalog.has(item.catalogItemId));
       const commercialNameById = new Map<number, string>();
       if (toCreate.length > 0) {
         const wantedIds = [...new Set(toCreate.map((item) => item.catalogItemId))];
@@ -328,10 +376,18 @@ export class CommercialRequestWorkflowService {
       });
       if (updated.count === 0) throw transitionConflict(requestId);
 
+      // A cotacao herda o selo de desenvolvimento (so liga, nunca desliga; sem mexer em listedAt).
+      if (request.isDevelopment === true) {
+        await tx.quoteRequest.update({
+          where: { id: quoteRequestId },
+          data: { isDevelopment: true },
+        });
+      }
+
       const quoteCurrency = quote.currency.trim().toUpperCase();
       const reusedItemIds: number[] = [];
       const createdItemIds: number[] = [];
-      for (const crItem of request.items) {
+      for (const crItem of requestItems) {
         let quoteItemId = existingByCatalog.get(crItem.catalogItemId);
         if (quoteItemId !== undefined) {
           reusedItemIds.push(quoteItemId);
@@ -399,6 +455,68 @@ export class CommercialRequestWorkflowService {
     }, INTERACTIVE_TX_OPTIONS);
 
     return [{ id: requestId, status: 'quoting', quoteCode, rejectionReason: null }];
+  }
+
+  // Vincula um item NOVO (sem catalogo) a um item do catalogo, antes de cotar. Permitido
+  // (inclusive trocar o vinculo) enquanto a solicitacao estiver pendente. Sem aviso ao comercial.
+  static async linkItemToCatalog(
+    requestId: number,
+    itemId: number,
+    catalogItemId: number,
+    userId: number,
+  ): Promise<void> {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Serializa com createQuoteWithLinks e linkToExistingQuote, que tomam este mesmo lock
+      // (lockCommercialRequests) antes de ler itens/status; sem bloquear FKs filhas.
+      await tx.$queryRaw`SELECT id FROM "CommercialRequest" WHERE id = ${requestId} FOR NO KEY UPDATE`;
+
+      const item = await tx.commercialRequestItem.findFirst({
+        where: { id: itemId, commercialRequestId: requestId },
+        select: {
+          id: true,
+          catalogItemId: true,
+          proposedName: true,
+          commercialRequest: { select: { status: true } },
+        },
+      });
+      if (!item) throw new HttpError(404, 'Item da solicitacao nao encontrado.');
+      if (item.commercialRequest.status !== 'pending') {
+        throw new HttpError(409, `A solicitacao #${requestId} nao esta mais pendente.`);
+      }
+      if (item.proposedName === null) {
+        throw new HttpError(400, 'Somente itens novos podem ser vinculados ao catalogo.');
+      }
+
+      const catalogItem = await tx.catalogItem.findFirst({
+        where: { id: catalogItemId, isActive: true },
+        select: { id: true },
+      });
+      if (!catalogItem) throw new HttpError(400, INACTIVE_CATALOG_MESSAGE);
+
+      try {
+        await tx.commercialRequestItem.update({
+          where: { id: itemId },
+          data: { catalogItemId },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new HttpError(409, 'Este item do catalogo ja esta nesta solicitacao.');
+        }
+        throw error;
+      }
+
+      // So ids: nenhum texto livre (nome digitado/observacao) no AuditLog.
+      await AuditLogService.log(
+        {
+          entityType: ENTITY_TYPE,
+          entityId: requestId,
+          action: 'link_catalog_item',
+          performedById: userId,
+          metadata: { itemId, catalogItemId, previousCatalogItemId: item.catalogItemId },
+        },
+        tx,
+      );
+    }, INTERACTIVE_TX_OPTIONS);
   }
 
   // (c) Recusa com motivo. Vinculos com a cotacao sao mantidos (historico).
