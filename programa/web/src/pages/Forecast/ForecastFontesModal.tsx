@@ -2,17 +2,22 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'rea
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import { Tab, TabList, TabPanel, Tabs } from '@/components/Tabs';
 import { forecastErrorMessage } from '@/services/forecast';
 import {
   forecastFontesKeys,
   getForecastPrazoReal,
+  listForecastSources,
   patchForecastSourceLeadTime,
   type ForecastPrazoReal,
   type ForecastPrazoRealEstatistica,
   type ForecastPrazoRealFonte,
 } from '@/services/forecastFontes';
 import { diferencaTexto, ordenarFontes, textoIndisponivel, textoPrazoReal } from './forecastFontes';
+import { contarSemPais, opcoesDePais, paisPorFonte, textoFontesSemPais } from './forecastOcasioes';
 import { LEAD_TIME_MAX_DIAS, lerLeadTime } from './forecastPendentes';
+import ForecastFontePais from './ForecastFontePais';
+import ForecastOcasioesPanel from './ForecastOcasioesPanel';
 
 interface Props {
   /** admin/comprador editam o lead time (PATCH /forecast/sources/:id); os demais so leem. */
@@ -54,6 +59,22 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
   const [focoPara, setFocoPara] = useState<number | null>(null);
   const botoes = useRef(new Map<number, HTMLButtonElement>());
   const campo = useRef<HTMLInputElement>(null);
+
+  // Pais de cada fonte: o prazo-real nao o traz, entao junta com GET /forecast/sources (mesma chave do cadastro de produto).
+  const lista = useQuery({ queryKey: forecastFontesKeys.todas, queryFn: listForecastSources });
+  const paises = useMemo(() => paisPorFonte(lista.data), [lista.data]);
+  const opcoesPais = useMemo(
+    () => opcoesDePais(paises ? [...paises.values()].filter((c): c is string => c !== null) : []),
+    [paises],
+  );
+  const avisoSemPais = paises
+    ? textoFontesSemPais(
+        contarSemPais(
+          fontes.map((f) => f.sourceId),
+          paises,
+        ),
+      )
+    : null;
 
   const salvar = useMutation({
     mutationFn: ({ id, dias }: { id: number; dias: number; nome: string }) => patchForecastSourceLeadTime(id, dias),
@@ -108,6 +129,8 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
   return (
     <>
       <p className="fcd-dica">{textoTopo(dados)}</p>
+      {avisoSemPais && <p className="fcd-dica">{avisoSemPais}</p>}
+      {lista.isError && <p className="fcd-dica">Não foi possível carregar o país das fontes.</p>}
       {!dados.disponivel && (
         <p className="fcd-dica" role="status">
           {textoIndisponivel(dados.motivo, dados.quinzena?.label ?? null)}
@@ -129,6 +152,7 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
           <thead>
             <tr>
               <th scope="col">Fonte</th>
+              <th scope="col">País</th>
               <th scope="col">Lead time cadastrado</th>
               <th scope="col">Desembaraço</th>
               <th scope="col">Prazo real PO → ETA FINAL</th>
@@ -145,6 +169,16 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
               return (
                 <tr key={f.sourceId}>
                   <th scope="row">{f.nome}</th>
+                  <td>
+                    <ForecastFontePais
+                      sourceId={f.sourceId}
+                      nome={f.nome}
+                      countryCode={paises ? (paises.get(f.sourceId) ?? null) : undefined}
+                      podeEditar={podeEditar}
+                      opcoes={opcoesPais}
+                      onSalvo={setAviso}
+                    />
+                  </td>
                   <td>
                     {emEdicao ? (
                       <form onSubmit={(e) => enviar(e, f)} noValidate>
@@ -227,23 +261,37 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
 
 export default function ForecastFontesModal({ podeEditar, onFechar }: Props) {
   const prazoReal = useQuery({ queryKey: forecastFontesKeys.prazoReal, queryFn: getForecastPrazoReal });
+  const [aba, setAba] = useState('fontes');
 
   return (
-    <Modal isOpen onClose={onFechar} title="Fontes e lead time" size="wide">
-      {prazoReal.isLoading && (
-        <div className="fcd-carregando" role="status">
-          <Spinner /> Carregando fontes…
-        </div>
-      )}
-      {prazoReal.isError && (
-        <div className="alert alert--error" role="alert">
-          <p className="fcd-alert__texto">{forecastErrorMessage(prazoReal.error)}</p>
-          <button type="button" className="ghost-button" onClick={() => void prazoReal.refetch()}>
-            Tentar de novo
-          </button>
-        </div>
-      )}
-      {prazoReal.isSuccess && <Conteudo dados={prazoReal.data} podeEditar={podeEditar} />}
+    <Modal isOpen onClose={onFechar} title="Fontes e lead time" size="xl">
+      <div className="fco-abas">
+        <Tabs value={aba} onValueChange={setAba} baseId="fcf-abas">
+          <TabList aria-label="Seções do diálogo Fontes e lead time">
+            <Tab value="fontes">Lead time por fonte</Tab>
+            <Tab value="ocasioes">Ocasiões</Tab>
+          </TabList>
+          <TabPanel value="fontes">
+            {prazoReal.isLoading && (
+              <div className="fcd-carregando" role="status">
+                <Spinner /> Carregando fontes…
+              </div>
+            )}
+            {prazoReal.isError && (
+              <div className="alert alert--error" role="alert">
+                <p className="fcd-alert__texto">{forecastErrorMessage(prazoReal.error)}</p>
+                <button type="button" className="ghost-button" onClick={() => void prazoReal.refetch()}>
+                  Tentar de novo
+                </button>
+              </div>
+            )}
+            {prazoReal.isSuccess && <Conteudo dados={prazoReal.data} podeEditar={podeEditar} />}
+          </TabPanel>
+          <TabPanel value="ocasioes">
+            <ForecastOcasioesPanel podeEditar={podeEditar} />
+          </TabPanel>
+        </Tabs>
+      </div>
     </Modal>
   );
 }
