@@ -1,6 +1,9 @@
 // Series SINTETICAS da P1b-1 (nenhum dado real; so em memoria). Calendario 2024-01..2026-12 (t = 0..35), quantidades
 // inteiras, ruido mulberry32 com semente fixa. Nenhum id lembra codigo de item real.
+import { hashConfigRef } from '../../src/utils/forecastPreditivoConfigRef';
+import type { CelulaCalibracao, TabelaCalibracao } from '../../src/utils/forecastPreditivoCalibracao';
 import { somarMeses } from '../../src/utils/forecastPreditivoSerie';
+import { PREDITIVO_VERSAO } from '../../src/utils/forecastPreditivoTipos';
 import type { AnoMes, PontoMensal, SerieEntrada } from '../../src/utils/forecastPreditivoTipos';
 import { CALENDARIO_INICIO, CALENDARIO_MESES, mulberry32 } from './forecastPreditivoSinteticas';
 
@@ -42,4 +45,28 @@ export function seriesRef(): SerieEntrada[] {
 // Marcas de ForecastAtypicalMonth (produto x yearMonth): o pico real de R-ATIP.
 export function marcasRef(): Map<string, AnoMes[]> {
   return new Map<string, AnoMes[]>([['R-ATIP', [mesRef(30)]]]);
+}
+
+const celulas = (celula: CelulaCalibracao['celula'], ms: number[], n: number, q10: number, q90: number): CelulaCalibracao[] =>
+  ms.map((m) => ({ celula, m, n, q10, q90 }));
+
+// Tabela de calibracao sintetica (so agregados): smooth n 30 (fronteira exata do minimo), TOTAL n 100, erratic h=1 com n 29
+// (um abaixo do minimo: cai no TOTAL), lead time m = 2..6, nivel n 300 / razao 1,2 (fator 1,1 com k 300).
+export function tabelaSintetica(sobrescrever: Partial<TabelaCalibracao> = {}): TabelaCalibracao {
+  return {
+    formato: 'preditivo-calibracao-v1',
+    versao: PREDITIVO_VERSAO,
+    hashConfig: hashConfigRef(),
+    correcaoNivel: false,
+    parametros: { horizonte: 6, minTreino: 6, historicoMaximo: 7, usarMascara: true, janelaNivelMeses: 12 },
+    ultimoMes: '2026-12',
+    mensal: [
+      ...celulas('smooth', [1, 2, 3, 4, 5, 6], 30, -0.5, 0.5),
+      ...celulas('erratic', [1], 29, -0.9, 0.9),
+      ...celulas('TOTAL', [1, 2, 3, 4, 5, 6], 100, -0.4, 0.6),
+    ],
+    leadTime: [...celulas('smooth', [2, 3, 4, 5, 6], 30, -0.3, 0.3), ...celulas('TOTAL', [2, 3, 4, 5, 6], 100, -0.2, 0.4)],
+    nivel: { n: 300, razao: 1.2 },
+    ...sobrescrever,
+  };
 }
