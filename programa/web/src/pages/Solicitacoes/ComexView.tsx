@@ -7,6 +7,7 @@ import { Pagination } from '@/components/Pagination';
 import {
   COMMERCIAL_REQUEST_STATUS_LABELS,
   CommercialRequestStatus,
+  customerLabel,
   formatCommercialPrice,
   formatCommercialQuantity,
   listCommercialRequesters,
@@ -155,7 +156,7 @@ export default function ComexView() {
                         <td data-label="Solicitação">#{request.id}</td>
                         <td data-label="Criada em">{formatDate(request.createdAt)}</td>
                         <td data-label="Solicitante">{request.requestedBy.name}</td>
-                        <td data-label="Cliente">{request.customerName ?? '—'}</td>
+                        <td data-label="Cliente">{customerLabel(request.customerName)}</td>
                         <td data-label="Itens">{request.items.length}</td>
                         <td className="col-status" data-label="Status">
                           <span className={statusBadgeClass(request.status)}>

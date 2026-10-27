@@ -138,7 +138,7 @@ describe('Solicitacoes - comercial', () => {
     renderPage();
     await screen.findByText('Pendente');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     const enviar = screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement;
     expect(enviar.disabled).toBe(true);
 
@@ -165,7 +165,7 @@ describe('Solicitacoes - comercial', () => {
   it('quantidade zero ou fracionada desabilita o Enviar', async () => {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
 
@@ -183,7 +183,7 @@ describe('Solicitacoes - comercial', () => {
     vi.mocked(api.post).mockResolvedValue({ ...MINE_ROW, id: 6 });
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
     fireEvent.change(screen.getByLabelText('Preço-alvo'), { target: { value: '12,5' } });
@@ -200,7 +200,7 @@ describe('Solicitacoes - comercial', () => {
   it('escolher um item fecha a busca e coloca o foco na quantidade dele', async () => {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
 
@@ -214,7 +214,7 @@ describe('Solicitacoes - comercial', () => {
   it('"+ Adicionar outro item" reabre a busca vazia e "Fechar busca" volta ao botao', async () => {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
 
@@ -231,7 +231,7 @@ describe('Solicitacoes - comercial', () => {
   it('remover o unico item volta a mostrar a busca', async () => {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
 
@@ -244,7 +244,7 @@ describe('Solicitacoes - comercial', () => {
   it('item ja adicionado aparece como "Adicionado ✓" nos resultados', async () => {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
     fireEvent.click(screen.getByRole('button', { name: '+ Adicionar outro item' }));
@@ -259,7 +259,7 @@ describe('Solicitacoes - comercial', () => {
     vi.mocked(api.post).mockResolvedValue({ ...MINE_ROW, id: 6 });
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
     fireEvent.change(screen.getByLabelText('Preço-alvo'), { target: { value: '1.234,5' } });
@@ -273,7 +273,7 @@ describe('Solicitacoes - comercial', () => {
   async function openFormWithItem() {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
     fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
   }
@@ -370,7 +370,7 @@ describe('Solicitacoes - comercial', () => {
   it('termo com menos de 2 caracteres nao dispara a busca', async () => {
     renderPage();
     await screen.findByText('Pendente');
-    fireEvent.click(screen.getByRole('button', { name: 'Nova solicitação' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 'r' } });
     await new Promise((resolve) => setTimeout(resolve, 450));
     expect(api.get).not.toHaveBeenCalledWith(

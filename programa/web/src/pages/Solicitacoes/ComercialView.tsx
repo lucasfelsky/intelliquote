@@ -11,6 +11,7 @@ import {
   CommercialRequestStatus,
   CommercialRequestUnit,
   createCommercialRequest,
+  customerLabel,
   formatCommercialPrice,
   formatCommercialQuantity,
   formatFinalPrice,
@@ -267,7 +268,7 @@ export default function ComercialView() {
           <p className="page-subtitle">Peça ao COMEX a cotação dos itens que seus clientes precisam.</p>
         </div>
         <button type="button" className="primary-button" onClick={openModal}>
-          Nova solicitação
+          Solicitar uma cotação
         </button>
       </header>
 
@@ -287,7 +288,7 @@ export default function ComercialView() {
         {!mine.isLoading && !mine.isError && rows.length === 0 && (
           <div className="empty-state">
             <strong>Nenhuma solicitação ainda</strong>
-            <p>Use “Nova solicitação” para pedir a cotação de um ou mais itens.</p>
+            <p>Use “Solicitar uma cotação” para pedir a cotação de um ou mais itens.</p>
           </div>
         )}
 
@@ -310,7 +311,7 @@ export default function ComercialView() {
                   <tr key={request.id}>
                     <td data-label="Solicitação">#{request.id}</td>
                     <td data-label="Criada em">{formatDate(request.createdAt)}</td>
-                    <td data-label="Cliente">{request.customerName ?? '—'}</td>
+                    <td data-label="Cliente">{customerLabel(request.customerName)}</td>
                     <td data-label="Itens">
                       <ul className="sol-items-list">
                         {request.items.map((item) => (
@@ -360,16 +361,17 @@ export default function ComercialView() {
         )}
       </section>
 
-      <Modal isOpen={modalOpen} onClose={closeModal} title="Nova solicitação" size="wide">
+      <Modal isOpen={modalOpen} onClose={closeModal} title="Solicitar uma cotação" size="wide">
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
             <div className="form-grid__full">
-              <label className="field-label" htmlFor="cr-customer">Cliente</label>
+              <label className="field-label" htmlFor="cr-customer">Cliente (opcional)</label>
               <input
                 id="cr-customer"
                 className="input"
                 value={customerName}
                 maxLength={200}
+                placeholder="Ex.: nome do cliente (opcional)"
                 onChange={(e) => setCustomerName(e.target.value)}
               />
             </div>
@@ -491,7 +493,7 @@ export default function ComercialView() {
               <input
                 id="cr-search"
                 className="input"
-                placeholder="Digite ao menos 2 letras do nome comercial"
+                placeholder="Digite o nome comercial do item"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 autoComplete="off"

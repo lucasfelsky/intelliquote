@@ -99,6 +99,12 @@ export interface CommercialRequestInput {
 const QUANTITY_FORMAT = new Intl.NumberFormat('pt-BR');
 const PRICE_FORMAT = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Cliente e opcional: vazio (ou so espacos) vira "Cliente nao informado". */
+export function customerLabel(name: string | null): string {
+  const trimmed = name?.trim() ?? '';
+  return trimmed === '' ? 'Cliente não informado' : trimmed;
+}
+
 /** 12000 -> "12.000" (pt-BR). */
 export function formatCommercialQuantity(quantity: number): string {
   return QUANTITY_FORMAT.format(quantity);
