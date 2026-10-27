@@ -22,6 +22,7 @@ vi.mock('../src/lib/prisma', () => {
     forecastProduct: { findMany: vi.fn() },
     forecastAtypicalMonth: { findMany: vi.fn() },
     forecastCommercialDemand: { findMany: vi.fn() },
+    forecastPurchaseDecision: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn() },
     forecastSnapshot: { findMany: vi.fn(), findFirst: vi.fn() },
     forecastMonthlySale: { findMany: vi.fn() },
@@ -46,6 +47,7 @@ const prismaMock = prisma as unknown as {
   forecastProduct: { findMany: Mock };
   forecastAtypicalMonth: { findMany: Mock };
   forecastCommercialDemand: { findMany: Mock };
+  forecastPurchaseDecision: { findMany: Mock };
   forecastProductCode: { findMany: Mock };
   forecastSnapshot: { findMany: Mock; findFirst: Mock };
   forecastMonthlySale: { findMany: Mock };
@@ -634,6 +636,8 @@ describe('Forecast routes - relatorio de compras', () => {
     prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
     // Demanda do comercial (PR 6d): sem pedido aberto por padrao.
     prismaMock.forecastCommercialDemand.findMany.mockResolvedValue([]);
+    // Decisoes de compra (PR3): so o XLSX le; sem decisao por padrao.
+    prismaMock.forecastPurchaseDecision.findMany.mockResolvedValue([]);
     // O relatorio le a embalagem do cadastro por codigo (PR 2C); aqui nenhum codigo tem embalagem.
     prismaMock.forecastProductCode.findMany.mockResolvedValue([]);
     const produtos = fixture.produtos.slice(0, 5);

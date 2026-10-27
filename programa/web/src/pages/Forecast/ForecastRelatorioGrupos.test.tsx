@@ -223,10 +223,10 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     expect(within(linha).getByText('GRUPO SINTETICO')).toBeTruthy();
     expect(within(linha).getByText('Grupo de equivalência')).toBeTruthy();
     expect(within(linha).getAllByText('150,0').length).toBeGreaterThan(0);
-    // Sublinhas na linha seguinte (modo legado: Item + 9 colunas comuns = 10).
+    // Sublinhas na linha seguinte (modo legado: Item + 10 colunas comuns = 11).
     const sublinha = linha.nextElementSibling as HTMLElement;
     expect(sublinha.className).toBe('fcr-linha-grupo');
-    expect(sublinha.querySelector('td')?.getAttribute('colspan')).toBe('10');
+    expect(sublinha.querySelector('td')?.getAttribute('colspan')).toBe('11');
     expect(within(sublinha).getByRole('table', { name: 'Membros do grupo GRUPO SINTETICO' })).toBeTruthy();
     expect(within(sublinha).getByText('PRODUTO 002')).toBeTruthy();
   });

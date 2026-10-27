@@ -228,7 +228,7 @@ describe('ForecastRelatorioCompras', () => {
       .getAllByRole('columnheader')
       .map((c) => c.textContent);
     expect(colunas).toEqual([
-      'Item', 'Status', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Saldo zera', 'Ruptura', 'Data-limite', 'Em andamento',
+      'Item', 'Status', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Qtd. decidida (kg)', 'Saldo zera', 'Ruptura', 'Data-limite', 'Em andamento',
     ]);
   });
 
