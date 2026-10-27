@@ -353,11 +353,11 @@ describe('Forecast - meses atipicos fora da media (DB)', () => {
     await wb.xlsx.load(Buffer.from(res.body.data.contentBase64, 'base64') as unknown as ArrayBuffer);
     const ws = wb.getWorksheet('Por urgência')!;
     const cabecalho = (ws.getRow(1).values as Array<string | undefined>).slice(1);
-    // Observacao segue a ULTIMA; "Grupo de equivalência" (PR 6b) vem entre ela e "Meses fora da média".
+    // Observacao segue a ULTIMA; "Grupo de equivalência" (PR 6b) e as 3 da decisao de compra (PR3) vem entre ela e "Meses fora da média".
     const colMeses = cabecalho.indexOf('Meses fora da média');
     expect(cabecalho.at(-1)).toBe('Observação');
-    expect(cabecalho.at(-2)).toBe('Grupo de equivalência');
-    expect(colMeses).toBe(cabecalho.length - 3);
+    expect(cabecalho.at(-5)).toBe('Grupo de equivalência');
+    expect(colMeses).toBe(cabecalho.length - 6);
     const linhas: Array<Array<string | undefined>> = [];
     ws.eachRow((row, n) => {
       if (n > 1) linhas.push((row.values as Array<string | undefined>).slice(1));

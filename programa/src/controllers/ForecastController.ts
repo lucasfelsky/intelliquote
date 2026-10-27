@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
+import { ForecastDecisaoCompraService } from '../services/ForecastDecisaoCompraService';
 import { ForecastDemandaComercialService } from '../services/ForecastDemandaComercialService';
 import { ForecastGrupoEquivalenciaService } from '../services/ForecastGrupoEquivalenciaService';
 import { ForecastImportService } from '../services/ForecastImportService';
@@ -17,6 +18,7 @@ import {
   forecastDemandaComercialPatchSchema,
   forecastDemandaComercialQuerySchema,
   forecastDbcorpPreviewSchema,
+  forecastDecisaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
   forecastGrupoEquivalenciaPatchSchema,
@@ -371,6 +373,37 @@ export class ForecastController {
         throw new HttpError(400, 'Grupo invalido.');
       }
       const data = await ForecastGrupoEquivalenciaService.remove(id, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async listDecisoes(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const data = await ForecastDecisaoCompraService.listar(id);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async putDecisao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const productId = parseId(req.params.productId);
+      if (productId === null) {
+        throw new HttpError(400, 'Produto inválido.');
+      }
+      const input = forecastDecisaoPutSchema.parse(req.body);
+      const data = await ForecastDecisaoCompraService.gravar(id, productId, input, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

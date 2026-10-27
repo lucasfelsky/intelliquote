@@ -12,6 +12,7 @@ import {
   totaisDeposito,
 } from './forecastImport';
 import { AvisosEErros, useFocoNoTitulo } from './ForecastResumoPlanilha';
+import { NOTA_COMPLETAR_MODO_TESTE, textoHistoricoModoTeste } from './forecastModoTeste';
 import { dataBr, inteiroBr } from './forecastPainel';
 import { TabelaPendentes } from './ForecastPendentesCadastro';
 import { textoForaDoCalculoPrevia } from './forecastPendentes';
@@ -272,13 +273,16 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
 function BlocoPendentes({
   pendentes,
   onCompletar,
+  modoTeste,
 }: {
   pendentes: ForecastPendentesResumo;
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
+  modoTeste: boolean;
 }) {
   return (
     <Bloco titulo={`Pendentes de cadastro (${inteiroBr(pendentes.totalItens)})`}>
       <p>{textoForaDoCalculoPrevia(pendentes.totalItens)}</p>
+      {modoTeste && onCompletar !== undefined && <p className="fit-resumo-nota">{NOTA_COMPLETAR_MODO_TESTE}</p>}
       <TabelaPendentes
         itens={pendentes.itens}
         omitidos={pendentes.omitidos}
@@ -293,7 +297,13 @@ function BlocoPendentes({
   );
 }
 
-function BlocoHistorico({ historico }: { historico: ForecastDbcorpSummary['historico'] }) {
+function BlocoHistorico({
+  historico,
+  modoTeste,
+}: {
+  historico: ForecastDbcorpSummary['historico'];
+  modoTeste: boolean;
+}) {
   const anterior = historico.mesAnterior;
   return (
     <Bloco titulo="Histórico de vendas">
@@ -319,7 +329,8 @@ function BlocoHistorico({ historico }: { historico: ForecastDbcorpSummary['histo
         </div>
       )}
       {historico.ausentes.length > 0 && <p>Meses sem histórico: {historico.ausentes.map(mesAno).join(', ')}</p>}
-      {anterior && (
+      {anterior && modoTeste && <p className="fit-resumo-nota">{textoHistoricoModoTeste(anterior.yearMonth)}</p>}
+      {anterior && !modoTeste && (
         <p>
           Ao confirmar, o histórico de {mesAno(anterior.yearMonth)} será substituído: {inteiroBr(anterior.linhas)} linhas (
           {inteiroBr(anterior.novas)} novas, {inteiroBr(anterior.alteradas)} alteradas, {inteiroBr(anterior.removidas)}{' '}
@@ -334,12 +345,15 @@ export default function ForecastResumoDbcorp({
   resumo,
   onCompletar,
   prazos,
+  modoTeste = false,
 }: {
   resumo: ForecastDbcorpSummary;
   /** Abre o dialogo de completar o cadastro de um codigo pendente (sem a prop, a lista e so de leitura). */
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
   /** Tabela do prazo por fonte (PR 5A), logo abaixo do bloco do FUP; ausente em backend antigo. */
   prazos?: ReactNode;
+  /** "Importar como teste" ligado: o historico nao sera substituido e o aviso dos pendentes muda. */
+  modoTeste?: boolean;
 }) {
   const tituloRef = useFocoNoTitulo();
   const presentes = SLOTS_DBCORP.flatMap((s) => {
@@ -405,7 +419,7 @@ export default function ForecastResumoDbcorp({
         </table>
       </div>
       {resumo.pendentes && resumo.pendentes.totalItens > 0 && (
-        <BlocoPendentes pendentes={resumo.pendentes} onCompletar={onCompletar} />
+        <BlocoPendentes pendentes={resumo.pendentes} onCompletar={onCompletar} modoTeste={modoTeste} />
       )}
       {saldo && <BlocoSaldo relatorio={saldo} />}
       {vendas.length > 0 && (
@@ -420,7 +434,7 @@ export default function ForecastResumoDbcorp({
       {programacao && <BlocoProgramacao relatorio={programacao} />}
       {fup && <BlocoFup relatorio={fup} />}
       {prazos}
-      <BlocoHistorico historico={resumo.historico} />
+      <BlocoHistorico historico={resumo.historico} modoTeste={modoTeste} />
     </section>
   );
 }

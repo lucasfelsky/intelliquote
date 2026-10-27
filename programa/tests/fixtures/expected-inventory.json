@@ -42,6 +42,7 @@
       "EmailTemplateService.ts",
       "ExchangeRateService.ts",
       "ForecastDbcorpService.ts",
+      "ForecastDecisaoCompraService.ts",
       "ForecastDemandaComercialService.ts",
       "ForecastGrupoEquivalenciaService.ts",
       "ForecastImportService.ts",
@@ -136,6 +137,7 @@
       "ForecastMonthlySale",
       "ForecastProduct",
       "ForecastProductCode",
+      "ForecastPurchaseDecision",
       "ForecastSnapshot",
       "ForecastSource",
       "Forwarder",
@@ -177,7 +179,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 68
+    "migrations": 69
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -239,6 +241,7 @@
     "GET /forecast/products/:id/ultimo-preco",
     "GET /forecast/snapshots",
     "GET /forecast/snapshots/:id",
+    "GET /forecast/snapshots/:id/decisoes",
     "GET /forecast/snapshots/:id/pendentes",
     "GET /forecast/snapshots/:id/relatorio-compras",
     "GET /forecast/snapshots/:id/relatorio-compras/xlsx",
@@ -357,6 +360,7 @@
     "PUT /catalog-items/:id",
     "PUT /credit-partners/:id",
     "PUT /forecast/products/:id/meses-atipicos",
+    "PUT /forecast/snapshots/:id/decisoes/:productId",
     "PUT /forwarders/:id",
     "PUT /item-families/:id",
     "PUT /quote-request-items/:id",

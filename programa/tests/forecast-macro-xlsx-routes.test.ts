@@ -17,6 +17,7 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     forecastSnapshot: { findFirst: vi.fn() },
     forecastAtypicalMonth: { findMany: vi.fn() },
+    forecastPurchaseDecision: { findMany: vi.fn() },
     forecastProduct: { findMany: vi.fn() },
     forecastProductCode: { findMany: vi.fn() },
     forecastCommercialDemand: { findMany: vi.fn() },
@@ -36,6 +37,7 @@ const prismaMock = prisma as unknown as {
   auditLog: { create: Mock };
   forecastSnapshot: { findFirst: Mock };
   forecastAtypicalMonth: { findMany: Mock };
+  forecastPurchaseDecision: { findMany: Mock };
   forecastProduct: { findMany: Mock };
   forecastProductCode: { findMany: Mock };
   forecastCommercialDemand: { findMany: Mock };
@@ -106,6 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.forecastSnapshot.findFirst.mockResolvedValue(snapshot());
   prismaMock.forecastAtypicalMonth.findMany.mockResolvedValue([]);
+  prismaMock.forecastPurchaseDecision.findMany.mockResolvedValue([]);
 });
 
 async function abrir(base64: string): Promise<exceljs.Workbook> {

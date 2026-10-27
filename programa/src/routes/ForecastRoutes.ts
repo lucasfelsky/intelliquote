@@ -199,4 +199,19 @@ router.get(
   ForecastController.getRelatorioComprasXlsx,
 );
 
+// Quantidade decidida de compra por item e quinzena (PR3): ler = equipe COMEX; gravar/apagar = admin/comprador.
+router.get(
+  '/forecast/snapshots/:id/decisoes',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listDecisoes,
+);
+
+router.put(
+  '/forecast/snapshots/:id/decisoes/:productId',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putDecisao,
+);
+
 export { router as forecastRoutes };

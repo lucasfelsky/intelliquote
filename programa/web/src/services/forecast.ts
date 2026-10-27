@@ -662,7 +662,11 @@ export type ForecastWorkbookConfirmResult = ForecastImportSummary & {
   options: ForecastImportOptions;
 };
 
-export type ForecastDbcorpConfirmResult = ForecastDbcorpSummary & { snapshotId: number };
+export type ForecastDbcorpConfirmResult = ForecastDbcorpSummary & {
+  snapshotId: number;
+  /** Eco do servidor; ausente = backend sem modo teste (a importacao foi a normal). */
+  modoTeste?: boolean;
+};
 
 export async function previewForecastWorkbook(body: ForecastWorkbookBody): Promise<ForecastImportSummary> {
   const response = await api.post<{ data: ForecastImportSummary }>('/v1/forecast/import/workbook/preview', body);
@@ -685,8 +689,15 @@ export async function previewForecastDbcorp(body: ForecastDbcorpBody): Promise<F
   return response.data;
 }
 
-export async function confirmForecastDbcorp(body: ForecastDbcorpBody): Promise<ForecastDbcorpConfirmResult> {
-  const response = await api.post<{ data: ForecastDbcorpConfirmResult }>('/v1/forecast/import/dbcorp/confirm', body);
+/** `modoTeste` so viaja quando ligado (desligado = corpo identico ao da importacao normal). */
+export async function confirmForecastDbcorp(
+  body: ForecastDbcorpBody,
+  modoTeste = false,
+): Promise<ForecastDbcorpConfirmResult> {
+  const response = await api.post<{ data: ForecastDbcorpConfirmResult }>(
+    '/v1/forecast/import/dbcorp/confirm',
+    modoTeste ? { ...body, modoTeste: true } : body,
+  );
   return response.data;
 }
 

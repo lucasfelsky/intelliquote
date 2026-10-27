@@ -8,6 +8,7 @@ import {
   FORECAST_MAX_PALLETS_POR_CODIGO,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
+import type { StatusCompra } from '../utils/forecastTypes';
 import { isValidDateKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 
 const contentBase64Field = z
@@ -75,54 +76,62 @@ const prazoEstimativaField = z.object({
 });
 
 // Quinzena a partir dos relatorios DBCorp. O confirm recebe o mesmo corpo do preview (grava sempre a
-// quinzena e o mes anterior do historico; sem opcoes). `prazosEstimativa` (opcional) viaja nos dois: o confirm
-// repete o calculo do preview com os mesmos prazos.
-export const forecastDbcorpPreviewSchema = z
-  .object({
-    label: labelField,
-    baseDate: dateKeyField('Data base invalida (use AAAA-MM-DD).'),
-    files: z.object({
-      saldo: dbcorpFileField,
-      vendasMes: dbcorpFileField,
-      vendasAtual: dbcorpFileField.optional(),
-      vendasAnual: dbcorpFileField,
-      programacao: dbcorpFileField,
-      fup: dbcorpFileField,
-      clientesAtivos: dbcorpFileField.optional(),
-      margem: dbcorpFileField.optional(),
-    }),
-    prazosEstimativa: z
-      .array(prazoEstimativaField)
-      .max(
-        FORECAST_DBCORP_PRAZOS_MAX_FONTES,
-        `Informe no maximo ${FORECAST_DBCORP_PRAZOS_MAX_FONTES} fontes em prazosEstimativa.`,
-      )
-      .optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.prazosEstimativa) {
-      const vistos = new Set<number>();
-      for (const [index, prazo] of value.prazosEstimativa.entries()) {
-        if (vistos.has(prazo.sourceId)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['prazosEstimativa', index, 'sourceId'],
-            message: 'Fonte repetida em prazosEstimativa.',
-          });
-        }
-        vistos.add(prazo.sourceId);
-      }
-    }
-    if (value.label.endsWith('-2') && !value.files.vendasAtual) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['files', 'vendasAtual'],
-        message: 'Na 2a quinzena envie o relatorio de vendas do mes atual (ate o dia 15).',
-      });
-    }
-  });
+// quinzena; o mes anterior do historico e os prazos alterados so sem `modoTeste`). `prazosEstimativa` (opcional)
+// viaja nos dois: o confirm repete o calculo do preview com os mesmos prazos. `modoTeste` (opcional) so existe no
+// confirm: o preview descarta a chave.
+const forecastDbcorpBaseSchema = z.object({
+  label: labelField,
+  baseDate: dateKeyField('Data base invalida (use AAAA-MM-DD).'),
+  files: z.object({
+    saldo: dbcorpFileField,
+    vendasMes: dbcorpFileField,
+    vendasAtual: dbcorpFileField.optional(),
+    vendasAnual: dbcorpFileField,
+    programacao: dbcorpFileField,
+    fup: dbcorpFileField,
+    clientesAtivos: dbcorpFileField.optional(),
+    margem: dbcorpFileField.optional(),
+  }),
+  prazosEstimativa: z
+    .array(prazoEstimativaField)
+    .max(
+      FORECAST_DBCORP_PRAZOS_MAX_FONTES,
+      `Informe no maximo ${FORECAST_DBCORP_PRAZOS_MAX_FONTES} fontes em prazosEstimativa.`,
+    )
+    .optional(),
+});
 
-export const forecastDbcorpConfirmSchema = forecastDbcorpPreviewSchema;
+function regrasDbcorp(
+  value: z.infer<typeof forecastDbcorpBaseSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (value.prazosEstimativa) {
+    const vistos = new Set<number>();
+    for (const [index, prazo] of value.prazosEstimativa.entries()) {
+      if (vistos.has(prazo.sourceId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['prazosEstimativa', index, 'sourceId'],
+          message: 'Fonte repetida em prazosEstimativa.',
+        });
+      }
+      vistos.add(prazo.sourceId);
+    }
+  }
+  if (value.label.endsWith('-2') && !value.files.vendasAtual) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['files', 'vendasAtual'],
+      message: 'Na 2a quinzena envie o relatorio de vendas do mes atual (ate o dia 15).',
+    });
+  }
+}
+
+export const forecastDbcorpPreviewSchema = forecastDbcorpBaseSchema.superRefine(regrasDbcorp);
+
+export const forecastDbcorpConfirmSchema = forecastDbcorpBaseSchema
+  .extend({ modoTeste: z.boolean({ error: 'Informe modoTeste (true/false).' }).optional() })
+  .superRefine(regrasDbcorp);
 
 const leadTimeDaysField = z
   .number({ error: 'Informe um numero inteiro de dias (ou null).' })
@@ -574,3 +583,41 @@ export const forecastGrupoEquivalenciaPatchSchema = z
 
 export type ForecastGrupoEquivalenciaCreateInput = z.infer<typeof forecastGrupoEquivalenciaCreateSchema>;
 export type ForecastGrupoEquivalenciaPatchInput = z.infer<typeof forecastGrupoEquivalenciaPatchSchema>;
+
+// Quantidade decidida de compra (PR3 do piloto): PUT por item e quinzena. `quantidadeKg: null` apaga a decisao (0 e uma
+// decisao valida: nao comprar). O status usa o vocabulario da cor do item na planilha. Chave desconhecida = 400.
+export const FORECAST_DECISAO_STATUS = ['nao', 'cotando', 'preco', 'confirmado', 'po'] as const satisfies readonly StatusCompra[];
+export const FORECAST_DECISAO_KG_MAX = 10_000_000;
+export const FORECAST_DECISAO_OBSERVACAO_MAX = 300;
+
+export type ForecastDecisaoStatus = (typeof FORECAST_DECISAO_STATUS)[number];
+
+const decisaoKgField = z
+  .number({ error: 'Informe a quantidade em kg (ou null para apagar a decisão).' })
+  .min(0, 'A quantidade não pode ser negativa.')
+  .max(FORECAST_DECISAO_KG_MAX, 'A quantidade aceita no máximo 10.000.000 kg.')
+  .refine((v) => /^\d+(\.\d{1,3})?$/.test(String(v)), { message: 'A quantidade aceita no máximo 3 casas decimais.' });
+
+const decisaoObservacaoField = z
+  .string({ error: 'A observação deve ser um texto (ou null).' })
+  .trim()
+  .max(FORECAST_DECISAO_OBSERVACAO_MAX, `A observação aceita no máximo ${FORECAST_DECISAO_OBSERVACAO_MAX} caracteres.`)
+  .transform((value) => (value === '' ? null : value))
+  .nullable();
+
+export const forecastDecisaoPutSchema = z
+  .strictObject({
+    quantidadeKg: decisaoKgField.nullable(),
+    observacao: decisaoObservacaoField.optional(),
+    status: z.enum(FORECAST_DECISAO_STATUS, { error: 'Status da decisão inválido.' }).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.quantidadeKg === null && (value.observacao !== undefined || value.status !== undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Para apagar a decisão, envie só quantidadeKg: null.',
+      });
+    }
+  });
+
+export type ForecastDecisaoPutInput = z.infer<typeof forecastDecisaoPutSchema>;

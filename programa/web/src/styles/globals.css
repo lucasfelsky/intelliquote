@@ -3362,6 +3362,30 @@ i.fc-status--preco { background: var(--info); }
   color: var(--ink-soft);
 }
 
+/* Forecast: quantidade decidida (PR3) */
+.fdec-celula { min-width: 220px; }
+.fdec-editor { display: flex; flex-direction: column; gap: 6px; }
+.fdec-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fdec-kg { width: 120px; flex: 0 0 auto; padding: 5px 8px; font-size: 13px; text-align: right; }
+.fdec-status, .fdec-obs { padding: 5px 8px; font-size: 12px; }
+.fdec-salvar { padding: 5px 12px; font-size: 13px; }
+.fdec-leitura { display: flex; flex-direction: column; gap: 2px; }
+.fdec-valor { font-weight: 700; color: var(--ink); }
+.fdec-estado { display: block; font-size: 11px; color: var(--ink-soft); }
+.fdec-erro { margin: 0; font-size: 12px; color: var(--danger); }
+.fdec-alerta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.fdec-editor input:focus-visible,
+.fdec-editor select:focus-visible,
+.fdec-editor button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 700px) {
+  .fdec-kg, .fdec-status, .fdec-obs, .fdec-salvar, .fdec-editor .ghost-button { min-height: 44px; }
+}
+@media print {
+  .fdec-acoes, .fdec-alerta { display: none !important; }
+  .fdec-celula { min-width: 0; }
+  .fdec-kg, .fdec-status, .fdec-obs { border: 0; background: transparent; padding: 0; width: auto; font-size: 8.5pt; color: var(--ink); appearance: none; }
+}
+
 /* Forecast: detalhe do item na memoria de calculo (piloto PR4). */
 .fcu-detalhe { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; }
 .fcu-detalhe h3 { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
