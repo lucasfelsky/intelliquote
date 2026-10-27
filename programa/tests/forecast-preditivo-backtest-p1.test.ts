@@ -20,7 +20,7 @@ const OPCOES: OpcoesBacktestP1 = {
   leadTimePadraoDias: 90,
   razaoFaltaExcesso: 3,
   usarMascara: true,
-  tetoVies: 0.1,
+  tetoVies: null, // padrao da D5 (2026-10-27): criterio 3 relativo, sem teto absoluto
 };
 const normal = (entrada: SerieEntrada[]): SerieNormalizada[] => normalizarSeries(entrada).series;
 const sint = (...ids: string[]) => seriesSinteticas().filter((s) => ids.length === 0 || ids.includes(s.id));
@@ -70,7 +70,7 @@ describe('estrutura do resultado', () => {
     expect(r.hashEntrada).toBe(rodarBacktest(series, { ...OPCOES, metodos: [...METODO_IDS] }).hashEntrada);
     expect(r.cenariosMinTreino).toEqual([12, 6]);
     expect(r.cenarios.map((c) => [c.minTreino, c.principal])).toEqual([[12, true], [6, false]]);
-    expect(r.opcoes.tetoVies).toBe(0.1);
+    expect(r.opcoes.tetoVies).toBeNull();
   });
   it('min-treino 12 pedido -> um unico cenario principal', () => {
     const u = rodar(series, { minTreino: 12 });
@@ -103,7 +103,7 @@ describe('estrutura do resultado', () => {
       for (const l of c.linhas) {
         if (l.metodo === 'planilha-q') expect(l).toMatchObject({ promovivel: 'referencia', criteriosFalhos: [], vitoria: null });
         else expect(['nao', 'candidato']).toContain(l.promovivel);
-        for (const lista of [l.criteriosFalhos, l.criteriosFalhosSemTeto]) expect(lista.every((x) => x >= 1 && x <= 8 && x !== 6)).toBe(true);
+        expect(l.criteriosFalhos.every((x) => x >= 1 && x <= 8 && x !== 6)).toBe(true);
       }
     }
   });
@@ -212,25 +212,30 @@ describe('cenarios e opcoes chegam as funcoes', () => {
     expect(Object.keys(c.amostra.fallbackPorMetodo)).toEqual(['ses']);
     expect(rodar(todas(), { metodos: ['preditivo-p1', 'ses'] }).opcoes.metodos).toEqual(['ses', 'preditivo-p1']);
   });
-  it('tetoVies chega ao criterio 3 de toda linha, nas duas variantes', () => {
+  it('tetoVies chega ao criterio 3 de toda linha e das duas metades (null = relativo puro)', () => {
     for (const tetoVies of [0, 0.1, 0.3, 1, null]) {
       const r = rodar(pequena(), { tetoVies });
       for (const c of r.cenarios) {
         for (const l of c.linhas) {
           if (l.metodo === 'planilha-q') continue;
           expect(l.criteriosFalhos.includes(3)).toBe(!passaCriterio3(l.viesLT, l.viesRef, tetoVies));
-          expect(l.criteriosFalhosSemTeto.includes(3)).toBe(!passaCriterio3(l.viesLT, l.viesRef, null));
-          for (const m of [l.metade1, l.metade2]) {
-            expect(m.criteriosFalhos.includes(3)).toBe(!passaCriterio3(m.viesLT, m.viesRef, tetoVies));
-            expect(m.criteriosFalhosSemTeto.includes(3)).toBe(!passaCriterio3(m.viesLT, m.viesRef, null));
-          }
+          for (const m of [l.metade1, l.metade2]) expect(m.criteriosFalhos.includes(3)).toBe(!passaCriterio3(m.viesLT, m.viesRef, tetoVies));
         }
       }
     }
-    const l0 = rodar(pequena(), { tetoVies: 0 }).cenarios[1].linhas.filter((l) => l.metodo !== 'planilha-q');
-    expect(l0.some((l) => l.criteriosFalhos.includes(3) && !l.criteriosFalhosSemTeto.includes(3))).toBe(true);
-    const lNull = rodar(pequena(), { tetoVies: null }).cenarios[1].linhas;
-    expect(lNull.every((l) => JSON.stringify(l.criteriosFalhos) === JSON.stringify(l.criteriosFalhosSemTeto))).toBe(true);
+  });
+  it('sem tetoVies (padrao null) nao ha teto absoluto; teto 0 so acrescenta falhas do criterio 3', () => {
+    const rel = rodar(pequena()).cenarios[1].linhas.filter((l) => l.metodo !== 'planilha-q');
+    const t0 = rodar(pequena(), { tetoVies: 0 }).cenarios[1].linhas.filter((l) => l.metodo !== 'planilha-q');
+    expect(rel).toHaveLength(t0.length);
+    expect(JSON.stringify(rodar(pequena()).cenarios)).toBe(JSON.stringify(rodar(pequena(), { tetoVies: null }).cenarios));
+    // criterio 3 relativo puro: |vies| <= |vies Q| + 0,02 (sem corte absoluto)
+    for (const l of rel) expect(l.criteriosFalhos.includes(3)).toBe(l.viesLT === null || Math.abs(l.viesLT) > Math.abs(l.viesRef ?? 0) + 0.02);
+    // monotonia: quem falha o 3 sem teto continua falhando com teto 0, e o teto derruba ao menos uma linha a mais
+    rel.forEach((l, i) => {
+      if (l.criteriosFalhos.includes(3)) expect(t0[i].criteriosFalhos.includes(3)).toBe(true);
+    });
+    expect(rel.some((l, i) => !l.criteriosFalhos.includes(3) && t0[i].criteriosFalhos.includes(3))).toBe(true);
   });
 });
 

@@ -1,5 +1,5 @@
-// Forecast preditivo (P1a): uma linha (segmento x metodo) do backtest P1 e os criterios D5 1-5, 7 e 8. O criterio 3 tem
-// duas variantes (com teto absoluto de vies e "sem teto"); o 8 exige 1-5 em cada metade temporal das origens.
+// Forecast preditivo (P1a): uma linha (segmento x metodo) do backtest P1 e os criterios D5 1-5, 7 e 8. O criterio 3 e
+// RELATIVO por padrao (decisao do Lucas, 2026-10-27); o teto absoluto e opcional (--teto-vies); o 8 exige 1-5 em cada metade.
 // Metricas sobre a AMOSTRA COMUM: pares (serie, origem) com lead time observado (todos os metodos; sem previsao = Q).
 import { criteriosFalhos } from './forecastPreditivoBacktest';
 import type { MedidasPromocao, Obs, Promovivel } from './forecastPreditivoBacktest';
@@ -12,14 +12,15 @@ import type { Abc } from './forecastPreditivoSegmentos';
 import { PREDITIVO_CONFIG as C } from './forecastPreditivoTipos';
 import type { AnoMes, MetodoTodosId } from './forecastPreditivoTipos';
 
-// Criterio 3: |vies| <= teto (se houver) e |vies| <= |vies da referencia| + folga.
+// Criterio 3 (D5, relativo): |vies do metodo| <= |vies da planilha Q| + folga (2 p.p.), no mesmo segmento e janela; vies da Q
+// indefinido (null) vale 0. Sem teto absoluto: tetoVies null e o padrao; um numero soma o corte |vies| <= tetoVies (opcional).
 export function passaCriterio3(viesLT: number | null, viesRef: number | null, tetoVies: number | null): boolean {
   if (viesLT === null) return false;
   if (tetoVies !== null && Math.abs(viesLT) > tetoVies) return false;
   return Math.abs(viesLT) <= Math.abs(viesRef ?? 0) + C.promocao.viesFolga;
 }
 
-// Criterios 1, 2, 4 e 5 da fase 0 + o 3 com teto parametrizavel. Ordenado crescente.
+// Criterios 1, 2, 4 e 5 da fase 0 + o 3 relativo (o 3 da fase 0, com teto fixo 0,10, e legado do --relatorio p0). Ordenado crescente.
 export function criteriosFalhosP1(m: MedidasPromocao, tetoVies: number | null): number[] {
   const falhos = criteriosFalhos(m).filter((c) => c !== 3);
   if (!passaCriterio3(m.viesLT, m.viesRef, tetoVies)) falhos.push(3);
@@ -41,8 +42,7 @@ export interface ResumoMetade {
   viesRef: number | null;
   custoRel: number | null;
   vitoria: number | null;
-  criteriosFalhos: number[]; // 1..5 com o teto
-  criteriosFalhosSemTeto: number[];
+  criteriosFalhos: number[]; // 1..5 (3 relativo; teto absoluto so se pedido)
 }
 
 export interface LinhaP1 {
@@ -73,8 +73,6 @@ export interface LinhaP1 {
   metade2: ResumoMetade;
   criteriosFalhos: number[];
   promovivel: Promovivel;
-  criteriosFalhosSemTeto: number[];
-  promovivelSemTeto: Promovivel;
   itensAPiores: string[];
 }
 
@@ -186,7 +184,6 @@ function resumoMetade(sub: number[], meu: readonly ObsP1[], ref: readonly ObsP1[
     custoRel,
     vitoria,
     criteriosFalhos: referencia ? [] : criteriosFalhosP1(m, ctx.tetoVies),
-    criteriosFalhosSemTeto: referencia ? [] : criteriosFalhosP1(m, null),
   };
 }
 
@@ -240,14 +237,9 @@ export function calcularLinhaP1(
     perda90 += pinball(e.real, iv.p90, q.q90);
   }
   const cob = nIntervalo === 0 ? null : cobertos / nIntervalo;
-  const falhos = (teto: number | null, h1: number[], h2: number[]): number[] => {
-    const f = criteriosFalhosP1(m, teto);
-    if (falhaCriterio7(cob, nIntervalo)) f.push(7);
-    if (h1.length > 0 || h2.length > 0) f.push(8);
-    return f;
-  };
-  const f = referencia ? [] : falhos(ctx.tetoVies, metade1.criteriosFalhos, metade2.criteriosFalhos);
-  const fSem = referencia ? [] : falhos(null, metade1.criteriosFalhosSemTeto, metade2.criteriosFalhosSemTeto);
+  const f = referencia ? [] : criteriosFalhosP1(m, ctx.tetoVies);
+  if (!referencia && falhaCriterio7(cob, nIntervalo)) f.push(7);
+  if (!referencia && (metade1.criteriosFalhos.length > 0 || metade2.criteriosFalhos.length > 0)) f.push(8);
   const decisao = (lista: number[]): Promovivel => (referencia ? 'referencia' : lista.length > 0 ? 'nao' : 'candidato');
   return {
     segmento,
@@ -277,8 +269,6 @@ export function calcularLinhaP1(
     metade2,
     criteriosFalhos: f,
     promovivel: decisao(f),
-    criteriosFalhosSemTeto: fSem,
-    promovivelSemTeto: decisao(fSem),
     itensAPiores: referencia ? [] : total.piores,
   };
 }

@@ -31,7 +31,7 @@ node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/foreca
 | `--formato texto\|json` | texto | so stdout |
 | `--detalhe` | desligado | tabela por serie, com os ids como vieram na entrada |
 | `--relatorio p0\|p1` | p1 | p0 reproduz o relatorio da fase 0 |
-| `--teto-vies <0..1>\|sem` | 0,10 | teto absoluto do criterio 3 (so no p1) |
+| `--teto-vies <0..1>\|sem` | sem | teto absoluto **adicional** do criterio 3 (so no p1); sem a flag, o criterio 3 e relativo puro |
 
 **Dado real fica fora do repositorio.** O CLI recusa (codigo 2) qualquer arquivo sob um diretorio que tenha `.git`
 (inclui este worktree e o checkout principal), com uma unica excecao: `programa/tests/fixtures/` (dado sintetico ou
@@ -87,7 +87,10 @@ disponivel, byte a byte, com `--relatorio p0` (so a string da versao muda). O re
 
 **hashConfig.** O relatorio P1 usa `hashConfigP1()` = hash de `{ base: PREDITIVO_CONFIG, p1: PREDITIVO_CONFIG_P1 }`, entao
 o `config` do cabecalho mudou em relacao a fase 0. `PREDITIVO_CONFIG` nao mudou: o modo p0 mantem o `hashConfig` antigo.
-Mudou um valor de config ou de regra: sobe a versao (`PREDITIVO_VERSAO`).
+Mudou um valor de config ou de regra: sobe a versao (`PREDITIVO_VERSAO`). Excecao registrada: a decisao do Lucas de
+2026-10-27 (criterio 3 relativo, abaixo) trocou `PREDITIVO_CONFIG_P1.criterios.tetoViesPadrao` de 0,10 para `null`, entao o
+`hashConfig` do P1 mudou, mas a versao continua `p1.0.0` porque a P1a ainda nao foi mergeada (nunca houve relatorio P1 oficial).
+O `hashConfig` do `--relatorio p0` nao mudou.
 
 ### Metodos novos e regras de protecao
 
@@ -120,14 +123,24 @@ Mudou um valor de config ou de regra: sobe a versao (`PREDITIVO_VERSAO`).
 55% | 6 itens A piores (so listados) | 7 cobertura em [72%, 88%] com >= 30 pares com intervalo | 8 criterios 1-5 em **cada**
 metade temporal das origens da amostra (k meses: os `floor(k/2)` primeiros e o resto; colunas `M1`/`M2`).
 
-- Criterio 3 com **teto absoluto parametrizavel** (`--teto-vies`, padrao 0,10; `sem` desliga): `|vies| <= teto` (se
-  houver) e `|vies| <= |vies da planilha| + 2 p.p.`. O relatorio mostra sempre as duas variantes: `Falhos teto <x>` e
-  `Falhos sem teto` (o criterio 8 usa a mesma variante). Com teto 0,10 os criterios 1-5 sao os da fase 0 (teste).
+- **Criterio 3 relativo** (decisao do Lucas, 2026-10-27, no lugar do teto absoluto de 10%): o vies do metodo nao pode ser
+  pior que o da planilha Q em mais de 2 pontos percentuais, em modulo, no mesmo segmento e na mesma janela:
+  `|vies do metodo| <= |vies da planilha Q| + 0,02` (`C.promocao.viesFolga`), com vies = soma(previsto - real) / soma(real) sobre
+  a amostra comum. Vale para vies positivo e negativo e tambem em cada metade temporal (criterio 8). Vies da Q indefinido
+  (sem pares ou soma do realizado 0) vale 0; vies do metodo indefinido falha. Nao ha corte absoluto: com vies da Q de 0,29, um
+  metodo com 0,30 passa. Os demais criterios nao mudaram (WAPE -10%, custo -5%, vitoria >= 55%, cobertura 72-88%, 2 rodadas).
+- `--teto-vies <0..1>|sem` (padrao `sem`) e um modo opcional: com um numero acrescenta o corte `|vies| <= teto` ao criterio
+  relativo (ex.: `--teto-vies 0,10` reproduz o criterio de antes da decisao, util para comparar). O cabecalho do relatorio mostra
+  `teto absoluto de vies sem` ou o valor, e o JSON traz `opcoes.tetoVies` (`null` = sem). O relatorio nao mostra mais duas
+  variantes: `Falhos` e `Promovivel` sao os do criterio relativo (mais o teto, se pedido); as chaves `criteriosFalhosSemTeto` e
+  `promovivelSemTeto` do JSON deixaram de existir.
+- **Legado da fase 0**: o criterio 3 da fase 0 (`PREDITIVO_CONFIG.promocao.viesMax` = 0,10: `|vies| <= 0,10` e `<= |vies Q| + 2 p.p.`)
+  NAO mudou e continua valendo no `--relatorio p0`, cuja saida segue byte a byte a da fase 0 (so a string da versao muda).
 - O maximo continua `candidato`: nada e promovido (decisao de sombra e do dono do projeto).
 - Colunas do relatorio (iguais a LEGENDA impressa): `M1`/`M2` = criterios 1-5 que falham em cada metade (`-` = nenhum);
   `Fallb` = pares em que o metodo nao deu previsao e usou a planilha Q; `Cobert` = cobertura de `[p10, p90]`;
-  `Pinb10`/`Pinb90` = pinball de p10 e p90; `Falhos teto <x>` e `Falhos sem teto` = criterios que falham com e sem o teto
-  de vies (`-` = nenhum). `Promovivel`: `referencia` (a propria planilha Q), `candidato` (passa 1-5, 7 e 8) ou
+  `Pinb10`/`Pinb90` = pinball de p10 e p90; `Falhos` = criterios 1-5, 7 e 8 que falham (3 relativo; com teto absoluto so
+  se `--teto-vies` foi dado; `-` = nenhum). `Promovivel`: `referencia` (a propria planilha Q), `candidato` (passa 1-5, 7 e 8) ou
   `nao (<criterios>)`, p. ex. `nao (1,3,7)` = falham os criterios 1, 3 e 7.
 
 ### Cenarios, segmentos e relatorio
@@ -142,7 +155,8 @@ metade temporal das origens da amostra (k meses: os `floor(k/2)` primeiros e o r
 - Aviso `lead-time-truncado`: o lead time pede mais meses do que o horizonte cobre (`max(1, ceil(LT/30)) + 1 > H`).
 - Texto e JSON deterministicos e so ASCII; sem ids de serie nem nomes de fonte fora do `--detalhe`. JSON: topo `versao,
   hashConfig, hashEntrada, opcoes, cenariosMinTreino, linhasRejeitadas, cenarios` (+ `aviso`, `fontes` com detalhe).
-- `--relatorio p0` aceita as opcoes da fase 0 (inclusive `--metodos` com `METODO_IDS`); `--teto-vies` so vale no p1.
+- `--relatorio p0` aceita as opcoes da fase 0 (inclusive `--metodos` com `METODO_IDS`); `--teto-vies` so vale no p1
+  (no p0 o criterio 3 e o legado, com teto fixo 0,10).
 
 ### Entrada por produto
 

@@ -6,7 +6,8 @@ import { rodarBacktest } from '../src/utils/forecastPreditivoBacktest';
 import { executarCli } from '../src/utils/forecastPreditivoCli';
 import type { DependenciasCli } from '../src/utils/forecastPreditivoCli';
 import { executarCliP1, interpretarArgumentosP1 } from '../src/utils/forecastPreditivoCliP1';
-import { hashConfigP1 } from '../src/utils/forecastPreditivoConfigP1';
+import { PREDITIVO_CONFIG_P1, hashConfigP1 } from '../src/utils/forecastPreditivoConfigP1';
+import { passaCriterio3 } from '../src/utils/forecastPreditivoLinhasP1';
 import { normalizarSeries } from '../src/utils/forecastPreditivoSerie';
 import { METODO_IDS, METODO_TODOS_IDS } from '../src/utils/forecastPreditivoTipos';
 import { gerarCsvSinteticas, seriesSinteticas } from './helpers/forecastPreditivoSinteticas';
@@ -37,12 +38,13 @@ const ascii = (t: string) => {
 };
 
 describe('interpretarArgumentosP1: validos', () => {
-  it('padroes: relatorio p1, teto 0,10, todos os metodos, demais flags da fase 0', () => {
+  it('padroes: relatorio p1, sem teto absoluto (criterio 3 relativo), todos os metodos, demais flags da fase 0', () => {
     const r = interpretarArgumentosP1(['--entrada', 'a.csv']);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.opcoes).toMatchObject({ relatorio: 'p1', entrada: 'a.csv', formato: 'texto', detalhe: false });
-    expect(r.opcoes.backtest).toEqual({ horizonte: 6, minTreino: 6, metodos: [...METODO_TODOS_IDS], leadTimePadraoDias: 90, razaoFaltaExcesso: 3, usarMascara: true, tetoVies: 0.1 });
+    expect(r.opcoes.backtest).toEqual({ horizonte: 6, minTreino: 6, metodos: [...METODO_TODOS_IDS], leadTimePadraoDias: 90, razaoFaltaExcesso: 3, usarMascara: true, tetoVies: null });
+    expect(PREDITIVO_CONFIG_P1.criterios.tetoViesPadrao).toBeNull();
   });
   it.each([['0', 0], ['1', 1], ['1,0', 1], ['1.0', 1], ['0.15', 0.15], ['0,15', 0.15], ['sem', null]])('--teto-vies %s', (valor, esperado) => {
     const r = interpretarArgumentosP1(['--entrada', 'a.csv', '--teto-vies', valor]);
@@ -89,7 +91,7 @@ describe('interpretarArgumentosP1: invalidos', () => {
   });
   it('mensagens: teto so vale com p1; valor do teto', () => {
     expect(interpretarArgumentosP1(['--entrada', 'a.csv', '--relatorio', 'p0', '--teto-vies', '0.2'])).toEqual({ ok: false, erro: '--teto-vies so vale com --relatorio p1' });
-    expect(interpretarArgumentosP1(['--entrada', 'a.csv', '--teto-vies', '1.01'])).toMatchObject({ ok: false });
+    expect(interpretarArgumentosP1(['--entrada', 'a.csv', '--teto-vies', '1.01'])).toEqual({ ok: false, erro: '--teto-vies deve ser um numero de 0 a 1 (ex.: 0,10) ou sem (padrao: sem)' });
   });
   it('--relatorio p0 --metodos preditivo-p1 passa no parser, mas a fase 0 recusa com codigo 2', () => {
     const r = executarCliP1(['--entrada', FIX, '--relatorio', 'p0', '--metodos', 'preditivo-p1'], dFix());
@@ -135,11 +137,13 @@ describe('relatorio P1 (texto)', () => {
     expect(t.saida).toContain('Cenario: min-treino 6');
     expect(t.saida).toContain('sem venda >=6 meses');
     expect(t.saida).toContain('XYZ');
-    expect(t.saida).toContain('teto de vies 10,0%');
+    expect(t.saida).toContain('teto absoluto de vies sem');
     expect(t.saida).toContain('Metades das origens: meses');
     expect(t.saida).toContain('Resumo (TOTAL e candidatos):');
-    expect(t.saida).toContain('Falhos teto 10,0%');
-    expect(t.saida).toContain('Falhos sem teto');
+    expect(t.saida).toMatch(/ M2 +Falhos +Promovivel/);
+    expect(t.saida).not.toContain('Falhos teto');
+    expect(t.saida).not.toContain('Falhos sem teto');
+    expect(t.saida).toContain('3 vies relativo (|vies| <= |vies planilha Q| + 2 p.p.; sem teto absoluto, salvo --teto-vies)');
     expect(t.saida).toContain('Criterios: 1 amostra');
     expect(t.saida).toContain('lead-time-truncado');
   });
@@ -158,9 +162,12 @@ describe('relatorio P1 (texto)', () => {
   });
   it('teto sem e --min-treino 12 (um unico cenario)', () => {
     const r = executarCliP1(['--entrada', FIX, '--teto-vies', 'sem', '--min-treino', '12'], dFix());
-    expect(r.saida).toContain('teto de vies sem');
+    expect(r.saida).toContain('teto absoluto de vies sem');
     expect(r.saida).toContain('Cenario principal: min-treino 12');
     expect(r.saida).not.toContain('Cenario: min-treino');
+  });
+  it('--teto-vies 0,10 aparece no cabecalho (modo opcional)', () => {
+    expect(executarCliP1(['--entrada', FIX, '--teto-vies', '0,10'], dFix()).saida).toContain('teto absoluto de vies 10,0%');
   });
   it('so ASCII (console do PowerShell 5.1), tambem com detalhe', () => {
     expect(ascii(t.saida)).toBe(true);
@@ -188,17 +195,17 @@ describe('relatorio P1 (JSON)', () => {
     expect(Object.keys(j.cenarios[0])).toEqual(['minTreino', 'principal', 'origens', 'origensComObservacao', 'metades', 'contagem', 'contagemSegmentos', 'avisos', 'avisosP1', 'amostra', 'linhas']);
     expect(Object.keys(j.cenarios[1].linhas[0])).toEqual([
       'segmento', 'metodo', 'n', 'origens', 'nFallback', 'wapeH1', 'wapeH3', 'wapeLT', 'wapeRef', 'wapeRel', 'viesLT', 'viesRef', 'maeLT', 'custoLT', 'custoRel', 'faltaLT', 'excessoLT',
-      'vitoria', 'cobertura', 'nIntervalo', 'nPoolTotal', 'pinball10', 'pinball90', 'metade1', 'metade2', 'criteriosFalhos', 'promovivel', 'criteriosFalhosSemTeto', 'promovivelSemTeto', 'nItensAPiores',
+      'vitoria', 'cobertura', 'nIntervalo', 'nPoolTotal', 'pinball10', 'pinball90', 'metade1', 'metade2', 'criteriosFalhos', 'promovivel', 'nItensAPiores',
     ]);
-    expect(Object.keys(j.cenarios[1].linhas[0].metade1)).toEqual(['n', 'origens', 'wapeLT', 'wapeRef', 'viesLT', 'viesRef', 'custoRel', 'vitoria', 'criteriosFalhos', 'criteriosFalhosSemTeto']);
+    expect(Object.keys(j.cenarios[1].linhas[0].metade1)).toEqual(['n', 'origens', 'wapeLT', 'wapeRef', 'viesLT', 'viesRef', 'custoRel', 'vitoria', 'criteriosFalhos']);
     expect(Object.keys(j.cenarios[1].contagemSegmentos)).toEqual(['abc', 'sbc', 'xyz', 'lt', 'fonte', 'regra']);
     expect(Object.keys(j.cenarios[1].metades)).toEqual(['meses1', 'meses2', 'ultimoMes1']);
   });
-  it('valores: versao, cenarios [12, 6], principal, teto 0,1; round6', () => {
+  it('valores: versao, cenarios [12, 6], principal, sem teto absoluto; round6', () => {
     expect(j.versao).toBe('p1.0.0');
     expect(j.cenarios.map((c: { minTreino: number; principal: boolean }) => [c.minTreino, c.principal])).toEqual([[12, true], [6, false]]);
     expect(j.cenariosMinTreino).toEqual([12, 6]);
-    expect(j.opcoes.tetoVies).toBe(0.1);
+    expect(j.opcoes.tetoVies).toBeNull();
     const q = j.cenarios[1].linhas.find((l: { segmento: string; metodo: string }) => l.segmento === 'TOTAL' && l.metodo === 'planilha-q');
     expect(Math.round(q.wapeLT * 1e6) / 1e6).toBe(q.wapeLT);
   });
@@ -206,6 +213,21 @@ describe('relatorio P1 (JSON)', () => {
     expect(JSON.parse(run('--teto-vies', 'sem', '--min-treino', '12').saida).opcoes.tetoVies).toBeNull();
     expect(JSON.parse(run('--teto-vies', 'sem', '--min-treino', '12').saida).cenarios).toHaveLength(1);
     expect(JSON.parse(run('--teto-vies', '0,15').saida).opcoes.tetoVies).toBe(0.15);
+  });
+  it('o teto chega do CLI as linhas e as metades: padrao e relativo puro; --teto-vies 0,10 e 0,01 mudam so o criterio 3', () => {
+    type L = { metodo: string; viesLT: number | null; viesRef: number | null; criteriosFalhos: number[]; metade1: L; metade2: L };
+    const todas = (j: { cenarios: { linhas: L[] }[] }) => j.cenarios.flatMap((c) => c.linhas).filter((l) => l.metodo !== 'planilha-q');
+    for (const [extra, teto] of [[[], null], [['--teto-vies', 'sem'], null], [['--teto-vies', '0,10'], 0.1], [['--teto-vies', '0,01'], 0.01]] as [string[], number | null][]) {
+      const linhas = todas(JSON.parse(run(...extra).saida));
+      expect(linhas.length).toBeGreaterThan(100);
+      for (const l of linhas) {
+        for (const x of [l, l.metade1, l.metade2]) expect(x.criteriosFalhos.includes(3)).toBe(!passaCriterio3(x.viesLT, x.viesRef, teto));
+      }
+    }
+    const padrao = todas(JSON.parse(run().saida));
+    const com = todas(JSON.parse(run('--teto-vies', '0,01').saida));
+    expect(padrao.some((l, i) => !l.criteriosFalhos.includes(3) && com[i].criteriosFalhos.includes(3))).toBe(true);
+    expect(padrao.every((l, i) => !l.criteriosFalhos.includes(3) || com[i].criteriosFalhos.includes(3))).toBe(true);
   });
   it('--metodos limita as linhas aos pedidos', () => {
     const m = JSON.parse(run('--metodos', 'preditivo-p1,ses').saida);

@@ -33,7 +33,8 @@ export const PREDITIVO_CONFIG_P1 = congelar({
   },
   protecao: PROTECAO,
   intervalo: { q10: 0.1, q90: 0.9, janelaEscala: 12, minResiduos: 30, coberturaMin: 0.72, coberturaMax: 0.88, minPares: 30 },
-  criterios: { tetoViesPadrao: 0.1, minTreinoPrincipal: 12 },
+  // tetoViesPadrao null: criterio 3 RELATIVO puro (decisao do Lucas, 2026-10-27); --teto-vies <0..1> soma um teto absoluto.
+  criterios: { tetoViesPadrao: null as number | null, minTreinoPrincipal: 12 },
   segmentos: { ltAte60: 60, ltAte90: 90, topFontes: 10 },
 });
 

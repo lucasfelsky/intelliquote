@@ -1,6 +1,7 @@
 // Forecast preditivo (P1a): CLI local P1, PURO (mesmo contrato do CLI da fase 0: dependencias injetadas, nunca escreve em
 // disco, devolve { codigo, saida, erro }). Codigos: 0 ok | 1 erro inesperado | 2 entrada/opcao invalida ou caminho recusado.
-// Flags novas: --relatorio p0|p1 (padrao p1) e --teto-vies <0..1>|sem (padrao 0,10). O modo p0 delega ao executarCli da fase 0
+// Flags novas: --relatorio p0|p1 (padrao p1) e --teto-vies <0..1>|sem (padrao sem: criterio 3
+// relativo puro; um numero soma o teto absoluto |vies| <= teto). O modo p0 delega ao executarCli da fase 0
 // (saida byte a byte; so a versao muda).
 import { rodarBacktestP1, validarOpcoesBacktestP1 } from './forecastPreditivoBacktestP1';
 import type { OpcoesBacktestP1 } from './forecastPreditivoBacktestP1';
@@ -53,7 +54,7 @@ export function interpretarArgumentosP1(argv: string[]): Interpretacao {
     const valor = Number(tetoTexto.replace(',', '.'));
     if (tetoTexto === 'sem') tetoVies = null;
     else if (RE_TETO.test(tetoTexto) && valor <= 1) tetoVies = valor;
-    else return { ok: false, erro: '--teto-vies deve ser um numero de 0 a 1 (ex.: 0,10) ou sem' };
+    else return { ok: false, erro: '--teto-vies deve ser um numero de 0 a 1 (ex.: 0,10) ou sem (padrao: sem)' };
   }
   const base = interpretarArgumentos(relatorio === 'p0' ? p0 : resto);
   if (relatorio === 'p0') {

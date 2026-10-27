@@ -7,18 +7,48 @@ import { chavesSegmentoP1, classeLeadTime, leadTimeTruncado, ordenarSegmentosP1,
 import { somarMeses } from '../src/utils/forecastPreditivoSerie';
 import type { SerieNormalizada } from '../src/utils/forecastPreditivoTipos';
 
-describe('passaCriterio3 (teto parametrizavel)', () => {
+describe('passaCriterio3 relativo (padrao da D5, decisao do Lucas em 2026-10-27)', () => {
+  it.each([
+    // [viesLT, viesRef, passa]: |vies do metodo| <= |vies da Q| + 0,02, em modulo e dos dois lados
+    [0.51, 0.49, true],
+    [0.5101, 0.49, false],
+    [-0.51, 0.49, true],
+    [-0.5101, 0.49, false],
+    [0.51, -0.49, true],
+    [0.5101, -0.49, false],
+    [-0.51, -0.49, true],
+    [-0.5101, -0.49, false],
+    [0, 0.5, true], // bem melhor que a Q
+    [0.12, 0, false], // Q sem vies: so 2 p.p. de folga
+    [0.02, 0, true],
+    [0.0201, 0, false],
+  ])('vies %s, vies Q %s -> %s (sem teto absoluto)', (viesLT, viesRef, passa) => {
+    expect(passaCriterio3(viesLT, viesRef, null)).toBe(passa);
+  });
+  it('vies da Q indefinido (null) vale 0; vies do metodo indefinido falha', () => {
+    expect(passaCriterio3(0.02, null, null)).toBe(true);
+    expect(passaCriterio3(-0.02, null, null)).toBe(true);
+    expect(passaCriterio3(0.0201, null, null)).toBe(false);
+    expect(passaCriterio3(-0.0201, null, null)).toBe(false);
+    expect(passaCriterio3(null, 0.5, null)).toBe(false);
+    expect(passaCriterio3(null, null, null)).toBe(false);
+  });
+  it('SEM teto nao ha limite absoluto: vies 0,30 com vies Q 0,29 passa; com teto 0,10 falha', () => {
+    expect(passaCriterio3(0.3, 0.29, null)).toBe(true);
+    expect(passaCriterio3(0.3, 0.29, 0.1)).toBe(false);
+    expect(passaCriterio3(-0.9, -0.89, null)).toBe(true);
+    expect(passaCriterio3(0.9, 0.89, 1)).toBe(true);
+    expect(passaCriterio3(0.3, 0.29, 0.3)).toBe(true);
+    expect(passaCriterio3(0.3001, 0.29, 0.3)).toBe(false);
+  });
+});
+
+describe('passaCriterio3 com teto absoluto opcional (--teto-vies)', () => {
   it('teto 0,10 com viesRef 0,5: 0,1 passa; 0,101 e -0,101 falham', () => {
     expect(passaCriterio3(0.1, 0.5, 0.1)).toBe(true);
     expect(passaCriterio3(0.101, 0.5, 0.1)).toBe(false);
     expect(passaCriterio3(-0.1, 0.5, 0.1)).toBe(true);
     expect(passaCriterio3(-0.101, 0.5, 0.1)).toBe(false);
-  });
-  it('sem teto com viesRef 0,49: 0,51 passa e 0,511 falha (folga de 2 p.p.)', () => {
-    expect(passaCriterio3(0.51, 0.49, null)).toBe(true);
-    expect(passaCriterio3(0.511, 0.49, null)).toBe(false);
-    expect(passaCriterio3(-0.51, 0.49, null)).toBe(true);
-    expect(passaCriterio3(-0.511, -0.49, null)).toBe(false);
   });
   it('teto 0 so aceita vies exatamente 0; viesRef null vale 0; viesLT null falha', () => {
     expect(passaCriterio3(0, 0.5, 0)).toBe(true);
@@ -35,7 +65,7 @@ describe('passaCriterio3 (teto parametrizavel)', () => {
   });
 });
 
-describe('criteriosFalhosP1 == criteriosFalhos da fase 0 com teto 0,10', () => {
+describe('criteriosFalhosP1 com teto 0,10 == criteriosFalhos da fase 0 (viesMax 0,10 legado)', () => {
   it('grade de MedidasPromocao (inclui as fronteiras)', () => {
     let casos = 0;
     for (const origens of [5, 6]) {
@@ -57,7 +87,7 @@ describe('criteriosFalhosP1 == criteriosFalhos da fase 0 com teto 0,10', () => {
     }
     expect(casos).toBe(2 * 2 * 4 * 8 * 5 * 3 * 3);
   });
-  it('sem teto: so o criterio 3 muda, e fica ordenado', () => {
+  it('relativo (sem teto): so o criterio 3 muda, e fica ordenado', () => {
     const m: MedidasPromocao = { origens: 6, n: 30, wapeLT: 0.5, wapeRef: 1, viesLT: 0.15, viesRef: 0.2, custoRel: 0.5, vitoria: 0.9 };
     expect(criteriosFalhosP1(m, 0.1)).toEqual([3]);
     expect(criteriosFalhosP1(m, null)).toEqual([]);
@@ -83,7 +113,7 @@ describe('falhaCriterio7', () => {
 const MESES = Array.from({ length: 12 }, (_, k) => somarMeses('2025-01', k));
 const SERIES = ['S1', 'S2', 'S3', 'S4', 'S5'];
 const pares: ParLinha[] = SERIES.flatMap((id) => MESES.map((origem) => ({ serieId: id, origem, abc: 'B' as const })));
-const ctx = (extra: Partial<ContextoLinha> = {}): ContextoLinha => ({ pares, razaoFaltaExcesso: 3, tetoVies: 0.1, ultimoMes1: '2025-06', ...extra });
+const ctx = (extra: Partial<ContextoLinha> = {}): ContextoLinha => ({ pares, razaoFaltaExcesso: 3, tetoVies: null, ultimoMes1: '2025-06', ...extra });
 const indices = pares.map((_, p) => p);
 
 type Fator = (p: number) => number;
@@ -129,8 +159,6 @@ describe('calcularLinhaP1: valores a mao', () => {
   it('tudo limpo nas duas metades: candidato e sem criterio 7 nem 8', () => {
     expect(l.criteriosFalhos).toEqual([]);
     expect(l.promovivel).toBe('candidato');
-    expect(l.criteriosFalhosSemTeto).toEqual([]);
-    expect(l.promovivelSemTeto).toBe('candidato');
     expect(l.metade1).toMatchObject({ n: 30, origens: 6, criteriosFalhos: [] });
     expect(l.metade2).toMatchObject({ n: 30, origens: 6, criteriosFalhos: [] });
   });
@@ -142,7 +170,7 @@ describe('calcularLinhaP1: valores a mao', () => {
   });
   it('planilha-q e a referencia: criterios [], vitoria null, sem itens piores', () => {
     const q = linha(ref, ctx(), 'planilha-q');
-    expect(q).toMatchObject({ promovivel: 'referencia', promovivelSemTeto: 'referencia', criteriosFalhos: [], criteriosFalhosSemTeto: [], vitoria: null, itensAPiores: [] });
+    expect(q).toMatchObject({ promovivel: 'referencia', criteriosFalhos: [], vitoria: null, itensAPiores: [] });
     expect(q.metade1.criteriosFalhos).toEqual([]);
   });
 });
@@ -190,17 +218,27 @@ describe('criterio 8 (estabilidade nas duas metades)', () => {
     expect(l.metade2.n).toBe(60);
     expect(l.criteriosFalhos).toContain(8);
   });
-  it('variantes do teto: vies 0,15 x ref 0,2 falha 3 e 8 com teto 0,10, e limpo sem teto', () => {
+  it('padrao relativo: vies 0,15 x ref 0,2 e candidato; com teto 0,10 falha 3 e 8 (metade 1 tambem)', () => {
     const refAlta = obsPares(() => 1.2, () => null);
-    const l = calcularLinhaP1('TOTAL', 'ses', indices, obsPares(() => 1.15, cobertura83), refAlta, ctx());
-    expect(l.metade1.criteriosFalhos).toEqual([3]);
-    expect(l.metade1.criteriosFalhosSemTeto).toEqual([]);
-    expect(l.criteriosFalhos).toEqual([3, 8]);
-    expect(l.promovivel).toBe('nao');
-    expect(l.criteriosFalhosSemTeto).toEqual([]);
-    expect(l.promovivelSemTeto).toBe('candidato');
+    const meu = obsPares(() => 1.15, cobertura83);
+    const l = calcularLinhaP1('TOTAL', 'ses', indices, meu, refAlta, ctx());
+    expect(l.metade1.criteriosFalhos).toEqual([]);
+    expect(l.criteriosFalhos).toEqual([]);
+    expect(l.promovivel).toBe('candidato');
+    const t = calcularLinhaP1('TOTAL', 'ses', indices, meu, refAlta, ctx({ tetoVies: 0.1 }));
+    expect(t.metade1.criteriosFalhos).toEqual([3]);
+    expect(t.criteriosFalhos).toEqual([3, 8]);
+    expect(t.promovivel).toBe('nao');
   });
-  it('o teto do contexto chega a linha: teto 0,20 deixa a variante com teto limpa; teto 0 reprova ate vies 0,05', () => {
+  it('vies 0,30 com vies Q 0,29 (acima de qualquer teto 0,10): passa o 3 sem teto, falha o 3 com teto 0,10', () => {
+    const refAlta = obsPares(() => 1.29, () => null);
+    const meu = obsPares(() => 1.3, cobertura83);
+    expect(calcularLinhaP1('TOTAL', 'ses', indices, meu, refAlta, ctx()).criteriosFalhos).not.toContain(3);
+    const t = calcularLinhaP1('TOTAL', 'ses', indices, meu, refAlta, ctx({ tetoVies: 0.1 }));
+    expect(t.criteriosFalhos).toContain(3);
+    expect(t.metade1.criteriosFalhos).toContain(3);
+  });
+  it('o teto do contexto chega a linha: teto 0,20 deixa a linha limpa; teto 0 reprova ate vies 0,05', () => {
     const refAlta = obsPares(() => 1.2, () => null);
     const meu = obsPares(() => 1.15, cobertura83);
     expect(calcularLinhaP1('TOTAL', 'ses', indices, meu, refAlta, ctx({ tetoVies: 0.2 })).criteriosFalhos).toEqual([]);

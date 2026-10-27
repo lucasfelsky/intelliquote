@@ -32,7 +32,7 @@ describe('registros e tipos', () => {
     expect(Object.isFrozen(PREDITIVO_CONFIG_P1.protecao)).toBe(true);
     expect(PREDITIVO_CONFIG_P1.combinacao).toEqual({ componentes: ['ses', 'planilha-r', 'holt-amortecido'], minimoValidos: 4, minimoValidosHolt: 8 });
     expect(PREDITIVO_CONFIG_P1.intervalo.minResiduos).toBe(30);
-    expect(PREDITIVO_CONFIG_P1.criterios).toEqual({ tetoViesPadrao: 0.1, minTreinoPrincipal: 12 });
+    expect(PREDITIVO_CONFIG_P1.criterios).toEqual({ tetoViesPadrao: null, minTreinoPrincipal: 12 });
   });
 });
 
