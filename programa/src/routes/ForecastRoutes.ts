@@ -161,6 +161,36 @@ router.delete(
   ForecastController.deleteGrupoEquivalencia,
 );
 
+// Ocasioes que afetam o lead time (feriado, greve, fechamento de porto): por ora so informam no relatorio. Leitura =
+// equipe COMEX (com janela, expande a recorrencia); criar, editar e apagar = admin/comprador. `comercial` nao entra.
+router.get(
+  '/forecast/lead-time-events',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.listOcasioes,
+);
+
+router.post(
+  '/forecast/lead-time-events',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.createOcasiao,
+);
+
+router.patch(
+  '/forecast/lead-time-events/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.patchOcasiao,
+);
+
+router.delete(
+  '/forecast/lead-time-events/:id',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteOcasiao,
+);
+
 router.get('/forecast/snapshots', requireAuth, allowRoles(COMEX_ROLES), ForecastController.listSnapshots);
 
 router.get(

@@ -5,6 +5,7 @@ import { ForecastDemandaComercialService } from '../services/ForecastDemandaCome
 import { ForecastGrupoEquivalenciaService } from '../services/ForecastGrupoEquivalenciaService';
 import { ForecastImportService } from '../services/ForecastImportService';
 import { ForecastMesesAtipicosService } from '../services/ForecastMesesAtipicosService';
+import { ForecastOcasioesService } from '../services/ForecastOcasioesService';
 import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
 import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
@@ -23,6 +24,9 @@ import {
   forecastGrupoEquivalenciaCreateSchema,
   forecastGrupoEquivalenciaPatchSchema,
   forecastMesesAtipicosPutSchema,
+  forecastOcasiaoCreateSchema,
+  forecastOcasiaoPatchSchema,
+  forecastOcasioesQuerySchema,
   forecastProductCodeAddSchema,
   forecastProductCreateSchema,
   forecastProductReativarSchema,
@@ -424,6 +428,61 @@ export class ForecastController {
         query.layout === 'macro'
           ? await ForecastSnapshotService.getRelatorioComprasXlsxMacro(id, query.hoje)
           : await ForecastSnapshotService.getRelatorioComprasXlsx(id, query.hoje);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async listOcasioes(req: Request, res: Response): Promise<Response> {
+    try {
+      const str = (valor: unknown) => (typeof valor === 'string' ? valor : undefined);
+      const query = forecastOcasioesQuerySchema.parse({
+        de: str(req.query.de),
+        ate: str(req.query.ate),
+        scopeType: str(req.query.scopeType),
+        countryCode: str(req.query.countryCode),
+        sourceId: typeof req.query.sourceId === 'string' ? Number(req.query.sourceId) : undefined,
+        ativa: str(req.query.ativa),
+      });
+      const data = await ForecastOcasioesService.list(query);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async createOcasiao(req: Request, res: Response): Promise<Response> {
+    try {
+      const input = forecastOcasiaoCreateSchema.parse(req.body);
+      const data = await ForecastOcasioesService.create(input, req.user?.id ?? null);
+      return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async patchOcasiao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Ocasião inválida.');
+      }
+      const input = forecastOcasiaoPatchSchema.parse(req.body);
+      const data = await ForecastOcasioesService.patch(id, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async deleteOcasiao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Ocasião inválida.');
+      }
+      const data = await ForecastOcasioesService.remove(id, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
