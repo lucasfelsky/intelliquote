@@ -112,6 +112,29 @@ function observar(s: SerieNormalizada, i: number, origem: AnoMes, r: Extract<Res
 
 const soma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
+export interface MedidasPromocao {
+  origens: number;
+  n: number;
+  wapeLT: number | null;
+  wapeRef: number | null;
+  viesLT: number | null;
+  viesRef: number | null;
+  custoRel: number | null;
+  vitoria: number | null;
+}
+
+// Criterios 1 a 5 do desenho 4.4 (o 6 e informativo, 7 e 8 pendentes). Retorna os numeros dos criterios que falham.
+export function criteriosFalhos(m: MedidasPromocao): number[] {
+  const P = C.promocao;
+  const falhos: number[] = [];
+  if (!(m.origens >= P.minOrigens && m.n >= P.minObs)) falhos.push(1);
+  if (!(m.wapeLT !== null && m.wapeRef !== null && m.wapeLT <= P.wapeRel * m.wapeRef)) falhos.push(2);
+  if (!(m.viesLT !== null && Math.abs(m.viesLT) <= P.viesMax && Math.abs(m.viesLT) <= Math.abs(m.viesRef ?? 0) + P.viesFolga)) falhos.push(3);
+  if (!(m.custoRel !== null && m.custoRel <= P.custoRel)) falhos.push(4);
+  if (!(m.vitoria !== null && m.vitoria >= P.vitoria)) falhos.push(5);
+  return falhos;
+}
+
 function calcularLinha(segmento: string, metodo: MetodoId, indices: number[], res: Resultados, pares: Par[], o: OpcoesBacktest): LinhaResultado {
   const meu = res.get(metodo)!;
   const ref = res.get('planilha-q')!;
@@ -156,12 +179,7 @@ function calcularLinha(segmento: string, metodo: MetodoId, indices: number[], re
   const origens = new Set(eM.map((x) => x.origem)).size;
   const custoRel = custoR > 0 ? custoM / custoR : null;
   const vitoria = comparaveis > 0 ? vitorias / comparaveis : null;
-  const falhos: number[] = [];
-  if (!(origens >= C.promocao.minOrigens && eM.length >= C.promocao.minObs)) falhos.push(1);
-  if (!(wapeLT !== null && wapeRef !== null && wapeLT <= C.promocao.wapeRel * wapeRef)) falhos.push(2);
-  if (!(viesLT !== null && Math.abs(viesLT) <= C.promocao.viesMax && Math.abs(viesLT) <= Math.abs(viesRef ?? 0) + C.promocao.viesFolga)) falhos.push(3);
-  if (!(custoRel !== null && custoRel <= C.promocao.custoRel)) falhos.push(4);
-  if (!(vitoria !== null && vitoria >= C.promocao.vitoria)) falhos.push(5);
+  const falhos = criteriosFalhos({ origens, n: eM.length, wapeLT, wapeRef, viesLT, viesRef, custoRel, vitoria });
   const referencia = metodo === 'planilha-q';
   return {
     segmento,
@@ -232,7 +250,11 @@ export function rodarBacktest(entrada: SerieNormalizada[], o: OpcoesBacktest): R
 
   const porSegmento = new Map<string, number[]>();
   pares.forEach((p, pi) => {
-    for (const k of ['TOTAL', p.seg.abc, p.seg.sbc, `${p.seg.abc}/${p.seg.sbc}`]) porSegmento.set(k, [...(porSegmento.get(k) ?? []), pi]);
+    for (const k of ['TOTAL', p.seg.abc, p.seg.sbc, `${p.seg.abc}/${p.seg.sbc}`]) {
+      const lista = porSegmento.get(k);
+      if (lista) lista.push(pi);
+      else porSegmento.set(k, [pi]);
+    }
   });
   const linhas: LinhaResultado[] = [];
   for (const k of ordenarSegmentos([...porSegmento.keys()])) {
@@ -241,9 +263,15 @@ export function rodarBacktest(entrada: SerieNormalizada[], o: OpcoesBacktest): R
 
   const fim = series.map(ultimoMes).sort().pop() ?? '';
   const finais = fim === '' ? new Map<string, Segmento>() : segmentar(series, fim);
+  const paresPorSerie = new Map<number, number[]>(); // indices de pares (ordem crescente) por indice de serie
+  pares.forEach((p, pi) => {
+    const lista = paresPorSerie.get(p.s);
+    if (lista) lista.push(pi);
+    else paresPorSerie.set(p.s, [pi]);
+  });
   const contagem = { series: series.length, comPrevisao: 0, semVenda: 0, historicoCurto: 0 };
   const porSerie: ResumoSerie[] = series.map((s, idx) => {
-    const meus = pares.map((p, pi) => ({ p, pi })).filter((x) => x.p.s === idx);
+    const meus = (paresPorSerie.get(idx) ?? []).map((pi) => ({ p: pares[pi], pi }));
     const semVenda = s.valores.length > 0 && s.valores.every((v) => v === 0);
     if (meus.length > 0) contagem.comPrevisao++;
     else {

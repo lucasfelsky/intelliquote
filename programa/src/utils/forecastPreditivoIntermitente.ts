@@ -11,10 +11,11 @@ export function crostonEstado(
   valores: number[],
   mascara: boolean[],
   alfa: number,
+  minimoVendas: number = C.minimoVendas.croston,
 ): { tamanho: number; intervalo: number; sse: number } | null {
   const seq = valores.filter((_, i) => !mascara[i]);
   const k = seq.findIndex((v) => v > 0);
-  if (k < 0 || seq.filter((v) => v > 0).length < 2) return null;
+  if (k < 0 || seq.filter((v) => v > 0).length < minimoVendas) return null;
   let tamanho = seq[k];
   let intervalo = k + 1;
   let ultima = k;
@@ -31,10 +32,10 @@ export function crostonEstado(
   return { tamanho, intervalo, sse };
 }
 
-function melhorCroston(s: SerieNormalizada): { alfa: number; taxa: number } | null {
+function melhorCroston(s: SerieNormalizada, id: 'croston' | 'sba'): { alfa: number; taxa: number } | null {
   const candidatos: { alfa: number; taxa: number; sse: number }[] = [];
   for (const alfa of C.gradeCroston.alfa) {
-    const e = crostonEstado(s.valores, s.mascara, alfa);
+    const e = crostonEstado(s.valores, s.mascara, alfa, C.minimoVendas[id]);
     if (e) candidatos.push({ alfa, taxa: e.tamanho / e.intervalo, sse: e.sse });
   }
   return candidatos.length === 0 ? null : escolherMenorSse(candidatos);
@@ -44,7 +45,7 @@ function intermitente(id: 'croston' | 'sba'): Metodo {
   return (s, o) => {
     const invalido = validarAntes(s, o, id, 0);
     if (invalido) return invalido;
-    const m = melhorCroston(s);
+    const m = melhorCroston(s, id);
     if (!m) return { ok: false, metodo: id, motivo: 'historico-curto' };
     const valor = id === 'sba' ? (1 - m.alfa / 2) * m.taxa : m.taxa;
     return montarResultado(s, id, new Array<number>(o.horizonte).fill(valor), [], { alfa: m.alfa });

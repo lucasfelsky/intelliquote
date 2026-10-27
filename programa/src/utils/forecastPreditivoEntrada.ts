@@ -9,7 +9,6 @@ export const LIMITE_PONTOS = 240;
 
 type Caminhos = typeof nodePath.win32 | typeof nodePath.posix;
 
-const COLUNAS = ['serie', 'anomes', 'quantidade', 'atipico', 'ruptura', 'fonte', 'familia', 'leadtimedias'];
 const OBRIGATORIAS = ['serie', 'anomes', 'quantidade'];
 const NENHUMA = 'nenhuma serie';
 
@@ -51,7 +50,7 @@ class Acumulador {
 
 function lerCsv(texto: string): { series: SerieEntrada[]; erros: string[] } {
   const acc = new Acumulador();
-  const linhas = texto.replace(/^﻿/, '').split(/\r\n|\n|\r/);
+  const linhas = texto.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/);
   const primeira = linhas.findIndex((l) => l.trim() !== '');
   if (primeira < 0) return acc.resultado();
   const sep = linhas[primeira].includes(';') ? ';' : ',';
@@ -113,7 +112,7 @@ function lerJson(texto: string): { series: SerieEntrada[]; erros: string[] } {
   const acc = new Acumulador();
   let raiz: unknown;
   try {
-    raiz = JSON.parse(texto.replace(/^﻿/, ''));
+    raiz = JSON.parse(texto.replace(/^\uFEFF/, ''));
   } catch {
     acc.erros.push('json invalido');
     return acc.resultado();

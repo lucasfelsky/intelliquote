@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { rodarBacktest, validarOpcoesBacktest } from '../src/utils/forecastPreditivoBacktest';
-import type { LinhaResultado, OpcoesBacktest } from '../src/utils/forecastPreditivoBacktest';
+import { criteriosFalhos, rodarBacktest, validarOpcoesBacktest } from '../src/utils/forecastPreditivoBacktest';
+import type { LinhaResultado, MedidasPromocao, OpcoesBacktest } from '../src/utils/forecastPreditivoBacktest';
 import { METODOS } from '../src/utils/forecastPreditivoMetodos';
 import { normalizarSeries, somarMeses } from '../src/utils/forecastPreditivoSerie';
 import { AVISO_IDS, METODO_IDS } from '../src/utils/forecastPreditivoTipos';
@@ -185,6 +185,80 @@ describe('promocao (avaliada, sem efeito)', () => {
     const r = rodar(normalizarSeries(copias(sinteticas('TEND')[0], 3)).series, { metodos: ['holt'] });
     expect(new Set(r.linhas.map((l) => l.metodo))).toEqual(new Set(['holt']));
     expect(linha(r.linhas, 'TOTAL', 'holt').custoRel).not.toBeNull();
+  });
+});
+
+describe('promocao: fronteira de cada limiar (criterios 1 a 5)', () => {
+  // Base que atende tudo, nos limites exatos de origens e n; cada caso mexe em UM campo.
+  const BOA: MedidasPromocao = { origens: 6, n: 30, wapeLT: 0.5, wapeRef: 1, viesLT: 0.01, viesRef: 0.01, custoRel: 0.9, vitoria: 0.6 };
+  const falhos = (m: Partial<MedidasPromocao>) => criteriosFalhos({ ...BOA, ...m });
+  it('a base atende todos os criterios', () => {
+    expect(falhos({})).toEqual([]);
+  });
+  it('minOrigens 6: 5 falha, 6 passa', () => {
+    expect(falhos({ origens: 5 })).toEqual([1]);
+    expect(falhos({ origens: 6 })).toEqual([]);
+    expect(falhos({ origens: 7 })).toEqual([]);
+  });
+  it('minObs 30: 29 falha, 30 passa', () => {
+    expect(falhos({ n: 29 })).toEqual([1]);
+    expect(falhos({ n: 30 })).toEqual([]);
+    expect(falhos({ n: 31 })).toEqual([]);
+  });
+  it('wapeRel 0,90 da planilha: 0,899 e 0,90 passam, 0,901 falha; sem WAPE falha', () => {
+    expect(falhos({ wapeLT: 0.899 })).toEqual([]);
+    expect(falhos({ wapeLT: 0.9 })).toEqual([]);
+    expect(falhos({ wapeLT: 0.901 })).toEqual([2]);
+    expect(falhos({ wapeLT: null })).toEqual([2]);
+    expect(falhos({ wapeRef: null })).toEqual([2]);
+  });
+  it('viesMax 0,10 (planilha com vies grande para isolar o teto)', () => {
+    const ref = { viesRef: 0.5 };
+    expect(falhos({ ...ref, viesLT: 0.099 })).toEqual([]);
+    expect(falhos({ ...ref, viesLT: 0.1 })).toEqual([]);
+    expect(falhos({ ...ref, viesLT: 0.101 })).toEqual([3]);
+    expect(falhos({ viesLT: null })).toEqual([3]);
+  });
+  it('viesFolga 0,02 sobre o vies absoluto da planilha (planilha sem vies)', () => {
+    const ref = { viesRef: 0 };
+    expect(falhos({ ...ref, viesLT: 0.019 })).toEqual([]);
+    expect(falhos({ ...ref, viesLT: 0.02 })).toEqual([]);
+    expect(falhos({ ...ref, viesLT: 0.021 })).toEqual([3]);
+    expect(falhos({ viesRef: -0.04, viesLT: 0.059 })).toEqual([]); // folga sobre |viesRef|
+    expect(falhos({ viesRef: -0.04, viesLT: 0.061 })).toEqual([3]);
+    expect(falhos({ viesRef: null, viesLT: 0.021 })).toEqual([3]); // sem vies da planilha vale 0
+  });
+  it('vies negativo grande reprova (vale o modulo)', () => {
+    expect(falhos({ viesRef: 0.5, viesLT: -0.5 })).toEqual([3]);
+    expect(falhos({ viesRef: 0.5, viesLT: -0.101 })).toEqual([3]);
+    expect(falhos({ viesRef: 0.5, viesLT: -0.099 })).toEqual([]);
+    expect(falhos({ viesRef: 0, viesLT: -0.021 })).toEqual([3]);
+    expect(falhos({ viesRef: 0, viesLT: -0.019 })).toEqual([]);
+  });
+  it('custoRel 0,95: 0,949 e 0,95 passam, 0,951 falha; sem custo da planilha falha', () => {
+    expect(falhos({ custoRel: 0.949 })).toEqual([]);
+    expect(falhos({ custoRel: 0.95 })).toEqual([]);
+    expect(falhos({ custoRel: 0.951 })).toEqual([4]);
+    expect(falhos({ custoRel: null })).toEqual([4]);
+  });
+  it('vitoria 55%: 0,549 falha, 0,55 e 0,551 passam; sem comparaveis falha', () => {
+    expect(falhos({ vitoria: 0.549 })).toEqual([5]);
+    expect(falhos({ vitoria: 0.55 })).toEqual([]);
+    expect(falhos({ vitoria: 0.551 })).toEqual([]);
+    expect(falhos({ vitoria: null })).toEqual([5]);
+  });
+  it('varios criterios falhos saem em ordem crescente', () => {
+    expect(falhos({ origens: 1, wapeLT: 2, viesLT: 1, custoRel: 2, vitoria: 0 })).toEqual([1, 2, 3, 4, 5]);
+  });
+  it('criterio 6 so considera series A: serie B/C pior que 1,25 x a planilha nao entra em itensAPiores', () => {
+    const grande: SerieEntrada = { id: 'GRANDE', leadTimeDias: 30, pontos: sinteticas('CONST')[0].pontos.map((p) => ({ ...p, qtd: 100000 })) };
+    const r = rodar(normalizarSeries([...copias(sinteticas('TEND')[0], 2), grande]).series, { metodos: ['planilha-q', 'ingenuo-sazonal'] });
+    for (const id of ['TEND1', 'TEND2']) {
+      const s = r.porSerie.find((x) => x.id === id)!;
+      expect(s.abc).not.toBe('A'); // a serie gigante domina o volume
+      expect(s.wapeLT['ingenuo-sazonal']!).toBeGreaterThan(1.25 * s.wapeLT['planilha-q']!); // pior que o limite do criterio 6
+    }
+    expect(linha(r.linhas, 'TOTAL', 'ingenuo-sazonal').itensAPiores).toEqual([]);
   });
 });
 
