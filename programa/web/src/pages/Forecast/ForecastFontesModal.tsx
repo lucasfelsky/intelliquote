@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
-import { Tab, TabList, TabPanel, Tabs } from '@/components/Tabs';
+import { Tab, TabList, Tabs } from '@/components/Tabs';
 import { forecastErrorMessage } from '@/services/forecast';
 import {
   forecastFontesKeys,
@@ -259,19 +259,47 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
   );
 }
 
+const ABAS_BASE_ID = 'fcf-abas';
+
+/**
+ * Painel de aba que continua MONTADO quando inativo (o TabPanel compartilhado desmonta e o rascunho do formulario de
+ * ocasiao se perderia ao trocar de aba). Mesmos ids/aria que o Tabs.tsx espera (aria-controls/aria-labelledby).
+ */
+function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean; children: ReactNode }) {
+  return (
+    <div
+      role="tabpanel"
+      id={`${ABAS_BASE_ID}-panel-${valor}`}
+      aria-labelledby={`${ABAS_BASE_ID}-tab-${valor}`}
+      tabIndex={0}
+      className="tabs-panel"
+      style={{ outline: 'none' }}
+      hidden={!ativo}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function ForecastFontesModal({ podeEditar, onFechar }: Props) {
   const prazoReal = useQuery({ queryKey: forecastFontesKeys.prazoReal, queryFn: getForecastPrazoReal });
   const [aba, setAba] = useState('fontes');
+  // A aba Ocasiões so monta (e so busca dados) na primeira vez em que e aberta; depois fica montada.
+  const [abriuOcasioes, setAbriuOcasioes] = useState(false);
+  const mudarAba = (valor: string) => {
+    if (valor === 'ocasioes') setAbriuOcasioes(true);
+    setAba(valor);
+  };
 
   return (
     <Modal isOpen onClose={onFechar} title="Fontes e lead time" size="xl">
       <div className="fco-abas">
-        <Tabs value={aba} onValueChange={setAba} baseId="fcf-abas">
+        <Tabs value={aba} onValueChange={mudarAba} baseId={ABAS_BASE_ID}>
           <TabList aria-label="Seções do diálogo Fontes e lead time">
             <Tab value="fontes">Lead time por fonte</Tab>
             <Tab value="ocasioes">Ocasiões</Tab>
           </TabList>
-          <TabPanel value="fontes">
+          <PainelDaAba valor="fontes" ativo={aba === 'fontes'}>
             {prazoReal.isLoading && (
               <div className="fcd-carregando" role="status">
                 <Spinner /> Carregando fontes…
@@ -286,10 +314,10 @@ export default function ForecastFontesModal({ podeEditar, onFechar }: Props) {
               </div>
             )}
             {prazoReal.isSuccess && <Conteudo dados={prazoReal.data} podeEditar={podeEditar} />}
-          </TabPanel>
-          <TabPanel value="ocasioes">
-            <ForecastOcasioesPanel podeEditar={podeEditar} />
-          </TabPanel>
+          </PainelDaAba>
+          <PainelDaAba valor="ocasioes" ativo={aba === 'ocasioes'}>
+            {abriuOcasioes && <ForecastOcasioesPanel podeEditar={podeEditar} />}
+          </PainelDaAba>
         </Tabs>
       </div>
     </Modal>

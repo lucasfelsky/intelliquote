@@ -310,6 +310,27 @@ describe('editar', () => {
   });
 });
 
+describe('editar o que nao mudou', () => {
+  it('so o nome de ocasiao com pais desconhecido do Intl: sem erro de pais e PATCH so com o nome', async () => {
+    lista = [oc({ id: 7, name: 'OCASIAO SINTETICA 7', scopeType: 'pais', countryCode: 'XX' })];
+    await abrirEdicao('OCASIAO SINTETICA 7');
+    digitar('Nome', 'NOME NOVO');
+    salvar();
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith(`${URL_EVENTOS}/7`, { name: 'NOME NOVO' });
+    expect(screen.queryByText(/não reconhecido/)).toBeNull();
+  });
+
+  it('so o nome de ocasiao de fonte removida: nao exige escolher fonte', async () => {
+    lista = [oc({ id: 8, name: 'OCASIAO SINTETICA 8', scopeType: 'fonte', sourceId: null, source: null })];
+    await abrirEdicao('OCASIAO SINTETICA 8');
+    digitar('Nome', 'NOME NOVO');
+    salvar();
+    await waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+    expect(patch).toHaveBeenCalledWith(`${URL_EVENTOS}/8`, { name: 'NOME NOVO' });
+  });
+});
+
 describe('modelo', () => {
   it('Ano Novo chines 2027 preenche o formulario sem gravar nada', async () => {
     renderPanel();

@@ -113,6 +113,26 @@ describe('abas', () => {
     await waitFor(() => expect(aba1.getAttribute('aria-selected')).toBe('true'));
   });
 
+  it('trocar de aba nao descarta o rascunho do formulario de ocasiao (painel fica montado, oculto)', async () => {
+    renderModal(true);
+    await screen.findByRole('rowheader', { name: 'FONTE A' });
+    const [aba1, aba2] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
+    fireEvent.click(aba2);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nova ocasião' }));
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'RASCUNHO SINTETICO' } });
+
+    fireEvent.click(aba1);
+    expect(await screen.findByRole('rowheader', { name: 'FONTE A' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Nome' })).toBeNull(); // painel oculto fora da arvore de acessibilidade
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1);
+
+    fireEvent.click(aba2);
+    expect(((await screen.findByRole('textbox', { name: 'Nome' })) as HTMLInputElement).value).toBe('RASCUNHO SINTETICO');
+    expect(screen.queryByRole('rowheader', { name: 'FONTE A' })).toBeNull();
+    // a aba nao refez o carregamento so por reaparecer
+    expect(chamadasDeEventos().filter(([, q]) => q === undefined)).toHaveLength(1);
+  });
+
   it('a aba Ocasiões so busca as ocasioes depois de aberta', async () => {
     renderModal(true);
     await screen.findByRole('rowheader', { name: 'FONTE A' });

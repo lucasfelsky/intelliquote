@@ -3540,7 +3540,7 @@ i.fc-status--preco { background: var(--info); }
 .fco-filtro { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .fco-tabela th, .fco-tabela td, .fco-tabela-ano th, .fco-tabela-ano td { padding-left: 8px; padding-right: 8px; vertical-align: top; }
 .fco-tabela tbody th, .fco-tabela-ano tbody th { text-align: left; font-weight: 600; overflow-wrap: anywhere; }
-.fco-tabela tbody th .fcd-dica { margin-top: 2px; font-weight: 400; }
+.fco-tabela tbody th .fcd-dica { margin-top: 2px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--ink-soft); }
 .fco-acoes { flex-wrap: wrap; gap: 6px; }
 .fco-legenda { caption-side: top; padding: 0 0 6px; text-align: left; font-size: 12px; color: var(--ink-soft); }
 .fco-linha { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
@@ -3589,13 +3589,17 @@ i.fc-status--preco { background: var(--info); }
   .fco-filtros select,
   .fco-modelos select,
   .fco-form select,
-  .fco-pais select { min-height: 44px; }
+  .fco-pais select,
+  .fco-painel .ghost-button,
+  .fco-form input:not([type="radio"]):not([type="checkbox"]),
+  .fco-pais__codigo { min-height: 44px; }
   .fco-form .checkbox-field input { width: 20px; height: 20px; }
 }
 @media (max-width: 700px) {
   .fco-filtros { grid-template-columns: minmax(0, 1fr); }
   .fco-modelos .fcd-campo { min-width: 0; flex: 1 1 100%; }
   .fco-linha__rotulo { width: 120px; }
+  .fco-legenda { display: block; width: 100%; white-space: normal; }
   .fco-tabela, .fco-tabela-ano { min-width: 0; }
   .fco-tabela thead, .fco-tabela-ano thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .fco-tabela, .fco-tabela tbody, .fco-tabela-ano, .fco-tabela-ano tbody { display: block; }

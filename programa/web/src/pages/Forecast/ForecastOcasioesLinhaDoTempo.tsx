@@ -61,6 +61,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
       )}
       {!carregando && !erro && linhas.length > 0 && (
         <>
+          <p className="fcd-dica">Hoje: {dataBr(hoje)}</p>
           <div className="fco-linha" aria-hidden="true">
             <div className="fco-linha__rolagem">
               <div className="fco-linha__grade">

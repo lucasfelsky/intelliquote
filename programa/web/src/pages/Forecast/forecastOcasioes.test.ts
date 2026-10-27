@@ -429,3 +429,37 @@ describe('linha do tempo', () => {
     expect(posicaoDeHoje(HOJE, 2027)).toBeNull();
   });
 });
+
+describe('validarOcasiao: o que nao mudou na edicao nao e reconferido', () => {
+  const doPais = (countryCode: string) => oc({ scopeType: 'pais', countryCode });
+
+  it('pais valido no backend mas desconhecido do Intl passa se nao mudou', () => {
+    const original = doPais('XX');
+    const ctx = { ...CTX, escopoOriginal: 'pais' as const, paisOriginal: 'XX' };
+    const r = validarOcasiao({ ...camposDaOcasiao(original), nome: 'NOME NOVO' }, ctx);
+    expect(r.erros).toEqual({});
+    expect(r.valores?.pais).toBe('XX');
+    expect(montarEdicao(original, r.valores!)).toEqual({ name: 'NOME NOVO' });
+  });
+
+  it('trocar o pais volta a conferir (e minusculas casam com o original)', () => {
+    const original = doPais('XX');
+    const ctx = { ...CTX, escopoOriginal: 'pais' as const, paisOriginal: 'XX' };
+    expect(validarOcasiao({ ...camposDaOcasiao(original), pais: 'QQ' }, ctx).erros.pais).toBe(
+      'Código de país não reconhecido. Confira o código ISO de 2 letras.',
+    );
+    expect(validarOcasiao({ ...camposDaOcasiao(original), pais: 'xx' }, ctx).erros.pais).toBeUndefined();
+    // sem o contexto da edicao, a conferencia continua valendo (nova ocasiao)
+    expect(validarOcasiao({ ...camposDaOcasiao(original) }, CTX).erros.pais).toBeDefined();
+  });
+
+  it('fonte removida (sem id) e escopo intacto: nao exige escolher fonte', () => {
+    const original = oc({ scopeType: 'fonte', sourceId: null, source: null });
+    const ctx = { ...CTX, escopoOriginal: 'fonte' as const, fonteOriginal: null };
+    const r = validarOcasiao({ ...camposDaOcasiao(original), nome: 'NOME NOVO' }, ctx);
+    expect(r.erros).toEqual({});
+    expect(montarEdicao(original, r.valores!)).toEqual({ name: 'NOME NOVO' });
+    // numa ocasiao nova, a fonte continua obrigatoria
+    expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '' }), CTX).erros.fonte).toBe('Informe a fonte da ocasião.');
+  });
+});

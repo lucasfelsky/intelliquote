@@ -16,11 +16,12 @@ interface Props {
   onLimpar: () => void;
 }
 
-const SITUACOES: Array<[FiltrosOcasioes['situacao'], string]> = [
-  ['ativa', 'Ativas (em vigor ou futuras)'],
-  ['passada', 'Passadas'],
-  ['inativa', 'Inativas'],
-  ['todas', 'Todas'],
+// Rotulo curto (cabe no select em larguras medias); a descricao completa vai no title.
+const SITUACOES: Array<[FiltrosOcasioes['situacao'], string, string]> = [
+  ['ativa', 'Ativas', 'Ativas: em vigor ou futuras'],
+  ['passada', 'Passadas', 'Passadas: sem repetição e já encerradas'],
+  ['inativa', 'Inativas', 'Inativas: desligadas pelo usuário'],
+  ['todas', 'Todas', 'Todas as situações'],
 ];
 
 const ALCANCES: Array<[FiltrosOcasioes['escopo'], string]> = [
@@ -60,10 +61,11 @@ export default function ForecastOcasioesFiltros({ filtros, onMudar, paises, font
             id={id('situacao')}
             className="select"
             value={filtros.situacao}
+            title={SITUACOES.find(([valor]) => valor === filtros.situacao)?.[2]}
             onChange={(e) => onMudar({ ...filtros, situacao: e.target.value as FiltrosOcasioes['situacao'] })}
           >
-            {SITUACOES.map(([valor, rotulo]) => (
-              <option key={valor} value={valor}>
+            {SITUACOES.map(([valor, rotulo, descricao]) => (
+              <option key={valor} value={valor} title={descricao}>
                 {rotulo}
               </option>
             ))}

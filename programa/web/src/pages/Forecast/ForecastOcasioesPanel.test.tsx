@@ -1,4 +1,7 @@
+/// <reference types="node" />
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ForecastOcasioesPanel from './ForecastOcasioesPanel';
@@ -418,5 +421,51 @@ describe('inativar, reativar e excluir', () => {
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toBe('Esta ocasião não existe mais (pode ter sido excluída). A lista foi atualizada.');
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ['forecast', 'ocasioes'] });
+  });
+});
+
+describe('ajustes da revisao (QA visual)', () => {
+  it('Situacao: rotulo curto, descricao completa no title', async () => {
+    renderPanel();
+    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    const select = screen.getByLabelText('Situação') as HTMLSelectElement;
+    expect(select.title).toBe('Ativas: em vigor ou futuras');
+    const ativas = within(select).getByRole('option', { name: 'Ativas' }) as HTMLOptionElement;
+    expect(ativas.title).toBe('Ativas: em vigor ou futuras');
+    expect(within(select).queryByRole('option', { name: /em vigor/ })).toBeNull();
+    selecionar('Situação', 'passada');
+    expect(select.title).toMatch(/^Passadas/);
+  });
+
+  it('linha do tempo informa a data de hoje em texto, fora do bloco aria-hidden', async () => {
+    renderPanel();
+    await screen.findByRole('table', { name: /Datas em 2026/ });
+    const frase = screen.getByText('Hoje: 27/10/2026');
+    expect(frase.closest('[aria-hidden="true"]')).toBeNull();
+  });
+
+  describe('CSS do bloco fco-', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf8').replace(/\r\n/g, '\n');
+    const bloco = css.slice(css.indexOf('Prefixo fco-'));
+
+    it('legenda da tabela de datas ocupa a largura toda no mobile', () => {
+      const mobile = bloco.slice(bloco.indexOf('@media (max-width: 700px) {'));
+      expect(mobile).toContain('.fco-legenda { display: block; width: 100%; white-space: normal; }');
+    });
+
+    it('observacao dentro do th volta a caixa normal e cor secundaria', () => {
+      expect(bloco).toMatch(
+        /\.fco-tabela tbody th \.fcd-dica \{[^}]*text-transform: none;[^}]*color: var\(--ink-soft\);[^}]*\}/,
+      );
+    });
+
+    it('alvos de 44 px cobrem Limpar filtros, Tentar de novo, inputs e o codigo do pais', () => {
+      const inicio = bloco.indexOf('@media (max-width: 700px), (pointer: coarse) {');
+      const toque = bloco.slice(inicio, bloco.indexOf('\n}\n', inicio));
+      expect(toque).toContain('.fco-painel .ghost-button');
+      expect(toque).toContain('.fco-form input:not([type="radio"]):not([type="checkbox"])');
+      expect(toque).toContain('.fco-pais__codigo');
+      expect(toque).toContain('min-height: 44px');
+    });
   });
 });

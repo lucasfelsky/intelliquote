@@ -264,6 +264,9 @@ export interface ContextoValidacao {
   fontesAtivas: ReadonlySet<number>;
   /** Fonte da ocasiao em edicao (continua valida mesmo inativa, desde que nao seja trocada). */
   fonteOriginal: number | null;
+  /** Alcance e pais da ocasiao em edicao: o que nao mudou nao e reconferido (o backend ja aceitou). */
+  escopoOriginal?: ForecastOcasiaoEscopo | null;
+  paisOriginal?: string | null;
 }
 
 export interface OcasiaoValidada {
@@ -283,14 +286,22 @@ export function validarOcasiao(campos: CamposOcasiao, ctx: ContextoValidacao): O
 
   let pais: string | null = null;
   if (campos.escopo === 'pais') {
-    const lido = lerCodigoPais(campos.pais);
-    if ('erro' in lido) erros.pais = lido.erro;
-    else pais = lido.codigo;
+    const digitado = campos.pais.trim().toUpperCase();
+    if (ctx.escopoOriginal === 'pais' && ctx.paisOriginal && digitado === ctx.paisOriginal) {
+      pais = ctx.paisOriginal;
+    } else {
+      const lido = lerCodigoPais(campos.pais);
+      if ('erro' in lido) erros.pais = lido.erro;
+      else pais = lido.codigo;
+    }
   }
 
   let fonteId: number | null = null;
   if (campos.escopo === 'fonte') {
-    if (campos.fonte.trim() === '') erros.fonte = 'Informe a fonte da ocasião.';
+    const fonteRemovidaIntacta =
+      ctx.escopoOriginal === 'fonte' && ctx.fonteOriginal === null && campos.fonte.trim() === '';
+    if (fonteRemovidaIntacta) fonteId = null;
+    else if (campos.fonte.trim() === '') erros.fonte = 'Informe a fonte da ocasião.';
     else {
       fonteId = Number(campos.fonte);
       if (!ctx.fontesAtivas.has(fonteId) && fonteId !== ctx.fonteOriginal) {

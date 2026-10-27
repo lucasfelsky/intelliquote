@@ -127,6 +127,8 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
       efeitoBloqueado,
       fontesAtivas: fontesAtivasIds,
       fonteOriginal: ocasiao?.sourceId ?? null,
+      escopoOriginal: ocasiao?.scopeType ?? null,
+      paisOriginal: ocasiao?.countryCode ?? null,
     });
     setErros(achados);
     setSemMudanca(false);
