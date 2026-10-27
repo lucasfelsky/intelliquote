@@ -103,6 +103,24 @@ describe('lead time', () => {
     expect(r.leadTime.p50).toBeCloseTo(p[0] + p[1] + p[2] + p[3], 9);
     expect(r.leadTime.qHat).toBeCloseTo((p[0] + p[1] + p[2]) / 3, 9);
   });
+  it('qHat usa mq = ceil(dias / 30) (lead time NAO multiplo de 30 arredonda para cima; 0 dias -> 1; limitado ao horizonte)', () => {
+    const cresc = Array.from({ length: 24 }, (_, i) => 100 + 10 * i);
+    const qHatDe = (dias: number) => {
+      const r = uma(ent('A', cresc, dias));
+      return { p: p50s(r), q: r.leadTime.qHat };
+    };
+    const a = qHatDe(45); // ceil(1,5) = 2 (floor daria 1)
+    expect(a.p[1]).not.toBeCloseTo(a.p[0], 6); // a serie tem tendencia: as medias de 1 e de 2 meses diferem
+    expect(a.q).toBeCloseTo((a.p[0] + a.p[1]) / 2, 9);
+    const b = qHatDe(31); // ceil(1,03) = 2
+    expect(b.q).toBeCloseTo((b.p[0] + b.p[1]) / 2, 9);
+    const c = qHatDe(61); // ceil(2,03) = 3
+    expect(c.q).toBeCloseTo((c.p[0] + c.p[1] + c.p[2]) / 3, 9);
+    const d = qHatDe(0); // max(1, 0) = 1
+    expect(d.q).toBeCloseTo(d.p[0], 9);
+    const f = qHatDe(151); // ceil(5,03) = 6 = horizonte
+    expect(f.q).toBeCloseTo(f.p.reduce((t, x) => t + x, 0) / 6, 9);
+  });
 });
 
 describe('intervalos por tabela de calibracao', () => {

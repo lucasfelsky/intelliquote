@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { compatibilidadeTabela, fatorCorrecao, lerTabelaCalibracao } from '../src/utils/forecastPreditivoCalibracao';
 import { PARAMETROS_CORRECAO_PADRAO, VARIANTE_IDS, hashConfigRef } from '../src/utils/forecastPreditivoConfigRef';
-import { rodarBacktestRef, rodarCenarioRef, tabelaDoBacktest, validarOpcoesBacktestRef } from '../src/utils/forecastPreditivoBacktestRef';
+import { extremos, rodarBacktestRef, rodarCenarioRef, tabelaDoBacktest, validarOpcoesBacktestRef } from '../src/utils/forecastPreditivoBacktestRef';
 import type { OpcoesBacktestRef } from '../src/utils/forecastPreditivoBacktestRef';
 import { prepararSeriesRef } from '../src/utils/forecastPreditivoMarcas';
 import type { MarcasPorSerie } from '../src/utils/forecastPreditivoMarcas';
@@ -26,6 +26,14 @@ vi.mock('../src/utils/forecastPreditivoReferencia', async (original) => {
       return r;
     },
   };
+});
+
+// Injecao de falha (so no teste da guarda `escala > 0`): com `ligado`, mediaValidos devolve 0 na janela 12 (a da escala dos
+// residuos). Pela regra de protecao a escala nunca e 0 no caminho da combinacao; a guarda e defesa e so se prova assim.
+const escalaZero = vi.hoisted(() => ({ ligado: false }));
+vi.mock('../src/utils/forecastPreditivoBaselines', async (original) => {
+  const m = await original<typeof import('../src/utils/forecastPreditivoBaselines')>();
+  return { ...m, mediaValidos: (...a: Parameters<typeof m.mediaValidos>) => (escalaZero.ligado && a[2] === 12 ? { media: 0, semMesValido: false } : m.mediaValidos(...a)) };
 });
 
 const OPC: OpcoesBacktestRef = { horizonte: 6, minTreino: 6, leadTimePadraoDias: 90, razaoFaltaExcesso: 3, usarMascara: true, tetoVies: null, historicoMaximo: null, parametrosCorrecao: PARAMETROS_CORRECAO_PADRAO };
@@ -133,6 +141,83 @@ describe('historicoMaximo (simula a producao)', () => {
     expect(miolo(rodarBacktestRef(s, { ...OPC, historicoMaximo: 240 }))).toEqual(miolo(a));
     expect(miolo(rodarBacktestRef(s, { ...OPC, historicoMaximo: 7 }))).not.toEqual(miolo(a));
     expect(rodarBacktestRef(s, { ...OPC, historicoMaximo: 7 }).opcoes.historicoMaximo).toBe(7);
+  });
+});
+
+describe('janela de treino inteira marcada (a amostra nao muda)', () => {
+  // 14 meses (indices 0..13 = 2025-11..2026-12), crescente; marcas nos indices 6..9. minTreino 6 -> origens 5..11 (LT 30 dias -> hl 2).
+  // Com historicoMaximo 3 a janela de treino das origens 8 e 9 (indices 6-8 e 7-9) fica TODA marcada: a Q cai em historico-curto.
+  const e = ent('M', Array.from({ length: 14 }, (_, i) => 100 + 10 * i));
+  const marcas = new Map([['M', [6, 7, 8, 9].map((i) => somarMeses(FIM, i - 13))]]);
+  const rodar = (o: Partial<OpcoesBacktestRef> = {}, usar = true) => rodarBacktestRef(prep([e], marcas, usar), { ...OPC, ...o, usarMascara: usar });
+  const c6 = (r: ReturnType<typeof rodar>) => r.cenarios[1];
+
+  it('amostra.pares = 7 com historicoMaximo 3, 7, tudo (null/240) e sem mascara; o historico curto nao some com a serie', () => {
+    for (const hm of [null, 240, 7, 3]) {
+      const c = c6(rodar({ historicoMaximo: hm }));
+      expect(c.amostra.pares).toBe(7);
+      expect(c.contagem).toMatchObject({ comPrevisao: 1, historicoCurto: 0 });
+    }
+    expect(c6(rodar({}, false)).amostra.pares).toBe(7);
+  });
+  it('os 2 pares de janela toda marcada usam a media SEM mascara da Q (como o motor) e a referencia cai na Q (fallbackReferencia 2)', () => {
+    registro.length = 0;
+    const c = c6(rodar({ historicoMaximo: 3 }));
+    expect(c.amostra.fallbackReferencia).toBe(2);
+    const em = (variante: Registro['variante'], mes: AnoMes) => registro.filter((x) => x.variante === variante && x.origem === mes && x.id === 'M').pop()!;
+    const o8 = somarMeses(FIM, 8 - 13); // treino 160, 170, 180 (todos marcados)
+    const o9 = somarMeses(FIM, 9 - 13); // treino 170, 180, 190
+    for (const v of ['q', 'ref', 'cor'] as const) {
+      expect(em(v, o8).p50s[0]).toBeCloseTo(170, 9);
+      expect(em(v, o9).p50s[0]).toBeCloseTo(180, 9);
+      expect(em(v, o8).metodo).toBe('planilha-q');
+    }
+    // fora da janela toda marcada, a mascara segue valendo (origem 10: treino 180, 190, 200 com 180 e 190 marcados -> so o 200)
+    expect(em('q', somarMeses(FIM, 10 - 13)).p50s[0]).toBeCloseTo(200, 9);
+    expect(c6(rodar({ historicoMaximo: null })).amostra.fallbackReferencia).toBe(0);
+  });
+});
+
+describe('extremos (sem spread)', () => {
+  it('1.200.000 elementos nao lancam (Math.min(...xs) estoura a pilha: ~125 mil na thread principal, ~1 milhao em worker) e o min/max esta certo', () => {
+    const xs = Array.from({ length: 1200000 }, (_, i) => ((i * 7919) % 100003) / 7 - 5000);
+    xs[123456] = -99999;
+    xs[654] = 99999;
+    expect(() => extremos(xs)).not.toThrow();
+    expect(extremos(xs)).toEqual({ min: -99999, max: 99999 });
+  });
+  it('vazio -> null; um elemento -> min = max', () => {
+    expect(extremos([])).toBeNull();
+    expect(extremos([4])).toEqual({ min: 4, max: 4 });
+    expect(extremos([3, 1, 2])).toEqual({ min: 1, max: 3 });
+  });
+});
+
+describe('razao de nivel sem vendas na janela e guarda da escala', () => {
+  it('real = 0 com previsto > 0 -> razao null nas duas tabelas (e fator 1); a tabela gerada e lida de volta', () => {
+    const c = rodarBacktestRef(prep([ent('Z', [...k(12), 0, 0])]), { ...OPC, minTreino: 12 }).cenarios[0];
+    expect(c.amostra.pares).toBe(1);
+    for (const t of [c.tabelas.referencia, c.tabelas['referencia-corrigida']]) {
+      expect(t.nivel).toEqual({ n: 1, razao: null });
+      const lida = lerTabelaCalibracao(JSON.stringify(t));
+      expect(lida.ok && lida.tabela).toEqual(t);
+    }
+    expect(c.correcao).toMatchObject({ fatorMin: 1, fatorMax: 1 });
+  });
+  it('escala 0 na insercao: nenhum residuo (nem Infinity/NaN) entra nos pools; sem a falha injetada entram', () => {
+    const entradas = prep(crescentes(3));
+    const normal = rodarBacktestRef(entradas, { ...OPC, minTreino: 12 }).cenarios[0].tabelas.referencia;
+    expect(normal.mensal.length).toBeGreaterThan(0);
+    expect(normal.leadTime.length).toBeGreaterThan(0);
+    escalaZero.ligado = true;
+    try {
+      const t = rodarBacktestRef(entradas, { ...OPC, minTreino: 12 }).cenarios[0].tabelas.referencia;
+      expect(t.mensal).toEqual([]);
+      expect(t.leadTime).toEqual([]);
+      expect(lerTabelaCalibracao(JSON.stringify(t)).ok).toBe(true);
+    } finally {
+      escalaZero.ligado = false;
+    }
   });
 });
 

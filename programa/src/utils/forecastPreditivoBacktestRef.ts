@@ -98,6 +98,11 @@ const ABC: Abc[] = ['A', 'B', 'C', 'sem-venda'];
 const SBC: Sbc[] = ['smooth', 'erratic', 'intermittent', 'lumpy', 'insuficiente'];
 const XYZ: Xyz[] = ['X', 'Y', 'Z', 'n/a'];
 const LT: ClasseLt[] = ['<=60', '61-90', '>90', 'padrao'];
+// min/max sem spread (Math.min(...xs) lanca RangeError com ~125 mil elementos ou mais).
+export function extremos(xs: readonly number[]): { min: number; max: number } | null {
+  if (xs.length === 0) return null;
+  return xs.reduce((a, x) => ({ min: x < a.min ? x : a.min, max: x > a.max ? x : a.max }), { min: xs[0], max: xs[0] });
+}
 const mesDeIndice = (k: number): AnoMes => somarMeses('0000-01', k);
 
 // Treino da origem: serie cortada no mes e, com historicoMaximo, so os ultimos n meses.
@@ -155,8 +160,12 @@ export function rodarCenarioRef(entrada: SerieNormalizada[], o: OpcoesBacktestRe
     for (const c of porMes.get(k)!) {
       const s = series[c.s];
       const treino = treinos[c.s]!;
-      const pq = METODOS['planilha-q'](treino, { horizonte: H });
-      if (!pq.ok) continue; // nao ocorre com >= 1 mes valido; a serie conta em historicoCurto se nao tiver nenhum par
+      // Janela de treino com TODOS os meses marcados (e venda > 0): a Q devolve historico-curto; o motor usa a media SEM mascara
+      // (mediaSemMeses). Espelhamos o motor em vez de descartar o par: a amostra comum continua igual com/sem mascara e com
+      // qualquer historicoMaximo. A referencia cai na Q nesse par (base sem previsao) e ele conta em amostra.fallbackReferencia.
+      let pq = METODOS['planilha-q'](treino, { horizonte: H });
+      if (!pq.ok) pq = METODOS['planilha-q']({ ...treino, mascara: treino.mascara.map(() => false) }, { horizonte: H });
+      if (!pq.ok) continue; // defesa: so com serie vazia ou horizonte invalido (ja barrados); sem par nenhum a serie conta em historicoCurto
       const base = previsaoBaseRef(treino, H);
       const fallback = base.p50s.length === 0;
       const baseQ: BaseRef = { regra: base.regra, metodoUsado: 'planilha-q', componentes: 1, p50s: pq.pontos.map((p) => p.p50), parametros: pq.parametros, avisos: pq.avisos, avisosRef: [] };
@@ -324,8 +333,8 @@ export function rodarCenarioRef(entrada: SerieNormalizada[], o: OpcoesBacktestRe
     amostra: { pares: amostra.length, fallbackReferencia: amostra.filter((p) => obs.referencia[p].fallback).length, residuosExcluidosMascara: excluidosMascara },
     correcao: {
       fatorMedio: media,
-      fatorMin: fatores.length === 0 ? null : Math.min(...fatores),
-      fatorMax: fatores.length === 0 ? null : Math.max(...fatores),
+      fatorMin: extremos(fatores)?.min ?? null,
+      fatorMax: extremos(fatores)?.max ?? null,
       paresNoLimite,
       paresSemDados,
     },

@@ -216,6 +216,40 @@ describe('criarPoolsRef', () => {
     expect(cal.intervalo('lt', 'erratic', 1)).toBeNull(); // tipos separados
   });
 
+  it('fronteira n >= 30 do pool (minimo padrao): celula 29 -> TOTAL ou null, 30 -> celula; TOTAL 29 -> null, 30 -> total', () => {
+    const intervalo = (smooth: number, erratic: number) => {
+      const pools = criarPoolsRef(); // minResiduos 30
+      for (let v = 0; v < smooth; v++) pools.pendente(res('smooth', 1, '2026-01', v));
+      for (let v = 0; v < erratic; v++) pools.pendente(res('erratic', 1, '2026-01', v));
+      pools.liberarAte('2026-01');
+      return pools.calibrador('2026-01').intervalo('mensal', 'smooth', 1);
+    };
+    expect(intervalo(30, 0)?.fonte).toBe('celula'); // celula 30 (e TOTAL 30)
+    expect(intervalo(29, 0)).toBeNull(); // celula 29 e TOTAL 29
+    expect(intervalo(29, 1)?.fonte).toBe('total'); // celula 29, TOTAL 30
+    expect(intervalo(15, 14)).toBeNull(); // TOTAL 29
+    expect(intervalo(15, 15)?.fonte).toBe('total'); // TOTAL 30
+  });
+
+  it('razao de nivel sem vendas (real 0) ou que arredonda a 0 -> null; a tabela gerada e lida de volta (ida e volta)', () => {
+    for (const [real, previsto] of [[0, 10], [1e-9, 1]]) {
+      const pools = criarPoolsRef(cfg);
+      pools.pendente(res('smooth', 1, '2026-01', 1));
+      pools.nivelPendente({ liberacao: '2026-01', real, previsto });
+      pools.liberarAte('2026-01');
+      expect(pools.calibrador('2026-01').nivel()).toEqual({ n: 1, razao: null });
+      const meta = { versao: 'p1.1.0', hashConfig: hashConfigRef(), correcaoNivel: true, parametros: { horizonte: 6, minTreino: 6, historicoMaximo: null, usarMascara: true, janelaNivelMeses: 12 }, ultimoMes: '2026-01' };
+      const t = pools.paraTabela(meta);
+      expect(t.nivel).toEqual({ n: 1, razao: null });
+      const volta = lerTabelaCalibracao(JSON.stringify(t));
+      expect(volta.ok && volta.tabela).toEqual(t);
+    }
+    const pools = criarPoolsRef(cfg);
+    pools.nivelPendente({ liberacao: '2026-01', real: 2e-6, previsto: 1 }); // 0,000002 sobrevive ao round6: continua razao
+    pools.liberarAte('2026-01');
+    expect(pools.calibrador('2026-01').nivel().razao).toBeCloseTo(2e-6, 12);
+  });
+
   it('razao de nivel em janela 12: liberacao em mes - 12 fora, mes - 11 dentro', () => {
     const pools = criarPoolsRef(cfg);
     pools.nivelPendente({ liberacao: '2025-12', real: 1000, previsto: 10 }); // mes - 12: fora

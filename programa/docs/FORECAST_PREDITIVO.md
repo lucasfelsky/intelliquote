@@ -23,7 +23,7 @@ node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/foreca
 | `--entrada <arquivo>` | obrigatorio (ou `--quinzena`) | `.csv` ou `.json`, ate 20 MB |
 | `--quinzena <arquivo.json>` | - | formato da fixture de quinzena: uma serie por produto (J..N + O) |
 | `--horizonte` | 6 | 1 a 12 |
-| `--min-treino` | 6 | meses validos antes da 1a origem (no p1 roda tambem o cenario 12, o principal) |
+| `--min-treino` | 6 | meses antes da 1a origem: validos no p0/p1; de **calendario** no p1b (nao depende da mascara). No p1/p1b roda tambem o cenario 12, o principal |
 | `--metodos a,b` | todos | ids de `METODO_TODOS_IDS` (p1) ou `METODO_IDS` (`--relatorio p0`) |
 | `--lead-time-padrao` | 90 | dias, para serie sem `leadTimeDias` |
 | `--razao-falta-excesso` | 3 | custo de falta = razao x custo de excesso |
@@ -221,14 +221,16 @@ forcado; e o sinal para a correcao. Leitura estrita: `lerTabelaCalibracao(texto)
 
 `w = n / (n + k)`, `fator = clamp(1 + w x (razao - 1), fatorMin, fatorMax)` com `k` 300, limites 0,85 a 1,25, janela de 12 meses de
 liberacao e minimo de 30 pares (abaixo disso, fator 1 e `correcao-sem-dados`; no limite, `correcao-no-limite`). Pool unico (TOTAL), razao
-com a previsao **sem** correcao (o fator nao se realimenta), so na combinacao. Para ligar: `PREDITIVO_CONFIG_REF.correcaoNivel.ativaPorPadrao
+com a previsao **sem** correcao (o fator nao se realimenta), so na combinacao. Janela sem vendas (soma do realizado = 0) ou razao que arredonda a 0 em `round6`: `razao` = `null` (backtest, tabela e producao concordam; fator 1 e `correcao-sem-dados`), para a tabela gerada continuar legivel por `lerTabelaCalibracao`. Para ligar: `PREDITIVO_CONFIG_REF.correcaoNivel.ativaPorPadrao
 = true`, versao minor (`p1.2.0`) e nova tabela (o `hashConfig` muda), so por decisao do Lucas a partir do relatorio p1b com dado real.
 
 ### Backtest da referencia, custo completo e criterio 7
 
 - Variantes: `planilha-q`, `referencia`, `referencia-corrigida`, na **amostra comum** (pares com lead time observado). Elegibilidade por
   **meses de calendario** (a amostra e igual com e sem mascara e com qualquer `--historico-max`). Realizado **bruto**: o mes marcado
-  continua contando no erro; residuos de janela com mes marcado ficam fora dos pools (`residuosExcluidosMascara`).
+  continua contando no erro; residuos de janela com mes marcado ficam fora dos pools (`residuosExcluidosMascara`). Se a janela de treino
+  de uma origem tem **todos** os meses marcados (venda > 0; ex.: `--historico-max 3`), a Q usa a media sem mascara (como o motor com
+  `sem-mes-valido`) e a referencia cai na Q: o par **nao** e descartado e conta em `amostra.fallbackReferencia` (0 no uso normal).
 - Sem vazamento: treino cortado (e truncado em `--historico-max`) na origem; pools e razao de nivel so com residuos liberados ate a
   origem (`liberacao = origem + m`).
 - Custo em KG (sem preco), `custoH = razao x falta + excesso` por horizonte e no lead time (razao padrao 3); `custoRelH` contra a Q nos
@@ -260,6 +262,21 @@ preditivo - referencia P1b ...`, cabecalho (horizonte, cenarios, historico maxim
 cenario: contagens, `Amostra`, `Fator aplicado`, `Criterio 7 (TOTAL ...)`, tabela de segmentos x variantes, `Por horizonte (TOTAL)` e, com
 `--detalhe`, `Por serie` e `Fontes`. JSON: topo `versao, hashConfig, hashEntrada, opcoes, cenariosMinTreino, linhasRejeitadas, marcas,
 cenarios` (+ `aviso`, `fontes` com detalhe); a tabela nao sai no relatorio.
+
+Formato da tabela de calibracao (`--gerar-calibracao`; JSON; lida por `lerTabelaCalibracao`, tudo-ou-nada: chave a mais ou a menos, ou valor fora da faixa, recusa a tabela inteira):
+
+| Chave | Conteudo |
+|---|---|
+| `formato`, `versao`, `hashConfig` | `preditivo-calibracao-v1`; versao do codigo (`p1.1.0`); hash da config da referencia (outro hash = `calibracao-incompativel`) |
+| `correcaoNivel` | `true` se gerada para o modo com correcao de nivel (modo diferente do da previsao = incompativel) |
+| `parametros` | `horizonte`, `minTreino`, `historicoMaximo` (`null` = tudo), `usarMascara`, `janelaNivelMeses`; informativos, nao entram na compatibilidade |
+| `ultimoMes` | `YYYY-MM`, ultimo mes do calendario da entrada |
+| `mensal[]`, `leadTime[]` | celulas `{celula, m, n, q10, q90}`: `celula` = `smooth\|erratic\|intermittent\|lumpy\|insuficiente\|TOTAL`, `m` de 1 a 12 (h no mensal; meses do lead time), `n` residuos, `q10 <= q90` |
+| `nivel` | `{n, razao}`: pares e razao soma(real)/soma(previsto) nos ultimos 12 meses de liberacao; `razao` > 0 ou `null` (sem dado ou sem vendas na janela) |
+
+**A tabela gerada com dado real deriva de dado real** (quantis de residuos de vendas e contagens): **nao versionar neste repo publico** (R-14); onde guarda-la e decisao da P3. Os testes usam so `tabelaSintetica()`.
+
+Limites conhecidos: (a) `hashConfig` cobre `PREDITIVO_CONFIG`, `PREDITIVO_CONFIG_P1` e `PREDITIVO_CONFIG_REF` (inclui os `k`, limites e `minPares` **padrao**); `parametrosCorrecao` customizados (so a API pura; o CLI nao os expoe) **nao** entram no `hashConfig` nem em `parametros`, entao uma tabela `correcaoNivel: true` gerada com outros `k`/limites (seus residuos usam o p50 corrigido) continua "compativel": nao a misture. Mudar o formato para cobri-los quebraria `preditivo-calibracao-v1`; decisao adiada. (b) `amostra.fallbackReferencia` so e > 0 no caso da janela de treino inteira marcada (ver Backtest); no uso normal e sempre 0 (ramo de defesa).
 
 ### Fora da P1b-1
 

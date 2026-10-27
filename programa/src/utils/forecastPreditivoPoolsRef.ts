@@ -94,7 +94,10 @@ export function criarPoolsRef(
       real += s.real;
       previsto += s.previsto;
     }
-    return { n, razao: n > 0 && previsto > 0 ? real / previsto : null };
+    // Sem vendas na janela (real = 0) ou razao que arredonda a 0 na tabela: null (= sem dado; a correcao fica em 1 e a tabela
+    // gerada continua legivel por lerTabelaCalibracao, que exige razao > 0 ou null). Backtest, tabela e producao concordam.
+    const razao = n > 0 && previsto > 0 ? real / previsto : null;
+    return { n, razao: razao !== null && round6(razao) > 0 ? razao : null };
   };
 
   const escolher = (tipo: 'mensal' | 'lt', celula: string, m: number): { pool: Pool; fonte: 'celula' | 'total' } | null => {
