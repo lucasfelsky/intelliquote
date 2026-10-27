@@ -13,6 +13,7 @@ import {
   anexarOcasioesAoRelatorio,
   chaveDaFonte,
   ocasioesDaPoHoje,
+  ocasioesDaPoHojePorLinha,
   ocasioesDoItem,
   type ContextoOcasioes,
   type FonteDoCadastro,
@@ -260,6 +261,44 @@ describe('ocasioesDoItem', () => {
   });
 });
 
+describe('ocasioesDoItem (percentual, virada de ano e quinzena antiga)', () => {
+  const E = { fonte: 'FONTE 001', leadTimeDias: 30, ruptura: '2026-11-21', vencida: false, hoje: HOJE };
+  const fontes = { 'FONTE 001': fonteCad() };
+
+  it('efeito percentual: sobre o lead time inteiro (total) e sobre a duracao da etapa', () => {
+    const total = ocasiao({ id: 1, efeito: 'percentual', valor: 10 });
+    expect(ocasioesDoItem(E, contexto(fontes, [total]))?.ocasioes).toMatchObject([{ id: 1, etapa: 'total', dias: 3 }]);
+    // Prontidao de 10 dias: 10% = 1 dia (arredonda para cima).
+    const etapa = ocasiao({ id: 2, etapa: 'prontidao', efeito: 'percentual', valor: 10, inicio: '2026-10-25', fim: '2026-10-26' });
+    const r = ocasioesDoItem(E, contexto(fontes, [etapa]));
+    expect(r?.ocasioes).toMatchObject([{ id: 2, etapa: 'prontidao', dias: 1 }]);
+    expect(r?.extraDias).toBe(1);
+  });
+
+  it('anual que cruza a virada do ano cruza no relatorio (hoje 2026-12-20)', () => {
+    const quinzena = { ...sintetica([linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001' })]), baseDate: '2026-12-15', hoje: '2026-12-20' };
+    const base = montarRelatorioCompras(quinzena, []);
+    const natal = ocasiao({ id: 3, inicio: '2025-12-28', fim: '2026-01-03', recorrencia: 'anual', valor: 4 });
+    const r = anexarOcasioesAoRelatorio(base, contexto(fontes, [natal], { 3: 'OCASIAO 003' }));
+    expect(itensDe(r)[0].ocasioes).toMatchObject({ extraDias: 4, ocasioes: [{ id: 3, nome: 'OCASIAO 003', dias: 4 }] });
+    expect(r.ocasioes).toMatchObject({ estado: 'ok', itensAfetados: 1 });
+  });
+
+  it('quinzena antiga aberta hoje: a emissao e hoje, a normal ja vencida e nao repete o aviso', () => {
+    const quinzena = { ...sintetica([linha({ linha: 1, item: 'PRODUTO 001', fonte: 'FONTE 001' })]), baseDate: '2026-04-15' };
+    const base = montarRelatorioCompras(quinzena, []);
+    expect(itensDe(base)[0].vencida).toBe(true);
+    const r = anexarOcasioesAoRelatorio(base, contexto(fontes, [ocasiao({ id: 1 })]));
+    expect(itensDe(r)[0].ocasioes).toMatchObject({
+      extraDias: 5,
+      emissaoAvaliada: HOJE,
+      chegadaEstimada: '2026-11-24',
+      antesDeHoje: false,
+    });
+    expect(semBlocos(r)).toStrictEqual(semBlocos(base));
+  });
+});
+
 describe('ocasioesDaPoHoje', () => {
   const fontes = { 'FONTE 001': fonteCad() };
 
@@ -278,6 +317,14 @@ describe('ocasioesDaPoHoje', () => {
     expect(ocasioesDaPoHoje({ fonte: 'FONTE 001', AQ: null }, HOJE, ctx)).toBeNull();
     expect(ocasioesDaPoHoje({ fonte: 'FONTE 009', AQ: 30 }, HOJE, ctx)).toBeNull();
     expect(ocasioesDaPoHoje({ fonte: 'FONTE 001', AQ: 30 }, HOJE, contexto(fontes, []))).toBeNull();
+  });
+
+  it('efeito invalido no cadastro (NaN ou absurdo) lanca em vez de devolver data invalida', () => {
+    for (const valor of [Number.NaN, 1e15]) {
+      const ctx = contexto(fontes, [ocasiao({ id: 1, valor })]);
+      expect(() => ocasioesDaPoHoje({ fonte: 'FONTE 001', AQ: 30 }, HOJE, ctx)).toThrow();
+      expect(() => ocasioesDaPoHojePorLinha([{ linha: 1, fonte: 'FONTE 001', AQ: 30 }], HOJE, ctx)).toThrow();
+    }
   });
 
   it('componentes ausentes sai marcado', () => {
@@ -314,8 +361,31 @@ describe('anexarOcasioesAoRelatorio (sintetico)', () => {
       itensAfetados: 2,
       ocasioesQueCruzam: 1,
       antesDeHoje: 2,
-      itensSemFonteCadastrada: 2,
+      itensSemFonteCadastrada: 1,
       fontesSemPais: 1,
+    });
+  });
+
+  it('fonte vazia: sem bloco e fora da contagem de "fonte fora do cadastro"; fonte nao cadastrada conta', () => {
+    const rr = anexarOcasioesAoRelatorio(base, ctx);
+    const vazia = itensDe(rr).find((i) => i.linha === 4)!;
+    expect('ocasioes' in vazia).toBe(false);
+    const soVazia = montarRelatorioCompras(sintetica([linhas[3]]), []);
+    expect(anexarOcasioesAoRelatorio(soVazia, ctx).ocasioes).toMatchObject({ estado: 'ok', itensSemFonteCadastrada: 0 });
+    const soNaoCadastrada = montarRelatorioCompras(sintetica([linhas[2]]), []);
+    expect(anexarOcasioesAoRelatorio(soNaoCadastrada, ctx).ocasioes).toMatchObject({ itensSemFonteCadastrada: 1 });
+  });
+
+  it('fonte inativa no cadastro: sem bloco, fora de "sem fonte cadastrada" e de "sem pais"', () => {
+    const inativa = montarRelatorioCompras(sintetica([linhas[5]]), []);
+    const rr = anexarOcasioesAoRelatorio(inativa, ctx);
+    expect(itensDe(rr).every((i) => !('ocasioes' in i))).toBe(true);
+    expect(rr.grupos.every((g) => !('ocasioes' in g))).toBe(true);
+    expect(rr.ocasioes).toMatchObject({
+      estado: 'ok',
+      itensAfetados: 0,
+      itensSemFonteCadastrada: 0,
+      fontesSemPais: 0,
     });
   });
 
@@ -506,6 +576,44 @@ describe('igualdade com a fixture anonimizada (hoje 2026-10-20)', () => {
 
 describe('desempenho', () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it('300 itens x 100 ocasioes ativas em menos de 1 segundo (relatorio e memoria)', () => {
+    const linhas = Array.from({ length: 300 }, (_, i) =>
+      linha({
+        linha: i + 1,
+        item: `PRODUTO ${String(i + 1).padStart(3, '0')}`,
+        fonte: `FONTE ${String((i % 30) + 1).padStart(3, '0')}`,
+        AQ: 20 + (i % 9) * 10,
+      }),
+    );
+    const fontes: Record<string, FonteDoCadastro> = {};
+    for (let i = 1; i <= 30; i += 1) fontes[`FONTE ${String(i).padStart(3, '0')}`] = fonteCad({ id: i, countryCode: 'XA' });
+    const ocasioes = Array.from({ length: 100 }, (_, i) =>
+      ocasiao({
+        id: i + 1,
+        escopo: i % 3 === 0 ? 'global' : i % 3 === 1 ? 'pais' : 'fonte',
+        countryCode: i % 3 === 1 ? 'XA' : null,
+        sourceId: i % 3 === 2 ? (i % 30) + 1 : null,
+        etapa: (['total', 'prontidao', 'embarque', 'transito', 'liberacao'] as const)[i % 5],
+        inicio: `2026-${String(10 + (i % 3)).padStart(2, '0')}-${String(1 + (i % 20)).padStart(2, '0')}`,
+        fim: `2026-${String(10 + (i % 3)).padStart(2, '0')}-${String(10 + (i % 18)).padStart(2, '0')}`,
+        valor: 1 + (i % 6),
+      }),
+    );
+    const ctx = contexto(fontes, ocasioes);
+    const base = montarRelatorioCompras(sintetica(linhas), []);
+    const inicio = performance.now();
+    const r = anexarOcasioesAoRelatorio(base, ctx);
+    const memoria = ocasioesDaPoHojePorLinha(
+      linhas.map((l) => ({ linha: l.linha, fonte: l.fonte, AQ: l.AQ })),
+      HOJE,
+      ctx,
+    );
+    const ms = performance.now() - inicio;
+    expect(r.ocasioes).toMatchObject({ estado: 'ok', ativas: 100 });
+    expect(memoria.size).toBeGreaterThan(0);
+    expect(ms).toBeLessThan(1000);
+  });
 
   it('400 itens em 40 fontes x 20 ocasioes ativas em menos de 1 segundo, sem console', () => {
     const espioes = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => vi.spyOn(console, m));

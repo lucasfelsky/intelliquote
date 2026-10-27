@@ -218,6 +218,36 @@ describe('XLSX do relatorio sem ocasiao ativa (igual a hoje)', () => {
   });
 });
 
+describe('XLSX com ocasiao ativa e item sem lead time', () => {
+  it('o item sem lead time continua fora das abas de itens e as colunas novas seguem alinhadas', async () => {
+    const comSemLeadTime = montarRelatorioCompras(
+      { id: 1, label: '10-2', baseDate: BASE, half: 2, origin: 'planilha', hoje: HOJE, linhas: [...linhas, linha({ linha: 6, item: 'PRODUTO 006', fonte: 'FONTE 001', AN: null, AQ: null })] },
+      [],
+    );
+    expect(comSemLeadTime.fora.semLeadTime).toBe(1);
+    const r = anexarOcasioesAoRelatorio(comSemLeadTime, contexto);
+    expect(itensDe(r).some((i) => i.item === 'PRODUTO 006')).toBe(false);
+    expect(semBlocos(r)).toStrictEqual(semBlocos(comSemLeadTime));
+
+    const wb = await carregar(r);
+    const porFonte = wb.getWorksheet(ABA_RELATORIO)!;
+    const urgencia = wb.getWorksheet(ABA_POR_URGENCIA)!;
+    const nomes = (ws: exceljs.Worksheet) => {
+      const achados: string[] = [];
+      ws.eachRow((row) => row.eachCell((c) => typeof c.value === 'string' && c.value.startsWith('PRODUTO') && achados.push(c.value)));
+      return achados;
+    };
+    expect(nomes(porFonte)).not.toContain('PRODUTO 006');
+    expect(nomes(urgencia)).not.toContain('PRODUTO 006');
+    expect(urgencia.rowCount).toBe(itensDe(r).length + 1);
+    const linhasItens = linhasDeItens(r);
+    for (const item of itensDe(r)) {
+      const nas = Array.from({ length: N_NOVAS }, (_, i) => valor(porFonte, linhasItens.get(item.linha)!, N_COLUNAS + 1 + i));
+      expect(nas).toStrictEqual(celulasDeOcasioes(item));
+    }
+  });
+});
+
 describe('XLSX do relatorio com ocasiao ativa', () => {
   it('as 3 colunas entram no fim das duas abas, na ordem; item sem bloco = 3 celulas vazias', async () => {
     expect(comColunasDeOcasioes(comOcasioes)).toBe(true);

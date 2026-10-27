@@ -275,6 +275,49 @@ describe('Forecast routes - ocasioes no relatorio de compras e na memoria (PR 3)
     expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['efeito NaN', { ...eventoDoBanco, effectValue: Number.NaN }],
+    ['percentual absurdo', { ...eventoDoBanco, effectKind: 'percentual', effectValue: 1e15 }],
+  ])('ocasiao corrompida no banco (%s): 200 nas tres rotas, indisponivel e campos existentes iguais', async (_nome, evento) => {
+    const sem = {
+      snapshot: (await request(app).get(`${PATH}${QUERY}`).set('Cookie', cookies)).body.data,
+      relatorio: (await request(app).get(`${PATH}/relatorio-compras${QUERY}`).set('Cookie', cookies)).body.data,
+    };
+    warn.mockClear();
+    prismaMock.forecastLeadTimeEvent.findMany.mockResolvedValue([evento]);
+
+    const snapshot = await request(app).get(`${PATH}${QUERY}`).set('Cookie', cookies);
+    expect(snapshot.status).toBe(200);
+    expect(JSON.stringify(snapshot.body)).not.toContain('"ocasioesHoje"');
+    expect(snapshot.body.data).toStrictEqual(sem.snapshot);
+
+    const relatorio = await request(app).get(`${PATH}/relatorio-compras${QUERY}`).set('Cookie', cookies);
+    expect(relatorio.status).toBe(200);
+    expect(relatorio.body.data.ocasioes).toStrictEqual({ estado: 'indisponivel' });
+    expect(JSON.stringify(relatorio.body.data.grupos)).not.toContain('"ocasioes"');
+    expect(semChave(relatorio.body.data, 'ocasioes')).toStrictEqual(semChave(sem.relatorio, 'ocasioes'));
+
+    const xlsx = await request(app).get(`${PATH}/relatorio-compras/xlsx${QUERY}`).set('Cookie', cookies);
+    expect(xlsx.status).toBe(200);
+    const textos = textosDaAba((await xlsxDe(xlsx)).getWorksheet('Relatório de compras')!);
+    expect(textos).toContain('Ocasiões do lead time indisponíveis agora: o relatório saiu sem elas.');
+    expect(textos).not.toContain(COLUNAS_OCASIOES_XLSX[0]);
+
+    expect(warn).toHaveBeenCalledTimes(3);
+    for (const [objeto, mensagem] of warn.mock.calls as Array<[Record<string, unknown>, string]>) {
+      expect(objeto).toStrictEqual({ snapshotId: 7, erro: 'Error' });
+      expect(JSON.stringify([objeto, mensagem])).not.toMatch(/OCASIAO|FONTE/);
+    }
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('o relatorio nao calcula a memoria por linha (so o painel)', async () => {
+    prismaMock.forecastLeadTimeEvent.findMany.mockResolvedValue([eventoDoBanco]);
+    const relatorio = await request(app).get(`${PATH}/relatorio-compras${QUERY}`).set('Cookie', cookies);
+    expect(relatorio.status).toBe(200);
+    expect(JSON.stringify(relatorio.body)).not.toContain('"ocasioesHoje"');
+  });
+
   it('quinzena inexistente: 404 sem consultar as ocasioes', async () => {
     prismaMock.forecastSnapshot.findFirst.mockResolvedValue(null);
     for (const rota of ['', '/relatorio-compras', '/relatorio-compras/xlsx']) {

@@ -18,7 +18,7 @@ import {
   type EmbalagemCadastrada,
   type RelatorioCompras,
 } from '../utils/forecastRelatorioCompras';
-import { ocasioesDaPoHoje, type OcasioesDoCalculo } from '../utils/forecastRelatorioComprasOcasioes';
+import { anexarOcasioesAoRelatorio, ocasioesDaPoHojePorLinha, type OcasioesDaPoHoje, type OcasioesDoCalculo } from '../utils/forecastRelatorioComprasOcasioes';
 import {
   gerarXlsxRelatorioCompras,
   nomeArquivoRelatorioCompras,
@@ -258,27 +258,25 @@ export class ForecastSnapshotService {
     return { marcas, mesesForaDaMedia };
   }
 
-  // Ocasioes do lead time (PR 3), cadastro ATUAL, lidas UMA vez por requisicao; null = nenhuma ocasiao ativa (saida igual a
-  // de antes). Falha na leitura nao derruba nada: sai sem o bloco e avisa. O log leva so o id da quinzena e o tipo do erro.
-  private static async ocasioesDoCalculo(snapshotId: number, nomesDeFonte: string[]): Promise<OcasioesDoCalculo | null> {
+  // Ocasioes do lead time (PR 3): falha em qualquer etapa nunca derruba a rota; devolve o `fallback` e avisa. O log leva so
+  // o id da quinzena e o tipo do erro (nunca nome nem observacao de ocasiao).
+  private static async comFallbackDeOcasioes<T>(snapshotId: number, mensagem: string, fn: () => T | Promise<T>, fallback: () => T): Promise<T> {
     try {
-      return await ForecastOcasioesService.contextoDoCalculo(nomesDeFonte);
+      return await fn();
     } catch (error) {
-      logger.warn(
-        { snapshotId, erro: error instanceof Error ? error.name : 'desconhecido' },
-        'Ocasioes do lead time indisponiveis; relatorio sem o bloco.',
-      );
-      return { indisponivel: true };
+      logger.warn({ snapshotId, erro: error instanceof Error ? error.name : 'desconhecido' }, mensagem);
+      return fallback();
     }
   }
 
   // Quinzena calculada pelo motor (+ conferencia com o Excel quando a origem e a planilha).
   static async getCalculated(id: number, hoje?: string) {
-    return (await ForecastSnapshotService.calcularComOcasioes(id, hoje)).calc;
+    return (await ForecastSnapshotService.calcularComOcasioes(id, hoje, true)).calc;
   }
 
   // Corpo de getCalculated + o contexto das ocasioes (carregado depois de carregarQuinzena: o 404 segue sem consulta extra).
-  private static async calcularComOcasioes(id: number, hoje?: string) {
+  // `comMemoria`: so o painel (getCalculated) calcula o bloco por linha; o relatorio (e a decisao de compra) nao precisa.
+  private static async calcularComOcasioes(id: number, hoje: string | undefined, comMemoria: boolean) {
     const { snapshot, months, produtos, files, quinzena, half } = await ForecastSnapshotService.carregarQuinzena(id);
 
     const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
@@ -290,10 +288,23 @@ export class ForecastSnapshotService {
     const gruposDosProdutos = await ForecastGrupoEquivalenciaService.gruposDosProdutos(productIds);
     const { marcas, mesesForaDaMedia } = await ForecastSnapshotService.marcasDaQuinzena(produtos, quinzena.dataBase);
     const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half, mesesForaDaMedia });
-    const ocasioes = await ForecastSnapshotService.ocasioesDoCalculo(
+    // Cadastro ATUAL lido UMA vez por requisicao; null = nenhuma ocasiao ativa (saida igual a de antes).
+    const ocasioes = await ForecastSnapshotService.comFallbackDeOcasioes<OcasioesDoCalculo | null>(
       id,
-      produtos.map((p) => p.fonte),
+      'Ocasioes do lead time indisponiveis; relatorio sem o bloco.',
+      () => ForecastOcasioesService.contextoDoCalculo(produtos.map((p) => p.fonte)),
+      () => ({ indisponivel: true }),
     );
+    // Memoria de calculo (so no painel): dado ruim descarta o bloco de TODAS as linhas, sem derrubar o painel.
+    const memoria =
+      comMemoria && ocasioes && !('indisponivel' in ocasioes)
+        ? await ForecastSnapshotService.comFallbackDeOcasioes(
+            id,
+            'Ocasioes da memoria de calculo indisponiveis; detalhe sem o bloco.',
+            () => ocasioesDaPoHojePorLinha(calculadas.map((l) => ({ linha: l.linha, fonte: produtoPorLinha.get(l.linha)?.fonte ?? '', AQ: l.AQ })), hojeKey, ocasioes),
+            () => new Map<number, OcasioesDaPoHoje>(),
+          )
+        : new Map<number, OcasioesDaPoHoje>();
 
     const calc = {
       id: snapshot.id,
@@ -308,10 +319,7 @@ export class ForecastSnapshotService {
       linhas: calculadas.map((linha) => {
         const produto = produtoPorLinha.get(linha.linha);
         // Memoria de calculo: ocasioes da PO que sai hoje (so informa); sem bloco o objeto e o de antes.
-        const ocasioesHoje =
-          ocasioes && !('indisponivel' in ocasioes)
-            ? ocasioesDaPoHoje({ fonte: produto?.fonte ?? '', AQ: linha.AQ }, hojeKey, ocasioes)
-            : null;
+        const ocasioesHoje = memoria.get(linha.linha);
         return {
           ...linha,
           n: produto?.n ?? null,
@@ -377,7 +385,7 @@ export class ForecastSnapshotService {
   // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada
   // na quinzena; reusa o 404 de getCalculated). Nada aqui escreve em forecastSnapshot.
   static async getRelatorioCompras(id: number, hoje?: string): Promise<RelatorioCompras> {
-    const { calc, ocasioes } = await ForecastSnapshotService.calcularComOcasioes(id, hoje);
+    const { calc, ocasioes } = await ForecastSnapshotService.calcularComOcasioes(id, hoje, false);
     const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
       calc.linhas.flatMap((l) => l.codigos),
     );
@@ -388,12 +396,20 @@ export class ForecastSnapshotService {
     );
     // Demanda do comercial (PR 6d): pedidos abertos do cadastro ATUAL (nao congelados na quinzena), 1 consulta.
     const demandasComerciais = await ForecastDemandaComercialService.abertas();
-    return montarRelatorioCompras(calc, embalagens, {
+    const relatorio = montarRelatorioCompras(calc, embalagens, {
       sobDemanda,
       demandasComerciais,
       grupos: gruposDasLinhas(calc.linhas),
-      ...(ocasioes ? { ocasioes } : {}),
     });
+    // Blocos no relatorio (pos-motor): falha ao anexar = relatorio sem blocos e com o aviso de indisponivel.
+    return ocasioes
+      ? ForecastSnapshotService.comFallbackDeOcasioes(
+          id,
+          'Ocasioes do lead time indisponiveis; relatorio sem o bloco.',
+          () => anexarOcasioesAoRelatorio(relatorio, ocasioes),
+          () => anexarOcasioesAoRelatorio(relatorio, { indisponivel: true }),
+        )
+      : relatorio;
   }
 
   // Decisoes de compra da quinzena (PR3), por productId: 1 consulta. So os caminhos XLSX leem; a rota JSON do relatorio e o

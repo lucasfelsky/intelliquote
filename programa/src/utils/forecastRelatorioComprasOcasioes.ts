@@ -18,6 +18,7 @@ import {
   type OcasiaoLeadTime,
 } from './forecastOcasioes';
 import { somarDias } from './forecastMonths';
+import { isValidDateKey } from './supplierDocumentDates';
 import type { GrupoRelatorioCompras, ItemRelatorioCompras, RelatorioCompras } from './forecastRelatorioCompras';
 
 /** ForecastSource ATUAL, sem leadTimeDays (o lead time usado e o AQ congelado da quinzena). */
@@ -187,13 +188,15 @@ export function anexarOcasioesAoRelatorio(r: RelatorioCompras, ctx: OcasioesDoCa
   let fontesSemPais = 0;
 
   const grupos = r.grupos.map<GrupoRelatorioCompras>((g) => {
-    const cadastro = ctx.fontes.get(chaveDaFonte(g.fonte));
+    const chave = chaveDaFonte(g.fonte);
+    const cadastro = ctx.fontes.get(chave);
     if (cadastro && cadastro.ativa && cadastro.countryCode === null && haOcasiaoDePais) {
       fontesSemPais += 1;
     }
     const blocos: OcasioesDoItem[] = [];
     const itens = g.itens.map<ItemRelatorioCompras>((item) => {
-      if (!cadastro && item.ruptura !== null) {
+      // Fonte vazia nao e "fora do cadastro": nao ha fonte a cadastrar (o item so fica sem bloco).
+      if (!cadastro && chave !== '' && item.ruptura !== null) {
         itensSemFonteCadastrada += 1;
       }
       const bloco = ocasioesDoItem(
@@ -251,11 +254,31 @@ export function ocasioesDaPoHoje(
   if (r === null || r.ocasioes.length === 0) {
     return null;
   }
+  // Efeito invalido no cadastro (NaN, valor absurdo) gera data invalida: lanca, e quem chama descarta o bloco (sem 500).
+  const chegadaEstimada = somarDias(hoje, r.leadTimeAjustado);
+  if (!isValidDateKey(chegadaEstimada)) {
+    throw new Error(`Data invalida: ${chegadaEstimada}`);
+  }
   return {
     extraDias: r.extraDias,
     leadTimeAjustado: r.leadTimeAjustado,
-    chegadaEstimada: somarDias(hoje, r.leadTimeAjustado),
+    chegadaEstimada,
     ocasioes: r.ocasioes.map((o) => paraOcasiaoDoItem(ctx, o)),
     ...(r.componentesAusentes ? { componentesAusentes: true as const } : {}),
   };
+}
+
+// Memoria de calculo do painel: bloco por linha (so as linhas que alguma ocasiao cruza). Pode lancar com dado ruim no cadastro
+// (efeito invalido gera data invalida); quem chama descarta o bloco de todas as linhas.
+export function ocasioesDaPoHojePorLinha(
+  linhas: ReadonlyArray<{ linha: number; fonte: string; AQ: number | null }>,
+  hoje: string,
+  ctx: ContextoOcasioes,
+): Map<number, OcasioesDaPoHoje> {
+  const blocos = new Map<number, OcasioesDaPoHoje>();
+  for (const l of linhas) {
+    const bloco = ocasioesDaPoHoje(l, hoje, ctx);
+    if (bloco) blocos.set(l.linha, bloco);
+  }
+  return blocos;
 }
