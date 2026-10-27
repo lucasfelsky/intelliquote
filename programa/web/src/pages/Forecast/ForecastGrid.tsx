@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import type { ForecastDivergencia, ForecastLinha } from '@/services/forecast';
 import { descreverDivergencia, GRUPOS, STATUS_ROTULO, type ColunaPainel, type GrupoId } from './forecastPainel';
+import { semVendaHa6Meses } from './forecastSemVenda';
 
 export type DivergenciasPorCelula = ReadonlyMap<string, ForecastDivergencia>;
 
@@ -19,6 +20,7 @@ interface RowProps {
 
 const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergencias, onSelect }: RowProps) {
   const fonteEStatus = [linha.fonte, STATUS_ROTULO[linha.status]].filter(Boolean).join(' · ');
+  const semVenda = semVendaHa6Meses(linha);
   return (
     <tr className={selecionada ? 'fc-row fc-row--selecionada' : 'fc-row'}>
       <td className="fc-cell fc-fixa fc-fixa--n">{linha.n ?? ''}</td>
@@ -31,7 +33,11 @@ const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergenci
           onClick={() => onSelect(linha.linha)}
         >
           <span className="fc-item__nome">{linha.item}</span>{' '}
-          <span className="fc-item__fonte">{fonteEStatus}</span>
+          <span className="fc-item__fonte">
+            {semVenda && <span className="fcsv-selo">sem venda ≥6 meses</span>}
+            {semVenda && ' '}
+            {fonteEStatus}
+          </span>
         </button>
       </td>
       {colunas.map((c, i) => {
@@ -73,9 +79,18 @@ interface Props {
   divergencias: DivergenciasPorCelula;
   onSelect: (linha: number) => void;
   legenda: string;
+  mensagemVazia?: string;
 }
 
-export default function ForecastGrid({ colunas, linhas, selecionada, divergencias, onSelect, legenda }: Props) {
+export default function ForecastGrid({
+  colunas,
+  linhas,
+  selecionada,
+  divergencias,
+  onSelect,
+  legenda,
+  mensagemVazia = 'Nenhum produto com esses filtros.',
+}: Props) {
   // Colunas vizinhas do mesmo grupo viram uma faixa so no cabecalho.
   const faixas = useMemo(() => {
     const lista: Array<{ grupo: GrupoId; span: number }> = [];
@@ -131,7 +146,7 @@ export default function ForecastGrid({ colunas, linhas, selecionada, divergencia
           {linhas.length === 0 ? (
             <tr>
               <td className="fc-vazio" colSpan={colunas.length + 2}>
-                Nenhum produto com esses filtros.
+                {mensagemVazia}
               </td>
             </tr>
           ) : (
