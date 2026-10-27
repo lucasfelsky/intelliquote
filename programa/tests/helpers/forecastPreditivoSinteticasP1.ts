@@ -1,4 +1,4 @@
-// Series SINTETICAS da P1a (nenhum dado real). Determinísticas: formulas + mulberry32 com semente fixa.
+// Series SINTETICAS da P1a (nenhum dado real). Deterministicas: formulas + mulberry32 com semente fixa.
 // Calendario 2024-01..2026-12 (36 meses, t = 0..35); quantidades inteiras. So em memoria: nada daqui e versionado como CSV.
 import { somarMeses } from '../../src/utils/forecastPreditivoSerie';
 import type { PontoMensal, SerieEntrada } from '../../src/utils/forecastPreditivoTipos';

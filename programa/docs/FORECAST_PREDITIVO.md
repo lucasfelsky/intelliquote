@@ -1,6 +1,6 @@
-# Forecast preditivo - fase 0 (biblioteca de metodos + backtest + CLI local)
+# Forecast preditivo - fase 0 + P1a (biblioteca de metodos + backtest + CLI local)
 
-Versao do modelo: `p0.1.0` (`PREDITIVO_VERSAO`). Modo sombra: **nada aqui altera o calculo da planilha**
+Versao do modelo: `p1.0.0` (`PREDITIVO_VERSAO`). Modo sombra: **nada aqui altera o calculo da planilha**
 (`forecastEngine.ts`), o relatorio de compras, o XLSX, o banco ou a UI. Sao funcoes puras em
 `src/utils/forecastPreditivo*.ts` e um CLI que so escreve em stdout/stderr. O motor e importado apenas pelo teste de
 paridade.
@@ -23,13 +23,15 @@ node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/foreca
 | `--entrada <arquivo>` | obrigatorio (ou `--quinzena`) | `.csv` ou `.json`, ate 20 MB |
 | `--quinzena <arquivo.json>` | - | formato da fixture de quinzena: uma serie por produto (J..N + O) |
 | `--horizonte` | 6 | 1 a 12 |
-| `--min-treino` | 6 | meses validos antes da 1a origem |
-| `--metodos a,b` | todos | ids de `METODO_IDS` |
+| `--min-treino` | 6 | meses validos antes da 1a origem (no p1 roda tambem o cenario 12, o principal) |
+| `--metodos a,b` | todos | ids de `METODO_TODOS_IDS` (p1) ou `METODO_IDS` (`--relatorio p0`) |
 | `--lead-time-padrao` | 90 | dias, para serie sem `leadTimeDias` |
 | `--razao-falta-excesso` | 3 | custo de falta = razao x custo de excesso |
 | `--sem-mascara` | desligado | ignora atipico/ruptura (comparar vazamento) |
 | `--formato texto\|json` | texto | so stdout |
 | `--detalhe` | desligado | tabela por serie, com os ids como vieram na entrada |
+| `--relatorio p0|p1` | p1 | p0 reproduz o relatorio da fase 0 |
+| `--teto-vies <0..1>|sem` | 0,10 | teto absoluto do criterio 3 (so no p1) |
 
 **Dado real fica fora do repositorio.** O CLI recusa (codigo 2) qualquer arquivo sob um diretorio que tenha `.git`
 (inclui este worktree e o checkout principal), com uma unica excecao: `programa/tests/fixtures/` (dado sintetico ou
@@ -78,7 +80,71 @@ so lista ids com `--detalhe`; 7 (intervalo) n/a e 8 (2 rodadas) pendentes. Na fa
 `contagem`: `comPrevisao` = series com ao menos 1 origem; `historicoCurto` = series sem origem; `semVenda` = serie toda
 zero (as categorias podem se sobrepor).
 
-## Fora da fase 0
+## P1a (versao `p1.0.0`): combinacao, regras de protecao, intervalos e criterios D5 completos
 
-TSB, intervalos empiricos, combinacoes, Holt-Winters/ETS, sazonalidade em pool, detector de atipicos, service, rota, UI e
-migration ficam para as fases seguintes.
+A P1a acrescenta metodos e relatorio sem tocar o motor da planilha, o relatorio de compras nem o XLSX. A fase 0 continua
+disponivel, byte a byte, com `--relatorio p0` (so a string da versao muda). O relatorio padrao e o P1.
+
+**hashConfig.** O relatorio P1 usa `hashConfigP1()` = hash de `{ base: PREDITIVO_CONFIG, p1: PREDITIVO_CONFIG_P1 }`, entao
+o `config` do cabecalho mudou em relacao a fase 0. `PREDITIVO_CONFIG` nao mudou: o modo p0 mantem o `hashConfig` antigo.
+Mudou um valor de config ou de regra: sobe a versao (`PREDITIVO_VERSAO`).
+
+### Metodos novos e regras de protecao
+
+- `combinacao-ses-r-holt`: media simples (pesos iguais) de SES, planilha R e Holt amortecido. Com 8+ meses validos usa os
+  tres; com 4 a 7, so SES e R (o Holt amortecido pede 8); com menos de 4, `historico-curto`. Os avisos dos componentes
+  sao herdados (ex.: `previsao-negativa-zerada`).
+- `preditivo-p1`: escolhe o metodo por regra de protecao, **recalculada so com dados ate a origem** (na serie cortada;
+  nunca pelo aviso `degrau-nivel` da serie inteira, que usa o futuro). Ordem: sem dados ou menos de 8 meses validos ->
+  `curto` (planilha Q); sem venda nos ultimos 6 meses (media 0, inclui serie toda zero) -> `dormente` (planilha Q);
+  degrau de nivel (razao > 20 entre as metades) -> `degrau` (Holt amortecido); senao `padrao` (combinacao). Um alvo sem
+  previsao cai na planilha Q. Parametros em `PREDITIVO_CONFIG_P1.protecao` (`criarPreditivoP1(cfg)` aceita outra).
+
+### Amostra comum e intervalos
+
+- **Amostra comum.** Toda linha de metodo usa os mesmos pares (serie, origem) com lead time observado. O metodo que nao
+  da previsao no par usa a planilha Q nesse par (fallback contado na coluna `Fallb` e em `amostra.fallbackPorMetodo`).
+  Por isso o `n` e igual para todos os metodos de um segmento. Para os metodos da fase 0 sem fallback, as linhas TOTAL
+  sao iguais as do backtest da fase 0 (teste).
+- **Intervalos p10/p90 da soma no lead time**, sem vazamento: residuo do par = `(real - previsto) / (nivel medio dos 12
+  ultimos meses x meses do lead time)`. Um residuo so vale para pares cuja origem seja >= ao ultimo mes realizado da
+  janela dele. Pool por celula (SBC x meses do lead time); com menos de 30 residuos usa o pool TOTAL do mesmo prazo;
+  com menos de 30 no TOTAL, sem intervalo. Quantil tipo 7; `p10 = max(0, previsto + q10 x escala)` (idem `p90`). Os
+  quantis sao calculados uma vez por (mes, pool): custo ~ N log N. Relatorio: cobertura de `[p10, p90]` e pinball
+  (soma da perda / soma do realizado) de p10 e p90; `nPoolTotal` conta os pares cujo intervalo veio do pool TOTAL.
+
+### Criterios D5 1-8
+
+1 amostra (>= 6 origens e >= 30 pares) | 2 WAPE LT <= 0,90 x planilha | 3 vies | 4 custo <= 0,95 x planilha | 5 vitoria >=
+55% | 6 itens A piores (so listados) | 7 cobertura em [72%, 88%] com >= 30 pares com intervalo | 8 criterios 1-5 em **cada**
+metade temporal das origens da amostra (k meses: os `floor(k/2)` primeiros e o resto; colunas `M1`/`M2`).
+
+- Criterio 3 com **teto absoluto parametrizavel** (`--teto-vies`, padrao 0,10; `sem` desliga): `|vies| <= teto` (se
+  houver) e `|vies| <= |vies da planilha| + 2 p.p.`. O relatorio mostra sempre as duas variantes: `Falhos teto <x>` e
+  `Falhos sem teto` (o criterio 8 usa a mesma variante). Com teto 0,10 os criterios 1-5 sao os da fase 0 (teste).
+- O maximo continua `candidato`: nada e promovido (decisao de sombra e do dono do projeto).
+
+### Cenarios, segmentos e relatorio
+
+- **Dois cenarios**: `min-treino 12` (principal, sempre) e o `--min-treino` pedido (padrao 6); se o pedido for 12, so um.
+  Cenario sem nenhum par (serie curta) nao quebra: `linhas` vazias e a mensagem `Sem pares`.
+- Segmentos (alem de TOTAL, ABC, SBC e ABC/SBC): `XYZ`; `LT` (`<=60`, `61-90`, `>90`, `padrao` = lead time nao
+  informado); `FONTE` por **posto de volume** (`fonte-01..fonte-10`, `outras`, `sem-fonte`: o nome so sai com
+  `--detalhe`); `REGRA` (`padrao`, `dormente`, `curto`, `degrau`). ABC `sem-venda` aparece como `sem venda >=6 meses`
+  (ASCII: o console do PowerShell 5.1 corrompe o simbolo maior-ou-igual). Classe de lead time e fonte sao cadastro
+  atual (vazamento de cadastro: so rotulam o segmento, nao entram na previsao).
+- Aviso `lead-time-truncado`: o lead time pede mais meses do que o horizonte cobre (`max(1, ceil(LT/30)) + 1 > H`).
+- Texto e JSON deterministicos e so ASCII; sem ids de serie nem nomes de fonte fora do `--detalhe`. JSON: topo `versao,
+  hashConfig, hashEntrada, opcoes, cenariosMinTreino, linhasRejeitadas, cenarios` (+ `aviso`, `fontes` com detalhe).
+- `--relatorio p0` aceita as opcoes da fase 0 (inclusive `--metodos` com `METODO_IDS`); `--teto-vies` so vale no p1.
+
+### Entrada por produto
+
+O CSV ja aceita uma serie por produto: `serie` = id do produto, `leadTimeDias` e `fonte` por linha (vale o primeiro valor
+nao vazio). **Nada muda no parser.** O mapa codigo -> produto e local, fora do repositorio. Linhas de varios codigos com o
+mesmo `serie` e `anoMes` tambem sao somadas (aviso `mes-duplicado-somado`), mas o recomendado e agregar localmente.
+
+## Fora da P1a
+
+P1b: TSB e avaliacao da selecao de metodo por segmento (escolha na 1a metade, medida na 2a). P2: sazonalidade em pool,
+Holt-Winters/ETS, detector de atipicos, intervalos por mes e em producao. Sem service, rota, UI, banco nem migration.
