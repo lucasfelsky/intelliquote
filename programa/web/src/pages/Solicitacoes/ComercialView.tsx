@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { Modal } from '@/components/Modal';
 import { Pagination } from '@/components/Pagination';
+import { cleanProposedName, DEVELOPMENT_BADGE, hasExactCatalogMatch, NEW_ITEM_BADGE, normalizeItemNameKey } from './itemNovo';
 import {
   COMMERCIAL_REQUEST_STATUS_LABELS,
   COMMERCIAL_REQUEST_UNITS,
@@ -20,7 +21,13 @@ import {
 } from '@/services/commercialRequests';
 
 interface LineDraft {
-  catalogItemId: number;
+  /** Chave local da linha: `c:<catalogItemId>` (catalogo) ou `n:<nome normalizado>` (item novo). */
+  key: string;
+  catalogItemId: number | null;
+  /** Nome digitado (item novo); null em item de catalogo. */
+  proposedName: string | null;
+  /** Observacao do item novo (opcional). */
+  notes: string;
   commercialName: string;
   familyName: string | null;
   quantity: string;
@@ -31,6 +38,7 @@ interface LineDraft {
 
 const CURRENCIES = ['USD', 'EUR', 'BRL', 'CNY'];
 const MAX_ITEMS = 50;
+const MAX_ITEM_NOTES = 500;
 const MIN_SEARCH_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 300;
 const MINE_KEY = ['commercial-requests', 'mine'] as const;
@@ -114,7 +122,7 @@ export default function ComercialView() {
   // A busca fecha ao escolher um item (o foco vai para a quantidade dele) e
   // reabre pelo "+ Adicionar outro item". Sem itens, ela fica sempre aberta.
   const [searchOpen, setSearchOpen] = useState(true);
-  const [focusQtyId, setFocusQtyId] = useState<number | null>(null);
+  const [focusQtyId, setFocusQtyId] = useState<string | null>(null);
   const [focusAfterRemove, setFocusAfterRemove] = useState(false);
 
   useEffect(() => {
@@ -182,18 +190,22 @@ export default function ComercialView() {
   }
 
   function addItem(item: CommercialCatalogItem) {
-    if (lines.length >= MAX_ITEMS || lines.some((line) => line.catalogItemId === item.id)) return;
+    const key = `c:${item.id}`;
+    if (lines.length >= MAX_ITEMS || lines.some((line) => line.key === key)) return;
     setSearchTerm('');
     setDebouncedTerm('');
     setSearchOpen(false);
-    setFocusQtyId(item.id);
+    setFocusQtyId(key);
     setLines((current) => {
       if (current.length >= MAX_ITEMS) return current;
-      if (current.some((line) => line.catalogItemId === item.id)) return current;
+      if (current.some((line) => line.key === key)) return current;
       return [
         ...current,
         {
+          key,
           catalogItemId: item.id,
+          proposedName: null,
+          notes: '',
           commercialName: item.commercialName,
           familyName: item.familyName,
           quantity: '1',
@@ -205,14 +217,42 @@ export default function ComercialView() {
     });
   }
 
-  function updateLine(catalogItemId: number, patch: Partial<LineDraft>) {
-    setLines((current) =>
-      current.map((line) => (line.catalogItemId === catalogItemId ? { ...line, ...patch } : line)),
-    );
+  // Nenhum item cadastrado corresponde ao nome: o comercial inclui um item novo (desenvolvimento).
+  function addNewItem(rawName: string) {
+    const name = cleanProposedName(rawName);
+    const key = `n:${normalizeItemNameKey(name)}`;
+    if (name === '' || lines.length >= MAX_ITEMS || lines.some((line) => line.key === key)) return;
+    setSearchTerm('');
+    setDebouncedTerm('');
+    setSearchOpen(false);
+    setFocusQtyId(key);
+    setLines((current) => {
+      if (current.length >= MAX_ITEMS) return current;
+      if (current.some((line) => line.key === key)) return current;
+      return [
+        ...current,
+        {
+          key,
+          catalogItemId: null,
+          proposedName: name,
+          notes: '',
+          commercialName: name,
+          familyName: null,
+          quantity: '1',
+          unit: 'KG',
+          targetPrice: '',
+          targetCurrency: 'USD',
+        },
+      ];
+    });
   }
 
-  function removeLine(catalogItemId: number) {
-    setLines((current) => current.filter((line) => line.catalogItemId !== catalogItemId));
+  function updateLine(key: string, patch: Partial<LineDraft>) {
+    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
+  }
+
+  function removeLine(key: string) {
+    setLines((current) => current.filter((line) => line.key !== key));
     // O botão clicado some: devolve o foco para a busca (se reaparecer) ou para "+ Adicionar outro item".
     setFocusAfterRemove(true);
   }
@@ -239,12 +279,21 @@ export default function ComercialView() {
         );
         return;
       }
-      items.push({
-        catalogItemId: line.catalogItemId,
+      const common = {
         quantity: Number(line.quantity),
         unit: line.unit,
         ...(price !== null ? { targetPrice: price, targetCurrency: line.targetCurrency } : {}),
-      });
+      };
+      if (line.catalogItemId !== null) {
+        items.push({ catalogItemId: line.catalogItemId, ...common });
+      } else {
+        const lineNotes = line.notes.trim();
+        items.push({
+          proposedName: line.proposedName ?? line.commercialName,
+          ...(lineNotes !== '' ? { notes: lineNotes } : {}),
+          ...common,
+        });
+      }
     }
 
     setFormError(null);
@@ -258,6 +307,15 @@ export default function ComercialView() {
   const results = search.data ?? [];
   const showSearchHint = searchTerm.trim().length > 0 && searchTerm.trim().length < MIN_SEARCH_LENGTH;
   const showSearch = searchOpen || lines.length === 0;
+  const hasNewItem = lines.some((line) => line.catalogItemId === null);
+  const searchedLongEnough = debouncedTerm.length >= MIN_SEARCH_LENGTH && search.isSuccess;
+  const newItemKey = `n:${normalizeItemNameKey(debouncedTerm)}`;
+  const exactMatch = searchedLongEnough && hasExactCatalogMatch(debouncedTerm, results);
+  const canOfferNewItem =
+    searchedLongEnough &&
+    !exactMatch &&
+    lines.length < MAX_ITEMS &&
+    !lines.some((line) => line.key === newItemKey);
 
   return (
     <div className="page">
@@ -316,6 +374,11 @@ export default function ComercialView() {
                       <ul className="sol-items-list">
                         {request.items.map((item) => (
                           <li key={item.id}>
+                            {item.isNewItem && (
+                              <>
+                                <span className="badge badge--info">{NEW_ITEM_BADGE}</span>{' '}
+                              </>
+                            )}
                             {item.commercialName} — {formatCommercialQuantity(item.quantity)} {item.unit}
                             {item.targetPrice
                               ? ` — alvo ${formatCommercialPrice(item.targetPrice, item.targetCurrency)}`
@@ -333,6 +396,12 @@ export default function ComercialView() {
                       <span className={statusBadgeClass(request.status)}>
                         {COMMERCIAL_REQUEST_STATUS_LABELS[request.status]}
                       </span>
+                      {request.isDevelopment && (
+                        <>
+                          {' '}
+                          <span className="badge badge--info">{DEVELOPMENT_BADGE}</span>
+                        </>
+                      )}
                     </td>
                     <td className="cell-nowrap" data-label="Cotação">{request.quote?.requestCode ?? '—'}</td>
                     <td data-label="Observação do COMEX">
@@ -396,7 +465,7 @@ export default function ComercialView() {
           )}
           {lines.map((line) => (
             <fieldset
-              key={line.catalogItemId}
+              key={line.key}
               style={{
                 border: '1px solid var(--border, #dde3ea)',
                 borderRadius: 8,
@@ -405,28 +474,36 @@ export default function ComercialView() {
                 minWidth: 0,
               }}
             >
-              <legend className="text-sm" style={{ padding: '0 6px' }}>{labelOf(line)}</legend>
+              <legend className="text-sm" style={{ padding: '0 6px' }}>
+                {line.catalogItemId === null ? (
+                  <>
+                    {line.commercialName} · <span className="badge badge--info">{NEW_ITEM_BADGE}</span>
+                  </>
+                ) : (
+                  labelOf(line)
+                )}
+              </legend>
               <div className="form-grid">
                 <div>
-                  <label className="field-label" htmlFor={`cr-qty-${line.catalogItemId}`}>Quantidade *</label>
+                  <label className="field-label" htmlFor={`cr-qty-${line.key}`}>Quantidade *</label>
                   <input
-                    id={`cr-qty-${line.catalogItemId}`}
+                    id={`cr-qty-${line.key}`}
                     className="input"
                     type="number"
                     min={1}
                     step={1}
                     value={line.quantity}
-                    onChange={(e) => updateLine(line.catalogItemId, { quantity: e.target.value })}
+                    onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="field-label" htmlFor={`cr-unit-${line.catalogItemId}`}>Unidade</label>
+                  <label className="field-label" htmlFor={`cr-unit-${line.key}`}>Unidade</label>
                   <select
-                    id={`cr-unit-${line.catalogItemId}`}
+                    id={`cr-unit-${line.key}`}
                     className="select"
                     value={line.unit}
                     onChange={(e) =>
-                      updateLine(line.catalogItemId, { unit: e.target.value as CommercialRequestUnit })
+                      updateLine(line.key, { unit: e.target.value as CommercialRequestUnit })
                     }
                   >
                     {COMMERCIAL_REQUEST_UNITS.map((unit) => (
@@ -435,23 +512,23 @@ export default function ComercialView() {
                   </select>
                 </div>
                 <div>
-                  <label className="field-label" htmlFor={`cr-price-${line.catalogItemId}`}>Preço-alvo</label>
+                  <label className="field-label" htmlFor={`cr-price-${line.key}`}>Preço-alvo</label>
                   <input
-                    id={`cr-price-${line.catalogItemId}`}
+                    id={`cr-price-${line.key}`}
                     className="input"
                     inputMode="decimal"
                     placeholder="opcional"
                     value={line.targetPrice}
-                    onChange={(e) => updateLine(line.catalogItemId, { targetPrice: e.target.value })}
+                    onChange={(e) => updateLine(line.key, { targetPrice: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="field-label" htmlFor={`cr-cur-${line.catalogItemId}`}>Moeda</label>
+                  <label className="field-label" htmlFor={`cr-cur-${line.key}`}>Moeda</label>
                   <select
-                    id={`cr-cur-${line.catalogItemId}`}
+                    id={`cr-cur-${line.key}`}
                     className="select"
                     value={line.targetCurrency}
-                    onChange={(e) => updateLine(line.catalogItemId, { targetCurrency: e.target.value })}
+                    onChange={(e) => updateLine(line.key, { targetCurrency: e.target.value })}
                   >
                     {CURRENCIES.map((currency) => (
                       <option key={currency} value={currency}>{currency}</option>
@@ -459,17 +536,47 @@ export default function ComercialView() {
                   </select>
                 </div>
               </div>
+              {line.catalogItemId === null && (
+                <div style={{ marginTop: 8 }}>
+                  <label className="field-label" htmlFor={`cr-item-notes-${line.key}`}>Observação do item</label>
+                  <textarea
+                    id={`cr-item-notes-${line.key}`}
+                    className="textarea"
+                    rows={2}
+                    maxLength={MAX_ITEM_NOTES}
+                    placeholder="Opcional: aplicação, especificação, concorrente de referência…"
+                    value={line.notes}
+                    onChange={(e) => updateLine(line.key, { notes: e.target.value })}
+                  />
+                </div>
+              )}
               <div style={{ marginTop: 8, textAlign: 'right' }}>
                 <button
                   type="button"
                   className="ghost-button danger-button"
-                  onClick={() => removeLine(line.catalogItemId)}
+                  onClick={() => removeLine(line.key)}
                 >
                   Remover item
                 </button>
               </div>
             </fieldset>
           ))}
+
+          {hasNewItem && (
+            <p
+              role="status"
+              className="text-sm"
+              style={{
+                margin: '0 0 10px',
+                padding: '8px 12px',
+                background: 'var(--primary-50)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+              }}
+            >
+              Item novo: esta solicitação será de desenvolvimento. O COMEX cadastra o item antes de cotar.
+            </p>
+          )}
 
           {showSearch ? (
             <div style={{ marginTop: 4 }}>
@@ -512,7 +619,7 @@ export default function ComercialView() {
               )}
               {debouncedTerm.length >= MIN_SEARCH_LENGTH && search.isSuccess && results.length === 0 && (
                 <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
-                  Nenhum item encontrado.
+                  Nenhum item cadastrado com esse nome.
                 </p>
               )}
               {debouncedTerm.length >= MIN_SEARCH_LENGTH && results.length > 0 && (
@@ -524,15 +631,30 @@ export default function ComercialView() {
                         className="ghost-button"
                         style={{ width: '100%', textAlign: 'left', marginBottom: 4 }}
                         onClick={() => addItem(item)}
-                        disabled={lines.some((line) => line.catalogItemId === item.id)}
+                        disabled={lines.some((line) => line.key === `c:${item.id}`)}
                       >
-                        {lines.some((line) => line.catalogItemId === item.id)
+                        {lines.some((line) => line.key === `c:${item.id}`)
                           ? <>{labelOf(item)} <span className="sol-added">Adicionado ✓</span></>
                           : <>+ {labelOf(item)}</>}
                       </button>
                     </li>
                   ))}
                 </ul>
+              )}
+              {canOfferNewItem && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  style={{ width: '100%', textAlign: 'left', marginTop: 4 }}
+                  onClick={() => addNewItem(debouncedTerm)}
+                >
+                  + Incluir &quot;{cleanProposedName(debouncedTerm)}&quot; como item novo
+                </button>
+              )}
+              {exactMatch && (
+                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                  Esse item já está cadastrado: selecione-o acima.
+                </p>
               )}
             </div>
           ) : (

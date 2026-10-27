@@ -43,6 +43,8 @@ interface QuoteRequest {
   updatedAt: string;
   closedAt: string | null;
   createdById: number | null;
+  /** Veio de solicitacao de desenvolvimento do comercial (item novo). */
+  isDevelopment?: boolean;
   items?: QuoteRequestItem[];
   purchaseOrders?: PurchaseOrder[];
   dispatchCount?: number;
@@ -1114,6 +1116,7 @@ export default function CotacaoDetalhe() {
           <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
             {qr.status === 'open' ? 'Aberta' : 'Fechada'}
           </span>
+          {qr.isDevelopment && <span className="badge badge--info">Desenvolvimento</span>}
           {canDispatch && qr.status === 'open' && items.length > 0 && (
             <button
               type="button"

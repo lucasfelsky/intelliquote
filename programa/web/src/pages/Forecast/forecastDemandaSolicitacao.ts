@@ -28,7 +28,8 @@ export type MotivoBloqueio = 'sem-produto' | 'produto-inativo' | 'ambiguo' | 'ac
 
 export interface ItemCasado {
   itemId: number;
-  catalogItemId: number;
+  /** null = item novo (desenvolvimento) ainda sem catalogo: cai em "sem-produto". */
+  catalogItemId: number | null;
   commercialName: string;
   quantidade: number;
   /** Unidade normalizada (trim + maiusculas). */
@@ -121,7 +122,7 @@ export function casarItem(
     bloqueio: { motivo, texto },
   });
 
-  const candidatos = indice.get(item.catalogItemId) ?? [];
+  const candidatos = item.catalogItemId === null ? [] : (indice.get(item.catalogItemId) ?? []);
   if (candidatos.length === 0) return bloqueado('sem-produto', TEXTO_SEM_PRODUTO);
   const ativos = candidatos.filter((p) => p.isActive);
   const [casado, segundo] = ativos;

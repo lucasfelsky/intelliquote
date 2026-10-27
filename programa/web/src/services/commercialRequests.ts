@@ -20,8 +20,13 @@ export interface CommercialCatalogItem {
 
 interface CommercialRequestItemBase {
   id: number;
-  catalogItemId: number;
+  /** null = item novo ainda sem catalogo (solicitacao de desenvolvimento). */
+  catalogItemId: number | null;
+  /** Nome do catalogo ou, no item novo, o nome digitado pelo comercial. */
   commercialName: string;
+  isNewItem: boolean;
+  /** Observacao do item novo (visivel ao comercial dono e a Comex). */
+  notes: string | null;
   quantity: number;
   unit: string;
   targetPrice: string | null;
@@ -51,12 +56,17 @@ export interface CommercialRequestForCommercial {
   fulfillmentNote: string | null;
   createdAt: string;
   statusChangedAt: string | null;
+  /** Tem item novo sem catalogo: a Comex cadastra o item antes de cotar. */
+  isDevelopment: boolean;
   quote: { requestCode: string } | null;
   items: CommercialRequestItemForCommercial[];
 }
 
 export interface CommercialRequestItemForComex extends CommercialRequestItemBase {
-  marketName: string;
+  /** Nome digitado pelo comercial (continua depois do vinculo ao catalogo); null = item de catalogo. */
+  proposedName: string | null;
+  /** null enquanto o item novo nao tem catalogo. */
+  marketName: string | null;
   dbcorpCode: string | null;
   /** Item da cotacao a que este item esta vinculado (null = nao entrou na cotacao). */
   quoteRequestItemId: number | null;
@@ -71,6 +81,7 @@ export interface CommercialRequestForComex {
   fulfillmentNote: string | null;
   createdAt: string;
   statusChangedAt: string | null;
+  isDevelopment: boolean;
   requestedBy: { id: number; name: string; email: string };
   statusChangedBy: { id: number; name: string } | null;
   quoteRequest: { id: number; requestCode: string; status: string } | null;
@@ -82,13 +93,16 @@ export interface PaginatedResult<T> {
   pagination: { page: number; pageSize: number; totalItems: number; totalPages: number };
 }
 
-export interface CommercialRequestItemInput {
-  catalogItemId: number;
+interface CommercialRequestItemInputCommon {
   quantity: number;
   unit: CommercialRequestUnit;
   targetPrice?: number | null;
   targetCurrency?: string;
 }
+
+/** Item de catalogo OU item novo (nome digitado, sem catalogo): nunca os dois. */
+export type CommercialRequestItemInput = CommercialRequestItemInputCommon &
+  ({ catalogItemId: number } | { proposedName: string; notes?: string | null });
 
 export interface CommercialRequestInput {
   customerName?: string | null;
@@ -151,11 +165,14 @@ export function listCommercialRequests(params?: {
   page?: number;
   status?: CommercialRequestStatus | '';
   requestedById?: number | '';
+  /** Solicitacoes ligadas a uma cotacao (painel de desenvolvimento no detalhe da cotacao). */
+  quoteRequestId?: number;
 }): Promise<PaginatedResult<CommercialRequestForComex>> {
   return api.get<PaginatedResult<CommercialRequestForComex>>('/api/v1/commercial-requests', {
     page: params?.page,
     status: params?.status || undefined,
     requestedById: params?.requestedById || undefined,
+    quoteRequestId: params?.quoteRequestId || undefined,
   });
 }
 
@@ -178,6 +195,18 @@ export function linkCommercialRequestToQuote(
   return api.post<CommercialRequestForComex>(`/api/v1/commercial-requests/${id}/link-quote`, {
     quoteRequestId,
   });
+}
+
+/** Comex: vincula um item novo ao catalogo (existente ou recem-cadastrado) antes de cotar. */
+export function linkCommercialRequestItemToCatalog(
+  id: number,
+  itemId: number,
+  catalogItemId: number,
+): Promise<CommercialRequestForComex> {
+  return api.post<CommercialRequestForComex>(
+    `/api/v1/commercial-requests/${id}/items/${itemId}/catalog`,
+    { catalogItemId },
+  );
 }
 
 export function rejectCommercialRequest(
