@@ -161,6 +161,8 @@ export interface ColunaPainel {
   destaque?: (linha: ForecastLinha) => string;
   /** `title` da celula (PR 6c: mes atipico e media sem meses excluidos); a divergencia e a observacao tem prioridade. */
   titulo?: (linha: ForecastLinha) => string | undefined;
+  /** Texto so para leitor de tela (`sr-only` dentro da celula); `title` em `<td>` nao e anunciado de forma confiavel. */
+  textoAcessivel?: (linha: ForecastLinha) => string | undefined;
 }
 
 type ColunaDefinida = ColunaPainel & { oculta?: boolean };

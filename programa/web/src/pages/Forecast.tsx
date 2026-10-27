@@ -13,7 +13,9 @@ import {
   type ForecastSnapshotDetail,
   type ForecastSnapshotSummary,
 } from '@/services/forecast';
+import { forecastDecisoesKeys, listForecastDecisoes, type ForecastDecisao } from '@/services/forecastDecisoes';
 import { forecastPendentesKeys } from '@/services/forecastPendentes';
+import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
@@ -86,7 +88,21 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
   const [sel, setSel] = useState<number | null>(null);
   const termo = useDeferredValue(busca);
 
-  const colunas = useMemo(() => colunasDoPainel(detail.months, { ocultas }), [detail.months, ocultas]);
+  // Quantidades decididas pelo comprador: mesma chave do relatorio de compras (salvar la atualiza a grade). A grade
+  // nunca some: sem dados (carregando ou erro sem cache) a coluna ANALISE FORECAST mostra o valor congelado.
+  const decisoes = useQuery({
+    queryKey: forecastDecisoesKeys.lista(detail.id),
+    queryFn: () => listForecastDecisoes(detail.id),
+  });
+  const decisoesData = decisoes.data;
+  const mapaDecisoes = useMemo(
+    () => (decisoesData ? new Map<number, ForecastDecisao>(decisoesData.map((d) => [d.productId, d])) : null),
+    [decisoesData],
+  );
+  const colunas = useMemo(
+    () => colunasComDecisoes(colunasDoPainel(detail.months, { ocultas }), mapaDecisoes),
+    [detail.months, ocultas, mapaDecisoes],
+  );
   const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
   const contagem = useMemo(() => contarPorFiltro(base), [base]);
   const divergencias = useMemo(() => {
@@ -180,6 +196,20 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
             {visiveis.length} de {detail.linhas.length} produtos
           </span>
         </div>
+        {decisoes.isLoading && (
+          <p className="fcad-aviso" role="status">
+            Carregando as quantidades decididas…
+          </p>
+        )}
+        {decisoes.isError && decisoesData === undefined && (
+          <p className="fcad-aviso" role="status">
+            Não foi possível carregar as quantidades decididas. A coluna ANÁLISE FORECAST mostra o valor importado da
+            quinzena.
+            <button type="button" className="ghost-button ghost-button--sm" onClick={() => void decisoes.refetch()}>
+              Tentar de novo
+            </button>
+          </p>
+        )}
         <ForecastGrid
           colunas={colunas}
           linhas={visiveis}
@@ -318,6 +348,7 @@ export default function Forecast() {
       queryClient.removeQueries({ queryKey: forecastKeys.snapshot(id) });
       queryClient.removeQueries({ queryKey: forecastKeys.relatorio(id) });
       queryClient.removeQueries({ queryKey: forecastPendentesKeys.snapshot(id) });
+      queryClient.removeQueries({ queryKey: forecastDecisoesKeys.lista(id) });
       focoAposExcluir.current = restantes.length > 0 ? 'seletor' : 'importar';
       setImportada(null);
       setExcluida(label);

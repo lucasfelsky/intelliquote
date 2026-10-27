@@ -62,9 +62,11 @@ const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergenci
           : c.id === 'obs' && texto !== ''
             ? texto
             : c.titulo?.(linha);
+        const acessivel = c.textoAcessivel?.(linha);
         return (
           <td key={c.id} className={classes} title={title}>
             {destaque ? <span className={destaque}>{texto}</span> : texto}
+            {acessivel && <span className="sr-only">{acessivel}</span>}
           </td>
         );
       })}
