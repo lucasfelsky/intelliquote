@@ -15,6 +15,7 @@ import {
   listCommercialRequesters,
   listCommercialRequests,
 } from '@/services/commercialRequests';
+import { AnexosLista } from './AnexosTecnicos';
 import { CommercialRequestActions } from './ComexActions';
 import { DEVELOPMENT_BADGE, NEW_ITEM_BADGE } from './itemNovo';
 import { VincularCatalogoModal } from './VincularCatalogoModal';
@@ -285,6 +286,18 @@ export default function ComexView() {
                                 ))}
                               </tbody>
                             </table>
+                            {(request.attachments ?? []).length > 0 ? (
+                              <div style={{ marginTop: 12 }}>
+                                <strong className="text-sm">Anexos técnicos</strong>
+                                <AnexosLista requestId={request.id} attachments={request.attachments} />
+                              </div>
+                            ) : (
+                              request.isDevelopment && (
+                                <p className="text-sm" style={{ marginTop: 12, color: 'var(--ink-soft)' }}>
+                                  Sem anexos técnicos.
+                                </p>
+                              )
+                            )}
                           </td>
                         </tr>
                       )}

@@ -3,6 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { Modal } from '@/components/Modal';
 import { Pagination } from '@/components/Pagination';
+import {
+  AnexarArquivoModal,
+  AnexosLista,
+  AnexosReenvioPainel,
+  AnexosTecnicosCampo,
+  attachmentErrorMessage,
+  PendingAttachment,
+  sendAttachmentsSequentially,
+} from './AnexosTecnicos';
+import { CR_ATTACHMENT_MAX_PER_REQUEST } from '@/services/commercialRequestAttachments';
 import { cleanProposedName, DEVELOPMENT_BADGE, hasExactCatalogMatch, NEW_ITEM_BADGE, normalizeItemNameKey } from './itemNovo';
 import {
   COMMERCIAL_REQUEST_STATUS_LABELS,
@@ -124,6 +134,12 @@ export default function ComercialView() {
   const [searchOpen, setSearchOpen] = useState(true);
   const [focusQtyId, setFocusQtyId] = useState<string | null>(null);
   const [focusAfterRemove, setFocusAfterRemove] = useState(false);
+  // Anexos tecnicos (so com item novo). Enviados em sequencia DEPOIS de criar a solicitacao.
+  const [pendingFiles, setPendingFiles] = useState<PendingAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
+  // Solicitacao criada, mas algum anexo falhou: o modal passa a mostrar so os anexos restantes.
+  const [attachOnly, setAttachOnly] = useState<{ requestId: number; uploaded: number } | null>(null);
+  const [attachTarget, setAttachTarget] = useState<{ id: number; count: number } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedTerm(searchTerm.trim()), SEARCH_DEBOUNCE_MS);
@@ -159,24 +175,54 @@ export default function ComercialView() {
   });
 
   const create = useMutation({
-    mutationFn: (payload: CommercialRequestInput) => createCommercialRequest(payload),
-    onSuccess: () => {
+    mutationFn: ({ payload }: { payload: CommercialRequestInput; files: PendingAttachment[] }) =>
+      createCommercialRequest(payload),
+    onSuccess: (created, { files }) => {
       void qc.invalidateQueries({ queryKey: MINE_KEY });
       setPage(1);
-      closeModal();
+      if (files.length === 0) {
+        closeModal();
+        return;
+      }
+      void sendAttachments(created.id, files, 0);
     },
     onError: (err) => setFormError(messageOf(err)),
   });
 
+  // Anexos em sequencia; o primeiro que falhar interrompe e deixa o restante para reenvio.
+  async function sendAttachments(requestId: number, files: PendingAttachment[], alreadyUploaded: number) {
+    setAttachBusy(true);
+    setFormError(null);
+    const failure = await sendAttachmentsSequentially(requestId, files);
+    setAttachBusy(false);
+    void qc.invalidateQueries({ queryKey: MINE_KEY });
+    if (!failure) {
+      closeModal();
+      return;
+    }
+    setAttachOnly({ requestId, uploaded: alreadyUploaded + failure.index });
+    setPendingFiles(files.slice(failure.index));
+    const reason = attachmentErrorMessage(failure.error).replace(/\.$/, '');
+    setFormError(
+      `Solicitação #${requestId} criada, mas o anexo "${failure.fileName}" não foi enviado: ${reason}. Reenvie pela lista.`,
+    );
+  }
+
   const rows = mine.data?.data ?? [];
   const pagination = mine.data?.pagination;
   const canSubmit =
-    lines.length > 0 && lines.every((line) => isValidQuantity(line.quantity)) && !create.isPending;
+    lines.length > 0 &&
+    lines.every((line) => isValidQuantity(line.quantity)) &&
+    !create.isPending &&
+    !attachBusy;
 
   function openModal() {
     setCustomerName('');
     setNotes('');
     setLines([]);
+    setPendingFiles([]);
+    setAttachOnly(null);
+    setAttachBusy(false);
     setSearchTerm('');
     setDebouncedTerm('');
     setFormError(null);
@@ -187,6 +233,7 @@ export default function ComercialView() {
   function closeModal() {
     setModalOpen(false);
     setFormError(null);
+    setAttachOnly(null);
   }
 
   function addItem(item: CommercialCatalogItem) {
@@ -252,6 +299,9 @@ export default function ComercialView() {
   }
 
   function removeLine(key: string) {
+    const remaining = lines.filter((line) => line.key !== key);
+    // Sem item novo nao ha solicitacao de desenvolvimento: descarta os arquivos escolhidos.
+    if (!remaining.some((line) => line.catalogItemId === null)) setPendingFiles([]);
     setLines((current) => current.filter((line) => line.key !== key));
     // O botão clicado some: devolve o foco para a busca (se reaparecer) ou para "+ Adicionar outro item".
     setFocusAfterRemove(true);
@@ -298,9 +348,12 @@ export default function ComercialView() {
 
     setFormError(null);
     create.mutate({
-      customerName: customerName.trim() || null,
-      notes: notes.trim() || null,
-      items,
+      payload: {
+        customerName: customerName.trim() || null,
+        notes: notes.trim() || null,
+        items,
+      },
+      files: hasNewItem ? pendingFiles : [],
     });
   }
 
@@ -361,6 +414,7 @@ export default function ComercialView() {
                   <th>Itens</th>
                   <th className="col-status">Status</th>
                   <th>Cotação</th>
+                  <th>Anexos</th>
                   <th>Observação do COMEX</th>
                 </tr>
               </thead>
@@ -404,6 +458,28 @@ export default function ComercialView() {
                       )}
                     </td>
                     <td className="cell-nowrap" data-label="Cotação">{request.quote?.requestCode ?? '—'}</td>
+                    <td data-label="Anexos">
+                      {(() => {
+                        const attachments = request.attachments ?? [];
+                        const canEdit = request.status === 'pending' && request.isDevelopment;
+                        if (!canEdit && attachments.length === 0) return '—';
+                        return (
+                          <>
+                            <AnexosLista requestId={request.id} attachments={attachments} canRemove={canEdit} />
+                            {canEdit && attachments.length < CR_ATTACHMENT_MAX_PER_REQUEST && (
+                              <button
+                                type="button"
+                                className="ghost-button ghost-button--sm"
+                                aria-label={`Anexar arquivo à solicitação #${request.id}`}
+                                onClick={() => setAttachTarget({ id: request.id, count: attachments.length })}
+                              >
+                                Anexar
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </td>
                     <td data-label="Observação do COMEX">
                       {request.status === 'rejected' && request.rejectionReason
                         ? `Motivo: ${request.rejectionReason}`
@@ -430,7 +506,23 @@ export default function ComercialView() {
         )}
       </section>
 
-      <Modal isOpen={modalOpen} onClose={closeModal} title="Solicitar uma cotação" size="wide">
+      <Modal
+        isOpen={modalOpen}
+        onClose={attachBusy ? () => undefined : closeModal}
+        title="Solicitar uma cotação"
+        size="wide"
+      >
+        {attachOnly ? (
+          <AnexosReenvioPainel
+            error={formError}
+            files={pendingFiles}
+            onChange={setPendingFiles}
+            uploaded={attachOnly.uploaded}
+            busy={attachBusy}
+            onRetry={() => void sendAttachments(attachOnly.requestId, pendingFiles, attachOnly.uploaded)}
+            onClose={closeModal}
+          />
+        ) : (
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
             <div className="form-grid__full">
@@ -577,6 +669,9 @@ export default function ComercialView() {
               Item novo: esta solicitação será de desenvolvimento. O COMEX cadastra o item antes de cotar.
             </p>
           )}
+          {hasNewItem && (
+            <AnexosTecnicosCampo files={pendingFiles} onChange={setPendingFiles} disabled={create.isPending} />
+          )}
 
           {showSearch ? (
             <div style={{ marginTop: 4 }}>
@@ -672,15 +767,24 @@ export default function ComercialView() {
           )}
 
           <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-            <button type="button" className="ghost-button" onClick={closeModal}>
+            <button type="button" className="ghost-button" onClick={closeModal} disabled={attachBusy}>
               Cancelar
             </button>
             <button type="submit" className="primary-button" disabled={!canSubmit}>
-              {create.isPending ? 'Enviando…' : 'Enviar'}
+              {create.isPending || attachBusy ? 'Enviando…' : 'Enviar'}
             </button>
           </div>
         </form>
+        )}
       </Modal>
+
+      {attachTarget && (
+        <AnexarArquivoModal
+          requestId={attachTarget.id}
+          existingCount={attachTarget.count}
+          onClose={() => setAttachTarget(null)}
+        />
+      )}
     </div>
   );
 }

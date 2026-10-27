@@ -22,6 +22,7 @@ import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData'
 import { RespostasTab } from './CotacaoTabs/RespostasTab';
 import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
 import { ItensTab } from './CotacaoTabs/ItensTab';
+import { SolicitacaoDesenvolvimentoPanel } from './CotacaoTabs/SolicitacaoDesenvolvimentoPanel';
 import type { PurchaseOrder } from '@/services/purchaseOrders';
 
 type QuoteStatus = 'open' | 'closed';
@@ -1184,6 +1185,8 @@ export default function CotacaoDetalhe() {
           )}
         </div>
       </div>
+
+      {qr.isDevelopment && <SolicitacaoDesenvolvimentoPanel quoteRequestId={qr.id} />}
 
       {actionError && (
         <p style={{ color: 'var(--danger)', marginBottom: 12 }} className="text-sm">{actionError}</p>

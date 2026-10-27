@@ -363,6 +363,7 @@ describe('Solicitacoes - comercial', () => {
       'Itens',
       'Status',
       'Cotação',
+      'Anexos',
       'Observação do COMEX',
     ]);
   });

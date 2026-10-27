@@ -1,4 +1,5 @@
 import { api } from '@/api/client';
+import type { CommercialRequestAttachment } from '@/services/commercialRequestAttachments';
 
 export type CommercialRequestStatus = 'pending' | 'quoting' | 'fulfilled' | 'rejected';
 
@@ -58,6 +59,8 @@ export interface CommercialRequestForCommercial {
   statusChangedAt: string | null;
   /** Tem item novo sem catalogo: a Comex cadastra o item antes de cotar. */
   isDevelopment: boolean;
+  /** Anexos tecnicos (TDS/MSDS): so metadados, o arquivo vem pelo download. */
+  attachments: CommercialRequestAttachment[];
   quote: { requestCode: string } | null;
   items: CommercialRequestItemForCommercial[];
 }
@@ -82,6 +85,7 @@ export interface CommercialRequestForComex {
   createdAt: string;
   statusChangedAt: string | null;
   isDevelopment: boolean;
+  attachments: CommercialRequestAttachment[];
   requestedBy: { id: number; name: string; email: string };
   statusChangedBy: { id: number; name: string } | null;
   quoteRequest: { id: number; requestCode: string; status: string } | null;
