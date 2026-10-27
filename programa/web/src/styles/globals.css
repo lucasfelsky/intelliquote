@@ -1093,6 +1093,15 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   border-right: 1px solid var(--border);
   background: var(--surface-muted);
   overflow-y: auto;
+  /* Sem teto a linha do grid crescia com ~100 familias e o overflow nunca ativava.
+     420px ~ busca + cabecalho + .dispatcher-list (280px). O media <=720 reduz para 220px. */
+  max-height: 420px;
+  min-height: 0;
+  scroll-padding-top: 32px;
+}
+
+.dispatcher-folders > * {
+  flex-shrink: 0;
 }
 
 .dispatcher-folders__label {
@@ -1102,6 +1111,10 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   text-transform: uppercase;
   color: var(--ink-soft);
   padding: 2px 6px 6px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-muted);
 }
 
 .dispatcher-folders__group {
