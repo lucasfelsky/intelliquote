@@ -13,6 +13,7 @@ import {
   type ForecastUrgencia,
 } from '@/services/forecast';
 import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
+import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
 import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
@@ -195,8 +196,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
   const [editando, setEditando] = useState(false);
-  // Colunas da linha (Item, Urgencia, Fonte e as 9 comuns): a sublinha do grupo ocupa todas.
-  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 9;
+  // Colunas da linha (Item, Urgencia, Fonte e as 10 comuns): a sublinha do grupo ocupa todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 10;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
@@ -258,6 +259,9 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             )}
         </td>
         <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
+        <td className="fdec-celula">
+          <ForecastDecisaoCompra item={item} />
+        </td>
         <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
         <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
         <td>
@@ -295,6 +299,9 @@ const COLUNAS_COMUNS = (
     <th scope="col">Embalagem</th>
     <th scope="col" className="fcr-num">
       Qtd. final
+    </th>
+    <th scope="col" className="fcr-num">
+      Qtd. decidida (kg)
     </th>
     <th scope="col">Saldo zera</th>
     <th scope="col">Ruptura</th>
@@ -694,24 +701,26 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {comGrupos && <p>{paragrafoGruposDeEquivalencia()}</p>}
         </details>
       </section>
-      {dados.grupos.length === 0 ? (
-        <div className="empty-state">Nenhum item com demanda ≤ 0 nesta quinzena.</div>
-      ) : !comUrgencia ? (
-        dados.grupos.map((grupo) => <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} />)
-      ) : totalMostrado === 0 ? (
-        <div className="empty-state">Nenhum item nesta faixa.</div>
-      ) : visao === 'urgencia' ? (
-        filtrosVisiveis(diasCritico).map((u) => {
-          const itens = itensDaFaixa.filter(({ item }) => item.urgencia === u);
-          return itens.length > 0 ? (
-            <SecaoUrgencia key={u} urgencia={u} itens={itens} diasCritico={diasCritico} podeEditar={podeEditar} />
-          ) : null;
-        })
-      ) : (
-        gruposDaFaixa.map((grupo) => (
-          <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} comUrgencia diasCritico={diasCritico} />
-        ))
-      )}
+      <ProvedorDecisoesCompra snapshotId={snapshotId} podeEditar={podeEditar}>
+        {dados.grupos.length === 0 ? (
+          <div className="empty-state">Nenhum item com demanda ≤ 0 nesta quinzena.</div>
+        ) : !comUrgencia ? (
+          dados.grupos.map((grupo) => <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} />)
+        ) : totalMostrado === 0 ? (
+          <div className="empty-state">Nenhum item nesta faixa.</div>
+        ) : visao === 'urgencia' ? (
+          filtrosVisiveis(diasCritico).map((u) => {
+            const itens = itensDaFaixa.filter(({ item }) => item.urgencia === u);
+            return itens.length > 0 ? (
+              <SecaoUrgencia key={u} urgencia={u} itens={itens} diasCritico={diasCritico} podeEditar={podeEditar} />
+            ) : null;
+          })
+        ) : (
+          gruposDaFaixa.map((grupo) => (
+            <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} comUrgencia diasCritico={diasCritico} />
+          ))
+        )}
+      </ProvedorDecisoesCompra>
       {demandaComercial && (
         <ForecastRelatorioDemandaComercial
           dados={demandaComercial}

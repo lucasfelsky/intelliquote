@@ -434,14 +434,14 @@ describe('gerarXlsxRelatorioCompras (sintetico)', () => {
 
   it('aba Por urgencia: lista unica na ordem de posicaoUrgencia, com fonte, filtro e cabecalho congelado', async () => {
     const ws = (await abrir()).getWorksheet(ABA_POR_URGENCIA)!;
-    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(21);
-    expect(linhaComoArrayN(ws, 1, 21)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
+    expect(COLUNAS_POR_URGENCIA_XLSX).toHaveLength(24);
+    expect(linhaComoArrayN(ws, 1, 24)).toEqual([...COLUNAS_POR_URGENCIA_XLSX]);
     const lista = itensNaOrdemDeUrgencia(sintetico);
     expect(lista.map((x) => x.item.item)).toEqual(['PRODUTO 004', 'PRODUTO 002', 'PRODUTO 001', 'PRODUTO 003']);
     expect(ws.rowCount).toBe(1 + lista.length);
     lista.forEach(({ item, fonte }, i) => {
       const c = celulasDoItem(item, 15);
-      expect(linhaComoArrayN(ws, i + 2, 21)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
+      expect(linhaComoArrayN(ws, i + 2, 24)).toEqual([c[0], c[1], fonte, ...c.slice(2)]);
     });
     expect(ws.autoFilter).toBeTruthy();
     expect(ws.views[0]).toMatchObject({ state: 'frozen', ySplit: 1 });
@@ -1115,10 +1115,10 @@ describe('meses atipicos fora da media no XLSX', () => {
   });
 
   it('coluna "Meses fora da média" fica ANTES da Observação, que continua a ultima, nas 4 abas', () => {
-    // Nas abas de compra a coluna "Grupo de equivalência" (PR 6b) vem entre as duas; nas outras, "Meses" e a penultima.
+    // Nas abas de compra a coluna "Grupo de equivalência" (PR 6b) e as 3 da decisao (PR3) vem entre as duas; nas outras, "Meses" e a penultima.
     for (const [colunas, antes] of [
-      [COLUNAS_RELATORIO_XLSX, 3],
-      [COLUNAS_POR_URGENCIA_XLSX, 3],
+      [COLUNAS_RELATORIO_XLSX, 6],
+      [COLUNAS_POR_URGENCIA_XLSX, 6],
       [COLUNAS_SEM_CONSUMO_XLSX, 2],
       [COLUNAS_SOB_DEMANDA_XLSX, 2],
     ] as ReadonlyArray<readonly [readonly string[], number]>) {
@@ -1618,8 +1618,8 @@ describe('grupos de equivalencia no XLSX', () => {
     );
     expect(linhaDoGrupo.at(-1)).toBe('OBS SINTETICA 001'); // Observação segue a ultima (a do principal)
     expect(COLUNAS_RELATORIO_XLSX.at(-1)).toBe('Observação');
-    expect(COLUNAS_RELATORIO_XLSX.at(-2)).toBe('Grupo de equivalência');
-    expect(COLUNAS_POR_URGENCIA_XLSX.at(-2)).toBe('Grupo de equivalência');
+    expect(COLUNAS_RELATORIO_XLSX.at(-5)).toBe('Grupo de equivalência');
+    expect(COLUNAS_POR_URGENCIA_XLSX.at(-5)).toBe('Grupo de equivalência');
     // Linha avulsa (sem grupo): celula vazia.
     const avulsa = montarRelatorioCompras(quinzena(caso(100)), []);
     expect(celulasDoItem(avulsa.grupos[0].itens[0], 15)[COL('Grupo de equivalência') - 1]).toBe('');
