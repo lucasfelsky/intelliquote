@@ -1,6 +1,7 @@
 import { Incoterm, QuoteRequestStatus, SupplierStatus } from '@prisma/client';
 import { z } from 'zod';
 import { USER_ROLES } from '../constants/roles';
+import { cleanProposedName, normalizeItemNameKey } from '../utils/commercialItemName';
 import { normalizeAcceptedIncoterms } from '../utils/incoterm';
 import { ORIGIN_PORT_MAX_LENGTH } from '../utils/originPort';
 
@@ -917,10 +918,24 @@ export const commercialRequestCreateSchema = z
     items: z
       .array(
         z.object({
+          // Item de catalogo OU item novo (proposedName): exatamente um (superRefine abaixo).
           catalogItemId: z
             .number({ error: 'Item invalido.' })
             .int('Item invalido.')
-            .positive('Item invalido.'),
+            .positive('Item invalido.')
+            .optional(),
+          proposedName: z.preprocess(
+            (value) => {
+              if (value === undefined || value === null) return undefined;
+              return typeof value === 'string' ? cleanProposedName(value) : value;
+            },
+            z
+              .string({ error: 'Nome do item novo invalido.' })
+              .min(2, 'O nome do item novo deve ter ao menos 2 caracteres.')
+              .max(120, 'O nome do item novo deve ter no maximo 120 caracteres.')
+              .optional(),
+          ),
+          notes: nullableTrimmedText(500, 'A observacao do item deve ter no maximo 500 caracteres.'),
           quantity: z
             .number({ error: 'Quantidade invalida.' })
             .int('A quantidade deve ser um numero inteiro.')
@@ -945,15 +960,38 @@ export const commercialRequestCreateSchema = z
   })
   .superRefine((value, ctx) => {
     const seen = new Set<number>();
+    const seenNewKeys = new Set<string>();
     value.items.forEach((item, index) => {
-      if (seen.has(item.catalogItemId)) {
+      const hasCatalog = item.catalogItemId !== undefined;
+      const hasProposed = item.proposedName !== undefined;
+      if (hasCatalog === hasProposed) {
         ctx.addIssue({
           code: 'custom',
-          path: ['items', index, 'catalogItemId'],
-          message: 'Ha itens repetidos na solicitacao.',
+          path: ['items', index],
+          message: 'Informe o item do catalogo ou o nome do item novo.',
         });
+        return;
       }
-      seen.add(item.catalogItemId);
+      if (item.catalogItemId !== undefined) {
+        if (seen.has(item.catalogItemId)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['items', index, 'catalogItemId'],
+            message: 'Ha itens repetidos na solicitacao.',
+          });
+        }
+        seen.add(item.catalogItemId);
+      } else if (item.proposedName !== undefined) {
+        const key = normalizeItemNameKey(item.proposedName);
+        if (seenNewKeys.has(key)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['items', index, 'proposedName'],
+            message: 'Ha itens novos repetidos na solicitacao.',
+          });
+        }
+        seenNewKeys.add(key);
+      }
     });
   });
 
@@ -965,6 +1003,11 @@ export const commercialRequestListQuerySchema = z.object({
   requestedById: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.coerce.number().int().positive().optional(),
+  ),
+  // So a visao COMEX le este filtro (cotacao -> solicitacoes ligadas a ela).
+  quoteRequestId: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.coerce.number().int().positive().max(2147483647).optional(),
   ),
 });
 

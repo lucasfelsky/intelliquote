@@ -6,6 +6,7 @@
       "AuthController.ts",
       "CatalogItemController.ts",
       "CatalogItemImportController.ts",
+      "CommercialRequestAttachmentController.ts",
       "CommercialRequestController.ts",
       "CreditPartnerController.ts",
       "CreditSupportController.ts",
@@ -31,6 +32,7 @@
     "services": [
       "AuditLogService.ts",
       "AuthService.ts",
+      "CommercialRequestAttachmentService.ts",
       "CommercialRequestNotificationService.ts",
       "CommercialRequestPriceService.ts",
       "CommercialRequestWorkflowService.ts",
@@ -76,6 +78,7 @@
       "traceId.ts"
     ],
     "validators": [
+      "commercialRequestDevelopment.ts",
       "domain.ts",
       "forecast.ts",
       "supplierDocuments.ts",
@@ -123,6 +126,8 @@
       "AuditLog",
       "CatalogItem",
       "CommercialRequest",
+      "CommercialRequestAttachment",
+      "CommercialRequestAttachmentFile",
       "CommercialRequestItem",
       "CompanyProfile",
       "CreditPartner",
@@ -181,7 +186,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 70
+    "migrations": 71
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -201,6 +206,7 @@
     "DELETE /account/email-signature/image",
     "DELETE /attachments/:id",
     "DELETE /catalog-items/:id",
+    "DELETE /commercial-requests/:id/attachments/:attachmentId",
     "DELETE /credit-partners/:id",
     "DELETE /forecast/equivalence-groups/:id",
     "DELETE /forecast/lead-time-events/:id",
@@ -231,6 +237,7 @@
     "GET /catalog-items/:id",
     "GET /commercial-requests",
     "GET /commercial-requests/:id",
+    "GET /commercial-requests/:id/attachments/:attachmentId/download",
     "GET /commercial-requests/catalog-items",
     "GET /commercial-requests/mine",
     "GET /commercial-requests/pending-count",
@@ -312,7 +319,9 @@
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
     "POST /commercial-requests",
+    "POST /commercial-requests/:id/attachments",
     "POST /commercial-requests/:id/fulfill",
+    "POST /commercial-requests/:id/items/:itemId/catalog",
     "POST /commercial-requests/:id/link-quote",
     "POST /commercial-requests/:id/reject",
     "POST /credit-partners",
