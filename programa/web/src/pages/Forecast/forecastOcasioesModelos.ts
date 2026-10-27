@@ -79,7 +79,7 @@ export const ANO_NOVO_CHINES: Readonly<Record<number, string>> = {
 };
 export const TABELA_LUNAR_ATE = 2032;
 
-/** Dia do Festival do Barco-Dragao por ano: SUGESTAO a confirmar no calendario oficial (o aviso do modelo manda conferir). */
+/** Dia do Festival do Barco-Dragao por ano: SUGESTAO a confirmar com o Comex ou no calendario oficial (o aviso do modelo manda conferir). */
 export const BARCO_DRAGAO: Readonly<Record<number, string>> = {
   2026: '2026-06-19',
   2027: '2027-06-09',
@@ -218,18 +218,6 @@ export const MODELOS: readonly ModeloOcasiao[] = [
     nota: `${NOTA_ALEMA} 50 dias depois do domingo de Páscoa; muda a cada ano.`,
   },
   {
-    id: 'carnaval',
-    nome: 'Carnaval (Brasil)',
-    tipo: 'pascoa',
-    escopo: 'global',
-    pais: null,
-    deslocInicio: -48,
-    deslocFim: -46,
-    etapa: 'liberacao',
-    dias: 2,
-    nota: 'Da segunda-feira de Carnaval à Quarta-feira de Cinzas; muda a cada ano.',
-  },
-  {
     id: 'ano-novo-chines',
     nome: 'Ano Novo chinês',
     rotulo: 'Ano Novo chinês (Festival da Primavera)',
@@ -255,7 +243,7 @@ export const MODELOS: readonly ModeloOcasiao[] = [
     depois: 1,
     etapa: 'prontidao',
     dias: 3,
-    nota: 'Janela de 1 dia antes a 1 dia depois do Festival do Barco-Dragão; a data muda a cada ano.',
+    nota: 'Janela de 1 dia antes a 1 dia depois do Festival do Barco-Dragão; a data muda a cada ano. As datas são sugestão a confirmar com o Comex.',
   },
 ];
 
@@ -276,10 +264,8 @@ function avisosDoModelo(m: ModeloOcasiao): string[] {
   }
   if (m.lunar) {
     const tabela = TABELAS_LUNARES[m.lunar];
-    avisos.push(`Confirme a data no calendário oficial. A tabela do ${tabela.nome} cobre até ${tabela.ate}.`);
-  }
-  if (m.id === 'carnaval') {
-    avisos.push('O Carnaval no Brasil afeta a liberação de todas as fontes, por isso o alcance sugerido é Todas as fontes.');
+    const confirmar = m.id === 'barco-dragao' ? 'Confirme a data com o Comex ou no calendário oficial.' : 'Confirme a data no calendário oficial.';
+    avisos.push(`${confirmar} A tabela do ${tabela.nome} cobre até ${tabela.ate}.`);
   }
   if (m.escopo === 'pais' && m.pais === null) avisos.push('Escolha um ou mais países.');
   if (m.escopo === 'fonte') {
