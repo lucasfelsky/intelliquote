@@ -73,7 +73,7 @@ describe('validarOcasiao', () => {
     const r = validarOcasiao(CAMPOS_VAZIOS, CTX);
     expect(r.valores).toBeNull();
     expect(r.erros).toEqual({
-      nome: 'Informe o nome da ocasião.',
+      nome: 'Informe o nome do evento.',
       inicio: 'Informe a data de início.',
       fim: 'Informe a data de fim.',
       dias: 'Informe os dias como inteiro de 0 a 120.',
@@ -100,7 +100,7 @@ describe('validarOcasiao', () => {
   });
 
   it('escopo pais: as tres mensagens do codigo', () => {
-    expect(validarOcasiao(campos({ escopo: 'pais', pais: '' }), CTX).erros.pais).toBe('Informe o país da ocasião.');
+    expect(validarOcasiao(campos({ escopo: 'pais', pais: '' }), CTX).erros.pais).toBe('Informe o país do evento.');
     expect(validarOcasiao(campos({ escopo: 'pais', pais: 'C' }), CTX).erros.pais).toBe(
       'O código do país deve ter 2 letras (ISO 3166-1 alfa-2, ex.: CN).',
     );
@@ -111,7 +111,7 @@ describe('validarOcasiao', () => {
   });
 
   it('escopo fonte: vazio, inativa e a fonte original continua valida', () => {
-    expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '' }), CTX).erros.fonte).toBe('Informe a fonte da ocasião.');
+    expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '' }), CTX).erros.fonte).toBe('Informe a fonte do evento.');
     expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '9' }), CTX).erros.fonte).toBe('Fonte não encontrada ou inativa.');
     expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '9' }), { ...CTX, fonteOriginal: 9 }).erros.fonte).toBeUndefined();
     expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '2' }), CTX).valores?.fonteId).toBe(2);
@@ -335,7 +335,7 @@ describe('paises', () => {
     expect(lerCodigoPais(' cn ')).toEqual({ codigo: 'CN' });
     expect('erro' in lerCodigoPais('XX')).toBe(true);
     expect(lerCodigoPais('C')).toEqual({ erro: 'O código do país deve ter 2 letras (ISO 3166-1 alfa-2, ex.: CN).' });
-    expect(lerCodigoPais('')).toEqual({ erro: 'Informe o país da ocasião.' });
+    expect(lerCodigoPais('')).toEqual({ erro: 'Informe o país do evento.' });
   });
 
   it('nomeDoPais', () => {
@@ -373,8 +373,8 @@ describe('paises', () => {
     const mapa = new Map<number, string | null>([[1, 'CN'], [2, null]]);
     expect(contarSemPais([1, 2, 3], mapa)).toBe(2);
     expect(textoFontesSemPais(0)).toBeNull();
-    expect(textoFontesSemPais(1)).toBe('1 fonte sem país: ocasiões por país não a alcançam.');
-    expect(textoFontesSemPais(3)).toBe('3 fontes sem país: ocasiões por país não as alcançam.');
+    expect(textoFontesSemPais(1)).toBe('1 fonte sem país: eventos por país não a alcançam.');
+    expect(textoFontesSemPais(3)).toBe('3 fontes sem país: eventos por país não as alcançam.');
   });
 });
 
@@ -460,6 +460,6 @@ describe('validarOcasiao: o que nao mudou na edicao nao e reconferido', () => {
     expect(r.erros).toEqual({});
     expect(montarEdicao(original, r.valores!)).toEqual({ name: 'NOME NOVO' });
     // numa ocasiao nova, a fonte continua obrigatoria
-    expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '' }), CTX).erros.fonte).toBe('Informe a fonte da ocasião.');
+    expect(validarOcasiao(campos({ escopo: 'fonte', fonte: '' }), CTX).erros.fonte).toBe('Informe a fonte do evento.');
   });
 });

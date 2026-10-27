@@ -109,12 +109,26 @@ export function ocasiaoSumiu(err: unknown): boolean {
   return err instanceof ApiError && err.status === 404 && temMensagemNoCorpo(err);
 }
 
+// Textos que o BACKEND devolve em 400/409 (ele nao muda): as chaves sao literais dele, com o "a" escapado.
+const TEXTO_WEB_DO_BACKEND: Readonly<Record<string, string>> = {
+  'Já existe uma ocasi\u00e3o ativa com o mesmo alcance, período e etapa. Edite a existente.':
+    'Já existe um evento ativo com o mesmo alcance, período e etapa. Edite o existente.',
+  'Informe o nome da ocasi\u00e3o.': 'Informe o nome do evento.',
+  'Ocasi\u00e3o global n\u00e3o tem país nem fonte.': 'Evento de todas as fontes não tem país nem fonte.',
+  'Informe o país da ocasi\u00e3o.': 'Informe o país do evento.',
+  'Ocasi\u00e3o de país n\u00e3o tem fonte.': 'Evento por país não tem fonte.',
+  'Informe a fonte da ocasi\u00e3o.': 'Informe a fonte do evento.',
+  'Ocasi\u00e3o de fonte n\u00e3o tem país.': 'Evento por fonte não tem país.',
+  'Informe o que alterar na ocasi\u00e3o.': 'Informe o que alterar no evento.',
+};
+
 function mensagemDoBackend(err: ApiError): string {
   const message = messageOf(err);
-  return message && message !== `HTTP ${err.status}` ? message : `Pedido recusado pelo servidor (HTTP ${err.status}).`;
+  if (!message || message === `HTTP ${err.status}`) return `Pedido recusado pelo servidor (HTTP ${err.status}).`;
+  return TEXTO_WEB_DO_BACKEND[message] ?? message;
 }
 
-/** Mensagem em portugues para o usuario; 400/409 repassam a mensagem do backend. */
+/** Mensagem em portugues para o usuario; 400/409 repassam a mensagem do backend (as 8 conhecidas, traduzidas). */
 export function forecastOcasioesErrorMessage(err: unknown, acao: 'listar' | 'salvar' | 'excluir'): string {
   if (!(err instanceof ApiError)) return 'Sem conexão com o servidor. Tente de novo.';
   switch (err.status) {
@@ -122,20 +136,20 @@ export function forecastOcasioesErrorMessage(err: unknown, acao: 'listar' | 'sal
       return 'Sua sessão expirou. Entre de novo.';
     case 403:
       return acao === 'listar'
-        ? 'Seu perfil não tem acesso às ocasiões do Forecast.'
-        : 'Seu perfil não pode cadastrar nem alterar ocasiões.';
+        ? 'Seu perfil não tem acesso aos eventos estrangeiros do Forecast.'
+        : 'Seu perfil não pode cadastrar nem alterar eventos estrangeiros.';
     case 404:
       if (acao === 'listar' || !temMensagemNoCorpo(err)) {
-        return 'O servidor ainda não tem o cadastro de ocasiões. Aguarde a atualização do sistema.';
+        return 'O servidor ainda não tem o cadastro de eventos estrangeiros. Aguarde a atualização do sistema.';
       }
-      return 'Esta ocasião não existe mais (pode ter sido excluída). A lista foi atualizada.';
+      return 'Este evento não existe mais (pode ter sido excluído). A lista foi atualizada.';
     case 400:
     case 409:
       return mensagemDoBackend(err);
     default:
-      if (acao === 'listar') return `Não foi possível carregar as ocasiões (HTTP ${err.status}).`;
-      if (acao === 'salvar') return `Não foi possível salvar a ocasião (HTTP ${err.status}).`;
-      return `Não foi possível excluir a ocasião (HTTP ${err.status}).`;
+      if (acao === 'listar') return `Não foi possível carregar os eventos (HTTP ${err.status}).`;
+      if (acao === 'salvar') return `Não foi possível salvar o evento (HTTP ${err.status}).`;
+      return `Não foi possível excluir o evento (HTTP ${err.status}).`;
   }
 }
 

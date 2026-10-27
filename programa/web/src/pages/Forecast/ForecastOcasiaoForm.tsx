@@ -1,28 +1,19 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FORECAST_OCASIAO_NOME_MAX,
   FORECAST_OCASIAO_OBS_MAX,
-  alterarOcasiao,
-  criarOcasiao,
   forecastOcasioesErrorMessage,
-  forecastOcasioesKeys,
-  ocasiaoSumiu,
   type ForecastOcasiao,
-  type ForecastOcasiaoEdicao,
-  type ForecastOcasiaoEscopo,
-  type ForecastOcasiaoNova,
 } from '@/services/forecastOcasioes';
 import {
   CAMPOS_VAZIOS,
   ETAPAS_EM_ORDEM,
   ORDEM_CAMPOS_OCASIAO,
-  ROTULO_ESCOPO,
   ROTULO_ETAPA,
   camposDaOcasiao,
   camposDoModelo,
-  montarCorpoNovo,
   montarEdicao,
+  nomeDoPais,
   textoEfeito,
   validarOcasiao,
   type CampoOcasiao,
@@ -30,24 +21,32 @@ import {
   type OpcaoPais,
 } from './forecastOcasioes';
 import { MODELOS, type PreenchimentoModelo } from './forecastOcasioesModelos';
-import ForecastPaisCampo from './ForecastPaisCampo';
+import {
+  TEXTO_REGIONAL,
+  TEXTO_SOMA_POR_CIMA,
+  corposPorAlvo,
+  resumoDoSalvamento,
+  selecaoDoModelo,
+  validarAlvos,
+  type FonteAtiva,
+  type ResultadoAlvo,
+  type SelecaoAlvos,
+} from './forecastEventosAlvos';
+import ForecastEventoAlvos, { AlcanceDaEdicao } from './ForecastEventoAlvos';
+import { useGravarEvento } from './useGravarEvento';
 
 interface Props {
-  /** Presente = edicao. */
+  /** Presente = edicao (um registro so). */
   ocasiao?: ForecastOcasiao;
-  /** Presente = nova ocasiao com o formulario pre-preenchido pelo modelo (nada gravado ainda). */
+  /** Presente = novo evento com o formulario pre-preenchido pelo modelo (nada gravado ainda). */
   modelo?: PreenchimentoModelo;
-  fontesAtivas: Array<{ id: number; nome: string; countryCode: string | null }>;
+  fontesAtivas: FonteAtiva[];
   opcoesPais: readonly OpcaoPais[];
   /** Sem mensagem = cancelou. */
   onVoltar: (mensagem?: string) => void;
 }
 
-type Envio =
-  | { tipo: 'nova'; corpo: ForecastOcasiaoNova; nome: string }
-  | { tipo: 'edicao'; id: number; corpo: ForecastOcasiaoEdicao; nome: string };
-
-const ESCOPOS: ForecastOcasiaoEscopo[] = ['global', 'pais', 'fonte'];
+type ErrosForm = Partial<Record<CampoOcasiao, string>>;
 
 function camposIniciais(ocasiao?: ForecastOcasiao, modelo?: PreenchimentoModelo): CamposOcasiao {
   if (ocasiao) return camposDaOcasiao(ocasiao);
@@ -56,87 +55,100 @@ function camposIniciais(ocasiao?: ForecastOcasiao, modelo?: PreenchimentoModelo)
 }
 
 function tituloDoForm(ocasiao?: ForecastOcasiao, modelo?: PreenchimentoModelo): string {
-  if (ocasiao) return `Editar a ocasião ${ocasiao.name}`;
+  if (ocasiao) return `Editar o evento ${ocasiao.name}`;
   if (modelo) {
     const nomeDoModelo = MODELOS.find((m) => m.id === modelo.modeloId)?.nome ?? modelo.nome;
-    return `Nova ocasião a partir do modelo ${nomeDoModelo}`;
+    return `Novo evento a partir do modelo ${nomeDoModelo}`;
   }
-  return 'Nova ocasião';
+  return 'Novo evento';
 }
 
-function textoFontesDoPais(n: number): string {
-  if (n === 0) return 'Nenhuma fonte ativa tem este país ainda: informe o país das fontes na aba Lead time por fonte.';
-  return n === 1 ? '1 fonte ativa com este país.' : `${n} fontes ativas com este país.`;
-}
+const TEXTO_ALVO: Record<ResultadoAlvo['status'], (r: ResultadoAlvo) => string> = {
+  criado: (r) => `${r.rotulo}: criado`,
+  duplicado: (r) => `${r.rotulo}: já existia (há outro evento ativo com o mesmo período e etapa; nada mudou)`,
+  erro: (r) => `${r.rotulo}: erro — ${r.mensagem ?? ''}`,
+  'nao-enviado': (r) => `${r.rotulo}: não enviado`,
+};
 
-/** Formulario inline (Nova/Editar). O backend revalida tudo; aqui o erro aparece por campo, antes de enviar. */
+/** Formulario inline (Novo/Editar). O backend revalida tudo; aqui o erro aparece por campo, antes de enviar. */
 export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opcoesPais, onVoltar }: Props) {
-  const queryClient = useQueryClient();
   const baseId = useId();
   const id = (campo: string) => `${baseId}-${campo}`;
   const efeitoBloqueado = ocasiao?.effectKind === 'percentual';
   const titulo = useRef<HTMLHeadingElement>(null);
+  const botaoSalvar = useRef<HTMLButtonElement>(null);
 
   const [campos, setCampos] = useState<CamposOcasiao>(() => camposIniciais(ocasiao, modelo));
-  const [erros, setErros] = useState<Partial<Record<CampoOcasiao, string>>>({});
+  const [selecao, setSelecao] = useState<SelecaoAlvos>(() => selecaoDoModelo(modelo));
+  const [erros, setErros] = useState<ErrosForm>({});
   const [semMudanca, setSemMudanca] = useState(false);
+  const [lote, setLote] = useState<{ nome: string; resultados: ResultadoAlvo[] } | null>(null);
+  const nomeDoLote = useRef('');
 
   useEffect(() => {
     titulo.current?.focus();
   }, []);
 
-  const gravar = useMutation({
-    mutationFn: (envio: Envio) =>
-      envio.tipo === 'nova' ? criarOcasiao(envio.corpo) : alterarOcasiao(envio.id, envio.corpo),
-    onSuccess: async (_salva, envio) => {
-      await queryClient.invalidateQueries({ queryKey: forecastOcasioesKeys.todas });
-      onVoltar(envio.tipo === 'nova' ? `Ocasião ${envio.nome} cadastrada.` : `Ocasião ${envio.nome} atualizada.`);
-    },
-    onError: (err) => {
-      if (ocasiaoSumiu(err)) void queryClient.invalidateQueries({ queryKey: forecastOcasioesKeys.todas });
-    },
+  const gravar = useGravarEvento(onVoltar, (resultados) => {
+    setLote({ nome: nomeDoLote.current, resultados });
+    // So o que falhou continua marcado: salvar de novo nao duplica o que ja foi criado ou ja existia.
+    const falhou = resultados.filter((r) => r.status === 'erro' || r.status === 'nao-enviado').map((r) => r.alvo);
+    setSelecao({
+      modo: 'escolhidos',
+      paises: falhou.flatMap((a) => (a.tipo === 'pais' ? [a.codigo] : [])),
+      fontes: falhou.flatMap((a) => (a.tipo === 'fonte' ? [a.id] : [])),
+    });
   });
   const pendente = gravar.isPending;
 
-  const fontesAtivasIds = useMemo(() => new Set(fontesAtivas.map((f) => f.id)), [fontesAtivas]);
-  const fonteInativaDaOcasiao =
-    ocasiao && ocasiao.sourceId !== null && !fontesAtivasIds.has(ocasiao.sourceId)
-      ? { id: ocasiao.sourceId, nome: ocasiao.source?.name ?? `Fonte ${ocasiao.sourceId}` }
-      : null;
-  const fontesDoSelect = useMemo(
-    () => [...fontesAtivas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
-    [fontesAtivas],
-  );
+  // Depois do envio (o botao estava desabilitado), o foco volta ao Salvar para ler o resultado e tentar de novo.
+  useEffect(() => {
+    if (!pendente && lote) botaoSalvar.current?.focus();
+  }, [pendente, lote]);
+
+  const fontesPorId = useMemo(() => new Map(fontesAtivas.map((f) => [f.id, f])), [fontesAtivas]);
 
   const mudar = <K extends keyof CamposOcasiao>(campo: K, valor: CamposOcasiao[K], limpa?: CampoOcasiao[]) => {
     gravar.reset();
     setSemMudanca(false);
+    setLote(null);
     setCampos((c) => ({ ...c, [campo]: valor }));
     if (limpa) setErros((e) => ({ ...e, ...Object.fromEntries(limpa.map((l) => [l, undefined])) }));
   };
+  const mudarSelecao = (s: SelecaoAlvos) => {
+    gravar.reset();
+    setLote(null);
+    setSelecao(s);
+    setErros((e) => ({ ...e, escopo: undefined, fonte: undefined }));
+  };
 
   const focar = (campo: CampoOcasiao) => {
-    const alvo = campo === 'escopo' ? id(`escopo-${campos.escopo}`) : id(campo);
+    // Novo: o erro de alcance vai ao 1o pais da lista; o de fonte, ao campo de busca.
+    const alvo = campo === 'escopo' ? (ocasiao ? id(`escopo-${campos.escopo}`) : id('pais')) : id(campo);
     document.getElementById(alvo)?.focus();
   };
 
   const aoEnviar = (evento: FormEvent) => {
     evento.preventDefault();
     if (pendente) return;
-    const { erros: achados, valores } = validarOcasiao(campos, {
+    const { erros: achados, valores } = validarOcasiao(ocasiao ? campos : { ...campos, escopo: 'global' }, {
       efeitoBloqueado,
-      fontesAtivas: fontesAtivasIds,
+      fontesAtivas: new Set(fontesPorId.keys()),
       fonteOriginal: ocasiao?.sourceId ?? null,
       escopoOriginal: ocasiao?.scopeType ?? null,
       paisOriginal: ocasiao?.countryCode ?? null,
     });
-    setErros(achados);
+    const alvos = ocasiao ? null : validarAlvos(selecao, fontesPorId, nomeDoPais);
+    const todosErros = { ...achados, ...alvos?.erros };
+    setErros(todosErros);
     setSemMudanca(false);
-    if (!valores) {
-      const primeiro = ORDEM_CAMPOS_OCASIAO.find((c) => achados[c]);
+    setLote(null);
+    if (!valores || (alvos && !alvos.alvos)) {
+      const primeiro = ORDEM_CAMPOS_OCASIAO.find((c) => todosErros[c]);
       if (primeiro) focar(primeiro);
       return;
     }
+    nomeDoLote.current = valores.nome;
     if (ocasiao) {
       const corpo = montarEdicao(ocasiao, valores);
       if (corpo === null) {
@@ -146,7 +158,7 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
       gravar.mutate({ tipo: 'edicao', id: ocasiao.id, corpo, nome: valores.nome });
       return;
     }
-    gravar.mutate({ tipo: 'nova', corpo: montarCorpoNovo(valores), nome: valores.nome });
+    gravar.mutate({ tipo: 'nova', itens: corposPorAlvo(valores, alvos?.alvos ?? [], nomeDoPais), nome: valores.nome });
   };
 
   const descricao = (campo: CampoOcasiao, extra?: string) =>
@@ -158,8 +170,7 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
       </p>
     ) : null;
 
-  const paisDigitado = campos.pais.trim().toUpperCase();
-  const fontesDoPais = fontesAtivas.filter((f) => f.countryCode === paisDigitado).length;
+  const falhas = lote?.resultados.some((r) => r.status === 'erro' || r.status === 'nao-enviado') ?? false;
 
   return (
     <form className="fcd-form fco-form" onSubmit={aoEnviar} noValidate>
@@ -192,73 +203,30 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
         {erro('nome')}
       </div>
 
-      <fieldset className="fcd-campo fco-escopo" disabled={pendente}>
-        <legend className="field-label">Alcance</legend>
-        {ESCOPOS.map((e) => (
-          <label key={e} className="checkbox-field">
-            <input
-              id={id(`escopo-${e}`)}
-              type="radio"
-              name={id('escopo')}
-              checked={campos.escopo === e}
-              onChange={() => mudar('escopo', e, ['pais', 'fonte'])}
-            />
-            {ROTULO_ESCOPO[e]}
-          </label>
-        ))}
-      </fieldset>
-
-      {campos.escopo === 'pais' && (
-        <div className="fcd-campo">
-          <label className="field-label" htmlFor={id('pais')}>
-            País
-          </label>
-          <ForecastPaisCampo
-            id={id('pais')}
-            rotulo="País"
-            valor={campos.pais}
-            onMudar={(c) => mudar('pais', c, ['pais'])}
-            opcoes={opcoesPais}
-            invalido={Boolean(erros.pais)}
-            descritoPor={descricao('pais', paisDigitado.length === 2 ? id('pais-dica') : undefined)}
-            desabilitado={pendente}
-          />
-          {paisDigitado.length === 2 && (
-            <p className="fcd-dica" id={id('pais-dica')}>
-              {textoFontesDoPais(fontesDoPais)}
-            </p>
-          )}
-          {erro('pais')}
-        </div>
+      {ocasiao ? (
+        <AlcanceDaEdicao
+          id={id}
+          ocasiao={ocasiao}
+          campos={campos}
+          erros={erros}
+          onMudar={mudar}
+          fontesAtivas={fontesAtivas}
+          opcoesPais={opcoesPais}
+          desabilitado={pendente}
+        />
+      ) : (
+        <ForecastEventoAlvos
+          id={id}
+          selecao={selecao}
+          onMudar={mudarSelecao}
+          fontesAtivas={fontesAtivas}
+          opcoesPais={opcoesPais}
+          erroEscopo={erros.escopo}
+          erroFonte={erros.fonte}
+          desabilitado={pendente}
+        />
       )}
-
-      {campos.escopo === 'fonte' && (
-        <div className="fcd-campo">
-          <label className="field-label" htmlFor={id('fonte')}>
-            Fonte
-          </label>
-          <select
-            id={id('fonte')}
-            className="select"
-            value={campos.fonte}
-            onChange={(e) => mudar('fonte', e.target.value, ['fonte'])}
-            aria-invalid={erros.fonte ? true : undefined}
-            aria-describedby={descricao('fonte')}
-            disabled={pendente}
-          >
-            <option value="">Escolha a fonte</option>
-            {fonteInativaDaOcasiao && (
-              <option value={String(fonteInativaDaOcasiao.id)}>{fonteInativaDaOcasiao.nome} (inativa)</option>
-            )}
-            {fontesDoSelect.map((f) => (
-              <option key={f.id} value={String(f.id)}>
-                {f.nome}
-              </option>
-            ))}
-          </select>
-          {erro('fonte')}
-        </div>
-      )}
+      <p className="fcd-dica">{TEXTO_REGIONAL}</p>
 
       <div className="fcd-grade">
         <div className="fcd-campo">
@@ -310,8 +278,8 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
           Repete todo ano
         </label>
         <p className="fcd-dica" id={id('anual-dica')}>
-          Só para datas fixas (ex.: Natal). Datas móveis, como Páscoa e Ano Novo chinês, mudam a cada ano: cadastre uma por
-          ano.
+          Só para datas fixas (ex.: Natal). Datas móveis, como Páscoa e Ano Novo chinês, mudam a cada ano: cadastre um
+          evento por ano.
         </p>
       </div>
 
@@ -339,7 +307,7 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
             <span className="field-label">Efeito</span>
             <p className="fcd-dica">Efeito: {textoEfeito(ocasiao)}</p>
             <p className="fcd-dica fco-aviso-percentual">
-              Esta ocasião usa percentual, que a tela não edita. O efeito fica como está; os demais campos podem ser
+              Este evento usa percentual, que a tela não edita. O efeito fica como está; os demais campos podem ser
               alterados.
             </p>
           </div>
@@ -360,8 +328,7 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
               disabled={pendente}
             />
             <p className="fcd-dica" id={id('dias-dica')}>
-              Dias a MAIS do que o lead time da fonte já considera (a folga de feriados e o prazo real médio já estão nele).
-              Inteiro de 0 a 120.
+              {TEXTO_SOMA_POR_CIMA}
             </p>
             {erro('dias')}
           </div>
@@ -399,11 +366,24 @@ export default function ForecastOcasiaoForm({ ocasiao, modelo, fontesAtivas, opc
           {forecastOcasioesErrorMessage(gravar.error, 'salvar')}
         </div>
       )}
+      <div className="fco-vivo" aria-live="polite" aria-atomic="true">
+        {lote ? (
+          <div className="alert alert--error fco-resultado">
+            <p>{resumoDoSalvamento(lote.nome, lote.resultados)}</p>
+            <ul>
+              {lote.resultados.map((r) => (
+                <li key={`${r.alvo.tipo}-${r.rotulo}`}>{TEXTO_ALVO[r.status](r)}</li>
+              ))}
+            </ul>
+            {falhas && <p>Os que deram erro continuam marcados: salve de novo para tentar só eles.</p>}
+          </div>
+        ) : null}
+      </div>
       <div className="modal-actions">
         <button type="button" className="ghost-button" onClick={() => onVoltar()} disabled={pendente}>
           Cancelar
         </button>
-        <button type="submit" className="primary-button" disabled={pendente} aria-busy={pendente}>
+        <button ref={botaoSalvar} type="submit" className="primary-button" disabled={pendente} aria-busy={pendente}>
           {pendente ? 'Salvando…' : 'Salvar'}
         </button>
       </div>

@@ -105,35 +105,58 @@ describe('forecastOcasioesErrorMessage', () => {
 
   it('403 por acao', () => {
     expect(forecastOcasioesErrorMessage(new ApiError(403, null), 'listar')).toBe(
-      'Seu perfil não tem acesso às ocasiões do Forecast.',
+      'Seu perfil não tem acesso aos eventos estrangeiros do Forecast.',
     );
     for (const acao of ['salvar', 'excluir'] as const) {
       expect(forecastOcasioesErrorMessage(new ApiError(403, null), acao)).toBe(
-        'Seu perfil não pode cadastrar nem alterar ocasiões.',
+        'Seu perfil não pode cadastrar nem alterar eventos estrangeiros.',
       );
     }
   });
 
   it('404: listar ou sem corpo JSON = backend antigo', () => {
-    const antigo = 'O servidor ainda não tem o cadastro de ocasiões. Aguarde a atualização do sistema.';
+    const antigo = 'O servidor ainda não tem o cadastro de eventos estrangeiros. Aguarde a atualização do sistema.';
     expect(forecastOcasioesErrorMessage(new ApiError(404, { message: 'Ocasião não encontrada.' }), 'listar')).toBe(antigo);
     expect(forecastOcasioesErrorMessage(new ApiError(404, { contentType: 'text/html', body: '<html>' }), 'salvar')).toBe(antigo);
     expect(forecastOcasioesErrorMessage(new ApiError(404, null), 'excluir')).toBe(antigo);
   });
 
   it('404 com corpo JSON em salvar/excluir = nao existe mais', () => {
-    const sumiu = 'Esta ocasião não existe mais (pode ter sido excluída). A lista foi atualizada.';
+    const sumiu = 'Este evento não existe mais (pode ter sido excluído). A lista foi atualizada.';
     const err = new ApiError(404, { message: 'Ocasião não encontrada.' });
     expect(forecastOcasioesErrorMessage(err, 'salvar')).toBe(sumiu);
     expect(forecastOcasioesErrorMessage(err, 'excluir')).toBe(sumiu);
   });
 
-  it('400 e 409 repassam a mensagem do backend', () => {
+  it('400 e 409 repassam a mensagem do backend (desconhecida sem mexer)', () => {
     expect(forecastOcasioesErrorMessage(new ApiError(400, { message: 'Fonte não encontrada ou inativa.' }, 'Fonte não encontrada ou inativa.'), 'salvar')).toBe(
       'Fonte não encontrada ou inativa.',
     );
+    expect(forecastOcasioesErrorMessage(new ApiError(400, { message: 'Texto novo do servidor.' }), 'salvar')).toBe(
+      'Texto novo do servidor.',
+    );
+  });
+
+  it('409 do backend sai traduzido para eventos', () => {
     const dup = 'Já existe uma ocasião ativa com o mesmo alcance, período e etapa. Edite a existente.';
-    expect(forecastOcasioesErrorMessage(new ApiError(409, { message: dup }), 'salvar')).toBe(dup);
+    expect(forecastOcasioesErrorMessage(new ApiError(409, { message: dup }), 'salvar')).toBe(
+      'Já existe um evento ativo com o mesmo alcance, período e etapa. Edite o existente.',
+    );
+  });
+
+  it('as 8 mensagens do backend com "ocasião" saem traduzidas', () => {
+    const pares: Array<[string, string]> = [
+      ['Informe o nome da ocasião.', 'Informe o nome do evento.'],
+      ['Ocasião global não tem país nem fonte.', 'Evento de todas as fontes não tem país nem fonte.'],
+      ['Informe o país da ocasião.', 'Informe o país do evento.'],
+      ['Ocasião de país não tem fonte.', 'Evento por país não tem fonte.'],
+      ['Informe a fonte da ocasião.', 'Informe a fonte do evento.'],
+      ['Ocasião de fonte não tem país.', 'Evento por fonte não tem país.'],
+      ['Informe o que alterar na ocasião.', 'Informe o que alterar no evento.'],
+    ];
+    for (const [backend, web] of pares) {
+      expect(forecastOcasioesErrorMessage(new ApiError(400, { message: backend }), 'salvar')).toBe(web);
+    }
   });
 
   it('400 sem mensagem usa o texto padrao', () => {
@@ -141,9 +164,9 @@ describe('forecastOcasioesErrorMessage', () => {
   });
 
   it('outros status por acao', () => {
-    expect(forecastOcasioesErrorMessage(new ApiError(500, null), 'listar')).toBe('Não foi possível carregar as ocasiões (HTTP 500).');
-    expect(forecastOcasioesErrorMessage(new ApiError(500, null), 'salvar')).toBe('Não foi possível salvar a ocasião (HTTP 500).');
-    expect(forecastOcasioesErrorMessage(new ApiError(502, null), 'excluir')).toBe('Não foi possível excluir a ocasião (HTTP 502).');
+    expect(forecastOcasioesErrorMessage(new ApiError(500, null), 'listar')).toBe('Não foi possível carregar os eventos (HTTP 500).');
+    expect(forecastOcasioesErrorMessage(new ApiError(500, null), 'salvar')).toBe('Não foi possível salvar o evento (HTTP 500).');
+    expect(forecastOcasioesErrorMessage(new ApiError(502, null), 'excluir')).toBe('Não foi possível excluir o evento (HTTP 502).');
   });
 });
 

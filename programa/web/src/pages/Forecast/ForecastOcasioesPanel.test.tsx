@@ -129,7 +129,7 @@ function renderPanel(podeEditar = true) {
   );
 }
 
-const tabelaLista = () => screen.getByRole('table', { name: 'Ocasiões que afetam o lead time' });
+const tabelaLista = () => screen.getByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
 const nomesDaLista = () =>
   within(tabelaLista())
     .getAllByRole('rowheader')
@@ -152,7 +152,7 @@ describe('estados', () => {
   it('carregando', async () => {
     get.mockImplementation(() => new Promise(() => undefined));
     renderPanel();
-    expect(await screen.findByText(/Carregando ocasiões…/)).toBeTruthy();
+    expect(await screen.findByText(/Carregando eventos…/)).toBeTruthy();
   });
 
   it('erro 500 com "Tentar de novo" que recarrega', async () => {
@@ -162,10 +162,10 @@ describe('estados', () => {
     });
     renderPanel();
     const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toContain('Não foi possível carregar as ocasiões (HTTP 500).');
+    expect(alerta.textContent).toContain('Não foi possível carregar os eventos (HTTP 500).');
     mockLeituras();
     fireEvent.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }));
-    expect(await screen.findByRole('button', { name: 'Nova ocasião' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Novo evento' })).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -176,71 +176,74 @@ describe('estados', () => {
     });
     renderPanel();
     const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toContain('O servidor ainda não tem o cadastro de ocasiões. Aguarde a atualização do sistema.');
-    expect(screen.queryByRole('button', { name: 'Nova ocasião' })).toBeNull();
+    expect(alerta.textContent).toContain('O servidor ainda não tem o cadastro de eventos estrangeiros. Aguarde a atualização do sistema.');
+    expect(screen.queryByRole('button', { name: 'Novo evento' })).toBeNull();
     expect(screen.queryByText('Usar um modelo')).toBeNull();
   });
 
   it('vazio: editor convida a usar um modelo; leitura so informa', async () => {
     lista = [];
     const { unmount } = renderPanel(true);
-    expect(await screen.findByText('Nenhuma ocasião cadastrada. Use um modelo ou cadastre a primeira.')).toBeTruthy();
+    expect(await screen.findByText('Nenhum evento cadastrado. Use um modelo ou cadastre o primeiro.')).toBeTruthy();
     unmount();
     renderPanel(false);
-    expect(await screen.findByText('Nenhuma ocasião cadastrada.')).toBeTruthy();
+    expect(await screen.findByText('Nenhum evento cadastrado.')).toBeTruthy();
     expect(screen.queryByText(/Use um modelo/)).toBeNull();
   });
 
-  it('texto fixo informa que nada muda no calculo', async () => {
+  it('texto fixo informa que nada muda no calculo, a soma por cima e o escopo regional', async () => {
     renderPanel();
     expect(await screen.findByText(/Por enquanto só informam: nenhum cálculo do Forecast muda\./)).toBeTruthy();
+    expect(screen.getByText(/Eventos estrangeiros são períodos no exterior/)).toBeTruthy();
+    expect(screen.getByText(/somados por cima do lead time cadastrado da fonte: a folga FERIADOS do cadastro não é descontada/)).toBeTruthy();
+    expect(screen.getByText(/Cada evento vale só para os países e fontes escolhidos nele/)).toBeTruthy();
   });
 
   it('avisa quantas fontes ativas estao sem pais', async () => {
     renderPanel();
-    expect(await screen.findByText('1 fonte sem país: ocasiões por país não a alcançam.')).toBeTruthy();
+    expect(await screen.findByText('1 fonte sem país: eventos por país não a alcançam.')).toBeTruthy();
   });
 });
 
 describe('papeis', () => {
-  it('leitura (gestor/viewer): sem Nova ocasiao, sem modelo, sem coluna Acoes e com a dica', async () => {
+  it('leitura (gestor/viewer): sem Novo evento, sem modelo, sem coluna Acoes e com a dica', async () => {
     renderPanel(false);
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
-    expect(screen.getByText('Só administrador e comprador cadastram ou alteram ocasiões.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Nova ocasião' })).toBeNull();
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
+    expect(screen.getByText('Só administrador e comprador cadastram ou alteram eventos.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Novo evento' })).toBeNull();
     expect(screen.queryByText('Usar um modelo')).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Ações' })).toBeNull();
-    expect(screen.queryByRole('button', { name: /Editar a ocasião/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Editar o evento/ })).toBeNull();
   });
 
   it('edicao (admin/comprador): tudo disponivel', async () => {
     renderPanel(true);
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
-    expect(screen.getByRole('button', { name: 'Nova ocasião' })).toBeTruthy();
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
+    expect(screen.getByRole('button', { name: 'Novo evento' })).toBeTruthy();
     expect(screen.getByText('Usar um modelo')).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'Ações' })).toBeTruthy();
-    expect(screen.queryByText('Só administrador e comprador cadastram ou alteram ocasiões.')).toBeNull();
+    expect(screen.queryByText('Só administrador e comprador cadastram ou alteram eventos.')).toBeNull();
   });
 });
 
 describe('lista e filtros', () => {
   it('tabela com caption e cabecalhos; so ativas e por data de inicio', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     const cabecalhos = within(tabelaLista())
       .getAllByRole('columnheader')
       .map((th) => th.textContent);
-    expect(cabecalhos).toEqual(['Ocasião', 'Alcance', 'Período', 'Etapa', 'Efeito', 'Situação', 'Ações']);
+    expect(cabecalhos).toEqual(['Evento', 'Alcance', 'Período', 'Etapa', 'Efeito', 'Situação', 'Ações']);
     expect(nomesDaLista()).toEqual(['OCASIAO SINTETICA 2', 'OCASIAO SINTETICA 1', 'OCASIAO SINTETICA 5']);
     expect(screen.getByText('nota sintetica')).toBeTruthy();
     expect(screen.getByText('20/12 a 05/01, todo ano')).toBeTruthy();
     expect(screen.getByText('País: China (CN)')).toBeTruthy();
-    expect(screen.getByText('Mostrando 3 de 5 ocasiões.')).toBeTruthy();
+    expect(screen.getByText('Mostrando 3 de 5 eventos.')).toBeTruthy();
   });
 
-  it('Todas mostra passada e inativa com os textos Passada e Inativa', async () => {
+  it('Todos mostra passado e inativo com os textos Passado e Inativo', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     selecionar('Situação', 'todas');
     expect(nomesDaLista()).toEqual([
       'OCASIAO SINTETICA 3',
@@ -250,14 +253,14 @@ describe('lista e filtros', () => {
       'OCASIAO SINTETICA 5',
     ]);
     const tabela = within(tabelaLista());
-    expect(tabela.getByText('Passada')).toBeTruthy();
-    expect(tabela.getByText('Inativa')).toBeTruthy();
+    expect(tabela.getByText('Passado')).toBeTruthy();
+    expect(tabela.getByText('Inativo')).toBeTruthy();
     expect(tabela.getByText('Fonte: FONTE A')).toBeTruthy();
   });
 
   it('filtros de alcance, pais, fonte e ano', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     selecionar('Situação', 'todas');
 
     selecionar('Alcance', 'pais');
@@ -280,10 +283,10 @@ describe('lista e filtros', () => {
 
   it('sem resultado: aviso e Limpar filtros', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     selecionar('Situação', 'passada');
     selecionar('Alcance', 'global');
-    expect(screen.getByText('Nenhuma ocasião com estes filtros.')).toBeTruthy();
+    expect(screen.getByText('Nenhum evento com estes filtros.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }));
     expect(nomesDaLista()).toHaveLength(3);
     expect((screen.getByLabelText('Situação') as HTMLSelectElement).value).toBe('ativa');
@@ -292,13 +295,13 @@ describe('lista e filtros', () => {
   it('lista cheia (500) avisa o corte', async () => {
     lista = Array.from({ length: 500 }, (_, i) => oc({ id: i + 1, name: `OCASIAO SINTETICA ${i + 1}` }));
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
-    expect(screen.getByText('500 ocasiões. Mostrando as 500 primeiras por data de início.')).toBeTruthy();
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
+    expect(screen.getByText('500 eventos. Mostrando os 500 primeiros registros por data de início.')).toBeTruthy();
   });
 
   it('percentual: texto com selo', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     const linha = screen.getByRole('rowheader', { name: /OCASIAO SINTETICA 5/ }).closest('tr') as HTMLElement;
     expect(within(linha).getByText('+12,5% da etapa')).toBeTruthy();
     expect(within(linha).getByText('percentual')).toBeTruthy();
@@ -315,8 +318,8 @@ describe('linha do tempo', () => {
       .slice(1)
       .map((r) => within(r).getAllByRole('cell').map((c) => c.textContent));
     expect(celulas).toEqual([
-      ['20/12/2025', '05/01/2026'],
-      ['20/12/2026', '05/01/2027'],
+      ['País: China (CN)', '20/12/2025', '05/01/2026'],
+      ['País: China (CN)', '20/12/2026', '05/01/2027'],
     ]);
     expect(screen.getByText('Hoje')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Linha do tempo de 2026' })).toBeTruthy();
@@ -341,7 +344,7 @@ describe('linha do tempo', () => {
     });
     renderPanel();
     const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toContain('Não foi possível carregar as ocasiões (HTTP 500).');
+    expect(alerta.textContent).toContain('Não foi possível carregar os eventos (HTTP 500).');
     expect(within(alerta).getByRole('button', { name: 'Tentar de novo' })).toBeTruthy();
   });
 
@@ -349,77 +352,78 @@ describe('linha do tempo', () => {
     renderPanel();
     await screen.findByRole('table', { name: /Datas em 2026/ });
     selecionar('Situação', 'inativa');
-    expect(await screen.findByText('Nenhuma ocasião em 2026 com estes filtros.')).toBeTruthy();
+    expect(await screen.findByText('Nenhum evento em 2026 com estes filtros.')).toBeTruthy();
   });
 });
 
 describe('inativar, reativar e excluir', () => {
   it('inativar: PATCH, aviso e invalidacao', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     const invalidar = vi.spyOn(client, 'invalidateQueries');
-    fireEvent.click(screen.getByRole('button', { name: 'Inativar a ocasião OCASIAO SINTETICA 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar o evento OCASIAO SINTETICA 1' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith(`${URL_EVENTOS}/1`, { isActive: false }));
-    expect(await screen.findByText('Ocasião OCASIAO SINTETICA 1 inativada.')).toBeTruthy();
+    expect(await screen.findByText('Evento OCASIAO SINTETICA 1 inativado.')).toBeTruthy();
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ['forecast', 'ocasioes'] });
   });
 
-  it('reativar com 409 mostra a mensagem do servidor', async () => {
+  it('reativar com 409 mostra a mensagem do servidor, traduzida', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     selecionar('Situação', 'inativa');
-    const duplicata = 'Já existe uma ocasião ativa com o mesmo alcance, período e etapa. Edite a existente.';
+    // O backend (que nao muda) ainda fala em "ocasi\u00e3o"; o web traduz.
+    const duplicata = 'Já existe uma ocasi\u00e3o ativa com o mesmo alcance, período e etapa. Edite a existente.';
     patch.mockRejectedValue(new ApiError(409, { message: duplicata }, duplicata));
-    fireEvent.click(screen.getByRole('button', { name: 'Reativar a ocasião OCASIAO SINTETICA 4' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reativar o evento OCASIAO SINTETICA 4' }));
     const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toBe(duplicata);
+    expect(alerta.textContent).toBe('Já existe um evento ativo com o mesmo alcance, período e etapa. Edite o existente.');
     expect(patch).toHaveBeenCalledWith(`${URL_EVENTOS}/4`, { isActive: true });
   });
 
   it('botoes da linha ficam desabilitados com a mutacao pendente', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     patch.mockImplementation(() => new Promise(() => undefined));
-    fireEvent.click(screen.getByRole('button', { name: 'Inativar a ocasião OCASIAO SINTETICA 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Inativar o evento OCASIAO SINTETICA 1' }));
     await waitFor(() =>
-      expect((screen.getByRole('button', { name: 'Editar a ocasião OCASIAO SINTETICA 2' }) as HTMLButtonElement).disabled).toBe(true),
+      expect((screen.getByRole('button', { name: 'Editar o evento OCASIAO SINTETICA 2' }) as HTMLButtonElement).disabled).toBe(true),
     );
   });
 
   it('excluir: confirmacao inline; Cancelar nao exclui e devolve o foco ao botao', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir a ocasião OCASIAO SINTETICA 1' }));
-    const titulo = screen.getByRole('heading', { name: 'Excluir a ocasião OCASIAO SINTETICA 1' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir o evento OCASIAO SINTETICA 1' }));
+    const titulo = screen.getByRole('heading', { name: 'Excluir o evento OCASIAO SINTETICA 1' });
     expect(document.activeElement).toBe(titulo);
-    expect(screen.getByText('A exclusão é definitiva. Para só deixar de considerar a ocasião, use Inativar.')).toBeTruthy();
-    expect(screen.queryByRole('table', { name: 'Ocasiões que afetam o lead time' })).toBeNull();
+    expect(screen.getByText('A exclusão é definitiva. Para só deixar de considerar o evento, use Inativar.')).toBeTruthy();
+    expect(screen.queryByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
     expect(del).not.toHaveBeenCalled();
-    const botao = await screen.findByRole('button', { name: 'Excluir a ocasião OCASIAO SINTETICA 1' });
+    const botao = await screen.findByRole('button', { name: 'Excluir o evento OCASIAO SINTETICA 1' });
     await waitFor(() => expect(document.activeElement).toBe(botao));
   });
 
   it('excluir: confirmar chama DELETE e mostra o aviso', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     const invalidar = vi.spyOn(client, 'invalidateQueries');
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir a ocasião OCASIAO SINTETICA 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir ocasião' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir o evento OCASIAO SINTETICA 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir evento' }));
     await waitFor(() => expect(del).toHaveBeenCalledWith(`${URL_EVENTOS}/1`));
-    expect(await screen.findByText('Ocasião OCASIAO SINTETICA 1 excluída.')).toBeTruthy();
+    expect(await screen.findByText('Evento OCASIAO SINTETICA 1 excluído.')).toBeTruthy();
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ['forecast', 'ocasioes'] });
   });
 
-  it('excluir com 404 e corpo JSON: ocasiao nao existe mais e a lista e invalidada', async () => {
+  it('excluir com 404 e corpo JSON: evento nao existe mais e a lista e invalidada', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     const invalidar = vi.spyOn(client, 'invalidateQueries');
     del.mockRejectedValue(new ApiError(404, { message: 'Ocasião não encontrada.' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir a ocasião OCASIAO SINTETICA 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir ocasião' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir o evento OCASIAO SINTETICA 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir evento' }));
     const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toBe('Esta ocasião não existe mais (pode ter sido excluída). A lista foi atualizada.');
+    expect(alerta.textContent).toBe('Este evento não existe mais (pode ter sido excluído). A lista foi atualizada.');
     expect(invalidar).toHaveBeenCalledWith({ queryKey: ['forecast', 'ocasioes'] });
   });
 });
@@ -427,14 +431,14 @@ describe('inativar, reativar e excluir', () => {
 describe('ajustes da revisao (QA visual)', () => {
   it('Situacao: rotulo curto, descricao completa no title', async () => {
     renderPanel();
-    await screen.findByRole('table', { name: 'Ocasiões que afetam o lead time' });
+    await screen.findByRole('table', { name: 'Eventos estrangeiros que afetam o lead time' });
     const select = screen.getByLabelText('Situação') as HTMLSelectElement;
-    expect(select.title).toBe('Ativas: em vigor ou futuras');
-    const ativas = within(select).getByRole('option', { name: 'Ativas' }) as HTMLOptionElement;
-    expect(ativas.title).toBe('Ativas: em vigor ou futuras');
+    expect(select.title).toBe('Ativos: em vigor ou futuros');
+    const ativas = within(select).getByRole('option', { name: 'Ativos' }) as HTMLOptionElement;
+    expect(ativas.title).toBe('Ativos: em vigor ou futuros');
     expect(within(select).queryByRole('option', { name: /em vigor/ })).toBeNull();
     selecionar('Situação', 'passada');
-    expect(select.title).toMatch(/^Passadas/);
+    expect(select.title).toMatch(/^Passados/);
   });
 
   it('linha do tempo informa a data de hoje em texto, fora do bloco aria-hidden', async () => {

@@ -19,9 +19,14 @@ import { LEAD_TIME_MAX_DIAS, lerLeadTime } from './forecastPendentes';
 import ForecastFontePais from './ForecastFontePais';
 import ForecastOcasioesPanel from './ForecastOcasioesPanel';
 
+/** Aba aberta primeiro: o botao "Fontes e lead time" abre `fontes`; o "Eventos estrangeiros" abre `ocasioes`. */
+export type AbaFontes = 'fontes' | 'ocasioes';
+
 interface Props {
   /** admin/comprador editam o lead time (PATCH /forecast/sources/:id); os demais so leem. */
   podeEditar: boolean;
+  /** Padrao `fontes`. */
+  abaInicial?: AbaFontes;
   onFechar: () => void;
 }
 
@@ -263,7 +268,7 @@ const ABAS_BASE_ID = 'fcf-abas';
 
 /**
  * Painel de aba que continua MONTADO quando inativo (o TabPanel compartilhado desmonta e o rascunho do formulario de
- * ocasiao se perderia ao trocar de aba). Mesmos ids/aria que o Tabs.tsx espera (aria-controls/aria-labelledby).
+ * evento se perderia ao trocar de aba). Mesmos ids/aria que o Tabs.tsx espera (aria-controls/aria-labelledby).
  */
 function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean; children: ReactNode }) {
   return (
@@ -281,23 +286,24 @@ function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean
   );
 }
 
-export default function ForecastFontesModal({ podeEditar, onFechar }: Props) {
+export default function ForecastFontesModal({ podeEditar, abaInicial, onFechar }: Props) {
   const prazoReal = useQuery({ queryKey: forecastFontesKeys.prazoReal, queryFn: getForecastPrazoReal });
-  const [aba, setAba] = useState('fontes');
-  // A aba Ocasiões so monta (e so busca dados) na primeira vez em que e aberta; depois fica montada.
-  const [abriuOcasioes, setAbriuOcasioes] = useState(false);
+  const [aba, setAba] = useState<string>(abaInicial ?? 'fontes');
+  // A aba Eventos estrangeiros so monta (e so busca dados) na primeira vez em que e aberta; depois fica montada.
+  const [abriuOcasioes, setAbriuOcasioes] = useState(abaInicial === 'ocasioes');
+  const titulo = abaInicial === 'ocasioes' ? 'Eventos estrangeiros' : 'Fontes e lead time';
   const mudarAba = (valor: string) => {
     if (valor === 'ocasioes') setAbriuOcasioes(true);
     setAba(valor);
   };
 
   return (
-    <Modal isOpen onClose={onFechar} title="Fontes e lead time" size="xl">
+    <Modal isOpen onClose={onFechar} title={titulo} size="xl">
       <div className="fco-abas">
         <Tabs value={aba} onValueChange={mudarAba} baseId={ABAS_BASE_ID}>
-          <TabList aria-label="Seções do diálogo Fontes e lead time">
+          <TabList aria-label={`Seções do diálogo ${titulo}`}>
             <Tab value="fontes">Lead time por fonte</Tab>
-            <Tab value="ocasioes">Ocasiões</Tab>
+            <Tab value="ocasioes">Eventos estrangeiros</Tab>
           </TabList>
           <PainelDaAba valor="fontes" ativo={aba === 'fontes'}>
             {prazoReal.isLoading && (

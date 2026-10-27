@@ -3612,3 +3612,21 @@ i.fc-status--preco { background: var(--info); }
 @media print {
   .fco-acoes, .fco-barra, .fco-modelos, .fco-filtros { display: none !important; }
 }
+/* ---- Eventos estrangeiros (delta do PR 2): alvos multiplos, lista agrupada. Prefixo fco-. Somente tokens do tema. ---- */
+.fco-alvos { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fco-checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; margin: 0; padding: 0; list-style: none; }
+.fco-checklist--rolagem { max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fco-outro-pais { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.fco-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 4px; padding: 0; list-style: none; }
+.fco-chip { padding: 2px 8px; border-radius: var(--radius-sm); background: var(--surface-alt); color: var(--ink); font-size: 12px; line-height: 1.4; }
+.fco-grupo-alvos { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.fco-grupo-alvos > li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+.fco-resultado ul { margin: 6px 0 0; padding-left: 18px; }
+.fco-vivo:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.fco-tabela .ghost-button:focus-visible, .fco-grupo-alvos button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 700px), (pointer: coarse) {
+  .fco-checklist .checkbox-field, .fco-grupo-alvos button, .fco-outro-pais button { min-height: 44px; }
+}
+@media print {
+  .fco-grupo-alvos button, .fco-tabela .ghost-button--sm { display: none !important; }
+}

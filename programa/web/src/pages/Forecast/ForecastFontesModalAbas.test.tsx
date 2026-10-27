@@ -82,7 +82,7 @@ describe('abas', () => {
     renderModal(true);
     await screen.findByRole('rowheader', { name: 'FONTE A' });
     const abas = screen.getAllByRole('tab');
-    expect(abas.map((a) => a.textContent)).toEqual(['Lead time por fonte', 'Ocasiões']);
+    expect(abas.map((a) => a.textContent)).toEqual(['Lead time por fonte', 'Eventos estrangeiros']);
     expect(abas.map((a) => a.getAttribute('aria-selected'))).toEqual(['true', 'false']);
     expect(screen.getByRole('tablist', { name: 'Seções do diálogo Fontes e lead time' })).toBeTruthy();
     const painel = screen.getByRole('tabpanel');
@@ -100,7 +100,7 @@ describe('abas', () => {
     expect(document.activeElement).toBe(aba2);
     const painel = await screen.findByRole('tabpanel');
     expect(painel.getAttribute('aria-labelledby')).toBe(aba2.id);
-    expect(await screen.findByText(/Ocasiões são períodos/)).toBeTruthy();
+    expect(await screen.findByText(/Eventos estrangeiros são períodos/)).toBeTruthy();
     expect(screen.queryByRole('rowheader', { name: 'FONTE A' })).toBeNull();
 
     fireEvent.keyDown(aba2, { key: 'ArrowLeft' });
@@ -118,7 +118,7 @@ describe('abas', () => {
     await screen.findByRole('rowheader', { name: 'FONTE A' });
     const [aba1, aba2] = screen.getAllByRole('tab') as [HTMLElement, HTMLElement];
     fireEvent.click(aba2);
-    fireEvent.click(await screen.findByRole('button', { name: 'Nova ocasião' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo evento' }));
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'RASCUNHO SINTETICO' } });
 
     fireEvent.click(aba1);
@@ -133,12 +133,12 @@ describe('abas', () => {
     expect(chamadasDeEventos().filter(([, q]) => q === undefined)).toHaveLength(1);
   });
 
-  it('a aba Ocasiões so busca as ocasioes depois de aberta', async () => {
+  it('a aba Eventos estrangeiros so busca os eventos depois de aberta', async () => {
     renderModal(true);
     await screen.findByRole('rowheader', { name: 'FONTE A' });
     expect(chamadasDeEventos()).toHaveLength(0);
-    fireEvent.click(screen.getByRole('tab', { name: 'Ocasiões' }));
-    await screen.findByText(/Ocasiões são períodos/);
+    fireEvent.click(screen.getByRole('tab', { name: 'Eventos estrangeiros' }));
+    await screen.findByText(/Eventos estrangeiros são períodos/);
     await waitFor(() => expect(chamadasDeEventos().length).toBeGreaterThan(0));
   });
 });
@@ -151,7 +151,7 @@ describe('coluna Pais', () => {
     expect(await within(linhaDe('FONTE A')).findByText('China (CN)')).toBeTruthy();
     expect(within(linhaDe('FONTE C')).getByText('Índia (IN)')).toBeTruthy();
     expect(within(linhaDe('FONTE B')).getAllByRole('cell')[0]?.textContent).toBe('—');
-    expect(await screen.findByText('1 fonte sem país: ocasiões por país não a alcançam.')).toBeTruthy();
+    expect(await screen.findByText('1 fonte sem país: eventos por país não a alcançam.')).toBeTruthy();
   });
 
   it('viewer nao ve o botao de editar o pais', async () => {

@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { camposDoModelo, validarOcasiao } from './forecastOcasioes';
+import { camposDoModelo, nomeDoPais, validarOcasiao } from './forecastOcasioes';
+import { selecaoDoModelo, validarAlvos } from './forecastEventosAlvos';
 import {
   ANO_NOVO_CHINES,
+  BARCO_DRAGAO,
   MODELOS,
+  TABELA_BARCO_DRAGAO_ATE,
   TABELA_LUNAR_ATE,
   anosDoModelo,
   domingoDePascoa,
   preencherComModelo,
+  ultimoAnoDaTabela,
   type ModeloOcasiao,
 } from './forecastOcasioesModelos';
 
@@ -87,11 +91,94 @@ describe('Ano Novo chines', () => {
       movel: true,
     });
     expect(p.avisos).toContain('Confirme a data no calendário oficial. A tabela do Ano Novo chinês cobre até 2032.');
-    expect(p.avisos).toContain('Data móvel: cadastre uma ocasião por ano.');
+    expect(p.avisos).toContain('Data móvel: cadastre um evento por ano.');
   });
 
   it('fora da tabela = null', () => {
     expect(preencherComModelo(modelo('ano-novo-chines'), 2033)).toBeNull();
+  });
+});
+
+describe('Festival do Barco-Dragao (datas a confirmar pelo usuario)', () => {
+  it('tabela e limite', () => {
+    expect(BARCO_DRAGAO).toEqual({
+      2026: '2026-06-19',
+      2027: '2027-06-09',
+      2028: '2028-05-28',
+      2029: '2029-06-16',
+      2030: '2030-06-05',
+    });
+    expect(TABELA_BARCO_DRAGAO_ATE).toBe(2030);
+    expect(ultimoAnoDaTabela(modelo('barco-dragao'))).toBe(2030);
+    expect(ultimoAnoDaTabela(modelo('ano-novo-chines'))).toBe(2032);
+    expect(ultimoAnoDaTabela(modelo('natal-ano-novo'))).toBeNull();
+  });
+
+  it('2027: 1 dia antes a 1 depois, movel, aviso de tabela', () => {
+    const p = preencherComModelo(modelo('barco-dragao'), 2027)!;
+    expect(p).toMatchObject({
+      nome: 'Festival do Barco-Dragão 2027',
+      escopo: 'pais',
+      pais: 'CN',
+      inicio: '2027-06-08',
+      fim: '2027-06-10',
+      etapa: 'prontidao',
+      dias: 3,
+      anual: false,
+      movel: true,
+    });
+    expect(p.avisos).toContain('Confirme a data no calendário oficial. A tabela do Festival do Barco-Dragão cobre até 2030.');
+  });
+
+  it('anos oferecidos so ate onde a tabela cobre', () => {
+    expect(anosDoModelo(modelo('barco-dragao'), '2029-03-01')).toEqual([2029, 2030]);
+    expect(anosDoModelo(modelo('barco-dragao'), '2031-01-01')).toEqual([]);
+    expect(preencherComModelo(modelo('barco-dragao'), 2031)).toBeNull();
+  });
+});
+
+describe('feriados da China', () => {
+  it('Dia do Trabalhador: 1 a 5 de maio, anual, 5 dias, aviso de janela', () => {
+    const p = preencherComModelo(modelo('dia-trabalhador-cn'), 2026)!;
+    expect(p).toMatchObject({ escopo: 'pais', pais: 'CN', inicio: '2026-05-01', fim: '2026-05-05', anual: true, dias: 5 });
+    expect(p.avisos).toContain('Janela sugerida: o calendário oficial da China sai a cada ano. Confirme a data.');
+  });
+
+  it('Golden Week: 1 a 7 de outubro, anual, aviso de janela', () => {
+    const p = preencherComModelo(modelo('golden-week'), 2026)!;
+    expect(p).toMatchObject({ nome: 'Golden Week (China)', pais: 'CN', inicio: '2026-10-01', fim: '2026-10-07', anual: true, dias: 7 });
+    expect(p.avisos).toContain('Janela sugerida: o calendário oficial da China sai a cada ano. Confirme a data.');
+  });
+});
+
+describe('feriados alemaes por fonte', () => {
+  const ALEMAES = ['unidade-alema', 'sexta-santa', 'segunda-pascoa', 'ascensao', 'segunda-pentecostes'];
+
+  it('escopo fonte, sem pais, com o aviso das fontes alemas', () => {
+    for (const id of ALEMAES) {
+      const p = preencherComModelo(modelo(id), 2027)!;
+      expect(p.escopo, id).toBe('fonte');
+      expect(p.pais, id).toBeNull();
+      expect(p.avisos, id).toContain(
+        'Marque as fontes alemãs que param nesses feriados. O alcance é por fonte, não pelo país inteiro.',
+      );
+    }
+  });
+
+  it('nomes e datas', () => {
+    expect(preencherComModelo(modelo('sexta-santa'), 2027)).toMatchObject({
+      nome: 'Sexta-feira Santa (Alemanha) 2027',
+      inicio: '2027-03-26',
+      fim: '2027-03-26',
+      anual: false,
+      movel: true,
+    });
+    expect(preencherComModelo(modelo('unidade-alema'), 2026)).toMatchObject({
+      nome: 'Dia da Unidade Alemã (3 de outubro)',
+      inicio: '2026-10-03',
+      fim: '2026-10-03',
+      anual: true,
+    });
   });
 });
 
@@ -110,13 +197,10 @@ describe('modelos fixos', () => {
     });
   });
 
-  it('Golden Week avisa que e aproximada; modelo sem pais pede o pais', () => {
-    expect(preencherComModelo(modelo('golden-week'), 2026)!.avisos).toContain(
-      'Datas aproximadas: o calendário oficial da China sai a cada ano. Confirme a data.',
-    );
-    const p = preencherComModelo(modelo('primeiro-maio'), 2026)!;
+  it('modelo sem pais pede um ou mais paises', () => {
+    const p = preencherComModelo(modelo('ferias-agosto'), 2026)!;
     expect(p.pais).toBeNull();
-    expect(p.avisos).toContain('Escolha o país.');
+    expect(p.avisos).toContain('Escolha um ou mais países.');
     expect(p.avisos[0]).toBe(
       'Os dias e a janela são sugestões: ajuste ao que a fonte costuma informar. Nada é gravado até você salvar.',
     );
@@ -133,22 +217,24 @@ describe('anosDoModelo', () => {
 });
 
 describe('catalogo', () => {
-  it('11 modelos, ids unicos, nenhum de Diwali, Eid ou Ramada', () => {
-    expect(MODELOS).toHaveLength(11);
+  it('12 modelos, ids unicos, sem primeiro-maio, nenhum de Diwali, Eid ou Ramada', () => {
+    expect(MODELOS).toHaveLength(12);
+    expect(MODELOS.some((m) => m.id === 'primeiro-maio')).toBe(false);
     expect(new Set(MODELOS.map((m) => m.id)).size).toBe(MODELOS.length);
     for (const m of MODELOS) expect(`${m.id} ${m.nome}`).not.toMatch(/diwali|eid|ramad/i);
   });
 
-  it('PROPRIEDADE: todo modelo e ano disponivel valida; so falta o pais nos modelos sem pais', () => {
+  it('PROPRIEDADE: todo modelo e ano disponivel valida; so falta o alcance nos modelos sem pais e nos por fonte', () => {
     const ctx = { efeitoBloqueado: false, fontesAtivas: new Set<number>(), fonteOriginal: null };
     for (const m of MODELOS) {
       for (const ano of anosDoModelo(m, '2026-10-27')) {
         const p = preencherComModelo(m, ano);
         expect(p, `${m.id} ${ano}`).not.toBeNull();
-        const { erros } = validarOcasiao(camposDoModelo(p!), ctx);
-        const chaves = Object.keys(erros);
-        if (m.escopo === 'pais' && m.pais === null) expect(chaves, `${m.id} ${ano}`).toEqual(['pais']);
-        else expect(chaves, `${m.id} ${ano}`).toEqual([]);
+        const { erros } = validarOcasiao({ ...camposDoModelo(p!), escopo: 'global' }, ctx);
+        expect(Object.keys(erros), `${m.id} ${ano}`).toEqual([]);
+        const alvos = validarAlvos(selecaoDoModelo(p!), new Map(), nomeDoPais);
+        const faltaAlcance = (m.escopo === 'pais' && m.pais === null) || m.escopo === 'fonte';
+        expect(Object.keys(alvos.erros), `${m.id} ${ano}`).toEqual(faltaAlcance ? ['escopo'] : []);
       }
     }
   });

@@ -36,9 +36,9 @@ export const ROTULO_ESCOPO: Readonly<Record<ForecastOcasiaoEscopo, string>> = {
 
 export type SituacaoOcasiao = 'ativa' | 'passada' | 'inativa';
 export const ROTULO_SITUACAO: Readonly<Record<SituacaoOcasiao, string>> = {
-  ativa: 'Ativa',
-  passada: 'Passada',
-  inativa: 'Inativa',
+  ativa: 'Ativo',
+  passada: 'Passado',
+  inativa: 'Inativo',
 };
 
 export const MESES_ABREV = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'] as const;
@@ -89,7 +89,7 @@ export function paisReconhecido(codigo: string): boolean {
 
 export function lerCodigoPais(texto: string): { codigo: string } | { erro: string } {
   const codigo = texto.trim().toUpperCase();
-  if (codigo === '') return { erro: 'Informe o país da ocasião.' };
+  if (codigo === '') return { erro: 'Informe o país do evento.' };
   if (!/^[A-Z]{2}$/.test(codigo)) {
     return { erro: 'O código do país deve ter 2 letras (ISO 3166-1 alfa-2, ex.: CN).' };
   }
@@ -130,8 +130,8 @@ export function contarSemPais(ids: readonly number[], mapa: ReadonlyMap<number, 
 export function textoFontesSemPais(n: number): string | null {
   if (n <= 0) return null;
   return n === 1
-    ? '1 fonte sem país: ocasiões por país não a alcançam.'
-    : `${n} fontes sem país: ocasiões por país não as alcançam.`;
+    ? '1 fonte sem país: eventos por país não a alcançam.'
+    : `${n} fontes sem país: eventos por país não as alcançam.`;
 }
 
 // ---------- datas ----------
@@ -279,7 +279,7 @@ export function validarOcasiao(campos: CamposOcasiao, ctx: ContextoValidacao): O
   const erros: OcasiaoValidada['erros'] = {};
 
   const nome = campos.nome.trim();
-  if (nome === '') erros.nome = 'Informe o nome da ocasião.';
+  if (nome === '') erros.nome = 'Informe o nome do evento.';
   else if (nome.length > FORECAST_OCASIAO_NOME_MAX) {
     erros.nome = `O nome aceita no máximo ${FORECAST_OCASIAO_NOME_MAX} caracteres.`;
   }
@@ -301,7 +301,7 @@ export function validarOcasiao(campos: CamposOcasiao, ctx: ContextoValidacao): O
     const fonteRemovidaIntacta =
       ctx.escopoOriginal === 'fonte' && ctx.fonteOriginal === null && campos.fonte.trim() === '';
     if (fonteRemovidaIntacta) fonteId = null;
-    else if (campos.fonte.trim() === '') erros.fonte = 'Informe a fonte da ocasião.';
+    else if (campos.fonte.trim() === '') erros.fonte = 'Informe a fonte do evento.';
     else {
       fonteId = Number(campos.fonte);
       if (!ctx.fontesAtivas.has(fonteId) && fonteId !== ctx.fonteOriginal) {

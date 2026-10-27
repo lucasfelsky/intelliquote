@@ -5,40 +5,52 @@ import type { FiltrosOcasioes, OpcaoPais } from './forecastOcasioes';
 interface Props {
   filtros: FiltrosOcasioes;
   onMudar: (filtros: FiltrosOcasioes) => void;
-  /** So os paises usados em ocasioes de pais. */
+  /** So os paises usados em eventos por pais. */
   paises: OpcaoPais[];
-  /** So as fontes usadas em ocasioes de fonte. */
+  /** So as fontes usadas em eventos por fonte. */
   fontes: Array<{ id: number; nome: string }>;
   anos: number[];
-  /** Ocasioes cadastradas (lista do servidor) e as que passam pelos filtros. */
+  /** Eventos (grupos) cadastrados e os que passam pelos filtros. */
   total: number;
   visiveis: number;
+  /** Registros que o servidor devolveu (o corte de 500 olha registros, nao grupos). Padrao: `total`. */
+  registros?: number;
   onLimpar: () => void;
 }
 
 // Rotulo curto (cabe no select em larguras medias); a descricao completa vai no title.
 const SITUACOES: Array<[FiltrosOcasioes['situacao'], string, string]> = [
-  ['ativa', 'Ativas', 'Ativas: em vigor ou futuras'],
-  ['passada', 'Passadas', 'Passadas: sem repetição e já encerradas'],
-  ['inativa', 'Inativas', 'Inativas: desligadas pelo usuário'],
-  ['todas', 'Todas', 'Todas as situações'],
+  ['ativa', 'Ativos', 'Ativos: em vigor ou futuros'],
+  ['passada', 'Passados', 'Passados: sem repetição e já encerrados'],
+  ['inativa', 'Inativos', 'Inativos: desligados pelo usuário'],
+  ['todas', 'Todos', 'Todas as situações'],
 ];
 
 const ALCANCES: Array<[FiltrosOcasioes['escopo'], string]> = [
   ['todos', 'Todos'],
   ['global', 'Todas as fontes'],
-  ['pais', 'Um país'],
-  ['fonte', 'Uma fonte'],
+  ['pais', 'Por país'],
+  ['fonte', 'Por fonte'],
 ];
 
-function textoContagem(total: number, visiveis: number): string {
-  const plural = (n: number) => (n === 1 ? '1 ocasião' : `${n} ocasiões`);
-  const base = visiveis === total ? plural(total) : `Mostrando ${visiveis} de ${total} ocasiões.`;
-  if (total < FORECAST_OCASIOES_LISTA_MAX) return base;
-  return `${base.endsWith('.') ? base : `${base}.`} Mostrando as ${FORECAST_OCASIOES_LISTA_MAX} primeiras por data de início.`;
+function textoContagem(total: number, visiveis: number, registros: number): string {
+  const plural = (n: number) => (n === 1 ? '1 evento' : `${n} eventos`);
+  const base = visiveis === total ? plural(total) : `Mostrando ${visiveis} de ${total} eventos.`;
+  if (registros < FORECAST_OCASIOES_LISTA_MAX) return base;
+  return `${base.endsWith('.') ? base : `${base}.`} Mostrando os ${FORECAST_OCASIOES_LISTA_MAX} primeiros registros por data de início.`;
 }
 
-export default function ForecastOcasioesFiltros({ filtros, onMudar, paises, fontes, anos, total, visiveis, onLimpar }: Props) {
+export default function ForecastOcasioesFiltros({
+  filtros,
+  onMudar,
+  paises,
+  fontes,
+  anos,
+  total,
+  visiveis,
+  registros,
+  onLimpar,
+}: Props) {
   const baseId = useId();
   const id = (campo: string) => `${baseId}-${campo}`;
   const mostraPais = filtros.escopo === 'todos' || filtros.escopo === 'pais';
@@ -156,9 +168,9 @@ export default function ForecastOcasioesFiltros({ filtros, onMudar, paises, font
         </div>
       </div>
       <p className="fcd-dica" aria-live="polite">
-        {textoContagem(total, visiveis)}
+        {textoContagem(total, visiveis, registros ?? total)}
       </p>
-      {/* Sem resultado, o botao fica no aviso "Nenhuma ocasião com estes filtros." (um so "Limpar filtros" na tela). */}
+      {/* Sem resultado, o botao fica no aviso "Nenhum evento com estes filtros." (um so "Limpar filtros" na tela). */}
       {alterado && visiveis > 0 && (
         <button type="button" className="ghost-button ghost-button--sm" onClick={onLimpar}>
           Limpar filtros

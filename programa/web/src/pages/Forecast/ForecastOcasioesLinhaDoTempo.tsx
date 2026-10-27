@@ -5,8 +5,11 @@ import { MESES_ABREV, colunasDosMeses, posicaoDeHoje, segmentoNoAno } from './fo
 import { dataBr } from './forecastPainel';
 
 export interface LinhaDoTempo {
-  id: number;
+  /** Chave do grupo de eventos (uma linha por grupo). */
+  chave: string;
   nome: string;
+  /** Alvos do grupo (`textoAlcance`, separados por virgula). */
+  alcance: string;
   ativa: boolean;
   ocorrencias: ForecastOcasiaoOcorrencia[];
 }
@@ -20,10 +23,10 @@ interface Props {
   onTentar: () => void;
 }
 
-const rotuloDe = (l: Pick<LinhaDoTempo, 'nome' | 'ativa'>): string => (l.ativa ? l.nome : `${l.nome} (inativa)`);
+const rotuloDe = (l: Pick<LinhaDoTempo, 'nome' | 'ativa'>): string => (l.ativa ? l.nome : `${l.nome} (inativo)`);
 
 /**
- * Linha do tempo de 12 meses. As ocorrencias (inclusive a recorrencia anual expandida) vem do backend; a barra e so
+ * Linha do tempo de 12 meses (1 linha por evento agrupado). As ocorrencias (inclusive a recorrencia anual expandida) vem do backend; a barra e so
  * apresentacao (aria-hidden): a tabela logo abaixo traz as mesmas datas em texto.
  */
 export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carregando, erro, onTentar }: Props) {
@@ -33,7 +36,15 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
   const datas = useMemo(
     () =>
       linhas
-        .flatMap((l) => l.ocorrencias.map((o) => ({ chave: `${l.id}-${o.inicio}`, nome: rotuloDe(l), inicio: o.inicio, fim: o.fim })))
+        .flatMap((l) =>
+          l.ocorrencias.map((o) => ({
+            chave: `${l.chave}-${o.inicio}`,
+            nome: rotuloDe(l),
+            alcance: l.alcance,
+            inicio: o.inicio,
+            fim: o.fim,
+          })),
+        )
         .sort((a, b) => a.inicio.localeCompare(b.inicio) || a.nome.localeCompare(b.nome, 'pt-BR')),
     [linhas],
   );
@@ -57,7 +68,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
         </div>
       )}
       {!carregando && !erro && linhas.length === 0 && (
-        <p className="fcd-dica">Nenhuma ocasião em {ano} com estes filtros.</p>
+        <p className="fcd-dica">Nenhum evento em {ano} com estes filtros.</p>
       )}
       {!carregando && !erro && linhas.length > 0 && (
         <>
@@ -81,7 +92,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
                   </div>
                 </div>
                 {linhas.map((l) => (
-                  <div key={l.id} className="fco-linha__fila">
+                  <div key={l.chave} className="fco-linha__fila">
                     <span className="fco-linha__rotulo">{rotuloDe(l)}</span>
                     <div className="fco-linha__trilho">
                       {l.ocorrencias.map((o) => {
@@ -106,7 +117,8 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
               <caption className="fco-legenda">Datas em {ano} (mesma informação da linha do tempo)</caption>
               <thead>
                 <tr>
-                  <th scope="col">Ocasião</th>
+                  <th scope="col">Evento</th>
+                  <th scope="col">Alcance</th>
                   <th scope="col">De</th>
                   <th scope="col">Até</th>
                 </tr>
@@ -115,6 +127,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
                 {datas.map((d) => (
                   <tr key={d.chave}>
                     <th scope="row">{d.nome}</th>
+                    <td data-rotulo="Alcance">{d.alcance}</td>
                     <td data-rotulo="De">{dataBr(d.inicio)}</td>
                     <td data-rotulo="Até">{dataBr(d.fim)}</td>
                   </tr>
