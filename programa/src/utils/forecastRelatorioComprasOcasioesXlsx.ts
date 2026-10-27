@@ -8,7 +8,7 @@ import type exceljs from 'exceljs';
 import { dataBr } from './forecastRelatorioComprasXlsx';
 import type { ItemRelatorioCompras, RelatorioCompras } from './forecastRelatorioCompras';
 
-export const COLUNAS_OCASIOES_XLSX = ['Lead time ajustado (dias)', 'Data-limite ajustada', 'Ocasiões'] as const;
+export const COLUNAS_OCASIOES_XLSX = ['Lead time ajustado (dias)', 'Data-limite ajustada', 'Eventos estrangeiros'] as const;
 export const LARGURAS_OCASIOES_XLSX = [14, 16, 44];
 
 // [X]
@@ -27,35 +27,35 @@ export const textoOcasiaoDaLista = (o: { nome: string; dias: number; etapa: keyo
   `${o.nome} · +${o.dias} d (${ROTULO_ETAPA_OCASIAO_XLSX[o.etapa]})`;
 
 // [X]
-export const AVISO_ANTES_DE_HOJE_XLSX = 'A ocasião antecipa a data-limite para antes de hoje.';
+export const AVISO_ANTES_DE_HOJE_XLSX = 'O evento estrangeiro antecipa a data-limite para antes de hoje.';
 // [X]
 export const AVISO_COMPONENTES_AUSENTES_XLSX =
-  'Etapas da fonte não cadastradas (ou somam mais que o lead time): cada ocasião foi comparada com o lead time inteiro.';
+  'Etapas da fonte não cadastradas (ou somam mais que o lead time): cada evento foi comparado com o lead time inteiro.';
 // [X]
 export const NOTA_OSCILOU_XLSX = 'A estimativa não estabilizou: vale o maior acréscimo.';
 // [X]
-export const TEXTO_OCASIOES_INDISPONIVEIS_XLSX = 'Ocasiões do lead time indisponíveis agora: o relatório saiu sem elas.';
+export const TEXTO_OCASIOES_INDISPONIVEIS_XLSX = 'Eventos estrangeiros do lead time indisponíveis agora: o relatório saiu sem eles.';
 
 // [X]
 export function resumoOcasioes(itens: number): string {
-  if (itens === 0) return 'Nenhum item cruza as ocasiões cadastradas';
+  if (itens === 0) return 'Nenhum item cruza os eventos estrangeiros cadastrados';
   return itens === 1
-    ? '1 item com ocasião no lead time (estimativa)'
-    : `${itens} itens com ocasião no lead time (estimativa)`;
+    ? '1 item com evento estrangeiro no lead time (estimativa)'
+    : `${itens} itens com evento estrangeiro no lead time (estimativa)`;
 }
 // [X]
 export const resumoOcasioesAntesDeHoje = (n: number): string =>
   `${n} ${plural(n, 'item', 'itens')} com a data-limite ajustada já vencida`;
 // [X]
 export const resumoSemFonteCadastrada = (n: number): string =>
-  `${n} ${plural(n, 'item', 'itens')} com fonte fora do cadastro de lead time: ocasiões não avaliadas`;
+  `${n} ${plural(n, 'item', 'itens')} com fonte fora do cadastro de lead time: eventos não avaliados`;
 // [X]
 export const resumoFontesSemPais = (n: number): string =>
-  `${n} ${plural(n, 'fonte', 'fontes')} sem país: ocasiões por país não as alcançam`;
+  `${n} ${plural(n, 'fonte', 'fontes')} sem país: eventos por país não as alcançam`;
 
 // [X]
 export const PARAGRAFO_OCASIOES_XLSX =
-  'Ocasiões (feriados, greves, fechamentos) registram dias a MAIS do que o lead time da fonte já considera. O lead time ajustado e a data-limite ajustada são estimativas e só informam: a data-limite, a urgência, a ordem e as quantidades continuam as do lead time da fonte. As ocasiões vêm do cadastro atual (não ficam congeladas na quinzena). A linha do tempo do pedido segue prontidão, embarque, trânsito e liberação; a folga da fonte fica no fim e não cruza ocasiões.';
+  'Eventos estrangeiros (feriados, greves, fechamentos) registram dias a MAIS do que o lead time da fonte já considera. O lead time ajustado e a data-limite ajustada são estimativas e só informam: a data-limite, a urgência, a ordem e as quantidades continuam as do lead time da fonte. Os eventos vêm do cadastro atual (não ficam congelados na quinzena). A linha do tempo do pedido segue prontidão, embarque, trânsito e liberação; a folga da fonte fica no fim e não cruza eventos. Cada evento vale só para os países ou fontes escolhidos; eventos de regiões diferentes não se somam entre si. O evento soma por cima do lead time cadastrado: informe só os dias a mais.';
 
 // Mesmo valor de COR_VENCIDA_TEXTO (forecastRelatorioComprasXlsx.ts): a ajustada ja venceu e a normal nao.
 const COR_ANTES_DE_HOJE_TEXTO = 'FFB91C1C';

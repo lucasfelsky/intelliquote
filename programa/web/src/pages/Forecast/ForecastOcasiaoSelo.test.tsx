@@ -45,8 +45,8 @@ describe('ForecastOcasiaoSelo', () => {
 
   it('com bloco: texto + icone, aria-label com os dias e icone escondido do leitor de tela', () => {
     render(<ForecastOcasiaoSelo ocasioes={BLOCO} />);
-    const selo = screen.getByRole('img', { name: /Ocasião no lead time: 5 dias a mais/ });
-    expect(selo.textContent).toContain('Ocasião: +5 d');
+    const selo = screen.getByRole('img', { name: /Evento estrangeiro no lead time: 5 dias a mais/ });
+    expect(selo.textContent).toContain('Evento estrangeiro: +5 d');
     expect(selo.className).toContain('badge--info');
     expect(selo.querySelector('.fcoc-selo__icone')?.getAttribute('aria-hidden')).toBe('true');
   });
@@ -54,7 +54,7 @@ describe('ForecastOcasiaoSelo', () => {
   it('1 dia usa o singular no aria-label', () => {
     render(<ForecastOcasiaoSelo ocasioes={{ ...BLOCO, extraDias: 1 }} />);
     expect(
-      screen.getByRole('img', { name: 'Ocasião no lead time: 1 dia a mais (estimativa, só informa)' }),
+      screen.getByRole('img', { name: 'Evento estrangeiro no lead time: 1 dia a mais (estimativa, só informa)' }),
     ).toBeTruthy();
   });
 });
@@ -67,7 +67,7 @@ describe('OcasioesDoItemDetalhe', () => {
 
   it('mostra lead time e data-limite ajustados, chegada estimada, a lista e a etiqueta "estimativa"', () => {
     const { container } = render(<OcasioesDoItemDetalhe item={item(BLOCO)} />);
-    expect(screen.getByText('Ocasiões no lead time')).toBeTruthy();
+    expect(screen.getByText('Eventos estrangeiros no lead time')).toBeTruthy();
     expect(container.querySelector('.fcoc-estimativa')?.textContent).toBe('estimativa');
     expect(screen.getByText('30 + 5 = 35 dias')).toBeTruthy();
     expect(screen.getByText('17/10/2026')).toBeTruthy();
@@ -113,7 +113,7 @@ describe('OcasioesDoGrupoSelo', () => {
         })}
       />,
     );
-    expect(screen.getByText('Ocasiões: OCASIAO 001, OCASIAO 002 · 2 itens')).toBeTruthy();
+    expect(screen.getByText('Eventos estrangeiros: OCASIAO 001, OCASIAO 002 · 2 itens')).toBeTruthy();
     expect(container.querySelector('.fcoc-selo__icone')?.getAttribute('aria-hidden')).toBe('true');
   });
 });
@@ -144,7 +144,7 @@ describe('OcasioesNoResumo', () => {
       fontesSemPais: 0,
     };
     const vazio = emLista(<OcasioesNoResumo dados={dados(base)} />);
-    expect(textos(vazio.container)).toEqual(['Nenhum item cruza as ocasiões cadastradas']);
+    expect(textos(vazio.container)).toEqual(['Nenhum item cruza os eventos estrangeiros cadastrados']);
     vazio.unmount();
 
     const cheio = emLista(
@@ -153,10 +153,10 @@ describe('OcasioesNoResumo', () => {
       />,
     );
     expect(textos(cheio.container)).toEqual([
-      '3 itens com ocasião no lead time (estimativa)',
+      '3 itens com evento estrangeiro no lead time (estimativa)',
       '1 item com a data-limite ajustada já vencida',
-      '2 itens com fonte fora do cadastro de lead time: ocasiões não avaliadas',
-      '1 fonte sem país: ocasiões por país não as alcançam',
+      '2 itens com fonte fora do cadastro de lead time: eventos não avaliados',
+      '1 fonte sem país: eventos por país não as alcançam',
     ]);
   });
 });
@@ -177,7 +177,7 @@ describe('OcasioesNaMemoria', () => {
   it('com bloco: a frase e a etiqueta "estimativa"', () => {
     const { container } = render(<OcasioesNaMemoria ocasioes={HOJE} />);
     expect(container.querySelector('.fcoc-memoria')?.textContent).toBe(
-      'Com ocasiões: chega em 24/11/2026 (+5 dias: OCASIAO 001) estimativa',
+      'Com evento estrangeiro: chega em 24/11/2026 (+5 dias: OCASIAO 001) estimativa',
     );
     expect(container.querySelector('.fcoc-estimativa')?.textContent).toBe('estimativa');
     expect(screen.queryByText(AVISO_COMPONENTES_AUSENTES)).toBeNull();

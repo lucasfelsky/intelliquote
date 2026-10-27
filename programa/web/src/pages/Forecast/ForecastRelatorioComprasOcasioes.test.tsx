@@ -189,7 +189,7 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
     renderRelatorio();
     await screen.findByText('4 itens em 2 fontes');
 
-    expect(screen.getAllByRole('img', { name: /Ocasião no lead time: 5 dias a mais/ })).toHaveLength(2);
+    expect(screen.getAllByRole('img', { name: /Evento estrangeiro no lead time: 5 dias a mais/ })).toHaveLength(2);
 
     const sublinhas = [...document.querySelectorAll('tr.fcoc-linha')];
     expect(sublinhas).toHaveLength(2);
@@ -205,9 +205,9 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
       expect(within(celula).getByText(AVISO_ANTES_DE_HOJE, { exact: false })).toBeTruthy();
     }
 
-    expect(screen.getByText('2 itens com ocasião no lead time (estimativa)')).toBeTruthy();
+    expect(screen.getByText('2 itens com evento estrangeiro no lead time (estimativa)')).toBeTruthy();
     expect(screen.getByText('2 itens com a data-limite ajustada já vencida')).toBeTruthy();
-    expect(screen.getByText('1 item com fonte fora do cadastro de lead time: ocasiões não avaliadas')).toBeTruthy();
+    expect(screen.getByText('1 item com fonte fora do cadastro de lead time: eventos não avaliados')).toBeTruthy();
     expect(screen.queryByText(/sem país/)).toBeNull();
     expect(screen.getByText(APOIO_OCASIOES)).toBeTruthy();
     expect(screen.getByText(PARAGRAFO_OCASIOES)).toBeTruthy();
@@ -224,11 +224,11 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
     for (const tabela of tabelas) {
       const caption = tabela.querySelector('caption') as HTMLElement;
       if (caption.textContent?.startsWith('FONTE')) {
-        expect(within(caption).getByText('Ocasiões: OCASIAO 001 · 1 item')).toBeTruthy();
+        expect(within(caption).getByText('Evento estrangeiro: OCASIAO 001 · 1 item')).toBeTruthy();
         expect(tabela.querySelectorAll('tr.fcoc-linha')).toHaveLength(1);
       }
     }
-    expect(screen.getAllByRole('img', { name: /Ocasião no lead time/ })).toHaveLength(2);
+    expect(screen.getAllByRole('img', { name: /Evento estrangeiro no lead time/ })).toHaveLength(2);
     const sublinha = document.querySelector('tr.fcoc-linha') as HTMLElement;
     const dados = sublinha.previousElementSibling as HTMLTableRowElement;
     expect((sublinha.querySelector('td') as HTMLTableCellElement).colSpan).toBe(dados.children.length);

@@ -159,9 +159,9 @@ describe('ocasioesDoItem', () => {
     expect(r?.componentesAusentes).toBeUndefined();
   });
 
-  it('nome ausente do mapa vira "Ocasião <id>"', () => {
+  it('nome ausente do mapa vira "Evento estrangeiro <id>"', () => {
     const r = ocasioesDoItem(E, contexto(fontes, [ocasiao({ id: 7 })]));
-    expect(r?.ocasioes[0].nome).toBe('Ocasião 7');
+    expect(r?.ocasioes[0].nome).toBe('Evento estrangeiro 7');
   });
 
   it('ocasiao que cruza com 0 dias: bloco presente com extraDias 0 e sem antes de hoje', () => {

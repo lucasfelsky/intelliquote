@@ -33,11 +33,11 @@ describe('textos das ocasioes no relatorio de compras', () => {
   });
 
   it('selo e aria: singular, plural e 0 dias', () => {
-    expect(textoSeloOcasiao(5)).toBe('Ocasião: +5 d');
-    expect(textoSeloOcasiao(0)).toBe('Ocasião: +0 d');
-    expect(ariaSeloOcasiao(1)).toBe('Ocasião no lead time: 1 dia a mais (estimativa, só informa)');
-    expect(ariaSeloOcasiao(5)).toBe('Ocasião no lead time: 5 dias a mais (estimativa, só informa)');
-    expect(ariaSeloOcasiao(0)).toBe('Ocasião no lead time: 0 dias a mais (estimativa, só informa)');
+    expect(textoSeloOcasiao(5)).toBe('Evento estrangeiro: +5 d');
+    expect(textoSeloOcasiao(0)).toBe('Evento estrangeiro: +0 d');
+    expect(ariaSeloOcasiao(1)).toBe('Evento estrangeiro no lead time: 1 dia a mais (estimativa, só informa)');
+    expect(ariaSeloOcasiao(5)).toBe('Evento estrangeiro no lead time: 5 dias a mais (estimativa, só informa)');
+    expect(ariaSeloOcasiao(0)).toBe('Evento estrangeiro no lead time: 0 dias a mais (estimativa, só informa)');
   });
 
   it('ocasiao na lista, com o rotulo de cada etapa', () => {
@@ -58,36 +58,45 @@ describe('textos das ocasioes no relatorio de compras', () => {
   });
 
   it('avisos, apoio e paragrafo', () => {
-    expect(AVISO_ANTES_DE_HOJE).toBe('A ocasião antecipa a data-limite para antes de hoje.');
+    expect(AVISO_ANTES_DE_HOJE).toBe('O evento estrangeiro antecipa a data-limite para antes de hoje.');
     expect(AVISO_COMPONENTES_AUSENTES).toBe(
-      'Etapas da fonte não cadastradas (ou somam mais que o lead time): cada ocasião foi comparada com o lead time inteiro.',
+      'Etapas da fonte não cadastradas (ou somam mais que o lead time): cada evento foi comparado com o lead time inteiro.',
     );
     expect(NOTA_OSCILOU).toBe('A estimativa não estabilizou: vale o maior acréscimo.');
-    expect(TEXTO_OCASIOES_INDISPONIVEIS).toBe('Ocasiões do lead time indisponíveis agora: o relatório saiu sem elas.');
+    expect(TEXTO_OCASIOES_INDISPONIVEIS).toBe('Eventos estrangeiros do lead time indisponíveis agora: o relatório saiu sem eles.');
     expect(APOIO_OCASIOES).toContain('Estimativa; só informa (não muda data-limite, urgência nem quantidades).');
-    expect(PARAGRAFO_OCASIOES).toContain('a folga da fonte fica no fim e não cruza ocasiões.');
-    expect(PARAGRAFO_OCASIOES).toContain('As ocasiões vêm do cadastro atual (não ficam congeladas na quinzena).');
+    expect(PARAGRAFO_OCASIOES).toContain('a folga da fonte fica no fim e não cruza eventos.');
+    expect(PARAGRAFO_OCASIOES).toContain('Os eventos vêm do cadastro atual (não ficam congelados na quinzena).');
+    // Decisao do Lucas: alcance regional estrito e soma por cima do lead time cadastrado.
+    const alcance = 'Cada evento vale só para os países ou fontes escolhidos; eventos de regiões diferentes não se somam entre si.';
+    const soma = 'O evento soma por cima do lead time cadastrado: informe só os dias a mais.';
+    for (const texto of [PARAGRAFO_OCASIOES, APOIO_OCASIOES]) {
+      expect(texto).toContain(alcance);
+      expect(texto).toContain(soma);
+    }
+    expect(PARAGRAFO_OCASIOES.startsWith('Eventos estrangeiros (feriados, greves, fechamentos)')).toBe(true);
+    expect(APOIO_OCASIOES.startsWith('Eventos estrangeiros: dias a MAIS')).toBe(true);
   });
 
   it('resumo: 0, 1 e n', () => {
-    expect(resumoOcasioes(0)).toBe('Nenhum item cruza as ocasiões cadastradas');
-    expect(resumoOcasioes(1)).toBe('1 item com ocasião no lead time (estimativa)');
-    expect(resumoOcasioes(7)).toBe('7 itens com ocasião no lead time (estimativa)');
+    expect(resumoOcasioes(0)).toBe('Nenhum item cruza os eventos estrangeiros cadastrados');
+    expect(resumoOcasioes(1)).toBe('1 item com evento estrangeiro no lead time (estimativa)');
+    expect(resumoOcasioes(7)).toBe('7 itens com evento estrangeiro no lead time (estimativa)');
     expect(resumoOcasioesAntesDeHoje(1)).toBe('1 item com a data-limite ajustada já vencida');
     expect(resumoOcasioesAntesDeHoje(3)).toBe('3 itens com a data-limite ajustada já vencida');
-    expect(resumoSemFonteCadastrada(1)).toBe('1 item com fonte fora do cadastro de lead time: ocasiões não avaliadas');
-    expect(resumoSemFonteCadastrada(2)).toBe('2 itens com fonte fora do cadastro de lead time: ocasiões não avaliadas');
-    expect(resumoFontesSemPais(1)).toBe('1 fonte sem país: ocasiões por país não as alcançam');
-    expect(resumoFontesSemPais(4)).toBe('4 fontes sem país: ocasiões por país não as alcançam');
+    expect(resumoSemFonteCadastrada(1)).toBe('1 item com fonte fora do cadastro de lead time: eventos não avaliados');
+    expect(resumoSemFonteCadastrada(2)).toBe('2 itens com fonte fora do cadastro de lead time: eventos não avaliados');
+    expect(resumoFontesSemPais(1)).toBe('1 fonte sem país: eventos por país não as alcançam');
+    expect(resumoFontesSemPais(4)).toBe('4 fontes sem país: eventos por país não as alcançam');
   });
 
   it('cabecalho do grupo', () => {
     expect(textoOcasioesDoGrupo({ ocasioes: [{ nome: 'OCASIAO 001' }], itensAfetados: 1 })).toBe(
-      'Ocasiões: OCASIAO 001 · 1 item',
+      'Evento estrangeiro: OCASIAO 001 · 1 item',
     );
     expect(
       textoOcasioesDoGrupo({ ocasioes: [{ nome: 'OCASIAO 001' }, { nome: 'OCASIAO 002' }], itensAfetados: 3 }),
-    ).toBe('Ocasiões: OCASIAO 001, OCASIAO 002 · 3 itens');
+    ).toBe('Eventos estrangeiros: OCASIAO 001, OCASIAO 002 · 3 itens');
   });
 
   it('memoria de calculo: data em dd/mm/aaaa, dia no singular e no plural', () => {
@@ -97,9 +106,9 @@ describe('textos das ocasioes no relatorio de compras', () => {
         extraDias: 5,
         ocasioes: [{ nome: 'OCASIAO 001' }, { nome: 'OCASIAO 002' }],
       }),
-    ).toBe('Com ocasiões: chega em 24/11/2026 (+5 dias: OCASIAO 001, OCASIAO 002)');
+    ).toBe('Com eventos estrangeiros: chega em 24/11/2026 (+5 dias: OCASIAO 001, OCASIAO 002)');
     expect(
       textoMemoriaOcasioes({ chegadaEstimada: '2026-11-20', extraDias: 1, ocasioes: [{ nome: 'OCASIAO 001' }] }),
-    ).toBe('Com ocasiões: chega em 20/11/2026 (+1 dia: OCASIAO 001)');
+    ).toBe('Com evento estrangeiro: chega em 20/11/2026 (+1 dia: OCASIAO 001)');
   });
 });

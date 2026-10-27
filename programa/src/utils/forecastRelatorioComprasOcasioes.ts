@@ -103,7 +103,7 @@ export interface OcasioesDaPoHoje {
 // Mesma regra de normalizeSourceName (forecastWorkbook.ts:27); nao importar: aquele arquivo puxa exceljs.
 export const chaveDaFonte = (fonte: string): string => fonte.trim().toUpperCase();
 
-const nomeDaOcasiao = (ctx: ContextoOcasioes, id: number): string => ctx.nomes.get(id) ?? `Ocasião ${id}`;
+const nomeDaOcasiao = (ctx: ContextoOcasioes, id: number): string => ctx.nomes.get(id) ?? `Evento estrangeiro ${id}`;
 
 const paraOcasiaoDoItem = (ctx: ContextoOcasioes, o: OcasiaoAplicada): OcasiaoDoItem => ({
   id: o.id,

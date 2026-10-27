@@ -78,12 +78,12 @@ beforeEach(() => {
 });
 
 describe('ForecastMemoria com ocasioes (PR 3)', () => {
-  it('com ocasioesHoje: a frase "Com ocasiões: chega em ..." e a etiqueta "estimativa" abaixo da chegada normal', () => {
+  it('com ocasioesHoje: a frase "Com eventos estrangeiros: chega em ..." e a etiqueta "estimativa" abaixo da chegada normal', () => {
     const { container } = montar(linha({ ocasioesHoje: OCASIOES_HOJE }));
     expect(screen.getByText('Se a PO sair hoje, chega em')).toBeTruthy();
     expect(screen.getByText('19/11/2026')).toBeTruthy();
     const frase = container.querySelector('.fcoc-memoria') as HTMLElement;
-    expect(frase.textContent).toBe('Com ocasiões: chega em 24/11/2026 (+5 dias: OCASIAO 001, OCASIAO 002) estimativa');
+    expect(frase.textContent).toBe('Com eventos estrangeiros: chega em 24/11/2026 (+5 dias: OCASIAO 001, OCASIAO 002) estimativa');
     expect(frase.querySelector('.fcoc-estimativa')?.textContent).toBe('estimativa');
     // Entre a data normal e o texto de risco.
     const medio = container.querySelector('.fc-lado__medio') as HTMLElement;
@@ -94,7 +94,7 @@ describe('ForecastMemoria com ocasioes (PR 3)', () => {
   it('sem ocasioesHoje: nada de ocasiao na memoria', () => {
     const { container } = montar(linha());
     expect(container.querySelector('[class*="fcoc-"]')).toBeNull();
-    expect(screen.queryByText(/Com ocasiões/)).toBeNull();
+    expect(screen.queryByText(/Com eventos? estrangeiros?/)).toBeNull();
   });
 
   it('o texto de risco e o mesmo com e sem as ocasioes (a frase e so apoio)', () => {
@@ -111,7 +111,7 @@ describe('ForecastMemoria com ocasioes (PR 3)', () => {
     montar(linha({ ocasioesHoje: { ...OCASIOES_HOJE, componentesAusentes: true } }));
     expect(
       screen.getByText(
-        'Etapas da fonte não cadastradas (ou somam mais que o lead time): cada ocasião foi comparada com o lead time inteiro.',
+        'Etapas da fonte não cadastradas (ou somam mais que o lead time): cada evento foi comparado com o lead time inteiro.',
       ),
     ).toBeTruthy();
   });

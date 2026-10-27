@@ -291,7 +291,7 @@ export class ForecastSnapshotService {
     // Cadastro ATUAL lido UMA vez por requisicao; null = nenhuma ocasiao ativa (saida igual a de antes).
     const ocasioes = await ForecastSnapshotService.comFallbackDeOcasioes<OcasioesDoCalculo | null>(
       id,
-      'Ocasioes do lead time indisponiveis; relatorio sem o bloco.',
+      'Eventos estrangeiros do lead time indisponiveis; relatorio sem o bloco.',
       () => ForecastOcasioesService.contextoDoCalculo(produtos.map((p) => p.fonte)),
       () => ({ indisponivel: true }),
     );
@@ -300,7 +300,7 @@ export class ForecastSnapshotService {
       comMemoria && ocasioes && !('indisponivel' in ocasioes)
         ? await ForecastSnapshotService.comFallbackDeOcasioes(
             id,
-            'Ocasioes da memoria de calculo indisponiveis; detalhe sem o bloco.',
+            'Eventos estrangeiros da memoria de calculo indisponiveis; detalhe sem o bloco.',
             () => ocasioesDaPoHojePorLinha(calculadas.map((l) => ({ linha: l.linha, fonte: produtoPorLinha.get(l.linha)?.fonte ?? '', AQ: l.AQ })), hojeKey, ocasioes),
             () => new Map<number, OcasioesDaPoHoje>(),
           )
@@ -405,7 +405,7 @@ export class ForecastSnapshotService {
     return ocasioes
       ? ForecastSnapshotService.comFallbackDeOcasioes(
           id,
-          'Ocasioes do lead time indisponiveis; relatorio sem o bloco.',
+          'Eventos estrangeiros do lead time indisponiveis; relatorio sem o bloco.',
           () => anexarOcasioesAoRelatorio(relatorio, ocasioes),
           () => anexarOcasioesAoRelatorio(relatorio, { indisponivel: true }),
         )

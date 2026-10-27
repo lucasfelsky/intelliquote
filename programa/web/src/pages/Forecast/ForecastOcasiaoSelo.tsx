@@ -49,7 +49,7 @@ export function OcasioesDoItemDetalhe({ item }: { item: ForecastItemRelatorio })
   return (
     <div className="fcoc-detalhe">
       <p className="fcoc-detalhe__titulo">
-        <strong>Ocasiões no lead time</strong> <span className="fcoc-estimativa">{ROTULO_ESTIMATIVA}</span>
+        <strong>Eventos estrangeiros no lead time</strong> <span className="fcoc-estimativa">{ROTULO_ESTIMATIVA}</span>
       </p>
       <dl className="fcoc-detalhe__lista">
         <div>

@@ -264,7 +264,7 @@ describe('Forecast routes - ocasioes no relatorio de compras e na memoria (PR 3)
     const xlsx = await request(app).get(`${PATH}/relatorio-compras/xlsx${QUERY}`).set('Cookie', cookies);
     expect(xlsx.status).toBe(200);
     const textos = textosDaAba((await xlsxDe(xlsx)).getWorksheet('Relatório de compras')!);
-    expect(textos).toContain('Ocasiões do lead time indisponíveis agora: o relatório saiu sem elas.');
+    expect(textos).toContain('Eventos estrangeiros do lead time indisponíveis agora: o relatório saiu sem eles.');
     expect(textos).not.toContain(COLUNAS_OCASIOES_XLSX[0]);
 
     expect(warn).toHaveBeenCalledTimes(3);
@@ -300,7 +300,7 @@ describe('Forecast routes - ocasioes no relatorio de compras e na memoria (PR 3)
     const xlsx = await request(app).get(`${PATH}/relatorio-compras/xlsx${QUERY}`).set('Cookie', cookies);
     expect(xlsx.status).toBe(200);
     const textos = textosDaAba((await xlsxDe(xlsx)).getWorksheet('Relatório de compras')!);
-    expect(textos).toContain('Ocasiões do lead time indisponíveis agora: o relatório saiu sem elas.');
+    expect(textos).toContain('Eventos estrangeiros do lead time indisponíveis agora: o relatório saiu sem eles.');
     expect(textos).not.toContain(COLUNAS_OCASIOES_XLSX[0]);
 
     expect(warn).toHaveBeenCalledTimes(3);
