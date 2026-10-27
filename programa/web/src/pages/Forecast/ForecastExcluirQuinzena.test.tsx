@@ -368,9 +368,9 @@ describe('Forecast - excluir quinzena', () => {
     expect(document.querySelector('dialog[open]')).toBeNull();
     expect(document.activeElement).toBe(seletor);
     expect(get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots').length).toBeGreaterThan(listasAntes);
-    // Nenhum GET do que foi excluido depois da exclusao (daria 404): so o detalhe inicial da 7.
+    // Nenhum GET do que foi excluido depois da exclusao (daria 404): so o detalhe e as decisoes iniciais da 7.
     const da7 = get.mock.calls.map((c) => String(c[0])).filter((p) => p.includes('/snapshots/7'));
-    expect(da7).toEqual(['/v1/forecast/snapshots/7']);
+    expect(da7).toEqual(['/v1/forecast/snapshots/7', '/v1/forecast/snapshots/7/decisoes']);
   });
 
   it('excluir a unica quinzena mostra o estado vazio e foca Importar quinzena', async () => {

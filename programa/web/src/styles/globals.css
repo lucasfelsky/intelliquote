@@ -3527,3 +3527,14 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 700px), (pointer: coarse) {
   .fcsv-chave { min-height: 44px; }
 }
+/* Forecast: Qtd. decidida na coluna ANALISE FORECAST do painel. */
+.fcad-decidida::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 999px; vertical-align: middle; background: var(--ink-faint); }
+.fcad-decidida--nao::before { background: var(--ink-faint); }
+.fcad-decidida--cotando::before { background: var(--tone-warning-border-strong); }
+.fcad-decidida--confirmado::before { background: var(--star-on); }
+.fcad-decidida--po::before { background: var(--primary); }
+.fcad-decidida--preco::before { background: var(--info); }
+.fcad-aviso { display: flex; gap: 10px; align-items: center; margin: 6px 12px; font-size: 12px; color: var(--ink-soft); }
+/* Forecast: exportar planilha MACRO pelo cabecalho do painel. */
+.fcme-msg { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcme-msg--erro { color: var(--danger); }
