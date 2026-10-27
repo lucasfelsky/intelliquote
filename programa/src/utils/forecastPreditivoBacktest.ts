@@ -74,7 +74,7 @@ export function validarOpcoesBacktest(o: OpcoesBacktest): string[] {
   return erros;
 }
 
-interface Obs {
+export interface Obs {
   h1?: Erro;
   h3?: Erro;
   lt?: Erro;
@@ -89,7 +89,7 @@ type Resultados = Map<MetodoId, (Obs | null)[]>; // por par; null = metodo nao d
 
 const porId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-function observar(s: SerieNormalizada, i: number, origem: AnoMes, r: Extract<ResultadoPrevisao, { ok: true }>, o: OpcoesBacktest): Obs {
+export function observar(s: SerieNormalizada, i: number, origem: AnoMes, r: Extract<ResultadoPrevisao, { ok: true }>, o: OpcoesBacktest): Obs {
   const real = (h: number): number | null => (i + h < s.valores.length && !s.mascara[i + h] ? s.valores[i + h] : null);
   const erro = (h: number, x: number, prev: number): Erro => ({ serieId: s.id, origem, h, real: x, previsto: prev });
   const obs: Obs = {};

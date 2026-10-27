@@ -46,7 +46,7 @@ function calcularMascara(valores: number[], atipico: boolean[], ruptura: boolean
 }
 
 // Degrau de nivel (ex.: troca de unidade): medias das duas metades dos meses validos, razao maior/menor > degrauRazao.
-function temDegrau(valores: number[], mascara: boolean[]): boolean {
+export function temDegrau(valores: number[], mascara: boolean[]): boolean {
   const validos = valores.filter((_, i) => !mascara[i]);
   if (validos.length < 4) return false;
   const h = Math.floor(validos.length / 2);
