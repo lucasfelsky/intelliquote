@@ -167,3 +167,24 @@ export const FORECAST_PRAZO_REAL_JANELA_DIAS = 365;
 export const FORECAST_PRAZO_REAL_MAX_DIAS = 365;
 // Abaixo desse numero de chegadas a media e marcada como "poucas chegadas".
 export const FORECAST_PRAZO_REAL_MIN_CHEGADAS = 3;
+
+// --- Ocasioes que afetam o lead time (PR 1) ---
+// Vocabularios aqui (nao no validator) porque a util pura forecastOcasioes.ts nao importa zod.
+export const FORECAST_OCASIAO_ESCOPOS = ['global', 'pais', 'fonte'] as const;
+export const FORECAST_OCASIAO_RECORRENCIAS = ['nenhuma', 'anual'] as const;
+export const FORECAST_OCASIAO_ETAPAS = ['total', 'prontidao', 'embarque', 'transito', 'liberacao'] as const;
+// Etapas da linha do tempo, na ordem em que acontecem (a ocasiao de uma etapa empurra as seguintes).
+export const FORECAST_OCASIAO_ETAPAS_SEQUENCIAIS = ['prontidao', 'embarque', 'transito', 'liberacao'] as const;
+export const FORECAST_OCASIAO_EFEITOS = ['dias', 'percentual'] as const;
+export const FORECAST_OCASIAO_NOME_MAX = 120;
+export const FORECAST_OCASIAO_OBS_MAX = 300;
+// Duracao maxima (inclusiva) do intervalo de uma ocorrencia.
+export const FORECAST_OCASIAO_DURACAO_MAX_DIAS = 120;
+export const FORECAST_OCASIAO_DIAS_MAX = 120;
+export const FORECAST_OCASIAO_PERCENTUAL_MIN = 1;
+export const FORECAST_OCASIAO_PERCENTUAL_MAX = 300;
+// Avaliacoes do ponto fixo da data de emissao (a ocasiao muda a data, que muda as ocasioes que cruzam).
+export const FORECAST_OCASIAO_PONTO_FIXO_MAX_ITERACOES = 3;
+export const FORECAST_OCASIOES_LISTA_MAX = 500;
+export const FORECAST_OCASIOES_JANELA_MAX_DIAS = 731;
+export const FORECAST_COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
