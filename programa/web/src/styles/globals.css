@@ -3527,3 +3527,27 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 700px), (pointer: coarse) {
   .fcsv-chave { min-height: 44px; }
 }
+/* Forecast: ocasioes no lead time no relatorio e na memoria (informativo). Somente tokens do tema. */
+.fcoc-selo { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; }
+.fcoc-selo__icone { font-size: 12px; line-height: 1; }
+.fcr-tabela .fcoc-linha > td { padding: 0 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.fcr-scroll:has(.fcoc-detalhe) { container-type: inline-size; }
+.fcoc-detalhe { position: sticky; left: 0; box-sizing: border-box; width: min(100%, calc(100vw - 56px)); width: min(100%, calc(100cqw - 20px)); padding: 8px 12px; border-left: 3px solid var(--info); border-radius: var(--radius-sm); background: var(--surface-alt); }
+.fcoc-detalhe__titulo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 13px; color: var(--ink); }
+.fcoc-detalhe__lista { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 16px; margin: 0 0 6px; }
+.fcoc-detalhe__lista dt { font-size: 12px; color: var(--ink-soft); }
+.fcoc-detalhe__lista dd { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); }
+.fcoc-detalhe__ocasioes { margin: 0 0 6px; padding-left: 18px; font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.fcoc-estimativa { display: inline-block; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 11px; line-height: 16px; color: var(--ink-soft); }
+.fcoc-aviso { margin: 4px 0 0; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--tone-warning-bg); color: var(--tone-warning-fg-strong); font-size: 12px; font-weight: 700; }
+.fcoc-nota { display: block; margin: 4px 0 0; font-size: 12px; color: var(--ink-soft); }
+.fcoc-grupo { display: inline-flex; align-items: center; gap: 4px; }
+.fcoc-memoria { display: block; margin: 4px 0; font-size: 13px; color: var(--ink); }
+.fcoc-apoio { color: var(--ink-soft); }
+.fcoc-resumo { color: var(--ink); }
+@media (max-width: 700px) {
+  .fcoc-detalhe__lista { grid-template-columns: 1fr; }
+}
+@media print {
+  .fcoc-detalhe { position: static; width: auto; }
+}

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
 import {
@@ -17,6 +18,7 @@ import {
   type EmbalagemCadastrada,
   type RelatorioCompras,
 } from '../utils/forecastRelatorioCompras';
+import { ocasioesDaPoHoje, type OcasioesDoCalculo } from '../utils/forecastRelatorioComprasOcasioes';
 import {
   gerarXlsxRelatorioCompras,
   nomeArquivoRelatorioCompras,
@@ -28,6 +30,7 @@ import { AuditLogService } from './AuditLogService';
 import { ForecastDemandaComercialService } from './ForecastDemandaComercialService';
 import { ForecastGrupoEquivalenciaService } from './ForecastGrupoEquivalenciaService';
 import { ForecastMesesAtipicosService } from './ForecastMesesAtipicosService';
+import { ForecastOcasioesService } from './ForecastOcasioesService';
 import { CADASTRO_TX_OPTIONS, isCadastroOcupado } from './ForecastProductCadastroService';
 import { ForecastProductService } from './ForecastProductService';
 import { ForecastSobDemandaService } from './ForecastSobDemandaService';
@@ -255,8 +258,27 @@ export class ForecastSnapshotService {
     return { marcas, mesesForaDaMedia };
   }
 
+  // Ocasioes do lead time (PR 3), cadastro ATUAL, lidas UMA vez por requisicao; null = nenhuma ocasiao ativa (saida igual a
+  // de antes). Falha na leitura nao derruba nada: sai sem o bloco e avisa. O log leva so o id da quinzena e o tipo do erro.
+  private static async ocasioesDoCalculo(snapshotId: number, nomesDeFonte: string[]): Promise<OcasioesDoCalculo | null> {
+    try {
+      return await ForecastOcasioesService.contextoDoCalculo(nomesDeFonte);
+    } catch (error) {
+      logger.warn(
+        { snapshotId, erro: error instanceof Error ? error.name : 'desconhecido' },
+        'Ocasioes do lead time indisponiveis; relatorio sem o bloco.',
+      );
+      return { indisponivel: true };
+    }
+  }
+
   // Quinzena calculada pelo motor (+ conferencia com o Excel quando a origem e a planilha).
   static async getCalculated(id: number, hoje?: string) {
+    return (await ForecastSnapshotService.calcularComOcasioes(id, hoje)).calc;
+  }
+
+  // Corpo de getCalculated + o contexto das ocasioes (carregado depois de carregarQuinzena: o 404 segue sem consulta extra).
+  private static async calcularComOcasioes(id: number, hoje?: string) {
     const { snapshot, months, produtos, files, quinzena, half } = await ForecastSnapshotService.carregarQuinzena(id);
 
     const hojeKey = hoje ?? todayKeyInSaoPaulo(new Date());
@@ -268,8 +290,12 @@ export class ForecastSnapshotService {
     const gruposDosProdutos = await ForecastGrupoEquivalenciaService.gruposDosProdutos(productIds);
     const { marcas, mesesForaDaMedia } = await ForecastSnapshotService.marcasDaQuinzena(produtos, quinzena.dataBase);
     const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half, mesesForaDaMedia });
+    const ocasioes = await ForecastSnapshotService.ocasioesDoCalculo(
+      id,
+      produtos.map((p) => p.fonte),
+    );
 
-    return {
+    const calc = {
       id: snapshot.id,
       label: snapshot.label,
       baseDate: quinzena.dataBase,
@@ -281,6 +307,11 @@ export class ForecastSnapshotService {
       createdAt: snapshot.createdAt,
       linhas: calculadas.map((linha) => {
         const produto = produtoPorLinha.get(linha.linha);
+        // Memoria de calculo: ocasioes da PO que sai hoje (so informa); sem bloco o objeto e o de antes.
+        const ocasioesHoje =
+          ocasioes && !('indisponivel' in ocasioes)
+            ? ocasioesDaPoHoje({ fonte: produto?.fonte ?? '', AQ: linha.AQ }, hojeKey, ocasioes)
+            : null;
         return {
           ...linha,
           n: produto?.n ?? null,
@@ -305,10 +336,12 @@ export class ForecastSnapshotService {
           // Marcas da janela desta quinzena (indice 0..5 = J..O, 6 = P); o motivo e o do cadastro. Vazio sem marca.
           mesesForaDaMedia:
             produto?.productId != null ? marcasNaJanela(quinzena.dataBase, marcas.get(produto.productId) ?? []) : [],
+          ...(ocasioesHoje ? { ocasioesHoje } : {}),
         };
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,
     };
+    return { calc, ocasioes };
   }
 
   // Pendentes de cadastro da quinzena: os codigos que o DBCorp trouxe (congelados em `inputs`) comparados com o
@@ -344,7 +377,7 @@ export class ForecastSnapshotService {
   // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada
   // na quinzena; reusa o 404 de getCalculated). Nada aqui escreve em forecastSnapshot.
   static async getRelatorioCompras(id: number, hoje?: string): Promise<RelatorioCompras> {
-    const calc = await ForecastSnapshotService.getCalculated(id, hoje);
+    const { calc, ocasioes } = await ForecastSnapshotService.calcularComOcasioes(id, hoje);
     const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
       calc.linhas.flatMap((l) => l.codigos),
     );
@@ -359,6 +392,7 @@ export class ForecastSnapshotService {
       sobDemanda,
       demandasComerciais,
       grupos: gruposDasLinhas(calc.linhas),
+      ...(ocasioes ? { ocasioes } : {}),
     });
   }
 

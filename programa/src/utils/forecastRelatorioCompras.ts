@@ -47,6 +47,9 @@
 // vezes); grupo coberto (a linha dele nao entraria) manda os membros que entrariam sozinhos para `cobertosPorGrupo`, com o
 // motivo. Meses atipicos (6c): cada membro ja traz a sua media ajustada (a soma e natural). O motor nao e tocado.
 //
+// Ocasioes no lead time (PR 3 das ocasioes): so informa; bloco opcional anexado por forecastRelatorioComprasOcasioes.ts
+// (item, grupo de fonte e relatorio); nenhum campo existente muda.
+//
 // Encaixe de novas fontes de dados: qualquer provedor de entradas (planilha, DBCorp, futuro gateway) so
 // precisa produzir a quinzena normalizada; este modulo consome o resultado do motor. Um provedor de
 // embalagens so precisa devolver `EmbalagemCadastrada[]` (hoje `ForecastProductService.embalagensDosCodigos`,
@@ -66,6 +69,13 @@ import {
 } from './forecastGruposEquivalencia';
 import { somarDias, yearMonthsDaJanela } from './forecastMonths';
 import { palletsDoCadastro } from './forecastPallets';
+import {
+  anexarOcasioesAoRelatorio,
+  type OcasioesDoCalculo,
+  type OcasioesDoGrupo,
+  type OcasioesDoItem,
+  type OcasioesDoRelatorio,
+} from './forecastRelatorioComprasOcasioes';
 import { daysUntil, isValidDateKey } from './supplierDocumentDates';
 
 export interface LinhaParaRelatorio {
@@ -192,6 +202,8 @@ export interface ItemRelatorioCompras {
   diasAteRuptura: number | null;
   /** 0-based na ordem global de urgencia; tela e XLSX ordenam por este numero sem repetir a regra. */
   posicaoUrgencia: number;
+  /** Ocasioes no lead time (PR 3 das ocasioes): so informa; ausente = nenhuma ocasiao cruza o item. */
+  ocasioes?: OcasioesDoItem;
 }
 
 export interface GrupoRelatorioCompras {
@@ -202,6 +214,8 @@ export interface GrupoRelatorioCompras {
   urgenciaMaisAlta: UrgenciaId;
   porUrgencia: Record<UrgenciaId, number>;
   itens: ItemRelatorioCompras[];
+  /** Ocasioes que cruzam os itens do grupo (so informa); ausente = nenhuma. */
+  ocasioes?: OcasioesDoGrupo;
 }
 
 export type MotivoSemConsumo = 'programacao' | 'estoque';
@@ -321,6 +335,8 @@ export interface RelatorioCompras {
   /** PR 6b: grupos formados na quinzena (ordem alfabetica), com o destino de cada um; vazio sem grupos. */
   gruposDeEquivalencia: GrupoNoRelatorio[];
   grupos: GrupoRelatorioCompras[];
+  /** Resumo das ocasioes ativas; ausente = nenhuma ocasiao ativa cadastrada (relatorio igual ao de antes). */
+  ocasioes?: OcasioesDoRelatorio;
 }
 
 export type UrgenciaId = 'sem-estoque' | 'critico' | 'atrasado' | 'no-prazo';
@@ -599,6 +615,8 @@ export function montarRelatorioCompras(
     sobDemanda?: ReadonlyMap<number, { motivo: string | null }>;
     demandasComerciais?: DemandaComercialAberta[];
     grupos?: GrupoDeEquivalencia[];
+    // Ocasioes no lead time (PR 3 das ocasioes): so anexa o bloco informativo; sem a opcao o resultado e o de antes.
+    ocasioes?: OcasioesDoCalculo;
   } = {},
 ): RelatorioCompras {
   const diasCritico = opcoes.diasCritico ?? DIAS_RUPTURA_CRITICA;
@@ -827,7 +845,7 @@ export function montarRelatorioCompras(
     const item = todos.find((i) => i.linha === linha);
     if (item) item.demandaComercialKg = kg;
   }
-  return {
+  const relatorio: RelatorioCompras = {
     quinzena: {
       id: q.id,
       label: q.label,
@@ -860,4 +878,5 @@ export function montarRelatorioCompras(
     gruposDeEquivalencia,
     grupos,
   };
+  return opcoes.ocasioes ? anexarOcasioesAoRelatorio(relatorio, opcoes.ocasioes) : relatorio;
 }

@@ -70,6 +70,53 @@ export interface ForecastLinha {
   /** PR4 (opcionais: backend antigo nao manda): colunas AY (amostra por pacote) e AZ (pedir amostra) congeladas na quinzena; nulo = vazio. */
   qtdAmostra?: string | null;
   solicitarAmostra?: string | null;
+  /** Ocasioes (PR 3; opcional: backend antigo ou sem ocasiao cruzando nao manda): a PO que sai hoje. So informa. */
+  ocasioesHoje?: ForecastOcasioesHoje;
+}
+
+/** Ocasioes no lead time (PR 3 das ocasioes; tudo opcional: backend antigo nao manda; so informa, estimativa). */
+export type ForecastEtapaOcasiao = 'total' | 'prontidao' | 'embarque' | 'transito' | 'liberacao';
+
+export interface ForecastOcasiaoDoItem {
+  id: number;
+  nome: string;
+  etapa: ForecastEtapaOcasiao;
+  dias: number;
+}
+
+export interface ForecastOcasioesDoItem {
+  extraDias: number;
+  leadTimeAjustado: number;
+  dataLimiteAjustada: string;
+  /** A ajustada ja venceu e a normal nao. */
+  antesDeHoje: boolean;
+  emissaoAvaliada: string;
+  chegadaEstimada: string;
+  ocasioes: ForecastOcasiaoDoItem[];
+  componentesAusentes?: true;
+  oscilou?: true;
+}
+
+export interface ForecastOcasioesDoGrupo {
+  itensAfetados: number;
+  ocasioes: Array<{ id: number; nome: string; etapa: ForecastEtapaOcasiao }>;
+  componentesAusentes?: true;
+}
+
+export type ForecastOcasioesDoRelatorio =
+  | {
+      estado: 'ok'; ativas: number; itensAfetados: number; ocasioesQueCruzam: number;
+      antesDeHoje: number; itensSemFonteCadastrada: number; fontesSemPais: number;
+    }
+  | { estado: 'indisponivel' };
+
+/** Memoria de calculo: a PO que sai hoje com as ocasioes (chegadaEstimada = hoje + lead time ajustado). */
+export interface ForecastOcasioesHoje {
+  extraDias: number;
+  leadTimeAjustado: number;
+  chegadaEstimada: string;
+  ocasioes: ForecastOcasiaoDoItem[];
+  componentesAusentes?: true;
 }
 
 /** Mes de venda atipica de um produto dentro da janela da quinzena; `indice`: 0..5 = J..O, 6 = P (mes atual). */
@@ -272,6 +319,8 @@ export interface ForecastItemRelatorio {
   urgencia?: ForecastUrgencia;
   diasAteRuptura?: number | null;
   posicaoUrgencia?: number;
+  /** PR 3 das ocasioes (opcional: backend antigo, ou nenhuma ocasiao cruza o item, nao manda). So informa. */
+  ocasioes?: ForecastOcasioesDoItem;
 }
 
 export interface ForecastGrupoRelatorio {
@@ -282,6 +331,8 @@ export interface ForecastGrupoRelatorio {
   urgenciaMaisAlta?: ForecastUrgencia;
   porUrgencia?: Record<ForecastUrgencia, number>;
   itens: ForecastItemRelatorio[];
+  /** PR 3 das ocasioes (opcional): ocasioes que cruzam os itens do grupo. */
+  ocasioes?: ForecastOcasioesDoGrupo;
 }
 
 /** Item sem consumo, fora da lista de compra, com estoque ou programacao (PR 2D). */
@@ -403,6 +454,8 @@ export interface ForecastRelatorioCompras {
   /** PR 6b (opcional: backend antigo nao manda): grupos formados na quinzena e o destino de cada um. */
   gruposDeEquivalencia?: ForecastGrupoNoRelatorio[];
   grupos: ForecastGrupoRelatorio[];
+  /** PR 3 das ocasioes (opcional): ausente = nenhuma ocasiao ativa cadastrada. */
+  ocasioes?: ForecastOcasioesDoRelatorio;
 }
 
 export async function getForecastRelatorioCompras(id: number): Promise<ForecastRelatorioCompras> {

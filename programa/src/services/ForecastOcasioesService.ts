@@ -15,6 +15,8 @@ import {
   type Ocorrencia,
   type RecorrenciaOcasiao,
 } from '../utils/forecastOcasioes';
+import type { ContextoOcasioes } from '../utils/forecastRelatorioComprasOcasioes';
+import { normalizeSourceName } from '../utils/forecastWorkbook';
 import { HttpError } from '../utils/http';
 import { dateKeyToDbDate, dbDateToKey } from '../utils/supplierDocumentDates';
 import { AuditLogService } from './AuditLogService';
@@ -208,6 +210,42 @@ export class ForecastOcasioesService {
       }
     }
     return dados;
+  }
+
+  // Contexto do relatorio de compras (PR 3): ocasioes ATIVAS + as fontes ATUAIS pelo nome normalizado. Sem try/catch (quem
+  // chama decide a falha); sem `deletedAt` (os dois models nao tem). Sem ocasiao ativa = null apos 1 consulta; com, 2.
+  // Le as FORECAST_OCASIOES_LISTA_MAX primeiras por id.
+  static async contextoDoCalculo(nomesDeFonte: readonly string[]): Promise<ContextoOcasioes | null> {
+    const linhas = await prisma.forecastLeadTimeEvent.findMany({
+      where: { isActive: true },
+      select: {
+        id: true, name: true, scopeType: true, countryCode: true, sourceId: true, startDate: true, endDate: true,
+        recurrence: true, component: true, effectKind: true, effectValue: true, isActive: true,
+      },
+      orderBy: { id: 'asc' },
+      take: FORECAST_OCASIOES_LISTA_MAX,
+    });
+    if (linhas.length === 0) {
+      return null;
+    }
+    const chaves = [...new Set(nomesDeFonte.map(normalizeSourceName).filter((chave) => chave !== ''))];
+    const cadastro =
+      chaves.length === 0
+        ? []
+        : await prisma.forecastSource.findMany({
+            where: { normalizedName: { in: chaves } },
+            select: {
+              normalizedName: true, id: true, countryCode: true, isActive: true,
+              readinessDays: true, shippingDays: true, transitDays: true, clearanceDays: true,
+            },
+          });
+    return {
+      ocasioes: linhas.map(paraOcasiaoDoCalculo),
+      nomes: new Map(linhas.map((linha) => [linha.id, linha.name] as const)),
+      fontes: new Map(
+        cadastro.map(({ normalizedName, isActive, ...resto }) => [normalizedName, { ...resto, ativa: isActive }] as const),
+      ),
+    };
   }
 
   static async create(input: ForecastOcasiaoCreateInput, userId: number | null): Promise<ForecastOcasiaoData> {

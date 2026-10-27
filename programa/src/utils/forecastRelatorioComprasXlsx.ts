@@ -8,6 +8,15 @@ import { COLUNAS_DECISAO_XLSX, LARGURAS_DECISAO_XLSX, TEXTO_QUEBRA_DECISAO_XLSX,
 import type { ItemDemandaComercial } from './forecastDemandaComercial';
 import type { DadosDoGrupo, MembroDoGrupo } from './forecastGruposEquivalencia';
 import { URGENCIAS, itensNaOrdemDeUrgencia } from './forecastRelatorioCompras';
+import {
+  COLUNAS_OCASIOES_XLSX,
+  LARGURAS_OCASIOES_XLSX,
+  celulasDeOcasioes,
+  comColunasDeOcasioes,
+  comParagrafoDeOcasioes,
+  formatarCelulasDeOcasioes,
+  linhasDoResumoDeOcasioes,
+} from './forecastRelatorioComprasOcasioesXlsx';
 import type {
   GrupoNoRelatorio,
   GrupoRelatorioCompras,
@@ -34,6 +43,8 @@ export const ABA_REGRAS = 'Regras';
 // As colunas da tela (+ Urgencia e Dias ate a ruptura); Item / Embalagem / Data-limite desdobradas em colunas filtraveis.
 // Colunas novas entram no fim, mas a Observacao (PR 5B) continua a ULTIMA: 'Meses fora da média' (PR 6c) e 'Grupo de
 // equivalência' (PR 6b: os membros, um por linha, so na linha do grupo) e as 3 colunas da decisao de compra (PR3) entram antes dela.
+// Excecao: as 3 colunas das ocasioes (COLUNAS_OCASIOES_XLSX) so existem com ocasiao ativa e entram DEPOIS da Observacao, para
+// nenhuma coluna existente mudar de posicao entre arquivos com e sem ocasiao.
 export const COLUNAS_RELATORIO_XLSX = [
   'Item',
   'Urgência',
@@ -718,7 +729,7 @@ function formatarLinhaDeItem(row: exceljs.Row, item: ItemRelatorioCompras, colun
   }
 }
 
-function adicionarGrupo(ws: exceljs.Worksheet, g: GrupoRelatorioCompras, diasCritico: number): void {
+function adicionarGrupo(ws: exceljs.Worksheet, g: GrupoRelatorioCompras, diasCritico: number, comOcasioes = false): void {
   const total = COLUNAS_RELATORIO_XLSX.length;
 
   const faixa = ws.addRow([tituloDoGrupo(g, diasCritico)]);
@@ -726,22 +737,24 @@ function adicionarGrupo(ws: exceljs.Worksheet, g: GrupoRelatorioCompras, diasCri
   faixa.getCell(1).font = { bold: true };
   faixa.getCell(1).fill = preencher(COR_FAIXA);
 
-  estilizarCabecalho(ws.addRow([...COLUNAS_RELATORIO_XLSX]));
+  estilizarCabecalho(ws.addRow([...COLUNAS_RELATORIO_XLSX, ...(comOcasioes ? COLUNAS_OCASIOES_XLSX : [])]));
 
   for (const item of g.itens) {
-    const row = ws.addRow(celulasDoItem(item, diasCritico));
+    const row = ws.addRow([...celulasDoItem(item, diasCritico), ...(comOcasioes ? celulasDeOcasioes(item) : [])]);
     formatarLinhaDeItem(row, item, COLUNAS_RELATORIO_XLSX);
+    if (comOcasioes) formatarCelulasDeOcasioes(row, item, total + 1);
   }
 
   ws.addRow([]);
 }
 
-function adicionarAbaPorUrgencia(workbook: exceljs.Workbook, r: RelatorioCompras): void {
+function adicionarAbaPorUrgencia(workbook: exceljs.Workbook, r: RelatorioCompras, comOcasioes = false): void {
   const ws = workbook.addWorksheet(ABA_POR_URGENCIA);
-  ws.columns = LARGURAS_POR_URGENCIA.map((width) => ({ width }));
+  const colunasNovas = comOcasioes ? COLUNAS_OCASIOES_XLSX.length : 0;
+  ws.columns = [...LARGURAS_POR_URGENCIA, ...(comOcasioes ? LARGURAS_OCASIOES_XLSX : [])].map((width) => ({ width }));
   ws.pageSetup = { ...PAGINA_PAISAGEM };
-  estilizarCabecalho(ws.addRow([...COLUNAS_POR_URGENCIA_XLSX]));
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUNAS_POR_URGENCIA_XLSX.length } };
+  estilizarCabecalho(ws.addRow([...COLUNAS_POR_URGENCIA_XLSX, ...(comOcasioes ? COLUNAS_OCASIOES_XLSX : [])]));
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: COLUNAS_POR_URGENCIA_XLSX.length + colunasNovas } };
   ws.views = [{ state: 'frozen', ySplit: 1 }];
 
   const lista = itensNaOrdemDeUrgencia(r);
@@ -751,8 +764,9 @@ function adicionarAbaPorUrgencia(workbook: exceljs.Workbook, r: RelatorioCompras
   }
   for (const { item, fonte } of lista) {
     const c = celulasDoItem(item, r.urgencia.diasCritico);
-    const row = ws.addRow([c[0], c[1], fonte || 'Sem fonte', ...c.slice(2)]);
+    const row = ws.addRow([c[0], c[1], fonte || 'Sem fonte', ...c.slice(2), ...(comOcasioes ? celulasDeOcasioes(item) : [])]);
     formatarLinhaDeItem(row, item, COLUNAS_POR_URGENCIA_XLSX);
+    if (comOcasioes) formatarCelulasDeOcasioes(row, item, COLUNAS_POR_URGENCIA_XLSX.length + 1);
   }
 }
 
@@ -862,10 +876,12 @@ function adicionarAbaGrupos(workbook: exceljs.Workbook, r: RelatorioCompras): vo
 export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Buffer> {
   const workbook = new exceljs.Workbook();
   const ws = workbook.addWorksheet(ABA_RELATORIO);
-  ws.columns = LARGURAS.map((width) => ({ width }));
+  // Ocasioes (PR 3): so com ocasiao ativa; 3 colunas depois da Observacao, linhas no resumo e paragrafo nas Regras.
+  const comOcasioes = comColunasDeOcasioes(r);
+  ws.columns = [...LARGURAS, ...(comOcasioes ? LARGURAS_OCASIOES_XLSX : [])].map((width) => ({ width }));
   ws.pageSetup = { ...PAGINA_PAISAGEM };
 
-  linhasDoResumo(r).forEach((texto, i) => {
+  [...linhasDoResumo(r), ...linhasDoResumoDeOcasioes(r)].forEach((texto, i) => {
     const row = ws.addRow([texto]);
     if (i === 0) {
       row.getCell(COL_ITEM).font = { bold: true, size: 14 };
@@ -877,11 +893,11 @@ export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Bu
     ws.addRow(['Nenhum item com demanda ≤ 0 nesta quinzena.']);
   } else {
     for (const g of r.grupos) {
-      adicionarGrupo(ws, g, r.urgencia.diasCritico);
+      adicionarGrupo(ws, g, r.urgencia.diasCritico, comOcasioes);
     }
   }
 
-  adicionarAbaPorUrgencia(workbook, r);
+  adicionarAbaPorUrgencia(workbook, r, comOcasioes);
   adicionarAbaSemConsumo(workbook, r);
   const comSobDemanda = r.sobDemanda.itens.length > 0;
   if (comSobDemanda) {
@@ -899,12 +915,9 @@ export async function gerarXlsxRelatorioCompras(r: RelatorioCompras): Promise<Bu
 
   const regras = workbook.addWorksheet(ABA_REGRAS);
   regras.columns = [{ width: 120 }];
-  paragrafosDeRegras(
-    r.urgencia.diasCritico,
-    comSobDemanda,
-    contarComMesesForaDaMedia(r) > 0,
-    comDemandaComercial,
-    comGrupos,
+  comParagrafoDeOcasioes(
+    paragrafosDeRegras(r.urgencia.diasCritico, comSobDemanda, contarComMesesForaDaMedia(r) > 0, comDemandaComercial, comGrupos),
+    r,
   ).forEach((texto) => {
     const row = regras.addRow([texto]);
     row.getCell(1).alignment = { vertical: 'top', wrapText: true };

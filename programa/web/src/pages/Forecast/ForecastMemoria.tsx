@@ -9,6 +9,7 @@ import {
 import ForecastDetalheItem from './ForecastDetalheItem';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastMesesAtipicosModal from './ForecastMesesAtipicosModal';
+import { OcasioesNaMemoria } from './ForecastOcasiaoSelo';
 import { dataBr, mesAbrevDoAnoMes, passosDaMemoria, risco, type TomValor } from './forecastPainel';
 import { textoMotivoSobDemanda, textoSeloDoGrupo } from './forecastRelatorioTextos';
 
@@ -209,6 +210,7 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
         </div>
         <span className="fc-lado__fraco">Se a PO sair hoje, chega em</span>
         <div className="fc-lado__medio">{dataBr(linha.AP)}</div>
+        <OcasioesNaMemoria ocasioes={linha.ocasioesHoje} />
         <div className={`fc-risco fc-risco--${situacao.tom}`} role="status">
           {situacao.texto}
         </div>
