@@ -216,12 +216,16 @@ describe('POST /commercial-requests/:id/link-quote', () => {
     expect(response.status).toBe(200);
     expect(response.body.id).toBe(9);
     expect(response.body.items[0].quoteRequestItemId).toBe(501);
-    expect(txMock.$queryRaw).toHaveBeenCalledTimes(1);
+    // 2 locks: cotacao (#104) e, depois, a linha da solicitacao (lockCommercialRequests)
+    expect(txMock.$queryRaw).toHaveBeenCalledTimes(2);
     expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       txMock.commercialRequest.updateMany.mock.invocationCallOrder[0],
     );
     expect(txMock.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
       txMock.quoteRequest.findFirst.mock.invocationCallOrder[0],
+    );
+    expect(txMock.$queryRaw.mock.invocationCallOrder[1]).toBeLessThan(
+      txMock.commercialRequest.findUnique.mock.invocationCallOrder[0],
     );
     expect(txMock.commercialRequest.updateMany.mock.calls[0][0]).toMatchObject({
       where: { id: 9, status: 'pending' },

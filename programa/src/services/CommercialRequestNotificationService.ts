@@ -62,10 +62,12 @@ export class CommercialRequestNotificationService {
           id: true,
           customerName: true,
           notes: true,
+          isDevelopment: true,
           requestedBy: { select: { name: true } },
           items: {
             orderBy: { id: 'asc' },
             select: {
+              proposedName: true,
               quantity: true,
               unit: true,
               targetPrice: true,
@@ -96,7 +98,9 @@ export class CommercialRequestNotificationService {
           const target = hasPrice
             ? ` — alvo ${formatPrice(item.targetPrice)} ${item.targetCurrency ?? ''}`.trimEnd()
             : '';
-          return `${item.catalogItem.commercialName} — ${item.quantity} ${item.unit}${target}`;
+          const name = item.catalogItem?.commercialName ?? item.proposedName ?? '';
+          const newMark = item.proposedName ? ' (item novo — desenvolvimento)' : '';
+          return `${name} — ${item.quantity} ${item.unit}${target}${newMark}`;
         })
         .join('\n');
 
@@ -104,7 +108,9 @@ export class CommercialRequestNotificationService {
       const base = mailerEnv.portalUrl.replace(/\/$/, '');
 
       const rendered = await renderCommercialRequestCreatedFromTemplate({
-        subject: `[IntelliQuote] Nova solicitação do comercial #${request.id} — ${requesterName}`,
+        subject: request.isDevelopment
+          ? `[IntelliQuote] Nova solicitação de desenvolvimento #${request.id} — ${requesterName}`
+          : `[IntelliQuote] Nova solicitação do comercial #${request.id} — ${requesterName}`,
         requesterName,
         requestId: request.id,
         customerName: request.customerName ?? '',

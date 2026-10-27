@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { CommercialRequestController } from '../controllers/CommercialRequestController';
+import { CommercialRequestAttachmentController } from '../controllers/CommercialRequestAttachmentController';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 import { COMEX_ROLES } from '../constants/roles';
 
@@ -53,6 +54,11 @@ commercialRequestRoutes.post(
   CommercialRequestController.linkQuote,
 );
 commercialRequestRoutes.post(
+  '/commercial-requests/:id/items/:itemId/catalog',
+  ...comexAct,
+  CommercialRequestController.linkItemToCatalog,
+);
+commercialRequestRoutes.post(
   '/commercial-requests/:id/reject',
   ...comexAct,
   CommercialRequestController.reject,
@@ -61,6 +67,25 @@ commercialRequestRoutes.post(
   '/commercial-requests/:id/fulfill',
   ...comexAct,
   CommercialRequestController.fulfill,
+);
+
+// Anexos tecnicos (TDS/MSDS) da solicitacao de desenvolvimento. So o comercial dono anexa/remove
+// (a posse e conferida no service: outro comercial recebe 404); COMEX e o dono baixam.
+commercialRequestRoutes.post(
+  '/commercial-requests/:id/attachments',
+  ...comercialOnly,
+  CommercialRequestAttachmentController.upload,
+);
+commercialRequestRoutes.delete(
+  '/commercial-requests/:id/attachments/:attachmentId',
+  ...comercialOnly,
+  CommercialRequestAttachmentController.remove,
+);
+commercialRequestRoutes.get(
+  '/commercial-requests/:id/attachments/:attachmentId/download',
+  requireAuth,
+  allowRoles([...COMEX_ROLES, 'comercial']),
+  CommercialRequestAttachmentController.download,
 );
 
 export { commercialRequestRoutes };

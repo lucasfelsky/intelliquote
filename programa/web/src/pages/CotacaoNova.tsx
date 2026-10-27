@@ -129,13 +129,25 @@ export default function CotacaoNova() {
       );
       return;
     }
+    // Item novo (desenvolvimento) sem catalogo nao vira item de cotacao: a Comex vincula antes.
+    const linkedItems = data.items.flatMap((item) =>
+      item.catalogItemId === null ? [] : [{ ...item, catalogItemId: item.catalogItemId }],
+    );
+    if (linkedItems.length !== data.items.length) {
+      setLinkWarning(
+        'Solicitação #' +
+          data.id +
+          ' tem item novo sem cadastro no catálogo: vincule-o em Solicitações antes de criar a cotação.',
+      );
+      return;
+    }
     setLinkedRequestId(data.id);
     setItems(
-      data.items.map((item) => ({
+      linkedItems.map((item) => ({
         tempId: tempIdCounter++,
         catalogItemId: item.catalogItemId,
         commercialName: item.commercialName,
-        marketName: item.marketName,
+        marketName: item.marketName ?? item.commercialName,
         quantity: item.quantity,
         unit: item.unit,
         notes: '',

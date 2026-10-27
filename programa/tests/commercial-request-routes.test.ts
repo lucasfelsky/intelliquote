@@ -388,6 +388,8 @@ describe('POST /commercial-requests', () => {
       id: 1,
       catalogItemId: 10,
       commercialName: 'Resina X',
+      isNewItem: false,
+      notes: null,
       quantity: 5,
       unit: 'KG',
       targetPrice: null,
@@ -511,10 +513,12 @@ describe('GET /commercial-requests/mine - preco final (PR2)', () => {
     const row = response.body.data[0];
     expect(Object.keys(row).sort()).toEqual(
       [
+        'attachments',
         'createdAt',
         'customerName',
         'fulfillmentNote',
         'id',
+        'isDevelopment',
         'items',
         'notes',
         'quote',
@@ -530,6 +534,8 @@ describe('GET /commercial-requests/mine - preco final (PR2)', () => {
         'commercialName',
         'finalPrice',
         'id',
+        'isNewItem',
+        'notes',
         'quantity',
         'targetCurrency',
         'targetPrice',
