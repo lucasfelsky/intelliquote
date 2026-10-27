@@ -70,6 +70,7 @@ model User {
   createdSupplierDocuments SupplierDocument[]  @relation("SupplierDocumentCreatedBy")
   commercialRequests     CommercialRequest[]   @relation("CommercialRequestRequestedBy")
   commercialRequestStatusChanges CommercialRequest[] @relation("CommercialRequestStatusChangedBy")
+  commercialRequestAttachments CommercialRequestAttachment[] @relation("CommercialRequestAttachmentUploadedBy")
   createdForecastSnapshots ForecastSnapshot[] @relation("ForecastSnapshotCreatedBy")
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
@@ -175,6 +176,7 @@ model QuoteRequest {
   reopenedAt      DateTime?
   purchaseOrderSentAt DateTime?
   listedAt        DateTime                 @default(now()) // chave de ordenacao da lista; muda so no reopen
+  isDevelopment   Boolean                  @default(false) // ligado pelo workflow (solicitacao de desenvolvimento); nunca desligado
   createdById     Int?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
@@ -1050,17 +1052,28 @@ model CommercialRequest {
   requestedBy       User                    @relation("CommercialRequestRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
   statusChangedBy   User?                   @relation("CommercialRequestStatusChangedBy", fields: [statusChangedById], references: [id], onDelete: SetNull)
   quoteRequest      QuoteRequest?           @relation(fields: [quoteRequestId], references: [id], onDelete: SetNull)
+  // Gravado no create (ha item novo sem catalogo); e historico, nunca recalculado.
+  isDevelopment     Boolean                 @default(false)
   items             CommercialRequestItem[]
+  attachments       CommercialRequestAttachment[]
 
   @@index([requestedById, createdAt])
   @@index([status, createdAt])
   @@index([quoteRequestId])
 }
 
+// Item de catalogo (catalogItemId) OU item novo digitado pelo comercial (proposedName, ainda sem
+// catalogo; a Comex vincula antes de cotar). O indice unico PARCIAL
+// (commercialRequestId, proposedNameKey) WHERE proposedNameKey IS NOT NULL e o CHECK
+// "catalogItemId IS NOT NULL OR proposedName IS NOT NULL" vivem so na migration (Prisma nao
+// representa); precedente: SupplierContact_single_primary_per_supplier.
 model CommercialRequestItem {
   id                  Int               @id @default(autoincrement())
   commercialRequestId Int
-  catalogItemId       Int
+  catalogItemId       Int?
+  proposedName        String?
+  proposedNameKey     String?
+  notes               String?
   quantity            Int
   unit                String
   targetPrice         Decimal?          @db.Decimal(12, 2)
@@ -1068,12 +1081,40 @@ model CommercialRequestItem {
   quoteRequestItemId  Int?
   createdAt           DateTime          @default(now())
   commercialRequest   CommercialRequest @relation(fields: [commercialRequestId], references: [id], onDelete: Cascade)
-  catalogItem         CatalogItem       @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+  catalogItem         CatalogItem?      @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
   quoteRequestItem    QuoteRequestItem? @relation(fields: [quoteRequestItemId], references: [id], onDelete: SetNull)
 
   @@unique([commercialRequestId, catalogItemId])
   @@index([catalogItemId])
   @@index([quoteRequestItemId])
+}
+
+// Anexos tecnicos (TDS/MSDS/Outro) de solicitacao de desenvolvimento. Bytes em tabela separada.
+// kind: TDS | MSDS | OUTRO (CHECK so na migration).
+model CommercialRequestAttachment {
+  id                  Int                              @id @default(autoincrement())
+  commercialRequestId Int
+  kind                String
+  fileName            String
+  mimeType            String
+  fileSize            Int
+  sha256              String
+  uploadedById        Int?
+  createdAt           DateTime                         @default(now())
+  commercialRequest   CommercialRequest                @relation(fields: [commercialRequestId], references: [id], onDelete: Cascade)
+  uploadedBy          User?                            @relation("CommercialRequestAttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  file                CommercialRequestAttachmentFile?
+
+  @@unique([commercialRequestId, sha256])
+  @@index([commercialRequestId])
+  @@index([uploadedById])
+}
+
+// Binario em tabela separada: a lista nunca carrega bytea (mesmo padrao de SupplierDocumentFile).
+model CommercialRequestAttachmentFile {
+  attachmentId Int                         @id
+  data         Bytes
+  attachment   CommercialRequestAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
 }
 
 // Forecast de compras (Fase 1, PO.COMP.01 Rev.03). "Fonte" e a chave de lead time da aba LEADTIME

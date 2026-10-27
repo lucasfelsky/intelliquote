@@ -122,6 +122,8 @@
       "AuditLog",
       "CatalogItem",
       "CommercialRequest",
+      "CommercialRequestAttachment",
+      "CommercialRequestAttachmentFile",
       "CommercialRequestItem",
       "CompanyProfile",
       "CreditPartner",
@@ -179,7 +181,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 69
+    "migrations": 70
   },
   "emailTemplates": [
     "commercial_request_created@pt",
