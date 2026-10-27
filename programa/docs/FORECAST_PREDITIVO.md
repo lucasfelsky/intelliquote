@@ -95,9 +95,10 @@ Mudou um valor de config ou de regra: sobe a versao (`PREDITIVO_VERSAO`).
   tres; com 4 a 7, so SES e R (o Holt amortecido pede 8); com menos de 4, `historico-curto`. Os avisos dos componentes
   sao herdados (ex.: `previsao-negativa-zerada`).
 - `preditivo-p1`: escolhe o metodo por regra de protecao, **recalculada so com dados ate a origem** (na serie cortada;
-  nunca pelo aviso `degrau-nivel` da serie inteira, que usa o futuro). Ordem: sem dados ou menos de 8 meses validos ->
-  `curto` (planilha Q); sem venda nos ultimos 6 meses (media 0, inclui serie toda zero) -> `dormente` (planilha Q);
-  degrau de nivel (razao > 20 entre as metades) -> `degrau` (Holt amortecido); senao `padrao` (combinacao). Um alvo sem
+  nunca pelo aviso `degrau-nivel` da serie inteira, que usa o futuro). Ordem (a do codigo, `regraProtecao`): 1 sem dados -> `curto` (planilha Q); 2 media dos ultimos 6 meses = 0 (inclui serie toda
+  zero) -> `dormente` (planilha Q); 3 menos de 8 meses validos -> `curto`; 4 degrau de nivel (razao > 20 entre as metades) ->
+  `degrau` (Holt amortecido); 5 senao `padrao` (combinacao). A regra 2 vem antes da 3: serie com 5 a 7 meses validos e 6 zeros
+  finais cai em `dormente`, nao em `curto`. Um alvo sem
   previsao cai na planilha Q. Parametros em `PREDITIVO_CONFIG_P1.protecao` (`criarPreditivoP1(cfg)` aceita outra).
 
 ### Amostra comum e intervalos
@@ -123,6 +124,11 @@ metade temporal das origens da amostra (k meses: os `floor(k/2)` primeiros e o r
   houver) e `|vies| <= |vies da planilha| + 2 p.p.`. O relatorio mostra sempre as duas variantes: `Falhos teto <x>` e
   `Falhos sem teto` (o criterio 8 usa a mesma variante). Com teto 0,10 os criterios 1-5 sao os da fase 0 (teste).
 - O maximo continua `candidato`: nada e promovido (decisao de sombra e do dono do projeto).
+- Colunas do relatorio (iguais a LEGENDA impressa): `M1`/`M2` = criterios 1-5 que falham em cada metade (`-` = nenhum);
+  `Fallb` = pares em que o metodo nao deu previsao e usou a planilha Q; `Cobert` = cobertura de `[p10, p90]`;
+  `Pinb10`/`Pinb90` = pinball de p10 e p90; `Falhos teto <x>` e `Falhos sem teto` = criterios que falham com e sem o teto
+  de vies (`-` = nenhum). `Promovivel`: `referencia` (a propria planilha Q), `candidato` (passa 1-5, 7 e 8) ou
+  `nao (<criterios>)`, p. ex. `nao (1,3,7)` = falham os criterios 1, 3 e 7.
 
 ### Cenarios, segmentos e relatorio
 

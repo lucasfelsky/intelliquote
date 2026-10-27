@@ -148,16 +148,22 @@ describe('amostra comum e fallback', () => {
     expect(c.amostra.fallbackPorMetodo['planilha-q']).toBe(0);
     expect(Object.keys(c.amostra.fallbackPorMetodo)).toEqual([...METODO_TODOS_IDS]);
   });
-  it('metodo sem previsao usa a Q no par: linha igual a da Q quando todo par cai em fallback', () => {
-    const uma: SerieEntrada = { ...constante('UMA'), pontos: constante('UMA').pontos.map((p, t) => ({ ...p, qtd: t === 2 ? 50 : 0 })) };
-    const c = rodar(normal([uma])).cenarios[1];
+  it('metodo sem previsao usa a Q no par (Q > 0, nao zero): linha igual a da Q quando todo par cai em fallback', () => {
+    // vendas nos meses 20 e 34: nas origens 20..31 o croston so ve 1 venda (fallback em TODO par), a Q e > 0 nas origens 20..22 e a venda 34 entra no real das origens 30 e 31
+    const uma: SerieEntrada = { ...constante('UMA'), pontos: constante('UMA').pontos.map((p, t) => ({ ...p, qtd: t === 20 || t === 34 ? 50 : 0 })) };
+    const c = rodarCenarioP1(normal([uma]), { ...OPCOES, minTreino: 21 }, false);
     const q = c.linhas.find((l) => l.segmento === 'TOTAL' && l.metodo === 'planilha-q')!;
     const cr = c.linhas.find((l) => l.segmento === 'TOTAL' && l.metodo === 'croston')!;
-    expect(cr.n).toBeGreaterThan(0);
-    expect(cr.nFallback).toBe(cr.n);
+    expect(cr.n).toBe(12);
+    expect(cr.nFallback).toBe(12);
+    expect(q.wapeLT).toBeCloseTo(3, 6); // (3 x 4 x 50/3 + 2 x 50) / 100; previsao zero em todo par daria WAPE 1
+    expect(q.wapeLT).not.toBeCloseTo(1, 6);
     expect(cr.wapeLT).toBe(q.wapeLT);
     expect(cr.viesLT).toBe(q.viesLT);
     expect(cr.custoLT).toBe(q.custoLT);
+    expect(cr.faltaLT).toBe(q.faltaLT);
+    expect(cr.excessoLT).toBe(q.excessoLT);
+    expect(q.excessoLT).toBeGreaterThan(0);
   });
 });
 
@@ -256,6 +262,17 @@ describe('metades temporais', () => {
 
 describe('regras de protecao e avisos no backtest', () => {
   const r = rodar(todas());
+  it('segmento REGRA calculado so com dados ate a origem: pares antes do degrau caem em padrao', () => {
+    const d = rodarCenarioP1(normal(seriesP1().filter((s) => s.id === 'P-DEGRAU')), OPCOES, false);
+    const n = (seg: string) => d.linhas.find((l) => l.segmento === seg && l.metodo === 'planilha-q')?.n ?? 0;
+    const total = n('TOTAL');
+    expect(n('REGRA:padrao')).toBeGreaterThan(0);
+    expect(n('REGRA:degrau')).toBeGreaterThan(0);
+    expect(n('REGRA:padrao') + n('REGRA:degrau') + n('REGRA:curto') + n('REGRA:dormente')).toBe(total);
+    expect(n('REGRA:padrao')).toBeLessThan(total);
+    expect(n('REGRA:degrau')).toBeLessThan(total);
+    expect(d.porSerie[0].regra).toBe('degrau'); // so o ultimo mes usa a serie inteira
+  });
   it('REGRA:dormente aparece para a serie dormente; ABC sem-venda == regra dormente por serie (ultimo mes)', () => {
     expect(r.cenarios[1].linhas.some((l) => l.segmento === 'REGRA:dormente')).toBe(true);
     for (const s of r.cenarios[1].porSerie) {

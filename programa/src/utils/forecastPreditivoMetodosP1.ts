@@ -72,4 +72,3 @@ export const METODOS_P1: Readonly<Record<MetodoP1Id, Metodo>> = {
 };
 
 export const METODOS_TODOS: Readonly<Record<MetodoTodosId, Metodo>> = { ...METODOS, ...METODOS_P1 };
-
