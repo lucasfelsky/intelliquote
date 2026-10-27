@@ -77,6 +77,14 @@ router.get(
   ForecastController.getEmbalagens,
 );
 
+// Ultimo preco negociado (proposta vencedora direta mais recente): so leitura, sem AuditLog.
+router.get(
+  '/forecast/products/:id/ultimo-preco',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getUltimoPreco,
+);
+
 router.patch(
   '/forecast/products/:id/embalagens',
   requireAuth,

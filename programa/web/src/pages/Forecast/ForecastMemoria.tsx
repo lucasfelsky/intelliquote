@@ -6,6 +6,7 @@ import {
   forecastSobDemandaErrorMessage,
   patchForecastSobDemanda,
 } from '@/services/forecastSobDemanda';
+import ForecastDetalheItem from './ForecastDetalheItem';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastMesesAtipicosModal from './ForecastMesesAtipicosModal';
 import { dataBr, mesAbrevDoAnoMes, passosDaMemoria, risco, type TomValor } from './forecastPainel';
@@ -302,6 +303,7 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
             </dd>
           </div>
         </dl>
+        <ForecastDetalheItem key={linha.productId ?? `sem-${linha.linha}`} linha={linha} />
         <span className="fc-lado__fraco">CHEG. calculada com hoje = {dataBr(hoje)}</span>
       </div>
       {atipicos && linha.productId != null && (

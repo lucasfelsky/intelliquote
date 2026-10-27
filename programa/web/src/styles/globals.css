@@ -3485,3 +3485,23 @@ i.fc-status--preco { background: var(--info); }
   .fdec-celula { min-width: 0; }
   .fdec-kg, .fdec-status, .fdec-obs { border: 0; background: transparent; padding: 0; width: auto; font-size: 8.5pt; color: var(--ink); appearance: none; }
 }
+
+/* Forecast: detalhe do item na memoria de calculo (piloto PR4). */
+.fcu-detalhe { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; }
+.fcu-detalhe h3 { margin: 0 0 8px; font-size: 14px; color: var(--ink); }
+.fcu-lista { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.fcu-lista > div { display: flex; flex-direction: column; gap: 2px; }
+.fcu-lista dt { color: var(--ink-soft); }
+.fcu-lista dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.fcu-botao { align-self: flex-start; }
+.fcu-botao[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.fcu-botao:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fcu-resultado { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.fcu-resultado p { margin: 0; }
+.fcu-preco { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; border-left: 3px solid var(--primary-700); border-radius: var(--radius-sm); background: var(--surface-alt); }
+.fcu-preco__valor { font-weight: 700; color: var(--ink); }
+.fcu-preco__data { color: var(--ink-soft); }
+.fcu-nota { font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+@media (max-width: 700px) {
+  .fcu-botao { min-height: 44px; }
+}
