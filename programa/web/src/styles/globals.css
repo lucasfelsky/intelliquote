@@ -3519,3 +3519,11 @@ i.fc-status--preco { background: var(--info); }
 @media print {
   .fgc-acao { display: none !important; }
 }
+
+/* Forecast: filtro sem venda >=6 meses. */
+.fcsv-selo { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-alt); color: var(--ink-soft); font-size: 10px; font-weight: 600; line-height: 16px; white-space: nowrap; }
+.fcsv-ocultos { font-size: 12px; color: var(--ink-soft); }
+.fcsv-chave[aria-checked="false"] { background: var(--tone-warning-bg); color: var(--tone-warning-fg-strong); border-color: var(--tone-warning-border-strong); }
+@media (max-width: 700px), (pointer: coarse) {
+  .fcsv-chave { min-height: 44px; }
+}

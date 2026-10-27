@@ -1093,10 +1093,13 @@ model ForecastSource {
   // importacao DBCorp (o import da planilha nao mexe nestas colunas).
   arrivalFromReadinessDays Int?
   arrivalFromEtdDays       Int?
+  // Pais da fonte (ISO 3166-1 alfa-2 maiusculo), informado a mao; casa com as ocasioes de escopo 'pais'. O import da planilha nao grava.
+  countryCode              String?
   supplierId               Int?
   supplier                 Supplier?         @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   isActive                 Boolean           @default(true)
   products                 ForecastProduct[]
+  leadTimeEvents           ForecastLeadTimeEvent[]
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
 
@@ -1299,4 +1302,34 @@ model ForecastPurchaseDecision {
 
   @@unique([snapshotId, productId])
   @@index([productId])
+}
+
+// Ocasiao que afeta o lead time (feriado, greve, fechamento de porto, safra): periodo + alcance (global, pais ou fonte) +
+// etapa (prontidao/embarque/transito/liberacao ou total) + efeito (dias ou percentual). String + Zod, sem enum, como o resto
+// do Forecast. Por ora so INFORMA no relatorio (nao muda o motor). `name`/`notes` sao texto livre: nunca vao ao AuditLog.
+// `createdById` sem FK: o autor fica no AuditLog. `coverWithStock` so sera usada na fase 5 (nao exposta na API).
+// Hard delete (o caminho normal e inativar); apagar a fonte apaga as ocasioes dela (Cascade).
+model ForecastLeadTimeEvent {
+  id             Int             @id @default(autoincrement())
+  name           String
+  scopeType      String
+  countryCode    String?
+  sourceId       Int?
+  source         ForecastSource? @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  startDate      DateTime        @db.Date
+  endDate        DateTime        @db.Date
+  recurrence     String          @default("nenhuma")
+  component      String          @default("total")
+  effectKind     String          @default("dias")
+  effectValue    Decimal         @db.Decimal(8, 2)
+  coverWithStock Boolean         @default(false)
+  notes          String?
+  isActive       Boolean         @default(true)
+  createdById    Int?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([isActive, startDate])
+  @@index([sourceId])
+  @@index([scopeType, countryCode])
 }
