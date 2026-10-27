@@ -37,7 +37,7 @@ describe('propriedades dos metodos P1 x todas as series sinteticas (fase 0 + P1)
         expect(METODOS_TODOS[id](s, { horizonte: 6 })).toEqual(a);
         if (a.ok) {
           oks++;
-          expect(a.versao).toBe('p1.0.0');
+          expect(a.versao).toBe('p1.1.0');
           expect(a.metodo).toBe(id);
           expect(a.pontos.map((p) => p.h)).toEqual([1, 2, 3, 4, 5, 6]);
         }

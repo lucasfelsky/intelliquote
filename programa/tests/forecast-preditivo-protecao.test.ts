@@ -111,10 +111,10 @@ describe('preditivo-p1: valores a mao', () => {
     expect(z.pontos.map((p) => p.p50)).toEqual([0, 0]);
     expect(z.avisos).toEqual(['sem-venda']);
   });
-  it('resultado identificado como preditivo-p1 e versao p1.0.0', () => {
+  it('resultado identificado como preditivo-p1 e versao p1.1.0', () => {
     const r = ok(p1([5, 8, 6, 0, 0, 0, 0, 0, 0, 3, 3, 3]));
     expect(r.metodo).toBe('preditivo-p1');
-    expect(r.versao).toBe('p1.0.0');
+    expect(r.versao).toBe('p1.1.0');
   });
   it('horizonte invalido e sem dados vem da validacao comum', () => {
     expect(p1([10, 20, 30, 40, 50, 60, 70, 80], 13)).toEqual({ ok: false, metodo: 'preditivo-p1', motivo: 'horizonte-invalido' });

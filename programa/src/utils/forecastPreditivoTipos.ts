@@ -2,7 +2,7 @@
 // Nada aqui altera o motor da planilha (forecastEngine.ts): o preditivo so o compara, em teste e no CLI local.
 import { createHash } from 'node:crypto';
 
-export const PREDITIVO_VERSAO = 'p1.0.0';
+export const PREDITIVO_VERSAO = 'p1.1.0';
 
 export type AnoMes = string; // 'YYYY-MM'
 
@@ -32,7 +32,7 @@ export const METODO_IDS: readonly MetodoId[] = [
   'sba',
 ];
 
-// Metodos da P1 (desenho 5.4); a P1b acrescenta 'tsb'.
+// Metodos da P1 (desenho 5.4); TSB fica para a P1c.
 export type MetodoP1Id = 'combinacao-ses-r-holt' | 'preditivo-p1';
 export const METODO_P1_IDS: readonly MetodoP1Id[] = ['combinacao-ses-r-holt', 'preditivo-p1'];
 export type MetodoTodosId = MetodoId | MetodoP1Id;

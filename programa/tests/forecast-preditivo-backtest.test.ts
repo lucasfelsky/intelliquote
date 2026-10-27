@@ -44,7 +44,7 @@ describe('validarOpcoesBacktest', () => {
 describe('estrutura do resultado', () => {
   const r = rodar(normal());
   it('cabecalho, contagens e avisos com todas as chaves', () => {
-    expect(r.versao).toBe('p1.0.0');
+    expect(r.versao).toBe('p1.1.0');
     expect(r.hashConfig).toMatch(/^[0-9a-f]{64}$/);
     expect(r.hashEntrada).toMatch(/^[0-9a-f]{64}$/);
     expect(r.origens).toBe(30); // 2024-06 .. 2026-11
