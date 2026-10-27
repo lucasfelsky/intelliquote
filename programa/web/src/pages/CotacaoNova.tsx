@@ -12,6 +12,7 @@ import {
   formatCommercialPrice,
   getCommercialRequest,
 } from '@/services/commercialRequests';
+import { AvisosDoForecast, usePrefillDoForecast } from './Forecast/usePrefillDoForecast';
 
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
 
@@ -156,6 +157,14 @@ export default function CotacaoNova() {
           'Solicitação do comercial #' + data.id,
     );
   }, [fromRequestId, linkedRequest.data, linkedRequest.isError]);
+
+  // Pre-preenchimento a partir de uma linha do relatorio de compras do Forecast (?fromForecast=quinzena-produto).
+  const prefillForecast = usePrefillDoForecast(searchParams, canCreate, ({ item, description: desc }) => {
+    setItems((current) =>
+      current.some((it) => it.catalogItemId === item.catalogItemId) ? current : [...current, { ...item, tempId: tempIdCounter++ }],
+    );
+    setDescription((current) => (current.trim() ? current : desc));
+  });
 
   const createQuote = useMutation({
     mutationFn: async () => {
@@ -369,6 +378,7 @@ export default function CotacaoNova() {
           {linkWarning}
         </p>
       )}
+      <AvisosDoForecast estado={prefillForecast} />
 
       <section className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
