@@ -3505,3 +3505,17 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 700px) {
   .fcu-botao { min-height: 44px; }
 }
+
+/* Forecast: gerar cotação a partir da linha do relatório (piloto PR6). */
+.fgc-acao { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.fgc-botao { align-self: flex-start; }
+.fgc-botao[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.fgc-botao:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fgc-motivo { font-size: 11px; color: var(--ink-soft); }
+.fgc-aviso { margin-bottom: 16px; }
+@media (max-width: 700px) {
+  .fgc-botao { min-height: 44px; }
+}
+@media print {
+  .fgc-acao { display: none !important; }
+}

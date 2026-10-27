@@ -15,6 +15,7 @@ import {
 import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
+import ForecastGerarCotacao from './ForecastGerarCotacao';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
 import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
 import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
@@ -261,6 +262,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
         <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
         <td className="fdec-celula">
           <ForecastDecisaoCompra item={item} />
+          <ForecastGerarCotacao item={item} />
         </td>
         <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
         <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>

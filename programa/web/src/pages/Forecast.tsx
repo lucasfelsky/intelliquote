@@ -17,6 +17,7 @@ import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
+import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
@@ -415,7 +416,9 @@ export default function Forecast() {
       )}
       {detail && visao === 'painel' && <Painel key={detail.id} detail={detail} podeEditar={podeImportar} />}
       {detail && visao === 'compras' && (
-        <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} podeEditar={podeImportar} />
+        <ProvedorGerarCotacao snapshotId={detail.id} podeCriar={podeImportar}>
+          <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} podeEditar={podeImportar} />
+        </ProvedorGerarCotacao>
       )}
       {gruposAberto && <ForecastGruposModal podeEditar={podeImportar} onFechar={() => setGruposAberto(false)} />}
       {fontesAberto && <ForecastFontesModal podeEditar={podeImportar} onFechar={() => setFontesAberto(false)} />}
