@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import type { ForecastLinhasKg, ForecastPrazosEstimativa } from '@/services/forecast';
+import { NOTA_PRAZOS_MODO_TESTE, textoPadroesNaoGravados } from './forecastModoTeste';
 import { inteiroBr } from './forecastPainel';
 import {
   rascunhoInvalido,
@@ -20,6 +21,8 @@ interface Props {
   ocupado: boolean;
   /** Quantas vezes o recalculo terminou (o foco vai para a mensagem de retorno a cada uma). */
   recalculos: number;
+  /** Importar como teste ligado: os prazos alterados valem so para a quinzena (nao viram padrao da fonte). */
+  modoTeste?: boolean;
 }
 
 function Contagem({ valor }: { valor: ForecastLinhasKg }) {
@@ -71,12 +74,22 @@ function CampoDias({ id, rotulo, valor, habilitado, padrao, onMudar }: CampoProp
  * Tabela do prazo das chegadas estimadas do FUP, por fonte. Editar os dias nao muda a pre-visualizacao: o botao
  * recalcula com o corpo ja lido e o Confirmar fica bloqueado ate la.
  */
-export default function ForecastPrazosPorFonte({ prazos, rascunho, onMudar, onRecalcular, ocupado, recalculos }: Props) {
+export default function ForecastPrazosPorFonte({
+  prazos,
+  rascunho,
+  onMudar,
+  onRecalcular,
+  ocupado,
+  recalculos,
+  modoTeste = false,
+}: Props) {
   const base = useId();
   const retornoRef = useRef<HTMLParagraphElement>(null);
   const mudou = prazosMudaram(rascunho, prazos);
   const invalido = rascunhoInvalido(rascunho, prazos);
-  const alterados = textoPadroesAlterados(prazos.padroesAlterados);
+  const alterados = modoTeste
+    ? textoPadroesNaoGravados(prazos.padroesAlterados)
+    : textoPadroesAlterados(prazos.padroesAlterados);
   const { semFonte } = prazos;
   const temSemFonte =
     semFonte.prontidao.linhas > 0 || semFonte.etd.linhas > 0;
@@ -90,8 +103,10 @@ export default function ForecastPrazosPorFonte({ prazos, rascunho, onMudar, onRe
     <div className="fci-bloco fci-prazo">
       <h4>Prazo das chegadas estimadas, por fonte</h4>
       <p>
-        Chegadas sem ETA usam a data do FUP + o prazo da fonte e ficam marcadas ESTIMADA. Ao confirmar, o prazo usado vira
-        o padrão da fonte nas próximas importações.
+        Chegadas sem ETA usam a data do FUP + o prazo da fonte e ficam marcadas ESTIMADA.{' '}
+        {modoTeste
+          ? NOTA_PRAZOS_MODO_TESTE
+          : 'Ao confirmar, o prazo usado vira o padrão da fonte nas próximas importações.'}
       </p>
       {alterados && <p className="fci-prazo__alterados">{alterados}</p>}
       {(prazos.fontes.length > 0 || temSemFonte) && (
