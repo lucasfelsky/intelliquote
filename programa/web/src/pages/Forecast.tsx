@@ -21,6 +21,7 @@ import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModa
 import ForecastExportarMacro from './Forecast/ForecastExportarMacro';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
+import { useDialogoFontes } from './Forecast/useDialogoFontes';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
@@ -255,10 +256,8 @@ export default function Forecast() {
   const [gruposAberto, setGruposAberto] = useState(false);
   const botaoGrupos = useRef<HTMLButtonElement>(null);
   const gruposAbriuAntes = useRef(false);
-  // Fontes e lead time (3C): todos os papeis COMEX veem; admin/comprador editam o lead time.
-  const [fontesAberto, setFontesAberto] = useState(false);
-  const botaoFontes = useRef<HTMLButtonElement>(null);
-  const fontesAbriuAntes = useRef(false);
+  // Fontes e lead time (3C) / Eventos estrangeiros (PR 2): todos os papeis COMEX veem; admin/comprador editam.
+  const dialogoFontes = useDialogoFontes();
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
@@ -309,15 +308,6 @@ export default function Forecast() {
       botaoGrupos.current?.focus();
     }
   }, [gruposAberto]);
-
-  useEffect(() => {
-    if (fontesAberto) {
-      fontesAbriuAntes.current = true;
-    } else if (fontesAbriuAntes.current) {
-      fontesAbriuAntes.current = false;
-      botaoFontes.current?.focus();
-    }
-  }, [fontesAberto]);
 
   // Trocar de visao preserva a quinzena da URL.
   const mudarVisao = (proxima: 'painel' | 'compras') => {
@@ -415,13 +405,22 @@ export default function Forecast() {
               </div>
             )}
             <button
-              ref={botaoFontes}
+              ref={dialogoFontes.botaoFontes}
               type="button"
               className="ghost-button"
               aria-haspopup="dialog"
-              onClick={() => setFontesAberto(true)}
+              onClick={() => dialogoFontes.abrir('fontes')}
             >
               Fontes e lead time
+            </button>
+            <button
+              ref={dialogoFontes.botaoEventos}
+              type="button"
+              className="ghost-button"
+              aria-haspopup="dialog"
+              onClick={() => dialogoFontes.abrir('ocasioes')}
+            >
+              Eventos estrangeiros
             </button>
             <button
               ref={botaoGrupos}
@@ -511,7 +510,9 @@ export default function Forecast() {
         </ProvedorGerarCotacao>
       )}
       {gruposAberto && <ForecastGruposModal podeEditar={podeImportar} onFechar={() => setGruposAberto(false)} />}
-      {fontesAberto && <ForecastFontesModal podeEditar={podeImportar} onFechar={() => setFontesAberto(false)} />}
+      {dialogoFontes.aba && (
+        <ForecastFontesModal podeEditar={podeImportar} abaInicial={dialogoFontes.aba} onFechar={dialogoFontes.fechar} />
+      )}
       {excluirAlvo && (
         <ForecastExcluirQuinzenaModal
           quinzena={excluirAlvo}

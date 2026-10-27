@@ -1,22 +1,32 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import { Tab, TabList, Tabs } from '@/components/Tabs';
 import { forecastErrorMessage } from '@/services/forecast';
 import {
   forecastFontesKeys,
   getForecastPrazoReal,
+  listForecastSources,
   patchForecastSourceLeadTime,
   type ForecastPrazoReal,
   type ForecastPrazoRealEstatistica,
   type ForecastPrazoRealFonte,
 } from '@/services/forecastFontes';
 import { diferencaTexto, ordenarFontes, textoIndisponivel, textoPrazoReal } from './forecastFontes';
+import { contarSemPais, opcoesDePais, paisPorFonte, textoFontesSemPais } from './forecastOcasioes';
 import { LEAD_TIME_MAX_DIAS, lerLeadTime } from './forecastPendentes';
+import ForecastFontePais from './ForecastFontePais';
+import ForecastOcasioesPanel from './ForecastOcasioesPanel';
+
+/** Aba aberta primeiro: o botao "Fontes e lead time" abre `fontes`; o "Eventos estrangeiros" abre `ocasioes`. */
+export type AbaFontes = 'fontes' | 'ocasioes';
 
 interface Props {
   /** admin/comprador editam o lead time (PATCH /forecast/sources/:id); os demais so leem. */
   podeEditar: boolean;
+  /** Padrao `fontes`. */
+  abaInicial?: AbaFontes;
   onFechar: () => void;
 }
 
@@ -54,6 +64,22 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
   const [focoPara, setFocoPara] = useState<number | null>(null);
   const botoes = useRef(new Map<number, HTMLButtonElement>());
   const campo = useRef<HTMLInputElement>(null);
+
+  // Pais de cada fonte: o prazo-real nao o traz, entao junta com GET /forecast/sources (mesma chave do cadastro de produto).
+  const lista = useQuery({ queryKey: forecastFontesKeys.todas, queryFn: listForecastSources });
+  const paises = useMemo(() => paisPorFonte(lista.data), [lista.data]);
+  const opcoesPais = useMemo(
+    () => opcoesDePais(paises ? [...paises.values()].filter((c): c is string => c !== null) : []),
+    [paises],
+  );
+  const avisoSemPais = paises
+    ? textoFontesSemPais(
+        contarSemPais(
+          fontes.map((f) => f.sourceId),
+          paises,
+        ),
+      )
+    : null;
 
   const salvar = useMutation({
     mutationFn: ({ id, dias }: { id: number; dias: number; nome: string }) => patchForecastSourceLeadTime(id, dias),
@@ -108,6 +134,8 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
   return (
     <>
       <p className="fcd-dica">{textoTopo(dados)}</p>
+      {avisoSemPais && <p className="fcd-dica">{avisoSemPais}</p>}
+      {lista.isError && <p className="fcd-dica">Não foi possível carregar o país das fontes.</p>}
       {!dados.disponivel && (
         <p className="fcd-dica" role="status">
           {textoIndisponivel(dados.motivo, dados.quinzena?.label ?? null)}
@@ -129,6 +157,7 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
           <thead>
             <tr>
               <th scope="col">Fonte</th>
+              <th scope="col">País</th>
               <th scope="col">Lead time cadastrado</th>
               <th scope="col">Desembaraço</th>
               <th scope="col">Prazo real PO → ETA FINAL</th>
@@ -145,6 +174,16 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
               return (
                 <tr key={f.sourceId}>
                   <th scope="row">{f.nome}</th>
+                  <td>
+                    <ForecastFontePais
+                      sourceId={f.sourceId}
+                      nome={f.nome}
+                      countryCode={paises ? (paises.get(f.sourceId) ?? null) : undefined}
+                      podeEditar={podeEditar}
+                      opcoes={opcoesPais}
+                      onSalvo={setAviso}
+                    />
+                  </td>
                   <td>
                     {emEdicao ? (
                       <form onSubmit={(e) => enviar(e, f)} noValidate>
@@ -225,25 +264,68 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
   );
 }
 
-export default function ForecastFontesModal({ podeEditar, onFechar }: Props) {
+const ABAS_BASE_ID = 'fcf-abas';
+
+/**
+ * Painel de aba que continua MONTADO quando inativo (o TabPanel compartilhado desmonta e o rascunho do formulario de
+ * evento se perderia ao trocar de aba). Mesmos ids/aria que o Tabs.tsx espera (aria-controls/aria-labelledby).
+ */
+function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean; children: ReactNode }) {
+  return (
+    <div
+      role="tabpanel"
+      id={`${ABAS_BASE_ID}-panel-${valor}`}
+      aria-labelledby={`${ABAS_BASE_ID}-tab-${valor}`}
+      tabIndex={0}
+      className="tabs-panel"
+      style={{ outline: 'none' }}
+      hidden={!ativo}
+    >
+      {children}
+    </div>
+  );
+}
+
+export default function ForecastFontesModal({ podeEditar, abaInicial, onFechar }: Props) {
   const prazoReal = useQuery({ queryKey: forecastFontesKeys.prazoReal, queryFn: getForecastPrazoReal });
+  const [aba, setAba] = useState<string>(abaInicial ?? 'fontes');
+  // A aba Eventos estrangeiros so monta (e so busca dados) na primeira vez em que e aberta; depois fica montada.
+  const [abriuOcasioes, setAbriuOcasioes] = useState(abaInicial === 'ocasioes');
+  const titulo = abaInicial === 'ocasioes' ? 'Eventos estrangeiros' : 'Fontes e lead time';
+  const mudarAba = (valor: string) => {
+    if (valor === 'ocasioes') setAbriuOcasioes(true);
+    setAba(valor);
+  };
 
   return (
-    <Modal isOpen onClose={onFechar} title="Fontes e lead time" size="wide">
-      {prazoReal.isLoading && (
-        <div className="fcd-carregando" role="status">
-          <Spinner /> Carregando fontes…
-        </div>
-      )}
-      {prazoReal.isError && (
-        <div className="alert alert--error" role="alert">
-          <p className="fcd-alert__texto">{forecastErrorMessage(prazoReal.error)}</p>
-          <button type="button" className="ghost-button" onClick={() => void prazoReal.refetch()}>
-            Tentar de novo
-          </button>
-        </div>
-      )}
-      {prazoReal.isSuccess && <Conteudo dados={prazoReal.data} podeEditar={podeEditar} />}
+    <Modal isOpen onClose={onFechar} title={titulo} size="xl">
+      <div className="fco-abas">
+        <Tabs value={aba} onValueChange={mudarAba} baseId={ABAS_BASE_ID}>
+          <TabList aria-label={`Seções do diálogo ${titulo}`}>
+            <Tab value="fontes">Lead time por fonte</Tab>
+            <Tab value="ocasioes">Eventos estrangeiros</Tab>
+          </TabList>
+          <PainelDaAba valor="fontes" ativo={aba === 'fontes'}>
+            {prazoReal.isLoading && (
+              <div className="fcd-carregando" role="status">
+                <Spinner /> Carregando fontes…
+              </div>
+            )}
+            {prazoReal.isError && (
+              <div className="alert alert--error" role="alert">
+                <p className="fcd-alert__texto">{forecastErrorMessage(prazoReal.error)}</p>
+                <button type="button" className="ghost-button" onClick={() => void prazoReal.refetch()}>
+                  Tentar de novo
+                </button>
+              </div>
+            )}
+            {prazoReal.isSuccess && <Conteudo dados={prazoReal.data} podeEditar={podeEditar} />}
+          </PainelDaAba>
+          <PainelDaAba valor="ocasioes" ativo={aba === 'ocasioes'}>
+            {abriuOcasioes && <ForecastOcasioesPanel podeEditar={podeEditar} />}
+          </PainelDaAba>
+        </Tabs>
+      </div>
     </Modal>
   );
 }
