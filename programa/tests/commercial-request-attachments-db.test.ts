@@ -226,16 +226,21 @@ describe('Anexos tecnicos da solicitacao de desenvolvimento (DB)', () => {
 
   testDbSkip('envios simultaneos: o teto de 5 vale mesmo em paralelo (lock da solicitacao)', async () => {
     const requestId = await newDevRequest();
+    const total = 12;
+
+    // Aquece o pool de conexoes (abre varias conexoes antes do Promise.all): sem isso os envios
+    // podem se serializar sozinhos na abertura das conexoes e o teste nao detectaria a falta do lock.
+    await Promise.all(Array.from({ length: total }, () => prisma.$queryRaw`SELECT pg_sleep(0.05)::text`));
 
     const responses = await Promise.all(
-      Array.from({ length: 8 }, (_, i) =>
+      Array.from({ length: total }, (_, i) =>
         upload(requestId, body(pdfBytes(`par${i}`), { fileName: `par-${i}.pdf` })),
       ),
     );
 
     const statuses = responses.map((r) => r.status).sort();
     expect(statuses.filter((s) => s === 201)).toHaveLength(5);
-    expect(statuses.filter((s) => s === 409)).toHaveLength(3);
+    expect(statuses.filter((s) => s === 409)).toHaveLength(total - 5);
     expect(await prisma.commercialRequestAttachment.count({ where: { commercialRequestId: requestId } })).toBe(5);
   });
 

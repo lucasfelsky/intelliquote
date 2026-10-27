@@ -95,8 +95,10 @@ describe('SolicitacaoDesenvolvimentoPanel', () => {
     renderPanel();
 
     expect(await screen.findByText('Solicitação #9')).toBeTruthy();
+    // pageSize 100: todas as solicitacoes ligadas (a pagina padrao de 20 truncaria).
     expect(api.get).toHaveBeenCalledWith('/api/v1/commercial-requests', {
       page: 1,
+      pageSize: 100,
       status: undefined,
       requestedById: undefined,
       quoteRequestId: 50,

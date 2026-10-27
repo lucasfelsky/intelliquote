@@ -13,6 +13,8 @@ function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : 'Erro desconhecido.';
 }
 
+const LINKED_PAGE_SIZE = 100;
+
 interface Props {
   quoteRequestId: number;
 }
@@ -25,7 +27,8 @@ interface Props {
 export function SolicitacaoDesenvolvimentoPanel({ quoteRequestId }: Props) {
   const linked = useQuery({
     queryKey: ['commercial-requests', 'by-quote', quoteRequestId],
-    queryFn: () => listCommercialRequests({ quoteRequestId, page: 1 }),
+    // Maximo do backend (100): sem tamanho, a pagina padrao (20) truncaria as solicitacoes ligadas.
+    queryFn: () => listCommercialRequests({ quoteRequestId, page: 1, pageSize: LINKED_PAGE_SIZE }),
   });
 
   const requests = (linked.data?.data ?? []).filter((request) => request.isDevelopment);

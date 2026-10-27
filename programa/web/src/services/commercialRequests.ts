@@ -171,9 +171,12 @@ export function listCommercialRequests(params?: {
   requestedById?: number | '';
   /** Solicitacoes ligadas a uma cotacao (painel de desenvolvimento no detalhe da cotacao). */
   quoteRequestId?: number;
+  /** Tamanho da pagina (o backend limita a 100; sem valor, usa o padrao dele). */
+  pageSize?: number;
 }): Promise<PaginatedResult<CommercialRequestForComex>> {
   return api.get<PaginatedResult<CommercialRequestForComex>>('/api/v1/commercial-requests', {
     page: params?.page,
+    pageSize: params?.pageSize,
     status: params?.status || undefined,
     requestedById: params?.requestedById || undefined,
     quoteRequestId: params?.quoteRequestId || undefined,

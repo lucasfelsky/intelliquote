@@ -1,4 +1,16 @@
 import type { SupplierDocumentMime } from '../constants/supplierDocuments';
+import { sanitizeDocumentFileName } from './supplierDocumentFile';
+
+// Caracteres bidi (LRM/RLM, LRE..RLO, isolates) e zero-width (ZWSP..ZWJ, BOM): invisiveis ou que
+// invertem a exibicao ("evil<RLO>txt.pdf" aparece como "evilfdp.txt"). O util compartilhado com
+// os Documentos do fornecedor so remove controles; aqui o anexo da solicitacao remove tambem estes.
+const BIDI_AND_ZERO_WIDTH = /[​-‏‪-‮⁦-⁩﻿]/g;
+
+// Nome seguro do anexo da solicitacao: sem bidi/zero-width + sanitizacao dos Documentos do fornecedor
+// (basename, sem controles, tamanho maximo, "documento.<ext>" se ficar vazio).
+export function sanitizeAttachmentFileName(raw: string, mime: SupplierDocumentMime): string {
+  return sanitizeDocumentFileName(raw.replace(BIDI_AND_ZERO_WIDTH, ''), mime);
+}
 
 const EXTENSIONS_BY_MIME: Record<SupplierDocumentMime, readonly string[]> = {
   'application/pdf': ['pdf'],

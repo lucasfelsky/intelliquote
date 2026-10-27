@@ -20,12 +20,11 @@ import {
   type CommercialRequestAttachmentKind,
 } from '../constants/commercialRequestAttachments';
 import { HttpError } from '../utils/http';
-import { extensionMatchesMime } from '../utils/commercialRequestAttachmentFile';
 import {
-  decodeStrictBase64,
-  detectDocumentMime,
-  sanitizeDocumentFileName,
-} from '../utils/supplierDocumentFile';
+  extensionMatchesMime,
+  sanitizeAttachmentFileName,
+} from '../utils/commercialRequestAttachmentFile';
+import { decodeStrictBase64, detectDocumentMime } from '../utils/supplierDocumentFile';
 import type { CommercialRequestAttachmentUploadInput } from '../validators/commercialRequestDevelopment';
 import { AuditLogService } from './AuditLogService';
 
@@ -79,7 +78,7 @@ function prepare(input: CommercialRequestAttachmentUploadInput): PreparedAttachm
     throw new HttpError(400, CR_ATTACHMENT_TYPE_MISMATCH_MESSAGE);
   }
 
-  const fileName = sanitizeDocumentFileName(input.fileName, detected);
+  const fileName = sanitizeAttachmentFileName(input.fileName, detected);
   if (!extensionMatchesMime(fileName, detected)) {
     throw new HttpError(400, CR_ATTACHMENT_EXTENSION_MISMATCH_MESSAGE);
   }

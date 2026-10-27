@@ -67,6 +67,18 @@ function assertAllItemsInCatalog<T extends { catalogItemId: number | null }>(
   return items as Array<T & { catalogItemId: number }>;
 }
 
+// Trava as linhas de CommercialRequest (FOR NO KEY UPDATE, ids em ordem crescente para nao
+// gerar deadlock entre transacoes) ANTES de ler itens/status. E o mesmo lock de linkItemToCatalog:
+// serializa a troca do vinculo de catalogo com a criacao/vinculo de cotacao, sem bloquear FKs filhas.
+async function lockCommercialRequests(
+  tx: Prisma.TransactionClient,
+  requestIds: number[],
+): Promise<void> {
+  const ids = [...new Set(requestIds)].sort((a, b) => a - b);
+  if (ids.length === 0) return;
+  await tx.$queryRaw`SELECT id FROM "CommercialRequest" WHERE id IN (${Prisma.join(ids)}) ORDER BY id FOR NO KEY UPDATE`;
+}
+
 function decimalToNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(String(value));
@@ -93,6 +105,9 @@ export class CommercialRequestWorkflowService {
     const commercialNameById = new Map(catalogItems.map((ci) => [ci.id, ci.commercialName]));
 
     return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Mesmo lock de linkItemToCatalog, antes de ler itens/status das solicitacoes.
+      await lockCommercialRequests(tx, requestIds);
+
       const requests = await tx.commercialRequest.findMany({
         where: { id: { in: requestIds } },
         select: {
@@ -289,6 +304,9 @@ export class CommercialRequestWorkflowService {
         throw new HttpError(409, 'Somente cotacoes abertas aceitam vinculo.');
       }
 
+      // Mesmo lock de linkItemToCatalog, antes de ler itens/status da solicitacao.
+      await lockCommercialRequests(tx, [requestId]);
+
       const request = await tx.commercialRequest.findUnique({
         where: { id: requestId },
         select: {
@@ -448,7 +466,8 @@ export class CommercialRequestWorkflowService {
     userId: number,
   ): Promise<void> {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Serializa com a criacao/vinculo de cotacao (que muda o status) sem bloquear FKs filhas.
+      // Serializa com createQuoteWithLinks e linkToExistingQuote, que tomam este mesmo lock
+      // (lockCommercialRequests) antes de ler itens/status; sem bloquear FKs filhas.
       await tx.$queryRaw`SELECT id FROM "CommercialRequest" WHERE id = ${requestId} FOR NO KEY UPDATE`;
 
       const item = await tx.commercialRequestItem.findFirst({
