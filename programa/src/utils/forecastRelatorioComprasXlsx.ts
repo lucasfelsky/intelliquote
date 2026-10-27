@@ -4,6 +4,7 @@
 // Datas saem como texto dd/mm/aaaa, igual a tela. Rotulos e formatos espelham o web
 // (guarda de paridade em tests/forecast-relatorio-compras-xlsx.test.ts).
 import exceljs from 'exceljs';
+import { COLUNAS_DECISAO_XLSX, LARGURAS_DECISAO_XLSX, TEXTO_QUEBRA_DECISAO_XLSX, celulasDaDecisao } from './forecastDecisaoCompraXlsx';
 import type { ItemDemandaComercial } from './forecastDemandaComercial';
 import type { DadosDoGrupo, MembroDoGrupo } from './forecastGruposEquivalencia';
 import { URGENCIAS, itensNaOrdemDeUrgencia } from './forecastRelatorioCompras';
@@ -32,7 +33,7 @@ export const ABA_REGRAS = 'Regras';
 
 // As colunas da tela (+ Urgencia e Dias ate a ruptura); Item / Embalagem / Data-limite desdobradas em colunas filtraveis.
 // Colunas novas entram no fim, mas a Observacao (PR 5B) continua a ULTIMA: 'Meses fora da média' (PR 6c) e 'Grupo de
-// equivalência' (PR 6b: os membros, um por linha, so na linha do grupo) entram antes dela.
+// equivalência' (PR 6b: os membros, um por linha, so na linha do grupo) e as 3 colunas da decisao de compra (PR3) entram antes dela.
 export const COLUNAS_RELATORIO_XLSX = [
   'Item',
   'Urgência',
@@ -53,6 +54,7 @@ export const COLUNAS_RELATORIO_XLSX = [
   'Em andamento',
   'Meses fora da média',
   'Grupo de equivalência',
+  ...COLUNAS_DECISAO_XLSX,
   'Observação',
 ] as const;
 
@@ -155,10 +157,11 @@ const NOMES_TEXTO_QUEBRA = [
   'Em andamento',
   'Meses fora da média',
   'Grupo de equivalência',
+  ...TEXTO_QUEBRA_DECISAO_XLSX,
   'Observação',
 ] as const;
-const NOMES_NUMERICOS = ['Demanda', 'Qtd. sugerida', 'Qtd. final'] as const;
-const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 20, 36, 40];
+const NOMES_NUMERICOS = ['Demanda', 'Qtd. sugerida', 'Qtd. final', 'Qtd. decidida (kg)'] as const;
+const LARGURAS = [34, 22, 22, 14, 24, 11, 13, 30, 34, 30, 11, 12, 18, 12, 13, 10, 28, 20, 36, ...LARGURAS_DECISAO_XLSX, 40];
 const LARGURAS_POR_URGENCIA = [34, 22, 24, ...LARGURAS.slice(2)];
 const LARGURAS_SEM_CONSUMO = [34, 22, 24, 24, 26, 11, 12, 30, 30, 20, 40];
 const LARGURAS_SOB_DEMANDA = [34, 22, 24, 24, 40, 11, 30, 14, 11, 30, 20, 40];
@@ -487,7 +490,7 @@ function textoEmAndamento(item: ItemRelatorioCompras): string {
   return juntarLinhas([...linhasChegada(chegadas), ...linhasProgramacao(programacoes)]);
 }
 
-// 20 valores, na ordem de COLUNAS_RELATORIO_XLSX.
+// 23 valores, na ordem de COLUNAS_RELATORIO_XLSX.
 export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): Array<string | number> {
   const { usada, multiplas } = item.embalagem;
   const { ruptura } = item;
@@ -530,6 +533,7 @@ export function celulasDoItem(item: ItemRelatorioCompras, diasCritico: number): 
           .filter((t) => t !== null)
           .join('\n')
       : '',
+    ...celulasDaDecisao(item.decisao, STATUS_ROTULO_XLSX),
     item.obs,
   ];
 }

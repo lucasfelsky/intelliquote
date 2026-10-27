@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import exceljs from 'exceljs';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app } from '../src/app';
@@ -352,6 +353,47 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
   });
+
+  testDbSkip('XLSX do relatorio e MACRO via rota: decisao nas 3 colunas e em AO (inclusive 0); sem decisao mantem o congelado', async () => {
+    const decidida = await put(productA, { quantidadeKg: 55.5, status: 'confirmado', observacao: OBSERVACAO });
+    expect(decidida.status).toBe(200);
+    // O produto C ja tem decisao (corrida acima); trocar para 0 prova que o zero nao some do arquivo.
+    expect((await put(productC, { quantidadeKg: 0 })).status).toBe(200);
+
+    const baixar = async (layout?: string) => {
+      const res = await request(app)
+        .get(`/api/v1/forecast/snapshots/${snapshotId}/relatorio-compras/xlsx?hoje=${HOJE}${layout ? `&layout=${layout}` : ''}`)
+        .set('Cookie', cookies);
+      expect(res.status).toBe(200);
+      const wb = new exceljs.Workbook();
+      await wb.xlsx.load(Buffer.from(res.body.data.contentBase64, 'base64') as unknown as ArrayBuffer);
+      return wb;
+    };
+
+    const relatorio = await baixar();
+    const ws = relatorio.getWorksheet('Por urgência')!;
+    const cabecalho = Array.from({ length: ws.columnCount }, (_, i) => String(ws.getRow(1).getCell(i + 1).value ?? ''));
+    expect(cabecalho.slice(-4)).toEqual(['Qtd. decidida (kg)', 'Status da decisão', 'Obs. da decisão', 'Observação']);
+    const col = (nome: string) => cabecalho.indexOf(nome) + 1;
+    const linhaDoItem = (nome: string) => {
+      let achada = 0;
+      ws.eachRow((row, n) => {
+        if (String(row.getCell(1).value) === nome) achada = n;
+      });
+      expect(achada, nome).toBeGreaterThan(0);
+      return ws.getRow(achada);
+    };
+    expect(linhaDoItem(NAME_A).getCell(col('Qtd. decidida (kg)')).value).toBe(55.5);
+    expect(linhaDoItem(NAME_A).getCell(col('Status da decisão')).value).toBe('Confirmado, aguarda PO');
+    expect(linhaDoItem(NAME_A).getCell(col('Obs. da decisão')).value).toBe(OBSERVACAO);
+    expect(linhaDoItem(NAME_C).getCell(col('Qtd. decidida (kg)')).value).toBe(0);
+
+    const macro = (await baixar('macro')).getWorksheet('FORECAST (MACRO)')!;
+    expect(macro.getCell('AO3').value).toBe(55.5);
+    expect(macro.getCell('AO5').value).toBe(0);
+    // B nao tem decisao: AO continua o analiseForecast congelado (nulo).
+    expect(macro.getCell('AO4').value ?? null).toBeNull();
+  }, 60_000);
 
   testDbSkip('retencao: excluir a quinzena mantem as decisoes; GET/PUT -> 404; mesmo rotulo novo comeca vazio', async () => {
     const outra = await criarQuinzena('04-1');
