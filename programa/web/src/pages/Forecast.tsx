@@ -23,6 +23,7 @@ import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
+import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
 import {
   casaBusca,
@@ -243,6 +244,8 @@ export default function Forecast() {
   const detail = detalhe.data;
   const [mostrarSemVenda, setMostrarSemVenda] = useMostrarSemVenda(user?.id);
   const ocultaveis = useMemo(() => (detail ? contarOcultaveis(detail.linhas) : 0), [detail]);
+  // PO.COMP.01: calculado no front (hoje em Sao Paulo, uma vez por montagem); null fora da tabela de feriados.
+  const proxima = useMemo(() => proximaAnalise(hojeEmSaoPaulo(new Date())), []);
 
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
   useEffect(() => {
@@ -347,7 +350,10 @@ export default function Forecast() {
           <h1>
             Forecast de compras <span className="badge badge--warning fc-beta">Beta</span>
           </h1>
-          <p>{subtitulo}</p>
+          <p>
+            {subtitulo}
+            {escolhida && proxima && <span className="fcpa-proxima"> · próxima análise {dataBr(proxima)}</span>}
+          </p>
           <p className="fc-beta-aviso">Em validação: confira os números com a planilha do Forecast.</p>
         </div>
         {(quinzenas.length > 0 || podeImportar || lista.isSuccess) && (
