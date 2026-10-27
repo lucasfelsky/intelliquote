@@ -18,6 +18,7 @@ import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
+import ForecastExportarMacro from './Forecast/ForecastExportarMacro';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
@@ -431,6 +432,7 @@ export default function Forecast() {
             >
               Grupos de equivalência
             </button>
+            {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
             {podeImportar && (
               <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
                 Importar quinzena

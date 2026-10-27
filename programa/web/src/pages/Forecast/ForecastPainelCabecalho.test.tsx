@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Forecast from '../Forecast';
@@ -22,7 +22,7 @@ vi.mock('@/api/client', () => ({
   },
 }));
 
-import { api } from '@/api/client';
+import { api, ApiError } from '@/api/client';
 
 const get = vi.mocked(api.get);
 
@@ -92,15 +92,29 @@ function detalhe(over: Record<string, unknown> = {}) {
 
 const RESUMOS = [
   { id: 7, label: '10-2', baseDate: '2026-10-15T00:00:00.000Z', half: 2, origin: 'planilha', months: MONTHS, files: [], createdById: 1, createdAt: '2026-10-20T12:00:00.000Z' },
+  { id: 8, label: '11-1', baseDate: '2026-11-05T00:00:00.000Z', half: 1, origin: 'planilha', months: MONTHS, files: [], createdById: 1, createdAt: '2026-11-05T12:00:00.000Z' },
 ];
 
-function mockApi() {
+const RELATORIO = {
+  quinzena: { id: 7, label: '10-2', baseDate: '2026-10-15', half: 2, origin: 'planilha', hoje: '2026-10-20' },
+  totais: { itens: 0, fontes: 0, vencidas: 0, semEmbalagem: 0, multiplasEmbalagens: 0 },
+  fora: { semLeadTime: 0, semConsumoSemFalta: 0 },
+  grupos: [],
+};
+
+const PATH_XLSX = '/v1/forecast/snapshots/7/relatorio-compras/xlsx';
+const NOME_MACRO = 'forecast-macro-10-2-2026-10-20.xlsx';
+const xlsxOk = async () => ({ data: { fileName: NOME_MACRO, contentBase64: btoa('x') } });
+
+function mockApi(xlsx: () => Promise<unknown> = xlsxOk) {
   get.mockImplementation(async (path: string) => {
     if (path === '/v1/forecast/snapshots') return { data: RESUMOS };
+    if (path.endsWith('/xlsx')) return xlsx();
     if (path.endsWith('/decisoes')) return { data: { decisoes: [] } };
     if (path.endsWith('/pendentes')) return { data: { aplicavel: false } };
+    if (path.endsWith('/relatorio-compras')) return { data: RELATORIO };
     const id = Number(path.split('/').pop());
-    return { data: id === 7 ? detalhe() : undefined };
+    return { data: id === 7 ? detalhe() : id === 8 ? detalhe({ id: 8, label: '11-1', baseDate: '2026-11-05', half: 1 }) : undefined };
   });
 }
 
@@ -153,5 +167,85 @@ describe('Forecast - subtitulo com a proxima analise', () => {
     const p = (await screen.findByText(SUBTITULO)).closest('p');
     expect(p?.textContent).toBe(SUBTITULO);
     expect(screen.queryByText(/próxima análise/)).toBeNull();
+  });
+});
+
+describe('Forecast - exportar planilha MACRO pelo cabecalho do painel', () => {
+  const NOME_BOTAO = 'Exportar planilha MACRO (XLSX)';
+  const originais = { criar: URL.createObjectURL, revogar: URL.revokeObjectURL };
+  const botaoExportar = () => screen.findByRole('button', { name: NOME_BOTAO }) as Promise<HTMLButtonElement>;
+
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = originais.criar;
+    URL.revokeObjectURL = originais.revogar;
+    vi.restoreAllMocks();
+  });
+
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao, direto em .page-header__actions', async (papel) => {
+    mockRole = papel;
+    mockApi();
+    renderPage();
+    const botao = await botaoExportar();
+    expect(botao.parentElement?.classList.contains('page-header__actions')).toBe(true);
+  });
+
+  it('o clique baixa o MACRO com layout=macro e o hoje da quinzena, e mostra o nome gerado', async () => {
+    mockApi();
+    renderPage();
+    fireEvent.click(await botaoExportar());
+    const ok = await screen.findByText(`Planilha MACRO gerada: ${NOME_MACRO}`);
+    expect(ok.getAttribute('role')).toBe('status');
+    expect(get).toHaveBeenCalledWith(PATH_XLSX, { hoje: '2026-10-20', layout: 'macro' });
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
+  });
+
+  it('pendente: "Gerando planilha MACRO…" desabilitado e aria-busy; ao resolver volta ao rotulo', async () => {
+    let resolver: (v: unknown) => void = () => {};
+    mockApi(() => new Promise((r) => (resolver = r)));
+    renderPage();
+    fireEvent.click(await botaoExportar());
+    const gerando = (await screen.findByRole('button', { name: 'Gerando planilha MACRO…' })) as HTMLButtonElement;
+    expect(gerando.disabled).toBe(true);
+    expect(gerando.getAttribute('aria-busy')).toBe('true');
+    resolver({ data: { fileName: NOME_MACRO, contentBase64: btoa('x') } });
+    const volta = (await botaoExportar()) as HTMLButtonElement;
+    expect(volta.disabled).toBe(false);
+    expect(volta.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('erro 404: alerta com a mensagem do servico e nenhum "Planilha MACRO gerada"', async () => {
+    mockApi(() => Promise.reject(new ApiError(404, null)));
+    renderPage();
+    fireEvent.click(await botaoExportar());
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBe('Quinzena não encontrada (pode ter sido removida).');
+    expect(screen.queryByText(/Planilha MACRO gerada/)).toBeNull();
+  });
+
+  it('na visao "Relatorio de compras" o botao do cabecalho some: so o do relatorio', async () => {
+    mockApi();
+    renderPage();
+    await botaoExportar();
+    fireEvent.click(screen.getByRole('button', { name: 'Relatório de compras' }));
+    await screen.findByRole('button', { name: 'Baixar planilha MACRO (XLSX)' });
+    expect(screen.queryByRole('button', { name: NOME_BOTAO })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /planilha MACRO/ })).toHaveLength(1);
+  });
+
+  it('trocar de quinzena limpa a mensagem de planilha gerada', async () => {
+    mockApi();
+    renderPage();
+    fireEvent.click(await botaoExportar());
+    await screen.findByText(/Planilha MACRO gerada/);
+    fireEvent.change(screen.getByLabelText('Quinzena'), { target: { value: '8' } });
+    await screen.findByText(/Quinzena 11-1 · base 05\/11\/2026/);
+    await waitFor(() => expect(screen.queryByText(/Planilha MACRO gerada/)).toBeNull());
+    expect(within(document.body).getByRole('button', { name: NOME_BOTAO })).toBeTruthy();
   });
 });

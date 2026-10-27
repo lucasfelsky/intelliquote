@@ -3535,3 +3535,6 @@ i.fc-status--preco { background: var(--info); }
 .fcad-decidida--po::before { background: var(--primary); }
 .fcad-decidida--preco::before { background: var(--info); }
 .fcad-aviso { display: flex; gap: 10px; align-items: center; margin: 6px 12px; font-size: 12px; color: var(--ink-soft); }
+/* Forecast: exportar planilha MACRO pelo cabecalho do painel. */
+.fcme-msg { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcme-msg--erro { color: var(--danger); }
