@@ -66,15 +66,24 @@ export function intervalosEmpiricos(
   pares.forEach((p, i) => {
     if (p.escala > 0) elegiveis.push(i);
   });
+  const memo = new Map<string, number>(); // indiceMes por texto (poucos meses distintos, muitas chamadas)
+  const mesIdx = (a: AnoMes): number => {
+    let v = memo.get(a);
+    if (v === undefined) {
+      v = indiceMes(a);
+      memo.set(a, v);
+    }
+    return v;
+  };
   const residuo = (i: number) => (pares[i].realLT - pares[i].previstoLT) / pares[i].escala;
-  const lib = elegiveis.map((i) => indiceMes(pares[i].liberacao));
+  const lib = elegiveis.map((i) => mesIdx(pares[i].liberacao));
   const porLiberacao = elegiveis
     .map((i, k) => ({ i, lib: lib[k] }))
     .sort((a, b) => a.lib - b.lib || pares[a.i].indice - pares[b.i].indice || a.i - b.i);
 
   const porMes = new Map<number, number[]>();
   for (const i of elegiveis) {
-    const m = indiceMes(pares[i].origem);
+    const m = mesIdx(pares[i].origem);
     const lista = porMes.get(m);
     if (lista) lista.push(i);
     else porMes.set(m, [i]);
