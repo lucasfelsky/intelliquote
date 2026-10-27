@@ -1097,7 +1097,7 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
      420px ~ busca + cabecalho + .dispatcher-list (280px). O media <=720 reduz para 220px. */
   max-height: 420px;
   min-height: 0;
-  scroll-padding-top: 32px;
+  scroll-padding-top: 44px;
 }
 
 .dispatcher-folders > * {
@@ -1110,9 +1110,10 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--ink-soft);
-  padding: 2px 6px 6px;
+  /* top -12px + padding-top 14px: cobre a folga de 12px do container ao rolar */
+  padding: 14px 6px 6px;
   position: sticky;
-  top: 0;
+  top: -12px;
   z-index: 1;
   background: var(--surface-muted);
 }

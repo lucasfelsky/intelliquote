@@ -182,6 +182,8 @@ describe('Modal de envio: coluna de pastas', () => {
 
     const label = /\n\.dispatcher-folders__label \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(label).toContain('position: sticky');
+    expect(label).toContain('top: -12px');
+    expect(label).toContain('padding: 14px 6px 6px');
     expect(label).toContain('background: var(--surface-muted)');
 
     expect(css).toMatch(/\.dispatcher-folders > \* \{\s*flex-shrink: 0;\s*\}/);
