@@ -32,6 +32,12 @@ const DEFAULT_TARGET_CURRENCY = 'USD';
 const CATALOG_SEARCH_LIMIT = 20;
 const MAX_DB_INT = 2147483647;
 
+// Anexos tecnicos: SO metadados. Nunca `file` (bytea) nem `sha256` nas listas.
+const attachmentsSelect = {
+  orderBy: { id: 'asc' as const },
+  select: { id: true, kind: true, fileName: true, mimeType: true, fileSize: true, createdAt: true },
+};
+
 // Projecao do COMERCIAL: select explicito, nunca `include` do catalogItem inteiro.
 // Proibido expor marketName/dbcorpCode/ncm/notes do catalogo, fornecedor, parceiro, preco de
 // fornecedor ou dados de outros solicitantes.
@@ -49,6 +55,7 @@ const commercialSelect = {
   isDevelopment: true,
   quoteRequestId: true,
   quoteRequest: { select: { requestCode: true, deletedAt: true } },
+  attachments: attachmentsSelect,
   items: {
     orderBy: { id: 'asc' as const },
     select: {
@@ -81,6 +88,7 @@ const comexSelect = {
   requestedBy: { select: { id: true, name: true, email: true } },
   statusChangedBy: { select: { id: true, name: true } },
   quoteRequest: { select: { id: true, requestCode: true, status: true, deletedAt: true } },
+  attachments: attachmentsSelect,
   items: {
     orderBy: { id: 'asc' as const },
     select: {
@@ -111,6 +119,29 @@ function serializePrice(
   return String(value);
 }
 
+// Lista explicita de campos: mesmo que a linha traga mais (ex.: mocks), so os metadados saem.
+function serializeAttachments(
+  attachments:
+    | {
+        id: number;
+        kind: string;
+        fileName: string;
+        mimeType: string;
+        fileSize: number;
+        createdAt: Date;
+      }[]
+    | undefined,
+) {
+  return (attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    kind: attachment.kind,
+    fileName: attachment.fileName,
+    mimeType: attachment.mimeType,
+    fileSize: attachment.fileSize,
+    createdAt: attachment.createdAt,
+  }));
+}
+
 // Shape ESTRITO do comercial (nada de IDs internos nem fornecedor/parceiro).
 function serializeForCommercial(row: CommercialRow, prices: Map<number, FinalPrice | null>) {
   return {
@@ -124,6 +155,7 @@ function serializeForCommercial(row: CommercialRow, prices: Map<number, FinalPri
     statusChangedAt: row.statusChangedAt,
     // `?? false` / `?? null`: tolera linhas de mocks anteriores a esta coluna.
     isDevelopment: row.isDevelopment ?? false,
+    attachments: serializeAttachments(row.attachments),
     quote:
       row.quoteRequest && row.quoteRequest.deletedAt === null
         ? { requestCode: row.quoteRequest.requestCode }
@@ -165,6 +197,7 @@ function serializeForComex(row: ComexRow) {
     createdAt: row.createdAt,
     statusChangedAt: row.statusChangedAt,
     isDevelopment: row.isDevelopment ?? false,
+    attachments: serializeAttachments(row.attachments),
     requestedBy: row.requestedBy,
     statusChangedBy: row.statusChangedBy,
     quoteRequest:

@@ -8,6 +8,10 @@ import {
   ATTACHMENT_JSON_BODY_LIMIT_BYTES,
   ATTACHMENT_TOO_LARGE_MESSAGE,
 } from './constants/attachments';
+import {
+  CR_ATTACHMENT_JSON_BODY_LIMIT_BYTES,
+  CR_ATTACHMENT_TOO_LARGE_MESSAGE,
+} from './constants/commercialRequestAttachments';
 import { FORECAST_JSON_BODY_LIMIT_BYTES, FORECAST_TOO_LARGE_MESSAGE } from './constants/forecast';
 import {
   SUPPLIER_DOCUMENT_JSON_BODY_LIMIT_BYTES,
@@ -129,6 +133,24 @@ app.use(
   (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err?.type === 'entity.too.large') {
       res.status(413).json({ message: SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE });
+      return;
+    }
+    next(err);
+  },
+);
+
+// Anexos tecnicos da solicitacao do comercial (PDF/PNG/JPEG ate 10MB em base64 no JSON). Parser
+// maior so neste prefixo (login antes de ler o corpo) e 413 em JSON com mensagem amigavel.
+app.use(
+  '/api/v1/commercial-requests/:id/attachments',
+  requireAuthBeforeBody,
+  express.json({ limit: CR_ATTACHMENT_JSON_BODY_LIMIT_BYTES }),
+);
+app.use(
+  '/api/v1/commercial-requests/:id/attachments',
+  (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      res.status(413).json({ message: CR_ATTACHMENT_TOO_LARGE_MESSAGE });
       return;
     }
     next(err);

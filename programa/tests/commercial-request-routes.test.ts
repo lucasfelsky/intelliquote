@@ -513,6 +513,7 @@ describe('GET /commercial-requests/mine - preco final (PR2)', () => {
     const row = response.body.data[0];
     expect(Object.keys(row).sort()).toEqual(
       [
+        'attachments',
         'createdAt',
         'customerName',
         'fulfillmentNote',
