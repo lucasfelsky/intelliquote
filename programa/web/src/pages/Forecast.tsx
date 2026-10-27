@@ -16,6 +16,7 @@ import {
 import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
+import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
@@ -36,6 +37,12 @@ import {
   textoDoSelo,
   type FiltroId,
 } from './Forecast/forecastPainel';
+import {
+  contarOcultaveis,
+  filtrarPorSemVenda,
+  ocultavelPorSemVenda,
+  useMostrarSemVenda,
+} from './Forecast/forecastSemVenda';
 
 const ORIGEM_ROTULO: Record<ForecastOrigin, string> = {
   planilha: 'planilha',
@@ -63,7 +70,15 @@ function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
   );
 }
 
-function Painel({ detail, podeEditar }: { detail: ForecastSnapshotDetail; podeEditar: boolean }) {
+interface PainelProps {
+  detail: ForecastSnapshotDetail;
+  podeEditar: boolean;
+  mostrarSemVenda: boolean;
+  onMostrarSemVenda: (mostrar: boolean) => void;
+  ocultaveis: number;
+}
+
+function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: PainelProps) {
   const [filtro, setFiltro] = useState<FiltroId>('todos');
   const [busca, setBusca] = useState('');
   const [ocultas, setOcultas] = useState(false);
@@ -71,7 +86,8 @@ function Painel({ detail, podeEditar }: { detail: ForecastSnapshotDetail; podeEd
   const termo = useDeferredValue(busca);
 
   const colunas = useMemo(() => colunasDoPainel(detail.months, { ocultas }), [detail.months, ocultas]);
-  const contagem = useMemo(() => contarPorFiltro(detail.linhas), [detail.linhas]);
+  const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
+  const contagem = useMemo(() => contarPorFiltro(base), [base]);
   const divergencias = useMemo(() => {
     const mapa = new Map<string, ForecastDivergencia>();
     for (const d of detail.conferencia?.divergencias ?? []) mapa.set(chaveDaDivergencia(d.linha, d.coluna), d);
@@ -80,10 +96,24 @@ function Painel({ detail, podeEditar }: { detail: ForecastSnapshotDetail; podeEd
 
   const visiveis = useMemo(() => {
     const teste = FILTROS.find((f) => f.id === filtro)?.teste ?? (() => true);
-    return detail.linhas.filter((l) => teste(l) && casaBusca(l, termo));
-  }, [detail.linhas, filtro, termo]);
+    return base.filter((l) => teste(l) && casaBusca(l, termo));
+  }, [base, filtro, termo]);
 
-  const selecionada = detail.linhas.find((l) => l.linha === sel) ?? detail.linhas[0];
+  // Itens ocultos pelo filtro de sem venda que casariam com o chip e a busca atuais (explica o estado vazio).
+  const ocultosQueCasariam = useMemo(() => {
+    if (mostrarSemVenda || visiveis.length > 0) return 0;
+    const teste = FILTROS.find((f) => f.id === filtro)?.teste ?? (() => true);
+    return detail.linhas.filter((l) => ocultavelPorSemVenda(l) && teste(l) && casaBusca(l, termo)).length;
+  }, [detail.linhas, mostrarSemVenda, visiveis.length, filtro, termo]);
+
+  let mensagemVazia: string | undefined;
+  if (base.length === 0 && detail.linhas.length > 0) {
+    mensagemVazia = 'Todos os produtos desta quinzena estão ocultos pelo filtro “sem venda há 6 meses ou mais”.';
+  } else if (ocultosQueCasariam > 0) {
+    mensagemVazia = `Nenhum produto visível com esses filtros: ${ocultosQueCasariam} sem venda há 6 meses ou mais ${ocultosQueCasariam === 1 ? 'está oculto' : 'estão ocultos'}.`;
+  }
+
+  const selecionada = base.find((l) => l.linha === sel) ?? base[0];
   const onSelect = useCallback((linha: number) => setSel(linha), []);
 
   return (
@@ -130,6 +160,11 @@ function Painel({ detail, podeEditar }: { detail: ForecastSnapshotDetail; podeEd
               </span>
               Colunas ocultas da planilha
             </button>
+            <ForecastFiltroSemVenda
+              mostrar={mostrarSemVenda}
+              ocultaveis={ocultaveis}
+              onAlternar={() => onMostrarSemVenda(!mostrarSemVenda)}
+            />
           </div>
         </div>
         <div className="fc-legenda">
@@ -151,6 +186,7 @@ function Painel({ detail, podeEditar }: { detail: ForecastSnapshotDetail; podeEd
           divergencias={divergencias}
           onSelect={onSelect}
           legenda={`Forecast da quinzena ${detail.label}: ${visiveis.length} de ${detail.linhas.length} produtos`}
+          mensagemVazia={mensagemVazia}
         />
       </section>
       {selecionada && (
@@ -205,6 +241,8 @@ export default function Forecast() {
     enabled: escolhidaId !== undefined,
   });
   const detail = detalhe.data;
+  const [mostrarSemVenda, setMostrarSemVenda] = useMostrarSemVenda(user?.id);
+  const ocultaveis = useMemo(() => (detail ? contarOcultaveis(detail.linhas) : 0), [detail]);
 
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
   useEffect(() => {
@@ -293,7 +331,11 @@ export default function Forecast() {
 
   const subtitulo = escolhida
     ? detail
-      ? `Quinzena ${detail.label} · base ${dataBr(detail.baseDate)} · ${detail.linhas.length} produtos · origem ${ORIGEM_ROTULO[detail.origin]}`
+      ? `Quinzena ${detail.label} · base ${dataBr(detail.baseDate)} · ${detail.linhas.length} produtos${
+          mostrarSemVenda || ocultaveis === 0 || visao !== 'painel'
+            ? ''
+            : ` (${ocultaveis} ocultos sem venda ≥6 meses)`
+        } · origem ${ORIGEM_ROTULO[detail.origin]}`
       : `Quinzena ${escolhida.label} · base ${dataBr(escolhida.baseDate)} · origem ${ORIGEM_ROTULO[escolhida.origin]}`
     : 'Projeção de estoque e demanda por quinzena, no layout da planilha FORECAST (MACRO).';
 
@@ -414,7 +456,16 @@ export default function Forecast() {
       {detail && detail.origin === 'dbcorp' && (
         <ForecastPendentesCadastro key={`pendentes-${detail.id}`} snapshotId={detail.id} label={detail.label} podeEditar={podeImportar} />
       )}
-      {detail && visao === 'painel' && <Painel key={detail.id} detail={detail} podeEditar={podeImportar} />}
+      {detail && visao === 'painel' && (
+        <Painel
+          key={detail.id}
+          detail={detail}
+          podeEditar={podeImportar}
+          mostrarSemVenda={mostrarSemVenda}
+          onMostrarSemVenda={setMostrarSemVenda}
+          ocultaveis={ocultaveis}
+        />
+      )}
       {detail && visao === 'compras' && (
         <ProvedorGerarCotacao snapshotId={detail.id} podeCriar={podeImportar}>
           <ForecastRelatorioCompras key={detail.id} snapshotId={detail.id} podeEditar={podeImportar} />
