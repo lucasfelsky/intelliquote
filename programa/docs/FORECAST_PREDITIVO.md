@@ -30,8 +30,8 @@ node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/foreca
 | `--sem-mascara` | desligado | ignora atipico/ruptura (comparar vazamento) |
 | `--formato texto\|json` | texto | so stdout |
 | `--detalhe` | desligado | tabela por serie, com os ids como vieram na entrada |
-| `--relatorio p0|p1` | p1 | p0 reproduz o relatorio da fase 0 |
-| `--teto-vies <0..1>|sem` | 0,10 | teto absoluto do criterio 3 (so no p1) |
+| `--relatorio p0\|p1` | p1 | p0 reproduz o relatorio da fase 0 |
+| `--teto-vies <0..1>\|sem` | 0,10 | teto absoluto do criterio 3 (so no p1) |
 
 **Dado real fica fora do repositorio.** O CLI recusa (codigo 2) qualquer arquivo sob um diretorio que tenha `.git`
 (inclui este worktree e o checkout principal), com uma unica excecao: `programa/tests/fixtures/` (dado sintetico ou
