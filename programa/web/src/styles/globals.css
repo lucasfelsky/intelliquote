@@ -3362,6 +3362,106 @@ i.fc-status--preco { background: var(--info); }
   color: var(--ink-soft);
 }
 
+/* Demanda do comercial: puxar de uma Solicitação (piloto PR5). Somente tokens do tema. */
+.fcsl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fcsl-botao {
+  align-self: flex-start;
+}
+.fcsl-resumo {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.fcsl-painel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+}
+.fcsl-painel > .ghost-button {
+  align-self: flex-start;
+}
+.fcsl-titulo {
+  margin: 0;
+  font-size: 15px;
+}
+.fcsl-lista,
+.fcsl-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fcsl-lista {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.fcsl-solicitacao {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.fcsl-cabecalho {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.fcsl-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.fcsl-item__dados {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.fcsl-item__dados p {
+  margin: 0;
+}
+.fcsl-item__nome {
+  font-size: 14px;
+  color: var(--ink);
+}
+.fcsl-item__qtd {
+  font-size: 13px;
+  color: var(--ink);
+}
+.fcsl-motivo {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+.fcsl button:focus-visible,
+.fcsl-titulo:focus-visible {
+  outline: 2px solid var(--primary-700);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus-ring-strong);
+}
+@media (max-width: 700px) {
+  .fcsl button {
+    min-height: 44px;
+  }
+  .fcsl-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* Forecast: quantidade decidida (PR3) */
 .fdec-celula { min-width: 220px; }
 .fdec-editor { display: flex; flex-direction: column; gap: 6px; }

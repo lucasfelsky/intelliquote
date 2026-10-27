@@ -76,7 +76,7 @@ describe('servico de demanda do comercial do Forecast', () => {
       ],
     });
     await expect(listForecastProdutosParaDemanda()).resolves.toEqual([
-      { id: 5, name: 'PRODUTO 001', isActive: true, source: { name: 'FONTE 001' }, codes: [{ code: 'C0001' }] },
+      { id: 5, name: 'PRODUTO 001', isActive: true, source: { name: 'FONTE 001' }, codes: [{ code: 'C0001', catalogItemId: null }] },
       { id: 6, name: 'PRODUTO 002', isActive: false, source: null, codes: [] },
     ]);
     expect(get).toHaveBeenCalledWith('/v1/forecast/products');
