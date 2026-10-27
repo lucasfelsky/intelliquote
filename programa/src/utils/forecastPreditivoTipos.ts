@@ -2,7 +2,7 @@
 // Nada aqui altera o motor da planilha (forecastEngine.ts): o preditivo so o compara, em teste e no CLI local.
 import { createHash } from 'node:crypto';
 
-export const PREDITIVO_VERSAO = 'p0.1.0';
+export const PREDITIVO_VERSAO = 'p1.0.0';
 
 export type AnoMes = string; // 'YYYY-MM'
 
@@ -31,6 +31,12 @@ export const METODO_IDS: readonly MetodoId[] = [
   'croston',
   'sba',
 ];
+
+// Metodos da P1 (desenho 5.4); a P1b acrescenta 'tsb'.
+export type MetodoP1Id = 'combinacao-ses-r-holt' | 'preditivo-p1';
+export const METODO_P1_IDS: readonly MetodoP1Id[] = ['combinacao-ses-r-holt', 'preditivo-p1'];
+export type MetodoTodosId = MetodoId | MetodoP1Id;
+export const METODO_TODOS_IDS: readonly MetodoTodosId[] = [...METODO_IDS, ...METODO_P1_IDS]; // ordem do relatorio P1
 
 export type AvisoId =
   | 'historico-curto'
@@ -92,18 +98,18 @@ export interface PontoPrevisto {
 export type ResultadoPrevisao =
   | {
       ok: true;
-      metodo: MetodoId;
+      metodo: MetodoTodosId;
       versao: string;
       origem: AnoMes;
       pontos: PontoPrevisto[];
       avisos: AvisoId[];
       parametros: Record<string, number>;
     }
-  | { ok: false; metodo: MetodoId; motivo: 'historico-curto' | 'sem-dados' | 'horizonte-invalido' };
+  | { ok: false; metodo: MetodoTodosId; motivo: 'historico-curto' | 'sem-dados' | 'horizonte-invalido' };
 
 export type Metodo = (s: SerieNormalizada, o: OpcoesPrevisao) => ResultadoPrevisao;
 
-function congelar<T>(o: T): T {
+export function congelar<T>(o: T): T {
   if (o !== null && typeof o === 'object') {
     for (const v of Object.values(o as Record<string, unknown>)) congelar(v);
     Object.freeze(o);

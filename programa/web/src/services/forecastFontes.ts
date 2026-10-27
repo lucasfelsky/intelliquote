@@ -11,6 +11,8 @@ export interface ForecastFonte {
   leadTimeDays: number | null;
   clearanceDays: number | null;
   isActive: boolean;
+  /** Pais ISO-2 informado na tela (PR 2); opcional: backend antigo nao manda. */
+  countryCode?: string | null;
   _count?: { products: number };
 }
 

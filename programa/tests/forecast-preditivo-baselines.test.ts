@@ -59,7 +59,7 @@ describe('baselines a mao: [10, 20, 30, 40]', () => {
     const r = prever('planilha-q', s, 3);
     if (!r.ok) throw new Error('ok');
     expect(r.origem).toBe('2025-04');
-    expect(r.versao).toBe('p0.1.0');
+    expect(r.versao).toBe('p1.0.0');
     expect(r.pontos.map((p) => [p.h, p.anoMes])).toEqual([[1, '2025-05'], [2, '2025-06'], [3, '2025-07']]);
     expect(r.avisos).toEqual([]);
   });

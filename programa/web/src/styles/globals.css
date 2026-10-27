@@ -1093,6 +1093,15 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   border-right: 1px solid var(--border);
   background: var(--surface-muted);
   overflow-y: auto;
+  /* Sem teto a linha do grid crescia com ~100 familias e o overflow nunca ativava.
+     420px ~ busca + cabecalho + .dispatcher-list (280px). O media <=720 reduz para 220px. */
+  max-height: 420px;
+  min-height: 0;
+  scroll-padding-top: 44px;
+}
+
+.dispatcher-folders > * {
+  flex-shrink: 0;
 }
 
 .dispatcher-folders__label {
@@ -1101,7 +1110,12 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--ink-soft);
-  padding: 2px 6px 6px;
+  /* top -12px + padding-top 14px: cobre a folga de 12px do container ao rolar */
+  padding: 14px 6px 6px;
+  position: sticky;
+  top: -12px;
+  z-index: 1;
+  background: var(--surface-muted);
 }
 
 .dispatcher-folders__group {
@@ -3551,3 +3565,117 @@ i.fc-status--preco { background: var(--info); }
 @media print {
   .fcoc-detalhe { position: static; width: auto; }
 }
+
+/* ---- Forecast: ocasioes que afetam o lead time (PR 2 web) - aba Ocasioes, pais por fonte e linha do tempo. Prefixo fco-. Somente tokens do tema. ---- */
+.fco-abas { min-width: 0; }
+.fco-painel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fco-painel section { display: flex; flex-direction: column; gap: 8px; }
+.fco-barra { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+.fco-modelos { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; min-width: 0; margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fco-modelos .fcd-campo { min-width: 180px; }
+.fco-modelos > .fcd-dica { flex: 1 1 100%; }
+.fco-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.fco-filtro { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fco-tabela th, .fco-tabela td, .fco-tabela-ano th, .fco-tabela-ano td { padding-left: 8px; padding-right: 8px; vertical-align: top; }
+.fco-tabela tbody th, .fco-tabela-ano tbody th { text-align: left; font-weight: 600; overflow-wrap: anywhere; }
+.fco-tabela tbody th .fcd-dica { margin-top: 2px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--ink-soft); }
+.fco-acoes { flex-wrap: wrap; gap: 6px; }
+.fco-legenda { caption-side: top; padding: 0 0 6px; text-align: left; font-size: 12px; color: var(--ink-soft); }
+.fco-linha { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fco-linha__rolagem { overflow-x: auto; }
+.fco-linha__grade { min-width: 720px; }
+.fco-linha__fila { display: flex; align-items: stretch; border-bottom: 1px solid var(--border); }
+.fco-linha__fila:last-child { border-bottom: 0; }
+.fco-linha__rotulo { position: sticky; left: 0; z-index: 2; flex: none; box-sizing: border-box; width: 160px; padding: 6px 8px; border-right: 1px solid var(--border); background: var(--surface); font-size: 12px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.fco-linha__meses { position: relative; display: grid; flex: 1; min-width: 0; padding-top: 14px; }
+.fco-linha__mes { padding: 6px 0; border-left: 1px solid var(--border); text-align: center; font-size: 11px; font-weight: 700; color: var(--ink-soft); }
+.fco-linha__trilho { position: relative; flex: 1; min-width: 0; min-height: 28px; }
+.fco-linha__barra { position: absolute; top: 6px; bottom: 6px; min-width: 4px; border-radius: 2px; background: var(--primary-700); }
+.fco-linha__barra--inativa { background: transparent; border: 1px dashed var(--ink-soft); }
+.fco-linha__hoje { position: absolute; top: 0; bottom: 0; z-index: 1; width: 2px; background: var(--danger); }
+.fco-linha__hoje-rotulo { position: absolute; top: 0; left: 4px; font-size: 10px; font-weight: 700; line-height: 14px; white-space: nowrap; color: var(--danger); }
+.fco-form { max-width: 880px; }
+.fco-escopo { gap: 8px; }
+.fco-avisos { margin: 0; padding: 8px 12px 8px 28px; border-left: 3px solid var(--primary-700); border-radius: var(--radius-sm); background: var(--surface-alt); font-size: 12px; line-height: 1.45; color: var(--ink-soft); }
+.fco-aviso-percentual { padding: 6px 10px; border-radius: var(--radius-sm); background: var(--tone-warning-bg); color: var(--ink); }
+.fco-pais { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.fco-pais__form { display: flex; flex-direction: column; gap: 8px; min-width: 180px; }
+.fco-pais__codigo { width: 72px; text-align: center; text-transform: uppercase; }
+.fco-pais__editar { margin-left: 4px; }
+.fco-confirmar { display: flex; flex-direction: column; gap: 12px; padding: 12px; border: 1px solid var(--danger); border-radius: var(--radius-sm); background: var(--surface); }
+.fco-form input:focus-visible,
+.fco-form select:focus-visible,
+.fco-form textarea:focus-visible,
+.fco-filtros select:focus-visible,
+.fco-modelos select:focus-visible,
+.fco-pais select:focus-visible,
+.fco-pais input:focus-visible,
+.fco-barra button:focus-visible,
+.fco-acoes button:focus-visible,
+.fco-confirmar button:focus-visible,
+.fco-abas .tabs-trigger:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fco-pais [aria-invalid="true"] { border-color: var(--danger); }
+@media (max-width: 700px), (pointer: coarse) {
+  .fco-abas .tabs-trigger,
+  .fco-barra button,
+  .fco-acoes button,
+  .fco-pais__editar,
+  .fco-pais__form button,
+  .fco-confirmar button,
+  .fco-form .modal-actions button,
+  .fco-form .checkbox-field,
+  .fco-filtros select,
+  .fco-modelos select,
+  .fco-form select,
+  .fco-pais select,
+  .fco-painel .ghost-button,
+  .fco-form input:not([type="radio"]):not([type="checkbox"]),
+  .fco-pais__codigo { min-height: 44px; }
+  .fco-form .checkbox-field input { width: 20px; height: 20px; }
+}
+@media (max-width: 700px) {
+  .fco-filtros { grid-template-columns: minmax(0, 1fr); }
+  .fco-modelos .fcd-campo { min-width: 0; flex: 1 1 100%; }
+  .fco-linha__rotulo { width: 120px; }
+  .fco-legenda { display: block; width: 100%; white-space: normal; }
+  .fco-tabela, .fco-tabela-ano { min-width: 0; }
+  .fco-tabela thead, .fco-tabela-ano thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .fco-tabela, .fco-tabela tbody, .fco-tabela-ano, .fco-tabela-ano tbody { display: block; }
+  .fco-tabela tr, .fco-tabela-ano tr { display: block; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .fco-tabela th, .fco-tabela td, .fco-tabela-ano th, .fco-tabela-ano td { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 4px 0; border-bottom: 0; text-align: right; }
+  .fco-tabela tbody th, .fco-tabela-ano tbody th { display: block; text-align: left; }
+  .fco-tabela td::before, .fco-tabela-ano td::before { content: attr(data-rotulo); flex: none; max-width: 45%; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; color: var(--ink-soft); }
+  .fco-tabela .fco-acoes { justify-content: flex-end; }
+}
+@media print {
+  .fco-acoes, .fco-barra, .fco-modelos, .fco-filtros { display: none !important; }
+}
+/* ---- Eventos estrangeiros (delta do PR 2): alvos multiplos, lista agrupada. Prefixo fco-. Somente tokens do tema. ---- */
+.fco-alvos { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.fco-checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; margin: 0; padding: 0; list-style: none; }
+.fco-checklist--rolagem { max-height: 240px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.fco-outro-pais { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.fco-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 4px; padding: 0; list-style: none; }
+.fco-chip { padding: 2px 8px; border-radius: var(--radius-sm); background: var(--surface-alt); color: var(--ink); font-size: 12px; line-height: 1.4; }
+.fco-grupo-alvos { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.fco-grupo-alvos > li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+.fco-resultado ul { margin: 6px 0 0; padding-left: 18px; }
+.fco-vivo:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.fco-tabela .ghost-button:focus-visible, .fco-grupo-alvos button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+@media (max-width: 700px), (pointer: coarse) {
+  .fco-checklist .checkbox-field, .fco-grupo-alvos button, .fco-outro-pais button { min-height: 44px; }
+}
+@media print {
+  .fco-grupo-alvos button, .fco-tabela .ghost-button--sm { display: none !important; }
+}
+/* Forecast: Qtd. decidida na coluna ANALISE FORECAST do painel. */
+.fcad-decidida::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 999px; vertical-align: middle; background: var(--ink-faint); }
+.fcad-decidida--nao::before { background: var(--ink-faint); }
+.fcad-decidida--cotando::before { background: var(--tone-warning-border-strong); }
+.fcad-decidida--confirmado::before { background: var(--star-on); }
+.fcad-decidida--po::before { background: var(--primary); }
+.fcad-decidida--preco::before { background: var(--info); }
+.fcad-aviso { display: flex; gap: 10px; align-items: center; margin: 6px 12px; font-size: 12px; color: var(--ink-soft); }
+/* Forecast: exportar planilha MACRO pelo cabecalho do painel. */
+.fcme-msg { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
+.fcme-msg--erro { color: var(--danger); }

@@ -1,6 +1,6 @@
 // Forecast preditivo (fase 0): regras comuns a todos os metodos + baselines (planilha Q/R, ingenuo, sazonal, ponderada).
 import { PREDITIVO_CONFIG as C, PREDITIVO_VERSAO, ordenarAvisos } from './forecastPreditivoTipos';
-import type { AnoMes, AvisoId, Metodo, MetodoId, OpcoesPrevisao, ResultadoPrevisao, SerieNormalizada } from './forecastPreditivoTipos';
+import type { AnoMes, AvisoId, Metodo, MetodoTodosId, OpcoesPrevisao, ResultadoPrevisao, SerieNormalizada } from './forecastPreditivoTipos';
 import { somarMeses } from './forecastPreditivoSerie';
 
 type MetodoBaseline = 'planilha-q' | 'planilha-r' | 'ingenuo' | 'ingenuo-sazonal' | 'media-ponderada';
@@ -10,7 +10,7 @@ export const origemDe = (s: SerieNormalizada): AnoMes => somarMeses(s.inicio, s.
 // Monta o resultado: p50 negativo vira 0 (com aviso); nao finito e bug e lanca.
 export function montarResultado(
   s: SerieNormalizada,
-  metodo: MetodoId,
+  metodo: MetodoTodosId,
   p50s: number[],
   avisos: AvisoId[],
   parametros: Record<string, number>,
@@ -28,7 +28,7 @@ export function montarResultado(
 export function previsaoPlana(
   s: SerieNormalizada,
   o: OpcoesPrevisao,
-  metodo: MetodoId,
+  metodo: MetodoTodosId,
   valor: number,
   avisos: AvisoId[] = [],
   parametros: Record<string, number> = {},
@@ -40,7 +40,7 @@ export function previsaoPlana(
 export function validarAntes(
   s: SerieNormalizada,
   o: OpcoesPrevisao,
-  metodo: MetodoId,
+  metodo: MetodoTodosId,
   minimo: number,
 ): ResultadoPrevisao | null {
   if (!Number.isInteger(o.horizonte) || o.horizonte < 1 || o.horizonte > C.horizonteMax) {

@@ -22,6 +22,7 @@ import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo 
 import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
 import { APOIO_OCASIOES, PARAGRAFO_OCASIOES } from './forecastOcasioesRelatorio';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
+import { useBaixarPlanilhaMacro } from './useBaixarPlanilhaMacro';
 import {
   APOIO_SEM_CONSUMO,
   badgeDaUrgencia,
@@ -510,9 +511,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
     mutationFn: (hoje: string) => baixarForecastRelatorioXlsx(snapshotId, hoje),
   });
   // Planilha no layout da aba FORECAST (MACRO) do PO.COMP.01 (mesma rota, ?layout=macro).
-  const macro = useMutation({
-    mutationFn: (hoje: string) => baixarForecastRelatorioXlsx(snapshotId, hoje, 'macro'),
-  });
+  const macro = useBaixarPlanilhaMacro(snapshotId);
   // Estado so desta tela (sem URL); o `key` da quinzena reinicia a visao e o filtro.
   const [visao, setVisao] = useState<VisaoRelatorio>('urgencia');
   const [filtro, setFiltro] = useState<FiltroUrgencia>('todas');

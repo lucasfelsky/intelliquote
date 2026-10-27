@@ -1,13 +1,13 @@
-// Backtest do Forecast preditivo (fase 0), LOCAL: so escreve em stdout/stderr. Uso (cwd = programa/):
+// Backtest do Forecast preditivo (P1a; --relatorio p0 reproduz a fase 0), LOCAL: so escreve em stdout/stderr. Uso (cwd = programa/):
 //   node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/forecast-preditivo-backtest.ts --entrada <arquivo>
 // --quiet e obrigatorio (sem ele o ts-node-dev imprime [INFO] em stdout). Excecao nao capturada deixa o ts-node-dev
 // pendurado em modo watch: por isso tudo roda dentro do try/catch, nada e assincrono e nada relanca.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { executarCli } from '../src/utils/forecastPreditivoCli';
+import { executarCliP1 } from '../src/utils/forecastPreditivoCliP1';
 
 try {
-  const r = executarCli(process.argv.slice(2), {
+  const r = executarCliP1(process.argv.slice(2), {
     cwd: process.cwd(),
     raizRepo: path.resolve(__dirname, '..', '..'),
     existe: (c) => fs.existsSync(c),
