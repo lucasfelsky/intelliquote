@@ -339,6 +339,7 @@ export class ForecastSourceService {
     if (input.clearanceDays !== undefined) data.clearanceDays = input.clearanceDays;
     if (input.leadTimeDays !== undefined) data.leadTimeDays = input.leadTimeDays;
     if (input.supplierId !== undefined) data.supplierId = input.supplierId;
+    if (input.countryCode !== undefined) data.countryCode = input.countryCode;
     if (input.isActive !== undefined) data.isActive = input.isActive;
 
     return prisma.$transaction(async (tx) => {

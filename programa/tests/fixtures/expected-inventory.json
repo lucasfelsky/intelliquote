@@ -49,6 +49,7 @@
       "ForecastGrupoEquivalenciaService.ts",
       "ForecastImportService.ts",
       "ForecastMesesAtipicosService.ts",
+      "ForecastOcasioesService.ts",
       "ForecastProductCadastroService.ts",
       "ForecastProductService.ts",
       "ForecastSnapshotService.ts",
@@ -139,6 +140,7 @@
       "ForecastAtypicalMonth",
       "ForecastCommercialDemand",
       "ForecastEquivalenceGroup",
+      "ForecastLeadTimeEvent",
       "ForecastMonthlySale",
       "ForecastProduct",
       "ForecastProductCode",
@@ -184,7 +186,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 70
+    "migrations": 71
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -207,6 +209,7 @@
     "DELETE /commercial-requests/:id/attachments/:attachmentId",
     "DELETE /credit-partners/:id",
     "DELETE /forecast/equivalence-groups/:id",
+    "DELETE /forecast/lead-time-events/:id",
     "DELETE /forecast/snapshots/:id",
     "DELETE /forwarders/:id",
     "DELETE /quote-request-items/:id",
@@ -243,6 +246,7 @@
     "GET /credit-support-requests/:id/purchase-order/recipients",
     "GET /forecast/commercial-demands",
     "GET /forecast/equivalence-groups",
+    "GET /forecast/lead-time-events",
     "GET /forecast/products",
     "GET /forecast/products/:id/embalagens",
     "GET /forecast/products/:id/ultimo-preco",
@@ -291,6 +295,7 @@
     "GET /users/:id",
     "PATCH /forecast/commercial-demands/:id",
     "PATCH /forecast/equivalence-groups/:id",
+    "PATCH /forecast/lead-time-events/:id",
     "PATCH /forecast/products/:id/compra-sob-demanda",
     "PATCH /forecast/products/:id/embalagens",
     "PATCH /forecast/sources/:id",
@@ -329,6 +334,7 @@
     "POST /forecast/import/dbcorp/preview",
     "POST /forecast/import/workbook/confirm",
     "POST /forecast/import/workbook/preview",
+    "POST /forecast/lead-time-events",
     "POST /forecast/products",
     "POST /forecast/products/:id/codigos",
     "POST /forecast/products/:id/reativar",

@@ -1,15 +1,27 @@
 import { z } from 'zod';
 import {
   FORECAST_BASE64_MAX_LENGTH,
+  FORECAST_COUNTRY_CODE_PATTERN,
   FORECAST_LABEL_PATTERN,
   FORECAST_DBCORP_PRAZOS_MAX_FONTES,
   FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_MAX_PALLETS_POR_CODIGO,
+  FORECAST_OCASIAO_DIAS_MAX,
+  FORECAST_OCASIAO_DURACAO_MAX_DIAS,
+  FORECAST_OCASIAO_EFEITOS,
+  FORECAST_OCASIAO_ESCOPOS,
+  FORECAST_OCASIAO_ETAPAS,
+  FORECAST_OCASIAO_NOME_MAX,
+  FORECAST_OCASIAO_OBS_MAX,
+  FORECAST_OCASIAO_PERCENTUAL_MAX,
+  FORECAST_OCASIAO_PERCENTUAL_MIN,
+  FORECAST_OCASIAO_RECORRENCIAS,
+  FORECAST_OCASIOES_JANELA_MAX_DIAS,
   FORECAST_TOO_LARGE_MESSAGE,
 } from '../constants/forecast';
 import type { StatusCompra } from '../utils/forecastTypes';
-import { isValidDateKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
+import { daysUntil, isValidDateKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 
 const contentBase64Field = z
   .string({ error: 'Envie a planilha em contentBase64.' })
@@ -139,6 +151,15 @@ const leadTimeDaysField = z
   .min(0, 'Os dias nao podem ser negativos.')
   .nullable();
 
+// Pais da fonte (ISO 3166-1 alfa-2), informado a mao; casa com as ocasioes de escopo 'pais'. Maiusculo por transform.
+const countryCodeField = z
+  .string({ error: 'Informe o código do país com 2 letras (ou null).' })
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .refine((value) => FORECAST_COUNTRY_CODE_PATTERN.test(value), {
+    message: 'O código do país deve ter 2 letras (ISO 3166-1 alfa-2, ex.: BR).',
+  });
+
 export const forecastSourcePatchSchema = z
   .object({
     readinessDays: leadTimeDaysField.optional(),
@@ -153,6 +174,7 @@ export const forecastSourcePatchSchema = z
       .positive('Fornecedor invalido.')
       .nullable()
       .optional(),
+    countryCode: countryCodeField.nullable().optional(),
     isActive: z.boolean({ error: 'Informe isActive (true/false).' }).optional(),
   })
   .refine(
@@ -621,3 +643,210 @@ export const forecastDecisaoPutSchema = z
   });
 
 export type ForecastDecisaoPutInput = z.infer<typeof forecastDecisaoPutSchema>;
+
+// Ocasioes que afetam o lead time (PR 1): feriado, greve, fechamento de porto, safra. Cadastro por admin/comprador; so
+// informa no relatorio (nao muda o motor). Chave desconhecida = 400 (inclusive `coverWithStock`, que existe so na coluna).
+// Escopo: `global` sem pais/fonte; `pais` com `countryCode`; `fonte` com `sourceId` (a fonte ativa e conferida no service).
+// No PATCH os blocos sao atomicos: escopo (scopeType + countryCode + sourceId), periodo (startDate + endDate) e efeito
+// (effectKind + effectValue) vem completos ou nao vem.
+const ocasiaoNomeField = z
+  .string({ error: 'Informe o nome da ocasião.' })
+  .trim()
+  .min(1, 'Informe o nome da ocasião.')
+  .max(FORECAST_OCASIAO_NOME_MAX, `O nome aceita no máximo ${FORECAST_OCASIAO_NOME_MAX} caracteres.`);
+
+const ocasiaoObservacaoField = z
+  .string({ error: 'A observação deve ser um texto (ou null).' })
+  .trim()
+  .max(FORECAST_OCASIAO_OBS_MAX, `A observação aceita no máximo ${FORECAST_OCASIAO_OBS_MAX} caracteres.`)
+  .transform((value) => (value === '' ? null : value))
+  .nullable();
+
+const ocasiaoEscopoField = z.enum(FORECAST_OCASIAO_ESCOPOS, { error: 'Escopo inválido (global, pais ou fonte).' });
+const ocasiaoRecorrenciaField = z.enum(FORECAST_OCASIAO_RECORRENCIAS, { error: 'Recorrência inválida (nenhuma ou anual).' });
+const ocasiaoEtapaField = z.enum(FORECAST_OCASIAO_ETAPAS, {
+  error: 'Etapa inválida (total, prontidao, embarque, transito ou liberacao).',
+});
+const ocasiaoEfeitoField = z.enum(FORECAST_OCASIAO_EFEITOS, { error: 'Tipo de efeito inválido (dias ou percentual).' });
+const ocasiaoDataField = (campo: string) => dateKeyField(`Informe ${campo} (AAAA-MM-DD).`);
+const ocasiaoFonteField = z
+  .number({ error: 'Fonte inválida.' })
+  .int('Fonte inválida.')
+  .positive('Fonte inválida.')
+  .max(2_147_483_647, 'Fonte inválida.'); // INTEGER do Postgres
+const ocasiaoValorField = z.number({ error: 'Informe o valor do efeito.' });
+
+function regraEscopoOcasiao(
+  value: { scopeType: (typeof FORECAST_OCASIAO_ESCOPOS)[number]; countryCode?: string | null; sourceId?: number | null },
+  ctx: z.RefinementCtx,
+): void {
+  const temPais = value.countryCode !== undefined && value.countryCode !== null;
+  const temFonte = value.sourceId !== undefined && value.sourceId !== null;
+  if (value.scopeType === 'global' && (temPais || temFonte)) {
+    ctx.addIssue({ code: 'custom', message: 'Ocasião global não tem país nem fonte.' });
+  }
+  if (value.scopeType === 'pais') {
+    if (!temPais) {
+      ctx.addIssue({ code: 'custom', path: ['countryCode'], message: 'Informe o país da ocasião.' });
+    }
+    if (temFonte) {
+      ctx.addIssue({ code: 'custom', path: ['sourceId'], message: 'Ocasião de país não tem fonte.' });
+    }
+  }
+  if (value.scopeType === 'fonte') {
+    if (!temFonte) {
+      ctx.addIssue({ code: 'custom', path: ['sourceId'], message: 'Informe a fonte da ocasião.' });
+    }
+    if (temPais) {
+      ctx.addIssue({ code: 'custom', path: ['countryCode'], message: 'Ocasião de fonte não tem país.' });
+    }
+  }
+}
+
+function regraPeriodoOcasiao(value: { startDate: string; endDate: string }, ctx: z.RefinementCtx): void {
+  if (!isValidDateKey(value.startDate) || !isValidDateKey(value.endDate)) {
+    return;
+  }
+  if (value.endDate < value.startDate) {
+    ctx.addIssue({ code: 'custom', path: ['endDate'], message: 'O fim não pode ser anterior ao início.' });
+    return;
+  }
+  if (daysUntil(value.endDate, value.startDate) + 1 > FORECAST_OCASIAO_DURACAO_MAX_DIAS) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['endDate'],
+      message: `O período aceita no máximo ${FORECAST_OCASIAO_DURACAO_MAX_DIAS} dias.`,
+    });
+  }
+}
+
+function regraEfeitoOcasiao(
+  value: { effectKind: (typeof FORECAST_OCASIAO_EFEITOS)[number]; effectValue: number },
+  ctx: z.RefinementCtx,
+): void {
+  if (value.effectKind === 'dias') {
+    if (!Number.isInteger(value.effectValue) || value.effectValue < 0 || value.effectValue > FORECAST_OCASIAO_DIAS_MAX) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['effectValue'],
+        message: `Informe os dias como inteiro de 0 a ${FORECAST_OCASIAO_DIAS_MAX}.`,
+      });
+    }
+    return;
+  }
+  if (
+    value.effectValue < FORECAST_OCASIAO_PERCENTUAL_MIN ||
+    value.effectValue > FORECAST_OCASIAO_PERCENTUAL_MAX ||
+    !/^\d+(\.\d{1,2})?$/.test(String(value.effectValue))
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['effectValue'],
+      message: `Informe o percentual de ${FORECAST_OCASIAO_PERCENTUAL_MIN} a ${FORECAST_OCASIAO_PERCENTUAL_MAX} com até 2 casas decimais.`,
+    });
+  }
+}
+
+export const forecastOcasiaoCreateSchema = z
+  .strictObject({
+    name: ocasiaoNomeField,
+    scopeType: ocasiaoEscopoField,
+    countryCode: countryCodeField.nullable().optional(),
+    sourceId: ocasiaoFonteField.nullable().optional(),
+    startDate: ocasiaoDataField('o início'),
+    endDate: ocasiaoDataField('o fim'),
+    recurrence: ocasiaoRecorrenciaField.default('nenhuma'),
+    component: ocasiaoEtapaField.default('total'),
+    effectKind: ocasiaoEfeitoField.default('dias'),
+    effectValue: ocasiaoValorField,
+    notes: ocasiaoObservacaoField.optional(),
+    isActive: z.boolean({ error: 'Informe isActive (true/false).' }).default(true),
+  })
+  .superRefine((value, ctx) => {
+    regraEscopoOcasiao(value, ctx);
+    regraPeriodoOcasiao(value, ctx);
+    regraEfeitoOcasiao(value, ctx);
+  })
+  .transform((value) => ({
+    ...value,
+    countryCode: value.countryCode ?? null,
+    sourceId: value.sourceId ?? null,
+    notes: value.notes ?? null,
+  }));
+
+export const forecastOcasiaoPatchSchema = z
+  .strictObject({
+    name: ocasiaoNomeField.optional(),
+    scopeType: ocasiaoEscopoField.optional(),
+    countryCode: countryCodeField.nullable().optional(),
+    sourceId: ocasiaoFonteField.nullable().optional(),
+    startDate: ocasiaoDataField('o início').optional(),
+    endDate: ocasiaoDataField('o fim').optional(),
+    recurrence: ocasiaoRecorrenciaField.optional(),
+    component: ocasiaoEtapaField.optional(),
+    effectKind: ocasiaoEfeitoField.optional(),
+    effectValue: ocasiaoValorField.optional(),
+    notes: ocasiaoObservacaoField.optional(),
+    isActive: z.boolean({ error: 'Informe isActive (true/false).' }).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (Object.values(value).every((campo) => campo === undefined)) {
+      ctx.addIssue({ code: 'custom', message: 'Informe o que alterar na ocasião.' });
+      return;
+    }
+    if (value.scopeType === undefined && (value.countryCode !== undefined || value.sourceId !== undefined)) {
+      ctx.addIssue({ code: 'custom', path: ['scopeType'], message: 'Para alterar país ou fonte, informe também o escopo.' });
+    }
+    if (value.scopeType !== undefined) {
+      regraEscopoOcasiao({ scopeType: value.scopeType, countryCode: value.countryCode, sourceId: value.sourceId }, ctx);
+    }
+    if ((value.startDate === undefined) !== (value.endDate === undefined)) {
+      ctx.addIssue({ code: 'custom', path: ['endDate'], message: 'Informe o início e o fim juntos.' });
+    } else if (value.startDate !== undefined && value.endDate !== undefined) {
+      regraPeriodoOcasiao({ startDate: value.startDate, endDate: value.endDate }, ctx);
+    }
+    if ((value.effectKind === undefined) !== (value.effectValue === undefined)) {
+      ctx.addIssue({ code: 'custom', path: ['effectValue'], message: 'Informe o tipo e o valor do efeito juntos.' });
+    } else if (value.effectKind !== undefined && value.effectValue !== undefined) {
+      regraEfeitoOcasiao({ effectKind: value.effectKind, effectValue: value.effectValue }, ctx);
+    }
+  })
+  .transform((value) =>
+    value.scopeType === undefined
+      ? value
+      : { ...value, countryCode: value.countryCode ?? null, sourceId: value.sourceId ?? null },
+  );
+
+export const forecastOcasioesQuerySchema = z
+  .object({
+    de: dateKeyField('Informe a data inicial da janela (AAAA-MM-DD).').optional(),
+    ate: dateKeyField('Informe a data final da janela (AAAA-MM-DD).').optional(),
+    scopeType: ocasiaoEscopoField.optional(),
+    countryCode: countryCodeField.optional(),
+    sourceId: ocasiaoFonteField.optional(),
+    ativa: z
+      .enum(['true', 'false'], { error: 'Informe ativa=true ou ativa=false.' })
+      .transform((value) => value === 'true')
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.de === undefined) !== (value.ate === undefined)) {
+      ctx.addIssue({ code: 'custom', path: ['ate'], message: 'Informe a janela com de e ate juntos.' });
+      return;
+    }
+    if (value.de !== undefined && value.ate !== undefined) {
+      if (value.ate < value.de) {
+        ctx.addIssue({ code: 'custom', path: ['ate'], message: 'A data final não pode ser anterior à inicial.' });
+      } else if (daysUntil(value.ate, value.de) + 1 > FORECAST_OCASIOES_JANELA_MAX_DIAS) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['ate'],
+          message: `A janela aceita no máximo ${FORECAST_OCASIOES_JANELA_MAX_DIAS} dias.`,
+        });
+      }
+    }
+  });
+
+export type ForecastOcasiaoCreateInput = z.infer<typeof forecastOcasiaoCreateSchema>;
+export type ForecastOcasiaoPatchInput = z.infer<typeof forecastOcasiaoPatchSchema>;
+export type ForecastOcasioesQueryInput = z.infer<typeof forecastOcasioesQuerySchema>;
