@@ -191,7 +191,7 @@ function renderPage(url = '/forecast') {
 const detalhesChamados = () =>
   get.mock.calls
     .map((c) => String(c[0]))
-    .filter((p) => p.startsWith('/v1/forecast/snapshots/') && !p.endsWith('/relatorio-compras') && !p.endsWith('/pendentes'));
+    .filter((p) => p.startsWith('/v1/forecast/snapshots/') && !p.endsWith('/relatorio-compras') && !p.endsWith('/pendentes') && !p.endsWith('/decisoes'));
 
 const pendentesChamados = () => get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith('/pendentes'));
 

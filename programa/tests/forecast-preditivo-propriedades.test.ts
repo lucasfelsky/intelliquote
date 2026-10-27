@@ -47,7 +47,7 @@ describe('propriedades de todos os metodos x todas as series sinteticas', () => 
         const a = METODOS[id](s, { horizonte: 6 });
         expect(METODOS[id](s, { horizonte: 6 })).toEqual(a);
         if (a.ok) {
-          expect(a.versao).toBe('p0.1.0');
+          expect(a.versao).toBe('p1.0.0');
           expect(a.metodo).toBe(id);
           expect(a.pontos.map((p) => p.h)).toEqual([1, 2, 3, 4, 5, 6]);
         }

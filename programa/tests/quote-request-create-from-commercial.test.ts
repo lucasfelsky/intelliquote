@@ -6,6 +6,7 @@ import { hashPassword } from '../src/utils/password';
 
 const { txMock, notifyMock, auditLogMock } = vi.hoisted(() => ({
   txMock: {
+    $queryRaw: vi.fn(),
     commercialRequest: { findMany: vi.fn(), updateMany: vi.fn() },
     commercialRequestItem: { update: vi.fn() },
     quoteRequest: { create: vi.fn(), findUnique: vi.fn() },
@@ -104,6 +105,7 @@ beforeEach(async () => {
   ]);
   prismaMock.$transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(txMock));
 
+  txMock.$queryRaw.mockResolvedValue([]);
   // solicitacao 7 tem os itens 10 (casa) e 12 (o COMEX removeu da cotacao)
   txMock.commercialRequest.findMany.mockResolvedValue([
     {

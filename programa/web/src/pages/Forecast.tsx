@@ -13,9 +13,12 @@ import {
   type ForecastSnapshotDetail,
   type ForecastSnapshotSummary,
 } from '@/services/forecast';
+import { forecastDecisoesKeys, listForecastDecisoes, type ForecastDecisao } from '@/services/forecastDecisoes';
 import { forecastPendentesKeys } from '@/services/forecastPendentes';
+import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
+import ForecastExportarMacro from './Forecast/ForecastExportarMacro';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import { useDialogoFontes } from './Forecast/useDialogoFontes';
@@ -24,6 +27,7 @@ import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
+import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
 import {
   casaBusca,
@@ -86,7 +90,21 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
   const [sel, setSel] = useState<number | null>(null);
   const termo = useDeferredValue(busca);
 
-  const colunas = useMemo(() => colunasDoPainel(detail.months, { ocultas }), [detail.months, ocultas]);
+  // Quantidades decididas pelo comprador: mesma chave do relatorio de compras (salvar la atualiza a grade). A grade
+  // nunca some: sem dados (carregando ou erro sem cache) a coluna ANALISE FORECAST mostra o valor congelado.
+  const decisoes = useQuery({
+    queryKey: forecastDecisoesKeys.lista(detail.id),
+    queryFn: () => listForecastDecisoes(detail.id),
+  });
+  const decisoesData = decisoes.data;
+  const mapaDecisoes = useMemo(
+    () => (decisoesData ? new Map<number, ForecastDecisao>(decisoesData.map((d) => [d.productId, d])) : null),
+    [decisoesData],
+  );
+  const colunas = useMemo(
+    () => colunasComDecisoes(colunasDoPainel(detail.months, { ocultas }), mapaDecisoes),
+    [detail.months, ocultas, mapaDecisoes],
+  );
   const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
   const contagem = useMemo(() => contarPorFiltro(base), [base]);
   const divergencias = useMemo(() => {
@@ -180,6 +198,20 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
             {visiveis.length} de {detail.linhas.length} produtos
           </span>
         </div>
+        {decisoes.isLoading && (
+          <p className="fcad-aviso" role="status">
+            Carregando as quantidades decididas…
+          </p>
+        )}
+        {decisoes.isError && decisoesData === undefined && (
+          <p className="fcad-aviso" role="status">
+            Não foi possível carregar as quantidades decididas. A coluna ANÁLISE FORECAST mostra o valor importado da
+            quinzena.
+            <button type="button" className="ghost-button ghost-button--sm" onClick={() => void decisoes.refetch()}>
+              Tentar de novo
+            </button>
+          </p>
+        )}
         <ForecastGrid
           colunas={colunas}
           linhas={visiveis}
@@ -242,6 +274,8 @@ export default function Forecast() {
   const detail = detalhe.data;
   const [mostrarSemVenda, setMostrarSemVenda] = useMostrarSemVenda(user?.id);
   const ocultaveis = useMemo(() => (detail ? contarOcultaveis(detail.linhas) : 0), [detail]);
+  // PO.COMP.01: calculado no front (hoje em Sao Paulo, uma vez por montagem); null fora da tabela de feriados.
+  const proxima = useMemo(() => proximaAnalise(hojeEmSaoPaulo(new Date())), []);
 
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
   useEffect(() => {
@@ -305,6 +339,7 @@ export default function Forecast() {
       queryClient.removeQueries({ queryKey: forecastKeys.snapshot(id) });
       queryClient.removeQueries({ queryKey: forecastKeys.relatorio(id) });
       queryClient.removeQueries({ queryKey: forecastPendentesKeys.snapshot(id) });
+      queryClient.removeQueries({ queryKey: forecastDecisoesKeys.lista(id) });
       focoAposExcluir.current = restantes.length > 0 ? 'seletor' : 'importar';
       setImportada(null);
       setExcluida(label);
@@ -337,7 +372,10 @@ export default function Forecast() {
           <h1>
             Forecast de compras <span className="badge badge--warning fc-beta">Beta</span>
           </h1>
-          <p>{subtitulo}</p>
+          <p>
+            {subtitulo}
+            {escolhida && proxima && <span className="fcpa-proxima"> · próxima análise {dataBr(proxima)}</span>}
+          </p>
           <p className="fc-beta-aviso">Em validação: confira os números com a planilha do Forecast.</p>
         </div>
         {(quinzenas.length > 0 || podeImportar || lista.isSuccess) && (
@@ -393,6 +431,7 @@ export default function Forecast() {
             >
               Grupos de equivalência
             </button>
+            {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
             {podeImportar && (
               <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
                 Importar quinzena

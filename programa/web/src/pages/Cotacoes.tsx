@@ -23,6 +23,7 @@ interface QuoteRequest {
   reopenedAt: string | null;
   purchaseOrderSentAt: string | null;
   createdById: number | null;
+  isDevelopment: boolean;
   _count?: { quoteResponses?: number; items?: number };
 }
 
@@ -121,6 +122,7 @@ function normalize(qr: unknown): QuoteRequest {
     reopenedAt: (obj.reopenedAt as string | null) ?? null,
     purchaseOrderSentAt: (obj.purchaseOrderSentAt as string | null) ?? null,
     createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
+    isDevelopment: obj.isDevelopment === true,
     _count: countObj
       ? {
           quoteResponses: typeof countObj.quoteResponses === 'number' ? countObj.quoteResponses : 0,
@@ -341,7 +343,15 @@ export default function Cotacoes() {
               {rows.map((qr) => (
                 <tr key={qr.id}>
                   <td>{qr.id}</td>
-                  <td className="cell-nowrap"><strong>{qr.requestCode}</strong></td>
+                  <td className="cell-nowrap">
+                    <strong>{qr.requestCode}</strong>
+                    {qr.isDevelopment && (
+                      <>
+                        {' '}
+                        <span className="badge badge--info">Desenvolvimento</span>
+                      </>
+                    )}
+                  </td>
                   <td>
                     <div className="chip-row">
                       {qr.desiredIncoterm.map((t) => (

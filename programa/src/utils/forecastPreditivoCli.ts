@@ -8,7 +8,7 @@ import { ancestralComGit, caminhoSob, entradaDentroDoRepo, lerEntrada, pastaFixt
 import { relatorioJson, relatorioTexto } from './forecastPreditivoRelatorio';
 import { normalizarSeries, serieDaQuinzena } from './forecastPreditivoSerie';
 import { METODO_IDS, PREDITIVO_CONFIG as C } from './forecastPreditivoTipos';
-import type { MetodoId, SerieEntrada } from './forecastPreditivoTipos';
+import type { MetodoId, SerieEntrada, SerieNormalizada } from './forecastPreditivoTipos';
 import type { Quinzena } from './forecastTypes';
 
 export const LIMITE_BYTES = 20 * 1024 * 1024;
@@ -87,51 +87,60 @@ function lerQuinzena(texto: string): SerieEntrada[] | null {
   }
 }
 
+export type CargaSeries = { ok: true; series: SerieNormalizada[]; rejeitadas: number } | { ok: false; erro: string };
+
+// Resolve o caminho, recusa repositorio git (exceto fixtures), checa existencia/tamanho/extensao, le e normaliza. Pura: so usa deps.
+// Compartilhada com o CLI P1 (a logica de seguranca de caminho nao pode existir em duas copias).
+export function carregarSeries(opcoes: { entrada?: string; quinzena?: string }, deps: DependenciasCli): CargaSeries {
+  const caminhos = deps.caminhos ?? nodePath;
+  const arquivo = (opcoes.entrada ?? opcoes.quinzena)!;
+  const resolvido = caminhos.resolve(deps.cwd, arquivo);
+  const existe = deps.existe(resolvido);
+  const candidatos = [resolvido];
+  if (existe) {
+    const real = deps.caminhoReal(resolvido);
+    if (real !== resolvido) candidatos.push(real);
+  }
+  // junction/symlink: vale o caminho resolvido E o real. Sob fixtures (nas duas) e liberado; sob repo git, recusado.
+  const sobFixtures = (c: string) => caminhoSob(pastaFixtures(deps.raizRepo, caminhos), c, caminhos);
+  const liberado = candidatos.every(sobFixtures);
+  if (!liberado && candidatos.some((c) => entradaDentroDoRepo(c, deps.raizRepo, caminhos) || ancestralComGit(c, deps.existe, caminhos) !== null)) {
+    return { ok: false, erro: 'entrada recusada: caminho dentro de um repositorio git (so programa/tests/fixtures/ e aceito); use um arquivo fora do repositorio' };
+  }
+  if (!existe) return { ok: false, erro: 'arquivo de entrada nao encontrado' };
+  if (deps.tamanhoBytes(resolvido) > LIMITE_BYTES) return { ok: false, erro: 'arquivo de entrada maior que 20 MB' };
+  const extensao = caminhos.extname(resolvido).toLowerCase();
+  if (opcoes.entrada !== undefined && extensao !== '.csv' && extensao !== '.json') return { ok: false, erro: 'extensao da entrada deve ser .csv ou .json' };
+  if (opcoes.quinzena !== undefined && extensao !== '.json') return { ok: false, erro: 'extensao da quinzena deve ser .json' };
+
+  const texto = deps.lerTexto(resolvido);
+  let entrada: SerieEntrada[];
+  let errosLeitura: string[] = [];
+  if (opcoes.quinzena !== undefined) {
+    const series = lerQuinzena(texto);
+    if (series === null) return { ok: false, erro: 'quinzena invalida' };
+    entrada = series;
+  } else {
+    const lida = lerEntrada(texto, extensao === '.json' ? 'json' : 'csv');
+    entrada = lida.series;
+    errosLeitura = lida.erros;
+  }
+  const fatal = errosLeitura.find((e) => e === 'nenhuma serie' || e.startsWith('limite') || e.startsWith('cabecalho') || e.startsWith('json invalido'));
+  if (fatal !== undefined || entrada.length === 0) return { ok: false, erro: fatal ?? 'nenhuma serie' };
+
+  const { series, erros: errosSerie } = normalizarSeries(entrada);
+  return { ok: true, series, rejeitadas: errosLeitura.length + errosSerie.length };
+}
+
 export function executarCli(argv: string[], deps: DependenciasCli): { codigo: 0 | 1 | 2; saida: string; erro: string } {
   try {
     const args = interpretarArgumentos(argv);
     if (!args.ok) return resposta(2, '', args.erro);
     const { opcoes } = args;
-    const caminhos = deps.caminhos ?? nodePath;
-    const arquivo = (opcoes.entrada ?? opcoes.quinzena)!;
-    const resolvido = caminhos.resolve(deps.cwd, arquivo);
-    const existe = deps.existe(resolvido);
-    const candidatos = [resolvido];
-    if (existe) {
-      const real = deps.caminhoReal(resolvido);
-      if (real !== resolvido) candidatos.push(real);
-    }
-    // junction/symlink: vale o caminho resolvido E o real. Sob fixtures (nas duas) e liberado; sob repo git, recusado.
-    const sobFixtures = (c: string) => caminhoSob(pastaFixtures(deps.raizRepo, caminhos), c, caminhos);
-    const liberado = candidatos.every(sobFixtures);
-    if (!liberado && candidatos.some((c) => entradaDentroDoRepo(c, deps.raizRepo, caminhos) || ancestralComGit(c, deps.existe, caminhos) !== null)) {
-      return resposta(2, '', 'entrada recusada: caminho dentro de um repositorio git (so programa/tests/fixtures/ e aceito); use um arquivo fora do repositorio');
-    }
-    if (!existe) return resposta(2, '', 'arquivo de entrada nao encontrado');
-    if (deps.tamanhoBytes(resolvido) > LIMITE_BYTES) return resposta(2, '', 'arquivo de entrada maior que 20 MB');
-    const extensao = caminhos.extname(resolvido).toLowerCase();
-    if (opcoes.entrada !== undefined && extensao !== '.csv' && extensao !== '.json') return resposta(2, '', 'extensao da entrada deve ser .csv ou .json');
-    if (opcoes.quinzena !== undefined && extensao !== '.json') return resposta(2, '', 'extensao da quinzena deve ser .json');
-
-    const texto = deps.lerTexto(resolvido);
-    let entrada: SerieEntrada[];
-    let errosLeitura: string[] = [];
-    if (opcoes.quinzena !== undefined) {
-      const series = lerQuinzena(texto);
-      if (series === null) return resposta(2, '', 'quinzena invalida');
-      entrada = series;
-    } else {
-      const lida = lerEntrada(texto, extensao === '.json' ? 'json' : 'csv');
-      entrada = lida.series;
-      errosLeitura = lida.erros;
-    }
-    const fatal = errosLeitura.find((e) => e === 'nenhuma serie' || e.startsWith('limite') || e.startsWith('cabecalho') || e.startsWith('json invalido'));
-    if (fatal !== undefined || entrada.length === 0) return resposta(2, '', fatal ?? 'nenhuma serie');
-
-    const { series, erros: errosSerie } = normalizarSeries(entrada);
-    const rejeitadas = errosLeitura.length + errosSerie.length;
-    const resultado = rodarBacktest(series, opcoes.backtest);
-    const o = { detalhe: opcoes.detalhe, linhasRejeitadas: rejeitadas };
+    const carga = carregarSeries(opcoes, deps);
+    if (!carga.ok) return resposta(2, '', carga.erro);
+    const resultado = rodarBacktest(carga.series, opcoes.backtest);
+    const o = { detalhe: opcoes.detalhe, linhasRejeitadas: carga.rejeitadas };
     return resposta(0, opcoes.formato === 'json' ? relatorioJson(resultado, o) : relatorioTexto(resultado, o), '');
   } catch (e) {
     return resposta(1, '', `erro inesperado (${e instanceof Error ? e.name : 'desconhecido'})`);
