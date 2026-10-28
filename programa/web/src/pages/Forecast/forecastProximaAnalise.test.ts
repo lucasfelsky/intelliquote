@@ -13,12 +13,10 @@ describe('FERIADOS_NACIONAIS', () => {
     expect([...ANOS_COBERTOS].sort()).toEqual([2026, 2027]);
   });
 
-  it('2026: os 13 feriados esperados (igualdade de conjunto)', () => {
+  it('2026: os 11 feriados esperados (igualdade de conjunto)', () => {
     expect([...(FERIADOS_NACIONAIS[2026] ?? [])].sort()).toEqual(
       [
         '2026-01-01',
-        '2026-02-16',
-        '2026-02-17',
         '2026-04-03',
         '2026-04-21',
         '2026-05-01',
@@ -33,12 +31,10 @@ describe('FERIADOS_NACIONAIS', () => {
     );
   });
 
-  it('2027: os 13 feriados esperados (igualdade de conjunto)', () => {
+  it('2027: os 11 feriados esperados (igualdade de conjunto)', () => {
     expect([...(FERIADOS_NACIONAIS[2027] ?? [])].sort()).toEqual(
       [
         '2027-01-01',
-        '2027-02-08',
-        '2027-02-09',
         '2027-03-26',
         '2027-04-21',
         '2027-05-01',
@@ -52,6 +48,15 @@ describe('FERIADOS_NACIONAIS', () => {
       ].sort(),
     );
   });
+
+  it('22 datas no total e nenhuma de Carnaval', () => {
+    const todas = Object.values(FERIADOS_NACIONAIS).flat();
+    expect(todas).toHaveLength(22);
+    expect(todas).not.toContain('2026-02-16');
+    expect(todas).not.toContain('2026-02-17');
+    expect(todas).not.toContain('2027-02-08');
+    expect(todas).not.toContain('2027-02-09');
+  });
 });
 
 describe('ehDiaUtil', () => {
@@ -64,7 +69,17 @@ describe('ehDiaUtil', () => {
     expect(ehDiaUtil('2026-10-24')).toBe(false); // sabado
     expect(ehDiaUtil('2026-10-25')).toBe(false); // domingo
     expect(ehDiaUtil('2026-11-02')).toBe(false); // Finados (segunda)
-    expect(ehDiaUtil('2026-02-17')).toBe(false); // Carnaval (terca)
+    expect(ehDiaUtil('2026-04-03')).toBe(false); // Sexta-feira Santa
+    expect(ehDiaUtil('2026-06-04')).toBe(false); // Corpus Christi
+    expect(ehDiaUtil('2027-03-26')).toBe(false); // Sexta-feira Santa
+    expect(ehDiaUtil('2027-05-27')).toBe(false); // Corpus Christi
+  });
+
+  it('Carnaval conta como dia util (2026 e 2027)', () => {
+    expect(ehDiaUtil('2026-02-16')).toBe(true);
+    expect(ehDiaUtil('2026-02-17')).toBe(true);
+    expect(ehDiaUtil('2027-02-08')).toBe(true);
+    expect(ehDiaUtil('2027-02-09')).toBe(true);
   });
 
   it('ano fora da tabela e data invalida devolvem null', () => {
@@ -78,7 +93,7 @@ describe('ehDiaUtil', () => {
 // Valores gerados e conferidos: [ano, mes, 2o dia util a partir do dia 1, 2o dia util a partir do dia 16].
 const CANDIDATAS: Array<[number, number, string, string]> = [
   [2026, 1, '2026-01-05', '2026-01-19'],
-  [2026, 2, '2026-02-03', '2026-02-19'],
+  [2026, 2, '2026-02-03', '2026-02-17'],
   [2026, 3, '2026-03-03', '2026-03-17'],
   [2026, 4, '2026-04-02', '2026-04-17'],
   [2026, 5, '2026-05-05', '2026-05-19'],
@@ -111,6 +126,12 @@ describe('segundoDiaUtil', () => {
     },
   );
 
+  it('Carnaval nao adia; Sexta-feira Santa e Corpus Christi seguem feriado', () => {
+    expect(segundoDiaUtil(2027, 2, 8)).toBe('2027-02-09'); // com Carnaval como feriado seria 11/02
+    expect(segundoDiaUtil(2026, 4, 3)).toBe('2026-04-07'); // sem Sexta-feira Santa seria 06/04
+    expect(segundoDiaUtil(2026, 6, 4)).toBe('2026-06-08'); // sem Corpus Christi seria 05/06
+  });
+
   it('fora da tabela ou entrada invalida = null', () => {
     expect(segundoDiaUtil(2028, 1, 1)).toBeNull();
     expect(segundoDiaUtil(2026, 13, 1)).toBeNull();
@@ -138,8 +159,11 @@ describe('proximaAnalise', () => {
     expect(proximaAnalise('2026-11-05')).toBe('2026-11-17'); // 15/11 domingo e feriado
   });
 
-  it('Carnaval: 16 e 17/02 sao feriados; quarta de cinzas conta como util', () => {
-    expect(proximaAnalise('2026-02-04')).toBe('2026-02-19');
+  it('Carnaval nao adia a analise: 2o dia util apos o dia 15 de fev/2026 e 17/02', () => {
+    // com Carnaval como feriado seriam 19/02, 19/02, 19/02
+    expect(proximaAnalise('2026-02-04')).toBe('2026-02-17');
+    expect(proximaAnalise('2026-02-17')).toBe('2026-02-17');
+    expect(proximaAnalise('2026-02-18')).toBe('2026-03-03');
   });
 
   it('virada de ano: 01/01 e feriado', () => {

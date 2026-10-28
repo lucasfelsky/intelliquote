@@ -5,7 +5,7 @@
 //
 // Premissas (confirmar com o Comex):
 // - Dia util = segunda a sexta fora da tabela de feriados abaixo.
-// - Ponto facultativo (ex.: quarta-feira de cinzas ate as 14h) conta como dia util.
+// - Carnaval (segunda e terca) e quarta-feira de cinzas sao ponto facultativo e contam como dia util (decisao do Lucas, 2026-10-27).
 // - Feriados estaduais e municipais ficam de fora.
 //
 // REVISAR TODO ANO (dezembro): acrescentar o ano seguinte; o Comex confirma a lista.
@@ -14,18 +14,17 @@
 // Nota juridica (so registro; o Comex deve confirmar a lista): por lei federal sao feriados nacionais 1/1, 21/4, 1/5,
 // 7/9, 2/11, 15/11 e 25/12 (Lei 662/1949, redacao da Lei 10.607/2002), 12/10 (Lei 6.802/1980) e 20/11 (Lei 14.759/2023).
 // Sexta-feira da Paixao e feriado religioso declarado por lei municipal (Lei 9.093/1995), na pratica em todo o pais.
-// Carnaval e Corpus Christi sao ponto facultativo no servico publico federal, nao feriado por lei federal; entram na
-// tabela por decisao do Lucas (bancos e despacho aduaneiro param).
+// Carnaval e Corpus Christi sao ponto facultativo no servico publico federal, nao feriado por lei federal. Corpus
+// Christi entra na tabela por decisao do Lucas (bancos e despacho aduaneiro param); o Carnaval NAO entra (conta como
+// dia util, decisao do Lucas de 2026-10-27).
 //
 // Datas sao sempre manipuladas pelo texto AAAA-MM-DD; o dia da semana vem de aritmetica em UTC. new Date('AAAA-MM-DD')
 // com getDay() local e toISOString() mostram o dia anterior em BRT.
 
-/** Feriados nacionais (e Carnaval, Sexta-feira Santa, Corpus Christi) por ano, em AAAA-MM-DD. */
+/** Feriados nacionais (e Sexta-feira Santa, Corpus Christi) por ano, em AAAA-MM-DD. Carnaval fica fora: dia util. */
 export const FERIADOS_NACIONAIS: Readonly<Record<number, readonly string[]>> = {
   2026: [
     '2026-01-01',
-    '2026-02-16',
-    '2026-02-17',
     '2026-04-03',
     '2026-04-21',
     '2026-05-01',
@@ -39,8 +38,6 @@ export const FERIADOS_NACIONAIS: Readonly<Record<number, readonly string[]>> = {
   ],
   2027: [
     '2027-01-01',
-    '2027-02-08',
-    '2027-02-09',
     '2027-03-26',
     '2027-04-21',
     '2027-05-01',
