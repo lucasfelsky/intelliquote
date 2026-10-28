@@ -94,7 +94,7 @@
   --toast-outline: rgba(255, 255, 255, 0.45);
   --toast-hover-tint: rgba(255, 255, 255, 0.1);
 
-  /* Refino (Suite COMEX, mock v68): base aditiva, ninguem consome ainda. */
+  /* Refino (Suite COMEX, mock v68): base aditiva; so a regiao "shell F2" consome (F2). */
   --rf-bg: #eef2f1;
   --rf-surface: #ffffff;
   --rf-surface-alt: #f5f8f7;
@@ -129,6 +129,8 @@
   --rf-fc-status-po: #007864;
   --rf-fc-status-preco: #1e6fb6;
   --rf-fc-current-tint: rgba(253, 243, 220, 0.45);
+  --rf-control-hover-border: #b9cbc6;
+  --rf-avatar-ring: none;
   --rf-primary: #14dda7;
   --rf-primary-hover: #2ee8b5;
   --rf-primary-pressed: #0fb98c;
@@ -149,6 +151,7 @@
   --rf-sidebar-tag-fg: #d6e6eb;
   --rf-sidebar-tag-active-bg: rgba(20, 221, 167, 0.22);
   --rf-sidebar-tag-active-fg: #5ff0c8;
+  --rf-brand-tile-on-navy: rgba(255, 255, 255, 0.10);
   --rf-tone-success-solid: #007864;
   --rf-tone-warning-solid: #c98a12;
   --rf-tone-danger-solid: #c2362b;
@@ -296,6 +299,8 @@
   --rf-fc-status-po: #14dda7;
   --rf-fc-status-preco: #9cc3ff;
   --rf-fc-current-tint: rgba(242, 193, 78, 0.06);
+  --rf-control-hover-border: rgba(74, 222, 200, 0.28);
+  --rf-avatar-ring: 0 0 0 1px rgba(20, 221, 167, 0.35);
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -799,8 +804,7 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .row-actions > a,
 .page-header__actions > button,
 .page-header__actions > a,
-.modal-actions > button,
-.topbar__user > .ghost-button {
+.modal-actions > button {
   white-space: nowrap;
 }
 .link-button { text-align: left; }
@@ -857,137 +861,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   border-radius: var(--radius);
 }
 
-.app-shell {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  min-height: 100vh;
-  background: var(--bg);
-}
-
-.app-shell--with-admin {
-  grid-template-columns: 240px 1fr;
-}
-
-.app-shell__main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.app-shell__content {
-  padding: 24px 32px 48px;
-  max-width: 1200px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-.sidebar {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 18px 12px;
-  gap: 18px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-}
-
-.sidebar__brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 8px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.sidebar__brand-logo {
-  width: 36px; height: 36px;
-  border-radius: 10px;
-  object-fit: cover;
-  background: var(--logo-chip-bg);
-  padding: 2px;
-  box-shadow: var(--shadow-logo);
-}
-.sidebar__brand strong { display: block; font-size: 15px; }
-.sidebar__brand small { color: var(--ink-soft); font-size: 11px; }
-
-.sidebar__nav { flex: 1; }
-.sidebar__nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-
-.sidebar__link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--ink-soft);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: background 0.12s, color 0.12s;
-}
-.sidebar__link:hover { background: var(--surface-alt); color: var(--ink); text-decoration: none; }
-.sidebar__link--active { background: var(--primary-50); color: var(--primary-700); font-weight: 700; }
-.sidebar__icon { font-size: 16px; width: 18px; text-align: center; }
-
-.sidebar__group {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border);
-}
-.sidebar__group-title {
-  margin: 0 0 8px;
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--ink-soft);
-}
-.sidebar__group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-
-.sidebar__footer {
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.sidebar__footer-mark {
-  width: 22px; height: 22px;
-  border-radius: 6px;
-  object-fit: cover;
-  background: var(--logo-chip-bg);
-  padding: 1px;
-}
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 32px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.topbar__title { display: flex; align-items: center; gap: 12px; }
-.topbar__logo {
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  object-fit: cover;
-  background: var(--logo-chip-bg);
-  padding: 2px;
-  box-shadow: var(--shadow-logo);
-}
-.topbar__title { display: flex; align-items: center; gap: 8px; }
-.topbar__user { display: flex; align-items: center; gap: 12px; }
-.topbar__user > .ghost-button { font-size: 13px; }
-.topbar__user-info { display: flex; flex-direction: column; text-align: right; }
-.topbar__user-info strong { font-size: 13px; }
-.topbar__user-info small { color: var(--ink-soft); font-size: 11px; }
-
 /* Seletor de tema (components/ThemeToggle.tsx): segmented control so com icones. */
 .theme-toggle {
   display: inline-flex;
@@ -1024,6 +897,380 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   .theme-toggle__option { width: 44px; height: 44px; }
 }
 
+/* >>> shell F2 (Suite COMEX) >>> */
+/* Shell do app (mock v68): sidebar navy, topbar, marca e entrada de pagina. UNICA regiao do CSS que consome
+   var(--rf-*); so seletores do shell (guarda: src/test/shellCss.test.ts e suiteComexTokens.test.ts).
+   Sidebar e igual nos 2 temas; o que muda com o tema vem dos pares de token (topbar). */
+.app-shell {
+  display: grid;
+  grid-template-columns: 256px 1fr;
+  min-height: 100vh;
+  background-color: var(--bg);
+  /* abaixo da sidebar fixa a coluna segue navy ate o fim da pagina (mock) */
+  background-image: linear-gradient(var(--rf-primary-strong), var(--rf-primary-strong));
+  background-repeat: no-repeat;
+  background-size: 256px 100%;
+}
+
+.app-shell__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-shell__content {
+  padding: 28px clamp(16px, 3vw, 40px) 40px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Entrada de pagina: sobe 12px + opacidade; sidebar e topbar nao se movem. Sem `key` no React: nao remonta a pagina.
+   `backwards`: nada sobra depois dos 500ms (sem transform residual que mude o bloco de contencao de position: fixed). */
+@keyframes rf-page-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rf-page-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.app-shell__content > * {
+  animation: rf-page-enter var(--rf-dur-page) var(--rf-ease-out) backwards;
+}
+
+/* ---- sidebar navy ---- */
+.sidebar {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 16px 18px;
+  background: var(--rf-sidebar-bg);
+  color: var(--rf-sidebar-brand-ink);
+  font-family: var(--rf-font-sans);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rf-sidebar-seg-border) transparent;
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px;
+}
+.sidebar__brand-name {
+  font-family: var(--rf-font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 40px;
+  white-space: nowrap;
+  position: relative;
+  top: -2px;
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.sidebar__nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px 0 14px;
+  border-radius: var(--rf-radius-button);
+  color: var(--rf-sidebar-ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base) var(--rf-ease-out);
+}
+.sidebar__group .sidebar__link { padding: 0 14px; }
+.sidebar__link:hover {
+  background: var(--rf-sidebar-hover);
+  color: var(--rf-sidebar-ink);
+  text-decoration: none;
+}
+.sidebar__link--active,
+.sidebar__link--active:hover {
+  background: var(--rf-sidebar-active-bg);
+  box-shadow: inset 0 0 0 1px var(--rf-sidebar-active-ring);
+  color: var(--rf-sidebar-ink);
+  font-weight: 700;
+}
+.sidebar__icon { display: block; flex: none; width: 18px; height: 18px; }
+.sidebar__link--active .sidebar__icon { color: var(--rf-primary); }
+.sidebar__label { flex-grow: 1; }
+
+/* selo (Beta): mono 10/700 caixa alta. Familia mono sem JetBrains carregada (F2-D1). */
+.sidebar__tag {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-sidebar-tag-bg);
+  color: var(--rf-sidebar-tag-fg);
+  font: 700 10px var(--rf-font-mono);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.sidebar__link--active .sidebar__tag {
+  background: var(--rf-sidebar-tag-active-bg);
+  color: var(--rf-sidebar-tag-active-fg);
+}
+
+/* contador de pendentes (Solicitacoes): menta */
+.sidebar__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-primary);
+  color: var(--rf-on-primary);
+  font: 700 11px var(--rf-font-mono);
+}
+
+.sidebar__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar__group-title {
+  margin: 0;
+  padding: 0 14px 6px;
+  font-family: var(--rf-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--rf-sidebar-ink-soft);
+}
+
+.sidebar__footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* seletor de tema sobre o navy (variante de ThemeToggle) */
+.theme-toggle--navy {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--rf-sidebar-seg-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-sidebar-seg-bg);
+}
+.theme-toggle--navy .theme-toggle__option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--rf-sidebar-ink-soft);
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
+}
+.theme-toggle--navy .theme-toggle__option:hover { color: var(--rf-sidebar-ink-soft); }
+.theme-toggle--navy .theme-toggle__option[aria-checked="true"] {
+  background: var(--rf-sidebar-active-bg);
+  box-shadow: none;
+  color: var(--rf-primary);
+}
+
+.sidebar__logout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--rf-radius-button);
+  background: transparent;
+  color: var(--rf-sidebar-ink-soft);
+  font: 600 13px var(--rf-font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
+}
+.sidebar__logout:hover {
+  background: var(--rf-sidebar-hover);
+  color: var(--rf-sidebar-ink);
+}
+
+.sidebar__version {
+  padding: 0 14px;
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  color: var(--rf-sidebar-ink-soft);
+}
+
+/* foco: anel navy + menta (mock). Sem outline: o box-shadow e o indicador. */
+.sidebar__link:focus-visible,
+.sidebar__logout:focus-visible,
+.theme-toggle--navy .theme-toggle__option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--rf-primary-strong), 0 0 0 4px var(--rf-primary);
+}
+.sidebar__link--active:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--rf-sidebar-active-ring), 0 0 0 2px var(--rf-primary-strong), 0 0 0 4px var(--rf-primary);
+}
+
+/* marca "Rota e chegada" (BrandMark): cores por classe, nunca por atributo */
+.brand-mark { display: block; flex: none; }
+.brand-mark__tile { fill: var(--rf-primary-strong); }
+.brand-mark--dark .brand-mark__tile { fill: var(--rf-brand-tile-on-navy); }
+.brand-mark__glyph { stroke: var(--rf-sidebar-ink); }
+.brand-mark__dot { fill: var(--rf-primary); }
+
+/* ---- topbar ---- */
+.topbar {
+  box-sizing: border-box;
+  min-height: 76px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px clamp(16px, 3vw, 40px);
+  /* fundo = fundo da pagina: herda o do .app-shell ate a fase da TROCA (F2-D3) */
+  background: transparent;
+  border-bottom: 1px solid var(--rf-border);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-sans);
+}
+.topbar__spacer { flex: 1 1 220px; min-width: 0; }
+
+.topbar__sso {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-tone-neutral-bg);
+  color: var(--rf-tone-neutral-fg);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.topbar__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px 0 6px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+}
+.topbar__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-primary-strong);
+  color: var(--rf-sidebar-ink);
+  font: 700 13px var(--rf-font-sans);
+  box-shadow: var(--rf-avatar-ring);
+}
+.topbar__user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.topbar__user-info strong {
+  font: 700 13px var(--rf-font-sans);
+  white-space: nowrap;
+}
+.topbar__user-info small {
+  font: 500 11px var(--rf-font-sans);
+  color: var(--rf-ink-soft);
+  white-space: nowrap;
+}
+.topbar__role {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-tone-success-bg);
+  color: var(--rf-tone-success-fg);
+  font: 700 11px var(--rf-font-sans);
+}
+
+.topbar__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+  color: var(--rf-action);
+  font: 700 13px var(--rf-font-sans);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--rf-dur-base) var(--rf-ease-out), border-color var(--rf-dur-base) var(--rf-ease-out);
+}
+.topbar__account:hover {
+  background: var(--rf-surface-alt);
+  border-color: var(--rf-control-hover-border);
+  text-decoration: none;
+}
+.topbar__account:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+
+/* alvo de toque (F2-D2): 44 no rodape da sidebar em ponteiro grosso; mouse segue o mock (36 / 40) */
+@media (pointer: coarse) {
+  .theme-toggle--navy .theme-toggle__option { height: 44px; }
+  .sidebar__logout { height: 44px; }
+}
+
+/* <= 880: sidebar (navy) empilhada acima da topbar, sem hamburguer (F12) */
+@media (max-width: 880px) {
+  .app-shell { grid-template-columns: 1fr; background-image: none; }
+  .sidebar { position: static; height: auto; }
+  .app-shell__content { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__content > * { animation: rf-page-fade 150ms linear backwards; }
+}
+/* <<< shell F2 <<< */
+
 .page { display: flex; flex-direction: column; gap: 18px; }
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
@@ -1057,16 +1304,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-alt);
-}
-
-@media (max-width: 880px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar { border-right: 0; border-bottom: 1px solid var(--border); position: static; height: auto; }
-  .app-shell__content { padding: 16px; }
-  .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
-  .topbar__user { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-  .topbar .badge { white-space: nowrap; }
-  .app-shell__admin { display: none; }
 }
 
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -2703,20 +2940,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 
 /* ===== Solicitacoes do comercial (PR1). Classes novas; nada existente foi alterado. ===== */
 
-/* Contador de pendentes no menu: cor de alerta legivel no link ativo (fundo primary-50) e no inativo. */
-.sidebar__badge {
-  margin-left: auto;
-  min-width: 20px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--danger-strong);
-  color: var(--on-strong);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
-}
-
 .sol-items-list { margin: 0; padding-left: 16px; }
 .sol-added { font-weight: 700; color: var(--primary-700); }
 .sol-filter { max-width: 220px; }
@@ -3025,22 +3248,7 @@ i.fc-status--preco { background: var(--info); }
   .fci-slots { grid-template-columns: 1fr; }
 }
 
-/* ---- Forecast: selo BETA (sidebar + titulo) ---- */
-.sidebar__tag {
-  margin-left: auto;
-  flex: none;
-  padding: 0 6px;
-  border: 1px solid var(--tone-warning-border);
-  border-radius: 999px;
-  background: var(--tone-warning-bg);
-  color: var(--warning);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 16px;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
+/* ---- Forecast: selo BETA (titulo) ---- */
 .fc-beta {
   margin-left: 8px;
   vertical-align: middle;

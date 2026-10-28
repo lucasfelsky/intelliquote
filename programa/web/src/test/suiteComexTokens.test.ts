@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 //  - paridade: o CSS tem exatamente os tokens da fixture, com os valores da fixture (claro e escuro);
 //  - contraste WCAG 2.x nos 2 temas, compondo alpha sobre o --rf-surface do tema;
 //  - excecoes de contraste do proprio mock, explicitas (o conjunto de reprovados tem de ser EXATAMENTE a lista);
-//  - invariantes da base aditiva: ninguem consome var(--rf-*) e --rf-* so existe nos 2 blocos de token.
-// Quando a fase da TROCA passar a consumir os tokens, so os invariantes (ultimo describe) mudam.
+//  - invariantes: desde a F2 so a regiao "shell F2" do globals.css consome var(--rf-*) (sidebar, topbar, marca);
+//    --rf-* so e DECLARADO nos 2 blocos de token; login.css, index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
+// Quando a fase da TROCA passar a consumir os tokens nas paginas, so os invariantes (ultimo describe) mudam.
 
 const readSource = (relative: string) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 const css = readSource('../styles/globals.css');
@@ -33,7 +34,15 @@ const tsSources = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../test/**', 
 
 // ---------- parser minimo (mesma abordagem de themeTokens.test.ts) ----------
 const DARK_HEADER = ':root[data-theme="dark"] {';
-const clean = css.replace(/\r\n/g, '\n').replace(/\/\*[\s\S]*?\*\//g, '');
+const REGION_START = '/* >>> shell F2 (Suite COMEX) >>> */';
+const REGION_END = '/* <<< shell F2 <<< */';
+const rawLf = css.replace(/\r\n/g, '\n');
+const regionStart = rawLf.indexOf(REGION_START);
+const regionEnd = rawLf.indexOf(REGION_END);
+const regionRaw = regionStart >= 0 && regionEnd > regionStart ? rawLf.slice(regionStart, regionEnd + REGION_END.length) : '';
+const cssOutsideRegion = regionRaw ? rawLf.replace(regionRaw, '') : rawLf;
+const stripComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '');
+const clean = stripComments(cssOutsideRegion);
 
 function extractBlock(source: string, header: string): { body: string; rest: string } {
   const start = source.indexOf(header);
@@ -75,11 +84,18 @@ describe('--rf-*: paridade CSS x fixture (mock v68)', () => {
   const pairs = fixture.filter((t) => !t.constante);
   const constants = fixture.filter((t) => t.constante);
 
-  it('a fixture tem 81 tokens: 34 pares claro/escuro e 47 constantes, sem repeticao', () => {
-    expect(fixture).toHaveLength(81);
-    expect(pairs).toHaveLength(34);
-    expect(constants).toHaveLength(47);
-    expect(new Set(fixture.map((t) => t.token)).size).toBe(81);
+  it('a fixture tem 84 tokens: 36 pares claro/escuro e 48 constantes, sem repeticao', () => {
+    expect(fixture).toHaveLength(84);
+    expect(pairs).toHaveLength(36);
+    expect(constants).toHaveLength(48);
+    expect(new Set(fixture.map((t) => t.token)).size).toBe(84);
+  });
+
+  it('os 3 tokens da F2 (desenhados pelo mock) estao na fixture', () => {
+    const byName = Object.fromEntries(fixture.map((t) => [t.token, t]));
+    expect(byName['--rf-control-hover-border']).toMatchObject({ claro: '#b9cbc6', escuro: 'rgba(74, 222, 200, 0.28)', fonte: 'mock' });
+    expect(byName['--rf-avatar-ring']).toMatchObject({ claro: 'none', escuro: '0 0 0 1px rgba(20, 221, 167, 0.35)', fonte: 'mock' });
+    expect(byName['--rf-brand-tile-on-navy']).toMatchObject({ claro: 'rgba(255, 255, 255, 0.10)', escuro: null, constante: true, fonte: 'mock' });
   });
 
   it('a fixture so tem valores publicos: ref e nome de board ou token, nunca URL ou caminho', () => {
@@ -100,7 +116,7 @@ describe('--rf-*: paridade CSS x fixture (mock v68)', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('o bloco escuro tem exatamente os 34 pares, com o valor escuro da fixture', () => {
+  it('o bloco escuro tem exatamente os 36 pares, com o valor escuro da fixture', () => {
     expect([...darkRf].sort()).toEqual(pairs.map((t) => t.token).sort());
     const wrong = pairs.filter((t) => darkTokens[t.token] !== t.escuro).map((t) => `${t.token}: ${darkTokens[t.token]}`);
     expect(wrong).toEqual([]);
@@ -225,6 +241,39 @@ function measure(): Row[] {
     ratio: Number(worst.toFixed(2)),
     ok: worst >= TEXT,
   });
+
+  // ---- Shell F2: estados compostos sobre o navy. A sidebar e igual nos 2 temas (tokens constantes); cada estado
+  // e medido nas 2 pontas do gradiente e vale a pior.
+  const tok = (name: string): Rgba => parseColor(lightTokens[name] ?? '');
+  const rgbOf = ([r, g, b]: Rgba): Rgb => [r, g, b];
+  const stops = gradient.map((stop) => rgbOf(parseColor(stop)));
+  const onNavy = (id: string, min: number, fg: string, layers: string[]) => {
+    const worstOfStops = Math.min(
+      ...stops.map((navy) => {
+        const bg = layers.reduce<Rgb>((under, layer) => over(tok(layer), under), navy);
+        return ratioOf(over(tok(fg), bg), bg);
+      }),
+    );
+    rows.push({ id: `ambos: ${id}`, min, ratio: Number(worstOfStops.toFixed(2)), ok: worstOfStops >= min });
+  };
+  onNavy('sidebar link ativo (--rf-sidebar-ink / pilula ativa)', TEXT, '--rf-sidebar-ink', ['--rf-sidebar-active-bg']);
+  onNavy('sidebar hover (--rf-sidebar-ink / hover)', TEXT, '--rf-sidebar-ink', ['--rf-sidebar-hover']);
+  onNavy('sidebar item inativo (--rf-sidebar-ink-soft / navy)', TEXT, '--rf-sidebar-ink-soft', []);
+  onNavy('rotulo ADMINISTRACAO (--rf-sidebar-ink-soft / navy)', TEXT, '--rf-sidebar-ink-soft', []);
+  onNavy('selo inativo (--rf-sidebar-tag-fg / --rf-sidebar-tag-bg)', TEXT, '--rf-sidebar-tag-fg', ['--rf-sidebar-tag-bg']);
+  onNavy('marca (--rf-sidebar-brand-ink / navy)', TEXT, '--rf-sidebar-brand-ink', []);
+  onNavy('icone do tema marcado (--rf-primary / segmento ativo)', UI, '--rf-primary', ['--rf-sidebar-seg-bg', '--rf-sidebar-active-bg']);
+  onNavy('icone do tema desmarcado (--rf-sidebar-ink-soft / segmento)', UI, '--rf-sidebar-ink-soft', ['--rf-sidebar-seg-bg']);
+  onNavy('anel de foco (--rf-primary / navy)', UI, '--rf-primary', []);
+  const avatar = ratioOf(rgbOf(tok('--rf-sidebar-ink')), rgbOf(tok('--rf-primary-strong')));
+  rows.push({ id: 'ambos: avatar (--rf-sidebar-ink / --rf-primary-strong)', min: TEXT, ratio: Number(avatar.toFixed(2)), ok: avatar >= TEXT });
+  const contador = ratioOf(rgbOf(tok('--rf-on-primary')), rgbOf(tok('--rf-primary')));
+  rows.push({ id: 'ambos: contador (--rf-on-primary / --rf-primary)', min: TEXT, ratio: Number(contador.toFixed(2)), ok: contador >= TEXT });
+  // Foco da topbar: --rf-action (anel externo) contra o fundo da pagina, em cada tema.
+  for (const theme of ['claro', 'escuro'] as const) {
+    const ratio = ratioOf(opaque(theme, '--rf-action'), opaque(theme, '--rf-bg'));
+    rows.push({ id: `${theme}: foco da topbar (--rf-action / --rf-bg)`, min: UI, ratio: Number(ratio.toFixed(2)), ok: ratio >= UI });
+  }
   return rows;
 }
 
@@ -253,7 +302,7 @@ describe('--rf-*: contraste nos 2 temas (WCAG 2.x, alpha composto sobre --rf-sur
 
   it('mede os pares nos 2 temas', () => {
     console.table(rows.map((r) => ({ par: r.id, min: r.min, ratio: r.ratio, ok: r.ok })));
-    expect(rows).toHaveLength(PAIRS.length * 2 + 1);
+    expect(rows).toHaveLength(PAIRS.length * 2 + 1 + 13);
   });
 
   it('o conjunto de pares reprovados e EXATAMENTE a lista de excecoes do mock', () => {
@@ -270,10 +319,95 @@ describe('--rf-*: contraste nos 2 temas (WCAG 2.x, alpha composto sobre --rf-sur
   });
 });
 
-// ---------- invariantes da base aditiva ----------
-describe('--rf-*: invariantes da base aditiva (so a fase da TROCA os remove)', () => {
-  it('ninguem consome var(--rf-: globals.css, login.css, index.html e src (nao-teste)', () => {
-    expect(css).not.toContain('var(--rf-');
+// ---------- invariantes ----------
+interface CssRule {
+  prelude: string;
+  body: string;
+}
+
+function parseRules(text: string): CssRule[] {
+  const rules: CssRule[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const open = text.indexOf('{', i);
+    if (open < 0) break;
+    let depth = 1;
+    let j = open + 1;
+    while (j < text.length && depth > 0) {
+      const ch = text.charAt(j);
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+      j++;
+    }
+    rules.push({ prelude: text.slice(i, open).trim(), body: text.slice(open + 1, j - 1) });
+    i = j;
+  }
+  return rules;
+}
+
+const regionClean = stripComments(regionRaw);
+const regionRules = parseRules(regionClean);
+const ALLOWED_AT_RULES = [
+  '@keyframes rf-page-enter',
+  '@keyframes rf-page-fade',
+  '@media (max-width: 880px)',
+  '@media (pointer: coarse)',
+  '@media (prefers-reduced-motion: reduce)',
+];
+// O \b do PLAN nao casa sufixos BEM (.sidebar__link: "r" e "_" sao ambos \w); basta o proximo caractere nao ser alfanumerico.
+const SHELL_SELECTOR = /^(:root\[data-theme="dark"\]\s+)?(\.app-shell|\.sidebar|\.topbar|\.theme-toggle--navy|\.brand-mark)(?![A-Za-z0-9])/;
+
+function regionSelectors(): string[] {
+  const out: string[] = [];
+  for (const rule of regionRules) {
+    if (rule.prelude.startsWith('@media')) {
+      for (const inner of parseRules(rule.body)) out.push(...inner.prelude.split(',').map((x) => x.trim()));
+    } else if (!rule.prelude.startsWith('@')) {
+      out.push(...rule.prelude.split(',').map((x) => x.trim()));
+    }
+  }
+  return out;
+}
+
+describe('--rf-*: invariantes (so a regiao "shell F2" consome; so os 2 blocos declaram)', () => {
+  it('a regiao delimitada existe uma vez, com marcadores no CSS bruto', () => {
+    expect(rawLf.split(REGION_START)).toHaveLength(2);
+    expect(rawLf.split(REGION_END)).toHaveLength(2);
+    expect(regionStart).toBeGreaterThanOrEqual(0);
+    expect(regionEnd).toBeGreaterThan(regionStart);
+    expect(regionRules.length).toBeGreaterThan(20);
+  });
+
+  it('var(--rf- so aparece DENTRO da regiao (nada fora dela, nem nos blocos de token)', () => {
+    expect(cssOutsideRegion).not.toContain('var(--rf-');
+    expect(regionClean).toContain('var(--rf-');
+  });
+
+  it('a regiao so usa var(): nao DECLARA --rf-*', () => {
+    expect(regionClean).not.toMatch(/(^|[;{\s])--rf-[\w-]+\s*:/);
+  });
+
+  it('todo seletor da regiao e do shell (app-shell, sidebar, topbar, theme-toggle--navy, brand-mark)', () => {
+    const selectors = regionSelectors();
+    expect(selectors.length).toBeGreaterThan(40);
+    expect(selectors.filter((sel) => !SHELL_SELECTOR.test(sel))).toEqual([]);
+  });
+
+  it('so os at-rules previstos: keyframes de entrada, <= 880, pointer: coarse e reduced-motion', () => {
+    const atRules = regionRules.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
+    expect(atRules.filter((a) => !ALLOWED_AT_RULES.includes(a))).toEqual([]);
+    for (const required of ALLOWED_AT_RULES) expect(atRules, required).toContain(required);
+    for (const rule of regionRules.filter((r) => r.prelude.startsWith('@media'))) {
+      for (const inner of parseRules(rule.body)) expect(inner.prelude.startsWith('@'), inner.prelude).toBe(false);
+    }
+  });
+
+  it('o resto do CSS segue sem --rf- (fora da regiao e dos 2 blocos) e o login.css nao usa token', () => {
+    expect(restOfCss).not.toContain('--rf-');
+    expect(loginCss).not.toContain('--rf-');
+  });
+
+  it('login.css, index.html e src (nao-teste) nao consomem var(--rf-: componentes usam classes, nunca estilo inline com token', () => {
     expect(loginCss).not.toContain('var(--rf-');
     expect(indexHtml).not.toContain('var(--rf-');
     const offenders = Object.entries(tsSources)
@@ -281,11 +415,6 @@ describe('--rf-*: invariantes da base aditiva (so a fase da TROCA os remove)', (
       .map(([path]) => path);
     expect(offenders).toEqual([]);
     expect(Object.keys(tsSources).length).toBeGreaterThan(0);
-  });
-
-  it('--rf-* so existe dentro dos 2 blocos de token (nem no resto do CSS, nem no login.css)', () => {
-    expect(restOfCss).not.toContain('--rf-');
-    expect(loginCss).not.toContain('--rf-');
   });
 
   it('Sora so aparece na linha --rf-font-display do CSS e na familia do <link> do index.html', () => {
@@ -297,7 +426,7 @@ describe('--rf-*: invariantes da base aditiva (so a fase da TROCA os remove)', (
     expect(indexHtml).toContain('&family=Sora:wght@600;700&display=swap');
   });
 
-  it('JetBrains Mono nao e carregada pelo <link> (so token; as regras antigas ja a citam)', () => {
+  it('JetBrains Mono nao e carregada pelo <link> (F2-D1: so token; o shell cai em ui-monospace)', () => {
     expect(indexHtml).not.toContain('JetBrains');
   });
 });

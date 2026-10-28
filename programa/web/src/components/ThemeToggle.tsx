@@ -1,68 +1,23 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { setThemePreference, useThemePreference, type ThemePreference } from '@/theme/theme';
+import { Icon } from './icons';
 
 // Segmented control de 3 estados (Claro / Escuro / Automatico), so com icones. Padrao WAI-ARIA
-// radiogroup: tabindex "roving" e setas movem a selecao. CSS: .theme-toggle*.
-
-function Svg({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      aria-hidden="true"
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function SunIcon() {
-  return (
-    <Svg>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </Svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <Svg>
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </Svg>
-  );
-}
-
-function MonitorIcon() {
-  return (
-    <Svg>
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8" />
-      <path d="M12 17v4" />
-    </Svg>
-  );
-}
+// radiogroup: tabindex "roving" e setas movem a selecao. CSS: .theme-toggle* (variant="navy": sobre a sidebar, mock v68).
+// Icones de traco do mock (icons.tsx), 16px / traco 2.
 
 const OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string; icon: ReactNode }> = [
-  { value: 'light', label: 'Claro', icon: <SunIcon /> },
-  { value: 'dark', label: 'Escuro', icon: <MoonIcon /> },
-  { value: 'auto', label: 'Automático (segue o sistema)', icon: <MonitorIcon /> },
+  { value: 'light', label: 'Claro', icon: <Icon name="sun" size={16} strokeWidth={2} /> },
+  { value: 'dark', label: 'Escuro', icon: <Icon name="moon" size={16} strokeWidth={2} /> },
+  { value: 'auto', label: 'Automático (segue o sistema)', icon: <Icon name="monitor" size={16} strokeWidth={2} /> },
 ];
 
-export default function ThemeToggle() {
+interface ThemeToggleProps {
+  /** `navy`: segmento sobre o fundo navy da sidebar (CSS .theme-toggle--navy). */
+  variant?: 'default' | 'navy';
+}
+
+export default function ThemeToggle({ variant = 'default' }: ThemeToggleProps = {}) {
   const preference = useThemePreference();
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -85,7 +40,11 @@ export default function ThemeToggle() {
   }
 
   return (
-    <div role="radiogroup" aria-label="Tema da interface" className="theme-toggle">
+    <div
+      role="radiogroup"
+      aria-label="Tema da interface"
+      className={variant === 'navy' ? 'theme-toggle theme-toggle--navy' : 'theme-toggle'}
+    >
       {OPTIONS.map((option, index) => {
         const checked = option.value === preference;
         return (

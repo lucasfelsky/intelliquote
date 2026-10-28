@@ -7,7 +7,7 @@ import { getCommercialRequestsPendingCount } from '@/services/commercialRequests
 import { COMEX_ROLES, filterNavByRole, PRIMARY_NAV, ADMIN_NAV } from './navConfig';
 
 export default function AppShell() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const role = user?.role;
   const isComex = !!role && COMEX_ROLES.includes(role);
 
@@ -30,6 +30,7 @@ export default function AppShell() {
         adminItems={adminNav}
         adminHeader={adminHeader}
         badges={badges}
+        onLogout={() => void logout()}
       />
       <div className="app-shell__main">
         <Topbar />

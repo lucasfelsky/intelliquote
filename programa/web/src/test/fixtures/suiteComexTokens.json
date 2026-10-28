@@ -272,6 +272,22 @@
     "ref": "ForecastPainel"
   },
   {
+    "token": "--rf-control-hover-border",
+    "claro": "#b9cbc6",
+    "escuro": "rgba(74, 222, 200, 0.28)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Topbar"
+  },
+  {
+    "token": "--rf-avatar-ring",
+    "claro": "none",
+    "escuro": "0 0 0 1px rgba(20, 221, 167, 0.35)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Topbar"
+  },
+  {
     "token": "--rf-primary",
     "claro": "#14dda7",
     "escuro": null,
@@ -430,6 +446,14 @@
     "constante": true,
     "fonte": "mock",
     "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-brand-tile-on-navy",
+    "claro": "rgba(255, 255, 255, 0.10)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Marca"
   },
   {
     "token": "--rf-tone-success-solid",

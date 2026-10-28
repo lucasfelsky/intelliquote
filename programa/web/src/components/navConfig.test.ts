@@ -7,6 +7,7 @@ import {
   isComercialRole,
   type NavItem,
 } from './navConfig';
+import { ICONS } from './icons';
 
 function visiblePaths(role: string | null | undefined): string[] {
   return [...filterNavByRole(PRIMARY_NAV, role), ...filterNavByRole(ADMIN_NAV, role)].map(
@@ -95,5 +96,18 @@ describe('navConfig', () => {
   it('papel ausente: so itens sem roles (nenhum no menu principal)', () => {
     expect(visiblePaths(undefined)).toEqual([]);
     expect(visiblePaths(null)).toEqual([]);
+  });
+
+  it('todo icon e chave de ICONS (icons.tsx) e nao tem caractere fora de [a-z-]', () => {
+    for (const item of [...PRIMARY_NAV, ...ADMIN_NAV]) {
+      expect(Object.keys(ICONS), item.to).toContain(item.icon);
+      expect(item.icon, item.to).toMatch(/^[a-z-]+$/);
+    }
+  });
+
+  it('os 14 icones de navegacao continuam unicos', () => {
+    const all = [...PRIMARY_NAV, ...ADMIN_NAV];
+    expect(all).toHaveLength(14);
+    expect(new Set(all.map((item) => item.icon)).size).toBe(14);
   });
 });

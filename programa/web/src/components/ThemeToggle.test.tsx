@@ -83,3 +83,44 @@ describe('ThemeToggle', () => {
     expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
   });
 });
+
+describe('ThemeToggle - variante navy (sidebar)', () => {
+  it('padrao nao tem a classe navy; variant="navy" a adiciona', () => {
+    const { container, unmount } = render(<ThemeToggle />);
+    expect(container.querySelector('.theme-toggle')?.className).not.toContain('theme-toggle--navy');
+    unmount();
+    const navy = render(<ThemeToggle variant="navy" />);
+    expect(navy.container.querySelector('.theme-toggle')?.className).toContain('theme-toggle--navy');
+  });
+
+  it('navy mantem os 3 radios, os nomes e o roving tabindex', () => {
+    render(<ThemeToggle variant="navy" />);
+    expect(screen.getByRole('radiogroup', { name: 'Tema da interface' })).toBeTruthy();
+    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(radio('Claro')).toBeTruthy();
+    expect(radio('Escuro')).toBeTruthy();
+    expect(radio(AUTO).tabIndex).toBe(0);
+    expect(radio('Claro').tabIndex).toBe(-1);
+    expect(radio('Escuro').tabIndex).toBe(-1);
+  });
+
+  it('navy: setas continuam movendo foco e selecao', () => {
+    render(<ThemeToggle variant="navy" />);
+    act(() => radio('Claro').focus());
+    fireEvent.click(radio('Claro'));
+    fireEvent.keyDown(radio('Claro'), { key: 'ArrowRight' });
+    expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(radio('Escuro'));
+  });
+
+  it('os icones sao SVG do mock (16px, traco 2) e aria-hidden', () => {
+    const { container } = render(<ThemeToggle variant="navy" />);
+    const svgs = container.querySelectorAll('.theme-toggle__option svg');
+    expect(svgs).toHaveLength(3);
+    for (const svg of Array.from(svgs)) {
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+      expect(svg.getAttribute('width')).toBe('16');
+      expect(svg.getAttribute('stroke-width')).toBe('2');
+    }
+  });
+});

@@ -1,8 +1,10 @@
 // Tipos compartilhados para a navegação principal.
+import type { IconName } from './icons';
+
 export interface NavItem {
   to: string;
   label: string;
-  icon: string;       // glifo unicode (sem dependencia de icone lib)
+  icon: IconName;     // chave de ICONS (icons.tsx): icone de traco do mock v68
   end?: boolean;
   group?: 'main' | 'admin';
   roles?: string[];   // se vazio/ausente, todos os papeis veem
@@ -17,23 +19,23 @@ export function isComercialRole(role?: string | null): boolean {
 }
 
 export const PRIMARY_NAV: NavItem[] = [
-  { to: '/',          label: 'Overview',           icon: '◎', end: true,  group: 'main', roles: COMEX_ROLES },
-  { to: '/cotacoes',  label: 'Cotações',           icon: '✦',             group: 'main', roles: COMEX_ROLES },
-  { to: '/solicitacoes', label: 'Solicitações',    icon: '✎',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
-  { to: '/itens',     label: 'Itens',              icon: '◇',             group: 'main', roles: COMEX_ROLES },
-  { to: '/fornecedores', label: 'Fornecedores',    icon: '⬢',             group: 'main', roles: COMEX_ROLES },
-  { to: '/forecast',  label: 'Forecast',           icon: '◔',             group: 'main', roles: COMEX_ROLES, tag: 'Beta' },
-  { to: '/forwarders', label: 'Forwarders',       icon: '⇄',             group: 'main', roles: COMEX_ROLES },
-  { to: '/familias',  label: 'Famílias',           icon: '⬡',             group: 'main', roles: COMEX_ROLES },
-  { to: '/relatorios',label: 'Relatórios',         icon: '▥',             group: 'main', roles: COMEX_ROLES },
-  { to: '/ajuda',     label: 'Ajuda',              icon: '?',             group: 'main', roles: COMEX_ROLES },
+  { to: '/',          label: 'Overview',           icon: 'overview', end: true,  group: 'main', roles: COMEX_ROLES },
+  { to: '/cotacoes',  label: 'Cotações',           icon: 'cotacoes',             group: 'main', roles: COMEX_ROLES },
+  { to: '/solicitacoes', label: 'Solicitações',    icon: 'solicitacoes',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
+  { to: '/itens',     label: 'Itens',              icon: 'itens',             group: 'main', roles: COMEX_ROLES },
+  { to: '/fornecedores', label: 'Fornecedores',    icon: 'fornecedores',             group: 'main', roles: COMEX_ROLES },
+  { to: '/forecast',  label: 'Forecast',           icon: 'forecast',             group: 'main', roles: COMEX_ROLES, tag: 'Beta' },
+  { to: '/forwarders', label: 'Forwarders',       icon: 'forwarders',             group: 'main', roles: COMEX_ROLES },
+  { to: '/familias',  label: 'Famílias',           icon: 'familias',             group: 'main', roles: COMEX_ROLES },
+  { to: '/relatorios',label: 'Relatórios',         icon: 'relatorios',             group: 'main', roles: COMEX_ROLES },
+  { to: '/ajuda',     label: 'Ajuda',              icon: 'ajuda',             group: 'main', roles: COMEX_ROLES },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
-  { to: '/usuarios',       label: 'Usuários',         icon: '◉', group: 'admin', roles: ['admin'] },
-  { to: '/empresa',        label: 'Empresa',          icon: '⌂', group: 'admin', roles: ['admin', 'comprador', 'gestor'] },
-  { to: '/auditoria',      label: 'Auditoria',        icon: '⌘', group: 'admin', roles: ['admin', 'gestor'] },
-  { to: '/templates',      label: 'Templates de e-mail', icon: '✉', group: 'admin', roles: ['admin', 'comprador', 'gestor', 'viewer'] },
+  { to: '/usuarios',       label: 'Usuários',         icon: 'usuarios', group: 'admin', roles: ['admin'] },
+  { to: '/empresa',        label: 'Empresa',          icon: 'empresa', group: 'admin', roles: ['admin', 'comprador', 'gestor'] },
+  { to: '/auditoria',      label: 'Auditoria',        icon: 'auditoria', group: 'admin', roles: ['admin', 'gestor'] },
+  { to: '/templates',      label: 'Templates de e-mail', icon: 'templates', group: 'admin', roles: ['admin', 'comprador', 'gestor', 'viewer'] },
 ];
 
 export function filterNavByRole(items: NavItem[], role: string | undefined | null): NavItem[] {

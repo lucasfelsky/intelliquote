@@ -65,6 +65,7 @@ const SAME_IN_BOTH_THEMES = [
   '--rf-sidebar-tag-fg',
   '--rf-sidebar-tag-active-bg',
   '--rf-sidebar-tag-active-fg',
+  '--rf-brand-tile-on-navy',
   '--rf-tone-success-solid',
   '--rf-tone-warning-solid',
   '--rf-tone-danger-solid',
