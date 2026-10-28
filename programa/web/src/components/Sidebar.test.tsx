@@ -118,7 +118,7 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
     expect(container.querySelectorAll('.sidebar__group .sidebar__link')).toHaveLength(4);
   });
 
-  it('rodape (F2b): botao de tema -> Sair -> assinatura -> versao, nessa ordem; Sair chama onLogout', () => {
+  it('rodape (F2b): botao de tema -> Sair -> assinatura, nessa ordem (sem rotulo de versao); Sair chama onLogout', () => {
     const onLogout = vi.fn();
     const { container } = renderAt('admin', '/', onLogout);
     const footer = container.querySelector('.sidebar__footer');
@@ -126,17 +126,17 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
     const tema = screen.getByRole('button', { name: 'Tema: automático — alternar tema' });
     const sair = screen.getByRole('button', { name: 'Sair' });
     const assinatura = container.querySelector('.sidebar__signature');
-    const versao = container.querySelector('.sidebar__version');
     expect(tema.className).toBe('sidebar__theme');
     expect(screen.queryByRole('radiogroup')).toBeNull();
-    for (const el of [tema, sair, assinatura, versao]) expect(footer?.contains(el ?? null)).toBe(true);
+    for (const el of [tema, sair, assinatura]) expect(footer?.contains(el ?? null)).toBe(true);
     const antes = (a: Element | null, b: Element | null) => !!(a && b && a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(antes(tema, sair)).toBe(true);
     expect(antes(sair, assinatura)).toBe(true);
-    expect(antes(assinatura, versao)).toBe(true);
     fireEvent.click(sair);
     expect(onLogout).toHaveBeenCalledTimes(1);
-    expect(versao?.textContent).toBe('v0.1 · Build local');
+    expect(container.querySelector('.sidebar__version')).toBeNull();
+    expect(screen.queryByText('v0.1 · Build local')).toBeNull();
+    expect(footer?.lastElementChild).toBe(assinatura);
   });
 
   it('assinatura "SQ Química": role="img" com o svg aria-hidden e nenhum descendente focavel; sem link nem botao', () => {
@@ -157,7 +157,7 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
     expect(() => fireEvent.click(screen.getByRole('button', { name: 'Sair' }))).not.toThrow();
   });
 
-  it('comercial: so Solicitacoes, sem Administracao e sem contador; rodape completo (tema, Sair, assinatura, versao)', () => {
+  it('comercial: so Solicitacoes, sem Administracao e sem contador; rodape completo (tema, Sair, assinatura; sem versao)', () => {
     const { container } = renderAt('comercial', '/solicitacoes');
     expect(screen.getAllByRole('link').map((l) => l.textContent)).toEqual(['Solicitações']);
     expect(container.querySelector('.sidebar__group')).toBeNull();
@@ -166,7 +166,8 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
     expect(screen.getByRole('button', { name: 'Tema: automático — alternar tema' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sair' })).toBeTruthy();
     expect(screen.getByRole('img', { name: 'SQ Química' })).toBeTruthy();
-    expect(container.querySelector('.sidebar__version')?.textContent).toBe('v0.1 · Build local');
+    expect(container.querySelector('.sidebar__version')).toBeNull();
+    expect(screen.queryByText('v0.1 · Build local')).toBeNull();
   });
 
   it('contador: aria-label "N pendentes" e so em Solicitacoes (>0)', () => {

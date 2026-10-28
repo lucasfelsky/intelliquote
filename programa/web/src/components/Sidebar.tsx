@@ -73,7 +73,6 @@ export default function Sidebar({
         <div className="sidebar__signature">
           <SqLogo size={32} />
         </div>
-        <small className="sidebar__version">v0.1 · Build local</small>
       </footer>
     </aside>
   );

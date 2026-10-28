@@ -223,13 +223,9 @@ describe('shell F2b: rodape da sidebar (canvas v72)', () => {
     }
   });
 
-  it('.sidebar__version: centralizada, 11px com line-height 15px, cor suave por token', () => {
-    const versao = decl('.sidebar__version');
-    expect(versao['text-align']).toBe('center');
-    expect(versao['font-size']).toBe('11px');
-    expect(versao['line-height']).toBe('15px');
-    expect(versao.color).toBe('var(--rf-sidebar-ink-soft)');
-    expect(versao.padding).toBeUndefined();
+  it('.sidebar__version saiu do CSS (F2c: rotulo "v0.1 · Build local" removido)', () => {
+    expect(region).not.toContain('sidebar__version');
+    expect(outside).not.toContain('sidebar__version');
   });
 
   it('o seletor segmentado .theme-toggle saiu de TODO o CSS (regiao e fora dela)', () => {

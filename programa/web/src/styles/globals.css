@@ -1074,14 +1074,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   user-select: none;
 }
 
-.sidebar__version {
-  text-align: center;
-  font-family: var(--rf-font-mono);
-  font-size: 11px;
-  line-height: 15px;
-  color: var(--rf-sidebar-ink-soft);
-}
-
 /* foco: anel navy + menta (mock). Sem outline: o box-shadow e o indicador. */
 .sidebar__link:focus-visible,
 .sidebar__theme:focus-visible,
