@@ -64,7 +64,7 @@ const saldoRow = (codigo: string, deposito: string, qtd: number): Cell[] => [
   'x',
   deposito,
   'KG',
-  qtd,
+  qtd + 1000, // "Saldo Físico Disponível": SENTINELA, o estoque so le "Saldo Final"
   0,
   qtd,
   'SQ QUIMICA',

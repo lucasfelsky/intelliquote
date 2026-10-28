@@ -125,6 +125,13 @@ describe('SALDO: estoque = "Saldo Final" dos depositos da allowlist', () => {
     expect(r.usadas).toBe(1);
     expect(r.ignoradas['deposito excluido']).toBe(6);
     expect(r.lidas).toBe(r.usadas + ignoradasTotal(r));
+    // L4: deposito desconhecido NAO gera aviso; o unico aviso e o A2 (depositos da lista ausentes).
+    expect(r.avisos).toEqual([
+      'SALDO: nenhuma linha da empresa SQ QUIMICA nos depósitos VS SQ, EM TRANSITO, SEPARACAO (lista do estoque: DEPOSITO ITAJAI, VS SQ, EM TRANSITO, SEPARACAO).',
+    ]);
+    for (const nome of ['QUALIDADE', 'DEP. ITAJAI', 'DEPOSITO ITAJAI 2', 'EM-TRANSITO', FORECAST_DBCORP_SEM_DEPOSITO]) {
+      expect(r.avisos.some((a) => a.includes(nome))).toBe(false);
+    }
     const fora = r.porDeposito.filter((d) => !d.incluido);
     expect(fora.map((d) => [d.deposito, d.linhas, d.saldo]).sort()).toEqual(
       [
@@ -180,6 +187,53 @@ describe('SALDO: estoque = "Saldo Final" dos depositos da allowlist', () => {
       'SALDO: depósito da lista do estoque sob outra empresa ficou FORA do estoque: DEPOSITO ITAJAI (OUTRA EMPRESA: 2 linhas); VS SQ (OUTRA EMPRESA: 1 linha). O estoque só soma a empresa SQ QUIMICA.',
     ]);
     expect(JSON.stringify(r.avisos)).not.toContain('4321.5');
+  });
+
+  it('A1: deposito FORA da allowlist sob outra empresa nao gera aviso, mas aparece em outrasEmpresas', async () => {
+    const outra = (codigo: string, deposito: string | null, final: number) =>
+      linha(codigo, deposito, final, { empresa: 'OUTRA EMPRESA' });
+    const r = await parseSaldo(
+      await saldoXlsx([
+        ...todosOsDepositos(1),
+        outra('TST0101', 'QUALIDADE', 10),
+        outra('TST0102', 'DEPOSITO ITAJAI 2', 20),
+        outra('TST0103', null, 30),
+      ]),
+    );
+    expect(r.avisos).toEqual([]);
+    expect(r.outrasEmpresas).toEqual([{ empresa: 'OUTRA EMPRESA', linhas: 3, saldo: 60 }]);
+    expect(r.usadas).toBe(4);
+    expect(r.total).toBe(4);
+  });
+
+  it('A1: deposito da lista com acento, caixa e espacos sob outra empresa avisa com o nome da constante', async () => {
+    const outra = (codigo: string, deposito: string) => linha(codigo, deposito, 9, { empresa: 'OUTRA EMPRESA' });
+    const r = await parseSaldo(
+      await saldoXlsx([
+        ...todosOsDepositos(1),
+        outra('TST0101', 'Depósito Itajaí'),
+        outra('TST0102', '  vs   sq '),
+        outra('TST0103', 'separação'),
+      ]),
+    );
+    expect(r.avisos).toEqual([
+      'SALDO: depósito da lista do estoque sob outra empresa ficou FORA do estoque: DEPOSITO ITAJAI (OUTRA EMPRESA: 1 linha); VS SQ (OUTRA EMPRESA: 1 linha); SEPARACAO (OUTRA EMPRESA: 1 linha). O estoque só soma a empresa SQ QUIMICA.',
+    ]);
+  });
+
+  it('A1: ordem da constante e, dentro do deposito, ordem alfabetica da empresa (independe da ordem no arquivo)', async () => {
+    const outra = (codigo: string, deposito: string, empresa: string) => linha(codigo, deposito, 9, { empresa });
+    const r = await parseSaldo(
+      await saldoXlsx([
+        ...todosOsDepositos(1),
+        outra('TST0101', 'SEPARACAO', 'OUTRA EMPRESA'),
+        outra('TST0102', 'DEPOSITO ITAJAI', 'ZETA EMPRESA'),
+        outra('TST0103', 'DEPOSITO ITAJAI', 'ALFA EMPRESA'),
+      ]),
+    );
+    expect(r.avisos).toEqual([
+      'SALDO: depósito da lista do estoque sob outra empresa ficou FORA do estoque: DEPOSITO ITAJAI (ALFA EMPRESA: 1 linha); DEPOSITO ITAJAI (ZETA EMPRESA: 1 linha); SEPARACAO (OUTRA EMPRESA: 1 linha). O estoque só soma a empresa SQ QUIMICA.',
+    ]);
   });
 
   it('allowlist inteira sob outra empresa: sem saldo valido + aviso com os 4 depositos, sem aviso de ausencia', async () => {
