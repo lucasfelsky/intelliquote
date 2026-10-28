@@ -128,21 +128,24 @@ function decodeBase64(slot: ForecastDbcorpSlot, contentBase64: string): Buffer {
 }
 
 // Tira do resumo as linhas lidas e o que so serve ao servico (compra em aberto, linhas do FUP, avisos de coluna e
-// estimadas por fonte: o resumo traz `prazosEstimativa`).
+// estimadas por fonte: o resumo traz `prazosEstimativa`) e o saldo de pedido de venda do SALDO (D7: so vai para o
+// banco, nunca para a resposta).
 function tirarLinhas<T extends { linhas: unknown }>(
   parsed: T,
-): Omit<T, 'linhas' | 'comprasEmAberto' | 'fupLinhas' | 'avisosColuna' | 'estimadasPorFonte'> {
-  const { linhas, comprasEmAberto, fupLinhas, avisosColuna, estimadasPorFonte, ...resto } = parsed as T & {
+): Omit<T, 'linhas' | 'comprasEmAberto' | 'fupLinhas' | 'avisosColuna' | 'estimadasPorFonte' | 'saldoPedVenda'> {
+  const { linhas, comprasEmAberto, fupLinhas, avisosColuna, estimadasPorFonte, saldoPedVenda, ...resto } = parsed as T & {
     comprasEmAberto?: unknown;
     fupLinhas?: unknown;
     avisosColuna?: unknown;
     estimadasPorFonte?: unknown;
+    saldoPedVenda?: unknown;
   };
   void linhas;
   void comprasEmAberto;
   void fupLinhas;
   void avisosColuna;
   void estimadasPorFonte;
+  void saldoPedVenda;
   return resto;
 }
 
@@ -392,6 +395,7 @@ export class ForecastDbcorpService {
       clientesAtivos: parsed.clientesAtivos?.linhas ?? [],
       comprasEmAberto: parsed.fup.comprasEmAberto,
       prazosFup: amostrasDePrazo(parsed.fup.fupLinhas, baseDate),
+      ...(parsed.saldo.saldoPedVenda !== undefined ? { saldoPedVenda: parsed.saldo.saldoPedVenda } : {}),
     };
     const rotulos = rotulosDaQuinzena(baseDate);
     built.quinzena = {

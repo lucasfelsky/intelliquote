@@ -46,6 +46,9 @@ export interface Entradas {
   // Nao e entrada do motor: amostras do FUP (linhas com ETA FINAL) congeladas so para o prazo real por fonte (3C).
   // Ausente em quinzena gravada antes do 3C e na planilha.
   prazosFup?: AmostraPrazoFup[];
+  // D7: saldo de pedido de venda por codigo (so qtd > 0) do SALDO DBCorp. Nao e entrada do motor: sinal de demanda
+  // reprimida para a P3 do preditivo. Ausente = quinzena sem o sinal (planilha, DBCorp anterior ao D7 ou sem a coluna).
+  saldoPedVenda?: Lancamento[];
 }
 
 // Amostra de prazo de uma chegada do FUP (linha com ETA FINAL): dias DATA PO -> ETA FINAL e ETD -> ETA FINAL.

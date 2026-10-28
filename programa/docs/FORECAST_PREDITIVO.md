@@ -281,5 +281,16 @@ Limites conhecidos: (a) `hashConfig` cobre `PREDITIVO_CONFIG`, `PREDITIVO_CONFIG
 ### Fora da P1b-1
 
 Modo previsao do CLI e `--calibracao <arquivo>` (P1b-2); TSB e selecao de metodo por segmento (P1c); sazonalidade em pool, Holt-Winters/ETS
-e detector de atipicos (P2); D7 (saldo de pedidos de venda e ruptura); service, rota, UI, leitura de `ForecastAtypicalMonth` e de
+e detector de atipicos (P2); D7 (leitura do saldo de pedidos de venda e da ruptura: o congelamento em `inputs.saldoPedVenda` ja existe, ver a secao D7 abaixo; o consumo e da P3); service, rota, UI, leitura de `ForecastAtypicalMonth` e de
 `ForecastMonthlySale` do banco, migration (P3/P4).
+
+## D7: saldo de pedido de venda congelado na quinzena (`inputs.saldoPedVenda`)
+
+O parser do SALDO (DBCorp DS9004) le a coluna **opcional** "Saldo Ped. Venda" e o import DBCorp congela o valor em `ForecastSnapshot.inputs`, dentro do JSON (sem migration, sem rota nova). Nenhum calculo, relatorio, XLSX, painel ou pendente le o campo: e so um sinal de demanda reprimida (censura) para a P3.
+
+- **Forma:** `Entradas.saldoPedVenda?: Lancamento[]` (`{ codigo, qtd }`), um item por codigo (normalizado como o estoque), `qtd` somada com 6 casas, **so `qtd > 0`**, ordenado por `codigo`. Unidade: a do saldo fisico da mesma linha (KG).
+- **Universo:** as mesmas linhas do estoque (empresa `SQ QUIMICA`, deposito incluido, saldo fisico numerico). Valor vazio vale 0; negativo, nao numerico, texto ou data e descartado em silencio e nunca afeta estoque, contagens, avisos nem erros.
+- **Tres estados:** chave **ausente** = sem sinal (planilha, DBCorp anterior ao D7 ou SALDO sem a coluna; sem erro e sem aviso); `[]` = coluna presente e nenhum pedido em aberto; codigo com `qtd > 0` = ha pedido em aberto.
+- **Privacidade:** o valor so vai ao banco. Nao entra no resumo do preview/confirm, no AuditLog, em log, em resposta de GET nem em XLSX.
+- **Como a P3 vai ler:** carrega as quinzenas congeladas dos meses da serie e junta `inputs.saldoPedVenda` com `inputs.estoque` por produto (soma dos codigos atuais, D15; grupo de equivalencia pela soma dos membros, D9). Padrao de censura: `PV > 0` e `U <= 0` na data base marca a quinzena com sinal de ruptura; o mes fica censurado se alguma quinzena dele tiver o sinal, e a P3 preenche `PontoMensal.ruptura` (hoje so contado e ignorado em `forecastPreditivoMarcas.ts`). Variantes possiveis: `PV > U` ou `U <= 0 OU PV > 0`. A rota sombra devolve so flags/contagens, nunca o valor em kg.
+- **Semantica a confirmar com o Comex/DBCorp:** se "Saldo Ped. Venda" e o pedido de venda em aberto e se o valor e por deposito ou repete em cada linha do codigo. Ate la a P3 usa so `> 0`, nunca a magnitude.

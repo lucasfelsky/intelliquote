@@ -20,6 +20,7 @@ import { HttpError } from './http';
 import { rotuloDoYearMonth, yearMonthsDaJanela } from './forecastMonths';
 import { findHeaderColumn, txt, valor, type Bruto } from './forecastXlsx';
 import { normalizeProductCode } from './forecastWorkbook';
+import { coletorSaldoPedVenda } from './forecastSaldoPedVenda';
 import type { Lancamento, LancamentoMensal } from './forecastTypes';
 import {
   Acumulador,
@@ -53,6 +54,8 @@ export interface ParsedSaldo extends ResumoRelatorio {
   linhas: Lancamento[];
   porDeposito: DepositoResumo[];
   outrasEmpresas: Array<{ empresa: string; linhas: number; saldo: number }>;
+  // D7: so presente quando o SALDO traz a coluna opcional "Saldo Ped. Venda" (ausente = sem sinal; [] = sem pedido).
+  saldoPedVenda?: Lancamento[];
 }
 
 export interface ParsedVendas extends ResumoRelatorio {
@@ -154,6 +157,7 @@ function semLinhas(erros: string[]): ResumoRelatorio {
 
 const DEPOSITOS_EXCLUIDOS = new Set(FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS.map(normalizeDbcorpText));
 const EMPRESA_SALDO = normalizeDbcorpText(FORECAST_DBCORP_SALDO_EMPRESA);
+const [HEADER_SALDO_PED_VENDA] = FORECAST_DBCORP_HEADERS_OPCIONAIS.saldo;
 
 export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
   const vazio = (erros: string[]): ParsedSaldo => ({
@@ -168,6 +172,8 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
   const cab = localizarCabecalho(ws, 'saldo', FORECAST_DBCORP_HEADERS.saldo);
   if (!cab.ok) return vazio(cab.erros);
   const [cCodigo, cDeposito, cSaldo, cEmpresa] = cab.colunas;
+  const cPedVenda = findHeaderColumn(ws.getRow(cab.linha), [HEADER_SALDO_PED_VENDA]);
+  const pedVenda = cPedVenda === null ? null : coletorSaldoPedVenda();
 
   const acc = new Acumulador();
   const linhas: Lancamento[] = [];
@@ -212,6 +218,7 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
       continue;
     }
     linhas.push({ codigo, qtd: bSaldo });
+    if (pedVenda && cPedVenda !== null) pedVenda.adicionar(codigo, valor(row.getCell(cPedVenda)));
     acc.usar(bSaldo);
   }
 
@@ -230,7 +237,13 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
   const outrasEmpresas = [...empresas.values()]
     .map((e) => ({ ...e, saldo: round6(e.saldo) }))
     .sort((a, b) => b.linhas - a.linhas || a.empresa.localeCompare(b.empresa));
-  return { ...acc.resumo(avisos, []), linhas, porDeposito, outrasEmpresas };
+  return {
+    ...acc.resumo(avisos, []),
+    linhas,
+    porDeposito,
+    outrasEmpresas,
+    ...(pedVenda ? { saldoPedVenda: pedVenda.linhas() } : {}),
+  };
 }
 
 // --- VENDAS (DS9003): o mesmo relatorio em 3 slots -------------------------------------------------
