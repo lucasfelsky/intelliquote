@@ -1305,6 +1305,12 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .banner--error::before {
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 8v5M12 16h.01'/%3E%3C/svg%3E");
 }
+/* Alerta que ja traz o proprio icone (<svg> filho direto, ex.: aviso da aba Itens): sem o icone por mascara e com o
+   padding do board (16); o svg do TSX fica no lugar do icone. Sem suporte a :has() o aviso mostra os dois icones (so esse aviso). */
+.alert:has(> svg),
+.banner:has(> svg) { padding-left: 16px; }
+.alert:has(> svg)::before,
+.banner:has(> svg)::before { display: none; }
 
 /* ---- Tabela ---- */
 .table-wrapper {

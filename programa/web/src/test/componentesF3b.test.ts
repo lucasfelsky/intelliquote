@@ -62,6 +62,8 @@ const PERMITIDAS_F3B = new Set([
 
 // Classes cujas regras tem de morar so na regiao (seletor fora dela so passa com classe de tela/Forecast).
 const MIGRADAS_F3B = new Set(PERMITIDAS_F3B);
+// Restos do grupo misto de white-space (intacto na F3b por determinacao da 10.5; a F3c apaga): nao sao regras de estilo da F3b.
+const RESTOS_ATE_F3C = ['.row-actions > button', '.row-actions > a'];
 
 // ---------- leitura das regras da regiao ----------
 // Separa a lista de seletores por virgula FORA de parenteses (:is(.a, .b) e um seletor so).
@@ -198,7 +200,11 @@ describe('F3b: regiao `componentes F3b`', () => {
           for (const seletor of listaDeSeletores(r.prelude)) {
             const ultimas = classesDoSeletor(ultimoComposto(seletor));
             const todas = classesDoSeletor(seletor);
-            if (ultimas.some((c) => MIGRADAS_F3B.has(c)) && todas.every((c) => MIGRADAS_F3B.has(c))) infratores.push(seletor);
+            const migradas = todas.length > 0 && todas.every((c) => MIGRADAS_F3B.has(c));
+            // ultimo composto com classe migrada (regra do PLAN 10.2) OU ultimo composto so de elemento (th, td, tr): a regra antiga
+            // `.table th` reintroduzida fora da regiao tem de ser pega; os 2 restos abaixo seguem ate a F3c apagar o grupo misto.
+            const elementoFinal = ultimas.length === 0 && !RESTOS_ATE_F3C.includes(seletor);
+            if (migradas && (ultimas.some((c) => MIGRADAS_F3B.has(c)) || elementoFinal)) infratores.push(seletor);
           }
         }
       }
@@ -290,6 +296,10 @@ describe('F3b: chips', () => {
     });
   });
 
+  it('.chip--static:hover (claro) mantem o tom neutro, nao herda o hover menta do .chip', () => {
+    expect(de('.chip--static:hover')).toEqual({ background: 'var(--rf-tone-neutral-bg)' });
+  });
+
   it('no escuro o chip estatico usa --rf-surface-alt (board CotacoesEscuro), tambem no hover', () => {
     expect(de(':root[data-theme="dark"] .chip--static')).toEqual({ background: 'var(--rf-surface-alt)' });
     expect(de(':root[data-theme="dark"] .chip--static:hover')).toEqual({ background: 'var(--rf-surface-alt)' });
@@ -371,6 +381,33 @@ describe('F3b: alertas e banners', () => {
   it('.alert e .banner sem tom = informacao (D-F3-04)', () => {
     expect(de('.alert')).toMatchObject({ background: 'var(--rf-tone-info-bg)', color: 'var(--rf-tone-info-fg)' });
     expect(de('.banner')).toMatchObject({ background: 'var(--rf-tone-info-bg)', color: 'var(--rf-tone-info-fg)' });
+  });
+});
+
+describe('F3b: alerta que ja traz o proprio icone', () => {
+  it('.alert/.banner com <svg> filho direto: sem o icone por mascara e com padding-left 16 (um icone so)', () => {
+    expect(de('.alert:has(> svg)')).toEqual({ 'padding-left': '16px' });
+    expect(de('.banner:has(> svg)')).toEqual({ 'padding-left': '16px' });
+    expect(de('.alert:has(> svg)::before')).toEqual({ display: 'none' });
+    expect(de('.banner:has(> svg)::before')).toEqual({ display: 'none' });
+  });
+
+  it('a regra :has vem DEPOIS do padding e do ::before base (mesma ordem de cascata)', () => {
+    expect(limpo.indexOf('.alert:has(> svg)')).toBeGreaterThan(limpo.indexOf('.alert--error::before'));
+  });
+
+  it('o aviso da aba Itens e o UNICO .alert/.banner do app com icone filho no TSX', () => {
+    const fontes = import.meta.glob(['../**/*.tsx', '!../**/*.test.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+    const achados: string[] = [];
+    for (const [arquivo, texto] of Object.entries(fontes)) {
+      const linhas = texto.split(/\r?\n/);
+      linhas.forEach((linha, i) => {
+        if (!/className=/.test(linha)) return;
+        if (!/(^|[\s"'`{])(alert|banner)([\s"'`}]|$)/.test(linha.slice(linha.indexOf('className=')))) return;
+        if (/<svg|<\w*Icon\b/.test(linhas.slice(i, i + 3).join(' '))) achados.push(`${arquivo.replace('../', '')}:${i + 1}`);
+      });
+    }
+    expect(achados).toEqual(['pages/CotacaoTabs/ItensTab.tsx:605']);
   });
 });
 
