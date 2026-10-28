@@ -87,7 +87,7 @@ function lerQuinzena(texto: string): SerieEntrada[] | null {
   }
 }
 
-export type CargaSeries = { ok: true; series: SerieNormalizada[]; rejeitadas: number } | { ok: false; erro: string };
+export type CargaSeries = { ok: true; series: SerieNormalizada[]; entradas: SerieEntrada[]; rejeitadas: number } | { ok: false; erro: string };
 
 // Resolve o caminho, recusa repositorio git (exceto fixtures), checa existencia/tamanho/extensao, le e normaliza. Pura: so usa deps.
 // Compartilhada com o CLI P1 (a logica de seguranca de caminho nao pode existir em duas copias).
@@ -129,7 +129,7 @@ export function carregarSeries(opcoes: { entrada?: string; quinzena?: string }, 
   if (fatal !== undefined || entrada.length === 0) return { ok: false, erro: fatal ?? 'nenhuma serie' };
 
   const { series, erros: errosSerie } = normalizarSeries(entrada);
-  return { ok: true, series, rejeitadas: errosLeitura.length + errosSerie.length };
+  return { ok: true, series, entradas: entrada, rejeitadas: errosLeitura.length + errosSerie.length };
 }
 
 export function executarCli(argv: string[], deps: DependenciasCli): { codigo: 0 | 1 | 2; saida: string; erro: string } {

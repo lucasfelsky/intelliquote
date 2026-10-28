@@ -1,6 +1,6 @@
-# Forecast preditivo - fase 0 + P1a (biblioteca de metodos + backtest + CLI local)
+# Forecast preditivo - fase 0 + P1a + P1b-1 (biblioteca de metodos + backtest + referencia + CLI local)
 
-Versao do modelo: `p1.0.0` (`PREDITIVO_VERSAO`). Modo sombra: **nada aqui altera o calculo da planilha**
+Versao do modelo: `p1.1.0` (`PREDITIVO_VERSAO`). Modo sombra: **nada aqui altera o calculo da planilha**
 (`forecastEngine.ts`), o relatorio de compras, o XLSX, o banco ou a UI. Sao funcoes puras em
 `src/utils/forecastPreditivo*.ts` e um CLI que so escreve em stdout/stderr. O motor e importado apenas pelo teste de
 paridade.
@@ -23,14 +23,14 @@ node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/foreca
 | `--entrada <arquivo>` | obrigatorio (ou `--quinzena`) | `.csv` ou `.json`, ate 20 MB |
 | `--quinzena <arquivo.json>` | - | formato da fixture de quinzena: uma serie por produto (J..N + O) |
 | `--horizonte` | 6 | 1 a 12 |
-| `--min-treino` | 6 | meses validos antes da 1a origem (no p1 roda tambem o cenario 12, o principal) |
+| `--min-treino` | 6 | meses antes da 1a origem: validos no p0/p1; de **calendario** no p1b (nao depende da mascara). No p1/p1b roda tambem o cenario 12, o principal |
 | `--metodos a,b` | todos | ids de `METODO_TODOS_IDS` (p1) ou `METODO_IDS` (`--relatorio p0`) |
 | `--lead-time-padrao` | 90 | dias, para serie sem `leadTimeDias` |
 | `--razao-falta-excesso` | 3 | custo de falta = razao x custo de excesso |
 | `--sem-mascara` | desligado | ignora atipico/ruptura (comparar vazamento) |
 | `--formato texto\|json` | texto | so stdout |
 | `--detalhe` | desligado | tabela por serie, com os ids como vieram na entrada |
-| `--relatorio p0\|p1` | p1 | p0 reproduz o relatorio da fase 0 |
+| `--relatorio p0\|p1\|p1b` | p1 | p0 reproduz o relatorio da fase 0; p1b = referencia (secao P1b-1) |
 | `--teto-vies <0..1>\|sem` | sem | teto absoluto **adicional** do criterio 3 (so no p1); sem a flag, o criterio 3 e relativo puro |
 
 **Dado real fica fora do repositorio.** O CLI recusa (codigo 2) qualquer arquivo sob um diretorio que tenha `.git`
@@ -80,7 +80,7 @@ so lista ids com `--detalhe`; 7 (intervalo) n/a e 8 (2 rodadas) pendentes. Na fa
 `contagem`: `comPrevisao` = series com ao menos 1 origem; `historicoCurto` = series sem origem; `semVenda` = serie toda
 zero (as categorias podem se sobrepor).
 
-## P1a (versao `p1.0.0`): combinacao, regras de protecao, intervalos e criterios D5 completos
+## P1a (nasceu na versao `p1.0.0`; hoje `p1.1.0`): combinacao, regras de protecao, intervalos e criterios D5 completos
 
 A P1a acrescenta metodos e relatorio sem tocar o motor da planilha, o relatorio de compras nem o XLSX. A fase 0 continua
 disponivel, byte a byte, com `--relatorio p0` (so a string da versao muda). O relatorio padrao e o P1.
@@ -89,7 +89,7 @@ disponivel, byte a byte, com `--relatorio p0` (so a string da versao muda). O re
 o `config` do cabecalho mudou em relacao a fase 0. `PREDITIVO_CONFIG` nao mudou: o modo p0 mantem o `hashConfig` antigo.
 Mudou um valor de config ou de regra: sobe a versao (`PREDITIVO_VERSAO`). Excecao registrada: a decisao do Lucas de
 2026-10-27 (criterio 3 relativo, abaixo) trocou `PREDITIVO_CONFIG_P1.criterios.tetoViesPadrao` de 0,10 para `null`, entao o
-`hashConfig` do P1 mudou, mas a versao continua `p1.0.0` porque a P1a ainda nao foi mergeada (nunca houve relatorio P1 oficial).
+`hashConfig` do P1 mudou, mas a versao ficou `p1.0.0` porque a P1a ainda nao tinha sido mergeada (nunca houve relatorio P1 oficial).
 O `hashConfig` do `--relatorio p0` nao mudou.
 
 ### Metodos novos e regras de protecao
@@ -166,5 +166,120 @@ mesmo `serie` e `anoMes` tambem sao somadas (aviso `mes-duplicado-somado`), mas 
 
 ## Fora da P1a
 
-P1b: TSB e avaliacao da selecao de metodo por segmento (escolha na 1a metade, medida na 2a). P2: sazonalidade em pool,
+A referencia em todos os produtos veio na P1b-1 (secao abaixo). TSB e selecao de metodo por segmento ficam para a P1c. P2: sazonalidade em pool,
 Holt-Winters/ETS, detector de atipicos, intervalos por mes e em producao. Sem service, rota, UI, banco nem migration.
+
+## P1b-1 (versao `p1.1.0`): referencia em todos os produtos
+
+Decisao do Lucas (2026-10-27): a previsao de referencia ("sombra") passa a ser a **combinacao SES + R + Holt amortecido em
+todos os produtos**, com intervalos p10/p90 e custo de negocio completo. Continua modo sombra: `forecastEngine.ts`, o relatorio
+de compras, o XLSX, o banco e a UI nao mudam. O `hashConfig` do p0 e do p1 **nao mudou**; so o relatorio p1b e a tabela de
+calibracao usam `hashConfigRef()` (hash de `{ base, p1, ref }`).
+
+### Regra da referencia (`previsaoBaseRef`, unico caminho do calculo)
+
+Ordem das regras (a do codigo): 1 sem dados -> `sem-dados`, sem previsao; 2 media dos ultimos 6 meses = 0 -> `dormente`: planilha Q
+(= 0) + `dormente-planilha`; 3 menos de 4 meses validos -> `curto`: planilha Q + `historico-curto-planilha`; 4 degrau de nivel
+(razao > 20 entre as metades) -> Holt amortecido (pede 8 validos) + `degrau-holt`, ou planilha Q + `degrau-planilha`; 5 senao
+`padrao`: combinacao, com **4 a 7 validos = SES + R (2 componentes)** e **8 ou mais = + Holt amortecido (3)**. Se ate a Q falhar
+(todos os meses marcados), a serie fica sem previsao (`ok false`, `historico-curto-planilha`). A regra olha so a serie recebida
+(no backtest, o treino da origem), nunca `degrau-nivel` da serie inteira. Avisos da referencia (ordem de `AVISO_REF_IDS`):
+`historico-curto-planilha`, `dormente-planilha`, `degrau-holt`, `degrau-planilha`, `sem-calibracao`, `calibracao-incompativel`,
+`sem-intervalo`, `correcao-sem-dados`, `correcao-no-limite`, `lead-time-padrao`, `lead-time-truncado`.
+
+### API `preverReferencia(entradas, marcas, opcoes)` (funcao pura)
+
+- `opcoes`: `horizonte` (6; 1 a 12), `leadTimePadraoDias` (90; 0 a 3650), `usarMascara` (true), `calibracao` (tabela ou `null`),
+  `correcaoNivel` (false), `parametrosCorrecao`. Opcao invalida lanca `opcoes invalidas: ...`.
+- Saida: `versao`, `hashConfig`, `hashCalibracao`, `calibracao` (`nenhuma`, `aplicada` ou `incompativel`), `opcoes`, `contagem`,
+  `erros` e `series` (ordenadas por id). Por produto: `ok`, `regra`, `metodoUsado`, `componentes`, `origem`, `pontos` (h = 1..H com
+  `p50`, `p10`, `p90`), `leadTime` (`dias`, `padrao`, `meses`, `truncado`, `p50`, `p10`, `p90`, `qHat`), `historico` (`meses`,
+  `validos`, `mascarados`, `minimoExigido`, `minimoHolt`), `correcao`, `intervalo`, `parametros`, `avisos` e `avisosRef`.
+- Lead time: `meses = min(H, max(1, ceil(dias/30)) + 1)`; `p50` do lead time = soma de `p50_1..p50_meses`; `qHat` = media dos
+  primeiros `min(H, max(1, ceil(dias/30)))` meses (consumo diario medio = `qHat / 30`).
+
+### Marcas de meses atipicos (`MarcasPorSerie`)
+
+Mapa produto -> `yearMonth` marcados (espelho de `ForecastAtypicalMonth`). **So marcas reais mascaram** (D8): as flags `atipico` e
+`ruptura` dos pontos de entrada sao ignoradas e contadas; a ruptura volta a ser discutida com o D7. Marca invalida, de produto
+inexistente, repetida ou fora de `[1o mes da serie, ultimo mes do calendario]` nao se aplica e e contada; marca nunca cria mes no
+calendario. Mes marcado sem linha na serie vira ponto 0 mascarado. A mascara e causal (`cortarAte` a corta junto). O mes marcado sai
+do nivel do SES, so avanca o Holt, sai de Q e R e da escala do intervalo. No CLI, as marcas vem da coluna `atipico` do arquivo.
+
+### Intervalos p10/p90 por tabela de calibracao
+
+A tabela e **entrada** da previsao (em producao cada produto tem ~6-7 meses; calibrar no proprio lote deixaria h = 4..6 e o lead
+time sem residuo). Ela e gerada pelo backtest local (`--gerar-calibracao`) e guarda **so agregados** adimensionais: quantis (tipo 7)
+de residuos escalonados por celula (SBC x `m`; `m` = h no mensal e meses do lead time), contagens e a razao real/previsto. Nenhum id,
+nome ou quantidade. Regras: celula com >= 30 residuos; senao o pool `TOTAL` do mesmo `m`; senao sem intervalo. `escala` = media dos
+12 ultimos meses validos (x meses no lead time); `p = max(0, p50 + q x escala)`. So a combinacao tem intervalo (Q, Holt de degrau e
+`curto` ficam sem, com `sem-intervalo`). Sem tabela: `sem-calibracao`; tabela de outro formato, `hashConfig` ou modo da correcao:
+`calibracao-incompativel` (ignorada, nunca inventa intervalo). O p50 pode ficar fora de `[p10, p90]` (vies historico forte): nada e
+forcado; e o sinal para a correcao. Leitura estrita: `lerTabelaCalibracao(texto)` e tudo-ou-nada, sem ecoar valor.
+
+### Correcao de nivel (desligada por padrao)
+
+`w = n / (n + k)`, `fator = clamp(1 + w x (razao - 1), fatorMin, fatorMax)` com `k` 300, limites 0,85 a 1,25, janela de 12 meses de
+liberacao e minimo de 30 pares (abaixo disso, fator 1 e `correcao-sem-dados`; no limite, `correcao-no-limite`). Pool unico (TOTAL), razao
+com a previsao **sem** correcao (o fator nao se realimenta), so na combinacao. Janela sem vendas (soma do realizado = 0) ou razao que arredonda a 0 em `round6`: `razao` = `null` (backtest, tabela e producao concordam; fator 1 e `correcao-sem-dados`), para a tabela gerada continuar legivel por `lerTabelaCalibracao`. Para ligar: `PREDITIVO_CONFIG_REF.correcaoNivel.ativaPorPadrao
+= true`, versao minor (`p1.2.0`) e nova tabela (o `hashConfig` muda), so por decisao do Lucas a partir do relatorio p1b com dado real.
+
+### Backtest da referencia, custo completo e criterio 7
+
+- Variantes: `planilha-q`, `referencia`, `referencia-corrigida`, na **amostra comum** (pares com lead time observado). Elegibilidade por
+  **meses de calendario** (a amostra e igual com e sem mascara e com qualquer `--historico-max`). Realizado **bruto**: o mes marcado
+  continua contando no erro; residuos de janela com mes marcado ficam fora dos pools (`residuosExcluidosMascara`). Se a janela de treino
+  de uma origem tem **todos** os meses marcados (venda > 0; ex.: `--historico-max 3`), a Q usa a media sem mascara (como o motor com
+  `sem-mes-valido`) e a referencia cai na Q: o par **nao** e descartado e conta em `amostra.fallbackReferencia` (0 no uso normal).
+- Sem vazamento: treino cortado (e truncado em `--historico-max`) na origem; pools e razao de nivel so com residuos liberados ate a
+  origem (`liberacao = origem + m`).
+- Custo em KG (sem preco), `custoH = razao x falta + excesso` por horizonte e no lead time (razao padrao 3); `custoRelH` contra a Q nos
+  mesmos pares; `Rupt sim` = fracao dos pares com realizado no lead time > previsto + `qHat/30` x lead time (igualdade nao e ruptura).
+  O criterio 4 nao mudou (custo no lead time); custo por horizonte e ruptura sao informativos. Por produto so com `--detalhe`.
+- Criterio 7 na linha TOTAL de cada variante de referencia (cobertura do lead time em [72%, 88%] com >= 30 pares); a cobertura mensal
+  (`Cobert mes`) e informativa. Campos herdados (WAPE, vies, vitoria, pinball, M1/M2, criterios 1-5, 7 e 8) sao os da P1a.
+
+### CLI: `--relatorio p1b`
+
+| Argumento | Padrao | Observacao |
+|---|---|---|
+| `--relatorio p0\|p1\|p1b` | p1 | p0/p1 delegam ao CLI da P1a com o argv intacto |
+| `--historico-max <1..240\|tudo>` | tudo | so os ultimos n meses de treino em cada origem (simula a producao, ~7 meses) |
+| `--gerar-calibracao` | desligado | saida = tabela JSON (ignora `--formato`; nao vale com `--detalhe`) |
+| `--correcao-nivel <sim\|nao>` | nao | so com `--gerar-calibracao`: modo da tabela gerada |
+
+As demais flags da P1a valem (`--entrada`, `--quinzena`, `--horizonte`, `--min-treino`, `--lead-time-padrao`, `--razao-falta-excesso`,
+`--sem-mascara`, `--formato`, `--detalhe`, `--teto-vies`); `--metodos` nao vale no p1b. Flag propria da P1b com p0/p1: erro `so vale
+com --relatorio p1b`. Valor invalido de `--relatorio`: `--relatorio deve ser p0, p1 ou p1b`.
+
+```
+node node_modules/ts-node-dev/lib/bin.js --transpile-only --quiet scripts/forecast-preditivo-backtest.ts --entrada C:\dados\series.csv --relatorio p1b --historico-max 7
+```
+
+Tabela de calibracao (sugestao: `--relatorio p1b --min-treino 6 --historico-max 7 --gerar-calibracao`): no PowerShell 5.1 grave com
+`[IO.File]::WriteAllText(<arquivo>, <saida>)`, nunca com `>` (UTF-16). O CLI nunca escreve em disco. Texto: 1a linha `Forecast
+preditivo - referencia P1b ...`, cabecalho (horizonte, cenarios, historico maximo, mascara, teto), `Marcas`, `Correcao de nivel`; por
+cenario: contagens, `Amostra`, `Fator aplicado`, `Criterio 7 (TOTAL ...)`, tabela de segmentos x variantes, `Por horizonte (TOTAL)` e, com
+`--detalhe`, `Por serie` e `Fontes`. JSON: topo `versao, hashConfig, hashEntrada, opcoes, cenariosMinTreino, linhasRejeitadas, marcas,
+cenarios` (+ `aviso`, `fontes` com detalhe); a tabela nao sai no relatorio.
+
+Formato da tabela de calibracao (`--gerar-calibracao`; JSON; lida por `lerTabelaCalibracao`, tudo-ou-nada: chave a mais ou a menos, ou valor fora da faixa, recusa a tabela inteira):
+
+| Chave | Conteudo |
+|---|---|
+| `formato`, `versao`, `hashConfig` | `preditivo-calibracao-v1`; versao do codigo (`p1.1.0`); hash da config da referencia (outro hash = `calibracao-incompativel`) |
+| `correcaoNivel` | `true` se gerada para o modo com correcao de nivel (modo diferente do da previsao = incompativel) |
+| `parametros` | `horizonte`, `minTreino`, `historicoMaximo` (`null` = tudo), `usarMascara`, `janelaNivelMeses`; informativos, nao entram na compatibilidade |
+| `ultimoMes` | `YYYY-MM`, ultimo mes do calendario da entrada |
+| `mensal[]`, `leadTime[]` | celulas `{celula, m, n, q10, q90}`: `celula` = `smooth\|erratic\|intermittent\|lumpy\|insuficiente\|TOTAL`, `m` de 1 a 12 (h no mensal; meses do lead time), `n` residuos, `q10 <= q90` |
+| `nivel` | `{n, razao}`: pares e razao soma(real)/soma(previsto) nos ultimos 12 meses de liberacao; `razao` > 0 ou `null` (sem dado ou sem vendas na janela) |
+
+**A tabela gerada com dado real deriva de dado real** (quantis de residuos de vendas e contagens): **nao versionar neste repo publico** (R-14); onde guarda-la e decisao da P3. Os testes usam so `tabelaSintetica()`.
+
+Limites conhecidos: (a) `hashConfig` cobre `PREDITIVO_CONFIG`, `PREDITIVO_CONFIG_P1` e `PREDITIVO_CONFIG_REF` (inclui os `k`, limites e `minPares` **padrao**); `parametrosCorrecao` customizados (so a API pura; o CLI nao os expoe) **nao** entram no `hashConfig` nem em `parametros`, entao uma tabela `correcaoNivel: true` gerada com outros `k`/limites (seus residuos usam o p50 corrigido) continua "compativel": nao a misture. Mudar o formato para cobri-los quebraria `preditivo-calibracao-v1`; decisao adiada. (b) `amostra.fallbackReferencia` so e > 0 no caso da janela de treino inteira marcada (ver Backtest); no uso normal e sempre 0 (ramo de defesa).
+
+### Fora da P1b-1
+
+Modo previsao do CLI e `--calibracao <arquivo>` (P1b-2); TSB e selecao de metodo por segmento (P1c); sazonalidade em pool, Holt-Winters/ETS
+e detector de atipicos (P2); D7 (saldo de pedidos de venda e ruptura); service, rota, UI, leitura de `ForecastAtypicalMonth` e de
+`ForecastMonthlySale` do banco, migration (P3/P4).

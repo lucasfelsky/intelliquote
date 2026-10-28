@@ -179,7 +179,7 @@ describe('relatorio', () => {
   it('texto: 1a linha com versao e hashes; sem ids de serie fora do detalhe', () => {
     const t = relatorioTexto(r, { detalhe: false, linhasRejeitadas: 3 });
     const linhas = t.split('\n');
-    expect(linhas[0]).toBe(`Forecast preditivo - backtest   versao p1.0.0   config ${r.hashConfig.slice(0, 8)}   entrada ${r.hashEntrada.slice(0, 8)}`);
+    expect(linhas[0]).toBe(`Forecast preditivo - backtest   versao p1.1.0   config ${r.hashConfig.slice(0, 8)}   entrada ${r.hashEntrada.slice(0, 8)}`);
     expect(linhas[1]).toContain('Series: 11 (com previsao 10, sem venda 1, historico curto 1)');
     expect(linhas[1]).toContain('linhas rejeitadas 3');
     expect(t).toContain('referencia');
@@ -196,7 +196,7 @@ describe('relatorio', () => {
   it('json: chaves em ordem fixa, valores com round6, porSerie so com detalhe', () => {
     const j = JSON.parse(relatorioJson(r, { detalhe: false }));
     expect(Object.keys(j)).toEqual(['versao', 'hashConfig', 'hashEntrada', 'opcoes', 'linhasRejeitadas', 'origens', 'contagem', 'avisos', 'linhas']);
-    expect(j.versao).toBe('p1.0.0');
+    expect(j.versao).toBe('p1.1.0');
     expect(JSON.stringify(j)).not.toContain('CONST');
     const comDetalhe = JSON.parse(relatorioJson(r, { detalhe: true }));
     expect(comDetalhe.porSerie).toHaveLength(11);
@@ -231,9 +231,9 @@ describe('executarCli (codigos 0, 1 e 2)', () => {
     const t = executarCli(['--entrada', 'tests\\fixtures\\forecast\\preditivo-sinteticas.csv'], d);
     expect(t.codigo).toBe(0);
     expect(t.erro).toBe('');
-    expect(t.saida.split('\n')[0]).toContain('versao p1.0.0');
+    expect(t.saida.split('\n')[0]).toContain('versao p1.1.0');
     const j = executarCli(['--entrada', FIX, '--formato', 'json'], d);
-    expect(JSON.parse(j.saida).versao).toBe('p1.0.0');
+    expect(JSON.parse(j.saida).versao).toBe('p1.1.0');
   });
   it('0: arquivo fora de qualquer repositorio; linhas rejeitadas contadas no cabecalho', () => {
     const r = executarCli(['--entrada', FORA], deps({ [FORA]: `${CAB}\nS1;2025-01;10\nS1;2025-13;5\nS1;2025-02;11\n` }));
@@ -244,7 +244,7 @@ describe('executarCli (codigos 0, 1 e 2)', () => {
     const q = { dataBase: '2026-10-15', produtos: [{ linha: 3, codigos: ['C1'], historico: [1, 2, 3, 4, 5], fonte: '' }], entradas: { vendasMes: [{ codigo: 'C1', qtd: 6 }], leadtime: [] } };
     const r = executarCli(['--quinzena', 'C:\\wt\\fc-pred\\programa\\tests\\fixtures\\forecast\\q.json', '--min-treino', '3'], deps({ 'C:\\wt\\fc-pred\\programa\\tests\\fixtures\\forecast\\q.json': JSON.stringify(q) }));
     expect(r.codigo).toBe(0);
-    expect(r.saida.split('\n')[0]).toContain('versao p1.0.0');
+    expect(r.saida.split('\n')[0]).toContain('versao p1.1.0');
   });
   it('2: caminho dentro do repo (relativo, absoluto ou ..), mensagem em stderr', () => {
     const d = deps({ 'C:\\wt\\fc-pred\\programa\\src\\utils\\forecastEngine.ts': 'x' });

@@ -46,7 +46,7 @@ describe('combinacao SES + R + Holt amortecido: valores a mao', () => {
     expect(p50(r)[1]).toBeCloseTo(28.125, 6);
     expect(r.parametros.componentes).toBe(2);
     expect(r.metodo).toBe('combinacao-ses-r-holt');
-    expect(r.versao).toBe('p1.0.0');
+    expect(r.versao).toBe('p1.1.0');
   });
   it('7 valores: SES 20,4375 + R 17 -> 18,71875', () => {
     const r = ok(comb([10, 12, 15, 14, 18, 20, 23]));

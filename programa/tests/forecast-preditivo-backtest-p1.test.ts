@@ -63,7 +63,7 @@ describe('estrutura do resultado', () => {
   const series = todas();
   const r = rodar(series);
   it('cabecalho, hashes e cenarios [12, 6] (principal primeiro)', () => {
-    expect(r.versao).toBe('p1.0.0');
+    expect(r.versao).toBe('p1.1.0');
     expect(r.hashConfig).toBe(hashConfigP1());
     expect(r.hashConfig).toMatch(/^[0-9a-f]{64}$/);
     expect(r.hashConfig).not.toBe(rodarBacktest(series, { ...OPCOES, metodos: [...METODO_IDS] }).hashConfig);

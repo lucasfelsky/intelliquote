@@ -119,7 +119,7 @@ describe('modo p0 == executarCli da fase 0 (objeto inteiro)', () => {
     const p0 = JSON.parse(executarCliP1(['--entrada', FIX, '--formato', 'json', '--relatorio', 'p0'], dFix()).saida);
     const fase0 = rodarBacktest(normalizarSeries(seriesSinteticas()).series, { horizonte: 6, minTreino: 6, metodos: [...METODO_IDS], leadTimePadraoDias: 90, razaoFaltaExcesso: 3, usarMascara: true });
     expect(p0.hashConfig).toBe(fase0.hashConfig);
-    expect(p0.versao).toBe('p1.0.0');
+    expect(p0.versao).toBe('p1.1.0');
     const p1 = JSON.parse(executarCliP1(['--entrada', FIX, '--formato', 'json'], dFix()).saida);
     expect(p1.hashConfig).toBe(hashConfigP1());
     expect(p1.hashConfig).not.toBe(p0.hashConfig);
@@ -132,7 +132,7 @@ describe('relatorio P1 (texto)', () => {
   it('codigo 0, 1a linha, cenarios, rotulos e eixos', () => {
     expect(t.codigo).toBe(0);
     expect(t.erro).toBe('');
-    expect(t.saida.split('\n')[0]).toMatch(/^Forecast preditivo - backtest P1   versao p1\.0\.0   config [0-9a-f]{8}   entrada [0-9a-f]{8}$/);
+    expect(t.saida.split('\n')[0]).toMatch(/^Forecast preditivo - backtest P1   versao p1\.1\.0   config [0-9a-f]{8}   entrada [0-9a-f]{8}$/);
     expect(t.saida).toContain('Cenario principal: min-treino 12');
     expect(t.saida).toContain('Cenario: min-treino 6');
     expect(t.saida).toContain('sem venda >=6 meses');
@@ -202,7 +202,7 @@ describe('relatorio P1 (JSON)', () => {
     expect(Object.keys(j.cenarios[1].metades)).toEqual(['meses1', 'meses2', 'ultimoMes1']);
   });
   it('valores: versao, cenarios [12, 6], principal, sem teto absoluto; round6', () => {
-    expect(j.versao).toBe('p1.0.0');
+    expect(j.versao).toBe('p1.1.0');
     expect(j.cenarios.map((c: { minTreino: number; principal: boolean }) => [c.minTreino, c.principal])).toEqual([[12, true], [6, false]]);
     expect(j.cenariosMinTreino).toEqual([12, 6]);
     expect(j.opcoes.tetoVies).toBeNull();
