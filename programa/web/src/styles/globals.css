@@ -181,6 +181,15 @@
   --rf-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* tokens F3a (componentes) */
+  --rf-action-hover-bg: #e8f0f2;
+  --rf-action-pressed-bg: #d6e3e7;
+  --rf-action-pressed: #003241;
+  --rf-danger: #c2362b;
+  --rf-danger-hover: #a82d23;
+  --rf-danger-pressed: #8f251d;
+  --rf-on-danger: #ffffff;
+  --rf-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234a6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --rf-shadow-primary-hover: 0 6px 18px rgba(20, 221, 167, 0.35);
 
   /* tokens F3b (componentes) */
 
@@ -311,6 +320,14 @@
   --rf-avatar-ring: 0 0 0 1px rgba(20, 221, 167, 0.35);
 
   /* tokens F3a (componentes) */
+  --rf-action-hover-bg: #163845;
+  --rf-action-pressed-bg: #1d4250;
+  --rf-action-pressed: #14dda7;
+  --rf-danger: #f07a70;
+  --rf-danger-hover: #f59a92;
+  --rf-danger-pressed: #f8b0a9;
+  --rf-on-danger: #1f0a0a;
+  --rf-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239fb6bf' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
   /* tokens F3b (componentes) */
 
@@ -385,56 +402,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   margin-bottom: 4px;
 }
 
-.primary-button {
-  background: var(--primary);
-  color: var(--on-primary);
-  border: 0;
-  padding: 10px 18px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  transition: background 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.primary-button:hover { background: var(--primary-hover); }
-.primary-button:disabled {
-  background: var(--surface-alt);
-  color: var(--ink-soft);
-  border: 1px solid var(--border-strong);
-  cursor: not-allowed;
-}
-
-.ghost-button {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--border);
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-}
-.ghost-button:hover { background: var(--surface-alt); }
-.ghost-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.ghost-button.danger-button {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: transparent;
-}
-.ghost-button.danger-button:hover {
-  background: var(--danger-strong);
-  color: var(--on-strong);
-}
-
-.danger-button {
-  background: var(--danger-strong);
-  color: var(--on-strong);
-  border: 0;
-  padding: 10px 18px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-}
-.danger-button:hover { filter: brightness(0.92); }
 
 .card {
   background: var(--surface);
@@ -444,31 +411,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   box-shadow: var(--shadow-sm);
 }
 
-.input, .select, .textarea {
-  width: 100%;
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  font-size: 14px;
-  color: var(--ink);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.input:focus, .select:focus, .textarea:focus {
-  outline: 0;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.field-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-bottom: 6px;
-}
 
 .badge {
   display: inline-flex;
@@ -1256,6 +1198,434 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 /* <<< shell F2 <<< */
 
 /* >>> componentes F3a (Suite COMEX) >>> */
+/* Botoes e campos (F3a). Regras movidas de cima e reescritas com os tokens --rf-*; so classes de botao, campo e contexto. */
+
+/* ---- Botoes: medidas comuns (min-height, nunca height: as sobrescritas do Forecast seguem valendo) ---- */
+.primary-button,
+.ghost-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--rf-radius-button);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  transition: background-color var(--rf-dur-base), color var(--rf-dur-base), border-color var(--rf-dur-base), box-shadow var(--rf-dur-base), transform var(--rf-dur-fast);
+}
+
+/* Primario */
+.primary-button {
+  border: 0;
+  background: var(--rf-primary);
+  color: var(--rf-on-primary);
+}
+.primary-button:hover:not(:disabled) {
+  background: var(--rf-primary-hover);
+  box-shadow: var(--rf-shadow-primary-hover);
+}
+.primary-button:active:not(:disabled) {
+  background: var(--rf-primary-pressed);
+  box-shadow: none;
+  transform: scale(0.97);
+}
+.primary-button:disabled {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+
+/* Destrutivo (cheio). Vem antes do secundario: em .ghost-button.danger-button o secundario (mesma especificidade, depois) vence. */
+.danger-button {
+  padding: 0 18px;
+  border: 0;
+  background: var(--rf-danger);
+  color: var(--rf-on-danger);
+}
+.danger-button:hover:not(:disabled) { background: var(--rf-danger-hover); }
+.danger-button:active:not(:disabled) {
+  background: var(--rf-danger-pressed);
+  transform: scale(0.97);
+}
+.danger-button:disabled {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+
+/* Secundario (padrao do .ghost-button: acoes de pagina, cartoes e formularios) */
+.ghost-button {
+  padding: 0 16px;
+  border: 1.5px solid var(--rf-action);
+  background: var(--rf-surface);
+  color: var(--rf-action);
+}
+.ghost-button:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+.ghost-button:active:not(:disabled) {
+  border-color: var(--rf-action-pressed);
+  background: var(--rf-action-pressed-bg);
+  color: var(--rf-action-pressed);
+  transform: scale(0.97);
+}
+.ghost-button:disabled {
+  border-color: var(--rf-border);
+  background: var(--rf-surface);
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+
+/* Fantasma ("Cancelar"): so dentro de .modal-actions */
+.modal-actions .ghost-button {
+  border: 0;
+  background: transparent;
+  color: var(--rf-action);
+}
+.modal-actions .ghost-button:hover:not(:disabled) { background: var(--rf-bg); }
+.modal-actions .ghost-button:active:not(:disabled) {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-action-pressed);
+  transform: scale(0.97);
+}
+.modal-actions .ghost-button:disabled {
+  background: transparent;
+  color: var(--rf-disabled-fg);
+}
+
+/* Acao de linha: 36 de altura (44 com pointer: coarse); fantasma, hover --rf-bg */
+:is(table, .row-actions) .ghost-button,
+.ghost-button--sm,
+.modal-actions .ghost-button--sm {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--rf-radius-control);
+  background: transparent;
+  color: var(--rf-action);
+  font-size: 13px;
+}
+:is(table, .row-actions) .ghost-button:hover:not(:disabled),
+.ghost-button--sm:hover:not(:disabled),
+.modal-actions .ghost-button--sm:hover:not(:disabled) { background: var(--rf-bg); }
+:is(table, .row-actions) .ghost-button:active:not(:disabled),
+.ghost-button--sm:active:not(:disabled),
+.modal-actions .ghost-button--sm:active:not(:disabled) {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-action-pressed);
+  transform: scale(0.97);
+}
+:is(table, .row-actions) .ghost-button:disabled,
+.ghost-button--sm:disabled,
+.modal-actions .ghost-button--sm:disabled {
+  background: transparent;
+  color: var(--rf-disabled-fg);
+}
+
+/* Fantasma destrutivo ("Excluir" em linha ou em pagina): texto vermelho, sem borda. O tamanho vem do contexto. */
+.ghost-button.danger-button {
+  border: 0;
+  background: transparent;
+  color: var(--rf-tone-danger-fg);
+}
+.ghost-button.danger-button:hover:not(:disabled) { background: var(--rf-tone-danger-bg); }
+.ghost-button.danger-button:active:not(:disabled) {
+  background: var(--rf-tone-danger-bg);
+  color: var(--rf-tone-danger-fg);
+  transform: scale(0.97);
+}
+.ghost-button.danger-button:disabled {
+  background: transparent;
+  color: var(--rf-disabled-fg);
+}
+
+/* Carregando (aria-busy): mantem a cor de repouso e o cursor de progresso, mesmo desabilitado pelo formulario */
+.primary-button[aria-busy="true"]:disabled {
+  background: var(--rf-primary);
+  color: var(--rf-on-primary);
+  cursor: progress;
+}
+.ghost-button[aria-busy="true"]:disabled {
+  border-color: var(--rf-action);
+  color: var(--rf-action);
+  cursor: progress;
+}
+.danger-button[aria-busy="true"]:disabled {
+  background: var(--rf-danger);
+  color: var(--rf-on-danger);
+  cursor: progress;
+}
+.ghost-button.danger-button[aria-busy="true"]:disabled {
+  background: transparent;
+  color: var(--rf-tone-danger-fg);
+}
+
+/* Foco: anel duplo (superficie por dentro, acao por fora; no destrutivo o externo e vermelho). O outline transparente aparece em forced-colors. */
+.primary-button:focus-visible:not(:disabled),
+.ghost-button:focus-visible:not(:disabled),
+.danger-button:focus-visible:not(:disabled),
+.link-button:focus-visible:not(:disabled),
+.icon-button:focus-visible:not(:disabled) {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.danger-button:focus-visible:not(:disabled) {
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-danger);
+}
+
+/* Acao de texto (linhas da aba Itens): sem caixa, 8x6 px de folga */
+.link-button {
+  padding: 8px 6px;
+  border: 0;
+  border-radius: var(--rf-radius-xs);
+  background: transparent;
+  color: var(--rf-action);
+  font-family: var(--rf-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  transition: color var(--rf-dur-base);
+}
+.link-button:hover:not(:disabled) {
+  color: var(--rf-action-pressed);
+  text-decoration: underline;
+}
+.link-button:disabled {
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+
+/* Botao so de icone: 36x36 */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface-alt);
+  color: var(--rf-ink-soft);
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base), color var(--rf-dur-base), box-shadow var(--rf-dur-base);
+}
+.icon-button svg { width: 16px; height: 16px; }
+.icon-button:hover:not(:disabled) {
+  background: var(--rf-bg);
+  color: var(--rf-ink);
+}
+.icon-button--danger { color: var(--rf-tone-danger-fg); }
+.icon-button--danger:hover:not(:disabled) {
+  background: var(--rf-tone-danger-bg);
+  color: var(--rf-tone-danger-fg);
+}
+.icon-button:disabled {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+.icon-button[aria-busy="true"] { cursor: progress; }
+
+/* Spinner de botao: 14 px, trilho a 25% da cor do texto; usa o @keyframes spin existente */
+.btn-spinner {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: var(--rf-radius-pill);
+  animation: spin 0.8s linear infinite;
+}
+
+/* ---- Campos ---- */
+.input,
+.select,
+.textarea,
+.field--inline select {
+  width: 100%;
+  padding: 0 14px;
+  border: 1.5px solid var(--rf-input-border);
+  border-radius: var(--rf-radius-control);
+  background-color: var(--rf-input-bg);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color var(--rf-dur-base), box-shadow var(--rf-dur-base);
+}
+.input,
+.select,
+.field--inline select { min-height: 44px; }
+.textarea {
+  padding: 10px 14px;
+  resize: vertical;
+}
+.textarea--code {
+  background-color: var(--code-bg);
+  color: var(--code-fg);
+  font-family: var(--rf-font-mono);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  min-height: 320px;
+}
+.select,
+.field--inline select {
+  padding-right: 36px;
+  background-image: var(--rf-select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px 16px;
+  font-weight: 600;
+  appearance: none;
+}
+.input:hover,
+.select:hover,
+.textarea:hover,
+.field--inline select:hover { border-color: var(--rf-ink-soft); }
+.input:focus,
+.select:focus,
+.textarea:focus,
+.field--inline select:focus {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  border-color: var(--rf-action);
+  box-shadow: 0 0 0 4px var(--rf-focus-halo);
+}
+.input[aria-invalid="true"],
+.select[aria-invalid="true"],
+.textarea[aria-invalid="true"] { border-color: var(--rf-danger); }
+.input:disabled,
+.select:disabled,
+.textarea:disabled,
+.field--inline select:disabled {
+  border-color: var(--rf-input-border);
+  background-color: var(--rf-disabled-bg);
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.field-hint {
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.field-error {
+  margin: 0;
+  color: var(--rf-tone-danger-fg);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* .field: rotulo (span) + controle em coluna */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.field > span {
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.field input,
+.field textarea,
+.field select { width: 100%; }
+.field--inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 110px;
+}
+
+/* ---- Selecao e arquivo ---- */
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.checkbox-field input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--rf-action);
+}
+.checkbox-field:has(input:disabled) { color: var(--rf-disabled-fg); }
+
+.file-input {
+  display: block;
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 8px;
+  border: 1.5px dashed var(--rf-input-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-input-bg);
+  color: var(--rf-ink-soft);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+}
+.file-input::file-selector-button {
+  min-height: 36px;
+  margin-right: 12px;
+  padding: 0 12px;
+  border: 1.5px solid var(--rf-action);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  color: var(--rf-action);
+  font-family: var(--rf-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.file-input::file-selector-button:hover { background: var(--rf-action-hover-bg); }
+.file-input:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  border-color: var(--rf-action);
+  box-shadow: 0 0 0 4px var(--rf-focus-halo);
+}
+
+/* Alvos de toque: 36 -> 44 */
+@media (pointer: coarse) {
+  :is(table, .row-actions) .ghost-button,
+  .ghost-button--sm,
+  .modal-actions .ghost-button--sm,
+  .link-button { min-height: 44px; }
+  .icon-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Movimento reduzido: sem transform no :active, transicoes so de cor; o spinner segue girando (indicador essencial), mais devagar */
+@media (prefers-reduced-motion: reduce) {
+  .primary-button,
+  .ghost-button,
+  .danger-button { transition: background-color var(--rf-dur-base), color var(--rf-dur-base), border-color var(--rf-dur-base); }
+  .primary-button:active:not(:disabled),
+  .danger-button:active:not(:disabled),
+  .ghost-button:active:not(:disabled),
+  .modal-actions .ghost-button:active:not(:disabled),
+  :is(table, .row-actions) .ghost-button:active:not(:disabled),
+  .ghost-button--sm:active:not(:disabled),
+  .modal-actions .ghost-button--sm:active:not(:disabled),
+  .ghost-button.danger-button:active:not(:disabled) { transform: none; }
+  .btn-spinner { animation-duration: 1.6s; }
+}
 /* <<< componentes F3a <<< */
 
 /* >>> componentes F3b (Suite COMEX) >>> */
@@ -1366,34 +1736,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 .modal-body { color: var(--ink); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
-.file-input {
-  display: block;
-  width: 100%;
-  margin-bottom: 16px;
-  padding: 8px;
-  font-size: 14px;
-  color: var(--ink-soft);
-  background: var(--input-bg);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-}
-.file-input::file-selector-button {
-  background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--border);
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  font-weight: 500;
-  font-family: inherit;
-  margin-right: 12px;
-  cursor: pointer;
-}
-.file-input::file-selector-button:hover { background: var(--surface-alt); }
-.file-input:focus-visible {
-  outline: 0;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
 
 .alert {
   border-radius: var(--radius-sm);
@@ -1406,11 +1748,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 .alert--error { border-color: var(--danger); background: var(--tone-danger-bg-soft); color: var(--danger); }
 .alert--success { border-color: var(--primary); background: var(--primary-50); color: var(--primary-700); }
 
-.checkbox-field {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; color: var(--ink);
-}
-.checkbox-field input { width: 16px; height: 16px; }
 
 .contact-list { display: flex; flex-direction: column; gap: 8px; }
 .contact-row {
@@ -1740,10 +2077,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   margin: 0;
 }
 
-.ghost-button--sm {
-  font-size: 0.75rem;
-  padding: 2px 10px;
-}
 
 .template-editor-label {
   display: flex;
@@ -1843,41 +2176,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   margin: 0 0 0.6rem;
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: 0.75rem;
-}
-
-.field > span {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.field input,
-.field textarea,
-.field select {
-  width: 100%;
-}
-
-.field--inline {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 110px;
-}
-
-.field--inline select {
-  padding: 0.4rem 0.6rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--input-border);
-  background: var(--surface);
-  font-size: 0.9rem;
-}
 
 .chip-list {
   display: flex;
@@ -1916,25 +2214,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   background: var(--surface-alt);
 }
 
-.textarea {
-  width: 100%;
-  border: 1px solid var(--input-border);
-  border-radius: var(--radius);
-  padding: 0.6rem 0.8rem;
-  font-family: inherit;
-  font-size: 0.95rem;
-  background: var(--surface);
-  resize: vertical;
-}
-
-.textarea--code {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  background: var(--code-bg);
-  color: var(--code-fg);
-  min-height: 320px;
-}
 
 .preview-frame {
   border: 1px solid var(--border);
@@ -2766,25 +3045,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 .po-group__hint { font-size: 13px; font-weight: 500; color: var(--ink-soft); }
 .po-rename-input { min-width: 180px; max-width: 320px; }
 
-.icon-button {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
-}
-.icon-button svg { width: 16px; height: 16px; }
-.icon-button:hover:not(:disabled) { background: var(--surface-alt); color: var(--ink); }
-.icon-button:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; }
-.icon-button:disabled { opacity: 0.4; cursor: not-allowed; }
-.icon-button--danger:hover:not(:disabled) { background: var(--tone-danger-bg); color: var(--danger); }
-.icon-button[aria-busy="true"] { cursor: progress; }
 
 .po-group-foot > td { padding: 6px 12px 10px; border-bottom: 0; background: var(--surface); }
 .po-group-foot__bar { position: sticky; inset-inline-start: 0; width: max-content; }
@@ -2871,7 +3131,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
 .move-item-modal__option input { margin: 0; }
 
 @media (pointer: coarse) {
-  .icon-button { width: 40px; height: 40px; }
   .item-action, .text-button { min-height: 40px; }
   .item-grip { display: none; }
   .po-table tr[draggable="true"] { cursor: auto; }
