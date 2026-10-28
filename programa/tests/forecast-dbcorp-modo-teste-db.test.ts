@@ -64,7 +64,7 @@ const saldoRow = (codigo: string, deposito: string, qtd: number): Cell[] => [
   'x',
   deposito,
   'KG',
-  qtd,
+  qtd + 1000, // "Saldo Físico Disponível": SENTINELA, o estoque so le "Saldo Final"
   0,
   qtd,
   'SQ QUIMICA',
@@ -102,7 +102,7 @@ async function reports() {
   return {
     saldo: file(
       'saldo.xlsx',
-      await xlsxBase64(SALDO_HEADERS, [saldoRow(CODE_A1, 'DEPOSITO TESTE', 100), saldoRow(CODE_B1, 'DEPOSITO TESTE', 40)]),
+      await xlsxBase64(SALDO_HEADERS, [saldoRow(CODE_A1, 'DEPOSITO ITAJAI', 100), saldoRow(CODE_B1, 'DEPOSITO ITAJAI', 40)]),
     ),
     vendasMes: file(
       'vendas-mes.xlsx',

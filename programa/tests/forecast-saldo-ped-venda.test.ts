@@ -101,35 +101,37 @@ const HEADERS = [
   'Empresa',
 ];
 const HEADERS_SEM_COLUNA = HEADERS.filter((h) => h !== 'Saldo Ped. Venda');
-const DEP = 'DEPOSITO TESTE';
+const DEP = 'DEPOSITO ITAJAI';
 const EXCLUIDO = 'QUALIDADE';
 
 // [codigo, deposito, saldo fisico, saldo ped. venda, empresa]
 type Linha = [string | null, string | null, number | string | null, Cell, string];
 
-const linhaCom = ([codigo, deposito, fisico, pedVenda, empresa]: Linha): Cell[] => [
+// A 5a coluna ("Saldo Físico Disponível") recebe SENTINELA (+1000) e a "Saldo Final" o valor da linha: o estoque so le a Final.
+const comSentinela = (v: number | string | null): Cell => (typeof v === 'number' ? v + 1000 : v);
+const linhaCom = ([codigo, deposito, saldo, pedVenda, empresa]: Linha): Cell[] => [
   codigo,
   `Produto ${codigo}`,
   deposito,
   'KG',
-  fisico,
+  comSentinela(saldo),
   pedVenda,
-  fisico,
+  saldo,
   empresa,
 ];
-const linhaSem = ([codigo, deposito, fisico, , empresa]: Linha): Cell[] => [
+const linhaSem = ([codigo, deposito, saldo, , empresa]: Linha): Cell[] => [
   codigo,
   `Produto ${codigo}`,
   deposito,
   'KG',
-  fisico,
-  fisico,
+  comSentinela(saldo),
+  saldo,
   empresa,
 ];
 
 const LINHAS: Linha[] = [
   ['TST0001', DEP, 100, 40, 'SQ QUIMICA'],
-  ['TST0001', 'OUTRO DEPOSITO TESTE', 50, 2.5, 'SQ QUIMICA'],
+  ['TST0001', 'VS SQ', 50, 2.5, 'SQ QUIMICA'],
   [' tst0002 ', DEP, 10, 0, 'SQ QUIMICA'],
   ['TST0003', EXCLUIDO, 70, 999, 'SQ QUIMICA'],
   ['TST0004', DEP, 80, 888, 'OUTRA EMPRESA'],

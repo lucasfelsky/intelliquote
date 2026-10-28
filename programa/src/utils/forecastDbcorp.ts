@@ -1,10 +1,10 @@
-// Parsers dos relatorios DBCorp (.xlsx) que alimentam uma quinzena do Forecast (estoque D2, decidida pelo
-// Lucas em 2026-10-21; FUP regra F3, decidida em 2026-10-22). Recebem Buffer (+ data base quando a janela
+// Parsers dos relatorios DBCorp (.xlsx) que alimentam uma quinzena do Forecast (estoque = coluna "Saldo Final"
+// dos depositos da allowlist, decidido em 2026-10-28; FUP regra F3, decidida em 2026-10-22). Recebem Buffer (+ data base quando a janela
 // de meses importa), nao tocam em banco e devolvem avisos/erros em vez de abortar. Colunas sempre
 // localizadas pelo cabecalho. As regras do FUP (F3, prontidao) vivem em forecastDbcorpRegras.ts (puro).
 import exceljs from 'exceljs';
 import {
-  FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS,
+  FORECAST_DBCORP_DEPOSITOS_PERMITIDOS,
   FORECAST_DBCORP_HEADERS,
   FORECAST_DBCORP_HEADERS_OPCIONAIS,
   FORECAST_DBCORP_HEADER_SCAN_ROWS,
@@ -155,9 +155,16 @@ function semLinhas(erros: string[]): ResumoRelatorio {
 
 // --- SALDO (DS9004) --------------------------------------------------------------------------------
 
-const DEPOSITOS_EXCLUIDOS = new Set(FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS.map(normalizeDbcorpText));
+const DEPOSITOS_PERMITIDOS = new Set(FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.map(normalizeDbcorpText));
 const EMPRESA_SALDO = normalizeDbcorpText(FORECAST_DBCORP_SALDO_EMPRESA);
 const [HEADER_SALDO_PED_VENDA] = FORECAST_DBCORP_HEADERS_OPCIONAIS.saldo;
+
+// "Saldo Final" e obrigatoria e SEM fallback: "Saldo Físico Disponível" desconta pedido de venda e, usada em silencio,
+// reduziria o estoque sem sinal na tela.
+const complementarErroSaldoFinal = (erro: string): string =>
+  erro.includes('"Saldo Final"')
+    ? `${erro} O estoque usa so a coluna "Saldo Final" (saldo do depósito); "Saldo Físico Disponível" não substitui porque desconta pedido de venda.`
+    : erro;
 
 export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
   const vazio = (erros: string[]): ParsedSaldo => ({
@@ -170,7 +177,7 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
   if (aba.ws === null) return vazio([aba.erro]);
   const ws = aba.ws;
   const cab = localizarCabecalho(ws, 'saldo', FORECAST_DBCORP_HEADERS.saldo);
-  if (!cab.ok) return vazio(cab.erros);
+  if (!cab.ok) return vazio(cab.erros.map(complementarErroSaldoFinal));
   const [cCodigo, cDeposito, cSaldo, cEmpresa] = cab.colunas;
   const cPedVenda = findHeaderColumn(ws.getRow(cab.linha), [HEADER_SALDO_PED_VENDA]);
   const pedVenda = cPedVenda === null ? null : coletorSaldoPedVenda();
@@ -179,6 +186,8 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
   const linhas: Lancamento[] = [];
   const depositos = new Map<string, DepositoResumo>();
   const empresas = new Map<string, { empresa: string; linhas: number; saldo: number }>();
+  // A1: linhas de deposito da allowlist sob outra empresa, contadas por deposito e empresa (so contagem de linhas).
+  const permitidoOutraEmpresa = new Map<string, Map<string, number>>();
 
   for (let r = cab.linha + 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
@@ -203,12 +212,19 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
       entry.linhas++;
       entry.saldo += bSaldo;
       empresas.set(empresa, entry);
+      const depositoOutra = normalizeDbcorpText(txt(bDeposito));
+      if (DEPOSITOS_PERMITIDOS.has(depositoOutra)) {
+        const porEmpresa = permitidoOutraEmpresa.get(depositoOutra) ?? new Map<string, number>();
+        const nomeEmpresa = empresa || '(sem empresa)';
+        porEmpresa.set(nomeEmpresa, (porEmpresa.get(nomeEmpresa) ?? 0) + 1);
+        permitidoOutraEmpresa.set(depositoOutra, porEmpresa);
+      }
       acc.ignorar('outra empresa');
       continue;
     }
 
     const deposito = normalizeDbcorpText(txt(bDeposito)) || FORECAST_DBCORP_SEM_DEPOSITO;
-    const incluido = !DEPOSITOS_EXCLUIDOS.has(deposito);
+    const incluido = DEPOSITOS_PERMITIDOS.has(deposito);
     const entry = depositos.get(deposito) ?? { deposito, incluido, linhas: 0, saldo: 0 };
     entry.linhas++;
     entry.saldo += bSaldo;
@@ -227,6 +243,30 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
     avisos.push(
       `Relatorio ${FORECAST_DBCORP_SLOTS.saldo} sem saldo valido da empresa ${FORECAST_DBCORP_SALDO_EMPRESA}.`,
     );
+  }
+  // A1 (ordem da constante, depois empresa).
+  const foraPorEmpresa: string[] = [];
+  for (const dep of FORECAST_DBCORP_DEPOSITOS_PERMITIDOS) {
+    const porEmpresa = permitidoOutraEmpresa.get(normalizeDbcorpText(dep));
+    if (!porEmpresa) continue;
+    const partes = [...porEmpresa.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([empresa, n]) => `${empresa}: ${n} ${plural(n, 'linha', 'linhas')}`);
+    foraPorEmpresa.push(...partes.map((p) => `${dep} (${p})`));
+  }
+  if (foraPorEmpresa.length > 0) {
+    avisos.push(
+      `SALDO: depósito da lista do estoque sob outra empresa ficou FORA do estoque: ${foraPorEmpresa.join('; ')}. O estoque só soma a empresa ${FORECAST_DBCORP_SALDO_EMPRESA}.`,
+    );
+  }
+  // A2 (so com estoque lido; com 0 o aviso "sem saldo valido" ja cobre).
+  if (acc.usadas > 0) {
+    const ausentes = FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.filter((dep) => !depositos.has(normalizeDbcorpText(dep)));
+    if (ausentes.length > 0) {
+      avisos.push(
+        `SALDO: nenhuma linha da empresa ${FORECAST_DBCORP_SALDO_EMPRESA} nos depósitos ${ausentes.join(', ')} (lista do estoque: ${FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.join(', ')}).`,
+      );
+    }
   }
   const porDeposito = [...depositos.values()]
     .map((d) => ({ ...d, saldo: round6(d.saldo) }))

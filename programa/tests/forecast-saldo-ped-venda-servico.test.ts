@@ -60,16 +60,24 @@ const file = (fileName: string, contentBase64: string) => ({ fileName, contentBa
 const SALDO_HEADERS = ['Código', 'Descrição', 'Depósito', 'Unidade', 'Saldo Físico Disponível', 'Saldo Ped. Venda', 'Saldo Final', 'Empresa'];
 const SALDO_HEADERS_SEM_COLUNA = SALDO_HEADERS.filter((h) => h !== 'Saldo Ped. Venda');
 
-async function relatorios(comColuna: boolean) {
+// Deslocamento do "Saldo Físico Disponível" quando `fisicoDiferente`: o estoque so pode ler a "Saldo Final".
+const DESLOCAMENTO_FISICO = 3333.375;
+
+async function relatorios(
+  comColuna: boolean,
+  opcoes: { deposito?: string; empresa?: string; fisicoDiferente?: boolean } = {},
+) {
+  const { deposito = 'DEPOSITO ITAJAI', empresa = 'SQ QUIMICA', fisicoDiferente = false } = opcoes;
   const linhas: Array<[string, number, number]> = [
     [CODIGO_A, 100, SENTINELA],
     [CODIGO_B, 40, 0],
   ];
-  const saldoRows: Cell[][] = linhas.map(([codigo, fisico, pedVenda]) =>
-    comColuna
-      ? [codigo, 'x', 'DEPOSITO TESTE', 'KG', fisico, pedVenda, fisico, 'SQ QUIMICA']
-      : [codigo, 'x', 'DEPOSITO TESTE', 'KG', fisico, fisico, 'SQ QUIMICA'],
-  );
+  const saldoRows: Cell[][] = linhas.map(([codigo, final, pedVenda]) => {
+    const fisico = fisicoDiferente ? final + DESLOCAMENTO_FISICO : final;
+    return comColuna
+      ? [codigo, 'x', deposito, 'KG', fisico, pedVenda, final, empresa]
+      : [codigo, 'x', deposito, 'KG', fisico, final, empresa];
+  });
   const vendasHeaders = ['Descr. Item', 'Item', 'Unid. Medida', 'Quantidade ', 'Empresa'];
   const vendas = (qtd: number) => [['x', CODIGO_A, 'KG', qtd, 'SQ QUIMICA']];
   return {
@@ -140,14 +148,15 @@ describe('Forecast DBCorp: saldo de pedido de venda no preview e no confirm', ()
     vi.restoreAllMocks();
   });
 
-  const corpo = async (comColuna: boolean, extra: object = {}) => ({
+  type OpcoesSaldo = Parameters<typeof relatorios>[1];
+  const corpo = async (comColuna: boolean, extra: object = {}, saldo?: OpcoesSaldo) => ({
     label: LABEL,
     baseDate: BASE_DATE,
-    files: await relatorios(comColuna),
+    files: await relatorios(comColuna, saldo),
     ...extra,
   });
-  const confirmar = async (comColuna: boolean, extra: object = {}) =>
-    ForecastDbcorpService.confirm((await corpo(comColuna, extra)) as never, 77);
+  const confirmar = async (comColuna: boolean, extra: object = {}, saldo?: OpcoesSaldo) =>
+    ForecastDbcorpService.confirm((await corpo(comColuna, extra, saldo)) as never, 77);
   const quinzenaGravada = (chamada = 0) => createFromParsed.mock.calls[chamada]![1] as Quinzena;
   const metadataDoSnapshot = (chamada = 0) => {
     const entradas = auditLog.mock.calls.filter(
@@ -212,5 +221,56 @@ describe('Forecast DBCorp: saldo de pedido de venda no preview e no confirm', ()
     const normal = quinzenaGravada(1).entradas;
     expect(teste.saldoPedVenda).toEqual([{ codigo: CODIGO_A, qtd: SENTINELA }]);
     expect(teste).toEqual(normal);
+  });
+
+  it('preview: so as chaves de sempre no resumo do SALDO e nenhum vazamento do Saldo Físico Disponível', async () => {
+    const preview = await ForecastDbcorpService.preview((await corpo(true, {}, { fisicoDiferente: true })) as never);
+    expect(Object.keys(preview.relatorios.saldo!).sort()).toEqual([
+      'avisos',
+      'codigosSemProduto',
+      'erros',
+      'fileName',
+      'ignoradas',
+      'lidas',
+      'outrasEmpresas',
+      'porDeposito',
+      'total',
+      'totalCasado',
+      'usadas',
+    ]);
+    expect(preview.relatorios.saldo!.total).toBe(140);
+    const texto = JSON.stringify(preview);
+    expect(texto).not.toContain(String(100 + DESLOCAMENTO_FISICO));
+    expect(texto).not.toContain(String(40 + DESLOCAMENTO_FISICO));
+    expect(texto).not.toContain(String(SENTINELA));
+  });
+
+  it('confirm: o estoque gravado e o "Saldo Final", nunca o "Saldo Físico Disponível"', async () => {
+    await confirmar(true, {}, { fisicoDiferente: true });
+    expect(quinzenaGravada().entradas.estoque).toEqual([
+      { codigo: CODIGO_A, qtd: 100 },
+      { codigo: CODIGO_B, qtd: 40 },
+    ]);
+  });
+
+  it('confirm: EM TRANSITO (deposito) nao duplica com o FUP EM TRANSITO (chegadas iguais)', async () => {
+    await confirmar(true, {}, { deposito: 'DEPOSITO ITAJAI' });
+    await confirmar(true, {}, { deposito: 'EM TRANSITO' });
+    expect(quinzenaGravada(1).entradas).toEqual(quinzenaGravada(0).entradas);
+    expect(quinzenaGravada(1).entradas.estoque).toEqual([
+      { codigo: CODIGO_A, qtd: 100 },
+      { codigo: CODIGO_B, qtd: 40 },
+    ]);
+  });
+
+  it('preview: saldo sob outra empresa fica fora e avisa (deposito da lista sob outra empresa + sem saldo valido)', async () => {
+    const preview = await ForecastDbcorpService.preview(
+      (await corpo(true, {}, { empresa: 'OUTRA EMPRESA' })) as never,
+    );
+    expect(preview.avisos).toContain(
+      'SALDO: depósito da lista do estoque sob outra empresa ficou FORA do estoque: DEPOSITO ITAJAI (OUTRA EMPRESA: 2 linhas). O estoque só soma a empresa SQ QUIMICA.',
+    );
+    expect(preview.avisos).toContain('Relatorio SALDO sem saldo valido da empresa SQ QUIMICA.');
+    expect(preview.relatorios.saldo!.usadas).toBe(0);
   });
 });
