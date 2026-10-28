@@ -16,9 +16,11 @@ import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastGerarCotacao from './ForecastGerarCotacao';
+import ForecastOcasiaoSelo, { OcasioesDoGrupoSelo, OcasioesDoItemDetalhe, OcasioesNoResumo } from './ForecastOcasiaoSelo';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
 import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
 import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
+import { APOIO_OCASIOES, PARAGRAFO_OCASIOES } from './forecastOcasioesRelatorio';
 import { d1, dataBr, inteiroBr, kgBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import { useBaixarPlanilhaMacro } from './useBaixarPlanilhaMacro';
 import {
@@ -227,6 +229,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
             <MediaSem meses={item.mesesForaDaMedia} />
             <SeloDemanda kg={item.demandaComercialKg} />
+            <ForecastOcasiaoSelo ocasioes={item.ocasioes} />
             <Observacao obs={item.obs} />
           </div>
         </th>
@@ -283,6 +286,13 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
         <tr className="fcr-linha-grupo">
           <td colSpan={colunas}>
             <SublinhasDoGrupo grupo={item.grupo} />
+          </td>
+        </tr>
+      )}
+      {item.ocasioes && (
+        <tr className="fcoc-linha">
+          <td colSpan={colunas}>
+            <OcasioesDoItemDetalhe item={item} />
           </td>
         </tr>
       )}
@@ -346,6 +356,7 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
                   {grupo.vencidas} {plural(grupo.vencidas, 'vencida', 'vencidas')}
                 </span>
               )}
+              <OcasioesDoGrupoSelo grupo={grupo} />
             </div>
           </caption>
           <thead>
@@ -638,6 +649,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             <li>{resumoDemandaComercial(demandaComercial.totais.abertas, demandaComercial.totais.sugeridoKg)}</li>
           )}
           {cobertosPorGrupo && <li>{resumoCobertosPorGrupo(cobertosPorGrupo.itens.length)}</li>}
+          <OcasioesNoResumo dados={dados} />
         </ul>
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
@@ -683,6 +695,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
         <p className="fcr-resumo__fora">
           Quinzena {quinzena.label} (base {dataBr(quinzena.baseDate)}) · datas conferidas em {dataBr(quinzena.hoje)}
         </p>
+        {dados.ocasioes?.estado === 'ok' && <p className="fcr-resumo__fora fcoc-apoio">{APOIO_OCASIOES}</p>}
         <details className="fcr-regra">
           <summary>Como as datas são calculadas</summary>
           <p>
@@ -700,6 +713,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
           {demandaComercial && <p>{paragrafoDemandaComercial()}</p>}
           {comGrupos && <p>{paragrafoGruposDeEquivalencia()}</p>}
+          {dados.ocasioes?.estado === 'ok' && <p>{PARAGRAFO_OCASIOES}</p>}
         </details>
       </section>
       <ProvedorDecisoesCompra snapshotId={snapshotId} podeEditar={podeEditar}>

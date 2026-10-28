@@ -49,17 +49,16 @@ describe('modelos baseados na Pascoa (2027)', () => {
     expect(janela('segunda-pascoa')).toEqual(['2027-03-29', '2027-03-29']);
     expect(janela('ascensao')).toEqual(['2027-05-06', '2027-05-06']);
     expect(janela('segunda-pentecostes')).toEqual(['2027-05-17', '2027-05-17']);
-    expect(janela('carnaval')).toEqual(['2027-02-08', '2027-02-10']);
   });
 
-  it('Carnaval 2028 (bissexto)', () => {
-    const p = preencherComModelo(modelo('carnaval'), 2028)!;
-    expect([p.inicio, p.fim]).toEqual(['2028-02-28', '2028-03-01']);
+  it('2028 (bissexto): Pascoa em 16/04, o nome leva o ano e o modelo e movel por fonte', () => {
+    const p = preencherComModelo(modelo('segunda-pascoa'), 2028)!;
+    expect([p.inicio, p.fim]).toEqual(['2028-04-17', '2028-04-17']);
+    expect(p).toMatchObject({ escopo: 'fonte', etapa: 'prontidao', dias: 1, anual: false, movel: true, nome: 'Segunda-feira de Páscoa (Alemanha) 2028' });
   });
 
-  it('Carnaval e global, na liberacao, e o nome leva o ano', () => {
-    const p = preencherComModelo(modelo('carnaval'), 2027)!;
-    expect(p).toMatchObject({ escopo: 'global', etapa: 'liberacao', dias: 2, anual: false, movel: true, nome: 'Carnaval (Brasil) 2027' });
+  it('o catalogo nao tem mais o Carnaval (Brasil)', () => {
+    expect(MODELOS.some((m) => m.id === 'carnaval' || /carnaval/i.test(m.nome))).toBe(false);
   });
 });
 
@@ -127,7 +126,7 @@ describe('Festival do Barco-Dragao (datas a confirmar pelo usuario)', () => {
       anual: false,
       movel: true,
     });
-    expect(p.avisos).toContain('Confirme a data no calendário oficial. A tabela do Festival do Barco-Dragão cobre até 2030.');
+    expect(p.avisos).toContain('Confirme a data com o Comex ou no calendário oficial. A tabela do Festival do Barco-Dragão cobre até 2030.');
   });
 
   it('anos oferecidos so ate onde a tabela cobre', () => {
@@ -217,8 +216,8 @@ describe('anosDoModelo', () => {
 });
 
 describe('catalogo', () => {
-  it('12 modelos, ids unicos, sem primeiro-maio, nenhum de Diwali, Eid ou Ramada', () => {
-    expect(MODELOS).toHaveLength(12);
+  it('11 modelos, ids unicos, sem primeiro-maio, nenhum de Diwali, Eid ou Ramada', () => {
+    expect(MODELOS).toHaveLength(11);
     expect(MODELOS.some((m) => m.id === 'primeiro-maio')).toBe(false);
     expect(new Set(MODELOS.map((m) => m.id)).size).toBe(MODELOS.length);
     for (const m of MODELOS) expect(`${m.id} ${m.nome}`).not.toMatch(/diwali|eid|ramad/i);
