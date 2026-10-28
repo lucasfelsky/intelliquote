@@ -1,0 +1,74 @@
+[
+  {
+    "token": "--rf-action-hover-bg",
+    "claro": "#e8f0f2",
+    "escuro": "#163845",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-action-pressed-bg",
+    "claro": "#d6e3e7",
+    "escuro": "#1d4250",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-action-pressed",
+    "claro": "#003241",
+    "escuro": "#14dda7",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-danger",
+    "claro": "#c2362b",
+    "escuro": "#f07a70",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-danger-hover",
+    "claro": "#a82d23",
+    "escuro": "#f59a92",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-danger-pressed",
+    "claro": "#8f251d",
+    "escuro": "#f8b0a9",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-on-danger",
+    "claro": "#ffffff",
+    "escuro": "#1f0a0a",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-select-chevron",
+    "claro": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234a6472' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+    "escuro": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239fb6bf' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+    "constante": false,
+    "fonte": "decisao",
+    "ref": "Componentes (D-F3-16)"
+  },
+  {
+    "token": "--rf-shadow-primary-hover",
+    "claro": "0 6px 18px rgba(20, 221, 167, 0.35)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Componentes"
+  }
+]

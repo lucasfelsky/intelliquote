@@ -93,6 +93,7 @@ const SAME_IN_BOTH_THEMES = [
   '--rf-dur-fill',
   '--rf-ease-out',
   '--rf-ease-spring',
+  '--rf-shadow-primary-hover',
 ];
 
 // Valores do :root claro em origin/main f74c579 (nao podem mudar).
