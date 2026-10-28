@@ -25,16 +25,18 @@ const MOCK: Record<string, string> = {
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  x: 'M6 6l12 12M18 6 6 18',
+  star: 'm12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
 };
 
 describe('icons', () => {
-  it('tem os 20 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user)', () => {
-    expect(ICON_NAMES).toHaveLength(20);
+  it('tem os 22 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star)', () => {
+    expect(ICON_NAMES).toHaveLength(22);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
       'relatorios', 'ajuda', 'usuarios', 'empresa', 'auditoria', 'templates', 'logout', 'theme-half', 'sun', 'moon',
-      'shield', 'user',
+      'shield', 'user', 'x', 'star',
     ]) {
       expect(ICONS, name).toHaveProperty(name);
     }
@@ -55,7 +57,7 @@ describe('icons', () => {
     expect(ICONS).not.toHaveProperty('monitor');
   });
 
-  it('so o theme-half tem camada preenchida (currentColor); os demais 19 so tem traco', () => {
+  it('so o theme-half tem camada preenchida (currentColor); os demais 21 so tem traco', () => {
     expect(Object.keys(ICON_FILLS)).toEqual(['theme-half']);
     const meio = render(<Icon name="theme-half" />).container.querySelectorAll('svg path');
     expect(meio).toHaveLength(2);
@@ -70,7 +72,7 @@ describe('icons', () => {
   });
 
   it('nenhum icone repete o path de outro', () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(20);
+    expect(new Set(Object.values(ICONS)).size).toBe(22);
   });
 
   it.each(ICON_NAMES)('<Icon name="%s"> renderiza svg decorativo de traco com currentColor', (name) => {

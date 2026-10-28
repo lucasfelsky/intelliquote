@@ -2,7 +2,8 @@ import type { SVGAttributes } from 'react';
 
 // Icones de traco do mock (Suite COMEX): 24x24, sem preenchimento, `currentColor` (a cor vem do CSS do contexto).
 // 14 de navegacao (navConfig), Sair, os 3 do botao de tema (automatico, noturno, claro; canvas v72) e os 2 da topbar
-// (escudo SSO e usuario). Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
+// (escudo SSO e usuario). F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
+// paralelas nao editarem este objeto. Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
 export const ICONS = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
   cotacoes: 'M9 3h6v3H9zM6 4.5H5v16.5h14V4.5h-1M9 11h6M9 15h6M9 19h3',
@@ -24,6 +25,8 @@ export const ICONS = {
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  x: 'M6 6l12 12M18 6 6 18',
+  star: 'm12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
 } as const;
 
 // Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.

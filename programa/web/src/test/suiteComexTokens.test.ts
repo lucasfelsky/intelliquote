@@ -1,30 +1,40 @@
 /// <reference types="node" />
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import {
+  fixtureUniao,
+  foraDasRegioes,
+  opaque as opaqueOf,
+  over,
+  parseColor,
+  parseRules,
+  ratioOf,
+  readSource,
+  regioes,
+  temasDeTokens,
+  tokensDosTemas,
+  type FixtureToken,
+  type Rgb,
+  type Rgba,
+  type ThemeName,
+} from './rfCss';
 
 // Base ADITIVA dos tokens --rf-* (Suite COMEX, mock v68). Esta guarda cobre:
-//  - paridade: o CSS tem exatamente os tokens da fixture, com os valores da fixture (claro e escuro);
+//  - paridade: o CSS tem exatamente os tokens da UNIAO das fixtures (suiteComexTokens.json + suiteComexTokens.f3x.json), com os valores
+//    de cada fixture (claro e escuro). A fixture base continua afirmando 84/36/48 para si; cada etapa da F3 acrescenta o seu arquivo;
 //  - contraste WCAG 2.x nos 2 temas, compondo alpha sobre o --rf-surface do tema;
 //  - excecoes de contraste do proprio mock, explicitas (o conjunto de reprovados tem de ser EXATAMENTE a lista);
-//  - invariantes: desde a F2 so a regiao "shell F2" do globals.css consome var(--rf-*) (sidebar, topbar, marca);
-//    --rf-* so e DECLARADO nos 2 blocos de token; login.css, index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
-// Quando a fase da TROCA passar a consumir os tokens nas paginas, so os invariantes (ultimo describe) mudam.
+//  - invariantes: so consomem var(--rf-*) as regioes delimitadas, numa lista FIXA e contigua (shell F2, componentes F3a, F3b, F3c, F3d;
+//    vazia e permitida); --rf-* so e DECLARADO nos 2 blocos de token; login.css, index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
+//  - O que cada regiao F3 pode conter (seletores, at-rules, reduced-motion, MIGRADAS) e conferido pelo teste da PROPRIA etapa
+//    (componentesF3a.test.ts ... F3d), nao aqui. PAIRS e KNOWN_EXCEPTIONS deste arquivo nao mudam mais na F3: pares novos ficam no teste da etapa.
+// Funcoes de apoio: ./rfCss.ts (nao e teste).
 
-const readSource = (relative: string) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 const css = readSource('../styles/globals.css');
 const loginCss = readSource('../styles/login.css');
 const indexHtml = readSource('../../index.html');
 
-interface FixtureToken {
-  token: string;
-  claro: string;
-  escuro: string | null;
-  constante: boolean;
-  fonte: 'mock' | 'decisao' | 'spec' | 'portal';
-  ref: string;
-}
-const fixture = JSON.parse(readSource('./fixtures/suiteComexTokens.json')) as FixtureToken[];
+const fixtureBase = JSON.parse(readSource('./fixtures/suiteComexTokens.json')) as FixtureToken[];
+const fixture = fixtureUniao();
 
 const tsSources = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../test/**', '!../**/*.test.ts', '!../**/*.test.tsx'], {
   query: '?raw',
@@ -32,63 +42,41 @@ const tsSources = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../test/**', 
   eager: true,
 }) as Record<string, string>;
 
-// ---------- parser minimo (mesma abordagem de themeTokens.test.ts) ----------
-const DARK_HEADER = ':root[data-theme="dark"] {';
-const REGION_START = '/* >>> shell F2 (Suite COMEX) >>> */';
-const REGION_END = '/* <<< shell F2 <<< */';
+// ---------- regioes e blocos de token ----------
+const SHELL_NOME = 'shell F2';
+// Lista FIXA, na ordem em que aparecem no CSS: o shell e, logo depois dele, as 4 etapas da F3 (cada uma pode estar vazia).
+const REGIOES_PERMITIDAS = ['shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d'] as const;
 const rawLf = css.replace(/\r\n/g, '\n');
-const regionStart = rawLf.indexOf(REGION_START);
-const regionEnd = rawLf.indexOf(REGION_END);
-const regionRaw = regionStart >= 0 && regionEnd > regionStart ? rawLf.slice(regionStart, regionEnd + REGION_END.length) : '';
-const cssOutsideRegion = regionRaw ? rawLf.replace(regionRaw, '') : rawLf;
-const stripComments = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '');
-const clean = stripComments(cssOutsideRegion);
-
-function extractBlock(source: string, header: string): { body: string; rest: string } {
-  const start = source.indexOf(header);
-  if (start < 0) throw new Error(`bloco nao encontrado: ${header}`);
-  let depth = 0;
-  for (let i = start + header.length - 1; i < source.length; i++) {
-    const ch = source.charAt(i);
-    if (ch === '{') depth++;
-    else if (ch === '}' && --depth === 0) {
-      return {
-        body: source.slice(start + header.length, i),
-        rest: source.slice(0, start) + source.slice(i + 1),
-      };
-    }
-  }
-  throw new Error(`bloco sem fechamento: ${header}`);
-}
-
-function parseTokens(body: string): Record<string, string> {
-  const tokens: Record<string, string> = {};
-  for (const [, name, value] of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
-    if (name !== undefined && value !== undefined) tokens[name] = value.replace(/\s+/g, ' ').trim();
-  }
-  return tokens;
-}
-
-const lightBlock = extractBlock(clean, ':root {');
-const darkBlock = extractBlock(lightBlock.rest, DARK_HEADER);
-const lightTokens = parseTokens(lightBlock.body);
-const darkTokens = parseTokens(darkBlock.body);
-const restOfCss = darkBlock.rest;
+const regs = regioes(rawLf);
+const cssOutsideRegions = foraDasRegioes(rawLf, regs);
+const shell = regs.find((r) => r.nome === SHELL_NOME);
+const regionClean = shell?.limpo ?? '';
+const regionRules = shell?.regras ?? [];
+const { claro: lightTokens, escuro: darkTokens, resto: restOfCss } = tokensDosTemas(rawLf);
 
 const rfOf = (tokens: Record<string, string>) => Object.keys(tokens).filter((t) => t.startsWith('--rf-'));
 const lightRf = rfOf(lightTokens);
 const darkRf = rfOf(darkTokens);
 
 // ---------- paridade com a fixture ----------
-describe('--rf-*: paridade CSS x fixture (mock v68)', () => {
+describe('--rf-*: paridade CSS x fixtures (mock v68)', () => {
   const pairs = fixture.filter((t) => !t.constante);
   const constants = fixture.filter((t) => t.constante);
 
-  it('a fixture tem 84 tokens: 36 pares claro/escuro e 48 constantes, sem repeticao', () => {
-    expect(fixture).toHaveLength(84);
-    expect(pairs).toHaveLength(36);
-    expect(constants).toHaveLength(48);
-    expect(new Set(fixture.map((t) => t.token)).size).toBe(84);
+  it('a fixture base tem 84 tokens: 36 pares claro/escuro e 48 constantes, sem repeticao', () => {
+    expect(fixtureBase).toHaveLength(84);
+    expect(fixtureBase.filter((t) => !t.constante)).toHaveLength(36);
+    expect(fixtureBase.filter((t) => t.constante)).toHaveLength(48);
+    expect(new Set(fixtureBase.map((t) => t.token)).size).toBe(84);
+  });
+
+  it('a uniao das fixtures contem a base e nao repete nenhum token', () => {
+    expect(fixture.length).toBeGreaterThanOrEqual(84);
+    expect(new Set(fixture.map((t) => t.token)).size).toBe(fixture.length);
+    for (const t of fixtureBase) expect(fixture.map((x) => x.token), t.token).toContain(t.token);
+    const arquivos = [...new Set(fixture.map((t) => t.arquivo))];
+    expect(arquivos).toContain('suiteComexTokens.json');
+    for (const arquivo of arquivos) expect(arquivo, arquivo).toMatch(/^suiteComexTokens(\.f3[a-d])?\.json$/);
   });
 
   it('os 3 tokens da F2 (desenhados pelo mock) estao na fixture', () => {
@@ -107,7 +95,7 @@ describe('--rf-*: paridade CSS x fixture (mock v68)', () => {
     }
   });
 
-  it('o conjunto de --rf-* do :root e exatamente o da fixture', () => {
+  it('o conjunto de --rf-* do :root e exatamente o da uniao das fixtures', () => {
     expect([...lightRf].sort()).toEqual(fixture.map((t) => t.token).sort());
   });
 
@@ -116,7 +104,7 @@ describe('--rf-*: paridade CSS x fixture (mock v68)', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('o bloco escuro tem exatamente os 36 pares, com o valor escuro da fixture', () => {
+  it('o bloco escuro tem exatamente os pares da uniao, com o valor escuro da fixture', () => {
     expect([...darkRf].sort()).toEqual(pairs.map((t) => t.token).sort());
     const wrong = pairs.filter((t) => darkTokens[t.token] !== t.escuro).map((t) => `${t.token}: ${darkTokens[t.token]}`);
     expect(wrong).toEqual([]);
@@ -128,55 +116,10 @@ describe('--rf-*: paridade CSS x fixture (mock v68)', () => {
 });
 
 // ---------- cor / contraste ----------
-type Rgba = [number, number, number, number];
-type Rgb = [number, number, number];
-
-function parseColor(value: string): Rgba {
-  const v = value.trim().toLowerCase();
-  const hexMatch = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(v)?.[1];
-  if (hexMatch) {
-    const hex = hexMatch.length === 3 ? [...hexMatch].map((c) => c + c).join('') : hexMatch;
-    return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), 1];
-  }
-  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(v);
-  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), rgb[4] === undefined ? 1 : Number(rgb[4])];
-  throw new Error(`cor nao suportada: ${value}`);
-}
-
-const over = ([r, g, b, a]: Rgba, under: Rgb): Rgb => {
-  const mix = (c: number, u: number) => Math.round(c * a + u * (1 - a));
-  return [mix(r, under[0]), mix(g, under[1]), mix(b, under[2])];
-};
-
-function luminance([r, g, b]: Rgb): number {
-  const linear = (c: number) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-}
-
-const ratioOf = (fg: Rgb, bg: Rgb) => {
-  const a = luminance(fg);
-  const b = luminance(bg);
-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-};
-
-type ThemeName = 'claro' | 'escuro';
-const THEMES: Record<ThemeName, Record<string, string>> = {
-  claro: lightTokens,
-  escuro: { ...lightTokens, ...darkTokens },
-};
+const THEMES = temasDeTokens(lightTokens, darkTokens);
 
 // Compoe o token (com alpha) sobre o --rf-surface do tema antes de medir.
-function opaque(theme: ThemeName, name: string): Rgb {
-  const tokens = THEMES[theme];
-  const surface = tokens['--rf-surface'];
-  const value = tokens[name];
-  if (surface === undefined || value === undefined) throw new Error(`token indefinido: ${name}`);
-  const [sr, sg, sb] = parseColor(surface);
-  return over(parseColor(value), [sr, sg, sb]);
-}
+const opaque = (theme: ThemeName, name: string): Rgb => opaqueOf(THEMES[theme], name);
 
 const TEXT = 4.5; // texto (AA)
 const UI = 3; // componente de UI (AA 1.4.11)
@@ -320,33 +263,6 @@ describe('--rf-*: contraste nos 2 temas (WCAG 2.x, alpha composto sobre --rf-sur
 });
 
 // ---------- invariantes ----------
-interface CssRule {
-  prelude: string;
-  body: string;
-}
-
-function parseRules(text: string): CssRule[] {
-  const rules: CssRule[] = [];
-  let i = 0;
-  while (i < text.length) {
-    const open = text.indexOf('{', i);
-    if (open < 0) break;
-    let depth = 1;
-    let j = open + 1;
-    while (j < text.length && depth > 0) {
-      const ch = text.charAt(j);
-      if (ch === '{') depth++;
-      else if (ch === '}') depth--;
-      j++;
-    }
-    rules.push({ prelude: text.slice(i, open).trim(), body: text.slice(open + 1, j - 1) });
-    i = j;
-  }
-  return rules;
-}
-
-const regionClean = stripComments(regionRaw);
-const regionRules = parseRules(regionClean);
 const ALLOWED_AT_RULES = [
   '@keyframes rf-page-enter',
   '@keyframes rf-page-fade',
@@ -369,31 +285,42 @@ function regionSelectors(): string[] {
   return out;
 }
 
-describe('--rf-*: invariantes (so a regiao "shell F2" consome; so os 2 blocos declaram)', () => {
-  it('a regiao delimitada existe uma vez, com marcadores no CSS bruto', () => {
-    expect(rawLf.split(REGION_START)).toHaveLength(2);
-    expect(rawLf.split(REGION_END)).toHaveLength(2);
-    expect(regionStart).toBeGreaterThanOrEqual(0);
-    expect(regionEnd).toBeGreaterThan(regionStart);
+describe('--rf-*: invariantes (so as regioes permitidas consomem; so os 2 blocos declaram)', () => {
+  it('as 5 regioes permitidas existem uma vez cada, na ordem, e as F3 ficam contiguas logo depois do shell', () => {
+    expect(regs.map((r) => r.nome)).toEqual([...REGIOES_PERMITIDAS]);
+    for (const nome of REGIOES_PERMITIDAS) {
+      expect(rawLf.split(`/* >>> ${nome} (Suite COMEX) >>> */`), nome).toHaveLength(2);
+      expect(rawLf.split(`/* <<< ${nome} <<< */`), nome).toHaveLength(2);
+    }
+    for (let i = 1; i < regs.length; i++) {
+      const anterior = regs[i - 1];
+      const atual = regs[i];
+      expect(anterior && atual && anterior.fim <= atual.inicio, REGIOES_PERMITIDAS[i]).toBe(true);
+      expect(rawLf.slice(anterior?.fim ?? 0, atual?.inicio ?? 0).trim(), `entre ${REGIOES_PERMITIDAS[i - 1]} e ${REGIOES_PERMITIDAS[i]}`).toBe('');
+    }
+  });
+
+  it('o shell F2 tem regras; as regioes F3 podem estar vazias (cada etapa confere a sua)', () => {
+    expect(shell).toBeDefined();
     expect(regionRules.length).toBeGreaterThan(20);
   });
 
-  it('var(--rf- so aparece DENTRO da regiao (nada fora dela, nem nos blocos de token)', () => {
-    expect(cssOutsideRegion).not.toContain('var(--rf-');
+  it('var(--rf- so aparece DENTRO de alguma regiao (nada fora delas, nem nos blocos de token)', () => {
+    expect(cssOutsideRegions).not.toContain('var(--rf-');
     expect(regionClean).toContain('var(--rf-');
   });
 
-  it('a regiao so usa var(): nao DECLARA --rf-*', () => {
-    expect(regionClean).not.toMatch(/(^|[;{\s])--rf-[\w-]+\s*:/);
+  it('nenhuma regiao DECLARA --rf-*: so usa var()', () => {
+    for (const r of regs) expect(r.limpo, r.nome).not.toMatch(/(^|[;{\s])--rf-[\w-]+\s*:/);
   });
 
-  it('todo seletor da regiao e do shell (app-shell, sidebar, topbar, brand-mark, sq-logo)', () => {
+  it('todo seletor do shell F2 e do shell (app-shell, sidebar, topbar, brand-mark, sq-logo)', () => {
     const selectors = regionSelectors();
     expect(selectors.length).toBeGreaterThan(40);
     expect(selectors.filter((sel) => !SHELL_SELECTOR.test(sel))).toEqual([]);
   });
 
-  it('so os at-rules previstos: keyframes de entrada, <= 880, pointer: coarse e reduced-motion', () => {
+  it('shell F2: so os at-rules previstos (keyframes de entrada, <= 880, pointer: coarse e reduced-motion)', () => {
     const atRules = regionRules.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     expect(atRules.filter((a) => !ALLOWED_AT_RULES.includes(a))).toEqual([]);
     for (const required of ALLOWED_AT_RULES) expect(atRules, required).toContain(required);
@@ -402,7 +329,7 @@ describe('--rf-*: invariantes (so a regiao "shell F2" consome; so os 2 blocos de
     }
   });
 
-  it('o resto do CSS segue sem --rf- (fora da regiao e dos 2 blocos) e o login.css nao usa token', () => {
+  it('o resto do CSS segue sem --rf- (fora das regioes e dos 2 blocos) e o login.css nao usa token', () => {
     expect(restOfCss).not.toContain('--rf-');
     expect(loginCss).not.toContain('--rf-');
   });

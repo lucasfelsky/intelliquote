@@ -179,6 +179,14 @@
   --rf-dur-fill: 320ms;
   --rf-ease-out: cubic-bezier(0.4, 0, 0.2, 1);
   --rf-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* tokens F3a (componentes) */
+
+  /* tokens F3b (componentes) */
+
+  /* tokens F3c (componentes) */
+
+  /* tokens F3d (componentes) */
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -301,6 +309,14 @@
   --rf-fc-current-tint: rgba(242, 193, 78, 0.06);
   --rf-control-hover-border: rgba(74, 222, 200, 0.28);
   --rf-avatar-ring: 0 0 0 1px rgba(20, 221, 167, 0.35);
+
+  /* tokens F3a (componentes) */
+
+  /* tokens F3b (componentes) */
+
+  /* tokens F3c (componentes) */
+
+  /* tokens F3d (componentes) */
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -1238,6 +1254,18 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   .app-shell__content > * { animation: rf-page-fade 150ms linear backwards; }
 }
 /* <<< shell F2 <<< */
+
+/* >>> componentes F3a (Suite COMEX) >>> */
+/* <<< componentes F3a <<< */
+
+/* >>> componentes F3b (Suite COMEX) >>> */
+/* <<< componentes F3b <<< */
+
+/* >>> componentes F3c (Suite COMEX) >>> */
+/* <<< componentes F3c <<< */
+
+/* >>> componentes F3d (Suite COMEX) >>> */
+/* <<< componentes F3d <<< */
 
 .page { display: flex; flex-direction: column; gap: 18px; }
 
