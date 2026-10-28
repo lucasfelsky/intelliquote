@@ -69,7 +69,7 @@ const saldoRow = (codigo: string, deposito: string, qtd: number, empresa = 'SQ Q
   'x',
   deposito,
   'KG',
-  qtd,
+  qtd + 1000, // "Saldo Físico Disponível": SENTINELA, o estoque so le "Saldo Final"
   0,
   qtd,
   empresa,
@@ -116,10 +116,10 @@ async function reports(options: { vendasMes?: Cell[][]; withVendasAtual?: boolea
     saldo: file(
       'saldo.xlsx',
       await xlsxBase64(SALDO_HEADERS, [
-        saldoRow(CODE_A1, 'DEPOSITO TESTE', 100),
-        saldoRow(CODE_A1, 'QUALIDADE', 900), // deposito excluido
-        saldoRow(CODE_A1, VAZIO, 25), // sem deposito: entra
-        saldoRow(CODE_B1, 'DEPOSITO TESTE', 40),
+        saldoRow(CODE_A1, 'DEPOSITO ITAJAI', 100),
+        saldoRow(CODE_A1, 'QUALIDADE', 900), // deposito fora da allowlist
+        saldoRow(CODE_A1, 'SEPARAÇÃO', 25), // allowlist: entra
+        saldoRow(CODE_B1, 'DEPOSITO ITAJAI', 40),
         saldoRow(CODE_A1, 'DEPOSITO TESTE', 5000, 'OUTRA EMPRESA'), // outra empresa
       ]),
     ),
@@ -410,7 +410,7 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
     }>;
     const a = linhas.find((l) => l.productId === productA.id)!;
     const b = linhas.find((l) => l.productId === productB.id)!;
-    // Estoque: so os depositos incluidos da empresa (100 + 25 sem deposito; 900 de QUALIDADE e 5000 de outra empresa fora).
+    // Estoque: so os depositos da allowlist da empresa (100 + 25 de SEPARAÇÃO; 900 de QUALIDADE e 5000 de outra empresa fora; Físico ignorado).
     expect(a.U).toBe(125);
     expect(b.U).toBe(40);
     expect(a.O).toBe(90);

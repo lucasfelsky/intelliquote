@@ -63,27 +63,18 @@ export const FORECAST_STATUS_COLORS = {
 export const FORECAST_ORIGIN_WORKBOOK = 'planilha';
 export const FORECAST_ORIGIN_DBCORP = 'dbcorp';
 
-// --- Quinzena a partir dos relatorios DBCorp (estoque D2, decidida pelo Lucas em 2026-10-21; FUP F3, 2026-10-22) ---
+// --- Quinzena a partir dos relatorios DBCorp (estoque: allowlist de depositos + "Saldo Final", decisao do Comex compras em 2026-10-28; FUP F3, 2026-10-22) ---
 // Comparacao de texto (deposito, empresa, status) sempre normalizada: sem acento, espacos
 // colapsados, trim, maiusculas.
 
 // Estoque = SALDO desta empresa.
 export const FORECAST_DBCORP_SALDO_EMPRESA = 'SQ QUIMICA';
 
-// Depositos que NAO contam como estoque (nota da aba ESTOQUE do Comex). LAB - AMOSTRA aparece como
-// LABORATORIO - AMOSTRA no DS9004: as duas grafias entram; comparacao normalizada.
-export const FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS = [
-  'AMOSTRA',
-  'CMC',
-  'CORREÇÃO',
-  'LAB - AMOSTRA',
-  'LABORATORIO - AMOSTRA',
-  'PRODUCAO',
-  'QUALIDADE',
-  'QUALIDADE SUL',
-  'REFUGO',
-  'SEPARAÇÃO',
-] as const;
+// Estoque do SALDO (DS9004) via DBCorp: SO estes depositos entram (decisao do Comex compras, 2026-10-28).
+// Grafia JA normalizada (normalizeDbcorpText: sem acento, maiusculas, espacos colapsados, trim).
+// Qualquer outro deposito, inclusive vazio, fica FORA e aparece no preview. EM TRANSITO = transito INTERNO
+// (trocas/devolucoes), nao e o FUP: nao duplica com as chegadas.
+export const FORECAST_DBCORP_DEPOSITOS_PERMITIDOS = ['DEPOSITO ITAJAI', 'VS SQ', 'EM TRANSITO', 'SEPARACAO'] as const;
 
 // Rotulo do preview para saldo sem deposito (no relatorio vem vazio ou so espacos).
 export const FORECAST_DBCORP_SEM_DEPOSITO = '(sem deposito)';
@@ -115,7 +106,7 @@ export const FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS = 365;
 export const FORECAST_DBCORP_PRAZOS_MAX_FONTES = 500;
 
 // Colunas do FUP que nao derrubam a importacao quando faltam (so geram aviso). SALDO: "Saldo Ped. Venda" (D7) e
-// opcional e nunca gera erro nem aviso quando falta.
+// opcional, nunca gera erro nem aviso quando falta, e e coletada so nas linhas que entram no estoque (allowlist).
 export const FORECAST_DBCORP_HEADERS_OPCIONAIS = {
   fup: ['DATA PO', 'DATA PRONTIDÃO'],
   saldo: ['Saldo Ped. Venda'],
@@ -149,7 +140,7 @@ export type ForecastDbcorpSlot = keyof typeof FORECAST_DBCORP_SLOTS;
 // Cabecalhos obrigatorios por relatorio (grafia real; comparacao sem acento/caixa, com trim).
 // MARGEM nao tem: e lida por posicao (A codigo, B margem, dados a partir da linha 2).
 export const FORECAST_DBCORP_HEADERS = {
-  saldo: ['Código', 'Depósito', 'Saldo Físico Disponível', 'Empresa'],
+  saldo: ['Código', 'Depósito', 'Saldo Final', 'Empresa'],
   vendas: ['Item', 'Quantidade', 'Empresa'],
   programacao: ['Status', 'Data Faturamento', 'Cód. Item', 'Qtde.'],
   fup: ['STATUS', 'CÓD. SQ', 'QTD - KGS', 'ETD (EMBARQUE)', 'ETA (CHEGADA)', 'ETA FINAL'],
