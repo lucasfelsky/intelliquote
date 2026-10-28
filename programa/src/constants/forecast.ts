@@ -114,8 +114,12 @@ export const FORECAST_DBCORP_ETA_POR_PRONTIDAO_DIAS = 35;
 export const FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS = 365;
 export const FORECAST_DBCORP_PRAZOS_MAX_FONTES = 500;
 
-// Colunas do FUP que nao derrubam a importacao quando faltam (so geram aviso).
-export const FORECAST_DBCORP_HEADERS_OPCIONAIS = { fup: ['DATA PO', 'DATA PRONTIDÃO'] } as const;
+// Colunas do FUP que nao derrubam a importacao quando faltam (so geram aviso). SALDO: "Saldo Ped. Venda" (D7) e
+// opcional e nunca gera erro nem aviso quando falta.
+export const FORECAST_DBCORP_HEADERS_OPCIONAIS = {
+  fup: ['DATA PO', 'DATA PRONTIDÃO'],
+  saldo: ['Saldo Ped. Venda'],
+} as const;
 
 // Linhas detalhadas (prontidao nao reconhecida) devolvidas no resumo; a contagem total vai sempre.
 export const FORECAST_DBCORP_MAX_DETALHES = 50;
