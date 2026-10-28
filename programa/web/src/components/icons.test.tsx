@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { ICONS, ICON_NAMES, Icon, type IconName } from './icons';
+import { ICONS, ICON_FILLS, ICON_NAMES, Icon, type IconName } from './icons';
 
-// Paths publicos do mock v68 (boards Sidebar e Topbar), copiados identicos. Se o mock mudar, mude aqui E em icons.tsx.
+// Paths publicos do mock (canvas v72: boards Sidebar e Topbar), copiados identicos. Se o mock mudar, mude aqui E em icons.tsx.
+// O circulo do icone automatico (r=9) e o do sol (r=4) viram path no app; o board os desenha como <circle>.
 const MOCK: Record<string, string> = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
   cotacoes: 'M9 3h6v3H9zM6 4.5H5v16.5h14V4.5h-1M9 11h6M9 15h6M9 19h3',
@@ -18,21 +19,21 @@ const MOCK: Record<string, string> = {
   empresa: 'M6 22V4l6-2v20M12 8h6v14M2 22h20M9 7h.01M9 11h.01M9 15h.01M15 12h.01M15 16h.01',
   auditoria: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
   templates: 'M4 5h16v14H4zM4 7l8 6 8-6',
-  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41',
-  moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
-  monitor: 'M2 3h20v14H2zM8 21h8M12 17v4',
+  'theme-half': 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 };
 
 describe('icons', () => {
-  it('tem os 20 icones do mock (14 de navegacao, logout, sun, moon, monitor, shield, user)', () => {
+  it('tem os 20 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user)', () => {
     expect(ICON_NAMES).toHaveLength(20);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
-      'relatorios', 'ajuda', 'usuarios', 'empresa', 'auditoria', 'templates', 'logout', 'sun', 'moon', 'monitor',
+      'relatorios', 'ajuda', 'usuarios', 'empresa', 'auditoria', 'templates', 'logout', 'theme-half', 'sun', 'moon',
       'shield', 'user',
     ]) {
       expect(ICONS, name).toHaveProperty(name);
@@ -41,6 +42,31 @@ describe('icons', () => {
 
   it('o d de cada icone e IGUAL ao do mock', () => {
     for (const name of ICON_NAMES) expect(ICONS[name], name).toBe(MOCK[name]);
+  });
+
+  it('os 3 icones do botao de tema (theme-half, sun, moon) sao os do canvas v72 e o monitor saiu', () => {
+    expect(ICONS['theme-half']).toBe('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z');
+    expect(ICON_FILLS['theme-half']).toBe('M12 3a9 9 0 0 0 0 18z');
+    expect(ICONS.moon).toBe('M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z');
+    expect(ICONS.sun).toBe(
+      'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+    );
+    expect(ICON_NAMES).not.toContain('monitor');
+    expect(ICONS).not.toHaveProperty('monitor');
+  });
+
+  it('so o theme-half tem camada preenchida (currentColor); os demais 19 so tem traco', () => {
+    expect(Object.keys(ICON_FILLS)).toEqual(['theme-half']);
+    const meio = render(<Icon name="theme-half" />).container.querySelectorAll('svg path');
+    expect(meio).toHaveLength(2);
+    expect(meio[0]?.getAttribute('fill')).toBeNull();
+    expect(meio[1]?.getAttribute('fill')).toBe('currentColor');
+    expect(meio[1]?.getAttribute('d')).toBe('M12 3a9 9 0 0 0 0 18z');
+    for (const name of ICON_NAMES.filter((n) => n !== 'theme-half')) {
+      const paths = render(<Icon name={name as IconName} />).container.querySelectorAll('svg path');
+      expect(paths, name).toHaveLength(1);
+      expect(paths[0]?.hasAttribute('fill'), name).toBe(false);
+    }
   });
 
   it('nenhum icone repete o path de outro', () => {
@@ -57,13 +83,16 @@ describe('icons', () => {
     expect(svg?.querySelector('path')?.getAttribute('d')).toBe(MOCK[name]);
   });
 
-  it('tamanho e traco padrao 18 / 1,9; ajustaveis (tema e escudo usam 2)', () => {
+  it('tamanho e traco padrao 18 / 1,9; ajustaveis (o botao de tema usa 16 / 1,9)', () => {
     const padrao = render(<Icon name="overview" />).container.querySelector('svg');
     expect(padrao?.getAttribute('width')).toBe('18');
     expect(padrao?.getAttribute('height')).toBe('18');
     expect(padrao?.getAttribute('stroke-width')).toBe('1.9');
-    const tema = render(<Icon name="sun" size={16} strokeWidth={2} />).container.querySelector('svg');
+    const tema = render(<Icon name="sun" size={16} strokeWidth={1.9} />).container.querySelector('svg');
     expect(tema?.getAttribute('width')).toBe('16');
-    expect(tema?.getAttribute('stroke-width')).toBe('2');
+    expect(tema?.getAttribute('stroke-width')).toBe('1.9');
+    const maior = render(<Icon name="shield" size={20} strokeWidth={2} />).container.querySelector('svg');
+    expect(maior?.getAttribute('width')).toBe('20');
+    expect(maior?.getAttribute('stroke-width')).toBe('2');
   });
 });

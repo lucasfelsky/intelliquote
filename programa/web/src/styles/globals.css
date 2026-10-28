@@ -861,42 +861,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   border-radius: var(--radius);
 }
 
-/* Seletor de tema (components/ThemeToggle.tsx): segmented control so com icones. */
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-alt);
-}
-.theme-toggle__option {
-  display: inline-grid;
-  place-items: center;
-  width: 29px;
-  height: 29px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  transition: color 0.12s, background-color 0.12s;
-}
-.theme-toggle__option svg { width: 16px; height: 16px; }
-.theme-toggle__option:hover { color: var(--ink); }
-.theme-toggle__option[aria-checked="true"] {
-  background: var(--surface);
-  color: var(--primary-700);
-  /* anel nao cromatico: distingue o selecionado sem depender so da cor do icone */
-  box-shadow: inset 0 0 0 1px var(--primary-700), var(--shadow-sm);
-}
-.theme-toggle__option:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; }
-@media (pointer: coarse) {
-  .theme-toggle__option { width: 44px; height: 44px; }
-}
-
 /* >>> shell F2 (Suite COMEX) >>> */
 /* Shell do app (mock v68): sidebar navy, topbar, marca e entrada de pagina. UNICA regiao do CSS que consome
    var(--rf-*); so seletores do shell (guarda: src/test/shellCss.test.ts e suiteComexTokens.test.ts).
@@ -1070,72 +1034,58 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
-/* seletor de tema sobre o navy (variante de ThemeToggle) */
-.theme-toggle--navy {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--rf-sidebar-seg-border);
-  border-radius: var(--rf-radius-button);
-  background: var(--rf-sidebar-seg-bg);
-}
-.theme-toggle--navy .theme-toggle__option {
+/* botao de tema (ThemeToggle, ciclo unico) e Sair: 176 centralizados no bloco de 224 (canvas v72). Tema 40 / Sair 44. */
+.sidebar__theme,
+.sidebar__logout {
+  align-self: center;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: auto;
-  height: 36px;
-  padding: 0;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  box-shadow: none;
-  color: var(--rf-sidebar-ink-soft);
-  cursor: pointer;
-  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
-}
-.theme-toggle--navy .theme-toggle__option:hover { color: var(--rf-sidebar-ink-soft); }
-.theme-toggle--navy .theme-toggle__option[aria-checked="true"] {
-  background: var(--rf-sidebar-active-bg);
-  box-shadow: none;
-  color: var(--rf-primary);
-}
-
-.sidebar__logout {
-  display: flex;
-  align-items: center;
   gap: 12px;
-  height: 40px;
+  box-sizing: border-box;
+  width: 176px;
   padding: 0 14px;
   border: 0;
   border-radius: var(--rf-radius-button);
   background: transparent;
   color: var(--rf-sidebar-ink-soft);
   font: 600 13px var(--rf-font-sans);
+  text-align: center;
   cursor: pointer;
-  text-align: left;
   transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
 }
+.sidebar__theme { height: 40px; }
+.sidebar__logout { height: 44px; }
+.sidebar__theme:hover,
 .sidebar__logout:hover {
   background: var(--rf-sidebar-hover);
   color: var(--rf-sidebar-ink);
 }
 
+/* assinatura "sq química" (SqLogo, tom dark): decorativa, sem foco nem clique */
+.sidebar__signature {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+  pointer-events: none;
+  user-select: none;
+}
+
 .sidebar__version {
-  padding: 0 14px;
+  text-align: center;
   font-family: var(--rf-font-mono);
   font-size: 11px;
+  line-height: 15px;
   color: var(--rf-sidebar-ink-soft);
 }
 
 /* foco: anel navy + menta (mock). Sem outline: o box-shadow e o indicador. */
 .sidebar__link:focus-visible,
-.sidebar__logout:focus-visible,
-.theme-toggle--navy .theme-toggle__option:focus-visible {
+.sidebar__theme:focus-visible,
+.sidebar__logout:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--rf-primary-strong), 0 0 0 4px var(--rf-primary);
 }
@@ -1149,6 +1099,33 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .brand-mark--dark .brand-mark__tile { fill: var(--rf-brand-tile-on-navy); }
 .brand-mark__glyph { stroke: var(--rf-sidebar-ink); }
 .brand-mark__dot { fill: var(--rf-primary); }
+
+/* assinatura SQ Quimica (board SQLogo, variante minusc, tom dark): cores por classe, nunca por atributo.
+   Sem opacidade, filtro, sombra ou caixa. Reaproveitada no login (F4). */
+.sq-logo {
+  display: inline-flex;
+  align-items: center;
+}
+.sq-logo__symbol { flex-shrink: 0; }
+.sq-logo__ring { stroke: var(--rf-sidebar-ink); }
+.sq-logo__green { fill: var(--rf-primary); }
+.sq-logo__words {
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+  line-height: 1;
+  font-family: var(--rf-font-display);
+}
+.sq-logo__sq {
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: var(--rf-sidebar-ink);
+}
+.sq-logo__chem {
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  color: var(--rf-sidebar-ink-soft);
+}
 
 /* ---- topbar ---- */
 .topbar {
@@ -1253,10 +1230,9 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
 }
 
-/* alvo de toque (F2-D2): 44 no rodape da sidebar em ponteiro grosso; mouse segue o mock (36 / 40) */
+/* alvo de toque (F2-D2): o botao de tema vai a 44 em ponteiro grosso (Sair ja e 44); mouse segue o mock (tema 40) */
 @media (pointer: coarse) {
-  .theme-toggle--navy .theme-toggle__option { height: 44px; }
-  .sidebar__logout { height: 44px; }
+  .sidebar__theme { height: 44px; }
 }
 
 /* <= 880: sidebar (navy) empilhada acima da topbar, sem hamburguer (F12) */

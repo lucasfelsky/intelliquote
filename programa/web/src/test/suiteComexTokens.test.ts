@@ -262,8 +262,8 @@ function measure(): Row[] {
   onNavy('rotulo ADMINISTRACAO (--rf-sidebar-ink-soft / navy)', TEXT, '--rf-sidebar-ink-soft', []);
   onNavy('selo inativo (--rf-sidebar-tag-fg / --rf-sidebar-tag-bg)', TEXT, '--rf-sidebar-tag-fg', ['--rf-sidebar-tag-bg']);
   onNavy('marca (--rf-sidebar-brand-ink / navy)', TEXT, '--rf-sidebar-brand-ink', []);
-  onNavy('icone do tema marcado (--rf-primary / segmento ativo)', UI, '--rf-primary', ['--rf-sidebar-seg-bg', '--rf-sidebar-active-bg']);
-  onNavy('icone do tema desmarcado (--rf-sidebar-ink-soft / segmento)', UI, '--rf-sidebar-ink-soft', ['--rf-sidebar-seg-bg']);
+  onNavy('botao de tema (--rf-sidebar-ink-soft / navy)', TEXT, '--rf-sidebar-ink-soft', []);
+  onNavy('botao de tema em hover (--rf-sidebar-ink / --rf-sidebar-hover)', TEXT, '--rf-sidebar-ink', ['--rf-sidebar-hover']);
   onNavy('anel de foco (--rf-primary / navy)', UI, '--rf-primary', []);
   const avatar = ratioOf(rgbOf(tok('--rf-sidebar-ink')), rgbOf(tok('--rf-primary-strong')));
   rows.push({ id: 'ambos: avatar (--rf-sidebar-ink / --rf-primary-strong)', min: TEXT, ratio: Number(avatar.toFixed(2)), ok: avatar >= TEXT });
@@ -355,7 +355,7 @@ const ALLOWED_AT_RULES = [
   '@media (prefers-reduced-motion: reduce)',
 ];
 // O \b do PLAN nao casa sufixos BEM (.sidebar__link: "r" e "_" sao ambos \w); basta o proximo caractere nao ser alfanumerico.
-const SHELL_SELECTOR = /^(:root\[data-theme="dark"\]\s+)?(\.app-shell|\.sidebar|\.topbar|\.theme-toggle--navy|\.brand-mark)(?![A-Za-z0-9])/;
+const SHELL_SELECTOR = /^(:root\[data-theme="dark"\]\s+)?(\.app-shell|\.sidebar|\.topbar|\.brand-mark|\.sq-logo)(?![A-Za-z0-9])/;
 
 function regionSelectors(): string[] {
   const out: string[] = [];
@@ -387,7 +387,7 @@ describe('--rf-*: invariantes (so a regiao "shell F2" consome; so os 2 blocos de
     expect(regionClean).not.toMatch(/(^|[;{\s])--rf-[\w-]+\s*:/);
   });
 
-  it('todo seletor da regiao e do shell (app-shell, sidebar, topbar, theme-toggle--navy, brand-mark)', () => {
+  it('todo seletor da regiao e do shell (app-shell, sidebar, topbar, brand-mark, sq-logo)', () => {
     const selectors = regionSelectors();
     expect(selectors.length).toBeGreaterThan(40);
     expect(selectors.filter((sel) => !SHELL_SELECTOR.test(sel))).toEqual([]);
@@ -423,7 +423,7 @@ describe('--rf-*: invariantes (so a regiao "shell F2" consome; so os 2 blocos de
     expect(soraLines[0]).toMatch(/^\s*--rf-font-display:/);
     expect(loginCss).not.toContain('Sora');
     expect(indexHtml.match(/Sora/g)).toHaveLength(1);
-    expect(indexHtml).toContain('&family=Sora:wght@600;700&display=swap');
+    expect(indexHtml).toContain('&family=Sora:wght@400;600;700&display=swap');
   });
 
   it('JetBrains Mono nao e carregada pelo <link> (F2-D1: so token; o shell cai em ui-monospace)', () => {

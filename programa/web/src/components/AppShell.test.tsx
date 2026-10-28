@@ -38,11 +38,11 @@ beforeEach(() => {
 });
 
 describe('AppShell (F2)', () => {
-  it('ordem de tab: links principais -> Administracao -> tema (so o marcado) -> Sair -> Minha conta -> conteudo', async () => {
+  it('ordem de tab: links principais -> Administracao -> botao de tema -> Sair -> Minha conta -> conteudo (a assinatura nao e tabulavel)', async () => {
     const { container } = renderShell();
     await screen.findByLabelText('3 pendentes');
     const nomes = tabbables(container).map((el) => {
-      if (el.getAttribute('role') === 'radio') return `radio:${el.getAttribute('aria-label')}`;
+      if (el.tagName === 'BUTTON' && el.hasAttribute('aria-label')) return el.getAttribute('aria-label');
       return (el.textContent ?? '')
         .replace(/\s+/g, ' ')
         .replace(/, Beta$/, '')
@@ -53,9 +53,12 @@ describe('AppShell (F2)', () => {
     const admin = ADMIN_NAV.map((i) => i.label);
     expect(nomes.slice(0, principais.length)).toEqual(principais);
     expect(nomes.slice(principais.length, principais.length + admin.length)).toEqual(admin);
-    expect(nomes.slice(principais.length + admin.length)).toEqual(['radio:Automático (segue o sistema)', 'Sair', 'Minha conta']);
-    // roving: so 1 dos 3 radios e tabulavel
-    expect(tabbables(container).filter((el) => el.getAttribute('role') === 'radio')).toHaveLength(1);
+    expect(nomes.slice(principais.length + admin.length)).toEqual(['Tema: automático — alternar tema', 'Sair', 'Minha conta']);
+    // botao unico de tema (sem radios) e a assinatura "SQ Química" fora da ordem de tab
+    expect(container.querySelectorAll('[role="radio"]')).toHaveLength(0);
+    const assinatura = container.querySelector('.sidebar__signature');
+    expect(assinatura).not.toBeNull();
+    expect(tabbables(container).some((el) => assinatura?.contains(el))).toBe(false);
     // o conteudo vem depois de "Minha conta" no documento
     const conta = screen.getByRole('link', { name: 'Minha conta' });
     expect(conta.compareDocumentPosition(screen.getByTestId('pagina')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

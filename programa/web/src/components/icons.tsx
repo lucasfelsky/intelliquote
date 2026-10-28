@@ -1,7 +1,8 @@
 import type { SVGAttributes } from 'react';
 
-// Icones de traco do mock v68 (Suite COMEX): 24x24, sem preenchimento, `currentColor` (a cor vem do CSS do contexto).
-// 14 de navegacao (navConfig), Sair, os 3 do seletor de tema e os 2 da topbar (escudo SSO e usuario).
+// Icones de traco do mock (Suite COMEX): 24x24, sem preenchimento, `currentColor` (a cor vem do CSS do contexto).
+// 14 de navegacao (navConfig), Sair, os 3 do botao de tema (automatico, noturno, claro; canvas v72) e os 2 da topbar
+// (escudo SSO e usuario). Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
 export const ICONS = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
   cotacoes: 'M9 3h6v3H9zM6 4.5H5v16.5h14V4.5h-1M9 11h6M9 15h6M9 19h3',
@@ -17,13 +18,18 @@ export const ICONS = {
   empresa: 'M6 22V4l6-2v20M12 8h6v14M2 22h20M9 7h.01M9 11h.01M9 15h.01M15 12h.01M15 16h.01',
   auditoria: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4',
   templates: 'M4 5h16v14H4zM4 7l8 6 8-6',
-  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41',
-  moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
-  monitor: 'M2 3h20v14H2zM8 21h8M12 17v4',
+  'theme-half': 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
 } as const;
+
+// Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.
+export const ICON_FILLS: Partial<Record<keyof typeof ICONS, string>> = {
+  'theme-half': 'M12 3a9 9 0 0 0 0 18z',
+};
 
 export type IconName = keyof typeof ICONS;
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];
@@ -50,6 +56,7 @@ export function Icon({ name, size = 18, strokeWidth = 1.9, ...rest }: IconProps)
       focusable="false"
     >
       <path d={ICONS[name]} />
+      {ICON_FILLS[name] && <path d={ICON_FILLS[name]} fill="currentColor" />}
     </svg>
   );
 }

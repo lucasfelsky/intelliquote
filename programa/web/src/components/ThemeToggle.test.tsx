@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import ThemeToggle from './ThemeToggle';
+import { ICONS, ICON_FILLS } from './icons';
 import { THEME_STORAGE_KEY, writeThemePreference } from '@/theme/theme';
 
 const html = () => document.documentElement;
-const radio = (name: string) => screen.getByRole('radio', { name });
-const AUTO = 'Automático (segue o sistema)';
+const botao = () => screen.getByRole('button', { name: /^Tema: .+ — alternar tema$/ });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -15,62 +15,65 @@ afterEach(() => {
   html().removeAttribute('data-theme-switching');
 });
 
-describe('ThemeToggle', () => {
-  it('renderiza 3 radios com nomes acessiveis dentro de um radiogroup', () => {
-    render(<ThemeToggle />);
-    expect(screen.getByRole('radiogroup', { name: 'Tema da interface' })).toBeTruthy();
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
-    expect(radio('Claro')).toBeTruthy();
-    expect(radio('Escuro')).toBeTruthy();
-    expect(radio(AUTO)).toBeTruthy();
+describe('ThemeToggle (botao unico ciclico, canvas v72)', () => {
+  it('um unico button type="button"; nenhum radiogroup nem radio', () => {
+    const { container } = render(<ThemeToggle />);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(botao().getAttribute('type')).toBe('button');
+    expect(botao().className).toBe('sidebar__theme');
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
+    expect(container.querySelector('.theme-toggle')).toBeNull();
   });
 
-  it('sem chave => Automatico marcado; com chave => reflete o storage; roving tabindex', () => {
-    const { unmount } = render(<ThemeToggle />);
-    expect(radio(AUTO).getAttribute('aria-checked')).toBe('true');
-    expect(radio(AUTO).tabIndex).toBe(0);
-    expect(radio('Claro').tabIndex).toBe(-1);
-    unmount();
-
-    localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+  it('sem chave: nome, title, texto visivel e icone do automatico (com a camada preenchida)', () => {
     render(<ThemeToggle />);
-    expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
-    expect(radio(AUTO).getAttribute('aria-checked')).toBe('false');
-    expect(radio('Escuro').tabIndex).toBe(0);
+    const b = screen.getByRole('button', { name: 'Tema: automático — alternar tema' });
+    expect(b.getAttribute('title')).toBe('Alternar tema (automático / noturno / claro)');
+    expect(b.textContent).toBe('Tema: automático');
+    const svg = b.querySelector('svg');
+    expect(svg?.getAttribute('aria-hidden')).toBe('true');
+    expect(svg?.getAttribute('width')).toBe('16');
+    expect(svg?.getAttribute('stroke-width')).toBe('1.9');
+    const paths = svg?.querySelectorAll('path') ?? [];
+    expect(paths).toHaveLength(2);
+    expect(paths[0]?.getAttribute('d')).toBe(ICONS['theme-half']);
+    expect(paths[1]?.getAttribute('d')).toBe(ICON_FILLS['theme-half']);
+    expect(paths[1]?.getAttribute('fill')).toBe('currentColor');
   });
 
-  it('clicar em Escuro grava dark e aplica data-theme; clicar em Automatico remove a chave', () => {
+  it('ciclo por clique: automatico -> noturno -> claro -> automatico (storage, data-theme, nome, texto e icone)', () => {
     render(<ThemeToggle />);
-    fireEvent.click(radio('Escuro'));
+
+    fireEvent.click(botao());
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
     expect(html().dataset.theme).toBe('dark');
-    expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
+    const noturno = screen.getByRole('button', { name: 'Tema: noturno — alternar tema' });
+    expect(noturno.textContent).toBe('Tema: noturno');
+    expect(noturno.querySelectorAll('path')).toHaveLength(1);
+    expect(noturno.querySelector('path')?.getAttribute('d')).toBe(ICONS.moon);
 
-    fireEvent.click(radio('Claro'));
+    fireEvent.click(noturno);
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('light');
     expect(html().dataset.theme).toBe('light');
+    const claro = screen.getByRole('button', { name: 'Tema: claro — alternar tema' });
+    expect(claro.textContent).toBe('Tema: claro');
+    expect(claro.querySelector('path')?.getAttribute('d')).toBe(ICONS.sun);
 
-    fireEvent.click(radio(AUTO));
+    fireEvent.click(claro);
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
-    expect(radio(AUTO).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Tema: automático — alternar tema' }).textContent).toBe('Tema: automático');
   });
 
-  it('setas movem foco e selecao (com wrap)', () => {
+  it('com chave "dark" ja comeca em "Tema: noturno"; com "light", em "Tema: claro"', () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+    const { unmount } = render(<ThemeToggle />);
+    expect(screen.getByRole('button', { name: 'Tema: noturno — alternar tema' })).toBeTruthy();
+    unmount();
+
+    localStorage.setItem(THEME_STORAGE_KEY, 'light');
     render(<ThemeToggle />);
-    act(() => radio('Claro').focus());
-    fireEvent.click(radio('Claro'));
-
-    fireEvent.keyDown(radio('Claro'), { key: 'ArrowRight' });
-    expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
-    expect(document.activeElement).toBe(radio('Escuro'));
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
-
-    fireEvent.keyDown(radio('Escuro'), { key: 'ArrowLeft' });
-    expect(radio('Claro').getAttribute('aria-checked')).toBe('true');
-
-    fireEvent.keyDown(radio('Claro'), { key: 'ArrowLeft' });
-    expect(radio(AUTO).getAttribute('aria-checked')).toBe('true');
-    expect(document.activeElement).toBe(radio(AUTO));
+    expect(screen.getByRole('button', { name: 'Tema: claro — alternar tema' })).toBeTruthy();
   });
 
   it('com setItem lancando o clique nao quebra e o tema muda mesmo assim', () => {
@@ -78,49 +81,32 @@ describe('ThemeToggle', () => {
       throw new Error('blocked');
     });
     render(<ThemeToggle />);
-    expect(() => fireEvent.click(radio('Escuro'))).not.toThrow();
+    expect(() => fireEvent.click(botao())).not.toThrow();
     expect(html().dataset.theme).toBe('dark');
-    expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
-  });
-});
-
-describe('ThemeToggle - variante navy (sidebar)', () => {
-  it('padrao nao tem a classe navy; variant="navy" a adiciona', () => {
-    const { container, unmount } = render(<ThemeToggle />);
-    expect(container.querySelector('.theme-toggle')?.className).not.toContain('theme-toggle--navy');
-    unmount();
-    const navy = render(<ThemeToggle variant="navy" />);
-    expect(navy.container.querySelector('.theme-toggle')?.className).toContain('theme-toggle--navy');
+    expect(screen.getByRole('button', { name: 'Tema: noturno — alternar tema' })).toBeTruthy();
   });
 
-  it('navy mantem os 3 radios, os nomes e o roving tabindex', () => {
-    render(<ThemeToggle variant="navy" />);
-    expect(screen.getByRole('radiogroup', { name: 'Tema da interface' })).toBeTruthy();
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
-    expect(radio('Claro')).toBeTruthy();
-    expect(radio('Escuro')).toBeTruthy();
-    expect(radio(AUTO).tabIndex).toBe(0);
-    expect(radio('Claro').tabIndex).toBe(-1);
-    expect(radio('Escuro').tabIndex).toBe(-1);
+  it('role="status" invisivel: vazio ate o primeiro clique e depois anuncia o novo tema', () => {
+    const { container } = render(<ThemeToggle />);
+    const status = screen.getByRole('status');
+    expect(status.textContent).toBe('');
+    expect(status.className).toContain('sr-only');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+
+    fireEvent.click(botao());
+    expect(screen.getByRole('status').textContent).toBe('Tema: noturno');
+    fireEvent.click(botao());
+    expect(screen.getByRole('status').textContent).toBe('Tema: claro');
   });
 
-  it('navy: setas continuam movendo foco e selecao', () => {
-    render(<ThemeToggle variant="navy" />);
-    act(() => radio('Claro').focus());
-    fireEvent.click(radio('Claro'));
-    fireEvent.keyDown(radio('Claro'), { key: 'ArrowRight' });
-    expect(radio('Escuro').getAttribute('aria-checked')).toBe('true');
-    expect(document.activeElement).toBe(radio('Escuro'));
-  });
-
-  it('os icones sao SVG do mock (16px, traco 2) e aria-hidden', () => {
-    const { container } = render(<ThemeToggle variant="navy" />);
-    const svgs = container.querySelectorAll('.theme-toggle__option svg');
-    expect(svgs).toHaveLength(3);
-    for (const svg of Array.from(svgs)) {
-      expect(svg.getAttribute('aria-hidden')).toBe('true');
-      expect(svg.getAttribute('width')).toBe('16');
-      expect(svg.getAttribute('stroke-width')).toBe('2');
+  it('todo svg e decorativo (aria-hidden) nos 3 estados', () => {
+    const { container } = render(<ThemeToggle />);
+    for (let i = 0; i < 3; i += 1) {
+      const svgs = container.querySelectorAll('svg');
+      expect(svgs).toHaveLength(1);
+      expect(svgs[0]?.getAttribute('aria-hidden')).toBe('true');
+      fireEvent.click(botao());
     }
   });
 });

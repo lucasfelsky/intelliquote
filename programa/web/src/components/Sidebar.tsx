@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import BrandMark from './BrandMark';
 import { Icon } from './icons';
 import type { NavItem } from './navConfig';
+import SqLogo from './SqLogo';
 import ThemeToggle from './ThemeToggle';
 
 interface SidebarProps {
@@ -10,7 +11,7 @@ interface SidebarProps {
   adminHeader?: boolean;
   /** Contadores por rota (ex.: `{ '/solicitacoes': 3 }`); so renderiza quando > 0. */
   badges?: Record<string, number>;
-  /** "Sair" no rodape da sidebar (mock v68: tema + Sair + versao). */
+  /** "Sair" no rodape da sidebar (canvas v72: tema + Sair + assinatura + versao). */
   onLogout?: () => void;
 }
 
@@ -64,11 +65,14 @@ export default function Sidebar({
         )}
       </nav>
       <footer className="sidebar__footer">
-        <ThemeToggle variant="navy" />
+        <ThemeToggle />
         <button type="button" className="sidebar__logout" onClick={onLogout}>
           <Icon name="logout" size={16} />
           Sair
         </button>
+        <div className="sidebar__signature">
+          <SqLogo size={32} />
+        </div>
         <small className="sidebar__version">v0.1 · Build local</small>
       </footer>
     </aside>
