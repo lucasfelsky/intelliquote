@@ -183,6 +183,7 @@
   /* tokens F3a (componentes) */
 
   /* tokens F3b (componentes) */
+  --rf-on-action: #ffffff;
 
   /* tokens F3c (componentes) */
 
@@ -313,6 +314,7 @@
   /* tokens F3a (componentes) */
 
   /* tokens F3b (componentes) */
+  --rf-on-action: #0b2430;
 
   /* tokens F3c (componentes) */
 
@@ -470,21 +472,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   margin-bottom: 6px;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--primary-50);
-  color: var(--primary-700);
-}
-.badge--muted { background: var(--surface-alt); color: var(--ink-soft); }
-.badge--warning { background: var(--tone-warning-bg); color: var(--warning); }
-.badge--danger { background: var(--tone-danger-bg); color: var(--danger); }
-.badge--info { background: var(--tone-info-bg); color: var(--info); }
 
 /* Chip (botao) que abre um popover informativo (components/InfoPopover.tsx). */
 .info-chip {
@@ -776,41 +763,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .new-version-toast__later:hover { background: var(--toast-hover-tint); }
 .new-version-toast__actions button:focus-visible { outline: 2px solid var(--on-strong); outline-offset: 2px; }
 
-.table-wrapper {
-  overflow-x: auto;
-  /* bloco de contencao de filhos absolutos (.sr-only das colunas de acoes) */
-  position: relative;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-.table th, .table td {
-  text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
-.table th {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  color: var(--ink-soft);
-  background: var(--surface-alt);
-  font-weight: 700;
-}
-.table tr:hover td { background: var(--surface-alt); }
-
-/* Grupo de acoes (Editar/Reabrir/Apagar etc.) numa celula de tabela.
-   Botoes usam padding menor que .ghost-button pra caber lado a lado sem
-   quebrar linha em colunas estreitas (3 botoes com o padding padrao de
-   8px/14px nao cabiam e ficavam empilhados verticalmente). */
-.row-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
 .row-actions .ghost-button {
   padding: 5px 10px;
   font-size: 13px;
@@ -824,49 +776,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   white-space: nowrap;
 }
 .link-button { text-align: left; }
-.table .badge { white-space: nowrap; }
-.table .cell-nowrap { white-space: nowrap; }
-
-/* Variante opt-in de .row-actions para tabelas onde a quebra de linha e pior que o
-   scroll horizontal (Cotacoes: 3 botoes de ~180px numa tabela de 9 colunas).
-   O wrap padrao de .row-actions faz o algoritmo table-layout:auto calcular a
-   contribuicao min-content do grupo como o MAIOR botao (64px) em vez da SOMA (180px),
-   sub-alocando a coluna e quebrando os botoes a partir de ~1366px de viewport.
-   nowrap forca a soma como minimo.
-   O .table-wrapper (overflow-x: auto) absorve o excesso abaixo de ~1150px. */
-.row-actions--nowrap {
-  flex-wrap: nowrap;
-}
-
-/* Coluna de badge de status centralizada. .table th/.table td alinha tudo a esquerda,
-   o que joga toda a sobra de largura da coluna para o lado direito do badge
-   (medido: 12px esquerda / 28px direita em 1920px). */
-.table .col-status {
-  text-align: center;
-}
-
-/* Trunca celula de texto longo com "..." + tooltip nativo (title) com o texto completo.
-   Nasce generica (nao amarrada a Fornecedores) pra poder ser reusada em outras tabelas
-   depois de medidas. Motivo: o e-mail do contato principal e um token indivisivel
-   (nao quebra em "@" nem "."), e era o maior contribuinte pro min-content de 925px
-   medido na tabela de Fornecedores (faixa de scroll horizontal ~880-1229px). */
-.table .cell-truncate {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Variante opt-in de densidade (padding menor) para telas de largura media,
-   escopada so na tabela de Fornecedores (classe .table--dense) porque so essa
-   tabela foi medida: min-content 925px, scroll comeca em ~1229px, pior overflow
-   (~348px) em ~881px. Aplicar em ".table" global atingiria 8 outras tabelas
-   nunca medidas. */
-@media (max-width: 1200px) {
-  .table--dense th, .table--dense td {
-    padding: 8px 8px;
-  }
-}
 
 .empty-state {
   padding: 48px 24px;
@@ -1259,6 +1168,229 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 /* <<< componentes F3a <<< */
 
 /* >>> componentes F3b (Suite COMEX) >>> */
+/* Selos, chips, alertas, banners e tabelas (mock v68: Componentes, Cotacoes). Consome var(--rf-*); so os seletores
+   de PERMITIDAS_F3b (guarda: src/test/componentesF3b.test.ts). Os botoes de dentro das tabelas sao da F3a. */
+
+/* ---- Selos ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--rf-radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  /* sem tom = sucesso (mantem o "Em dia" sem modificador) */
+  background: var(--rf-tone-success-bg);
+  color: var(--rf-tone-success-fg);
+}
+.badge--success { background: var(--rf-tone-success-bg); color: var(--rf-tone-success-fg); }
+.badge--muted { background: var(--rf-tone-neutral-bg); color: var(--rf-tone-neutral-fg); }
+.badge--warning { background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); }
+.badge--danger { background: var(--rf-tone-danger-bg); color: var(--rf-tone-danger-fg); }
+.badge--info { background: var(--rf-tone-info-bg); color: var(--rf-tone-info-fg); }
+/* Ponto de 6 px opt-in (cada tela aplica onde o mock mostra). */
+.badge--dot::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-tone-success-solid);
+}
+.badge--muted.badge--dot::before { background: var(--rf-tone-neutral-solid); }
+.badge--warning.badge--dot::before { background: var(--rf-tone-warning-solid); }
+.badge--danger.badge--dot::before { background: var(--rf-tone-danger-solid); }
+.badge--info.badge--dot::before { background: var(--rf-tone-info-solid); }
+/* Escuro (board CotacoesEscuro): o ponto acompanha o texto do tom; o --rf-tone-*-solid (constante) fica escuro demais sobre o tom translucido. */
+:root[data-theme="dark"] .badge--dot::before { background: currentColor; }
+
+/* ---- Chips ---- */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-surface);
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base) var(--rf-ease-out);
+}
+.chip:hover { background: var(--rf-primary-50); }
+/* Ativo: navy com texto branco no claro; menta com texto navy no escuro (--rf-action / --rf-on-action). */
+.chip--active {
+  border: 0;
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+  font-weight: 700;
+}
+.chip.chip--active:hover {
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+}
+/* Estatico (informativo, nao clicavel): codigo em mono sobre o tom neutro. */
+.chip--static {
+  min-height: 24px;
+  padding: 0 9px;
+  border: 0;
+  background: var(--rf-tone-neutral-bg);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+}
+.chip--static:hover { background: var(--rf-tone-neutral-bg); }
+/* Escuro (board CotacoesEscuro): o chip estatico usa a superficie elevada, nao o tom neutro translucido. */
+:root[data-theme="dark"] .chip--static,
+:root[data-theme="dark"] .chip--static:hover { background: var(--rf-surface-alt); }
+
+/* ---- Alertas e banners ---- */
+/* Receita unica: bloco com o icone em ::before (mascara; so o alfa conta, a cor vem de currentColor). Sem tom = informacao. */
+.alert,
+.banner {
+  position: relative;
+  display: block;
+  padding: 12px 16px 12px 44px;
+  border: 0;
+  border-radius: var(--rf-radius-alert);
+  background: var(--rf-tone-info-bg);
+  color: var(--rf-tone-info-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.alert::before,
+.banner::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 13px;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 11v5M12 8h.01'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+}
+.alert--info { background: var(--rf-tone-info-bg); color: var(--rf-tone-info-fg); }
+.alert--success,
+.banner--ok { background: var(--rf-tone-success-bg); color: var(--rf-tone-success-fg); }
+.alert--warning,
+.banner--warning { background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); }
+.alert--error,
+.banner--error { background: var(--rf-tone-danger-bg); color: var(--rf-tone-danger-fg); }
+.alert--success::before,
+.banner--ok::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 5 5 9-10'/%3E%3C/svg%3E");
+}
+.alert--warning::before,
+.banner--warning::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 2 20h20zM12 10v4M12 17h.01'/%3E%3C/svg%3E");
+}
+.alert--error::before,
+.banner--error::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 8v5M12 16h.01'/%3E%3C/svg%3E");
+}
+
+/* ---- Tabela ---- */
+.table-wrapper {
+  overflow-x: auto;
+  /* bloco de contencao de filhos absolutos (.sr-only das colunas de acoes) */
+  position: relative;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: var(--rf-ink);
+}
+.table th, .table td {
+  text-align: left;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rf-divider);
+  vertical-align: middle;
+}
+.table th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rf-ink-soft);
+  background: var(--rf-surface-alt);
+  white-space: nowrap;
+}
+.table tr:hover td { background: var(--rf-surface-alt); }
+/* Escuro (board CotacoesEscuro): a linha do cabecalho fecha com --rf-border (um degrau acima do --rf-divider das linhas). */
+:root[data-theme="dark"] .table th { border-bottom-color: var(--rf-border); }
+
+/* Grupo de acoes (Editar/Reabrir/Apagar etc.) numa celula de tabela: rotulo nunca quebra em 2 linhas
+   (o grupo quebra entre botoes). O botao em si (altura, padding, fonte) e da F3a. */
+.row-actions {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.row-actions > button,
+.row-actions > a {
+  white-space: nowrap;
+}
+.table .badge { white-space: nowrap; }
+.table .cell-nowrap { white-space: nowrap; }
+
+/* Variante opt-in de .row-actions para tabelas onde a quebra de linha e pior que o
+   scroll horizontal (Cotacoes: 3 botoes de ~180px numa tabela de 9 colunas).
+   O wrap padrao de .row-actions faz o algoritmo table-layout:auto calcular a
+   contribuicao min-content do grupo como o MAIOR botao (64px) em vez da SOMA (180px),
+   sub-alocando a coluna e quebrando os botoes a partir de ~1366px de viewport.
+   nowrap forca a soma como minimo.
+   O .table-wrapper (overflow-x: auto) absorve o excesso abaixo de ~1150px. */
+.row-actions--nowrap {
+  flex-wrap: nowrap;
+}
+
+/* Coluna de badge de status centralizada. .table th/.table td alinha tudo a esquerda,
+   o que joga toda a sobra de largura da coluna para o lado direito do badge
+   (medido: 12px esquerda / 28px direita em 1920px). */
+.table .col-status {
+  text-align: center;
+}
+
+/* Trunca celula de texto longo com "..." + tooltip nativo (title) com o texto completo.
+   Nasce generica (nao amarrada a Fornecedores) pra poder ser reusada em outras tabelas
+   depois de medidas. Motivo: o e-mail do contato principal e um token indivisivel
+   (nao quebra em "@" nem "."), e era o maior contribuinte pro min-content de 925px
+   medido na tabela de Fornecedores (faixa de scroll horizontal ~880-1229px). */
+.table .cell-truncate {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Variante opt-in de densidade (padding menor) para telas de largura media,
+   escopada so na tabela de Fornecedores (classe .table--dense) porque so essa
+   tabela foi medida: min-content 925px, scroll comeca em ~1229px, pior overflow
+   (~348px) em ~881px. Aplicar em ".table" global atingiria 8 outras tabelas
+   nunca medidas. A densidade por tela fica para as F5-F11. */
+@media (max-width: 1200px) {
+  .table--dense th, .table--dense td {
+    padding: 8px 8px;
+  }
+}
 /* <<< componentes F3b <<< */
 
 /* >>> componentes F3c (Suite COMEX) >>> */
@@ -1302,22 +1434,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   background: var(--surface-alt);
 }
 
-.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip {
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  cursor: pointer;
-}
-.chip--active {
-  background: var(--primary-strong);
-  border-color: var(--primary-strong);
-  color: var(--on-strong);
-  font-weight: 700;
-}
 
 dialog.modal-dialog {
   border: 0;
@@ -1395,16 +1511,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
-.alert {
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 14px;
-  border: 1px solid var(--border);
-  background: var(--surface-alt);
-  color: var(--ink);
-}
-.alert--error { border-color: var(--danger); background: var(--tone-danger-bg-soft); color: var(--danger); }
-.alert--success { border-color: var(--primary); background: var(--primary-50); color: var(--primary-700); }
 
 .checkbox-field {
   display: flex; align-items: center; gap: 8px;
@@ -1879,42 +1985,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   font-size: 0.9rem;
 }
 
-.chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.6rem;
-}
-
-.chip {
-  border: 1px solid var(--border);
-  background: var(--surface-alt);
-  color: var(--ink);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  border-radius: 999px;
-  padding: 0.25rem 0.6rem;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.chip:hover {
-  background: var(--primary-50);
-}
-
-.chip.chip--active:hover {
-  background: var(--primary-strong);
-  border-color: var(--primary-strong);
-  color: var(--on-strong);
-}
-
-.chip--static {
-  cursor: default;
-}
-
-.chip--static:hover {
-  background: var(--surface-alt);
-}
 
 .textarea {
   width: 100%;
@@ -1971,30 +2041,6 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   color: var(--ink);
 }
 
-.banner {
-  border-radius: var(--radius);
-  padding: 0.6rem 0.9rem;
-  font-size: 0.9rem;
-  border: 1px solid var(--border);
-}
-
-.banner--ok {
-  background: var(--primary-50);
-  border-color: var(--primary);
-  color: var(--primary-700);
-}
-
-.banner--warning {
-  background: var(--tone-warning-bg-alt);
-  border-color: var(--tone-warning-border-strong);
-  color: var(--tone-warning-fg-strong);
-}
-
-.banner--error {
-  background: var(--tone-danger-bg-alt);
-  border-color: var(--danger);
-  color: var(--danger);
-}
 
 .form-grid {
   display: grid;
