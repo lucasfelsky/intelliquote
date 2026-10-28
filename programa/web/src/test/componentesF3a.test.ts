@@ -113,6 +113,7 @@ const MIGRADAS_F3A = new Set([
   'ghost-button--sm',
   'danger-button',
   'icon-button',
+  'icon-button--danger',
   'btn-spinner',
   'input',
   'select',
@@ -364,6 +365,22 @@ describe('F3a: campos e selecao', () => {
     expect(naRegiao('.field--inline select')['min-height']).toBe('44px');
     expect(naRegiao('.textarea')).toMatchObject({ padding: '10px 14px', resize: 'vertical' });
     expect(naRegiao('.textarea')['min-height']).toBeUndefined();
+  });
+
+  it('textarea.input (6 usos no app) recebe a receita do textarea: padding 10px 14px, resize vertical, sem altura minima de 44', () => {
+    expect(naRegiao('textarea.input')).toMatchObject({ padding: '10px 14px', resize: 'vertical', 'min-height': '0' });
+    expect(naRegiao('textarea.input')['border-radius']).toBeUndefined();
+  });
+
+  it('select.input (2 usos no app) recebe a receita do select: chevron do token, 600, sem aparencia nativa, padding-right 36px', () => {
+    expect(naRegiao('select.input')).toMatchObject({
+      appearance: 'none',
+      'padding-right': '36px',
+      'background-image': 'var(--rf-select-chevron)',
+      'background-position': 'right 12px center',
+      'background-size': '16px 16px',
+      'font-weight': '600',
+    });
   });
 
   it('hover: borda --rf-ink-soft; foco: borda --rf-action + halo 4px; invalido: --rf-danger; desabilitado: --rf-disabled-*', () => {

@@ -1458,10 +1458,12 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .input,
 .select,
 .field--inline select { min-height: 44px; }
-.textarea {
+.textarea,
+textarea.input {
   padding: 10px 14px;
   resize: vertical;
 }
+textarea.input { min-height: 0; }
 .textarea--code {
   background-color: var(--code-bg);
   color: var(--code-fg);
@@ -1471,6 +1473,7 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   min-height: 320px;
 }
 .select,
+select.input,
 .field--inline select {
   padding-right: 36px;
   background-image: var(--rf-select-chevron);
