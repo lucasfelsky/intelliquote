@@ -4031,6 +4031,8 @@ dialog.modal-dialog[open] {
   font-family: var(--rf-font-mono);
   font-weight: 600;
 }
+/* Desvio do board: o board pinta o numero das falhas sempre em danger; aqui so quando
+   failedCount > 0 (o JSX aplica a modificadora so entao) - "0 falha(s)" fica na cor do texto. */
 .cotacao-envio__num--falha { color: var(--rf-tone-danger-fg); }
 .cotacao-envio__tabela {
   border: 1px solid var(--rf-divider);

@@ -84,6 +84,23 @@ function formatCurrency(value: number | undefined | null, currency: string): str
   }) + ' ' + currency;
 }
 
+// Preco-alvo e' campo de texto (inputMode decimal): aceita virgula ou ponto.
+// Vazio ou texto invalido vira null (igual ao antigo type="number", que entregava '').
+function parseTargetPriceInput(value: string | undefined): number | null {
+  const normalized = (value ?? '').trim().replace(',', '.');
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Exibicao do preco-alvo pre-preenchido: virgula decimal e 2 a 6 casas (2,10), como o board.
+// Sem separador de milhar (useGrouping false): "1.234,50" nao passaria no parseTargetPriceInput.
+function formatTargetPriceInput(value: number | string): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6, useGrouping: false });
+}
+
 function normalizeSupplier(raw: unknown): SupplierSummary {
   if (typeof raw !== 'object' || raw === null) throw new Error('Resposta inesperada.');
   const obj = raw as Record<string, unknown>;
@@ -225,7 +242,7 @@ export function RespostasTab({
       .filter((item) => !item.isUnavailable)
       .map((item) => ({
         quoteResponseItemId: item.id,
-        targetPrice: values[item.id]?.trim() ? Number(values[item.id]) : null,
+        targetPrice: parseTargetPriceInput(values[item.id]),
       }));
   }
 
@@ -239,7 +256,7 @@ export function RespostasTab({
           itemTargets: buildItemTargetsPayload(replyTarget, replyItemTargets),
         });
       }
-      const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+      const parsedTargetPrice = parseTargetPriceInput(replyTargetPrice);
       return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
     },
     onSuccess: (result) => {
@@ -280,7 +297,7 @@ export function RespostasTab({
     if (isMultiItemReply(r)) {
       const initialValues: Record<number, string> = {};
       (r.items ?? []).forEach((item) => {
-        initialValues[item.id] = item.targetPrice != null ? String(item.targetPrice) : '';
+        initialValues[item.id] = item.targetPrice != null ? formatTargetPriceInput(item.targetPrice) : '';
       });
       setReplyItemTargets(initialValues);
       setReplyTargetPrice('');
@@ -294,7 +311,7 @@ export function RespostasTab({
     }
 
     setReplyItemTargets({});
-    setReplyTargetPrice(r.targetPrice != null ? String(r.targetPrice) : '');
+    setReplyTargetPrice(r.targetPrice != null ? formatTargetPriceInput(r.targetPrice) : '');
     const initialTargetPrice = r.targetPrice != null ? Number(r.targetPrice) : null;
     replyPreviewMutation.mutate({ id: r.id, subject: '', message: '', targetPrice: initialTargetPrice });
   }
@@ -865,9 +882,8 @@ export function RespostasTab({
                           <input
                             id={`replyItemTarget-${item.id}`}
                             className="input resposta-responder__alvo"
-                            type="number"
-                            step="0.01"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
                             disabled={Boolean(item.isUnavailable)}
                             value={item.isUnavailable ? '' : (replyItemTargets[item.id] ?? '')}
                             onChange={(e) =>
@@ -891,9 +907,8 @@ export function RespostasTab({
                     <input
                       id="replyTargetPrice"
                       className="input resposta-form__mono"
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={replyTargetPrice}
                       onChange={(e) => setReplyTargetPrice(e.target.value)}
                     />
@@ -919,7 +934,7 @@ export function RespostasTab({
                       });
                       return;
                     }
-                    const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+                    const parsedTargetPrice = parseTargetPriceInput(replyTargetPrice);
                     replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
                   }}
                 >

@@ -1681,7 +1681,7 @@ export default function CotacaoDetalhe() {
                         </span>
                       </div>
                       <div className="cotacao-envio__contagem">
-                        <span className="cotacao-envio__num">{dispatchResult.sentCount}</span> enviado(s) · <span className="cotacao-envio__num cotacao-envio__num--falha">{dispatchResult.failedCount}</span> falha(s)
+                        <span className="cotacao-envio__num">{dispatchResult.sentCount}</span> enviado(s) · <span className={dispatchResult.failedCount > 0 ? 'cotacao-envio__num cotacao-envio__num--falha' : 'cotacao-envio__num'}>{dispatchResult.failedCount}</span> falha(s)
                       </div>
                     </div>
                   </div>
