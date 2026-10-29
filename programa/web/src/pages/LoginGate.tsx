@@ -2,8 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { ApiError } from '@/api/client';
-import LoginBackdrop from '@/components/LoginBackdrop';
-import '../styles/login.css';
+import LoginBackdrop, { LoginPainel } from '@/components/LoginBackdrop';
 
 export default function LoginGate() {
   const { login, status, exchangeError } = useAuth();
@@ -48,57 +47,62 @@ export default function LoginGate() {
   };
 
   return (
-    <div className="auth-gate auth-gate--routes">
+    <div className="auth-gate">
       <LoginBackdrop />
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <img src="/logo.png" alt="IntelliQuote" className="auth-card__logo" />
-        <p className="eyebrow auth-card__eyebrow">IntelliQuote</p>
-        <h1>Entrar</h1>
-        <p>Use a mesma conta do Portal COMEX. Acesso via Firebase Authentication.</p>
+      <LoginPainel />
+      <div className="auth-gate__area">
+        <form className="auth-card" onSubmit={handleSubmit} aria-busy={submitting}>
+          <div className="auth-card__cabecalho">
+            <p className="eyebrow auth-card__eyebrow">IntelliQuote</p>
+            <h1>Entrar</h1>
+            <p className="auth-card__texto">Use a mesma conta do Portal COMEX. Acesso via Firebase Authentication.</p>
+          </div>
 
-        <div style={{ marginTop: 16 }}>
-          <label className="field-label" htmlFor="email">E-mail</label>
-          <input
-            id="email" className="input" type="email" required autoFocus
-            value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="voce@sqquimica.com" autoComplete="email"
-          />
-        </div>
+          <div className="auth-card__campo">
+            <label className="field-label" htmlFor="email">E-mail</label>
+            <input
+              id="email" className="input" type="email" required autoFocus
+              value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="voce@sqquimica.com" autoComplete="email"
+            />
+          </div>
 
-        <div style={{ marginTop: 12 }}>
-          <label className="field-label" htmlFor="password">Senha</label>
-          <input
-            id="password" className="input" type="password" required minLength={6}
-            value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••" autoComplete="current-password"
-          />
-        </div>
+          <div className="auth-card__campo">
+            <label className="field-label" htmlFor="password">Senha</label>
+            <input
+              id="password" className="input" type="password" required minLength={6}
+              value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••" autoComplete="current-password"
+            />
+          </div>
 
-        {error && (
-          <p role="alert" style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13, wordBreak: 'break-word' }}>
-            {error}
-          </p>
-        )}
+          {error && (
+            <p className="alert alert--error auth-card__erro" role="alert">
+              {error}
+            </p>
+          )}
 
-        {exchangeError && !error && (
-          <p style={{ color: 'var(--ink-soft)', marginTop: 8, fontSize: 11, wordBreak: 'break-word' }}>
-            Detalhe: {exchangeError.slice(0, 300)}
-          </p>
-        )}
+          {exchangeError && !error && (
+            <p className="auth-card__detalhe">
+              Detalhe: {exchangeError.slice(0, 300)}
+            </p>
+          )}
 
-        <div className="auth-card__actions">
-          <button type="submit" className="primary-button auth-card__submit" disabled={submitting}>
-            {submitting ? 'Entrando…' : 'Entrar'}
-          </button>
-          <a
-            className="ghost-button"
-            href={import.meta.env.VITE_PORTAL_URL ?? 'https://portal-comex.com'}
-            rel="noopener"
-          >
-            Voltar ao Portal COMEX
-          </a>
-        </div>
-      </form>
+          <div className="auth-card__actions">
+            <button type="submit" className="primary-button auth-card__submit" disabled={submitting}>
+              {submitting && <span className="btn-spinner" aria-hidden="true" />}
+              {submitting ? 'Entrando…' : 'Entrar'}
+            </button>
+            <a
+              className="ghost-button auth-card__portal"
+              href={import.meta.env.VITE_PORTAL_URL ?? 'https://portal-comex.com'}
+              rel="noopener"
+            >
+              Voltar ao Portal COMEX
+            </a>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
