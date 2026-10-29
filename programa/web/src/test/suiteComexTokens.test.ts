@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   fixtureUniao,
@@ -23,14 +24,14 @@ import {
 //    de cada fixture (claro e escuro). A fixture base continua afirmando 84/36/48 para si; cada etapa da F3 acrescenta o seu arquivo;
 //  - contraste WCAG 2.x nos 2 temas, compondo alpha sobre o --rf-surface do tema;
 //  - excecoes de contraste do proprio mock, explicitas (o conjunto de reprovados tem de ser EXATAMENTE a lista);
-//  - invariantes: so consomem var(--rf-*) as regioes delimitadas, numa lista FIXA e contigua (shell F2, componentes F3a, F3b, F3c, F3d;
-//    vazia e permitida); --rf-* so e DECLARADO nos 2 blocos de token; login.css, index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
+//  - invariantes: so consomem var(--rf-*) as regioes delimitadas, numa lista FIXA e contigua (shell F2, componentes F3a, F3b, F3c, F3d, compat Forecast F3, tela F4 e tela F5;
+//    vazia e permitida); --rf-* so e DECLARADO nos 2 blocos de token; login.css (se existir: a F4 o apaga), index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
 //  - O que cada regiao F3 pode conter (seletores, at-rules, reduced-motion, MIGRADAS) e conferido pelo teste da PROPRIA etapa
 //    (componentesF3a.test.ts ... F3d), nao aqui. PAIRS e KNOWN_EXCEPTIONS deste arquivo nao mudam mais na F3: pares novos ficam no teste da etapa.
 // Funcoes de apoio: ./rfCss.ts (nao e teste).
 
 const css = readSource('../styles/globals.css');
-const loginCss = readSource('../styles/login.css');
+const loginCss = existsSync(new URL('../styles/login.css', import.meta.url)) ? readSource('../styles/login.css') : '';
 const indexHtml = readSource('../../index.html');
 
 const fixtureBase = JSON.parse(readSource('./fixtures/suiteComexTokens.json')) as FixtureToken[];
@@ -45,7 +46,7 @@ const tsSources = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../test/**', 
 // ---------- regioes e blocos de token ----------
 const SHELL_NOME = 'shell F2';
 // Lista FIXA, na ordem em que aparecem no CSS: o shell e, logo depois dele, as 4 etapas da F3 (cada uma pode estar vazia).
-const REGIOES_PERMITIDAS = ['shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d', 'compat Forecast F3'] as const;
+const REGIOES_PERMITIDAS = ['shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d', 'compat Forecast F3', 'tela F4', 'tela F5'] as const;
 const rawLf = css.replace(/\r\n/g, '\n');
 const regs = regioes(rawLf);
 const cssOutsideRegions = foraDasRegioes(rawLf, regs);
