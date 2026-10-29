@@ -34,23 +34,26 @@ export function SolicitacaoDesenvolvimentoPanel({ quoteRequestId }: Props) {
   const requests = (linked.data?.data ?? []).filter((request) => request.isDevelopment);
 
   return (
-    <section className="card" aria-label="Solicitação de desenvolvimento" style={{ marginBottom: 16 }}>
-      <h2 style={{ margin: '0 0 8px', fontSize: 16 }}>Solicitação de desenvolvimento</h2>
+    <section className="card sol-dev-painel" aria-label="Solicitação de desenvolvimento">
+      <div className="sol-dev-painel__topo">
+        <h2>Solicitação de desenvolvimento</h2>
+        <span className="badge badge--muted">Interno: não chega ao fornecedor</span>
+      </div>
 
       {linked.isLoading && (
-        <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+        <p className="sol-dev-painel__texto">
           Carregando solicitação…
         </p>
       )}
 
       {linked.isError && (
-        <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+        <p role="alert" className="alert alert--error">
           Não foi possível carregar a solicitação de desenvolvimento: {messageOf(linked.error)}
         </p>
       )}
 
       {linked.isSuccess && requests.length === 0 && (
-        <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+        <p className="sol-dev-painel__texto">
           Nenhuma solicitação de desenvolvimento ligada a esta cotação.
         </p>
       )}
@@ -58,8 +61,8 @@ export function SolicitacaoDesenvolvimentoPanel({ quoteRequestId }: Props) {
       {requests.map((request) => {
         const newItems = request.items.filter((item) => item.isNewItem);
         return (
-          <div key={request.id} style={{ marginTop: 8 }}>
-            <p className="text-sm" style={{ margin: '0 0 4px' }}>
+          <div key={request.id} className="sol-dev-painel__solicitacao">
+            <p className="sol-dev-painel__resumo">
               <strong>Solicitação #{request.id}</strong> · solicitante: {request.requestedBy.name}
             </p>
             {newItems.length > 0 && (
@@ -79,12 +82,12 @@ export function SolicitacaoDesenvolvimentoPanel({ quoteRequestId }: Props) {
               </ul>
             )}
             {(request.attachments ?? []).length > 0 ? (
-              <div style={{ marginTop: 6 }}>
+              <div className="sol-dev-painel__anexos">
                 <strong className="text-sm">Anexos técnicos</strong>
                 <AnexosLista requestId={request.id} attachments={request.attachments} />
               </div>
             ) : (
-              <p className="text-sm" style={{ margin: '6px 0 0', color: 'var(--ink-soft)' }}>
+              <p className="sol-dev-painel__texto">
                 Sem anexos técnicos.
               </p>
             )}

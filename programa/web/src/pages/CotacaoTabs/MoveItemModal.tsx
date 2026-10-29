@@ -55,7 +55,10 @@ export function MoveItemModal({
                 disabled={o.isCurrent || pending}
                 onChange={() => setSelected(o.value)}
               />
-              <span>{o.label}{o.isCurrent ? ' (atual)' : ''}</span>
+              <span>
+                <span className={o.value === NONE ? undefined : 'move-item-modal__po'}>{o.label}</span>
+                {o.isCurrent ? ' (atual)' : ''}
+              </span>
             </label>
           ))}
         </fieldset>

@@ -1,0 +1,34 @@
+[
+  {
+    "token": "--rf-selecao-anel",
+    "claro": "rgba(0, 120, 100, 0.45)",
+    "escuro": "rgba(20, 221, 167, 0.45)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "EnvioFornecedores"
+  },
+  {
+    "token": "--rf-on-action-tinta",
+    "claro": "rgba(255, 255, 255, 0.18)",
+    "escuro": "rgba(11, 36, 48, 0.18)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "EnvioFornecedoresScroll"
+  },
+  {
+    "token": "--rf-aviso-borda",
+    "claro": "rgba(201, 138, 18, 0.35)",
+    "escuro": "rgba(242, 193, 78, 0.35)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "EnvioResultado"
+  },
+  {
+    "token": "--rf-falha-linha",
+    "claro": "#fffafa",
+    "escuro": "rgba(229, 72, 60, 0.08)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "EnvioResultado"
+  }
+]
