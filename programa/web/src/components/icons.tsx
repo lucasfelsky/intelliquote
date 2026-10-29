@@ -2,7 +2,8 @@ import type { SVGAttributes } from 'react';
 
 // Icones de traco do mock (Suite COMEX): 24x24, sem preenchimento, `currentColor` (a cor vem do CSS do contexto).
 // 14 de navegacao (navConfig), Sair, os 3 do botao de tema (automatico, noturno, claro; canvas v72) e os 2 da topbar
-// (escudo SSO e usuario). F5: +12 (plus, search, filter, alert-triangle, refresh, arrow-right/left, check, link, lock, chevron-down/right). F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
+// (escudo SSO e usuario). F5: +12 (plus, search, filter, alert-triangle, refresh, arrow-right/left, check, link, lock, chevron-down/right).
+// F6/F7-0: +10 (edit, trash, download, info, file-text, grip, chevron-up, trophy, copy, eye); o envelope de "Enviar cotacao" reusa `templates`. F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
 // paralelas nao editarem este objeto. Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
 export const ICONS = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
@@ -39,6 +40,16 @@ export const ICONS = {
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
   'chevron-down': 'm6 9 6 6 6-6',
   'chevron-right': 'm9 6 6 6-6 6',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
+  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01',
+  'file-text': 'M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6',
+  grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  'chevron-up': 'm18 15-6-6-6 6',
+  trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3',
+  copy: 'M9 9h11v11H9zM5 15V4h11',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
 } as const;
 
 // Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.

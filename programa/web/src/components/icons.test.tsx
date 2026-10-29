@@ -39,11 +39,21 @@ const MOCK: Record<string, string> = {
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
   'chevron-down': 'm6 9 6 6 6-6',
   'chevron-right': 'm9 6 6 6-6 6',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  download: 'M12 4v11M7 10l5 5 5-5M4 20h16',
+  info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v5M12 8h.01',
+  'file-text': 'M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6',
+  grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  'chevron-up': 'm18 15-6-6-6 6',
+  trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3',
+  copy: 'M9 9h11v11H9zM5 15V4h11',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
 };
 
 describe('icons', () => {
-  it('tem os 34 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star e os 12 da F5)', () => {
-    expect(ICON_NAMES).toHaveLength(34);
+  it('tem os 44 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5 e os 10 da F6/F7)', () => {
+    expect(ICON_NAMES).toHaveLength(44);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
@@ -70,7 +80,7 @@ describe('icons', () => {
     expect(ICONS).not.toHaveProperty('monitor');
   });
 
-  it('so o theme-half tem camada preenchida (currentColor); os demais 33 so tem traco', () => {
+  it('so o theme-half tem camada preenchida (currentColor); os demais 43 so tem traco', () => {
     expect(Object.keys(ICON_FILLS)).toEqual(['theme-half']);
     const meio = render(<Icon name="theme-half" />).container.querySelectorAll('svg path');
     expect(meio).toHaveLength(2);
@@ -85,7 +95,7 @@ describe('icons', () => {
   });
 
   it('nenhum icone repete o path de outro', () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(34);
+    expect(new Set(Object.values(ICONS)).size).toBe(44);
   });
 
   it.each(ICON_NAMES)('<Icon name="%s"> renderiza svg decorativo de traco com currentColor', (name) => {

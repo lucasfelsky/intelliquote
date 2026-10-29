@@ -143,10 +143,10 @@ describe('F5: regiao `tela F5`', () => {
     expect(planas.length).toBeGreaterThan(60);
   });
 
-  it('a regiao vem DEPOIS das regioes F3 e da compat (vence as regras de componente de mesma especificidade pela ordem)', () => {
+  it('a regiao vem DEPOIS das regioes F3 e da compat, logo depois da tela F4 (vence as regras de componente de mesma especificidade pela ordem)', () => {
     const compat = regs.find((r) => r.nome === 'compat Forecast F3');
     expect((compat?.fim ?? Infinity) <= (regiao?.inicio ?? 0)).toBe(true);
-    expect(regs.findIndex((r) => r.nome === NOME)).toBe(regs.length - 1);
+    expect(regs.findIndex((r) => r.nome === NOME)).toBe(regs.findIndex((r) => r.nome === 'tela F4') + 1);
   });
 
   it('a regiao nao declara token (--*), consome var(--rf-* e nao tem cor literal, !important nem opacity', () => {

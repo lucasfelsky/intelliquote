@@ -24,8 +24,8 @@ import {
 //    de cada fixture (claro e escuro). A fixture base continua afirmando 84/36/48 para si; cada etapa da F3 acrescenta o seu arquivo;
 //  - contraste WCAG 2.x nos 2 temas, compondo alpha sobre o --rf-surface do tema;
 //  - excecoes de contraste do proprio mock, explicitas (o conjunto de reprovados tem de ser EXATAMENTE a lista);
-//  - invariantes: so consomem var(--rf-*) as regioes delimitadas, numa lista FIXA e contigua (base da pagina, shell F2, componentes F3a, F3b, F3c, F3d, compat Forecast F3, tela F4 e tela F5;
-//    vazia e permitida); --rf-* so e DECLARADO nos 2 blocos de token; login.css (se existir: a F4 o apaga), index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
+//  - invariantes: so consomem var(--rf-*) as regioes delimitadas, contiguas: uma lista FIXA (base da pagina, shell F2, componentes F3a, F3b, F3c, F3d, compat Forecast F3) e depois
+//    so regioes `tela F<n>` com n estritamente crescente (F4, F5, ...; vazia e permitida); --rf-* so e DECLARADO nos 2 blocos de token; login.css (se existir: a F4 o apaga), index.html e src/**/*.{ts,tsx} nao-teste seguem sem consumo.
 //  - O que cada regiao F3 pode conter (seletores, at-rules, reduced-motion, MIGRADAS) e conferido pelo teste da PROPRIA etapa
 //    (componentesF3a.test.ts ... F3d), nao aqui. PAIRS e KNOWN_EXCEPTIONS deste arquivo nao mudam mais na F3: pares novos ficam no teste da etapa.
 // Funcoes de apoio: ./rfCss.ts (nao e teste).
@@ -45,8 +45,10 @@ const tsSources = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../test/**', 
 
 // ---------- regioes e blocos de token ----------
 const SHELL_NOME = 'shell F2';
-// Lista FIXA, na ordem em que aparecem no CSS: o shell e, logo depois dele, as 4 etapas da F3 (cada uma pode estar vazia).
-const REGIOES_PERMITIDAS = ['base da pagina', 'shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d', 'compat Forecast F3', 'tela F4', 'tela F5'] as const;
+// Lista FIXA, na ordem em que aparecem no CSS: a base, o shell, as 4 etapas da F3 (cada uma pode estar vazia) e a compat do Forecast.
+// Depois dela, so `tela F<n>` com n estritamente crescente (as ondas novas nao editam mais este teste).
+const REGIOES_FIXAS = ['base da pagina', 'shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d', 'compat Forecast F3'] as const;
+const TELA = /^tela F(\d+)$/;
 const rawLf = css.replace(/\r\n/g, '\n');
 const regs = regioes(rawLf);
 const cssOutsideRegions = foraDasRegioes(rawLf, regs);
@@ -77,7 +79,7 @@ describe('--rf-*: paridade CSS x fixtures (mock v68)', () => {
     for (const t of fixtureBase) expect(fixture.map((x) => x.token), t.token).toContain(t.token);
     const arquivos = [...new Set(fixture.map((t) => t.arquivo))];
     expect(arquivos).toContain('suiteComexTokens.json');
-    for (const arquivo of arquivos) expect(arquivo, arquivo).toMatch(/^suiteComexTokens(\.f(3[a-d]|[45]))?\.json$/);
+    for (const arquivo of arquivos) expect(arquivo, arquivo).toMatch(/^suiteComexTokens(\.f(3[a-d]|\d{1,2}))?\.json$/);
   });
 
   it('os 3 tokens da F2 (desenhados pelo mock) estao na fixture', () => {
@@ -287,17 +289,24 @@ function regionSelectors(): string[] {
 }
 
 describe('--rf-*: invariantes (so as regioes permitidas consomem; so os 2 blocos declaram)', () => {
-  it('as regioes permitidas existem uma vez cada, na ordem, e as F3 ficam contiguas logo depois do shell', () => {
-    expect(regs.map((r) => r.nome)).toEqual([...REGIOES_PERMITIDAS]);
-    for (const nome of REGIOES_PERMITIDAS) {
+  it('as regioes permitidas existem uma vez cada, na ordem (fixas e depois tela F<n> crescente), todas contiguas', () => {
+    const nomes = regs.map((r) => r.nome);
+    expect(nomes.slice(0, REGIOES_FIXAS.length)).toEqual([...REGIOES_FIXAS]);
+    const telas = nomes.slice(REGIOES_FIXAS.length);
+    for (const nome of telas) expect(nome).toMatch(TELA);
+    const numeros = telas.map((nome) => Number(TELA.exec(nome)?.[1]));
+    numeros.forEach((n, i) => {
+      if (i > 0) expect(n, telas[i]).toBeGreaterThan(numeros[i - 1] ?? Infinity);
+    });
+    for (const nome of nomes) {
       expect(rawLf.split(`/* >>> ${nome} (Suite COMEX) >>> */`), nome).toHaveLength(2);
       expect(rawLf.split(`/* <<< ${nome} <<< */`), nome).toHaveLength(2);
     }
     for (let i = 1; i < regs.length; i++) {
       const anterior = regs[i - 1];
       const atual = regs[i];
-      expect(anterior && atual && anterior.fim <= atual.inicio, REGIOES_PERMITIDAS[i]).toBe(true);
-      expect(rawLf.slice(anterior?.fim ?? 0, atual?.inicio ?? 0).trim(), `entre ${REGIOES_PERMITIDAS[i - 1]} e ${REGIOES_PERMITIDAS[i]}`).toBe('');
+      expect(anterior && atual && anterior.fim <= atual.inicio, nomes[i]).toBe(true);
+      expect(rawLf.slice(anterior?.fim ?? 0, atual?.inicio ?? 0).trim(), `entre ${nomes[i - 1]} e ${nomes[i]}`).toBe('');
     }
   });
 
