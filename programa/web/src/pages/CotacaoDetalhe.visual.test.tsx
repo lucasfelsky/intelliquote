@@ -346,6 +346,13 @@ describe('CotacaoDetalhe (F6): Enviar cotação (3 passos)', () => {
     expect(faixa.getAttribute('role')).toBe('status');
     expect(within(faixa).getByText('Parcial').className).toBe('badge badge--dot badge--warning');
     expect(dialog.querySelector('[aria-current="step"]')?.textContent).toBe('3Resultado');
+    // numeros em negrito/mono (board EnvioResultado) sem mudar o texto lido: continua "1 enviado(s) · 1 falha(s)"
+    const contagem = faixa.querySelector('.cotacao-envio__contagem') as HTMLElement;
+    expect(contagem.textContent).toBe('1 enviado(s) · 1 falha(s)');
+    expect(Array.from(contagem.querySelectorAll('.cotacao-envio__num')).map((n) => [n.textContent, n.className])).toEqual([
+      ['1', 'cotacao-envio__num'],
+      ['1', 'cotacao-envio__num cotacao-envio__num--falha'],
+    ]);
     const selos = Array.from(dialog.querySelectorAll('.cotacao-envio__tabela tbody .badge'));
     expect(selos.map((s) => [s.textContent, s.className])).toEqual([
       ['Enviado', 'badge badge--dot badge--success'],
