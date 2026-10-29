@@ -45,7 +45,7 @@ const tsSources = import.meta.glob(['../**/*.ts', '../**/*.tsx', '!../test/**', 
 // ---------- regioes e blocos de token ----------
 const SHELL_NOME = 'shell F2';
 // Lista FIXA, na ordem em que aparecem no CSS: o shell e, logo depois dele, as 4 etapas da F3 (cada uma pode estar vazia).
-const REGIOES_PERMITIDAS = ['shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d'] as const;
+const REGIOES_PERMITIDAS = ['shell F2', 'componentes F3a', 'componentes F3b', 'componentes F3c', 'componentes F3d', 'compat Forecast F3'] as const;
 const rawLf = css.replace(/\r\n/g, '\n');
 const regs = regioes(rawLf);
 const cssOutsideRegions = foraDasRegioes(rawLf, regs);
@@ -286,7 +286,7 @@ function regionSelectors(): string[] {
 }
 
 describe('--rf-*: invariantes (so as regioes permitidas consomem; so os 2 blocos declaram)', () => {
-  it('as 5 regioes permitidas existem uma vez cada, na ordem, e as F3 ficam contiguas logo depois do shell', () => {
+  it('as regioes permitidas existem uma vez cada, na ordem, e as F3 ficam contiguas logo depois do shell', () => {
     expect(regs.map((r) => r.nome)).toEqual([...REGIOES_PERMITIDAS]);
     for (const nome of REGIOES_PERMITIDAS) {
       expect(rawLf.split(`/* >>> ${nome} (Suite COMEX) >>> */`), nome).toHaveLength(2);
