@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon } from '@/components/icons';
 import { Pagination } from '@/components/Pagination';
 
 type QuoteStatus = 'open' | 'closed';
@@ -211,52 +212,81 @@ export default function Cotacoes() {
   });
 
   return (
-    <div className="page">
+    <div className="page cotacoes-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">Compras</p>
           <h1>Cotações</h1>
           <p>Gerencie as cotações em andamento e as já fechadas.</p>
         </div>
-        <div className="page-header__actions">
-          <input
-            className="input"
-            placeholder="Buscar por código ou produto"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            style={{ maxWidth: 280 }}
-          />
+        {canCreate && (
+          <div className="page-header__actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => navigate('/cotacoes/nova')}
+            >
+              <Icon name="plus" size={16} strokeWidth={2.2} />
+              Nova cotação
+            </button>
+          </div>
+        )}
+      </div>
+
+      <section className="cotacoes-filtros" aria-label="Filtros">
+        <div className="cotacoes-filtro cotacoes-filtro--busca">
+          <label className="cotacoes-filtro__rotulo" htmlFor="cotacoesBusca">Buscar</label>
+          <div className="cotacoes-busca">
+            <Icon name="search" size={16} />
+            <input
+              id="cotacoesBusca"
+              className="cotacoes-busca__campo"
+              placeholder="Buscar por código ou produto"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+        </div>
+        <div className="cotacoes-filtro">
+          <label className="cotacoes-filtro__rotulo" htmlFor="cotacoesStatus">Status</label>
           <select
+            id="cotacoesStatus"
             className="select"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value as StatusFilter);
               setPage(1);
             }}
-            style={{ maxWidth: 160 }}
           >
             <option value="todas">Todas</option>
             <option value="abertas">Abertas</option>
             <option value="fechadas">Fechadas</option>
           </select>
+        </div>
+        <div className="cotacoes-filtro">
+          <label className="cotacoes-filtro__rotulo" htmlFor="cotacoesIncoterm">Incoterm</label>
           <select
+            id="cotacoesIncoterm"
             className="select"
             value={incotermFilter}
             onChange={(e) => {
               setIncotermFilter(e.target.value as Incoterm | 'todos');
               setPage(1);
             }}
-            style={{ maxWidth: 160 }}
           >
             <option value="todos">Incoterm: todos</option>
             {INCOTERMS.map((t) => (
               <option key={t} value={t}>Incoterm: {t}</option>
             ))}
           </select>
+        </div>
+        <div className="cotacoes-filtro">
+          <label className="cotacoes-filtro__rotulo" htmlFor="cotacoesPo">PO</label>
           <select
+            id="cotacoesPo"
             className="select"
             aria-label="Filtro de PO enviada"
             value={poFilter}
@@ -264,13 +294,16 @@ export default function Cotacoes() {
               setPoFilter(e.target.value as PoFilter);
               setPage(1);
             }}
-            style={{ maxWidth: 170 }}
           >
             <option value="todas">PO: todas</option>
             <option value="enviada">PO enviada</option>
             <option value="nao-enviada">PO não enviada</option>
           </select>
+        </div>
+        <div className="cotacoes-filtro">
+          <label className="cotacoes-filtro__rotulo" htmlFor="cotacoesMes">Mês</label>
           <select
+            id="cotacoesMes"
             className="select"
             aria-label="Filtro de mês"
             value={monthFilter}
@@ -278,185 +311,220 @@ export default function Cotacoes() {
               setMonthFilter(e.target.value);
               setPage(1);
             }}
-            style={{ maxWidth: 170 }}
           >
             <option value="todos">Mês: todos</option>
             {monthOptions.map((m) => (
               <option key={m.value} value={m.value}>Mês: {m.label}</option>
             ))}
           </select>
-          {canCreate && (
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => navigate('/cotacoes/nova')}
-            >
-              + Nova cotação
-            </button>
-          )}
         </div>
-      </div>
+      </section>
 
       {actionError && (
-        <p style={{ color: 'var(--danger)', marginBottom: 12 }} className="text-sm">{actionError}</p>
+        <p className="alert alert--error" role="alert">{actionError}</p>
       )}
 
-      <section className="card">
-        {list.isLoading && <p>Carregando cotações…</p>}
-        {list.isError && (
-          <div className="empty-state">
-            <p>Não foi possível carregar as cotações.</p>
-            <p style={{ color: 'var(--ink-soft)', marginBottom: 12 }} className="text-xs">
-              Verifique sua conexão e tente novamente.
-            </p>
-            <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
+      {list.isLoading ? (
+        <section className="card cotacoes-tabela-card" aria-busy="true">
+          <div className="cotacoes-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando cotações…
           </div>
-        )}
-        {list.data && rows.length === 0 && !list.isLoading && (
-          <div className="empty-state">
-            <strong>Nenhuma cotação encontrada</strong>
-            <p>
-              {hasFilters
-                ? 'Ajuste ou limpe os filtros para ver outras cotações.'
-                : canCreate
-                  ? 'Use o botão “Nova cotação” para começar.'
-                  : 'Aguarde o cadastro de novas cotações.'}
-            </p>
+          <div className="cotacoes-skeleton__cab" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
           </div>
-        )}
-        {list.data && rows.length > 0 && (
-          <div className="table-wrapper">
-            <table className="table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Código</th>
-                <th>Incoterm desejado</th>
-                <th>Itens</th>
-                <th>Respostas</th>
-                <th>PO</th>
-                <th className="col-status">Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((qr) => (
-                <tr key={qr.id}>
-                  <td>{qr.id}</td>
-                  <td className="cell-nowrap">
-                    <strong>{qr.requestCode}</strong>
-                    {qr.isDevelopment && (
-                      <>
-                        {' '}
-                        <span className="badge badge--info">Desenvolvimento</span>
-                      </>
-                    )}
-                  </td>
-                  <td>
-                    <div className="chip-row">
-                      {qr.desiredIncoterm.map((t) => (
-                        <span key={t} className="chip chip--static">{t}</span>
-                      ))}
-                    </div>
-                  </td>
-                  <td>{formatNumber(qr._count?.items)}</td>
-                  <td>{formatNumber(qr._count?.quoteResponses)}</td>
-                  <td>
-                    {qr.purchaseOrderSentAt ? (
-                      <span
-                        className="badge badge--info"
-                        title={`PO enviada em ${formatPoSentDate(qr.purchaseOrderSentAt)}`}
-                        aria-label={`PO enviada em ${formatPoSentDate(qr.purchaseOrderSentAt)}`}
-                      >
-                        PO enviada
-                      </span>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td className="col-status">
-                    {/* Reaberta substitui o "Aberta" (ela tambem esta aberta). */}
-                    {qr.status === 'open' && qr.reopenedAt ? (
-                      <span
-                        className="badge badge--warning"
-                        title={`Reaberta em ${formatSaoPauloDate(qr.reopenedAt)}`}
-                      >
-                        Reaberta
-                        <span className="sr-only"> em {formatSaoPauloDate(qr.reopenedAt)}</span>
-                      </span>
-                    ) : (
-                      <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
-                        {qr.status === 'open' ? 'Aberta' : 'Fechada'}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="row-actions row-actions--nowrap">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => navigate(`/cotacoes/${qr.id}`)}
-                      >
-                        Ver
-                      </button>
-                      {canCreate && qr.status === 'open' && (
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => navigate(`/cotacoes/${qr.id}`, { state: { edit: true } })}
-                        >
-                          Editar
-                        </button>
-                      )}
-                      {(user?.role === 'admin' || user?.role === 'gestor') && qr.status === 'closed' && (
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={async () => {
-                            if (await confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
-                              reopen.mutate(qr.id);
-                            }
-                          }}
-                          disabled={reopen.isPending}
-                        >
-                          Reabrir
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          type="button"
-                          className="ghost-button danger-button"
-                          onClick={async () => {
-                            const cascade = qr._count?.quoteResponses ?? 0;
-                            const msg = cascade > 0
-                              ? `Apagar a cotação ${qr.requestCode}? Todas as ${cascade} resposta(s) e os itens associados também serão removidas. Esta ação não pode ser desfeita.`
-                              : `Apagar a cotação ${qr.requestCode}? Esta ação não pode ser desfeita.`;
-                            if (await confirm(msg)) {
-                              remove.mutate(qr.id);
-                            }
-                          }}
-                          disabled={remove.isPending}
-                        >
-                          Apagar
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            </table>
-            <Pagination
-              page={page}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              itemLabel={{ singular: 'cotação', plural: 'cotações' }}
-              onPrevious={() => setPage((p) => Math.max(1, p - 1))}
-              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-            />
+          <div aria-hidden="true">
+            {[0, 1, 2, 3, 4, 5, 6].map((k) => (
+              <div key={k} className="cotacoes-skeleton__linha">
+                <span className="skeleton cotacoes-skeleton__id" />
+                <span className="skeleton cotacoes-skeleton__texto" />
+                <span className="cotacoes-skeleton__selos">
+                  <span className="skeleton cotacoes-skeleton__selo" />
+                  <span className="skeleton cotacoes-skeleton__selo" />
+                </span>
+                <span className="skeleton cotacoes-skeleton__num" />
+                <span className="skeleton cotacoes-skeleton__status" />
+              </div>
+            ))}
           </div>
-        )}
-      </section>
+        </section>
+      ) : (
+        <section className="card cotacoes-tabela-card">
+          {list.isError && (
+            <div className="cotacoes-estado">
+              <div
+                className="empty-state empty-state--erro"
+                role="alert"
+              >
+                <span className="empty-state__icon">
+                  <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+                </span>
+                <strong className="empty-state__title">Não foi possível carregar as cotações.</strong>
+                <p className="empty-state__text">Verifique sua conexão e tente novamente.</p>
+                <button type="button" className="ghost-button" onClick={() => list.refetch()}>
+                  <Icon name="refresh" size={14} strokeWidth={2} />
+                  Tentar novamente
+                </button>
+              </div>
+            </div>
+          )}
+          {list.data && rows.length === 0 && (
+            <div className="cotacoes-estado">
+              <div className="empty-state">
+                <span className="empty-state__icon">
+                  <Icon name="filter" size={36} strokeWidth={1.5} />
+                </span>
+                <strong className="empty-state__title">Nenhuma cotação encontrada</strong>
+                <p className="empty-state__text">
+                  {hasFilters
+                    ? 'Ajuste ou limpe os filtros para ver outras cotações.'
+                    : canCreate
+                      ? 'Use o botão “Nova cotação” para começar.'
+                      : 'Aguarde o cadastro de novas cotações.'}
+                </p>
+              </div>
+            </div>
+          )}
+          {list.data && rows.length > 0 && (
+            <>
+              <div className="table-wrapper">
+                <table className="table cotacoes-tabela">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Código</th>
+                      <th>Incoterm desejado</th>
+                      <th className="cotacoes-dir">Itens</th>
+                      <th className="cotacoes-dir">Respostas</th>
+                      <th>PO</th>
+                      <th className="col-status">Status</th>
+                      <th className="cotacoes-dir">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((qr) => (
+                      <tr key={qr.id}>
+                        <td className="cotacoes-id">{qr.id}</td>
+                        <td className="cell-nowrap">
+                          <span className="cotacoes-codigo">{qr.requestCode}</span>
+                          {qr.isDevelopment && (
+                            <>
+                              {' '}
+                              <span className="badge badge--info">Desenvolvimento</span>
+                            </>
+                          )}
+                        </td>
+                        <td>
+                          <div className="chip-row">
+                            {qr.desiredIncoterm.map((t) => (
+                              <span key={t} className="chip chip--static">{t}</span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="cotacoes-dir cotacoes-num">{formatNumber(qr._count?.items)}</td>
+                        <td className="cotacoes-dir cotacoes-num">{formatNumber(qr._count?.quoteResponses)}</td>
+                        <td>
+                          {qr.purchaseOrderSentAt ? (
+                            <span
+                              className="badge badge--info badge--dot"
+                              title={`PO enviada em ${formatPoSentDate(qr.purchaseOrderSentAt)}`}
+                              aria-label={`PO enviada em ${formatPoSentDate(qr.purchaseOrderSentAt)}`}
+                            >
+                              PO enviada
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="col-status">
+                          {/* Reaberta substitui o "Aberta" (ela tambem esta aberta). */}
+                          {qr.status === 'open' && qr.reopenedAt ? (
+                            <span
+                              className="badge badge--warning badge--dot"
+                              title={`Reaberta em ${formatSaoPauloDate(qr.reopenedAt)}`}
+                            >
+                              Reaberta
+                              <span className="sr-only"> em {formatSaoPauloDate(qr.reopenedAt)}</span>
+                            </span>
+                          ) : (
+                            <span className={`badge badge--dot${qr.status === 'closed' ? ' badge--muted' : ''}`}>
+                              {qr.status === 'open' ? 'Aberta' : 'Fechada'}
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="row-actions row-actions--nowrap">
+                            <button
+                              type="button"
+                              className="ghost-button"
+                              onClick={() => navigate(`/cotacoes/${qr.id}`)}
+                            >
+                              Ver
+                            </button>
+                            {canCreate && qr.status === 'open' && (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={() => navigate(`/cotacoes/${qr.id}`, { state: { edit: true } })}
+                              >
+                                Editar
+                              </button>
+                            )}
+                            {(user?.role === 'admin' || user?.role === 'gestor') && qr.status === 'closed' && (
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                onClick={async () => {
+                                  if (await confirm(`Reabrir a cotação ${qr.requestCode}?`)) {
+                                    reopen.mutate(qr.id);
+                                  }
+                                }}
+                                disabled={reopen.isPending}
+                              >
+                                Reabrir
+                              </button>
+                            )}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="ghost-button danger-button"
+                                onClick={async () => {
+                                  const cascade = qr._count?.quoteResponses ?? 0;
+                                  const msg = cascade > 0
+                                    ? `Apagar a cotação ${qr.requestCode}? Todas as ${cascade} resposta(s) e os itens associados também serão removidas. Esta ação não pode ser desfeita.`
+                                    : `Apagar a cotação ${qr.requestCode}? Esta ação não pode ser desfeita.`;
+                                  if (await confirm(msg)) {
+                                    remove.mutate(qr.id);
+                                  }
+                                }}
+                                disabled={remove.isPending}
+                              >
+                                Apagar
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                itemLabel={{ singular: 'cotação', plural: 'cotações' }}
+                onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              />
+            </>
+          )}
+        </section>
+      )}
     </div>
   );
 }

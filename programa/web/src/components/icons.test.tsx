@@ -27,16 +27,29 @@ const MOCK: Record<string, string> = {
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   x: 'M6 6l12 12M18 6 6 18',
   star: 'm12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
+  plus: 'M12 5v14M5 12h14',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-3.5-3.5',
+  filter: 'M3 5h18l-7 8v6l-4 2v-8z',
+  'alert-triangle': 'M12 3 2 20h20zM12 10v4M12 17h.01',
+  refresh: 'M20 11A8 8 0 0 0 5.3 6.3L3 8M3 3v5h5M4 13a8 8 0 0 0 14.7 4.7L21 16M21 21v-5h-5',
+  'arrow-right': 'M5 12h14M13 6l6 6-6 6',
+  'arrow-left': 'M19 12H5M11 6l-6 6 6 6',
+  check: 'm5 12 5 5 9-10',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
+  'chevron-down': 'm6 9 6 6 6-6',
+  'chevron-right': 'm9 6 6 6-6 6',
 };
 
 describe('icons', () => {
-  it('tem os 22 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star)', () => {
-    expect(ICON_NAMES).toHaveLength(22);
+  it('tem os 34 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star e os 12 da F5)', () => {
+    expect(ICON_NAMES).toHaveLength(34);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
       'relatorios', 'ajuda', 'usuarios', 'empresa', 'auditoria', 'templates', 'logout', 'theme-half', 'sun', 'moon',
-      'shield', 'user', 'x', 'star',
+      'shield', 'user', 'x', 'star', 'plus', 'search', 'filter', 'alert-triangle', 'refresh', 'arrow-right', 'arrow-left', 'check',
+      'link', 'lock', 'chevron-down', 'chevron-right',
     ]) {
       expect(ICONS, name).toHaveProperty(name);
     }
@@ -57,7 +70,7 @@ describe('icons', () => {
     expect(ICONS).not.toHaveProperty('monitor');
   });
 
-  it('so o theme-half tem camada preenchida (currentColor); os demais 21 so tem traco', () => {
+  it('so o theme-half tem camada preenchida (currentColor); os demais 33 so tem traco', () => {
     expect(Object.keys(ICON_FILLS)).toEqual(['theme-half']);
     const meio = render(<Icon name="theme-half" />).container.querySelectorAll('svg path');
     expect(meio).toHaveLength(2);
@@ -72,7 +85,7 @@ describe('icons', () => {
   });
 
   it('nenhum icone repete o path de outro', () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(22);
+    expect(new Set(Object.values(ICONS)).size).toBe(34);
   });
 
   it.each(ICON_NAMES)('<Icon name="%s"> renderiza svg decorativo de traco com currentColor', (name) => {
