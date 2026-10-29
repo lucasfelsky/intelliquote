@@ -1,5 +1,5 @@
 import { useConfirm } from '@/components/useConfirm';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
@@ -21,6 +21,7 @@ import {
   getTargetPriceHistory,
   type QuoteResponseReplyPreview,
 } from '@/services/dispatch';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { SupplierNotes } from '@/components/SupplierNotes';
 import { CreditSupportModal } from './CreditSupportModal';
@@ -381,29 +382,47 @@ export function RespostasTab({
     : '';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Respostas da Cotação</h2>
+    <div className="respostas-tab">
+      <div className="respostas-tab__cabecalho">
+        <h2 className="respostas-tab__titulo">Respostas da Cotação</h2>
         {canEditThis && (
           <button type="button" className="primary-button" onClick={openNew}>
-            + Nova resposta
+            <Icon name="plus" size={16} strokeWidth={2.2} />
+            Nova resposta
           </button>
         )}
       </div>
 
       {feedback && (
-        <p className={feedback.kind === 'err' ? 'alert alert--error' : 'alert alert--success'}>
+        <p
+          className={feedback.kind === 'err' ? 'alert alert--error' : 'alert alert--success'}
+          role={feedback.kind === 'err' ? 'alert' : 'status'}
+        >
           {feedback.text}
         </p>
       )}
 
-      {responsesQuery.isLoading && <p>Carregando respostas…</p>}
-      {responsesQuery.isError && <p>Erro ao carregar respostas.</p>}
-      
+      {responsesQuery.isLoading && (
+        <div className="empty-state">
+          <p className="empty-state__text">Carregando respostas…</p>
+        </div>
+      )}
+      {responsesQuery.isError && (
+        <div
+          className="empty-state empty-state--erro"
+          role="alert"
+        >
+          <span className="empty-state__icon">
+            <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+          </span>
+          <p className="empty-state__text">Erro ao carregar respostas.</p>
+        </div>
+      )}
+
       {!responsesQuery.isLoading && responses.length === 0 && (
         <div className="empty-state">
-          <strong>Sem respostas ainda</strong>
-          <p>
+          <strong className="empty-state__title">Sem respostas ainda</strong>
+          <p className="empty-state__text">
             {canManage && qrOpen
               ? 'Use o botão "+ Nova resposta" para cadastrar uma proposta.'
               : 'Aguarde o cadastro de respostas pelos fornecedores.'}
@@ -412,90 +431,95 @@ export function RespostasTab({
       )}
 
       {responses.length > 0 && (
-        <div className="table-wrapper">
+        <div className="table-wrapper respostas-tab__tabela">
         <table className="table">
           <thead>
             <tr>
               <th>Fornecedor</th>
               <th>Incoterm</th>
-              <th>Condições de pagamento</th>
-              <th>Lead time</th>
-              <th>Ações</th>
+              <th className="respostas-tab__num respostas-tab__th-pagamento">Condições de pagamento</th>
+              <th className="respostas-tab__num">Lead time</th>
+              <th className="respostas-tab__num">Ações</th>
             </tr>
           </thead>
           <tbody>
             {responses.map((r) => {
+              const overrides = (r.items ?? []).filter((item) =>
+                isOriginOverride(item.originPort, r.originPort),
+              ).length;
+              const allItems = r.items ?? [];
+              const unavailable = allItems.filter((item) => item.isUnavailable).length;
+              // DG informado pelo fornecedor (item indisponivel nunca conta como DG).
+              const dg = allItems.filter((item) => item.isDangerousGood && !item.isUnavailable).length;
               return (
                 <tr key={r.id}>
-                  <td>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => setItemsTarget(r)}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--primary-700)', fontWeight: 600, textDecoration: 'underline' }}
-                    >
-                      {r.supplier?.name ?? `Fornecedor #${r.supplierId}`}
-                    </button>
-                    {r.supplier?.country && <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{r.supplier.country}</div>}
-                    <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Origem: {r.originPort ?? '—'}</div>
-                    <SupplierNotes notes={r.notes} />
-                    {(() => {
-                      const overrides = (r.items ?? []).filter((item) =>
-                        isOriginOverride(item.originPort, r.originPort),
-                      ).length;
-                      return overrides > 0 ? (
-                        <span className="badge" style={{ marginTop: 4 }}>
-                          {overrides} {overrides === 1 ? 'item' : 'itens'} de outra origem
+                  <td className="respostas-tab__fornecedor">
+                    <div className="resposta-linha">
+                      <button
+                        type="button"
+                        className="link-button resposta-fornecedor"
+                        onClick={() => setItemsTarget(r)}
+                      >
+                        {r.supplier?.name ?? `Fornecedor #${r.supplierId}`}
+                      </button>
+                      {r.isWinner && (
+                        <span className="badge badge--success resposta-vencedora">
+                          <Icon name="trophy" size={12} strokeWidth={2} />
+                          Vencedora
                         </span>
-                      ) : null;
-                    })()}
-                    {(() => {
-                      const allItems = r.items ?? [];
-                      const unavailable = allItems.filter((item) => item.isUnavailable).length;
-                      if (unavailable === 0) return null;
-                      return (
-                        <div>
-                          <span className="badge" style={{ marginTop: 4 }}>
+                      )}
+                    </div>
+                    <div className="resposta-meta">
+                      {r.supplier?.country && (
+                        <>
+                          <span>{r.supplier.country}</span>
+                          <span aria-hidden="true">·</span>
+                        </>
+                      )}
+                      <span>Origem: {r.originPort ?? '—'}</span>
+                      {r.source === 'portal' && <span className="badge badge--info resposta-portal">via portal</span>}
+                    </div>
+                    <SupplierNotes notes={r.notes} />
+                    {(overrides > 0 || unavailable > 0 || dg > 0) && (
+                      <div className="resposta-tags" data-testid="response-alert-tags">
+                        {overrides > 0 && (
+                          <span className="badge badge--muted">
+                            {overrides} {overrides === 1 ? 'item' : 'itens'} de outra origem
+                          </span>
+                        )}
+                        {unavailable > 0 && (
+                          <span className="badge badge--warning">
                             {unavailable === allItems.length
                               ? 'Todos os itens indisponíveis'
                               : `${unavailable} ${unavailable === 1 ? 'item indisponível' : 'itens indisponíveis'}`}
                           </span>
-                        </div>
-                      );
-                    })()}
-                    {(() => {
-                      // DG informado pelo fornecedor (item indisponivel nunca conta como DG).
-                      const dg = (r.items ?? []).filter(
-                        (item) => item.isDangerousGood && !item.isUnavailable,
-                      ).length;
-                      if (dg === 0) return null;
-                      return (
-                        <div>
-                          <span className="badge" style={{ marginTop: 4 }} data-testid="dg-count-badge">
+                        )}
+                        {dg > 0 && (
+                          <span className="badge badge--danger" data-testid="dg-count-badge">
                             {dg} {dg === 1 ? 'item DG' : 'itens DG'}
                           </span>
-                        </div>
-                      );
-                    })()}
-                    {r.isWinner && (
-                      <div>
-                        <span className="badge badge--muted">Vencedora</span>
+                        )}
                       </div>
                     )}
-                    {r.source === 'portal' && (
-                      <span className="badge" style={{ marginTop: 4, background: 'var(--primary-tint)', color: 'var(--primary-700)' }}>
-                        via portal
-                      </span>
+                  </td>
+                  <td><span className="chip chip--static">{r.offeredIncoterm}</span></td>
+                  <td className="respostas-tab__num">
+                    <span className="respostas-tab__mono">{formatNumber(r.paymentTermsDays)}</span> dias
+                  </td>
+                  <td className="respostas-tab__num">
+                    {r.leadTimeDays != null ? (
+                      <>
+                        <span className="respostas-tab__mono">{formatNumber(r.leadTimeDays)}</span> dias
+                      </>
+                    ) : (
+                      <span className="respostas-tab__vazio">—</span>
                     )}
                   </td>
-                  <td><span className="badge">{r.offeredIncoterm}</span></td>
-                  <td>{formatNumber(r.paymentTermsDays)} dias</td>
-                  <td>{r.leadTimeDays != null ? `${formatNumber(r.leadTimeDays)} dias` : '—'}</td>
-                  <td>
+                  <td className="respostas-tab__acoes">
                     <div className="row-actions row-actions--nowrap">
                       <button
                         type="button"
-                        className="ghost-button"
+                        className="ghost-button ghost-button--sm"
                         onClick={() => openReplyModal(r)}
                         title="Responder (enviar e-mail ao fornecedor)"
                       >
@@ -503,14 +527,14 @@ export function RespostasTab({
                       </button>
                       <button
                         type="button"
-                        className="ghost-button"
+                        className="ghost-button ghost-button--sm"
                         onClick={() => setHistoryTarget(r)}
                         title="Histórico de preços desta resposta"
                       >
                         Histórico
                       </button>
                       {canEditThis && (
-                        <button type="button" className="ghost-button" onClick={() => setCreditTarget(r)}
+                        <button type="button" className="ghost-button ghost-button--sm" onClick={() => setCreditTarget(r)}
                           disabled={!(r.items ?? []).some((item) => !item.isUnavailable)}
                           title={(r.items ?? []).some((item) => !item.isUnavailable) ? 'Encaminhar ao parceiro de crédito' : 'Resposta sem itens disponíveis'}>
                           Credit Support
@@ -519,7 +543,7 @@ export function RespostasTab({
                       {canEditThis && (
                         <button
                           type="button"
-                          className="ghost-button"
+                          className="ghost-button ghost-button--sm danger-button"
                           onClick={async () => {
                             if (await confirm('Apagar esta resposta?')) {
                               removeMut.mutate(r.id);
@@ -550,8 +574,8 @@ export function RespostasTab({
         title="Nova resposta"
       >
         <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-grid__full">
+          <div className="resposta-form">
+            <div className="resposta-campo">
               <label className="field-label" htmlFor="rf-supplier">Fornecedor *</label>
               <select
                 id="rf-supplier"
@@ -568,154 +592,168 @@ export function RespostasTab({
                   ))}
               </select>
             </div>
-            <div>
-              <label className="field-label" htmlFor="rf-price">Preço oferecido *</label>
-              <input
-                id="rf-price"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.offeredPrice}
-                onChange={(e) => setForm({ ...form, offeredPrice: e.target.value })}
-                required
-              />
+            <div className="resposta-form__grade">
+              <div className="resposta-campo">
+                <label className="field-label" htmlFor="rf-price">Preço oferecido *</label>
+                <input
+                  id="rf-price"
+                  className="input resposta-form__mono"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.offeredPrice}
+                  onChange={(e) => setForm({ ...form, offeredPrice: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="resposta-campo">
+                <label className="field-label" htmlFor="rf-currency">Moeda *</label>
+                <input
+                  id="rf-currency"
+                  className="input resposta-form__mono"
+                  value={form.currency}
+                  onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+                  maxLength={3}
+                  required
+                />
+              </div>
+              <div className="resposta-campo">
+                <label className="field-label" htmlFor="rf-exchange">Câmbio (BRL/{form.currency || 'USD'})</label>
+                <input
+                  id="rf-exchange"
+                  className="input resposta-form__mono"
+                  type="number"
+                  min="0"
+                  step="0.0001"
+                  value={form.exchangeRate}
+                  onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
+                />
+              </div>
+              <div className="resposta-campo">
+                <label className="field-label" htmlFor="rf-incoterm">Incoterm *</label>
+                <select
+                  id="rf-incoterm"
+                  className="select resposta-form__mono"
+                  value={form.offeredIncoterm}
+                  onChange={(e) => setForm({ ...form, offeredIncoterm: e.target.value as Incoterm })}
+                  required
+                >
+                  {INCOTERMS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="resposta-campo">
+                <label className="field-label" htmlFor="rf-payment">Prazo pagamento (dias) *</label>
+                <input
+                  id="rf-payment"
+                  className="input resposta-form__mono"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.paymentTermsDays}
+                  onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
+                  required
+                />
+              </div>
             </div>
-            <div>
-              <label className="field-label" htmlFor="rf-currency">Moeda *</label>
-              <input
-                id="rf-currency"
-                className="input"
-                value={form.currency}
-                onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
-                maxLength={3}
-                required
-              />
+            <div className="resposta-form__grupos">
+              <fieldset className="resposta-form__grupo">
+                <legend>Custos</legend>
+                <div className="resposta-form__grade resposta-form__grade--custos">
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-freight">Frete</label>
+                    <input
+                      id="rf-freight"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.freightCost}
+                      onChange={(e) => setForm({ ...form, freightCost: e.target.value })}
+                    />
+                  </div>
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-insurance">Seguro</label>
+                    <input
+                      id="rf-insurance"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.insuranceCost}
+                      onChange={(e) => setForm({ ...form, insuranceCost: e.target.value })}
+                    />
+                  </div>
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-other">Outras taxas</label>
+                    <input
+                      id="rf-other"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.otherFees}
+                      onChange={(e) => setForm({ ...form, otherFees: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset className="resposta-form__grupo">
+                <legend>Impostos</legend>
+                <div className="resposta-form__grade resposta-form__grade--impostos">
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-ii">II (%)</label>
+                    <input
+                      id="rf-ii"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.importDuty}
+                      onChange={(e) => setForm({ ...form, importDuty: e.target.value })}
+                    />
+                  </div>
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-ipi">IPI (%)</label>
+                    <input
+                      id="rf-ipi"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.ipi}
+                      onChange={(e) => setForm({ ...form, ipi: e.target.value })}
+                    />
+                  </div>
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-pis">PIS (%)</label>
+                    <input
+                      id="rf-pis"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.pis}
+                      onChange={(e) => setForm({ ...form, pis: e.target.value })}
+                    />
+                  </div>
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="rf-cofins">COFINS (%)</label>
+                    <input
+                      id="rf-cofins"
+                      className="input resposta-form__mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.cofins}
+                      onChange={(e) => setForm({ ...form, cofins: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </fieldset>
             </div>
-            <div>
-              <label className="field-label" htmlFor="rf-exchange">Câmbio (BRL/{form.currency || 'USD'})</label>
-              <input
-                id="rf-exchange"
-                className="input"
-                type="number"
-                min="0"
-                step="0.0001"
-                value={form.exchangeRate}
-                onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-incoterm">Incoterm *</label>
-              <select
-                id="rf-incoterm"
-                className="select"
-                value={form.offeredIncoterm}
-                onChange={(e) => setForm({ ...form, offeredIncoterm: e.target.value as Incoterm })}
-                required
-              >
-                {INCOTERMS.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-payment">Prazo pagamento (dias) *</label>
-              <input
-                id="rf-payment"
-                className="input"
-                type="number"
-                min="0"
-                step="1"
-                value={form.paymentTermsDays}
-                onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-freight">Frete</label>
-              <input
-                id="rf-freight"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.freightCost}
-                onChange={(e) => setForm({ ...form, freightCost: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-insurance">Seguro</label>
-              <input
-                id="rf-insurance"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.insuranceCost}
-                onChange={(e) => setForm({ ...form, insuranceCost: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-other">Outras taxas</label>
-              <input
-                id="rf-other"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.otherFees}
-                onChange={(e) => setForm({ ...form, otherFees: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-ii">II (%)</label>
-              <input
-                id="rf-ii"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.importDuty}
-                onChange={(e) => setForm({ ...form, importDuty: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-ipi">IPI (%)</label>
-              <input
-                id="rf-ipi"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.ipi}
-                onChange={(e) => setForm({ ...form, ipi: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-pis">PIS (%)</label>
-              <input
-                id="rf-pis"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.pis}
-                onChange={(e) => setForm({ ...form, pis: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rf-cofins">COFINS (%)</label>
-              <input
-                id="rf-cofins"
-                className="input"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.cofins}
-                onChange={(e) => setForm({ ...form, cofins: e.target.value })}
-              />
-            </div>
-            <div className="form-grid__full">
+            <div className="resposta-campo">
               <label className="field-label" htmlFor="rf-notes">Observações</label>
               <textarea
                 id="rf-notes"
@@ -725,13 +763,14 @@ export function RespostasTab({
                 onChange={(e) => setForm({ ...form, notes: e.target.value })}
               />
             </div>
-          </div>
 
-          {formError && <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>}
+            {formError && <p className="alert alert--error" role="alert">{formError}</p>}
+          </div>
 
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeModal}>Cancelar</button>
             <button type="submit" className="primary-button" disabled={submitting || createMut.isPending}>
+              <Icon name="check" size={16} strokeWidth={2} />
               {submitting ? 'Cadastrando…' : 'Cadastrar resposta'}
             </button>
           </div>
@@ -744,151 +783,183 @@ export function RespostasTab({
         onClose={closeReplyModal}
         size="wide"
         title={replyTarget ? `Responder ${replyTargetName}` : ''}
+        subtitle={
+          replyTarget ? (
+            <>
+              <span className="resposta-codigo">{requestCode}</span> · {productName}
+            </>
+          ) : undefined
+        }
       >
         {replyTarget && (
           <>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
-              {requestCode} · {productName}
-            </p>
-
-            <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>
-              Assunto
-            </label>
-            <input
-              id="replySubject"
-              className="input"
-              value={replySubject}
-              onChange={(e) => setReplySubject(e.target.value)}
-            />
-
-            <label className="field-label" htmlFor="replyMessage" style={{ marginTop: 12 }}>
-              Mensagem
-            </label>
-            <textarea
-              id="replyMessage"
-              className="textarea"
-              rows={4}
-              value={replyMessage}
-              onChange={(e) => setReplyMessage(e.target.value)}
-              placeholder="Opcional. Ex.: confirmando o fechamento do pedido."
-            />
-
-            {isMultiItemReply(replyTarget) ? (
-              <>
-                <label className="field-label" style={{ marginTop: 12 }}>
-                  Preço-alvo por item (opcional)
+            <div className="resposta-responder">
+              <div className="resposta-campo">
+                <label className="field-label" htmlFor="replySubject">
+                  Assunto
                 </label>
-                {(replyTarget.items ?? []).map((item) => (
-                  <div key={item.id} style={{ marginTop: 8 }}>
-                    <label className="field-label" htmlFor={`replyItemTarget-${item.id}`}>
-                      {item.productName || productName || requestCode}
-                      {item.isUnavailable ? ' (temporariamente indisponível)' : ''}
+                <input
+                  id="replySubject"
+                  className="input"
+                  value={replySubject}
+                  onChange={(e) => setReplySubject(e.target.value)}
+                />
+              </div>
+
+              <div className="resposta-responder__colunas">
+                <div className="resposta-responder__coluna">
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="replyMessage">
+                      Mensagem
+                    </label>
+                    <textarea
+                      id="replyMessage"
+                      className="textarea"
+                      rows={4}
+                      value={replyMessage}
+                      onChange={(e) => setReplyMessage(e.target.value)}
+                      placeholder="Opcional. Ex.: confirmando o fechamento do pedido."
+                    />
+                  </div>
+
+                  {historyQuery.data && historyQuery.data.length > 0 && (
+                    <div className="resposta-historico">
+                      <h4 className="resposta-historico__titulo">Histórico de negociação</h4>
+                      <ul className="resposta-historico__lista">
+                        {historyQuery.data.map((h) => (
+                          <li key={h.id}>
+                            <span className="resposta-mono">
+                              {new Date(h.sentAt).toLocaleString('pt-BR', {
+                                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                              })}
+                            </span>{' '}
+                            —{' '}
+                            <span className="resposta-mono resposta-historico__valor">
+                              {formatCurrency(Number(h.targetPrice), replyTarget.currency || quoteRequestCurrency)}
+                            </span>{' '}
+                            (enviado por {h.sentBy?.name ?? 'desconhecido'})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {isMultiItemReply(replyTarget) ? (
+                  <fieldset className="resposta-responder__alvos">
+                    <legend>Preço-alvo por item (opcional)</legend>
+                    <div className="resposta-responder__alvos-grade">
+                      {(replyTarget.items ?? []).map((item) => (
+                        <Fragment key={item.id}>
+                          <label
+                            className={
+                              item.isUnavailable
+                                ? 'field-label resposta-responder__alvo-rotulo resposta-responder__alvo-rotulo--indisponivel'
+                                : 'field-label resposta-responder__alvo-rotulo'
+                            }
+                            htmlFor={`replyItemTarget-${item.id}`}
+                          >
+                            {item.productName || productName || requestCode}
+                            {item.isUnavailable ? ' (temporariamente indisponível)' : ''}
+                          </label>
+                          <input
+                            id={`replyItemTarget-${item.id}`}
+                            className="input resposta-responder__alvo"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            disabled={Boolean(item.isUnavailable)}
+                            value={item.isUnavailable ? '' : (replyItemTargets[item.id] ?? '')}
+                            onChange={(e) =>
+                              setReplyItemTargets((prev) => ({ ...prev, [item.id]: e.target.value }))
+                            }
+                          />
+                        </Fragment>
+                      ))}
+                    </div>
+                    <p className="resposta-dica">
+                      Preencher adiciona o pedido de redução de preço por item no e-mail.
+                    </p>
+                  </fieldset>
+                ) : (
+                  <div className="resposta-campo">
+                    <label className="field-label" htmlFor="replyTargetPrice">
+                      {replyTarget.items?.length === 1
+                        ? `Preço-alvo — ${replyTarget.items[0]?.productName || productName || requestCode} (opcional)`
+                        : 'Preço-alvo (opcional)'}
                     </label>
                     <input
-                      id={`replyItemTarget-${item.id}`}
-                      className="input"
+                      id="replyTargetPrice"
+                      className="input resposta-form__mono"
                       type="number"
                       step="0.01"
                       min="0"
-                      disabled={Boolean(item.isUnavailable)}
-                      value={item.isUnavailable ? '' : (replyItemTargets[item.id] ?? '')}
-                      onChange={(e) =>
-                        setReplyItemTargets((prev) => ({ ...prev, [item.id]: e.target.value }))
-                      }
+                      value={replyTargetPrice}
+                      onChange={(e) => setReplyTargetPrice(e.target.value)}
                     />
+                    <p className="resposta-dica">
+                      Preencher adiciona o bloco de pedido de redução de preço no e-mail.
+                    </p>
                   </div>
-                ))}
-                <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
-                  Preencher adiciona o pedido de redução de preço por item no e-mail.
-                </p>
-              </>
-            ) : (
-              <>
-                <label className="field-label" htmlFor="replyTargetPrice" style={{ marginTop: 12 }}>
-                  {replyTarget.items?.length === 1
-                    ? `Preço-alvo — ${replyTarget.items[0]?.productName || productName || requestCode} (opcional)`
-                    : 'Preço-alvo (opcional)'}
-                </label>
-                <input
-                  id="replyTargetPrice"
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={replyTargetPrice}
-                  onChange={(e) => setReplyTargetPrice(e.target.value)}
-                />
-                <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}>
-                  Preencher adiciona o bloco de pedido de redução de preço no e-mail.
-                </p>
-              </>
-            )}
-
-            {historyQuery.data && historyQuery.data.length > 0 && (
-              <div style={{ marginTop: 16, padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 4 }}>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: 13, color: 'var(--ink)' }}>Histórico de negociação</h4>
-                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 13, color: 'var(--ink-soft)' }}>
-                  {historyQuery.data.map((h) => (
-                    <li key={h.id} style={{ marginBottom: 4 }}>
-                      {new Date(h.sentAt).toLocaleString('pt-BR', {
-                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                      })} — {formatCurrency(Number(h.targetPrice), replyTarget.currency || quoteRequestCurrency)} (enviado por {h.sentBy?.name ?? 'desconhecido'})
-                    </li>
-                  ))}
-                </ul>
+                )}
               </div>
-            )}
 
-            <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={replyPreviewMutation.isPending}
-                onClick={() => {
-                  if (isMultiItemReply(replyTarget)) {
-                    replyPreviewMutation.mutate({
-                      id: replyTarget.id,
-                      subject: replySubject,
-                      message: replyMessage,
-                      itemTargets: buildItemTargetsPayload(replyTarget, replyItemTargets),
-                    });
-                    return;
-                  }
-                  const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
-                  replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
-                }}
-              >
-                {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
-              </button>
-            </div>
+              <div>
+                <button
+                  type="button"
+                  className="ghost-button resposta-responder__atualizar"
+                  disabled={replyPreviewMutation.isPending}
+                  onClick={() => {
+                    if (isMultiItemReply(replyTarget)) {
+                      replyPreviewMutation.mutate({
+                        id: replyTarget.id,
+                        subject: replySubject,
+                        message: replyMessage,
+                        itemTargets: buildItemTargetsPayload(replyTarget, replyItemTargets),
+                      });
+                      return;
+                    }
+                    const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+                    replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
+                  }}
+                >
+                  <Icon name="refresh" size={14} strokeWidth={1.9} />
+                  {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
+                </button>
+              </div>
 
-            <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
-            {replyPreviewData ? (
-              <>
-                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
-                  Para: <strong>{replyPreviewData.to}</strong>
-                  {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
-                </p>
-                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
-                  Assunto: <strong>{replyPreviewData.subject}</strong>
-                </p>
+              <div className="resposta-responder__previa-cab">
+                <h3 className="resposta-responder__previa-titulo">Preview do e-mail</h3>
+                {replyPreviewData ? (
+                  <>
+                    <p className="resposta-responder__linha">
+                      Para: <strong>{replyPreviewData.to}</strong>
+                      {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                    </p>
+                    <p className="resposta-responder__linha">
+                      Assunto: <strong>{replyPreviewData.subject}</strong>
+                    </p>
+                  </>
+                ) : (
+                  <p className="resposta-responder__linha">
+                    {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
+                  </p>
+                )}
+              </div>
+              {replyPreviewData && (
                 <iframe
                   sandbox=""
                   key={replyPreviewData.html.length}
                   title="preview-reply-email"
-                  className="preview-frame"
+                  className="preview-frame resposta-previa"
                   srcDoc={replyPreviewData.html}
                 />
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
-              </p>
-            )}
+              )}
 
-            {replyModalError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
-            )}
+              {replyModalError && (
+                <p className="alert alert--error" role="alert">{replyModalError}</p>
+              )}
+            </div>
 
             <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeReplyModal}>
@@ -900,6 +971,7 @@ export function RespostasTab({
                 disabled={replySendMutation.isPending || !replySubject.trim()}
                 onClick={() => replySendMutation.mutate()}
               >
+                <Icon name="templates" size={16} strokeWidth={1.9} />
                 {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
               </button>
             </div>
@@ -913,6 +985,13 @@ export function RespostasTab({
         onClose={() => setItemsTarget(null)}
         size="wide"
         title={itemsTarget ? `Itens — ${itemsTarget.supplier?.name ?? `Fornecedor #${itemsTarget.supplierId}`}` : ''}
+        subtitle={
+          itemsTarget ? (
+            <>
+              <span className="resposta-codigo">{requestCode}</span> · {productName}
+            </>
+          ) : undefined
+        }
       >
         {itemsTarget && (() => {
           const currency = itemsTarget.currency || quoteRequestCurrency;
@@ -964,17 +1043,17 @@ export function RespostasTab({
           );
           const showNotes = (itemsTarget.items ?? []).some((item) => (item.notes ?? '').trim() !== '');
           return (
-            <>
+            <div className="resposta-itens">
             <SupplierNotes notes={itemsTarget.notes} collapsible={false} testId="items-modal-notes" />
-            <div className="table-wrapper" style={itemsTarget.notes?.trim() ? { marginTop: 12 } : undefined}>
+            <div className="table-wrapper resposta-itens__tabela">
               <table className="table">
                 <thead>
                   <tr>
                     <th>Produto</th>
-                    <th>Qtd</th>
-                    <th>Preço unit.</th>
-                    <th>Total</th>
-                    <th>Lead time</th>
+                    <th className="resposta-itens__num">Qtd</th>
+                    <th className="resposta-itens__num">Preço unit.</th>
+                    <th className="resposta-itens__num">Total</th>
+                    <th className="resposta-itens__num">Lead time</th>
                     {showDg && <th>DG</th>}
                     {showOrigin && <th>Origem</th>}
                     {showIncotermPrices && <th>Preços por incoterm</th>}
@@ -983,38 +1062,42 @@ export function RespostasTab({
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.key}>
-                      <td>
-                        {row.productName}
-                        {row.unavailable && (
-                          <span className="badge" style={{ marginLeft: 6 }}>Temporariamente indisponível</span>
-                        )}
+                    <tr key={row.key} className={row.unavailable ? 'resposta-itens__linha--indisponivel' : undefined}>
+                      <td className="resposta-itens__produto">
+                        <span className="resposta-itens__produto-linha">
+                          {row.productName}
+                          {row.unavailable && (
+                            <span className="badge badge--warning">Temporariamente indisponível</span>
+                          )}
+                        </span>
                       </td>
-                      <td>{row.quantity}</td>
-                      <td>{row.unitPrice}</td>
-                      <td>{row.totalPrice}</td>
-                      <td>{row.leadTimeDays}</td>
+                      <td className="resposta-itens__num resposta-itens__valor">{row.quantity}</td>
+                      <td className="resposta-itens__num resposta-itens__valor">{row.unitPrice}</td>
+                      <td className="resposta-itens__num resposta-itens__valor">{row.totalPrice}</td>
+                      <td className="resposta-itens__num resposta-itens__valor">{row.leadTimeDays}</td>
                       {showDg && (
                         <td>
-                          {row.dg === 'DG' ? <span className="badge" data-testid="dg-item-badge">DG</span> : row.dg}
+                          {row.dg === 'DG' ? <span className="badge badge--danger" data-testid="dg-item-badge">DG</span> : row.dg}
                         </td>
                       )}
                       {showOrigin && (
                         <td>
-                          {row.origin}
-                          {row.originOverride && (
-                            <span className="badge" style={{ marginLeft: 6 }}>difere da geral</span>
-                          )}
+                          <span className="resposta-itens__produto-linha">
+                            {row.origin}
+                            {row.originOverride && (
+                              <span className="badge badge--muted">difere da geral</span>
+                            )}
+                          </span>
                         </td>
                       )}
-                      {showIncotermPrices && <td>{row.incotermPrices}</td>}
-                      {showNotes && <td><SupplierNotes notes={row.notes} label={null} testId="item-notes" /></td>}
+                      {showIncotermPrices && <td className="resposta-itens__incoterms">{row.incotermPrices}</td>}
+                      {showNotes && <td className="resposta-itens__obs"><SupplierNotes notes={row.notes} label={null} testId="item-notes" /></td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            </>
+            </div>
           );
         })()}
       </Modal>

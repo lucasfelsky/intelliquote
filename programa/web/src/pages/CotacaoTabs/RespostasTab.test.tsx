@@ -138,7 +138,7 @@ describe('RespostasTab', () => {
   it('2. "+ Nova resposta" abre o modal A', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.open).toBe(true);
     const heading = dialogA.querySelector('.modal-header h2');
@@ -231,7 +231,7 @@ describe('RespostasTab', () => {
   it('4. modal A é wide', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.className).toContain('modal-dialog--wide');
   });
@@ -239,7 +239,7 @@ describe('RespostasTab', () => {
   it('5. modal A sem título duplicado', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.querySelectorAll('h2').length).toBe(1);
   });
@@ -247,7 +247,7 @@ describe('RespostasTab', () => {
   it('6. "Cancelar" do modal A fecha e não submete', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.open).toBe(true);
     fireEvent.click(within(dialogA).getByRole('button', { name: 'Cancelar' }));

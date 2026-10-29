@@ -12,12 +12,6 @@ import {
 // mudou (portal ou edição manual); colunas = itens; destaque do que mudou vs a
 // linha anterior (calculado no servidor). CSS: .table/.badge/.table-wrapper + dialog.modal-dialog--xl.
 
-const CHANGED_STYLE = { fontWeight: 700, background: 'var(--primary-tint)' } as const;
-const STICKY_STYLE = { position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 2 } as const;
-const STICKY_HEADER_STYLE = { ...STICKY_STYLE, background: 'var(--surface-alt)' } as const;
-const PORTAL_BADGE_STYLE = { background: 'var(--primary-tint)', color: 'var(--primary-700)' } as const;
-const CHANGED_BADGE_STYLE = { fontWeight: 700, background: 'var(--primary-strong)', color: 'var(--on-strong)' } as const;
-
 export const EMPTY_HISTORY_MESSAGE = 'Histórico disponível a partir das próximas respostas ou edições.';
 
 function formatCurrency(value: number | undefined | null, currency: string): string {
@@ -50,14 +44,14 @@ function actorDisplay(actorName: string | null): { name: string; title: string }
 
 function ItemCell({ row, column, changed }: { row: PriceHistoryRow; column: PriceHistoryColumn; changed: boolean }) {
   const item = row.items.find((entry) => entry.quoteRequestItemId === column.quoteRequestItemId);
-  const style = changed ? CHANGED_STYLE : undefined;
   const changedAttr = changed ? 'true' : undefined;
+  const className = changed ? 'price-history__celula price-history__celula--alterada' : 'price-history__celula';
   if (!item) {
-    return <td data-changed={changedAttr} style={style}>—</td>;
+    return <td data-changed={changedAttr} className={className}>—</td>;
   }
   if (item.isUnavailable) {
     return (
-      <td data-changed={changedAttr} style={style}>
+      <td data-changed={changedAttr} className={className}>
         <span className="badge badge--warning">Indisponível</span>
       </td>
     );
@@ -67,11 +61,11 @@ function ItemCell({ row, column, changed }: { row: PriceHistoryRow; column: Pric
     (entry) => entry.incoterm !== row.offeredIncoterm,
   );
   return (
-    <td data-changed={changedAttr} style={style}>
-      <div>{formatCurrency(Number(item.unitPrice), row.currency)}</div>
-      <small style={{ color: 'var(--ink-soft)' }}>qtd {item.quantity.toLocaleString('pt-BR')}</small>
+    <td data-changed={changedAttr} className={className}>
+      <div className="price-history__preco">{formatCurrency(Number(item.unitPrice), row.currency)}</div>
+      <small className="price-history__apoio">qtd {item.quantity.toLocaleString('pt-BR')}</small>
       {(item.incotermPrices?.length ?? 0) >= 2 && alternatives.length > 0 && (
-        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+        <div className="price-history__alternativos">
           {alternatives.map((entry) => (
             <div key={entry.incoterm}>{entry.incoterm} {formatCurrency(Number(entry.unitPrice), row.currency)}</div>
           ))}
@@ -94,21 +88,25 @@ export function PriceHistoryModal({ response, onClose }: { response: QuoteRespon
 
   return (
     <Modal isOpen onClose={onClose} size="xl" title={`Histórico de preços — ${supplierName}`}>
-      {historyQuery.isPending && <p style={{ color: 'var(--ink-soft)' }}>Carregando histórico…</p>}
+      {historyQuery.isPending && <p className="price-history__estado">Carregando histórico…</p>}
       {historyQuery.isError && (
         <div className="alert alert--error" role="alert">Não foi possível carregar o histórico: {messageOf(historyQuery.error)}</div>
       )}
       {historyQuery.isSuccess && rows.length === 0 && (
-        <p style={{ color: 'var(--ink-soft)' }}>{EMPTY_HISTORY_MESSAGE}</p>
+        <p className="price-history__estado">{EMPTY_HISTORY_MESSAGE}</p>
       )}
       {historyQuery.isSuccess && rows.length > 0 && (
-        <div className="table-wrapper">
-          <table className="table" style={{ whiteSpace: 'nowrap' }}>
+        <div className="table-wrapper price-history__tabela">
+          <table className="table">
             <thead>
               <tr>
-                <th style={STICKY_HEADER_STYLE}>Data / origem</th>
+                <th className="price-history__fixa">Data / origem</th>
                 {columns.map((column) => (
-                  <th key={column.quoteRequestItemId} title={column.productName}>
+                  <th
+                    key={column.quoteRequestItemId}
+                    title={column.productName}
+                    className={column.itemCode ? 'price-history__codigo' : undefined}
+                  >
                     {column.itemCode ?? column.productName}
                   </th>
                 ))}
@@ -126,20 +124,16 @@ export function PriceHistoryModal({ response, onClose }: { response: QuoteRespon
                 return (
                   <tr key={row.id}>
                     {/* Data + badge de origem + autor empilhados na coluna fixa (cabe no 390px). */}
-                    <td style={STICKY_STYLE}>
-                      <div>{formatDateTime(row.recordedAt)}</div>
+                    <td className="price-history__fixa">
+                      <div className="price-history__data">{formatDateTime(row.recordedAt)}</div>
                       <span
-                        className="badge"
-                        style={row.source === 'portal' ? PORTAL_BADGE_STYLE : undefined}
+                        className={row.source === 'portal' ? 'badge badge--info price-history__origem' : 'badge badge--muted price-history__origem'}
                         title={actor?.title}
                       >
                         {sourceLabel(row.source)}
                       </span>
                       {actor && (
-                        <small
-                          title={actor.title}
-                          style={{ display: 'block', whiteSpace: 'normal', maxWidth: 160, color: 'var(--ink-soft)' }}
-                        >
+                        <small className="price-history__autor" title={actor.title}>
                           {actor.name}
                         </small>
                       )}
@@ -152,17 +146,25 @@ export function PriceHistoryModal({ response, onClose }: { response: QuoteRespon
                         changed={row.changedItemIds.includes(column.quoteRequestItemId)}
                       />
                     ))}
-                    {/* Incoterm/moeda alterados: celula destacada + valor anterior em texto menor (o badge tem fundo proprio). */}
-                    <td data-changed={incotermChanged ? 'true' : undefined} style={incotermChanged ? CHANGED_STYLE : undefined}>
-                      <span className="badge" style={incotermChanged ? CHANGED_BADGE_STYLE : undefined}>{row.offeredIncoterm}</span>
+                    {/* Incoterm/moeda alterados: celula destacada + valor anterior em texto menor (o selo troca para o navy). */}
+                    <td
+                      data-changed={incotermChanged ? 'true' : undefined}
+                      className={incotermChanged ? 'price-history__celula price-history__celula--alterada' : 'price-history__celula'}
+                    >
+                      <span className={incotermChanged ? 'chip chip--static price-history__incoterm--alterado' : 'chip chip--static'}>
+                        {row.offeredIncoterm}
+                      </span>
                       {incotermChanged && previous && (
-                        <small style={{ display: 'block', color: 'var(--ink-soft)' }}>antes: {previous.offeredIncoterm}</small>
+                        <small className="price-history__apoio">antes: {previous.offeredIncoterm}</small>
                       )}
                     </td>
-                    <td data-changed={totalChanged ? 'true' : undefined} style={totalChanged ? CHANGED_STYLE : undefined}>
-                      <div>{formatCurrency(Number(row.offeredPrice), row.currency)}</div>
+                    <td
+                      data-changed={totalChanged ? 'true' : undefined}
+                      className={totalChanged ? 'price-history__celula price-history__celula--alterada' : 'price-history__celula'}
+                    >
+                      <div className="price-history__preco">{formatCurrency(Number(row.offeredPrice), row.currency)}</div>
                       {currencyChanged && previous && (
-                        <small style={{ display: 'block', color: 'var(--ink-soft)' }}>moeda: {previous.currency} → {row.currency}</small>
+                        <small className="price-history__apoio">moeda: {previous.currency} {'\u2192'} {row.currency}</small>
                       )}
                     </td>
                   </tr>
@@ -172,8 +174,8 @@ export function PriceHistoryModal({ response, onClose }: { response: QuoteRespon
           </table>
         </div>
       )}
-      <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
-        <button type="button" className="ghost-button" onClick={onClose}>Fechar</button>
+      <div className="modal-actions">
+        <button type="button" className="ghost-button price-history__fechar" onClick={onClose}>Fechar</button>
       </div>
     </Modal>
   );
