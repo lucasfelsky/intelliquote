@@ -418,33 +418,12 @@
 
 html, body, #root { height: 100%; margin: 0; }
 
-body {
-  background: var(--bg);
-  color: var(--ink);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a { color: var(--primary-700); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
 button { font-family: inherit; cursor: pointer; }
 input, select, textarea { font-family: inherit; }
 
-h1, h2, h3, h4 { margin: 0 0 12px 0; color: var(--ink); }
-h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.3px; }
-h2 { font-size: 20px; font-weight: 700; }
-h3 { font-size: 16px; font-weight: 700; }
+h4 { margin: 0 0 12px 0; color: var(--ink); }
 p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 
-.eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  font-size: 12px;
-  color: var(--primary);
-  font-weight: 700;
-  margin-bottom: 4px;
-}
 
 
 
@@ -672,6 +651,93 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 }
 
 
+/* >>> base da pagina (Suite COMEX) >>> */
+/* Base da pagina (TROCA-1; boards v68): fundo, texto base, links, h1-h3, eyebrow, pagina e cabecalho de pagina. Consome var(--rf-*);
+   nenhum valor de token antigo muda (a TROCA-2 troca os valores). So body, a, h1, h2, h3 e as classes eyebrow, page, page-header,
+   page-header__actions, page-subtitle e page__subtitle (guarda: src/test/baseDaPagina.test.ts). h4 e p globais seguem no CSS antigo (D-T-04).
+   O leiaute lado a lado do cabecalho vale so para .page > .page-header (o .page-header de secao dentro de cartao nao muda). */
+body {
+  background: var(--rf-bg);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: var(--rf-primary-700); text-decoration: none; }
+a:hover { text-decoration: underline; }
+/* Cor do hover com especificidade de classe (:where zera o "a"): link COM classe (ex.: .topbar__account do shell) mantem a cor propria no hover. */
+:where(a):hover { color: var(--rf-primary-700-hover); }
+
+h1 {
+  margin: 0 0 12px 0;
+  font-family: var(--rf-font-display);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--rf-ink);
+}
+h2 {
+  margin: 0 0 12px 0;
+  font-family: var(--rf-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--rf-ink);
+}
+h3 {
+  margin: 0 0 12px 0;
+  font-family: var(--rf-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--rf-ink);
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rf-primary-700);
+  margin-bottom: 4px;
+}
+
+.page { display: flex; flex-direction: column; gap: 20px; }
+
+.page > .page-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+.page > .page-header > :first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.page > .page-header > :first-child > .eyebrow,
+.page > .page-header > :first-child > h1 {
+  margin: 0;
+}
+.page > .page-header h1 + p,
+.page-subtitle,
+.page__subtitle {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--rf-ink-soft);
+  max-width: 720px;
+}
+.page > .page-header > .page-header__actions {
+  gap: 8px;
+  align-items: center;
+}
+/* <<< base da pagina <<< */
+
 /* >>> shell F2 (Suite COMEX) >>> */
 /* Shell do app (mock v68): sidebar navy, topbar, marca e entrada de pagina. UNICA regiao do CSS que consome
    var(--rf-*); so seletores do shell (guarda: src/test/shellCss.test.ts e suiteComexTokens.test.ts).
@@ -680,7 +746,7 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   display: grid;
   grid-template-columns: 256px 1fr;
   min-height: 100vh;
-  background-color: var(--bg);
+  background-color: var(--rf-bg);
   /* abaixo da sidebar fixa a coluna segue navy ate o fim da pagina (mock) */
   background-image: linear-gradient(var(--rf-primary-strong), var(--rf-primary-strong));
   background-repeat: no-repeat;
@@ -3085,8 +3151,6 @@ dialog.modal-dialog[open] {
 }
 /* <<< tela F5 <<< */
 
-.page { display: flex; flex-direction: column; gap: 18px; }
-
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
    nenhum -- o espacamento entre input/select/botao dependia so do
    whitespace incidental entre as tags no JSX, o que deixava os
@@ -3094,10 +3158,9 @@ dialog.modal-dialog[open] {
    Fornecedores, Relatorios, etc.), varias delas ja passavam gap/
    alignItems via style inline que nao tinha efeito nenhum sem
    display:flex no pai.
-   Nota: .page-header em si fica como estava (stack vertical simples,
-   sem virar row) -- title bloco acima, acoes abaixo, cada um full-width.
-   Colocar os dois lado a lado (justify-content:space-between) quebrava
-   feio quando os controles nao cabiam numa linha so. */
+   Nota: o leiaute do cabecalho de pagina (.page > .page-header: titulo
+   e acoes lado a lado, com flex-wrap para quebrar em linha quando os
+   controles nao cabem) vive na regiao "base da pagina" (TROCA-1). */
 .page-header__actions {
   display: flex;
   flex-wrap: wrap;
