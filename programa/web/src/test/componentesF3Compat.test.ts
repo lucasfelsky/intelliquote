@@ -10,6 +10,7 @@ import {
   regioes,
   temasDeTokens,
   tokensDosTemas,
+  ultimoComposto,
   type CssRule,
   type Rgb,
   type ThemeName,
@@ -46,6 +47,9 @@ const PERMITIDAS_COMPAT = new Set([
   'fcr-linha--critico',
   'badge--danger',
   'fcr-embalagem__editar',
+  'fgc-botao',
+  'fco-acoes',
+  'fco-grupo-alvos',
 ]);
 
 // ---------- leitura das regras ----------
@@ -242,13 +246,13 @@ describe('F3 compat: regiao `compat Forecast F3`', () => {
     expect([...new Set(fora)]).toEqual([]);
   });
 
-  it('sem !important, sem print, sem animacao/transicao/transform e sem cor literal; at-rule unica: @media (pointer: coarse)', () => {
+  it('sem !important, sem print, sem animacao/transicao/transform e sem cor literal; at-rules: @media (pointer: coarse) e @media (max-width: 700px)', () => {
     expect(limpo).not.toContain('!important');
     expect(limpo).not.toContain('@media print');
     expect(limpo).not.toContain('@keyframes');
     expect(limpo).not.toMatch(/(^|[;{\s])(animation|transition|transform)\s*:/);
     expect(limpo).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
-    expect(regras.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude)).toEqual(['@media (pointer: coarse)']);
+    expect(regras.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude)).toEqual(['@media (pointer: coarse)', '@media (max-width: 700px)']);
     for (const cor of limpo.matchAll(/var\((--[\w-]+)/g)) expect(cor[1], 'so tokens --rf-*').toMatch(/^--rf-/);
     expect(limpo).not.toMatch(/(^|[;{\s])opacity\s*:/);
   });
@@ -264,13 +268,14 @@ describe('F3 compat: regiao `compat Forecast F3`', () => {
 // ---------- S travado contra os .tsx do Forecast ----------
 describe('F3 compat: S confere com as <table> do Forecast (so os .tsx; sem mudanca de TSX)', () => {
   const fontes = import.meta.glob('../pages/Forecast/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-  const tabelas: Array<{ arquivo: string; classes: string[]; direto: boolean }> = [];
+  const tabelas: Array<{ arquivo: string; classes: string[]; direto: boolean; trecho: string }> = [];
   for (const [arquivo, texto] of Object.entries(fontes)) {
     if (/\.test\.tsx$/.test(arquivo)) continue;
     for (const m of texto.matchAll(/<table className="([^"]+)"/g)) {
       const ini = m.index ?? 0;
       const fim = texto.indexOf('</table>', ini);
-      tabelas.push({ arquivo: arquivo.replace('../pages/Forecast/', ''), classes: (m[1] ?? '').split(/\s+/), direto: texto.slice(ini, fim).includes('ghost-button') });
+      const trecho = texto.slice(ini, fim);
+      tabelas.push({ arquivo: arquivo.replace('../pages/Forecast/', ''), classes: (m[1] ?? '').split(/\s+/), direto: trecho.includes('ghost-button'), trecho });
     }
   }
 
@@ -293,6 +298,61 @@ describe('F3 compat: S confere com as <table> do Forecast (so os .tsx; sem mudan
 
   it('cada classe de S e usada por alguma <table> do Forecast', () => {
     for (const c of S_CLASSES) expect(tabelas.some((t) => t.classes.includes(c)), c).toBe(true);
+  });
+
+  // Varredura do bloco do Forecast: regra de especificidade MENOR que a da base da compat (0,2,0) que alveja botao e declara uma propriedade
+  // que a compat tambem declara perde para a compat (o bloco do Forecast vem depois, mas 0,1,x < 0,2,0). Ou e reafirmada na compat ou
+  // so alveja botao fora de S (conferido contra os .tsx). Regra nova no bloco do Forecast que caia aqui reprova ate ser classificada.
+  describe('varredura: regras do bloco Forecast (classe unica) que alvejam botao e a compat anularia', () => {
+    const iForecast = css.indexOf('/* ---- Forecast (PR 1D-1) ---- */');
+    const blocoForecast = achatar(parseRules(css.slice(iForecast).replace(/\/\*[\s\S]*?\*\//g, '')));
+    const BASE: Spec = [0, 2, 0];
+    const PROPS_DA_COMPAT = ['justify-content', 'min-height', 'padding', 'border', 'border-radius', 'background', 'color', 'font-weight', 'font-size'];
+    const alvejaBotao = (sel: string) => /(^button\b|ghost-button|fgc-botao|__editar)/.test(ultimoComposto(sel));
+    const colidem = blocoForecast
+      .filter((a) => !(a.media ?? '').includes('print'))
+      .filter((a) => alvejaBotao(a.seletor) && cmp(especificidade(a.seletor), BASE) < 0)
+      .filter((a) => Object.keys(a.decls).some((p) => PROPS_DA_COMPAT.includes(p)))
+      .map((a) => ({ ...a, chave: `${a.media ?? '-'} | ${a.seletor}` }));
+
+    // seletor do Forecast -> [seletor e media da compat que o reafirma]
+    const REAFIRMADAS: Record<string, [string, string | null]> = {
+      '- | .fcr-embalagem__editar': [`${S} .fcr-embalagem__editar`, null],
+      '@media (max-width: 700px) | .fgc-botao': [`${S} .fgc-botao`, '@media (max-width: 700px)'],
+      '@media (max-width: 700px), (pointer: coarse) | .fco-acoes button': [`${S} .fco-acoes .ghost-button`, '@media (max-width: 700px)'],
+      '@media (max-width: 700px), (pointer: coarse) | .fco-grupo-alvos button': [`${S} .fco-grupo-alvos .ghost-button`, '@media (max-width: 700px)'],
+    };
+    // botoes que estao fora das tabelas S (modais e barras do Forecast): classe-raiz que NAO pode aparecer dentro de uma <table> de S
+    const FORA_DE_S: Record<string, string> = {
+      '@media (max-width: 700px) | .fcsl button': 'fcsl',
+      '@media (max-width: 700px), (pointer: coarse) | .fco-barra button': 'fco-barra',
+      '@media (max-width: 700px), (pointer: coarse) | .fco-pais__editar': 'fco-pais__editar',
+      '@media (max-width: 700px), (pointer: coarse) | .fco-pais__form button': 'fco-pais__form',
+      '@media (max-width: 700px), (pointer: coarse) | .fco-confirmar button': 'fco-confirmar',
+      '@media (max-width: 700px), (pointer: coarse) | .fco-outro-pais button': 'fco-outro-pais',
+    };
+
+    it('o conjunto que colide e exatamente o classificado (reafirmado na compat ou fora de S)', () => {
+      expect(colidem.length).toBeGreaterThan(5);
+      expect(colidem.map((c) => c.chave).sort()).toEqual([...Object.keys(REAFIRMADAS), ...Object.keys(FORA_DE_S)].sort());
+    });
+
+    it('cada regra reafirmada tem na compat as mesmas declaracoes (copia do bloco Forecast)', () => {
+      for (const [chave, [selCompat, mediaCompat]] of Object.entries(REAFIRMADAS)) {
+        const orig = colidem.find((c) => c.chave === chave);
+        expect(orig, chave).toBeDefined();
+        const compat = de(selCompat, mediaCompat);
+        for (const [prop, valor] of Object.entries(orig?.decls ?? {})) if (PROPS_DA_COMPAT.includes(prop)) expect(compat[prop], `${chave} -> ${prop}`).toBe(valor);
+        expect(cmp(especificidade(selCompat), BASE), selCompat).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('as classes dos botoes "fora de S" nao aparecem dentro de nenhuma <table> de S', () => {
+      for (const [chave, raiz] of Object.entries(FORA_DE_S)) {
+        const dentro = tabelas.filter((t) => t.classes.some((c) => (S_CLASSES as readonly string[]).includes(c)) && t.trecho.includes(raiz)).map((t) => t.arquivo);
+        expect(dentro, chave).toEqual([]);
+      }
+    });
   });
 });
 
@@ -353,6 +413,16 @@ describe('F3 compat: declaracoes (valores de ec2c5c3, antes da F3a; contorno 1,5
 
   it('toque: min-height 44 em @media (pointer: coarse)', () => {
     expect(de(`${S} .ghost-button`, '@media (pointer: coarse)')).toEqual({ 'min-height': '44px' });
+  });
+
+  it('toque em <= 700 px: reafirma as sobrescritas de classe unica do bloco Forecast (.fgc-botao, .fco-acoes button, .fco-grupo-alvos button)', () => {
+    const m = '@media (max-width: 700px)';
+    for (const sel of [`${S} .fgc-botao`, `${S} .fco-acoes .ghost-button`, `${S} .fco-grupo-alvos .ghost-button`]) {
+      expect(de(sel, m), sel).toEqual({ 'min-height': '44px' });
+      expect(cmp(especificidade(sel), especificidade(`${S} .ghost-button`)), sel).toBeGreaterThanOrEqual(0);
+    }
+    // o valor e o do bloco Forecast (copia)
+    expect(css).toMatch(/@media \(max-width: 700px\) \{\n  \.fgc-botao \{ min-height: 44px; \}/);
   });
 
   it('foco: a compat nao declara (anel da F3a e aneis proprios do Forecast continuam)', () => {

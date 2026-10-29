@@ -1842,6 +1842,14 @@ select.input,
   :is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button { min-height: 44px; }
 }
 
+/* Alvo de toque em <= 700 px (pointer nao coarse): sobrescritas de classe unica do bloco Forecast que o min-height: 0 acima anularia
+   (.fgc-botao, .fco-acoes button, .fco-grupo-alvos button; copia do bloco Forecast; remover na F13). As de duas classes seguem valendo. */
+@media (max-width: 700px) {
+  :is(.fcr-tabela, .fcp-tabela, .fco-tabela) .fgc-botao,
+  :is(.fcr-tabela, .fcp-tabela, .fco-tabela) .fco-acoes .ghost-button,
+  :is(.fcr-tabela, .fcp-tabela, .fco-tabela) .fco-grupo-alvos .ghost-button { min-height: 44px; }
+}
+
 /* Selo vencido / sem estoque / critico sobre a linha tingida: anel interno 1 px (nao muda altura nem largura) */
 :is(.fcr-linha--vencida, .fcr-linha--sem-estoque, .fcr-linha--critico) .badge--danger { box-shadow: inset 0 0 0 1px var(--rf-danger); }
 /* <<< compat Forecast F3 <<< */
