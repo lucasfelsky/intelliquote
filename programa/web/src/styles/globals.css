@@ -1778,6 +1778,74 @@ select.input,
 /* >>> componentes F3d (Suite COMEX) >>> */
 /* <<< componentes F3d <<< */
 
+/* >>> compat Forecast F3 (Suite COMEX) >>> */
+/* TEMPORARIO (Lucas, opcao 1): restaura contorno, alinhamento e altura dos botoes nas tabelas do Forecast e destaca o selo
+   vencido. Remover na F13 junto com o redesenho do Forecast. So seletores com classe do Forecast. */
+
+/* Botoes de tabela (S = .fcr-tabela, que inclui .fcd-tabela, .fcp-tabela e .fco-tabela): o contorno e as medidas de antes da F3a,
+   com a cor de acao do DS. Vem depois da regiao F3a e tem a mesma especificidade (empate vence pela ordem). */
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button {
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 8px 14px;
+  border: 1.5px solid var(--rf-action);
+  border-radius: var(--rf-radius-xs);
+  background: transparent;
+  color: var(--rf-action);
+  font-weight: 500;
+}
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button--sm {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+}
+
+/* Sobrescritas do proprio Forecast que antes venciam o .ghost-button por estarem mais abaixo (copia do bloco Forecast; remover na F13) */
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .fcr-embalagem__editar {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+/* .row-actions .ghost-button de antes (globals.css, regra geral de grupo de acoes de linha), nas ocasioes */
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .row-actions .ghost-button {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+/* Estados */
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button:active:not(:disabled) {
+  border-color: var(--rf-action-pressed);
+  background: var(--rf-action-pressed-bg);
+  color: var(--rf-action-pressed);
+}
+
+/* Destrutivo em tabela ("Excluir"): contorno e texto vermelhos; mantem hover e pressionado do destrutivo da F3a */
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button.danger-button {
+  border-color: var(--rf-danger);
+  color: var(--rf-tone-danger-fg);
+}
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button.danger-button:hover:not(:disabled) { background: var(--rf-tone-danger-bg); }
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button.danger-button:active:not(:disabled) {
+  border-color: var(--rf-danger);
+  background: var(--rf-tone-danger-bg);
+  color: var(--rf-tone-danger-fg);
+}
+
+/* Desabilitado: por ultimo, para vencer tambem o destrutivo */
+:is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button:disabled {
+  border-color: var(--rf-border);
+  background: transparent;
+  color: var(--rf-disabled-fg);
+}
+
+/* Alvo de toque: mantem 44 (o min-height: 0 acima anularia o da F3a) */
+@media (pointer: coarse) {
+  :is(.fcr-tabela, .fcp-tabela, .fco-tabela) .ghost-button { min-height: 44px; }
+}
+
+/* Selo vencido / sem estoque / critico sobre a linha tingida: anel interno 1 px (nao muda altura nem largura) */
+:is(.fcr-linha--vencida, .fcr-linha--sem-estoque, .fcr-linha--critico) .badge--danger { box-shadow: inset 0 0 0 1px var(--rf-danger); }
+/* <<< compat Forecast F3 <<< */
+
 .page { display: flex; flex-direction: column; gap: 18px; }
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
