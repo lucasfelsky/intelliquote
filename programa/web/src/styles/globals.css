@@ -3163,6 +3163,852 @@ dialog.modal-dialog[open] {
 /* <<< tela F6 <<< */
 
 /* >>> tela F7 (Suite COMEX) >>> */
+/* Respostas, Credit Support, Historico de precos e observacoes do fornecedor #153 (mock v68: CotacaoRespostas, ModalNovaResposta, ModalResponder,
+   ModalItensResposta, ModalHistoricoPrecos, ModalCreditSupport e RespostasObservacoes). Consome var(--rf-*) e, na previa em papel, var(--paper);
+   todo seletor tem uma classe DONA (respostas-tab, resposta-, credit-support, price-history ou supplier-notes); as classes compartilhadas
+   (.badge, .table, .modal-actions, .preview-frame, .alert...) so entram como CONTEXTO depois de um dono (guarda: src/test/telaF7.test.ts).
+   Os modais renderizam DENTRO de .respostas-tab (o <dialog> nao usa portal): por isso o reset de margem dos alertas vale para a aba toda. */
+
+/* ---- Aba Respostas: coluna, cabecalho, estados ---- */
+.respostas-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.respostas-tab__cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.respostas-tab__titulo { margin: 0; }
+.respostas-tab .alert { margin: 0; }
+/* Campo de texto longo dos modais: 12/14 do board (o F3a fixa 10/14) */
+.respostas-tab .textarea { padding: 12px 14px; }
+
+/* ---- Tabela: contorno 1 px e raio 16 (D-F6-08, so onde o board desenha); linha com acao de 36 (td de 8) ---- */
+.respostas-tab__tabela {
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-card);
+}
+.respostas-tab__tabela .table tbody tr:last-child td { border-bottom: 0; }
+.respostas-tab__tabela .table td { vertical-align: top; }
+/* 390 de conteudo + 2 x 16 de padding no board (content-box); aqui o border-box vale 422 */
+.respostas-tab__tabela .respostas-tab__fornecedor {
+  width: 422px;
+  min-width: 422px;
+}
+.respostas-tab__tabela .respostas-tab__num {
+  text-align: right;
+  white-space: nowrap;
+}
+.respostas-tab__tabela .respostas-tab__th-pagamento {
+  width: 96px;
+  line-height: 1.35;
+  white-space: normal;
+}
+.respostas-tab__tabela .respostas-tab__acoes { padding: 8px 12px; }
+.respostas-tab__mono {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.respostas-tab__vazio { color: var(--rf-ink-soft); }
+.respostas-tab__tabela .row-actions { justify-content: flex-end; }
+.respostas-tab__tabela .row-actions .ghost-button { padding: 0 8px; }
+.respostas-tab__tabela .row-actions .ghost-button:disabled { background: var(--rf-disabled-bg); }
+.respostas-tab__tabela .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* ---- Celula do fornecedor: nome, vencedora, pais/origem, via portal, tags ---- */
+.resposta-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.resposta-fornecedor {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--rf-action);
+  font-size: 14px;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resposta-fornecedor:hover:not(:disabled) { color: var(--rf-primary-700-hover); }
+.respostas-tab__tabela .resposta-vencedora {
+  flex: none;
+  gap: 5px;
+}
+.resposta-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.respostas-tab__tabela .resposta-portal { min-height: 20px; }
+.resposta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ---- Observacoes do fornecedor (#153): recolhiveis; vale na aba, no modal de itens e na Comparacao (D-F7-04) ---- */
+.supplier-notes {
+  margin-top: 4px;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.supplier-notes__texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.supplier-notes__mais {
+  margin-left: 4px;
+  padding: 0;
+  color: var(--rf-primary-700);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.supplier-notes__mais:hover:not(:disabled) { color: var(--rf-primary-700-hover); }
+
+/* ---- Campos e dica dos modais da aba ---- */
+.resposta-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.resposta-campo > .field-label { margin-bottom: 0; }
+.resposta-responder__alvos .resposta-dica { margin-top: 2px; }
+.resposta-dica {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  line-height: normal;
+}
+.resposta-mono {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.resposta-codigo {
+  color: var(--rf-ink);
+  font-family: var(--rf-font-mono);
+  font-weight: 600;
+}
+
+/* ---- Nova resposta: grade de 3 colunas e grupos Custos / Impostos ---- */
+.resposta-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.resposta-form__grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+.resposta-form__grupos {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 4fr);
+  gap: 16px;
+}
+.resposta-form__grupo {
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-card);
+  background: var(--rf-surface-alt);
+}
+.resposta-form__grupo > legend {
+  padding: 0 6px;
+  color: var(--rf-primary-700);
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.resposta-form__grade--custos {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.resposta-form__grade--impostos {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.resposta-form__grupo .input { padding: 0 12px; }
+.resposta-form__mono { font-family: var(--rf-font-mono); }
+
+/* ---- Responder: 2 colunas (mensagem + historico | precos-alvo), previa em papel ---- */
+.resposta-responder {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.resposta-responder__colunas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.resposta-responder__coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.resposta-responder__coluna .textarea {
+  height: 104px;
+  resize: none;
+}
+.resposta-historico {
+  padding: 12px 14px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+}
+.resposta-historico__titulo {
+  margin: 0 0 6px;
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+.resposta-historico__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.resposta-historico__valor { color: var(--rf-ink); }
+.resposta-responder__alvos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.resposta-responder__alvos > legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.resposta-responder__alvos-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px 12px;
+  align-items: center;
+}
+.resposta-responder__alvo-rotulo { margin: 0; }
+.resposta-responder__alvo-rotulo--indisponivel { color: var(--rf-disabled-fg); }
+.resposta-responder__alvo {
+  min-height: 40px;
+  padding: 0 12px;
+  font-family: var(--rf-font-mono);
+  text-align: right;
+}
+.resposta-responder__atualizar {
+  min-height: 36px;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: var(--rf-radius-control);
+  font-size: 13px;
+}
+.resposta-responder__previa-cab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.resposta-responder__previa-titulo { margin: 0; }
+.resposta-responder__linha {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.resposta-responder__linha strong { color: var(--rf-ink); }
+.resposta-previa.preview-frame {
+  display: block;
+  width: 100%;
+  height: 406px;
+  min-height: 0;
+  max-height: none;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-alert);
+  background: var(--paper);
+  box-shadow: none;
+}
+
+/* ---- Itens da resposta: tabela com contorno, numeros em mono, linha indisponivel em tom de apoio ---- */
+.resposta-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.resposta-itens .supplier-notes {
+  margin-top: 0;
+  color: var(--rf-ink);
+  font-size: 13px;
+}
+.resposta-itens__tabela {
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-card);
+}
+.resposta-itens__tabela .table { font-size: 13px; }
+.resposta-itens__tabela .table th { padding: 11px 12px; }
+.resposta-itens__tabela .table td { padding: 13px 12px; }
+.resposta-itens__tabela .table tbody tr:last-child td { border-bottom: 0; }
+.resposta-itens__tabela .resposta-itens__num { text-align: right; }
+.resposta-itens__tabela .resposta-itens__valor {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.resposta-itens__tabela .resposta-itens__incoterms {
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.resposta-itens__tabela .resposta-itens__produto { font-weight: 600; }
+.resposta-itens__tabela .resposta-itens__obs {
+  max-width: 200px;
+  white-space: normal;
+}
+.resposta-itens__tabela .resposta-itens__obs .supplier-notes {
+  margin-top: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.resposta-itens__produto-linha {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.resposta-itens__produto-linha .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.resposta-itens__tabela .resposta-itens__linha--indisponivel td {
+  background: var(--rf-surface-alt);
+  color: var(--rf-ink-soft);
+}
+
+/* ---- Credit Support: painel por fornecedor (grupo --rf-surface-alt, raio 18) e cartoes por parceiro ---- */
+.credit-support {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.credit-support__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-card-lg);
+  background: var(--rf-surface-alt);
+}
+.credit-support__titulo-grupo { margin: 0; }
+.credit-support__cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-alert);
+  background: var(--rf-surface);
+}
+.credit-support__cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.credit-support__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.credit-support__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.credit-support__parceiro { font-size: 15px; }
+.credit-support__fornecedor { color: var(--rf-ink-soft); }
+.credit-support__validade {
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.credit-support__mono {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.credit-support__meta {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.credit-support__destinatarios { overflow-wrap: anywhere; }
+.credit-support__acoes {
+  display: flex;
+  gap: 4px;
+}
+.credit-support__reenviar {
+  min-height: 36px;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: var(--rf-radius-control);
+  font-size: 13px;
+}
+.credit-support__codigo {
+  color: var(--rf-ink);
+  font-family: var(--rf-font-mono);
+  font-weight: 600;
+}
+.credit-support__linha {
+  margin: 0;
+  color: var(--rf-ink);
+  font-size: 13px;
+  line-height: normal;
+}
+.credit-support__dica {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  line-height: normal;
+}
+.credit-support__link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.credit-support__link-campo {
+  flex: 1 1 240px;
+  width: auto;
+  min-width: 0;
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+}
+.credit-support__copiar { padding: 0 14px; }
+
+/* Link novo do Reenviar: 2 colunas sobre --rf-surface-alt */
+.credit-support__novo-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+}
+.credit-support__novo-link-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.credit-support__novo-link-acao {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+.credit-support__destinos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.credit-support__destinos li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.credit-support__destinos .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* Tabela lado a lado (fornecedor x parceiro): contorno 1 px, raio 12, numeros em mono, totais em --rf-surface-alt */
+.credit-support__tabela {
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-button);
+}
+.credit-support__tabela .table { font-size: 13px; }
+.credit-support__tabela .table th { padding: 10px 12px; }
+.credit-support__tabela .table td {
+  padding: 10px 12px;
+  vertical-align: top;
+}
+.credit-support__tabela .table tbody tr:last-child td { border-bottom: 0; }
+.credit-support__tabela .credit-support__num {
+  text-align: right;
+  white-space: nowrap;
+}
+.credit-support__tabela .credit-support__valor {
+  color: var(--rf-ink);
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.credit-support__tabela .credit-support__linha--indisponivel .credit-support__valor { color: var(--rf-ink-soft); }
+.credit-support__tabela .credit-support__totais td {
+  padding: 12px;
+  background: var(--rf-surface-alt);
+}
+.credit-support__tabela .credit-support__totais .credit-support__valor strong { font-weight: 600; }
+.credit-support__produto {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 6px;
+}
+.credit-support__produto-nome {
+  grid-column: 1;
+  grid-row: 1;
+  font-weight: 600;
+}
+.credit-support__produto-codigo {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 2px;
+  color: var(--rf-ink-soft);
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+}
+.credit-support__selos {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 2;
+  grid-row: 1;
+  gap: 6px;
+}
+.credit-support__selos .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.credit-support__detalhes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 24px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.credit-support__detalhes-cheio {
+  grid-column: 1 / -1;
+  order: 1;
+}
+
+/* ---- Modal Credit Support: parceiro + contatos, assunto + validade, previa em papel ---- */
+.credit-support-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.credit-support-modal__estado {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.credit-support-modal__parceiro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 20px;
+  align-items: start;
+}
+.credit-support-modal__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.credit-support-modal__campo > .field-label { margin-bottom: 0; }
+.credit-support-modal__padrao {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.credit-support-modal__contatos {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.credit-support-modal__contatos > legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--rf-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+.credit-support-modal__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.credit-support-modal__contato {
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+  box-shadow: inset 0 0 0 1px var(--rf-divider);
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.credit-support-modal__contato:has(input:checked) {
+  background: var(--rf-primary-50);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--rf-primary-700) 45%, transparent);
+}
+.credit-support-modal__contato > span {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.credit-support-modal__contato .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.credit-support-modal__assunto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 16px;
+}
+.credit-support-modal__mono { font-family: var(--rf-font-mono); }
+.credit-support-modal__previa-cab {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.credit-support-modal__previa-titulo { margin: 0; }
+.credit-support-modal__linha-previa {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  line-height: normal;
+}
+.credit-support-modal__linha-previa strong { color: var(--rf-ink); }
+.credit-support-modal__previa.preview-frame {
+  display: block;
+  width: 100%;
+  height: 400px;
+  min-height: 0;
+  max-height: none;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-alert);
+  background: var(--paper);
+  box-shadow: none;
+}
+.credit-support-modal + .modal-actions { flex-wrap: wrap; }
+.credit-support-modal__destinos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.credit-support-modal__destinos li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+  font-size: 13px;
+}
+.credit-support-modal__destinos .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.credit-support-modal__email {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.credit-support-modal__linha {
+  margin: 0;
+  color: var(--rf-ink);
+  font-size: 13px;
+  line-height: normal;
+}
+.credit-support-modal__link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.credit-support-modal__link .credit-support__link-campo {
+  flex: 1 1 240px;
+  font-size: 12px;
+}
+
+/* Secundario com contorno no rodape do modal (o "Cancelar" fantasma do F3c e sem borda): "Pre-visualizar e-mail" e "Fechar" do historico */
+.modal-actions .credit-support-modal__previsualizar,
+.modal-actions .price-history__fechar {
+  border: 1.5px solid var(--rf-action);
+  background: var(--rf-surface);
+}
+.modal-actions .credit-support-modal__previsualizar:hover:not(:disabled),
+.modal-actions .price-history__fechar:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+.modal-actions .credit-support-modal__previsualizar:disabled {
+  border-color: var(--rf-border);
+  background: var(--rf-surface);
+  color: var(--rf-disabled-fg);
+}
+
+/* ---- Historico de precos: tabela larga com a 1a coluna fixa; celula alterada com a tinta menta ---- */
+.price-history__estado {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 14px;
+}
+.price-history__tabela {
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-card);
+}
+.price-history__tabela .table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.price-history__tabela .table th { padding: 11px 14px; }
+.price-history__tabela .table td {
+  padding: 12px 14px;
+  vertical-align: top;
+}
+.price-history__tabela .price-history__fixa {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  border-right: 1px solid var(--rf-divider);
+  background: var(--rf-surface);
+}
+.price-history__tabela .table th.price-history__fixa {
+  z-index: 2;
+  background: var(--rf-surface-alt);
+}
+.price-history__tabela .table th.price-history__codigo {
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.price-history__tabela .price-history__celula { font-weight: 500; }
+.price-history__tabela .price-history__celula--alterada {
+  background: var(--rf-primary-50);
+  color: var(--rf-ink);
+  font-weight: 700;
+}
+.price-history__preco {
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.price-history__apoio {
+  display: block;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  font-weight: 500;
+}
+.price-history__alternativos {
+  color: var(--rf-ink-soft);
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.price-history__data {
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.price-history__tabela .price-history__origem {
+  min-height: 22px;
+  margin-top: 4px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.price-history__autor {
+  display: block;
+  max-width: 160px;
+  margin-top: 3px;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+  white-space: normal;
+}
+/* Incoterm alterado: selo navy com texto --rf-on-action (o escuro redeclara o fundo do .chip--static com mais especificidade) */
+.price-history__tabela .chip--static.price-history__incoterm--alterado,
+.price-history__tabela .chip--static.price-history__incoterm--alterado:hover,
+:root[data-theme="dark"] .price-history__tabela .price-history__incoterm--alterado,
+:root[data-theme="dark"] .price-history__tabela .price-history__incoterm--alterado:hover {
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+}
+
+/* Largura media e celular: tudo em 1 coluna; a tabela rola dentro do contorno */
+@media (max-width: 640px) {
+  .resposta-form__grade,
+  .resposta-form__grupos,
+  .resposta-responder__colunas,
+  .credit-support-modal__parceiro,
+  .credit-support-modal__assunto,
+  .credit-support__novo-link,
+  .credit-support__detalhes { grid-template-columns: minmax(0, 1fr); }
+  .resposta-form__grade--custos,
+  .resposta-form__grade--impostos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .respostas-tab__tabela .respostas-tab__fornecedor {
+    width: 292px;
+    min-width: 292px;
+  }
+}
+
+/* Alvos de toque: 44 */
+@media (pointer: coarse) {
+  .resposta-responder__atualizar,
+  .resposta-responder__alvo,
+  .credit-support__reenviar,
+  .credit-support-modal__contato { min-height: 44px; }
+}
 /* <<< tela F7 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar

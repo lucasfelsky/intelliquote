@@ -36,27 +36,18 @@ export function SupplierNotes({
   const text = canCollapse && !expanded ? preview : notes;
 
   return (
-    <div data-testid={testId} style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
+    <div className="supplier-notes" data-testid={testId}>
       {label && <strong>{label}: </strong>}
-      <span id={id} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+      <span id={id} className="supplier-notes__texto">
         {text}
       </span>
       {canCollapse && (
         <button
           type="button"
+          className="link-button supplier-notes__mais"
           aria-expanded={expanded}
           aria-controls={id}
           onClick={() => setExpanded((value) => !value)}
-          style={{
-            color: 'var(--primary-700)',
-            background: 'none',
-            border: 'none',
-            padding: 0,
-            marginLeft: 4,
-            cursor: 'pointer',
-            textDecoration: 'underline',
-            font: 'inherit',
-          }}
         >
           {expanded ? 'ver menos' : 'ver mais'}
         </button>

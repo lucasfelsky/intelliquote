@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon } from '@/components/icons';
 import { useConfirm } from '@/components/useConfirm';
 import { messageOf, type QuoteResponse } from '@/services/quoteResponses';
 import {
@@ -139,148 +140,177 @@ function CreditSupportCard({
   const responded = row.status === 'responded';
 
   return (
-    <div className="dispatch-event" data-testid={`credit-support-request-${row.id}`}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-        {showSupplier && <span style={{ color: 'var(--ink-soft)' }}>{row.supplier.name} ·</span>}
-        <strong>{row.partner.name}</strong>
-        <span className={STATUS_CLASS[row.status] ?? 'badge'}>{STATUS_LABELS[row.status] ?? row.status}</span>
-        {row.isWinner && <span className="badge badge--success">Vencedora</span>}
-        {row.purchaseOrderSentAt && (
-          <span
-            className="badge badge--success"
-            data-testid="po-sent-badge"
-            title={`Ordem de Compra enviada ao parceiro em ${formatDateTime(row.purchaseOrderSentAt)}`}
-          >
-            PO enviada
-          </span>
-        )}
-        {row.isStale && <span className="badge badge--warning">Proposta do fornecedor mudou</span>}
-        <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Validade: {formatDate(row.expiresAt)}</span>
-      </div>
-      <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '6px 0 0' }}>
-        Enviado em {formatDateTime(row.createdAt)} por {row.createdBy?.name ?? '—'}
-      </p>
-      <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '2px 0 0', overflowWrap: 'anywhere' }}>
-        Destinatários: {row.recipientEmails.join(', ')}
-      </p>
-
-      {canManageLinks && (showRevoke || showResend) && (
-        <div className="row-actions" style={{ marginTop: 10 }}>
-          {showRevoke && (
-            <button type="button" className="ghost-button" disabled={busy} onClick={handleRevoke}>
-              Revogar
-            </button>
-          )}
-          {showResend && (
-            <button
-              type="button"
-              className="ghost-button"
-              disabled={busy || row.isStale}
-              title={row.isStale ? 'A proposta do fornecedor mudou: revogue e encaminhe de novo.' : 'Gerar novo link e reenviar o e-mail'}
-              onClick={() => resendMutation.mutate()}
-            >
-              {resendMutation.isPending ? 'Reenviando…' : 'Reenviar'}
-            </button>
-          )}
+    <article className="credit-support__cartao" data-testid={`credit-support-request-${row.id}`}>
+      <div className="credit-support__cabecalho">
+        <div className="credit-support__info">
+          <div className="credit-support__titulo">
+            {showSupplier && <span className="credit-support__fornecedor">{row.supplier.name} ·</span>}
+            <strong className="credit-support__parceiro">{row.partner.name}</strong>
+            <span className={`${STATUS_CLASS[row.status] ?? 'badge'} badge--dot`}>{STATUS_LABELS[row.status] ?? row.status}</span>
+            {row.isWinner && (
+              <span className="badge badge--success">
+                <Icon name="trophy" size={13} strokeWidth={2} />
+                Vencedora
+              </span>
+            )}
+            {row.purchaseOrderSentAt && (
+              <span
+                className="badge badge--info badge--dot"
+                data-testid="po-sent-badge"
+                title={`Ordem de Compra enviada ao parceiro em ${formatDateTime(row.purchaseOrderSentAt)}`}
+              >
+                PO enviada
+              </span>
+            )}
+            {row.isStale && (
+              <span className="badge badge--warning">
+                <Icon name="alert-triangle" size={13} strokeWidth={1.9} />
+                Proposta do fornecedor mudou
+              </span>
+            )}
+            <span className="credit-support__validade">
+              Validade: <span className="credit-support__mono">{formatDate(row.expiresAt)}</span>
+            </span>
+          </div>
+          <p className="credit-support__meta">
+            Enviado em <span className="credit-support__mono">{formatDateTime(row.createdAt)}</span> por {row.createdBy?.name ?? '—'}
+          </p>
+          <p className="credit-support__meta credit-support__destinatarios">
+            Destinatários: {row.recipientEmails.join(', ')}
+          </p>
         </div>
-      )}
 
-      {actionError && <p className="alert alert--error" style={{ marginTop: 10 }}>{actionError}</p>}
+        {canManageLinks && (showRevoke || showResend) && (
+          <div className="credit-support__acoes">
+            {showRevoke && (
+              <button type="button" className="ghost-button ghost-button--sm danger-button" disabled={busy} onClick={handleRevoke}>
+                Revogar
+              </button>
+            )}
+            {showResend && (
+              <button
+                type="button"
+                className="ghost-button credit-support__reenviar"
+                disabled={busy || row.isStale}
+                title={row.isStale ? 'A proposta do fornecedor mudou: revogue e encaminhe de novo.' : 'Gerar novo link e reenviar o e-mail'}
+                onClick={() => resendMutation.mutate()}
+              >
+                <Icon name="refresh" size={14} strokeWidth={1.9} />
+                {resendMutation.isPending ? 'Reenviando…' : 'Reenviar'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {actionError && <p className="alert alert--error" role="alert">{actionError}</p>}
 
       {resendResult && (
-        <div style={{ marginTop: 10 }}>
-          <p className="alert alert--success" style={{ marginBottom: 8 }}>Novo link gerado.</p>
-          <ul style={{ margin: '0 0 8px', paddingLeft: 16, fontSize: 13 }}>
-            {resendResult.recipients.map((r) => (
-              <li key={r.email} style={{ marginBottom: 4 }}>
-                {r.email}{' '}
-                <span className={r.status === 'failed' ? 'badge badge--danger' : 'badge'}>
-                  {r.status === 'failed' ? 'Falhou' : 'Enviado'}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p style={{ fontSize: 13, margin: '0 0 8px' }}>Validade: {formatDate(resendResult.expiresAt)}</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <input
-              className="input"
-              readOnly
-              value={resendResult.portalUrl}
-              aria-label="Link do portal do parceiro"
-              style={{ flex: '1 1 240px', minWidth: 0 }}
-            />
-            <button type="button" className="ghost-button" onClick={handleCopy}>
-              {copied ? 'Link copiado!' : 'Copiar link'}
-            </button>
+        <div className="credit-support__novo-link">
+          <div className="credit-support__novo-link-info">
+            <p className="alert alert--success" role="status">Novo link gerado.</p>
+            <ul className="credit-support__destinos">
+              {resendResult.recipients.map((r) => (
+                <li key={r.email}>
+                  {r.email}{' '}
+                  <span className={r.status === 'failed' ? 'badge badge--danger' : 'badge'}>
+                    {r.status === 'failed' ? 'Falhou' : 'Enviado'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="credit-support__linha">
+              Validade: <span className="credit-support__mono">{formatDate(resendResult.expiresAt)}</span>
+            </p>
           </div>
-          <p className="muted" style={{ marginTop: 8 }}>O link só é exibido agora.</p>
+          <div className="credit-support__novo-link-acao">
+            <div className="credit-support__link">
+              <input
+                className="input credit-support__link-campo"
+                readOnly
+                value={resendResult.portalUrl}
+                aria-label="Link do portal do parceiro"
+              />
+              <button type="button" className="ghost-button credit-support__copiar" onClick={handleCopy}>
+                <Icon name="copy" size={16} strokeWidth={1.9} />
+                {copied ? 'Link copiado!' : 'Copiar link'}
+              </button>
+            </div>
+            <p className="credit-support__dica">O link só é exibido agora.</p>
+          </div>
         </div>
       )}
 
       {responded ? (
-        <div style={{ marginTop: 12 }}>
-          <div className="table-wrapper">
+        <>
+          <div className="table-wrapper credit-support__tabela">
             <table className="table">
               <thead>
                 <tr>
                   <th>Produto</th>
-                  <th>Qtd/Unid</th>
-                  <th>Unit. fornecedor</th>
-                  <th>Total fornecedor</th>
-                  <th>Unit. parceiro</th>
-                  <th>Total parceiro</th>
-                  <th>Δ</th>
-                  <th>%</th>
+                  <th className="credit-support__num">Qtd/Unid</th>
+                  <th className="credit-support__num">Unit. fornecedor</th>
+                  <th className="credit-support__num">Total fornecedor</th>
+                  <th className="credit-support__num">Unit. parceiro</th>
+                  <th className="credit-support__num">Total parceiro</th>
+                  <th className="credit-support__num">Δ</th>
+                  <th className="credit-support__num">%</th>
                 </tr>
               </thead>
               <tbody>
                 {row.items.map((item) => (
-                  <tr key={item.quoteRequestItemId}>
+                  <tr key={item.quoteRequestItemId} className={item.isUnavailable ? 'credit-support__linha--indisponivel' : undefined}>
                     <td>
-                      {item.productName}
-                      {item.itemCode && <div className="muted" style={{ margin: 0 }}>{item.itemCode}</div>}
-                      {item.isUnavailable && <span className="badge badge--muted" style={{ marginLeft: 6 }}>Indisponível</span>}
-                      {item.isDangerousGood && !item.isUnavailable && (
-                        <span className="badge" style={{ marginLeft: 6 }}>DG</span>
-                      )}
+                      <div className="credit-support__produto">
+                        <span className="credit-support__produto-nome">{item.productName}</span>
+                        {item.itemCode && <span className="credit-support__produto-codigo">{item.itemCode}</span>}
+                        {(item.isUnavailable || item.isDangerousGood) && (
+                          <span className="credit-support__selos">
+                            {item.isUnavailable && <span className="badge badge--warning">Indisponível</span>}
+                            {item.isDangerousGood && !item.isUnavailable && (
+                              <span className="badge badge--danger">DG</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td>{item.isUnavailable ? '—' : `${item.quantity.toLocaleString('pt-BR')} ${item.unit}`}</td>
-                    <td>{item.isUnavailable ? '—' : formatMoney(item.originalUnitPrice, row.currency)}</td>
-                    <td>{item.isUnavailable ? '—' : formatMoney(item.originalTotalPrice, row.currency)}</td>
-                    <td>{formatMoney(item.partnerUnitPrice, row.currency)}</td>
-                    <td>{formatMoney(item.partnerTotalPrice, row.currency)}</td>
-                    <td>{item.isUnavailable ? '—' : formatDelta(item.partnerTotalPrice, item.originalTotalPrice, row.currency)}</td>
-                    <td>{formatPercent(item.markupPercent)}</td>
+                    <td className="credit-support__num credit-support__valor">{item.isUnavailable ? '—' : `${item.quantity.toLocaleString('pt-BR')} ${item.unit}`}</td>
+                    <td className="credit-support__num credit-support__valor">{item.isUnavailable ? '—' : formatMoney(item.originalUnitPrice, row.currency)}</td>
+                    <td className="credit-support__num credit-support__valor">{item.isUnavailable ? '—' : formatMoney(item.originalTotalPrice, row.currency)}</td>
+                    <td className="credit-support__num credit-support__valor">{formatMoney(item.partnerUnitPrice, row.currency)}</td>
+                    <td className="credit-support__num credit-support__valor">{formatMoney(item.partnerTotalPrice, row.currency)}</td>
+                    <td className="credit-support__num credit-support__valor">{item.isUnavailable ? '—' : formatDelta(item.partnerTotalPrice, item.originalTotalPrice, row.currency)}</td>
+                    <td className="credit-support__num credit-support__valor">{formatPercent(item.markupPercent)}</td>
                   </tr>
                 ))}
-                <tr data-testid={`credit-support-totals-${row.id}`}>
+                <tr className="credit-support__totais" data-testid={`credit-support-totals-${row.id}`}>
                   <td colSpan={3}><strong>Totais</strong></td>
-                  <td><strong>{formatMoney(row.totals.original, row.currency)}</strong></td>
+                  <td className="credit-support__num credit-support__valor"><strong>{formatMoney(row.totals.original, row.currency)}</strong></td>
                   <td />
-                  <td><strong>{formatMoney(row.totals.partner, row.currency)}</strong></td>
-                  <td><strong>{formatDelta(row.totals.partner, row.totals.original, row.currency)}</strong></td>
-                  <td><strong>{formatPercent(row.totals.markupPercent)}</strong></td>
+                  <td className="credit-support__num credit-support__valor"><strong>{formatMoney(row.totals.partner, row.currency)}</strong></td>
+                  <td className="credit-support__num credit-support__valor"><strong>{formatDelta(row.totals.partner, row.totals.original, row.currency)}</strong></td>
+                  <td className="credit-support__num credit-support__valor"><strong>{formatPercent(row.totals.markupPercent)}</strong></td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <ul style={{ margin: '10px 0 0', paddingLeft: 16, fontSize: 13 }}>
+          <ul className="credit-support__detalhes">
             <li>
               Prazo de pagamento: fornecedor {row.originalPaymentTermsDays} dias × parceiro{' '}
               {row.partnerPaymentTermsDays ?? '—'} dias
             </li>
             <li>Validade da proposta do parceiro: {row.partnerValidityDays ?? '—'} dias</li>
             <li>Respondido em {formatDateTime(row.respondedAt)} (versão {row.responseVersion})</li>
-            {row.partnerNotes && <li>Observações do parceiro: {row.partnerNotes}</li>}
+            {row.partnerNotes && <li className="credit-support__detalhes-cheio">Observações do parceiro: {row.partnerNotes}</li>}
             <li>Moeda/Incoterm: {row.currency} {row.offeredIncoterm}</li>
           </ul>
-        </div>
+        </>
       ) : (
-        <p style={{ fontSize: 13, margin: '8px 0 0' }}>
-          Itens encaminhados: {row.items.length} ({unavailableCount} {unavailableCount === 1 ? 'indisponível' : 'indisponíveis'})
+        <p className="credit-support__linha">
+          Itens encaminhados: <span className="credit-support__mono">{row.items.length}</span> (<span className="credit-support__mono">{unavailableCount}</span> {unavailableCount === 1 ? 'indisponível' : 'indisponíveis'})
         </p>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -302,7 +332,7 @@ export function CreditSupportPanel({
 
   if (query.isError) {
     return (
-      <p className="alert alert--error">
+      <p className="alert alert--error" role="alert">
         Não foi possível carregar os encaminhamentos de Credit Support: {messageOf(query.error)}
       </p>
     );
@@ -332,14 +362,14 @@ export function CreditSupportPanel({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className="credit-support">
       {groups.map((group) => (
         <section
           key={group.key}
-          className="card"
+          className="credit-support__grupo"
           data-testid={group.responseId === null ? 'credit-support-removed' : `credit-support-${group.responseId}`}
         >
-          <h3 style={{ marginTop: 0, fontSize: 16 }}>{group.title}</h3>
+          <h3 className="credit-support__titulo-grupo">{group.title}</h3>
           {group.rows.map((row) => (
             <CreditSupportCard
               key={row.id}
