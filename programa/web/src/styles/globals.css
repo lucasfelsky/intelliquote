@@ -197,6 +197,9 @@
   /* tokens F3c (componentes) */
 
   /* tokens F3d (componentes) */
+  --rf-skeleton-base: #e3ecea;
+  --rf-skeleton-shine: #f7faf9;
+  --rf-empty-border: #b9cbc6;
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -336,6 +339,9 @@
   /* tokens F3c (componentes) */
 
   /* tokens F3d (componentes) */
+  --rf-skeleton-base: #163845;
+  --rf-skeleton-shine: #1d4250;
+  --rf-empty-border: rgba(74, 222, 200, 0.28);
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -405,13 +411,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 }
 
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
-}
 
 
 
@@ -623,21 +622,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
   padding: 0 1px;
 }
 
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid var(--border);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-.spinner--sm { width: 18px; height: 18px; border-width: 2px; }
-.spinner--fullscreen {
-  position: fixed; inset: 0;
-  display: grid; place-items: center;
-  background: var(--bg);
-  z-index: 9999;
-}
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -719,14 +703,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 }
 .link-button { text-align: left; }
 
-.empty-state {
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--ink-soft);
-  background: var(--surface);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-}
 
 /* >>> shell F2 (Suite COMEX) >>> */
 /* Shell do app (mock v68): sidebar navy, topbar, marca e entrada de pagina. UNICA regiao do CSS que consome
@@ -1776,6 +1752,242 @@ select.input,
 /* <<< componentes F3c <<< */
 
 /* >>> componentes F3d (Suite COMEX) >>> */
+/* Abas, paginacao, estrelas, cartao, vazio, erro, skeleton e spinner (mock v68: Componentes, Cotacoes, CotacoesEstados, Movimento).
+   Consome var(--rf-*); so os seletores de PERMITIDAS_F3D (guarda: src/test/componentesF3d.test.ts). Regras movidas de cima e reescritas. */
+
+/* ---- Abas (components/Tabs.tsx): barra menta de 3 px que abre do centro na aba ativa ---- */
+/* A linha de baixo e uma sombra interna sobre 1 px de padding, nao border-bottom: com overflow-x: auto o overflow-y vira auto e a barra
+   (bottom: -1px, sobre a linha) e o anel de foco sairiam cortados na borda do contentor. */
+.tabs-list {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding-bottom: 1px;
+  box-shadow: inset 0 -1px 0 var(--rf-border);
+  overflow-x: auto;
+}
+.tabs-trigger {
+  position: relative;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--rf-ink-soft);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--rf-dur-base);
+}
+.tabs-trigger:hover,
+.tabs-trigger--active { color: var(--rf-ink); }
+.tabs-trigger--active::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--rf-primary);
+  transform-origin: center;
+  animation: rf-tab-bar var(--rf-dur-base) var(--rf-ease-out) both;
+}
+/* Foco duplo INTERNO (superficie fora, acao dentro): o anel externo do mock seria cortado pelo overflow-x da lista. */
+.tabs-trigger:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 2px var(--rf-surface), inset 0 0 0 4px var(--rf-action);
+}
+.tabs-panel { outline: none; }
+@keyframes rf-tab-bar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* ---- Paginacao (components/Pagination.tsx): numeros em mono; botoes = secundario pequeno (36) ---- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 20px;
+}
+.pagination__info {
+  font-size: 13px;
+  color: var(--rf-ink-soft);
+  white-space: nowrap;
+}
+.pagination__num {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pagination .ghost-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--rf-radius-control);
+  font-size: 13px;
+}
+
+/* ---- Estrelas (components/StarRating.tsx): SVG; cheia = ambar, vazia = so contorno ---- */
+.star-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.star-rating[role="radiogroup"] { gap: 4px; }
+.star-rating__star {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+.star-rating__star--on {
+  fill: var(--rf-tone-warning-solid);
+  stroke: var(--rf-tone-warning-fg);
+}
+.star-rating__star--off {
+  fill: none;
+  stroke: var(--rf-input-border);
+}
+.star-rating__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: transform var(--rf-dur-fast) var(--rf-ease-out);
+}
+.star-rating__button:hover { transform: scale(1.12); }
+.star-rating__button:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--rf-surface), 0 0 0 4px var(--rf-action);
+}
+.star-rating__button .star-rating__star { width: 20px; height: 20px; }
+.star-rating__button .star-rating__star--off { stroke-width: 1.6; }
+.star-rating__value {
+  margin-left: 4px;
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-ink);
+}
+
+/* ---- Cartao: 22 de raio, sem sombra, sem elevacao no hover ---- */
+.card {
+  padding: 22px 24px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface);
+}
+
+/* ---- Vazio e erro: tracejado, sem fundo; icone/titulo/texto sao opt-in das telas ---- */
+.empty-state {
+  padding: 28px;
+  border: 1px dashed var(--rf-empty-border);
+  border-radius: var(--rf-radius-card);
+  text-align: center;
+  font-size: 14px;
+  color: var(--rf-ink-soft);
+}
+.empty-state__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 8px;
+  color: var(--rf-primary-700);
+}
+.empty-state__icon svg {
+  width: 36px;
+  height: 36px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.empty-state__title {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--rf-ink);
+}
+.empty-state__text {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rf-ink-soft);
+}
+.empty-state--erro .empty-state__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-tone-danger-bg);
+  color: var(--rf-danger);
+}
+.empty-state--erro .empty-state__icon svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.7;
+}
+
+/* ---- Skeleton (novo): gradiente base > brilho > base que corre da direita para a esquerda ---- */
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--rf-skeleton-base) 0%, var(--rf-skeleton-shine) 50%, var(--rf-skeleton-base) 100%);
+  background-size: 200% 100%;
+  animation: rf-shimmer 1.4s linear infinite;
+}
+@keyframes rf-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+/* ---- Spinner (components/Spinner.tsx): geometria igual; usa o @keyframes spin existente ---- */
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--rf-border);
+  border-top-color: var(--rf-action);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner--sm { width: 18px; height: 18px; border-width: 2px; }
+.spinner--fullscreen {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: var(--rf-bg);
+  z-index: 9999;
+}
+
+/* Alvos de toque: 36 -> 44 (botoes da paginacao) e 28 -> 44 (estrelas de edicao); as abas ja tem 44 */
+@media (pointer: coarse) {
+  .pagination .ghost-button { min-height: 44px; }
+  .star-rating__button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/* Movimento reduzido: a barra da aba nao anima, o skeleton fica parado, as estrelas nao crescem; o spinner segue girando (indicador essencial), mais devagar */
+@media (prefers-reduced-motion: reduce) {
+  .tabs-trigger--active::after { animation: none; }
+  .star-rating__button { transition: none; }
+  .star-rating__button:hover { transform: none; }
+  .skeleton { animation: none; }
+  .spinner { animation-duration: 2.4s; }
+}
 /* <<< componentes F3d <<< */
 
 .page { display: flex; flex-direction: column; gap: 18px; }
@@ -2614,31 +2826,10 @@ dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
   margin-top: 14px;
 }
 
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.pagination__info {
-  font-size: 14px;
-  color: var(--ink-soft);
-}
-.pagination button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 
 .text-sm { font-size: 14px; }
 .text-xs { font-size: 12px; }
 
-.tabs-trigger:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--focus-ring-strong);
-}
 
 /* ==== ComparacaoTab (sub-aba Comparação) — restyle visual, classes novas ==== */
 

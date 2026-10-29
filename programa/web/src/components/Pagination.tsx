@@ -30,7 +30,8 @@ export function Pagination({
         Anterior
       </button>
       <span className="pagination__info">
-        Página {page} de {safeTotalPages} · {totalItems} {totalItems === 1 ? itemLabel.singular : itemLabel.plural} no total
+        Página <span className="pagination__num">{page}</span> de <span className="pagination__num">{safeTotalPages}</span> ·{' '}
+        <span className="pagination__num">{totalItems}</span> {totalItems === 1 ? itemLabel.singular : itemLabel.plural} no total
       </span>
       <button
         type="button"
