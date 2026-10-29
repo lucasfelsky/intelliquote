@@ -356,7 +356,7 @@ describe('tema escuro: .tsx e index.html', () => {
     // srcDoc da previa de e-mail (iframe claro)
     'pages/Templates.tsx': ['color:#888'],
     // stops da <mask> do fundo do login: luminancia da mascara, nao cor visivel
-    'components/LoginBackdrop.tsx': ['stopColor="#000"', 'stopColor="#fff"'],
+    'components/LoginBackdrop.tsx': ['stopColor="#000"', 'stopColor="#fff"', 'stopColor="#444"'],
   };
 
   it('cores literais em .tsx (exceto testes) so nas linhas da allowlist', () => {

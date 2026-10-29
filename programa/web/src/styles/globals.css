@@ -205,6 +205,18 @@
   --rf-empty-border: #b9cbc6;
 
   /* tokens F4 (login) */
+  --rf-login-panel-bg: linear-gradient(180deg, #003241, #004153);
+  --rf-login-panel-dot: rgba(232, 244, 246, 0.10);
+  --rf-login-dot: rgba(0, 65, 83, 0.12);
+  --rf-login-grid: rgba(0, 65, 83, 0.10);
+  --rf-login-curve: #004153;
+  --rf-login-curve-main: rgba(0, 163, 123, 0.85);
+  --rf-login-node-ring: #00a37b;
+  --rf-login-area: rgba(20, 221, 167, 0.08);
+  --rf-login-accent: #007864;
+  --rf-login-axis: rgba(0, 120, 100, 0.50);
+  --rf-login-card-shadow: 0 20px 48px rgba(0, 65, 83, 0.14);
+  --rf-login-ghost-border: #004153;
 
   /* tokens F5 (cotacoes) */
   color-scheme: light;
@@ -352,6 +364,18 @@
   --rf-empty-border: rgba(74, 222, 200, 0.28);
 
   /* tokens F4 (login) */
+  --rf-login-panel-bg: linear-gradient(180deg, #0a2a35, #0f3341);
+  --rf-login-panel-dot: rgba(232, 244, 246, 0.08);
+  --rf-login-dot: rgba(232, 244, 246, 0.07);
+  --rf-login-grid: rgba(232, 244, 246, 0.08);
+  --rf-login-curve: #b8ccd3;
+  --rf-login-curve-main: rgba(20, 221, 167, 0.90);
+  --rf-login-node-ring: #14dda7;
+  --rf-login-area: rgba(20, 221, 167, 0.10);
+  --rf-login-accent: #5ff0c8;
+  --rf-login-axis: rgba(159, 182, 191, 0.70);
+  --rf-login-card-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
+  --rf-login-ghost-border: #5a7880;
 
   /* tokens F5 (cotacoes) */
 }
@@ -636,32 +660,6 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 
 
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.auth-gate {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: linear-gradient(140deg, var(--bg) 0%, var(--primary-50) 100%);
-}
-.auth-card {
-  background: var(--surface);
-  padding: 32px;
-  border-radius: 18px;
-  max-width: 480px;
-  width: 100%;
-  box-shadow: var(--shadow);
-}
-.auth-card__logo {
-  width: 72px; height: 72px;
-  border-radius: 16px;
-  object-fit: cover;
-  background: var(--logo-chip-bg);
-  padding: 4px;
-  box-shadow: var(--shadow-logo-lg);
-  margin-bottom: 14px;
-}
-.auth-card__actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 
 .toast--success { background: var(--primary-strong); }
 .toast--danger { background: var(--danger-strong); }
@@ -2242,6 +2240,282 @@ dialog.modal-dialog[open] {
 /* <<< compat Forecast F3 <<< */
 
 /* >>> tela F4 (Suite COMEX) >>> */
+/* Login e estados de acesso (F4; boards Login, LoginEscuro e AcessoEstados A/B/C). Arte "Curvas de cambio" (D4): painel navy estatico + fundo
+   claro com curvas animadas so por CSS (nunca SMIL). Consome var(--rf-*); seletores com prefixo dono (auth-gate, auth-card, login-, loading-shell).
+   Larguras sem board (641-1439): painel clamp(280px, 41.667vw, 600px) e nome clamp(36px, 3.612vw, 52px) (D-F4-03); ate 640 o painel vira faixa. */
+
+/* ---- Leiaute: painel + area do cartao; o fundo (curvas) ocupa a area, atras de tudo ---- */
+.auth-gate {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: clamp(280px, 41.667vw, 600px) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--rf-bg);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-sans);
+}
+.auth-gate__area {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 24px;
+}
+
+/* ---- Fundo: pontos com mascara radial e curvas de cambio (geometria do board; cor so por classe) ---- */
+.login-backdrop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: clamp(280px, 41.667vw, 600px);
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.login-backdrop__svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.login-backdrop__ponto-grade { fill: var(--rf-login-dot); }
+.login-backdrop__grade { stroke: var(--rf-login-grid); }
+.login-backdrop__finas { stroke: var(--rf-login-curve); }
+.login-backdrop__area { fill: var(--rf-login-area); }
+.login-backdrop__principal { stroke: var(--rf-login-curve-main); }
+.login-backdrop__nos {
+  fill: var(--rf-bg);
+  stroke: var(--rf-login-node-ring);
+}
+.login-backdrop__moedas {
+  fill: var(--rf-login-accent);
+  font-family: var(--rf-font-mono);
+}
+.login-backdrop__eixo {
+  fill: var(--rf-login-axis);
+  font-family: var(--rf-font-mono);
+}
+
+/* ---- Movimento: 4 ondas (translateY) e o ponto USD/BRL (offset-path = o caminho da curva principal; 22 s) ---- */
+.login-backdrop__ponto {
+  fill: var(--rf-login-accent);
+  offset-path: path("M-40 332 C-27 336 13 349 40 358 C67 367 93 376 120 384 C147 392 173 402 200 406 C227 410 253 413 280 408 C307 403 333 380 360 376 C387 373 413 390 440 387 C467 384 493 368 520 360 C547 352 573 341 600 339 C627 337 653 349 680 348 C707 347 733 337 760 333 C787 329 813 321 840 323 C867 325 893 342 920 344 C947 346 973 331 1000 335 C1027 339 1053 361 1080 367 C1107 373 1133 368 1160 371 C1187 374 1213 387 1240 387 C1267 387 1293 376 1320 370 C1347 364 1373 353 1400 350 C1427 347 1467 351 1480 351");
+  offset-rotate: 0deg;
+  animation: rf-login-ponto 22s linear infinite;
+}
+.login-backdrop__onda--1 { animation: rf-login-onda-1 11s linear infinite; }
+.login-backdrop__onda--2 { animation: rf-login-onda-2 13s linear infinite; }
+.login-backdrop__onda--3 { animation: rf-login-onda-3 12s linear infinite; }
+.login-backdrop__onda--4 { animation: rf-login-onda-4 14s linear infinite; }
+@keyframes rf-login-ponto {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+@keyframes rf-login-onda-1 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes rf-login-onda-2 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+@keyframes rf-login-onda-3 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes rf-login-onda-4 {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+/* ---- Painel navy estatico (escuro: gradiente proprio e linha de 1 px a direita) ---- */
+.login-painel {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 80px clamp(28px, 3.889vw, 56px) 0;
+  background: var(--rf-login-panel-bg);
+}
+:root[data-theme="dark"] .login-painel {
+  margin-right: -1px;
+  border-right: 1px solid var(--rf-border);
+}
+.login-painel__textura {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.login-painel__ponto { fill: var(--rf-login-panel-dot); }
+.login-painel__marca,
+.login-painel__nome { position: relative; }
+.login-painel__nome {
+  margin: 0;
+  font-family: var(--rf-font-display);
+  font-size: clamp(36px, 3.612vw, 52px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--rf-sidebar-ink);
+}
+.login-painel__assinatura {
+  position: absolute;
+  left: clamp(28px, 3.889vw, 56px);
+  bottom: 40px;
+}
+
+/* ---- Cartao ---- */
+.auth-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 440px;
+  max-width: 100%;
+  padding: 36px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface);
+  box-shadow: var(--rf-login-card-shadow);
+}
+.auth-card__cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-card .auth-card__eyebrow {
+  margin: 0;
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  line-height: normal;
+  color: var(--rf-login-accent);
+}
+.auth-card h1 {
+  margin: 0;
+  font-family: var(--rf-font-display);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--rf-ink);
+}
+.auth-card .auth-card__texto {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--rf-ink-soft);
+}
+.auth-card__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.auth-card__campo .field-label { margin: 0; }
+.auth-card__campo .input {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--rf-radius-button);
+  font-size: 15px;
+  font-weight: 500;
+}
+.auth-card .auth-card__erro {
+  margin: 0;
+  word-break: break-word;
+}
+.auth-card .auth-card__detalhe {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--rf-ink-soft);
+  word-break: break-word;
+}
+.auth-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+.auth-card__submit {
+  flex: 1 1 120px;
+  gap: 10px;
+  min-height: 48px;
+  font-size: 15px;
+}
+.auth-card .auth-card__submit:disabled {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-ink);
+  cursor: progress;
+}
+.auth-card__portal {
+  flex: 0 0 auto;
+  min-height: 48px;
+  border-color: var(--rf-login-ghost-border);
+}
+.auth-card__portal:hover { text-decoration: none; }
+:root[data-theme="dark"] .auth-card__portal { color: var(--rf-ink); }
+:root[data-theme="dark"] .auth-card__portal:not(:hover, :active) { background: transparent; }
+
+/* ---- Carregando sessao (quadro C): marca + anel de 28 px; o conteiner e so o leiaute de tela cheia ---- */
+.loading-shell {
+  align-content: center;
+  gap: 22px;
+}
+.loading-shell__spinner {
+  width: 28px;
+  height: 28px;
+  border-width: 3px;
+}
+
+/* ---- Telas estreitas (D-F4-03; sem board, D7): o painel vira faixa no topo e as curvas ficam atras do cartao ---- */
+@media (max-width: 640px) {
+  .auth-gate {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .login-backdrop { left: 0; }
+  .login-painel {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px;
+  }
+  :root[data-theme="dark"] .login-painel {
+    margin-right: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--rf-border);
+  }
+  .login-painel__marca svg {
+    width: 40px;
+    height: 40px;
+  }
+  .login-painel__nome { font-size: 30px; }
+  .login-painel__assinatura { display: none; }
+  .auth-gate__area { padding: 20px 16px; }
+  .auth-card { padding: 28px 22px; }
+}
+
+/* ---- Movimento reduzido: ondas paradas e ponto oculto (= quadro t = 0 do board; D-F4-06) ---- */
+@media (prefers-reduced-motion: reduce) {
+  .login-backdrop__onda--1,
+  .login-backdrop__onda--2,
+  .login-backdrop__onda--3,
+  .login-backdrop__onda--4 { animation: none; }
+  .login-backdrop__ponto {
+    animation: none;
+    visibility: hidden;
+  }
+}
 /* <<< tela F4 <<< */
 
 /* >>> tela F5 (Suite COMEX) >>> */

@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import LoginGate from '@/pages/LoginGate';
+import LoadingShell from '@/components/LoadingShell';
 import AppShell from '@/components/AppShell';
 import ComercialRouteGuard from '@/components/ComercialRouteGuard';
 import NewVersionBanner from '@/components/NewVersionBanner';
@@ -39,14 +40,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-function LoadingShell() {
-  return (
-    <div className="spinner spinner--fullscreen">
-      <div className="spinner" />
-    </div>
-  );
-}
 
 function RequireAuth() {
   const { status } = useAuth();
