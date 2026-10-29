@@ -106,7 +106,7 @@ const PERMITIDAS_F3A = new Set([
 ]);
 
 // Classes cujas regras antigas MIGRARAM para a regiao. `.link-button` e `.row-actions` ficam de fora de proposito: o `.link-button`
-// e o `.row-actions .ghost-button` antigos (F3b/F3c) seguem intactos ate a F3c (PLAN 10.5) e perdem pela ordem.
+// e o `.row-actions .ghost-button` antigos foram apagados pela F3c (PLAN 10.5; o componentesF3c.test verifica).
 const MIGRADAS_F3A = new Set([
   'primary-button',
   'ghost-button',
@@ -520,8 +520,8 @@ describe('F3a: nada dos componentes migrados sobrou fora das regioes', () => {
   it('as sobrescritas do Forecast e de telas (com classe propria) continuam fora da regiao', () => {
     expect(foraSeletores).toContain('.fcd-acoes .ghost-button');
     expect(foraSeletores).toContain('.fc-busca .input');
-    expect(foraSeletores).toContain('.row-actions .ghost-button');
-    expect(foraSeletores).toContain('.link-button');
+    expect(foraSeletores).not.toContain('.row-actions .ghost-button');
+    expect(foraSeletores).not.toContain('.link-button');
   });
 
   it('o rotulo "field-label" nao tem mais caixa alta em nenhuma regra fora da regiao', () => {

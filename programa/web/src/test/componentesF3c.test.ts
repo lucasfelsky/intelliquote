@@ -236,6 +236,14 @@ describe('F3c: regiao `componentes F3c`', () => {
     expect(infratores).toEqual([]);
   });
 
+  it('PLAN 10.5: as regras mortas .row-actions .ghost-button e .link-button e o par .row-actions > button/a do grupo misto foram apagadas de fora das regioes', () => {
+    const foraLimpo = foraDasRegioes(css, regs).replace(/\/\*[\s\S]*?\*\//g, '');
+    const seletoresFora = achatar(parseRules(foraLimpo)).map((a) => a.seletor);
+    for (const s of ['.row-actions .ghost-button', '.link-button', '.row-actions > button', '.row-actions > a']) expect(seletoresFora, s).not.toContain(s);
+    expect(seletoresFora).toContain('.page-header__actions > button');
+    expect(seletoresFora).toContain('.page-header__actions > a');
+  });
+
   it('o grupo de white-space de fora perdeu o .modal-actions > button (agora na regiao) e o overlay deixou de ter fallback literal', () => {
     const foraLimpo = foraDasRegioes(css, regs).replace(/\/\*[\s\S]*?\*\//g, '');
     const seletoresFora = achatar(parseRules(foraLimpo)).map((a) => a.seletor);

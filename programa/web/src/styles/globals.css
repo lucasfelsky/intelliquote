@@ -675,18 +675,11 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 .toast--danger { background: var(--danger-strong); }
 .toast--warning { background: var(--warning-strong); }
 
-.row-actions .ghost-button {
-  padding: 5px 10px;
-  font-size: 13px;
-}
 /* Grupos de acao: rotulo de botao nunca quebra em 2 linhas (o grupo quebra entre botoes). */
-.row-actions > button,
-.row-actions > a,
 .page-header__actions > button,
 .page-header__actions > a {
   white-space: nowrap;
 }
-.link-button { text-align: left; }
 
 .empty-state {
   padding: 48px 24px;
