@@ -120,7 +120,7 @@ describe('CotacaoNova', () => {
     expect(dialog.open).toBe(false);
   });
 
-  it('2. step 2 + clique em "+ Adicionar item": abre com título "Adicionar item do catálogo"', async () => {
+  it('2. step 2 + clique em "Adicionar item": abre com título "Adicionar item do catálogo"', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
     fireEvent.click(getByRole('button', { name: 'Adicionar item' }));

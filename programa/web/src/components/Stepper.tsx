@@ -30,6 +30,7 @@ export function Stepper({ ariaLabel, steps, current }: StepperProps) {
                   {estado === 'feito' ? <Icon name="check" size={14} strokeWidth={2.6} /> : index + 1}
                 </span>
                 {label}
+                {estado === 'feito' && <span className="sr-only"> concluído</span>}
               </li>
             </Fragment>
           );

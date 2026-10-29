@@ -389,10 +389,7 @@ export default function CotacaoNova() {
       </div>
 
       {linkedRequestId !== null && (
-        <p
-          className="alert alert--success cotacao-nova__vinculo"
-          role="status"
-        >
+        <p className="alert alert--success cotacao-nova__vinculo" role="status">
           <Icon name="link" size={18} />
           {`Vinculada à solicitação #${linkedRequestId} do comercial`}
         </p>

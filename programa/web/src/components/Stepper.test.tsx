@@ -31,7 +31,7 @@ describe('Stepper', () => {
     const { container } = renderStepper(1);
     const feito = container.querySelector('.stepper__passo--feito') as HTMLElement;
     expect(feito).not.toBeNull();
-    expect(feito.textContent).toBe('Cotação');
+    expect(feito.textContent).toBe('Cotação concluído');
     const icone = feito.querySelector('svg');
     expect(icone?.getAttribute('aria-hidden')).toBe('true');
     expect(icone?.querySelector('path')?.getAttribute('d')).toBe('m5 12 5 5 9-10');
@@ -39,6 +39,16 @@ describe('Stepper', () => {
     const atual = container.querySelector('[aria-current="step"]') as HTMLElement;
     expect(atual.textContent).toBe('2Itens do catálogo');
     expect(container.querySelectorAll('[aria-current]')).toHaveLength(1);
+  });
+
+  it('passo feito tem o texto "concluido" so para leitor de tela (sr-only); atual e pendente nao', () => {
+    const { container } = renderStepper(1);
+    const feito = container.querySelector('.stepper__passo--feito') as HTMLElement;
+    const oculto = feito.querySelector('.sr-only') as HTMLElement;
+    expect(oculto.textContent).toBe(' concluído');
+    expect(container.querySelectorAll('.sr-only')).toHaveLength(1);
+    expect(container.querySelector('.stepper__passo--atual .sr-only')).toBeNull();
+    expect(container.querySelector('.stepper__passo--pendente .sr-only')).toBeNull();
   });
 
   it('passo pendente mostra o numero e nao tem icone', () => {
