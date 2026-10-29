@@ -9,14 +9,7 @@ import {
   reorderPurchaseOrders,
   type PurchaseOrder,
 } from '@/services/purchaseOrders';
-import {
-  ChevronDownIcon,
-  ChevronUpIcon,
-  GripIcon,
-  InfoIcon,
-  PencilIcon,
-  TrashIcon,
-} from './ItensTabIcons';
+import { Icon } from '@/components/icons';
 import { MoveItemModal } from './MoveItemModal';
 
 export interface ItensTabItem {
@@ -346,28 +339,28 @@ export function ItensTab(props: ItensTabProps) {
         onDragEnd={() => { setDraggingId(null); setDragOverKey(null); }}
       >
         <td>
-          {draggable && <span className="item-grip"><GripIcon /></span>}
+          {draggable && <span className="item-grip"><Icon name="grip" size={16} strokeWidth={3} /></span>}
           <strong>{itemName(it)}</strong>
         </td>
-        <td>{it.catalogItem?.marketName ?? '—'}</td>
+        <td className="po-cell-suave">{it.catalogItem?.marketName ?? '—'}</td>
         <td className="num">{formatNumber(it.quantity)}</td>
-        <td>{it.unit}</td>
-        <td>{it.desiredIncoterm ?? defaultIncoterm}</td>
-        <td>{it.destinationPort ?? defaultPort ?? '—'}</td>
+        <td className="po-cell-mono">{it.unit}</td>
+        <td className="po-cell-mono cell-nowrap">{it.desiredIncoterm ?? defaultIncoterm}</td>
+        <td className="cell-nowrap">{it.destinationPort ?? defaultPort ?? '—'}</td>
         <td>
           {(() => {
             const dgCount = props.dgCountByItemId?.[it.id] ?? 0;
             return dgCount > 0 ? (
               <span
-                className="badge badge--danger"
+                className="badge badge--danger badge--dot"
                 title={`Informado como DG por ${dgCount} ${dgCount === 1 ? 'fornecedor' : 'fornecedores'}`}
               >
                 DG
               </span>
-            ) : '—';
+            ) : <span className="po-cell-suave">—</span>;
           })()}
         </td>
-        <td className="cell-truncate" title={it.notes ?? undefined}>{it.notes ?? '—'}</td>
+        <td className="cell-truncate" title={it.notes ?? undefined}>{it.notes ?? <span className="po-cell-suave">—</span>}</td>
         {editable && (
           <td>
             <div className="row-actions row-actions--nowrap">
@@ -464,7 +457,7 @@ export function ItensTab(props: ItensTabProps) {
                   ref={refFor(`pencil:${po.id}`)}
                   onClick={() => startRename(po)}
                 >
-                  <PencilIcon />
+                  <Icon name="edit" size={16} />
                 </button>
               )}
               {!po && editable && (
@@ -481,7 +474,7 @@ export function ItensTab(props: ItensTabProps) {
                   disabled={index === 0 || reorderPo.isPending}
                   onClick={() => moveOrder(index, -1)}
                 >
-                  <ChevronUpIcon />
+                  <Icon name="chevron-up" size={16} strokeWidth={2} />
                 </button>
                 <button
                   type="button"
@@ -491,7 +484,7 @@ export function ItensTab(props: ItensTabProps) {
                   disabled={index === orders.length - 1 || reorderPo.isPending}
                   onClick={() => moveOrder(index, 1)}
                 >
-                  <ChevronDownIcon />
+                  <Icon name="chevron-down" size={16} strokeWidth={2} />
                 </button>
                 <button
                   type="button"
@@ -501,7 +494,7 @@ export function ItensTab(props: ItensTabProps) {
                   disabled={removePo.isPending}
                   onClick={() => handleRemovePo(po)}
                 >
-                  <TrashIcon />
+                  <Icon name="trash" size={16} />
                 </button>
               </div>
             )}
@@ -530,7 +523,11 @@ export function ItensTab(props: ItensTabProps) {
                 {!editable
                   ? 'Nenhum item nesta PO.'
                   : isTarget
-                    ? `Soltar em “${po.label}”`
+                    ? (
+                      <>
+                        <Icon name="download" size={18} />{`Soltar em “${po.label}”`}
+                      </>
+                    )
                     : 'PO vazia. Arraste itens para cá ou use “Mover” na linha do item.'}
               </div>
             </td>
@@ -546,7 +543,8 @@ export function ItensTab(props: ItensTabProps) {
                   aria-label={`Adicionar item em ${po.label}`}
                   onClick={() => onAddItem(po.id)}
                 >
-                  + Adicionar item
+                  <Icon name="plus" size={14} strokeWidth={2.2} />
+                  Adicionar item
                 </button>
               </div>
             </td>
@@ -560,11 +558,11 @@ export function ItensTab(props: ItensTabProps) {
     pending ? <span className="spinner spinner--sm" aria-hidden="true" /> : null;
 
   return (
-    <div>
+    <div className="itens-tab">
       <div className="itens-tab__header">
         <h2>Itens</h2>
         {editable && (
-          <div className="page-header__actions">
+          <div className="itens-tab__acoes">
             {grouped ? (
               <button
                 type="button"
@@ -573,7 +571,8 @@ export function ItensTab(props: ItensTabProps) {
                 disabled={addPo.isPending}
               >
                 {showSpinner(addPo.isPending)}
-                + Adicionar PO
+                <Icon name="plus" size={16} strokeWidth={2.2} />
+                Adicionar PO
               </button>
             ) : (
               <button
@@ -588,7 +587,8 @@ export function ItensTab(props: ItensTabProps) {
               </button>
             )}
             <button type="button" className="primary-button" onClick={() => onAddItem(null)}>
-              + Adicionar item
+              <Icon name="plus" size={16} strokeWidth={2.2} />
+              Adicionar item
             </button>
           </div>
         )}
@@ -602,8 +602,8 @@ export function ItensTab(props: ItensTabProps) {
         <div className="alert alert--error itens-tab__error" role="alert">{error}</div>
       )}
       {grouped && hasResponsesOrDispatch && (
-        <div className="alert itens-tab__notice" role="note">
-          <InfoIcon />
+        <div className="alert alert--info itens-tab__notice" role="note">
+          <Icon name="info" size={18} />
           <span>
             Esta cotação já tem envio ou respostas: reagrupar POs não altera os e-mails já enviados nem as propostas recebidas.
           </span>
@@ -611,8 +611,11 @@ export function ItensTab(props: ItensTabProps) {
       )}
       {items.length === 0 && !grouped ? (
         <div className="empty-state">
-          <strong>Nenhum item cadastrado</strong>
-          <p>
+          <span className="empty-state__icon">
+            <Icon name="file-text" size={36} strokeWidth={1.5} />
+          </span>
+          <strong className="empty-state__title">Nenhum item cadastrado</strong>
+          <p className="empty-state__text">
             {editable
               ? 'Use o botão “Adicionar item” para começar.'
               : 'Esta cotação ainda não possui itens.'}

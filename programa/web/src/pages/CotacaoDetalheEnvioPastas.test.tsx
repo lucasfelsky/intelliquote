@@ -143,8 +143,8 @@ describe('Modal de envio: coluna de pastas', () => {
   it('renderiza a coluna dentro do master-detail, com contadores e seleção única', async () => {
     vi.mocked(api.get).mockImplementation(getImpl as never);
     const { container, getByRole } = renderPage();
-    await waitFor(() => getByRole('button', { name: 'Enviar cotacao' }));
-    fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+    await waitFor(() => getByRole('button', { name: 'Enviar cotação' }));
+    fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
     const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
     await waitFor(() => {
       const f = dialog.querySelector('.dispatcher-folders');

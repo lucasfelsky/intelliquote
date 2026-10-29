@@ -114,7 +114,7 @@ describe('ItensTab', () => {
 
   it('modo simples: Agrupar por PO chama POST com group:true', async () => {
     renderTab({ items: [item(1, 'Resina A', null)] });
-    expect(screen.queryByText('+ Adicionar PO')).toBeNull();
+    expect(screen.queryByText('Adicionar PO')).toBeNull();
     fireEvent.click(screen.getByText('Agrupar por PO'));
     await waitFor(() => expect(createPurchaseOrder).toHaveBeenCalledWith(9, { group: true }));
   });
@@ -125,7 +125,7 @@ describe('ItensTab', () => {
       items: [item(1, 'A', 1)],
     });
     expect(screen.queryByText('Agrupar por PO')).toBeNull();
-    fireEvent.click(screen.getByText('+ Adicionar PO'));
+    fireEvent.click(screen.getByText('Adicionar PO'));
     await waitFor(() =>
       expect(createPurchaseOrder).toHaveBeenCalledWith(9, { adoptUnassigned: false }));
   });
@@ -281,7 +281,7 @@ describe('ItensTab', () => {
       purchaseOrders: [po(1, 1, 'PO 1'), po(2, 2, 'PO 2')],
       items: [item(1, 'A', 1)],
     });
-    expect(screen.queryByText('+ Adicionar PO')).toBeNull();
+    expect(screen.queryByText('Adicionar PO')).toBeNull();
     expect(screen.queryByText('Agrupar por PO')).toBeNull();
     expect(screen.queryByLabelText('Mover para PO')).toBeNull();
     expect(screen.queryByLabelText(/^Remover PO/)).toBeNull();

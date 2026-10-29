@@ -189,7 +189,7 @@ function dialogByTitle(container: HTMLElement, title: string): HTMLDialogElement
 }
 
 async function openDispatchToPreview(container: HTMLElement, getByRole: ReturnType<typeof render>['getByRole']) {
-  fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+  fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
   const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
   await waitFor(() => within(dialog).getByRole('checkbox'));
   fireEvent.click(within(dialog).getByRole('checkbox'));
@@ -237,7 +237,7 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = dialogByTitle(container, 'Novo item');
     expect(dialog.open).toBe(true);
     expect(dialog.className).toContain('modal-dialog');
@@ -356,7 +356,7 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = dialogByTitle(container, 'Novo item');
     fireEvent.change(within(dialog).getByPlaceholderText('Buscar item do catálogo...'), {
       target: { value: 'cento' },
@@ -383,7 +383,7 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = dialogByTitle(container, 'Novo item');
     const folder = await within(dialog).findByRole('button', { name: 'Monômero' });
     expect(folder.getAttribute('aria-expanded')).toBe('false');
@@ -419,7 +419,7 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = dialogByTitle(container, 'Novo item');
     await within(dialog).findByRole('button', { name: 'Monômero' });
     const catalogCalls = vi
@@ -504,7 +504,7 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     fireEvent.click(getByRole('tab', { name: 'Itens' }));
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = dialogByTitle(container, 'Novo item');
     expect(dialog.open).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
@@ -536,7 +536,7 @@ describe('CotacaoDetalhe', () => {
   it('7. Modal A abre wide, com subtítulo e h2 único', async () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
-    fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+    fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
     const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
     expect(dialog.open).toBe(true);
     expect(dialog.className).toContain('modal-dialog--wide');
@@ -549,7 +549,7 @@ describe('CotacaoDetalhe', () => {
     const { container, findByRole, getByRole } = renderPage();
     await findByRole('heading', { name: 'RFQ-001' });
     expect(container.querySelector('.dispatcher-list')).toBeNull();
-    fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+    fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
     await waitFor(() => expect(container.querySelector('.dispatcher-list')).not.toBeNull());
   });
 
@@ -586,7 +586,7 @@ describe('CotacaoDetalhe', () => {
 
       const { container, findByRole, getByRole } = renderPage();
       await findByRole('heading', { name: 'RFQ-001' });
-      fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+      fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
       const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
       await waitFor(() => expect(within(dialog).getByText('Fornecedor 130')).toBeTruthy());
       expect(within(dialog).getByText('Fornecedor 001')).toBeTruthy();
@@ -606,7 +606,7 @@ describe('CotacaoDetalhe', () => {
     it('9j. lista simples (formato legado) é consumida numa única chamada', async () => {
       const { container, findByRole, getByRole } = renderPage();
       await findByRole('heading', { name: 'RFQ-001' });
-      fireEvent.click(getByRole('button', { name: 'Enviar cotacao' }));
+      fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
       const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
       await waitFor(() => expect(within(dialog).getByText('ACME Ltda')).toBeTruthy());
       const supplierCalls = vi.mocked(api.get).mock.calls.filter(([path]) => path === '/v1/suppliers');
@@ -626,7 +626,7 @@ describe('CotacaoDetalhe', () => {
     const openDispatch = async () => {
       const utils = renderPage();
       await utils.findByRole('heading', { name: 'RFQ-001' });
-      fireEvent.click(utils.getByRole('button', { name: 'Enviar cotacao' }));
+      fireEvent.click(utils.getByRole('button', { name: 'Enviar cotação' }));
       return { ...utils, dialog: dialogByTitle(utils.container, 'Enviar cotação para fornecedores') };
     };
 
