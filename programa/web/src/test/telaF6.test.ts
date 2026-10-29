@@ -450,6 +450,9 @@ describe('F6: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.cotacao-envio .cotacao-envio__resultado--completed')).toEqual({ 'border-color': 'var(--rf-selecao-anel)', background: 'var(--rf-tone-success-bg)' });
     expect(naRegiao('.cotacao-envio .cotacao-envio__resultado--failed')).toEqual({ background: 'var(--rf-tone-danger-bg)' });
     expect(naRegiao('.cotacao-envio__resultado .badge')).toEqual({ background: 'var(--rf-surface)' });
+    expect(naRegiao('.cotacao-envio__contagem')).toEqual({ color: 'var(--rf-ink-soft)', 'font-size': '13px' });
+    expect(naRegiao('.cotacao-envio__num')).toEqual({ color: 'var(--rf-ink)', 'font-family': 'var(--rf-font-mono)', 'font-weight': '600' });
+    expect(naRegiao('.cotacao-envio__num--falha')).toEqual({ color: 'var(--rf-tone-danger-fg)' });
     expect(naRegiao('.cotacao-envio__tabela')).toEqual({ border: '1px solid var(--rf-divider)', 'border-radius': 'var(--rf-radius-card)' });
     expect(naRegiao('.cotacao-envio__linha-falha td')).toEqual({ background: 'var(--rf-falha-linha)' });
     expect(naRegiao('.cotacao-envio__detalhe--falha')).toEqual({ color: 'var(--rf-tone-danger-fg)', 'font-family': 'var(--rf-font-mono)' });
@@ -548,6 +551,9 @@ const PARES: ReadonlyArray<Par> = [
   [rf('tone-danger-fg'), rf('surface'), TEXT], // selo "Falhou" na faixa
   [rf('ink'), rf('tone-warning-bg'), TEXT], // titulo da faixa parcial
   [rf('ink-soft'), rf('tone-warning-bg'), TEXT], // contagem "n enviado(s)" na faixa parcial
+  [rf('tone-danger-fg'), rf('tone-warning-bg'), TEXT], // numero das falhas (negrito) na faixa parcial
+  [rf('ink'), rf('tone-success-bg'), TEXT], // numero dos enviados na faixa de sucesso
+  [rf('tone-danger-fg'), rf('tone-success-bg'), TEXT], // numero das falhas na faixa de sucesso
   [rf('ink-soft'), rf('tone-success-bg'), TEXT], // contagem na faixa de sucesso
   [rf('ink-soft'), rf('tone-danger-bg'), TEXT], // contagem na faixa de falha
   [rf('tone-danger-fg'), rf('falha-linha'), TEXT], // erro SMTP na linha que falhou
@@ -558,10 +564,12 @@ const PARES: ReadonlyArray<Par> = [
   [rf('ink'), rf('action-hover-bg'), TEXT], // destino escolhido no Mover
   [rf('primary-700'), rf('surface'), UI], // contorno do alvo de soltar
   [rf('input-border'), rf('input-bg'), UI], // borda da busca de fornecedor
-  [rf('selecao-anel'), rf('primary-50'), 1], // anel do fornecedor selecionado e do Link copiado (decorativo, ver EXCECOES)
 ];
 const EXCECOES: ReadonlyArray<{ id: string; fg: string; bg: string; tema: ThemeName; esperado: number }> = [
-  { id: 'tracejado da zona de soltar ociosa (--rf-empty-border sobre --rf-surface-alt; vazio do D-F3-09)', fg: rf('empty-border'), bg: rf('surface-alt'), tema: 'claro', esperado: 1.5 },
+  { id: 'tracejado da zona de soltar ociosa, claro (--rf-empty-border sobre --rf-surface-alt; vazio do D-F3-09)', fg: rf('empty-border'), bg: rf('surface-alt'), tema: 'claro', esperado: 1.58 },
+  { id: 'tracejado da zona de soltar ociosa, escuro (--rf-empty-border sobre --rf-surface-alt; vazio do D-F3-09)', fg: rf('empty-border'), bg: rf('surface-alt'), tema: 'escuro', esperado: 1.65 },
+  { id: 'tracejado sobre --rf-surface, claro (mesma medida do vazio da F3d)', fg: rf('empty-border'), bg: rf('surface'), tema: 'claro', esperado: 1.69 },
+  { id: 'tracejado sobre --rf-surface, escuro (mesma medida do vazio da F3d)', fg: rf('empty-border'), bg: rf('surface'), tema: 'escuro', esperado: 1.97 },
   { id: 'traco --rf-divider do .table-wrapper e das divisorias do Resumo (decorativo; o texto e o cabecalho da tabela fazem a estrutura)', fg: rf('divider'), bg: rf('surface'), tema: 'claro', esperado: 1.25 },
 ];
 
@@ -591,7 +599,8 @@ describe('F6: contraste nos 2 temas (alpha composto sobre --rf-surface)', () => 
     }
   });
 
-  it('excecoes decorativas (nenhuma e texto): tracejado da zona ociosa e traco do contorno seguem abaixo de 3:1 (claro)', () => {
+  it('excecoes decorativas (nenhuma e texto): o tracejado da zona de soltar ociosa (--rf-empty-border, como o vazio da F3d) e o traco do contorno seguem abaixo de 3:1; o tracejado esta registrado nos DOIS temas', () => {
+    expect(EXCECOES.filter((e) => e.fg === rf('empty-border')).map((e) => e.tema).sort()).toEqual(['claro', 'claro', 'escuro', 'escuro']);
     for (const e of EXCECOES) {
       const ratio = ratioOf(opaque(e.tema, e.fg), opaque(e.tema, e.bg));
       expect(ratio, e.id).toBeGreaterThan(e.esperado - 0.15);

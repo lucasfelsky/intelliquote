@@ -4026,6 +4026,12 @@ dialog.modal-dialog[open] {
   color: var(--rf-ink-soft);
   font-size: 13px;
 }
+.cotacao-envio__num {
+  color: var(--rf-ink);
+  font-family: var(--rf-font-mono);
+  font-weight: 600;
+}
+.cotacao-envio__num--falha { color: var(--rf-tone-danger-fg); }
 .cotacao-envio__tabela {
   border: 1px solid var(--rf-divider);
   border-radius: var(--rf-radius-card);
