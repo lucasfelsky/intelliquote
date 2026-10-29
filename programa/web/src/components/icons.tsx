@@ -2,7 +2,7 @@ import type { SVGAttributes } from 'react';
 
 // Icones de traco do mock (Suite COMEX): 24x24, sem preenchimento, `currentColor` (a cor vem do CSS do contexto).
 // 14 de navegacao (navConfig), Sair, os 3 do botao de tema (automatico, noturno, claro; canvas v72) e os 2 da topbar
-// (escudo SSO e usuario). F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
+// (escudo SSO e usuario). F5: +12 (plus, search, filter, alert-triangle, refresh, arrow-right/left, check, link, lock, chevron-down/right). F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
 // paralelas nao editarem este objeto. Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
 export const ICONS = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
@@ -27,6 +27,18 @@ export const ICONS = {
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   x: 'M6 6l12 12M18 6 6 18',
   star: 'm12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z',
+  plus: 'M12 5v14M5 12h14',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-3.5-3.5',
+  filter: 'M3 5h18l-7 8v6l-4 2v-8z',
+  'alert-triangle': 'M12 3 2 20h20zM12 10v4M12 17h.01',
+  refresh: 'M20 11A8 8 0 0 0 5.3 6.3L3 8M3 3v5h5M4 13a8 8 0 0 0 14.7 4.7L21 16M21 21v-5h-5',
+  'arrow-right': 'M5 12h14M13 6l6 6-6 6',
+  'arrow-left': 'M19 12H5M11 6l-6 6 6 6',
+  check: 'm5 12 5 5 9-10',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
+  'chevron-down': 'm6 9 6 6 6-6',
+  'chevron-right': 'm9 6 6 6-6 6',
 } as const;
 
 // Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.
