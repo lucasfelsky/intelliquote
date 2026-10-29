@@ -93,6 +93,14 @@ function parseTargetPriceInput(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// Exibicao do preco-alvo pre-preenchido: virgula decimal e 2 a 6 casas (2,10), como o board.
+// Sem separador de milhar (useGrouping false): "1.234,50" nao passaria no parseTargetPriceInput.
+function formatTargetPriceInput(value: number | string): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6, useGrouping: false });
+}
+
 function normalizeSupplier(raw: unknown): SupplierSummary {
   if (typeof raw !== 'object' || raw === null) throw new Error('Resposta inesperada.');
   const obj = raw as Record<string, unknown>;
@@ -289,7 +297,7 @@ export function RespostasTab({
     if (isMultiItemReply(r)) {
       const initialValues: Record<number, string> = {};
       (r.items ?? []).forEach((item) => {
-        initialValues[item.id] = item.targetPrice != null ? String(item.targetPrice) : '';
+        initialValues[item.id] = item.targetPrice != null ? formatTargetPriceInput(item.targetPrice) : '';
       });
       setReplyItemTargets(initialValues);
       setReplyTargetPrice('');
@@ -303,7 +311,7 @@ export function RespostasTab({
     }
 
     setReplyItemTargets({});
-    setReplyTargetPrice(r.targetPrice != null ? String(r.targetPrice) : '');
+    setReplyTargetPrice(r.targetPrice != null ? formatTargetPriceInput(r.targetPrice) : '');
     const initialTargetPrice = r.targetPrice != null ? Number(r.targetPrice) : null;
     replyPreviewMutation.mutate({ id: r.id, subject: '', message: '', targetPrice: initialTargetPrice });
   }

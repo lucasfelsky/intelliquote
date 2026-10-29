@@ -420,6 +420,39 @@ describe('RespostasTab', () => {
       expect(previewQuoteResponseReply).toHaveBeenLastCalledWith(42, { subject: 's', message: '', targetPrice: 2.1 });
     });
 
+    it('campo unico pre-preenchido mostra virgula decimal (90 -> 90,00) e o envio sem editar manda o mesmo numero', async () => {
+      const dialogB = await abrirResponder(response);
+      expect((dialogB.querySelector('#replyTargetPrice') as HTMLInputElement).value).toBe('90,00');
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(42, { subject: 's', message: '', targetPrice: 90 })
+      );
+    });
+
+    it('campo por item pre-preenchido mostra virgula decimal (1.78 -> 1,78; 2.1 -> 2,10; 1234.5 sem milhar) e o round-trip preserva o numero', async () => {
+      const comAlvos = {
+        ...multiItemResponse,
+        items: [
+          { ...multiItemResponse.items[0]!, targetPrice: 1.78 },
+          { ...multiItemResponse.items[1]!, targetPrice: 1234.5 },
+        ],
+      };
+      const dialogB = await abrirResponder(comAlvos);
+      expect((within(dialogB).getByLabelText('Resina Epóxi') as HTMLInputElement).value).toBe('1,78');
+      expect((within(dialogB).getByLabelText('Catalisador Y') as HTMLInputElement).value).toBe('1234,50');
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(43, {
+          subject: 's',
+          message: '',
+          itemTargets: [
+            { quoteResponseItemId: 501, targetPrice: 1.78 },
+            { quoteResponseItemId: 502, targetPrice: 1234.5 },
+          ],
+        })
+      );
+    });
+
     it('por item: "2,10", "2.10", vazio e texto invalido (preview e envio)', async () => {
       const dialogB = await abrirResponder(multiItemResponse);
       fireEvent.change(within(dialogB).getByLabelText('Resina Epóxi'), { target: { value: '2.10' } });
