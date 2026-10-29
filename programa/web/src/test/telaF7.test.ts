@@ -378,11 +378,14 @@ describe('F7: receitas dos boards (valores exatos)', () => {
       expect(colunas, s).toContain(s);
     }
     const coarse = mediaDe('@media (pointer: coarse)');
-    expect(coarse.every((r) => /min-height:\s*44px/.test(r.body))).toBe(true);
-    const alvos = coarse.flatMap((r) => listaDeSeletores(r.prelude));
+    const alvos44 = coarse.filter((r) => /min-height:\s*44px/.test(r.body)).flatMap((r) => listaDeSeletores(r.prelude));
     for (const s of ['.resposta-responder__atualizar', '.resposta-responder__alvo', '.credit-support__reenviar', '.credit-support-modal__contato']) {
-      expect(alvos, s).toContain(s);
+      expect(alvos44, s).toContain(s);
     }
+    // "ver mais" inline: sem min-height de 44 (nao infla a linha da nota); o alvo de toque vem do ::after de 44 de altura
+    expect(declaracoes(coarse, '.supplier-notes__mais')).toEqual({ position: 'relative', 'min-height': '0' });
+    expect(declaracoes(coarse, '.supplier-notes__mais::after')).toEqual({ content: '""', position: 'absolute', top: '-14px', right: '-6px', bottom: '-14px', left: '-6px' });
+    expect(alvos44).not.toContain('.supplier-notes__mais');
   });
 
   it('a regiao nao anima nem transiciona (so herda as transicoes de cor da F3)', () => {

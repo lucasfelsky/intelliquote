@@ -4008,6 +4008,19 @@ dialog.modal-dialog[open] {
   .resposta-responder__alvo,
   .credit-support__reenviar,
   .credit-support-modal__contato { min-height: 44px; }
+  /* "ver mais" e inline: o .link-button do F3a levaria a linha da nota a 44 e a inflaria (72 -> 98 em 4 linhas). A area de toque de 44 vem do ::after (sem layout). */
+  .supplier-notes__mais {
+    position: relative;
+    min-height: 0;
+  }
+  .supplier-notes__mais::after {
+    content: "";
+    position: absolute;
+    top: -14px;
+    right: -6px;
+    bottom: -14px;
+    left: -6px;
+  }
 }
 /* <<< tela F7 <<< */
 
