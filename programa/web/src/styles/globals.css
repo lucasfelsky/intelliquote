@@ -195,6 +195,9 @@
   --rf-on-action: #ffffff;
 
   /* tokens F3c (componentes) */
+  --rf-toast-bg: #0b2430;
+  --rf-toast-ink: #e8f4f6;
+  --rf-toast-ink-soft: #b8ccd3;
 
   /* tokens F3d (componentes) */
   color-scheme: light;
@@ -334,6 +337,7 @@
   --rf-on-action: #0b2430;
 
   /* tokens F3c (componentes) */
+  --rf-toast-bg: #163845;
 
   /* tokens F3d (componentes) */
 }
@@ -667,57 +671,15 @@ p { margin: 0 0 8px 0; line-height: 1.5; color: var(--ink-soft); }
 }
 .auth-card__actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 
-.toast-container {
-  position: fixed;
-  bottom: 16px; right: 16px;
-  display: flex; flex-direction: column; gap: 8px;
-  z-index: 10000;
-}
-.toast {
-  background: var(--toast-bg);
-  color: var(--on-strong);
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-  font-size: 14px;
-  min-width: 240px;
-  display: flex; align-items: center; gap: 10px;
-}
 .toast--success { background: var(--primary-strong); }
 .toast--danger { background: var(--danger-strong); }
 .toast--warning { background: var(--warning-strong); }
-.new-version-toast {
-  max-width: min(440px, calc(100vw - 32px));
-  flex-wrap: wrap;
-}
-.new-version-toast__text { flex: 1 1 220px; line-height: 1.45; }
-.new-version-toast__actions { display: flex; gap: 8px; margin-left: auto; }
-.new-version-toast__actions button {
-  min-height: 36px;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-}
-.new-version-toast__reload { background: var(--primary-strong); color: var(--on-strong); border: 0; }
-.new-version-toast__reload:hover { background: var(--toast-action-hover); }
-.new-version-toast__later { background: transparent; color: var(--on-strong); border: 1px solid var(--toast-outline); }
-.new-version-toast__later:hover { background: var(--toast-hover-tint); }
-.new-version-toast__actions button:focus-visible { outline: 2px solid var(--on-strong); outline-offset: 2px; }
 
-.row-actions .ghost-button {
-  padding: 5px 10px;
-  font-size: 13px;
-}
 /* Grupos de acao: rotulo de botao nunca quebra em 2 linhas (o grupo quebra entre botoes). */
-.row-actions > button,
-.row-actions > a,
 .page-header__actions > button,
-.page-header__actions > a,
-.modal-actions > button {
+.page-header__actions > a {
   white-space: nowrap;
 }
-.link-button { text-align: left; }
 
 .empty-state {
   padding: 48px 24px;
@@ -1773,6 +1735,211 @@ select.input,
 /* <<< componentes F3b <<< */
 
 /* >>> componentes F3c (Suite COMEX) >>> */
+/* Sobreposicoes (mock v68: Sobreposicoes, Confirmacoes, Movimento, Componentes "Feedback"): modal, confirmacao e aviso de nova versao.
+   Regras movidas de cima e reescritas com os tokens --rf-*; so as classes de PERMITIDAS_F3C (guarda: src/test/componentesF3c.test.ts).
+   Os botoes de dentro do modal (Cancelar, Salvar, Remover) e os campos sao da F3a; o rodape em faixa vale so onde .modal-actions e a ultima do corpo. */
+
+/* ---- Modal: <dialog> nativo; o visual mora em .modal-content ---- */
+dialog.modal-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow: visible;
+}
+dialog.modal-dialog--wide { max-width: 880px; }
+dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
+dialog.modal-dialog::backdrop {
+  background: var(--rf-overlay);
+  animation: rf-scrim-fade var(--rf-dur-base) linear;
+}
+dialog.modal-dialog[open] {
+  animation: rf-dialog-rise var(--rf-dur-slow) var(--rf-ease-out) backwards;
+}
+.modal-content {
+  background: var(--rf-surface);
+  border-radius: var(--rf-radius-panel);
+  box-shadow: var(--rf-shadow-modal);
+  padding: 0;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Cabecalho: titulo (fonte de display, 20) + subtitulo opcional + fechar de 44. Sem subtitulo, o titulo desce 8 px para alinhar com o centro do botao (board Confirmacoes). */
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 14px;
+}
+.modal-header h2 {
+  margin: 0;
+  font-family: var(--rf-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--rf-ink);
+}
+.modal-header > h2 { padding-top: 8px; }
+.modal-header__titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.modal-subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: normal;
+  color: var(--rf-ink-soft);
+}
+.btn-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+  color: var(--rf-ink);
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base), color var(--rf-dur-base), box-shadow var(--rf-dur-base);
+}
+.btn-close:hover { background: var(--rf-bg); }
+.btn-close:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+
+/* Corpo e acoes. A faixa do rodape (D-F3-11) so entra quando .modal-actions e a ultima do corpo ou do formulario do corpo; as demais ficam em linha ate a fase da tela. */
+.modal-body {
+  padding: 6px 24px 20px;
+  color: var(--rf-ink);
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+:is(.modal-body, .modal-body > form) > .modal-actions:last-child {
+  margin: 20px -24px -20px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--rf-divider);
+  background: var(--rf-surface-alt);
+}
+.modal-actions > button { white-space: nowrap; }
+.modal-actions .primary-button { padding: 0 18px; }
+
+/* Confirmacao (useConfirm): titulo e mensagem mais proximos que no formulario (board Confirmacoes: 10 + 4 em vez de 14 + 6). */
+.modal-confirm__message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--rf-ink);
+}
+.modal-content:has(.modal-confirm__message) .modal-header { padding-bottom: 10px; }
+.modal-content:has(.modal-confirm__message) .modal-body { padding-top: 4px; }
+
+/* ---- Aviso de nova versao (toast): canto inferior direito, 360 de largura, entra com mola ---- */
+.toast-container {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10000;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 360px;
+  max-width: calc(100vw - 40px);
+  padding: 14px 16px;
+  border-radius: var(--rf-radius-alert);
+  background: var(--rf-toast-bg);
+  color: var(--rf-toast-ink);
+  box-shadow: var(--rf-shadow-modal);
+  font-size: 14px;
+  animation: rf-toast-in var(--rf-dur-slow) var(--rf-ease-spring) backwards;
+}
+.new-version-toast {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.new-version-toast__text {
+  font-weight: 600;
+  line-height: 1.45;
+}
+.new-version-toast__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.new-version-toast__actions button {
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--rf-radius-control);
+  font-family: var(--rf-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base), color var(--rf-dur-base), box-shadow var(--rf-dur-base);
+}
+.new-version-toast__later {
+  padding: 0 12px;
+  background: transparent;
+  color: var(--rf-toast-ink-soft);
+}
+.new-version-toast__later:hover {
+  background: color-mix(in srgb, var(--rf-toast-ink) 10%, transparent);
+  color: var(--rf-toast-ink);
+}
+.new-version-toast__reload {
+  padding: 0 14px;
+  background: var(--rf-primary);
+  color: var(--rf-on-primary);
+}
+.new-version-toast__reload:hover { background: var(--rf-primary-hover); }
+.new-version-toast__actions button:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-toast-bg), 0 0 0 5px var(--rf-primary);
+}
+
+/* Movimento (board Movimento): dialogo sobe 12 px em --rf-dur-slow, fundo aparece em 200 ms, toast entra com mola */
+@keyframes rf-dialog-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rf-scrim-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rf-toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Movimento reduzido: so fade de 150 ms, sem deslocamento; o fechar troca so de cor */
+@media (prefers-reduced-motion: reduce) {
+  dialog.modal-dialog::backdrop { animation-duration: 150ms; }
+  dialog.modal-dialog[open] { animation: rf-scrim-fade 150ms linear backwards; }
+  .toast { animation: rf-scrim-fade 150ms linear backwards; }
+  .btn-close { transition: background-color var(--rf-dur-base), color var(--rf-dur-base); }
+  .new-version-toast__actions button { transition: background-color var(--rf-dur-base), color var(--rf-dur-base); }
+}
 /* <<< componentes F3c <<< */
 
 /* >>> componentes F3d (Suite COMEX) >>> */
@@ -1814,52 +1981,6 @@ select.input,
 }
 
 
-dialog.modal-dialog {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  width: 100%;
-  max-width: 560px;
-  max-height: 90vh;
-  overflow: visible;
-}
-dialog.modal-dialog::backdrop {
-  background: var(--overlay, rgba(0, 30, 30, 0.5));
-}
-dialog.modal-dialog--wide { max-width: 760px; }
-dialog.modal-dialog--xl { max-width: min(1200px, 95vw); }
-.modal-content {
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 24px;
-  box-shadow: var(--shadow);
-  max-height: 90vh;
-  overflow-y: auto;
-}
-.modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 4px;
-}
-.modal-header h2 { margin: 0; }
-.btn-close {
-  background: transparent;
-  border: 0;
-  font-size: 22px;
-  line-height: 1;
-  color: var(--ink-soft);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-}
-.btn-close:hover { background: var(--surface-alt); color: var(--ink); }
-.btn-close:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--focus-ring-strong);
-}
-.modal-body { color: var(--ink); }
-.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 
 
 

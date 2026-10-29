@@ -94,6 +94,8 @@ const SAME_IN_BOTH_THEMES = [
   '--rf-ease-out',
   '--rf-ease-spring',
   '--rf-shadow-primary-hover',
+  '--rf-toast-ink',
+  '--rf-toast-ink-soft',
 ];
 
 // Valores do :root claro em origin/main f74c579 (nao podem mudar).
