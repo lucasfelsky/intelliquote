@@ -1,0 +1,26 @@
+[
+  {
+    "token": "--rf-skeleton-base",
+    "claro": "#e3ecea",
+    "escuro": "#163845",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-skeleton-shine",
+    "claro": "#f7faf9",
+    "escuro": "#1d4250",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-empty-border",
+    "claro": "#b9cbc6",
+    "escuro": "rgba(74, 222, 200, 0.28)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Topbar"
+  }
+]

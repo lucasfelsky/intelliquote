@@ -70,13 +70,6 @@ export function TabList({ children, 'aria-label': ariaLabel }: { children: React
       aria-label={ariaLabel}
       className="tabs-list"
       onKeyDown={onKeyDown}
-      style={{
-        display: 'flex',
-        gap: '24px',
-        borderBottom: '1px solid var(--border)',
-        marginBottom: '16px',
-        overflowX: 'auto',
-      }}
     >
       {children}
     </div>
@@ -97,19 +90,7 @@ export function Tab({ value, children }: { value: string; children: ReactNode })
       id={`${ctx.baseId}-tab-${value}`}
       tabIndex={isSelected ? 0 : -1}
       onClick={() => ctx.onValueChange(value)}
-      style={{
-        background: 'none',
-        border: 'none',
-        borderBottom: isSelected ? '2px solid var(--primary-700)' : '2px solid transparent',
-        color: isSelected ? 'var(--primary-700)' : 'var(--ink-soft)',
-        padding: '8px 4px',
-        cursor: 'pointer',
-        fontSize: '14px',
-        fontWeight: isSelected ? 600 : 400,
-        whiteSpace: 'nowrap',
-        transition: 'all 0.2s ease',
-      }}
-      className={`tabs-trigger ${isSelected ? 'tabs-trigger--active' : ''}`}
+      className={isSelected ? 'tabs-trigger tabs-trigger--active' : 'tabs-trigger'}
     >
       {children}
     </button>
@@ -131,7 +112,6 @@ export function TabPanel({ value, children }: { value: string; children: ReactNo
       aria-labelledby={`${ctx.baseId}-tab-${value}`}
       tabIndex={0}
       className="tabs-panel"
-      style={{ outline: 'none' }}
     >
       {children}
     </div>
