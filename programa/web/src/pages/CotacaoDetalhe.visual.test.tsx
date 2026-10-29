@@ -363,6 +363,38 @@ describe('CotacaoDetalhe (F6): Enviar cotação (3 passos)', () => {
     expect(within(dialog).getByRole('button', { name: 'Gerenciar links' }).querySelector('svg')).not.toBeNull();
     expect(semEstilo(dialog)).toEqual([]);
   });
+
+  it('passo 3: com 0 falha(s) o numero das falhas fica na cor do texto (sem a modificadora --falha; desvio do board)', async () => {
+    vi.mocked(sendDispatch).mockResolvedValue({
+      dispatchEventId: 2,
+      status: 'completed',
+      recipientsCount: 1,
+      sentCount: 1,
+      failedCount: 0,
+      results: [{ supplierContactId: 10, status: 'sent', dispatchEventId: 2 }],
+    });
+    const { container, findByRole, getByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+    fireEvent.click(getByRole('button', { name: 'Enviar cotação' }));
+    const dialog = dialogByTitle(container, 'Enviar cotação para fornecedores');
+    await waitFor(() => within(dialog).getByRole('checkbox'));
+    fireEvent.click(within(dialog).getByRole('checkbox'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continuar' }));
+    await waitFor(() => within(dialog).getByLabelText('Assunto'));
+    await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Enviar agora' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Enviar agora' }));
+    const confirmacao = dialogByTitle(container, 'Confirmar ação');
+    await waitFor(() => expect(confirmacao.open).toBe(true));
+    fireEvent.click(within(confirmacao).getByRole('button', { name: 'Confirmar' }));
+
+    await waitFor(() => expect(dialog.querySelector('.cotacao-envio__resultado')).not.toBeNull());
+    const contagem = dialog.querySelector('.cotacao-envio__contagem') as HTMLElement;
+    expect(contagem.textContent).toBe('1 enviado(s) · 0 falha(s)');
+    expect(Array.from(contagem.querySelectorAll('.cotacao-envio__num')).map((n) => [n.textContent, n.className])).toEqual([
+      ['1', 'cotacao-envio__num'],
+      ['0', 'cotacao-envio__num'],
+    ]);
+  });
 });
 
 describe('CotacaoDetalhe (F6): Links do portal', () => {

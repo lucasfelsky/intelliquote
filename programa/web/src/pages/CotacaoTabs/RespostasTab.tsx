@@ -84,6 +84,15 @@ function formatCurrency(value: number | undefined | null, currency: string): str
   }) + ' ' + currency;
 }
 
+// Preco-alvo e' campo de texto (inputMode decimal): aceita virgula ou ponto.
+// Vazio ou texto invalido vira null (igual ao antigo type="number", que entregava '').
+function parseTargetPriceInput(value: string | undefined): number | null {
+  const normalized = (value ?? '').trim().replace(',', '.');
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normalizeSupplier(raw: unknown): SupplierSummary {
   if (typeof raw !== 'object' || raw === null) throw new Error('Resposta inesperada.');
   const obj = raw as Record<string, unknown>;
@@ -225,7 +234,7 @@ export function RespostasTab({
       .filter((item) => !item.isUnavailable)
       .map((item) => ({
         quoteResponseItemId: item.id,
-        targetPrice: values[item.id]?.trim() ? Number(values[item.id]) : null,
+        targetPrice: parseTargetPriceInput(values[item.id]),
       }));
   }
 
@@ -239,7 +248,7 @@ export function RespostasTab({
           itemTargets: buildItemTargetsPayload(replyTarget, replyItemTargets),
         });
       }
-      const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+      const parsedTargetPrice = parseTargetPriceInput(replyTargetPrice);
       return replyToQuoteResponse(replyTarget.id, { subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
     },
     onSuccess: (result) => {
@@ -865,9 +874,8 @@ export function RespostasTab({
                           <input
                             id={`replyItemTarget-${item.id}`}
                             className="input resposta-responder__alvo"
-                            type="number"
-                            step="0.01"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
                             disabled={Boolean(item.isUnavailable)}
                             value={item.isUnavailable ? '' : (replyItemTargets[item.id] ?? '')}
                             onChange={(e) =>
@@ -891,9 +899,8 @@ export function RespostasTab({
                     <input
                       id="replyTargetPrice"
                       className="input resposta-form__mono"
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={replyTargetPrice}
                       onChange={(e) => setReplyTargetPrice(e.target.value)}
                     />
@@ -919,7 +926,7 @@ export function RespostasTab({
                       });
                       return;
                     }
-                    const parsedTargetPrice = replyTargetPrice.trim() ? Number(replyTargetPrice) : null;
+                    const parsedTargetPrice = parseTargetPriceInput(replyTargetPrice);
                     replyPreviewMutation.mutate({ id: replyTarget.id, subject: replySubject, message: replyMessage, targetPrice: parsedTargetPrice });
                   }}
                 >
