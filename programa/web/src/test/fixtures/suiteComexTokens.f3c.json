@@ -1,0 +1,26 @@
+[
+  {
+    "token": "--rf-toast-bg",
+    "claro": "#0b2430",
+    "escuro": "#163845",
+    "constante": false,
+    "fonte": "portal",
+    "ref": "Sobreposicoes"
+  },
+  {
+    "token": "--rf-toast-ink",
+    "claro": "#e8f4f6",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sobreposicoes"
+  },
+  {
+    "token": "--rf-toast-ink-soft",
+    "claro": "#b8ccd3",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Componentes"
+  }
+]
