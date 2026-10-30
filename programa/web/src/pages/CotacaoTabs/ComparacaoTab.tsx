@@ -24,6 +24,7 @@ import {
 } from '@/services/dispatch';
 import { creditSupportQueryKey } from '@/services/creditSupport';
 import { Modal } from '@/components/Modal';
+import { Icon } from '@/components/icons';
 import { InfoPopover } from '@/components/InfoPopover';
 import { SupplierNotes } from '@/components/SupplierNotes';
 import { PurchaseOrderModal, type PurchaseOrderTarget } from './PurchaseOrderModal';
@@ -139,10 +140,9 @@ function DgSeal({ result }: { result: ComparisonResult }) {
   const names = dgItems.map((entry) => entry.productName || `Item ${entry.quoteRequestItemId}`).join(', ');
   return (
     <span
-      className="badge"
+      className="badge badge--danger cmp-dg"
       data-testid="dg-seal"
       title={`Informado como DG pelo fornecedor: ${names}`}
-      style={{ alignSelf: 'flex-start', marginTop: 2 }}
     >
       DG · {dgItems.length}
     </span>
@@ -188,76 +188,6 @@ function initialsOf(name: string): string {
 function scorePercent(total: number): number {
   if (typeof total !== 'number' || Number.isNaN(total)) return 0;
   return Math.min(100, Math.max(0, total));
-}
-
-function CheckIcon() {
-  return (
-    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function TrophyIcon() {
-  return (
-    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-      <path d="M4 22h16" />
-      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-    </svg>
-  );
-}
-
-function WarningIcon() {
-  return (
-    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
-function DocIcon() {
-  return (
-    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-    </svg>
-  );
-}
-
-function EnvelopeIcon() {
-  return (
-    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h16v16H4z" />
-      <polyline points="22,6 12,13 2,6" />
-    </svg>
-  );
-}
-
-function AlertIcon() {
-  return (
-    <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}
-
-function ChartIcon() {
-  return (
-    <svg aria-hidden="true" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3v18h18" />
-      <rect x="7" y="12" width="3" height="6" rx="1" />
-      <rect x="12" y="8" width="3" height="10" rx="1" />
-      <rect x="17" y="14" width="3" height="4" rx="1" />
-    </svg>
-  );
 }
 
 export function ComparacaoTab({
@@ -617,11 +547,11 @@ export function ComparacaoTab({
         >
           <div className={r.isWinner ? 'cmp-rank cmp-rank--winner' : 'cmp-rank'}>{idx + 1}</div>
           <div className="cmp-row__supplier">
-            <div className="cmp-row__name-line">
-              <span className="cmp-row__name">{name}</span>
+            <span className="cmp-row__name">{name}</span>
+            <span className="cmp-row__badges">
               {viaPartner && (
                 <span
-                  className="badge"
+                  className="badge badge--info"
                   data-testid="via-partner"
                   title="Alternativa de Credit Support: preço e prazo cotados pelo parceiro sobre a proposta deste fornecedor."
                 >
@@ -634,8 +564,8 @@ export function ComparacaoTab({
                 </span>
               )}
               {r.isWinner && (
-                <span className="cmp-winner-badge">
-                  <TrophyIcon />
+                <span className="badge badge--success cmp-winner-badge">
+                  <Icon name="trophy" size={12} strokeWidth={2.2} />
                   {manualWinner
                     ? 'Vencedora (escolha manual)'
                     : previewPendingApproval
@@ -650,23 +580,28 @@ export function ComparacaoTab({
                   label="Qtd divergente: ver itens com quantidade diferente da pedida"
                   trigger={
                     <>
-                      <WarningIcon />
+                      <Icon name="alert-triangle" size={12} strokeWidth={2.4} />
                       Qtd divergente
                     </>
                   }
                 >
-                  <strong>Quantidade divergente</strong>
-                  <ul className="info-popover__list">
+                  <strong className="cmp-popover__titulo">
+                    <Icon name="alert-triangle" size={14} strokeWidth={2.2} />
+                    Quantidade divergente
+                  </strong>
+                  <ul className="cmp-popover__lista">
                     {qtyMismatches.map((m) => (
                       <li key={m.quoteRequestItemId}>
-                        <strong>{m.productName || `Item ${m.quoteRequestItemId}`}</strong>: pedido {formatQty(m.requested)}, cotado {formatQty(m.offered)}
+                        <strong>{m.productName || `Item ${m.quoteRequestItemId}`}</strong>: pedido{' '}
+                        <span className="cmp-mono">{formatQty(m.requested)}</span>, cotado{' '}
+                        <span className="cmp-mono">{formatQty(m.offered)}</span>
                       </li>
                     ))}
                   </ul>
-                  <span>O ranking usa o unitário × quantidade pedida.</span>
+                  <span className="cmp-popover__nota">O ranking usa o unitário × quantidade pedida.</span>
                 </InfoPopover>
               )}
-            </div>
+            </span>
             <ContactLine name={contactSource?.name} email={contactSource?.email} />
             <span className="cmp-row__contact">{formatOriginLine(r)}</span>
             <SupplierNotes notes={r.notes} testId="cmp-notes" />
@@ -674,7 +609,7 @@ export function ComparacaoTab({
           </div>
           <div className="cmp-row__price">{formatNumber(r.offeredPrice)}</div>
           <div>
-            <span className="cmp-incoterm-pill">{r.offeredIncoterm}</span>
+            <span className="chip chip--static cmp-incoterm">{r.offeredIncoterm}</span>
           </div>
           <div className="cmp-row__payment">{r.paymentTermsDays} dias</div>
           <div className="cmp-row__leadtime">{formatLeadTime(r.leadTimeDays)}</div>
@@ -694,32 +629,32 @@ export function ComparacaoTab({
                   // PR4b: PO ao parceiro. Sem "Responder" (o e-mail iria ao fornecedor).
                   <button
                     type="button"
-                    className="cmp-btn cmp-btn--primary"
+                    className="primary-button cmp-btn cmp-btn--primary cmp-btn--sm"
                     onClick={() => handleRowSendPo(r, !manualWinner)}
                     title={`Enviar Ordem de Compra ao parceiro ${r.creditPartner?.name ?? ''} (${r.partnerContact?.email ?? 'contato principal'})`}
                     data-testid="po-partner"
                   >
-                    <DocIcon />
+                    <Icon name="file-text" size={15} strokeWidth={1.9} />
                     Enviar Ordem de Compra
                   </button>
                 ) : (
                   <>
                     <button
                       type="button"
-                      className="cmp-btn cmp-btn--primary"
+                      className="primary-button cmp-btn cmp-btn--primary cmp-btn--sm"
                       onClick={() => handleRowSendPo(r, !manualWinner)}
                       title={`Enviar Ordem de Compra para ${r.contact?.email ?? ''}`}
                     >
-                      <DocIcon />
+                      <Icon name="file-text" size={15} strokeWidth={1.9} />
                       Enviar Ordem de Compra
                     </button>
                     <button
                       type="button"
-                      className="cmp-btn cmp-btn--ghost"
+                      className="ghost-button cmp-btn cmp-btn--ghost cmp-btn--sm"
                       onClick={() => handleRowReply(r, !manualWinner)}
                       title={`Responder ${r.contact?.email ?? ''} para fechar o pedido`}
                     >
-                      <EnvelopeIcon />
+                      <Icon name="templates" size={15} strokeWidth={1.9} />
                       Responder
                     </button>
                   </>
@@ -729,7 +664,7 @@ export function ComparacaoTab({
                   {canCompare && (
                     <button
                       type="button"
-                      className="cmp-btn cmp-btn--link"
+                      className="link-button cmp-btn cmp-btn--link"
                       onClick={() => openWinnerModal(r)}
                     >
                       Definir como vencedora
@@ -738,7 +673,7 @@ export function ComparacaoTab({
                   {canSendPo && !viaPartner && (
                     <button
                       type="button"
-                      className="cmp-btn cmp-btn--link cmp-btn--subtle"
+                      className="link-button cmp-btn cmp-btn--link cmp-btn--subtle"
                       onClick={() => void handleNonWinnerPo(r)}
                       data-testid="po-nonwinner"
                     >
@@ -878,32 +813,65 @@ export function ComparacaoTab({
     }
   }
 
+  // Botao do by-pass (1 proposta so): o mesmo no cartao do fornecedor e, se por algum motivo nao
+  // houver resultado, em linha propria.
+  const renderBypassButton = (only: ComparisonResult | undefined, bypassViaPartner: boolean) => (
+    <button
+      type="button"
+      className="primary-button cmp-btn cmp-btn--primary"
+      onClick={() => handleBypassSendPo()}
+      disabled={bypassPending}
+      title={
+        bypassViaPartner
+          ? `Enviar Ordem de Compra ao parceiro ${only?.creditPartner?.name ?? ''} (${only?.partnerContact?.email ?? 'contato principal'})`
+          : undefined
+      }
+      data-testid={bypassViaPartner ? 'po-partner' : undefined}
+    >
+      <Icon name="file-text" size={16} strokeWidth={1.9} />
+      {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
+    </button>
+  );
+
+  const modalSubtitle = (
+    <>
+      <span className="cmp-codigo">{requestCode}</span> · {productName}
+    </>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div className="cmp-tab">
       {feedback && (
-        <p className={feedback.kind === 'err' ? 'alert alert--error' : 'alert alert--success'}>
+        <p
+          className={feedback.kind === 'err' ? 'alert alert--error cmp-feedback' : 'alert alert--success cmp-feedback'}
+          role={feedback.kind === 'err' ? 'alert' : 'status'}
+        >
           {feedback.text}
         </p>
       )}
 
-      <div className="cmp-card">
-        <div className="cmp-head">
+      <section className="cmp-card" aria-labelledby="cmp-title">
+        <header className="cmp-head">
           <div className="cmp-head__info">
             <span className="cmp-eyebrow">SQ Química · Comparação</span>
-            <h2 className="cmp-title">Comparação de fornecedores</h2>
-            <div className="cmp-head__meta">
-              {productName && <span className="cmp-head__product">{productName}</span>}
-            </div>
+            <h2 id="cmp-title" className="cmp-title">Comparação de fornecedores</h2>
+            {productName && <span className="cmp-head__product">{productName}</span>}
           </div>
           <div className="cmp-head__aside">
-            <div className="cmp-live">
+            <span className="cmp-live" role="status">
               <span className="cmp-live__dot" aria-hidden="true" />
-              {responseCount} respostas · ao vivo
-            </div>
+              {/* O leitor de tela le o texto inteiro (um no); o visual separa o numero em mono. */}
+              <span className="sr-only">
+                {responseCount} {responseCount === 1 ? 'resposta' : 'respostas'} · ao vivo
+              </span>
+              <span aria-hidden="true">
+                <span className="cmp-live__num">{responseCount}</span> {responseCount === 1 ? 'resposta' : 'respostas'} · ao vivo
+              </span>
+            </span>
             {canConclude && quoteRequestStatus === 'open' && (
               <button
                 type="button"
-                className="cmp-btn cmp-btn--ghost"
+                className="ghost-button cmp-btn cmp-btn--ghost"
                 onClick={() => {
                   setReviewTarget(rankedResults.find((r) => r.isWinner) ?? excludedWinner ?? null);
                   setReviewOpen(true);
@@ -914,7 +882,7 @@ export function ComparacaoTab({
               </button>
             )}
           </div>
-        </div>
+        </header>
 
         <div className="cmp-criteria">
           <div className="cmp-criteria__head">
@@ -934,7 +902,7 @@ export function ComparacaoTab({
                   onClick={() => toggleCriterion(c.id)}
                   title={c.id === 'quality' ? 'Fornecedores sem avaliações prévias recebem nota 0 neste critério.' : undefined}
                 >
-                  {isSelected && <CheckIcon />}
+                  {isSelected && <Icon name="check" size={14} strokeWidth={3} />}
                   {c.label}
                 </button>
               );
@@ -947,21 +915,39 @@ export function ComparacaoTab({
         </div>
 
         <div className="cmp-body">
-        {previewQuery.isLoading && <p>Calculando comparação…</p>}
+        {previewQuery.isLoading && (
+          <div className="cmp-carregando" role="status">
+            <span className="cmp-carregando__spinner" aria-hidden="true" />
+            <span>Calculando comparação…</span>
+          </div>
+        )}
         {previewQuery.isError && (
-          <div className="empty-state">
-            <p>Não foi possível calcular a comparação.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
-              {messageOf(previewQuery.error)}
-            </p>
-            <button className="ghost-button" onClick={() => previewQuery.refetch()}>Tentar novamente</button>
+          <div
+            role="alert"
+            className="cmp-erro"
+          >
+            <span className="cmp-erro__corpo">
+              <Icon name="alert-triangle" size={20} strokeWidth={1.9} />
+              <span className="cmp-erro__texto">
+                <strong>Não foi possível calcular a comparação.</strong>
+                <span>{messageOf(previewQuery.error)}</span>
+              </span>
+            </span>
+            <button
+              type="button"
+              className="ghost-button cmp-btn cmp-btn--ghost cmp-btn--sm"
+              onClick={() => previewQuery.refetch()}
+            >
+              <Icon name="refresh" size={14} strokeWidth={2} />
+              Tentar novamente
+            </button>
           </div>
         )}
 
         {previewQuery.data && responseCount === 0 && (
           <div className="cmp-empty">
-            <div className="cmp-empty__icon">
-              <ChartIcon />
+            <div className="cmp-empty__icon" aria-hidden="true">
+              <Icon name="relatorios" size={30} strokeWidth={1.5} />
             </div>
             <div className="cmp-empty__text">
               <strong>Nenhuma resposta ainda</strong>
@@ -975,9 +961,9 @@ export function ComparacaoTab({
 
         {previewQuery.data && responseCount > 0 && comparableCount === 0 && (
           <div className="cmp-bypass">
-            <div className="cmp-bypass-alert">
-              <div className="cmp-bypass-alert__icon">
-                <AlertIcon />
+            <div className="cmp-bypass-alert" role="status">
+              <div className="cmp-bypass-alert__icon" aria-hidden="true">
+                <Icon name="alert-circle" size={22} strokeWidth={1.9} />
               </div>
               <div className="cmp-bypass-alert__text">
                 <strong>Nenhuma proposta completa para comparar.</strong>
@@ -996,9 +982,9 @@ export function ComparacaoTab({
           const bypassContactSource = bypassViaPartner ? only?.partnerContact : only?.contact;
           return (
             <div className="cmp-bypass">
-              <div className="cmp-bypass-alert">
-                <div className="cmp-bypass-alert__icon">
-                  <AlertIcon />
+              <div className="cmp-bypass-alert" role="status">
+                <div className="cmp-bypass-alert__icon" aria-hidden="true">
+                  <Icon name="alert-circle" size={22} strokeWidth={1.9} />
                 </div>
                 <div className="cmp-bypass-alert__text">
                   <strong>
@@ -1016,17 +1002,17 @@ export function ComparacaoTab({
                 </div>
               </div>
 
-              {only && (
+              {only ? (
                 <div className="cmp-bypass-supplier">
                   <div className="cmp-bypass-supplier__info">
-                    <div className="cmp-bypass-supplier__avatar">{initialsOf(bypassName)}</div>
+                    <div className="cmp-bypass-supplier__avatar" aria-hidden="true">{initialsOf(bypassName)}</div>
                     <div className="cmp-bypass-supplier__name">
                       <strong>
                         {bypassName}
                         {bypassViaPartner && (
                           <>
                             {' '}
-                            <span className="badge" data-testid="via-partner">
+                            <span className="badge badge--info" data-testid="via-partner">
                               via {only.creditPartner?.name ?? 'parceiro'} · Credit Support
                             </span>
                           </>
@@ -1040,33 +1026,18 @@ export function ComparacaoTab({
                   <div className="cmp-bypass-supplier__stats">
                     <div className="cmp-bypass-supplier__stat">
                       <span>{basketLabel}</span>
-                      <strong>{formatNumber(only.offeredPrice)}</strong>
+                      <strong className="cmp-bypass-supplier__valor">{formatNumber(only.offeredPrice)}</strong>
                     </div>
                     <div className="cmp-bypass-supplier__stat">
                       <span>Lead time</span>
                       <strong>{formatLeadTime(only.leadTimeDays)}</strong>
                     </div>
+                    {renderBypassButton(only, bypassViaPartner)}
                   </div>
                 </div>
+              ) : (
+                <div className="cmp-bypass-actions">{renderBypassButton(only, bypassViaPartner)}</div>
               )}
-
-              <div className="cmp-bypass-actions">
-                <button
-                  type="button"
-                  className="cmp-btn cmp-btn--primary"
-                  onClick={() => handleBypassSendPo()}
-                  disabled={bypassPending}
-                  title={
-                    bypassViaPartner
-                      ? `Enviar Ordem de Compra ao parceiro ${only?.creditPartner?.name ?? ''} (${only?.partnerContact?.email ?? 'contato principal'})`
-                      : undefined
-                  }
-                  data-testid={bypassViaPartner ? 'po-partner' : undefined}
-                >
-                  <DocIcon />
-                  {bypassPending ? 'Processando…' : 'Enviar Ordem de Compra'}
-                </button>
-              </div>
             </div>
           );
         })()}
@@ -1074,19 +1045,23 @@ export function ComparacaoTab({
         {previewQuery.data && comparableCount >= 2 && (
           <>
             {previewPendingApproval && !manualWinner && (
-              <p className="alert alert--warning" style={{ marginBottom: 12 }}>
-                A adjudicação exige aprovação de gestor/admin pela alçada de R$ {formatNumber(previewQuery.data?.thresholdValue ?? null)} ou pela ausência de câmbio para verificar esse limite. Essa verificação é separada do ranking dos itens.
+              <p className="cmp-alcada" role="status">
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                <span>
+                  A adjudicação exige aprovação de gestor/admin pela alçada de R$ <span className="cmp-mono">{formatNumber(previewQuery.data?.thresholdValue ?? null)}</span> ou pela ausência de câmbio para verificar esse limite. Essa verificação é separada do ranking dos itens.
+                </span>
               </p>
             )}
             {manualWinner && canCompare && quoteRequestStatus === 'open' && (
-              <div style={{ marginBottom: 12 }}>
+              <div className="cmp-usar-score">
                 <button
                   type="button"
-                  className="cmp-btn cmp-btn--ghost"
+                  className="ghost-button cmp-btn cmp-btn--ghost"
                   onClick={() => void handleUseScoreWinner()}
                   data-testid="use-score-winner"
                   title="Descarta a escolha manual e usa a 1ª do ranking com os critérios atuais."
                 >
+                  <Icon name="refresh" size={16} strokeWidth={1.9} />
                   Usar vencedora pelo score
                 </button>
               </div>
@@ -1106,11 +1081,11 @@ export function ComparacaoTab({
         )}
 
         {previewQuery.data && excludedResponses.length > 0 && (
-          <section className="cmp-excluded" aria-labelledby="cmp-excluded-title" style={{ marginTop: 16 }}>
-            <h3 id="cmp-excluded-title" style={{ fontSize: 14, margin: '0 0 8px' }}>
+          <section className="cmp-excluded" aria-labelledby="cmp-excluded-title">
+            <h3 id="cmp-excluded-title" className="cmp-excluded__titulo">
               Fora do ranking
             </h3>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--ink-soft)' }}>
+            <ul className="cmp-excluded__lista">
               {excludedResponses.map((entry) => {
                 const isExcludedWinner = entry === excludedWinner;
                 const entryViaPartner = isViaPartner(entry);
@@ -1122,97 +1097,98 @@ export function ComparacaoTab({
                   creditPartner: entry.creditPartner,
                 };
                 return (
-                <li key={candidateKey(entry)} style={{ marginBottom: 4 }}>
-                  <strong style={{ color: 'var(--ink)' }}>
-                    {entry.supplier.name || `Fornecedor #${entry.supplierId}`}
-                  </strong>
-                  {entryViaPartner && (
-                    <>
-                      {' '}
-                      <span className="badge" data-testid="via-partner">
-                        via {entry.creditPartner?.name ?? 'parceiro'}
-                      </span>
-                    </>
-                  )}
-                  {isExcludedWinner && (
-                    <>
-                      {' '}
-                      <span className="cmp-winner-badge" data-testid="excluded-winner">
-                        <TrophyIcon />
-                        Vencedora (escolha manual)
-                      </span>
-                    </>
-                  )}
-                  {' — '}
-                  {excludedReasonText(entry)}
-                  {isExcludedWinner && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                      {entryViaPartner ? (
+                <li key={candidateKey(entry)} className="cmp-excluded__item">
+                  <span className="cmp-excluded__texto">
+                    <strong className="cmp-excluded__nome">
+                      {entry.supplier.name || `Fornecedor #${entry.supplierId}`}
+                    </strong>
+                    {entryViaPartner && (
+                      <>
+                        {' '}
+                        <span className="badge badge--info" data-testid="via-partner">
+                          via {entry.creditPartner?.name ?? 'parceiro'}
+                        </span>
+                      </>
+                    )}
+                    {isExcludedWinner && (
+                      <>
+                        {' '}
+                        <span className="badge badge--success cmp-winner-badge" data-testid="excluded-winner">
+                          <Icon name="trophy" size={12} strokeWidth={2.2} />
+                          Vencedora (escolha manual)
+                        </span>
+                      </>
+                    )}
+                    {' — '}
+                    {excludedReasonText(entry)}
+                  </span>
+                  <span className="cmp-excluded__acoes">
+                    {isExcludedWinner &&
+                      (entryViaPartner ? (
                         <button
                           type="button"
-                          className="cmp-btn cmp-btn--primary"
+                          className="primary-button cmp-btn cmp-btn--primary cmp-btn--sm"
                           onClick={() => handleRowSendPo(entryTarget, false)}
                           title={`Enviar Ordem de Compra ao parceiro ${entry.creditPartner?.name ?? ''}`}
                           data-testid="po-partner"
                         >
-                          <DocIcon />
+                          <Icon name="file-text" size={15} strokeWidth={1.9} />
                           Enviar Ordem de Compra
                         </button>
                       ) : (
                         <>
                           <button
                             type="button"
-                            className="cmp-btn cmp-btn--primary"
+                            className="primary-button cmp-btn cmp-btn--primary cmp-btn--sm"
                             onClick={() => handleRowSendPo(entryTarget, false)}
                           >
-                            <DocIcon />
+                            <Icon name="file-text" size={15} strokeWidth={1.9} />
                             Enviar Ordem de Compra
                           </button>
                           <button
                             type="button"
-                            className="cmp-btn cmp-btn--ghost"
+                            className="ghost-button cmp-btn cmp-btn--ghost cmp-btn--sm"
                             onClick={() => handleRowReply(entryTarget, false)}
                           >
-                            <EnvelopeIcon />
+                            <Icon name="templates" size={15} strokeWidth={1.9} />
                             Responder
                           </button>
                         </>
-                      )}
-                    </div>
-                  )}
-                  {!isExcludedWinner && canCompare && canPickExcludedAsWinner(entry) && (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        className="cmp-btn cmp-btn--link"
-                        onClick={() =>
-                          openWinnerModal({
-                            quoteResponseId: entry.quoteResponseId,
-                            supplierId: entry.supplierId,
-                            supplier: entry.supplier,
-                            creditSupportRequestId: entry.creditSupportRequestId,
-                            creditPartner: entry.creditPartner,
-                          })
-                        }
-                      >
-                        Definir como vencedora mesmo assim
-                      </button>
-                    </>
-                  )}
-                  {!isExcludedWinner && !entryViaPartner && canSendPo && (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        className="cmp-btn cmp-btn--link cmp-btn--subtle"
-                        onClick={() => void handleNonWinnerPo(entryTarget)}
-                        data-testid="po-nonwinner"
-                      >
-                        Enviar Ordem de Compra
-                      </button>
-                    </>
-                  )}
+                      ))}
+                    {!isExcludedWinner && canCompare && canPickExcludedAsWinner(entry) && (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          className="link-button cmp-btn cmp-btn--link"
+                          onClick={() =>
+                            openWinnerModal({
+                              quoteResponseId: entry.quoteResponseId,
+                              supplierId: entry.supplierId,
+                              supplier: entry.supplier,
+                              creditSupportRequestId: entry.creditSupportRequestId,
+                              creditPartner: entry.creditPartner,
+                            })
+                          }
+                        >
+                          Definir como vencedora mesmo assim
+                        </button>
+                      </>
+                    )}
+                    {!isExcludedWinner && !entryViaPartner && canSendPo && (
+                      <>
+                        {' '}
+                        <button
+                          type="button"
+                          className="link-button cmp-btn cmp-btn--link cmp-btn--subtle"
+                          onClick={() => void handleNonWinnerPo(entryTarget)}
+                          data-testid="po-nonwinner"
+                        >
+                          Enviar Ordem de Compra
+                        </button>
+                      </>
+                    )}
+                  </span>
                 </li>
                 );
               })}
@@ -1220,87 +1196,95 @@ export function ComparacaoTab({
           </section>
         )}
         </div>
-      </div>
+      </section>
 
       <Modal
         isOpen={replyTarget !== null}
         onClose={closeReplyModal}
         size="wide"
         title={replyTarget ? `Responder ${replyTargetName}` : ''}
+        subtitle={replyTarget ? modalSubtitle : undefined}
       >
         {replyTarget && (
           <>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
-              {requestCode} · {productName}
-            </p>
+            <div className="cmp-resposta">
+              <div className="cmp-campo">
+                <label className="field-label" htmlFor="replySubject">
+                  Assunto
+                </label>
+                <input
+                  id="replySubject"
+                  className="input"
+                  value={replySubject}
+                  onChange={(e) => setReplySubject(e.target.value)}
+                />
+              </div>
 
-            <label className="field-label" htmlFor="replySubject" style={{ marginTop: 12 }}>
-              Assunto
-            </label>
-            <input
-              id="replySubject"
-              className="input"
-              value={replySubject}
-              onChange={(e) => setReplySubject(e.target.value)}
-            />
+              <div className="cmp-campo">
+                <label className="field-label" htmlFor="replyMessage">
+                  Mensagem
+                </label>
+                <textarea
+                  id="replyMessage"
+                  className="textarea"
+                  rows={4}
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  placeholder="Opcional. Ex.: confirmando o fechamento do pedido. Aparece no corpo do e-mail."
+                />
+              </div>
 
-            <label className="field-label" htmlFor="replyMessage" style={{ marginTop: 12 }}>
-              Mensagem
-            </label>
-            <textarea
-              id="replyMessage"
-              className="textarea"
-              rows={4}
-              value={replyMessage}
-              onChange={(e) => setReplyMessage(e.target.value)}
-              placeholder="Opcional. Ex.: confirmando o fechamento do pedido. Aparece no corpo do e-mail."
-            />
+              <div>
+                <button
+                  type="button"
+                  className="ghost-button cmp-btn cmp-btn--ghost cmp-btn--sm"
+                  disabled={replyPreviewMutation.isPending}
+                  onClick={() =>
+                    replyTarget.quoteResponseId &&
+                    replyPreviewMutation.mutate({
+                      id: replyTarget.quoteResponseId,
+                      subject: replySubject,
+                      message: replyMessage,
+                    })
+                  }
+                >
+                  <Icon name="refresh" size={14} strokeWidth={2} />
+                  {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
+                </button>
+              </div>
 
-            <div className="modal-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
-              <button
-                type="button"
-                className="ghost-button"
-                disabled={replyPreviewMutation.isPending}
-                onClick={() =>
-                  replyTarget.quoteResponseId &&
-                  replyPreviewMutation.mutate({
-                    id: replyTarget.quoteResponseId,
-                    subject: replySubject,
-                    message: replyMessage,
-                  })
-                }
-              >
-                {replyPreviewMutation.isPending ? 'Atualizando…' : 'Atualizar preview'}
-              </button>
-            </div>
-
-            <h3 style={{ marginTop: 16, marginBottom: 6 }}>Preview do e-mail</h3>
-            {replyPreviewData ? (
-              <>
-                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
-                  Para: <strong>{replyPreviewData.to}</strong>
-                  {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
-                </p>
-                <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 8 }}>
-                  Assunto: <strong>{replyPreviewData.subject}</strong>
-                </p>
+              <div className="cmp-resposta__previa-cab">
+                <h3 className="cmp-resposta__previa-titulo">Preview do e-mail</h3>
+                {replyPreviewData ? (
+                  <>
+                    <p className="cmp-resposta__linha">
+                      Para: <strong>{replyPreviewData.to}</strong>
+                      {replyPreviewData.cc.length > 0 && <> · CC: {replyPreviewData.cc.join(', ')}</>}
+                    </p>
+                    <p className="cmp-resposta__linha">
+                      Assunto: <strong>{replyPreviewData.subject}</strong>
+                    </p>
+                  </>
+                ) : (
+                  <p className="cmp-resposta__linha">
+                    {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
+                  </p>
+                )}
+              </div>
+              {replyPreviewData && (
                 <iframe
                   sandbox=""
                   key={replyPreviewData.html.length}
                   title="preview-reply-email"
-                  className="preview-frame"
+                  className="preview-frame cmp-resposta__previa"
                   srcDoc={replyPreviewData.html}
                 />
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                {replyPreviewMutation.isPending ? 'Carregando preview…' : 'Sem preview ainda.'}
-              </p>
-            )}
+              )}
 
-            {replyModalError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{replyModalError}</p>
-            )}
+              {replyModalError && (
+                <p className="alert alert--error" role="alert">{replyModalError}</p>
+              )}
+            </div>
 
             <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={closeReplyModal}>
@@ -1312,6 +1296,7 @@ export function ComparacaoTab({
                 disabled={replySendMutation.isPending || !replySubject.trim()}
                 onClick={() => replySendMutation.mutate()}
               >
+                <Icon name="templates" size={16} strokeWidth={1.9} />
                 {replySendMutation.isPending ? 'Enviando…' : 'Enviar e-mail'}
               </button>
             </div>
@@ -1336,26 +1321,27 @@ export function ComparacaoTab({
           isOpen
           onClose={closeWinnerModal}
           title={`Definir ${winnerTargetName} como vencedora`}
+          subtitle={modalSubtitle}
         >
-          <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
-            {requestCode} · {productName}
-          </p>
+          <div className="cmp-vencedora">
+            <div className="cmp-campo">
+              <label className="field-label" htmlFor="winnerReason">
+                Motivo
+              </label>
+              <textarea
+                id="winnerReason"
+                className="textarea"
+                rows={4}
+                value={winnerReason}
+                onChange={(e) => setWinnerReason(e.target.value)}
+                placeholder="Obrigatório se esta proposta divergir da vencedora calculada pela comparação."
+              />
+            </div>
 
-          <label className="field-label" htmlFor="winnerReason" style={{ marginTop: 12 }}>
-            Motivo
-          </label>
-          <textarea
-            id="winnerReason"
-            className="textarea"
-            rows={4}
-            value={winnerReason}
-            onChange={(e) => setWinnerReason(e.target.value)}
-            placeholder="Obrigatório se esta proposta divergir da vencedora calculada pela comparação."
-          />
-
-          {winnerModalError && (
-            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{winnerModalError}</p>
-          )}
+            {winnerModalError && (
+              <p className="alert alert--error" role="alert">{winnerModalError}</p>
+            )}
+          </div>
 
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeWinnerModal}>
@@ -1374,6 +1360,7 @@ export function ComparacaoTab({
                 })
               }
             >
+              <Icon name="trophy" size={16} strokeWidth={1.9} />
               {setWinnerMut.isPending ? 'Salvando…' : 'Definir como vencedora'}
             </button>
           </div>
@@ -1384,45 +1371,48 @@ export function ComparacaoTab({
         isOpen={reviewOpen}
         onClose={closeReviewModal}
         title={reviewTarget ? `Avaliar ${reviewTargetName}` : 'Concluir cotação'}
+        subtitle={modalSubtitle}
       >
-        <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
-          {requestCode} · {productName}
-        </p>
-
-        {reviewTarget && (
-          <div className="cmp-review">
-            <div className="cmp-review__hint">Avaliação (opcional)</div>
-            <div className="cmp-review__grid">
-              <span>Preço</span>
-              <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
-              <span>Prazo</span>
-              <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
-              <span>Qualidade</span>
-              <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
-            </div>
-            <textarea
-              className="textarea cmp-review__comment"
-              value={reviewComment}
-              onChange={(e) => setReviewComment(e.target.value)}
-              placeholder="Comentário (opcional)"
-              rows={2}
-            />
-            {reviewRatingStarted && !reviewRatingComplete && (
-              <div className="cmp-review__warn">
-                Dê nota nas três dimensões ou deixe todas em branco.
+        <div className="cmp-avaliar">
+          {reviewTarget && (
+            <div className="cmp-review">
+              <div className="cmp-review__hint">Avaliação (opcional)</div>
+              <div className="cmp-review__grid">
+                <span>Preço</span>
+                <StarRating value={priceRating} onChange={setPriceRating} label="Preço" />
+                <span>Prazo</span>
+                <StarRating value={leadTimeRating} onChange={setLeadTimeRating} label="Prazo" />
+                <span>Qualidade</span>
+                <StarRating value={qualityRating} onChange={setQualityRating} label="Qualidade" />
               </div>
-            )}
-          </div>
-        )}
+              <textarea
+                className="textarea cmp-review__comment"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Comentário (opcional)"
+                rows={2}
+              />
+              {reviewRatingStarted && !reviewRatingComplete && (
+                <div
+                  role="alert"
+                  className="cmp-review__warn"
+                >
+                  <Icon name="alert-triangle" size={14} strokeWidth={2} />
+                  Dê nota nas três dimensões ou deixe todas em branco.
+                </div>
+              )}
+            </div>
+          )}
 
-        <label className="cmp-review__notify">
-          <input
-            type="checkbox"
-            checked={notifyLosers}
-            onChange={(e) => setNotifyLosers(e.target.checked)}
-          />
-          Avisar não selecionados
-        </label>
+          <label className="cmp-review__notify">
+            <input
+              type="checkbox"
+              checked={notifyLosers}
+              onChange={(e) => setNotifyLosers(e.target.checked)}
+            />
+            Avisar não selecionados
+          </label>
+        </div>
 
         <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={closeReviewModal}>
