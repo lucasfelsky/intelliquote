@@ -70,7 +70,7 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
   it('termo sem resultado mostra "+ Incluir "X" como item novo"', async () => {
     await openModalAndSearch('Aditivo Novo');
 
-    expect(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' })).toBeTruthy();
     expect(screen.getByText('Nenhum item cadastrado com esse nome.')).toBeTruthy();
   });
 
@@ -89,7 +89,7 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
 
   it('incluir cria a linha com o selo "Item novo" e o banner de desenvolvimento', async () => {
     await openModalAndSearch('Aditivo Novo');
-    fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
 
     expect(screen.getByText('Item novo', { selector: 'span.badge' })).toBeTruthy();
     const banner = screen.getByRole('status');
@@ -103,7 +103,7 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
   it('o POST leva { proposedName, quantity, unit, notes } e nao leva catalogItemId', async () => {
     vi.mocked(api.post).mockResolvedValue({ id: 6, isDevelopment: true, items: [] });
     await openModalAndSearch('  Aditivo   Novo ');
-    fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
     fireEvent.change(screen.getByLabelText('Observação do item'), { target: { value: ' aplicação em tintas ' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
@@ -120,7 +120,7 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
   it('sem observacao o POST omite notes', async () => {
     vi.mocked(api.post).mockResolvedValue({ id: 6, isDevelopment: true, items: [] });
     await openModalAndSearch('Aditivo Novo');
-    fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
 
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
@@ -130,9 +130,9 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
 
   it('incluir o mesmo nome 2x nao duplica a linha', async () => {
     await openModalAndSearch('Aditivo Novo');
-    fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar outro item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar outro item' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 'ADITIVO  novo' } });
 
     await screen.findByText('Nenhum item cadastrado com esse nome.');
@@ -142,7 +142,7 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
 
   it('remover a ultima linha nova esconde o banner de desenvolvimento', async () => {
     await openModalAndSearch('Aditivo Novo');
-    fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
     expect(screen.getByRole('status')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Remover item' }));
@@ -152,7 +152,7 @@ describe('ComercialView - item novo (desenvolvimento)', () => {
 
   it('item de catalogo continua sem banner de desenvolvimento', async () => {
     await openModalAndSearch('ácido');
-    fireEvent.click(await screen.findByRole('button', { name: '+ Ácido Cítrico · Ácidos' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ácido Cítrico · Ácidos' }));
 
     expect(screen.queryByRole('status')).toBeNull();
     expect(screen.queryByLabelText('Observação do item')).toBeNull();

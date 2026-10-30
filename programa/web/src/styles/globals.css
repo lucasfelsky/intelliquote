@@ -5093,6 +5093,959 @@ dialog.modal-dialog[open] {
 /* <<< tela F8 <<< */
 
 /* >>> tela F9 (Suite COMEX) >>> */
+/* Solicitacoes (F9; boards v68 SolicitacoesComex/-Dev, SolicitacoesComercial/-Dev, ModalSolicitarCotacao, ModalNovaSolicitacao, ModaisSolicitacao,
+   ModalVincularCatalogo e ModaisAnexos): lista do COMEX e do Comercial, linha expandida, modais de acao, Vincular ao catalogo, Solicitar uma cotacao e
+   anexos tecnicos. Consome var(--rf-*); nenhum token novo. Seletores sempre com um dono (solicitacoes-, solicitacao-, sol-table, sol-filter, sol-cell-,
+   sol-added, sol-item-, anexos-, vincular-catalogo); .sol-items-list so como contexto (o painel de desenvolvimento do Detalhe tem a regra propria).
+   Guarda: src/test/telaF9.test.ts. */
+
+/* ---- Raiz: alertas sem margem e modais alinhados a esquerda (o dialog herda o text-align do td do card mobile) ---- */
+.solicitacoes-alerta {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--rf-radius-alert);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.solicitacoes-alerta > svg {
+  flex: none;
+  margin-top: 1px;
+}
+.solicitacao-modal { text-align: left; }
+.modal-body > .solicitacao-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.modal-body > .solicitacao-modal--vincular { gap: 12px; }
+
+/* ---- Filtros (COMEX): 220 x 44 lado a lado, gap 8 (o gap vem do cabecalho da pagina) ---- */
+.solicitacoes-page .sol-filter {
+  width: 220px;
+  padding-left: 12px;
+}
+
+/* ---- Cartao da lista: colado, 22 de raio, sem padding ---- */
+.solicitacoes-page .solicitacoes-lista {
+  padding: 0;
+  overflow: hidden;
+}
+.solicitacoes-carregando {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+.solicitacoes-carregando .btn-spinner {
+  border-color: var(--rf-border);
+  border-top-color: var(--rf-action);
+}
+.solicitacoes-estado { padding: 20px; }
+.solicitacoes-estado .empty-state { padding: 32px 24px; }
+
+/* ---- Tabela das listas: cabecalho 12/700 sobre --rf-surface-alt, 1a coluna com 20 de recuo, linhas 10/12 (COMEX) ---- */
+.solicitacoes-page--comex .solicitacoes-tabela > thead > tr > th { padding: 12px; }
+.solicitacoes-page--comex .solicitacoes-tabela > thead > tr > th:first-child { padding-left: 20px; }
+.solicitacoes-page--comex .solicitacoes-tabela > thead > tr > th:last-child { padding-right: 20px; }
+.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td:first-child { padding-left: 20px; }
+.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td:last-child { padding-right: 20px; }
+.solicitacoes-page .solicitacoes-tabela .col-status { text-align: left; }
+.solicitacoes-page .solicitacoes-tabela .badge { white-space: nowrap; }
+/* Comercial (board 14e): linhas 14/14, conteudo no topo */
+.solicitacoes-page--comercial .solicitacoes-tabela > thead > tr > th { padding: 12px 14px; }
+.solicitacoes-page--comercial .solicitacoes-tabela > thead > tr > th:first-child { padding-left: 20px; }
+.solicitacoes-page--comercial .solicitacoes-tabela > thead > tr > th:last-child { padding-right: 20px; }
+.solicitacoes-page--comercial .solicitacoes-tabela > tbody > tr > td {
+  padding: 14px;
+  vertical-align: top;
+}
+.solicitacoes-page--comercial .solicitacoes-tabela > tbody > tr > td:first-child { padding-left: 20px; }
+.solicitacoes-page--comercial .solicitacoes-tabela > tbody > tr > td:last-child { padding-right: 20px; }
+
+/* ---- Celulas ---- */
+.solicitacoes-mono {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.solicitacoes-id {
+  font-size: 13px;
+  font-weight: 600;
+}
+.solicitacoes-page .solicitacoes-tabela > tbody > tr > td.solicitacoes-data {
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.solicitacoes-cliente { font-weight: 600; }
+.solicitacoes-cliente--vazio {
+  color: var(--rf-ink-soft);
+  font-weight: 500;
+}
+.solicitacoes-page .solicitacoes-tabela > tbody > tr > td.solicitacoes-itens-celula { white-space: nowrap; }
+.solicitacoes-page .solicitacoes-tabela > tbody > tr > td.solicitacoes-codigo {
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.solicitacoes-page .solicitacoes-tabela > tbody > tr > td.solicitacoes-observacao {
+  max-width: 240px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.solicitacoes-suave { color: var(--rf-ink-soft); }
+.solicitacoes-itens-conteudo { min-width: 0; }
+.solicitacoes-page .sol-items-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.sol-item-linha { overflow-wrap: anywhere; }
+.sol-item-final { font-weight: 700; }
+
+/* Codigo da cotacao como botao (COMEX): contorno --rf-action, mono 12/600 */
+.solicitacoes-page .solicitacoes-cotacao {
+  padding: 0 10px;
+  border: 1.5px solid var(--rf-action);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.solicitacoes-page .solicitacoes-cotacao:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+
+/* Acoes da linha: fantasma 36 (44 no toque), recuo 10; a dica de itens novos ocupa a linha de baixo */
+.solicitacoes-page .solicitacoes-tabela > tbody > tr > td.sol-cell-actions { padding: 8px 12px; }
+.solicitacoes-page .solicitacoes-tabela .sol-cell-actions .row-actions .ghost-button { padding: 0 10px; }
+.solicitacoes-page .solicitacoes-tabela .sol-cell-actions .row-actions .ghost-button:disabled { color: var(--rf-disabled-fg); }
+.solicitacoes-dica {
+  flex-basis: 100%;
+  color: var(--rf-tone-warning-fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* "Ver itens" / "Ocultar itens": 36, fundo --rf-surface-alt; aberto = navy (menta no escuro, --rf-on-action) */
+.solicitacoes-page .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver {
+  padding: 8px 20px 8px 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+.solicitacoes-page .solicitacoes-ver__botao {
+  gap: 6px;
+  background: var(--rf-surface-alt);
+  transition: background-color var(--rf-dur-base), color var(--rf-dur-base);
+}
+.solicitacoes-page .solicitacoes-ver__botao:hover:not(:disabled) { background: var(--rf-bg); }
+/* na linha em hover (fundo --rf-surface-alt) o botao nao pode sumir: vai para a superficie */
+.solicitacoes-page .solicitacoes-tabela > tbody > tr.solicitacoes-linha:hover .solicitacoes-ver__botao:not([aria-expanded="true"]):not(:hover) { background: var(--rf-surface); }
+.solicitacoes-page .solicitacoes-ver__botao[aria-expanded="true"],
+.solicitacoes-page .solicitacoes-ver__botao[aria-expanded="true"]:hover:not(:disabled),
+.solicitacoes-page .solicitacoes-ver__botao[aria-expanded="true"]:active:not(:disabled) {
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+}
+
+/* ---- Linha aberta + detalhe (board 14): fundo --rf-action-hover-bg e faixa interna de 3 px --rf-action ---- */
+.solicitacoes-page .solicitacoes-tabela > tbody > tr.solicitacoes-linha--aberta > td {
+  border-bottom: 0;
+  background: var(--rf-action-hover-bg);
+}
+.solicitacoes-page .solicitacoes-tabela > tbody > tr.solicitacoes-linha--aberta > td:first-child { box-shadow: inset 3px 0 0 var(--rf-action); }
+.solicitacoes-page .solicitacoes-tabela > tbody > tr.solicitacoes-linha-detalhe > td.sol-cell-detail,
+.solicitacoes-page .solicitacoes-tabela > tbody > tr.solicitacoes-linha-detalhe:hover > td.sol-cell-detail {
+  padding: 4px 20px 18px;
+  background: var(--rf-action-hover-bg);
+  box-shadow: inset 3px 0 0 var(--rf-action);
+  text-align: left;
+}
+.solicitacoes-detalhe {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-card);
+  background: var(--rf-surface);
+}
+.solicitacoes-notas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.solicitacoes-nota {
+  margin: 0;
+  color: var(--rf-ink);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.solicitacoes-itens-tabela {
+  overflow-x: auto;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-button);
+}
+.solicitacoes-itens { font-size: 13px; }
+.solicitacoes-page .solicitacoes-itens th { padding: 9px 14px; }
+.solicitacoes-page .solicitacoes-itens td {
+  padding: 9px 14px;
+  vertical-align: middle;
+}
+.solicitacoes-page .solicitacoes-itens tbody tr:last-child td { border-bottom: 0; }
+.solicitacoes-page .solicitacoes-itens th.solicitacoes-dir { text-align: right; }
+.solicitacoes-page .solicitacoes-itens td.solicitacoes-valor {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+.solicitacoes-page .solicitacoes-itens td.solicitacoes-item-nome { font-weight: 600; }
+.solicitacoes-page .solicitacoes-itens td.solicitacoes-suave { color: var(--rf-ink-soft); }
+.solicitacoes-itens-conteudo { min-width: 0; }
+.solicitacoes-page .solicitacoes-itens td.solicitacoes-dbcorp {
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+}
+.solicitacoes-page .solicitacoes-itens td.solicitacoes-na-cotacao {
+  color: var(--rf-ink-soft);
+  font-weight: 700;
+}
+.solicitacoes-page .solicitacoes-itens td.solicitacoes-na-cotacao--sim { color: var(--rf-tone-success-fg); }
+.solicitacoes-page .solicitacoes-vincular {
+  padding: 0 16px;
+  border: 1.5px solid var(--rf-action);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+  font-size: 14px;
+  gap: 8px;
+  white-space: nowrap;
+}
+.solicitacoes-page .solicitacoes-vincular:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+.solicitacoes-anexos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.solicitacoes-anexos__titulo { font-size: 13px; }
+.solicitacoes-anexos__vazio {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+
+/* "Anexar" na tabela do Comercial: 32, icone + texto */
+.solicitacoes-page .solicitacoes-anexar {
+  display: flex;
+  width: fit-content;
+  min-height: 32px;
+  margin-top: 6px;
+  padding: 0 8px;
+  gap: 6px;
+}
+
+/* ---- Anexos tecnicos: lista (tambem no painel de desenvolvimento do Detalhe) ---- */
+.anexos-lista__bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.anexos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.anexos-lista__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.anexos-lista .badge.anexos-lista__tipo {
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+}
+.anexos-lista__arquivo { overflow-wrap: anywhere; }
+.anexos-lista__nome { font-weight: 600; }
+.anexos-lista__tamanho { color: var(--rf-ink-soft); }
+.anexos-lista__mono {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.anexos-lista .ghost-button--sm {
+  min-height: 32px;
+  padding: 0 8px;
+}
+.anexos-lista .anexos-lista__baixar { gap: 4px; }
+.anexos-lista .ghost-button--sm.danger-button { gap: 6px; }
+.anexos-lista__confirmar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.anexos-lista__pergunta {
+  font-size: 13px;
+  font-weight: 600;
+}
+.anexos-lista .anexos-lista__confirmar-remocao {
+  min-height: 36px;
+  padding: 0 18px;
+}
+
+/* ---- Anexos tecnicos: campo de arquivos (card --rf-surface-alt; o input fica oculto, focavel, e o botao e o rotulo dele) ---- */
+.anexos-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-card);
+  background: var(--rf-surface-alt);
+  text-align: left;
+}
+.anexos-campo .field-label { margin: 0; }
+.anexos-campo__linha {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.anexos-campo__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.anexos-campo__botao { cursor: pointer; }
+.anexos-campo__input:focus-visible + .anexos-campo__botao {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.anexos-campo__input:disabled + .anexos-campo__botao {
+  border-color: var(--rf-border);
+  color: var(--rf-disabled-fg);
+  cursor: not-allowed;
+}
+.anexos-campo__estado {
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.anexos-campo__dica {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+}
+.anexos-campo__erros {
+  margin: 0;
+  padding: 10px 14px 10px 30px;
+  border-radius: var(--rf-radius-alert);
+  background: var(--rf-tone-danger-bg);
+  color: var(--rf-tone-danger-fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.anexos-campo__selecionados {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.anexos-campo__titulo { font-size: 13px; }
+.anexos-campo__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.anexos-campo__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+}
+.anexos-campo__arquivo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.anexos-campo__arquivo > svg {
+  flex: none;
+  color: var(--rf-ink-soft);
+}
+.anexos-campo__nome {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.anexos-campo__tamanho {
+  color: var(--rf-ink-soft);
+  white-space: nowrap;
+}
+.anexos-campo__mono {
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.anexos-campo .select.anexos-campo__tipo {
+  min-height: 36px;
+  padding: 0 10px;
+  padding-right: 32px;
+  font-size: 13px;
+}
+.anexos-campo__item .ghost-button--sm.danger-button { padding: 0 10px; }
+
+/* Anexar depois / reenvio */
+.anexos-anexar__contagem {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.anexos-reenvio {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---- Rodape em faixa dos modais (D-F3-11): os do COMEX moram em um div dentro do corpo, entao a regra da F3c nao os alcanca ---- */
+.modal-body > .solicitacao-modal > .modal-actions:last-child,
+.vincular-catalogo__painel > .modal-actions:last-child,
+.anexos-reenvio > .modal-actions:last-child {
+  margin: 6px -24px -20px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--rf-divider);
+  background: var(--rf-surface-alt);
+}
+.solicitacao-form > .modal-actions:last-child { margin-top: 6px; }
+.solicitacao-form .modal-actions .btn-spinner {
+  border-color: color-mix(in srgb, var(--rf-ink) 25%, transparent);
+  border-top-color: var(--rf-ink);
+}
+
+/* ---- Modais de acao do COMEX (board 14d) ---- */
+.solicitacao-modal__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.solicitacao-modal .field-label { margin: 0; }
+.solicitacao-modal .textarea {
+  padding: 12px 14px;
+  line-height: 1.5;
+  resize: none;
+}
+.solicitacao-modal__nota {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+}
+/* o p global (CSS antigo) tem cor propria: a cor do corpo volta com --rf-ink */
+.solicitacao-modal__texto {
+  margin: 0;
+  color: var(--rf-ink);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.solicitacao-modal__vazio {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.solicitacao-modal__erro {
+  margin: 0;
+  color: var(--rf-tone-danger-fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+.solicitacao-modal__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.solicitacao-modal__dica {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.solicitacao-modal__dica > svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--rf-tone-info-fg);
+}
+.solicitacao-cotacao {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+  box-shadow: inset 0 0 0 1px var(--rf-border);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base);
+}
+.solicitacao-cotacao:hover { background: var(--rf-surface-alt); }
+.solicitacao-cotacao[aria-pressed="true"] {
+  background: var(--rf-action-hover-bg);
+  box-shadow: inset 0 0 0 1.5px var(--rf-action);
+}
+.solicitacao-cotacao:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: inset 0 0 0 1px var(--rf-border), 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.solicitacao-cotacao > svg {
+  flex: none;
+  margin-left: auto;
+  color: var(--rf-action);
+}
+.solicitacao-cotacao__codigo {
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* Os modais do COMEX moram dentro da td das acoes: o botao de linha da F3a (:is(table, .row-actions) .ghost-button) os alcancaria; o "Cancelar" volta ao tamanho de modal */
+.solicitacao-modal .modal-actions .ghost-button {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--rf-radius-button);
+  font-size: 14px;
+}
+.solicitacao-modal__sem-preco {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.solicitacao-modal__atender-sem-preco {
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-tone-warning-bg);
+  color: var(--rf-tone-warning-fg);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.solicitacao-modal__motivo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- Busca com icone (Solicitar uma cotacao e Vincular a cotacao): a borda e do contentor; o input cobre a altura toda (alvo de 44) ---- */
+.solicitacao-busca__campo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid var(--rf-input-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-input-bg);
+  color: var(--rf-ink);
+  transition: border-color var(--rf-dur-base), box-shadow var(--rf-dur-base);
+}
+.solicitacao-busca__campo:hover { border-color: var(--rf-ink-soft); }
+.solicitacao-busca__campo:focus-within {
+  border-color: var(--rf-action);
+  box-shadow: 0 0 0 4px var(--rf-focus-halo);
+}
+.solicitacao-busca__campo > svg {
+  flex: none;
+  color: var(--rf-ink-soft);
+}
+.solicitacao-busca__input {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+  margin: -1.5px 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--rf-ink);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+.solicitacao-busca__input--codigo { font-family: var(--rf-font-mono); }
+
+/* ---- Vincular ao catalogo (board 14i): segmentado + painel; o seletor de itens e o da F5 ---- */
+.vincular-catalogo {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+.vincular-catalogo__modo {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+}
+.vincular-catalogo__aba {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--rf-action);
+  font-family: var(--rf-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base), color var(--rf-dur-base);
+}
+.vincular-catalogo__aba[aria-pressed="true"] {
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+}
+.vincular-catalogo__aba:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.vincular-catalogo__painel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vincular-catalogo__campos {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vincular-catalogo__ncm { margin: 6px 0 0; }
+
+/* ---- Solicitar uma cotacao (board 14f) ---- */
+.solicitacao-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.solicitacao-form .form-grid { gap: 14px; }
+.solicitacao-form .textarea {
+  padding: 12px 14px;
+  line-height: 1.5;
+  resize: none;
+}
+.solicitacao-form__titulo {
+  margin: 0;
+  font-family: var(--rf-font-display);
+  font-size: 16px;
+  font-weight: 700;
+}
+.solicitacao-form__vazio {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.solicitacao-item {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 16px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-card);
+}
+.solicitacao-item__legenda {
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.solicitacao-item__familia {
+  color: var(--rf-ink-soft);
+  font-weight: 600;
+}
+.solicitacao-item__grade {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+.solicitacao-item__grade > div { min-width: 0; }
+.solicitacao-item .input.solicitacao-item__numero { font-family: var(--rf-font-mono); }
+.solicitacao-item .select { padding-left: 12px; }
+.solicitacao-item__remover {
+  gap: 6px;
+  white-space: nowrap;
+}
+.solicitacao-item__obs { margin-top: 12px; }
+.solicitacao-form__aviso {
+  background: var(--rf-tone-success-bg);
+  color: var(--rf-tone-success-fg);
+}
+.solicitacao-form__outro { align-self: flex-start; }
+.solicitacao-busca {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-divider);
+  border-radius: var(--rf-radius-card);
+  background: var(--rf-surface-alt);
+}
+.solicitacao-busca .field-label { margin: 0; }
+.solicitacao-busca__topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.solicitacao-busca .solicitacao-busca__fechar {
+  padding: 4px 6px;
+  color: var(--rf-ink-soft);
+}
+.solicitacao-busca__dica {
+  margin: 0;
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+}
+.solicitacao-busca__aviso {
+  margin: 2px 0 0;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.solicitacao-busca__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.solicitacao-busca__resultado,
+.solicitacao-busca__incluir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-control);
+  background: var(--rf-surface);
+  color: var(--rf-action);
+  font-family: var(--rf-font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base);
+}
+.solicitacao-busca__resultado { min-height: 40px; }
+.solicitacao-busca__incluir {
+  min-height: 44px;
+  margin-top: 4px;
+}
+.solicitacao-busca__resultado:hover:not(:disabled),
+.solicitacao-busca__incluir:hover { background: var(--rf-action-hover-bg); }
+.solicitacao-busca__resultado:disabled {
+  border-color: var(--rf-divider);
+  background: var(--rf-tone-neutral-bg);
+  color: var(--rf-ink-soft);
+  font-weight: 600;
+  cursor: default;
+}
+.solicitacao-busca__resultado:focus-visible,
+.solicitacao-busca__incluir:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.solicitacao-busca__resultado > svg,
+.solicitacao-busca__incluir > svg { flex: none; }
+.sol-added {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--rf-tone-success-fg);
+  font-weight: 700;
+}
+
+/* ---- Telas medias: a tabela encolhe as colunas do meio ---- */
+@media (max-width: 1199px) {
+  .solicitacoes-page .solicitacoes-tabela > thead > tr > th:not(:first-child):not(:last-child),
+  .solicitacoes-page .solicitacoes-tabela > tbody > tr > td:not(:first-child):not(:last-child):not(.sol-cell-detail) {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+/* ---- Celular: abaixo de 720 a tabela vira lista de cards (status no topo) ---- */
+@media (max-width: 720px) {
+  .solicitacoes-page .table.sol-table,
+  .solicitacoes-page .table.sol-table > tbody,
+  .solicitacoes-page .table.sol-table > tbody > tr,
+  .solicitacoes-page .table.sol-table > tbody > tr > td { display: block; width: 100%; }
+  .solicitacoes-page .table.sol-table > thead { display: none; }
+  .solicitacoes-page .table.sol-table > tbody > tr {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+    padding: 4px 0;
+    border: 1px solid var(--rf-border);
+    border-radius: var(--rf-radius-card);
+    background: var(--rf-surface);
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr:hover > td { background: transparent; }
+  .solicitacoes-page .table.sol-table > tbody > tr > td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 12px;
+    border-bottom: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
+    box-shadow: none;
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr > td::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    color: var(--rf-ink-soft);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr > td.col-status {
+    order: -1;
+    align-items: center;
+    margin-bottom: 2px;
+    padding-bottom: 8px;
+    border-radius: var(--rf-radius-card) var(--rf-radius-card) 0 0;
+    background: var(--rf-surface-alt);
+    text-align: right;
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr:hover > td.col-status { background: var(--rf-surface-alt); }
+  .solicitacoes-page .table.sol-table > tbody > tr > td .sol-items-list { text-align: left; }
+  .solicitacoes-page .table.sol-table > tbody > tr > td.sol-cell-actions { justify-content: flex-end; }
+  .solicitacoes-page .table.sol-table > tbody > tr > td.sol-cell-actions::before { display: none; }
+  .solicitacoes-page .table.sol-table > tbody > tr > td.sol-cell-detail {
+    display: block;
+    padding: 4px 12px 14px;
+    border-radius: 0 0 var(--rf-radius-card) var(--rf-radius-card);
+    background: var(--rf-action-hover-bg);
+    box-shadow: none;
+    text-align: left;
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr > td.sol-cell-detail::before { display: none; }
+  .solicitacoes-page .table.sol-table > tbody > tr.solicitacoes-linha--aberta {
+    margin-bottom: 0;
+    border-bottom: 0;
+    border-radius: var(--rf-radius-card) var(--rf-radius-card) 0 0;
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr.solicitacoes-linha--aberta > td { background: var(--rf-action-hover-bg); }
+  .solicitacoes-page .table.sol-table > tbody > tr.solicitacoes-linha--aberta > td.col-status { background: var(--rf-action-hover-bg); }
+  .solicitacoes-page .table.sol-table > tbody > tr.solicitacoes-linha-detalhe {
+    margin-top: 0;
+    border-top: 0;
+    border-radius: 0 0 var(--rf-radius-card) var(--rf-radius-card);
+    background: var(--rf-action-hover-bg);
+  }
+  .solicitacoes-page .table.sol-table > tbody > tr > td.sol-cell-detail .solicitacoes-detalhe { padding: 12px; }
+  .solicitacoes-page .table.sol-table > tbody > tr.solicitacoes-linha--aberta > td.solicitacoes-ver { justify-content: flex-end; }
+  .solicitacoes-page .solicitacoes-itens-tabela .table.sol-table > tbody > tr {
+    margin-bottom: 8px;
+    border-radius: var(--rf-radius-button);
+  }
+  .solicitacoes-page .solicitacoes-itens-tabela .table.sol-table > tbody > tr:last-child { margin-bottom: 0; }
+  .solicitacoes-page .solicitacoes-itens-tabela { border: 0; overflow-x: visible; }
+  .solicitacoes-page .solicitacoes-itens-tabela .table.sol-table > tbody > tr > td { padding: 6px 12px; }
+  .solicitacoes-page .solicitacoes-itens-tabela .table.sol-table > tbody > tr > td.solicitacoes-valor { text-align: right; }
+  .solicitacoes-page .solicitacoes-tabela > tbody > tr > td.solicitacoes-observacao { max-width: none; }
+}
+
+/* Celular largo: a grade do item do modal cai para 2 colunas e o "Remover item" ocupa a linha */
+@media (max-width: 640px) {
+  .solicitacao-item__grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .solicitacao-item__remover {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+  .anexos-campo__item { grid-template-columns: minmax(0, 1fr) auto; }
+  .anexos-campo__arquivo { grid-column: 1 / -1; }
+  .anexos-campo__linha { flex-wrap: wrap; }
+}
+
+/* Filtros em largura total */
+@media (max-width: 540px) {
+  .solicitacoes-page .sol-filters { width: 100%; }
+  .solicitacoes-page .sol-filters .sol-filter {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Alvos de toque: 36/32/40 -> 44 */
+@media (pointer: coarse) {
+  .solicitacoes-page .solicitacoes-anexar,
+  .anexos-lista .ghost-button--sm,
+  .anexos-lista .anexos-lista__confirmar-remocao,
+  .anexos-campo .select.anexos-campo__tipo,
+  .anexos-campo__item .ghost-button--sm,
+  .vincular-catalogo__aba,
+  .solicitacao-busca__resultado,
+  .solicitacao-modal__atender-sem-preco { min-height: 44px; }
+}
+
+/* Movimento reduzido: sem transicao */
+@media (prefers-reduced-motion: reduce) {
+  .solicitacoes-page .solicitacoes-ver__botao,
+  .solicitacao-cotacao,
+  .solicitacao-busca__campo,
+  .solicitacao-busca__resultado,
+  .solicitacao-busca__incluir,
+  .vincular-catalogo__aba { transition: none; }
+}
 /* <<< tela F9 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
@@ -6257,66 +7210,8 @@ dialog.modal-dialog[open] {
 /* ===== Solicitacoes do comercial (PR1). Classes novas; nada existente foi alterado. ===== */
 
 .sol-items-list { margin: 0; padding-left: 16px; }
-.sol-added { font-weight: 700; color: var(--primary-700); }
-.sol-filter { max-width: 220px; }
 
-@media (max-width: 540px) {
-  .sol-filters { width: 100%; }
-  .sol-filters .sol-filter { width: 100%; max-width: none; }
-}
 
-/* Abaixo de 720px a tabela vira lista de cards (status em destaque no topo). */
-@media (max-width: 720px) {
-  .table.sol-table,
-  .table.sol-table tbody,
-  .table.sol-table tr,
-  .table.sol-table td { display: block; width: 100%; }
-  .table.sol-table thead { display: none; }
-  .table.sol-table tr {
-    display: flex;
-    flex-direction: column;
-    margin-bottom: 10px;
-    padding: 4px 0;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-  }
-  .table.sol-table tr:hover td { background: transparent; }
-  .table.sol-table td {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 6px 12px;
-    border-bottom: 0;
-    text-align: right;
-    overflow-wrap: anywhere;
-  }
-  .table.sol-table td::before {
-    content: attr(data-label);
-    flex: 0 0 38%;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-    text-align: left;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-  }
-  .table.sol-table td.col-status {
-    order: -1;
-    align-items: center;
-    padding-bottom: 8px;
-    margin-bottom: 2px;
-    text-align: right;
-    background: var(--surface-alt);
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  }
-  .table.sol-table td .sol-items-list { text-align: left; }
-  .table.sol-table td.sol-cell-actions { justify-content: flex-end; }
-  .table.sol-table td.sol-cell-actions::before { display: none; }
-  .table.sol-table td.sol-cell-detail { display: block; text-align: left; }
-  .table.sol-table td.sol-cell-detail::before { display: none; }
-}
 
 /* ---- Forecast (PR 1D-1) ---- */
 .fc-quinzena { min-width: 260px; }

@@ -1,6 +1,7 @@
 import { ChangeEvent, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import {
   CR_ATTACHMENT_ACCEPT,
@@ -103,6 +104,8 @@ interface CampoProps {
   disabled?: boolean;
   /** Prefixo dos ids (varios campos na mesma pagina). */
   idPrefix?: string;
+  /** Painel de reenvio: o estado diz "restantes" no lugar de "selecionados". */
+  restantes?: boolean;
 }
 
 /** Campo opcional de arquivos tecnicos: selecao multipla, tipo por arquivo, validacao no cliente. */
@@ -112,6 +115,7 @@ export function AnexosTecnicosCampo({
   existingCount = 0,
   disabled = false,
   idPrefix = 'cr-attach',
+  restantes = false,
 }: CampoProps) {
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -134,66 +138,81 @@ export function AnexosTecnicosCampo({
     onChange(files.filter((item) => item.key !== key));
   }
 
+  const estado =
+    files.length === 0
+      ? 'Nenhum arquivo escolhido'
+      : `${files.length} ${files.length === 1 ? 'arquivo' : 'arquivos'} ${
+          restantes ? (files.length === 1 ? 'restante' : 'restantes') : files.length === 1 ? 'selecionado' : 'selecionados'
+        }`;
+
   return (
-    <div className="form-grid__full" style={{ marginTop: 8 }}>
+    <div className="anexos-campo">
       <label className="field-label" htmlFor={`${idPrefix}-input`}>
         Arquivos técnicos (opcional)
       </label>
-      <input
-        id={`${idPrefix}-input`}
-        className="input"
-        type="file"
-        multiple
-        accept={CR_ATTACHMENT_ACCEPT}
-        disabled={disabled}
-        onChange={handleSelect}
-      />
-      <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
-        {HELP_TEXT}
-      </p>
+      <div className="anexos-campo__linha">
+        <input
+          id={`${idPrefix}-input`}
+          className="anexos-campo__input"
+          type="file"
+          multiple
+          accept={CR_ATTACHMENT_ACCEPT}
+          disabled={disabled}
+          onChange={handleSelect}
+        />
+        <label className="ghost-button anexos-campo__botao" htmlFor={`${idPrefix}-input`}>
+          <Icon name="upload" size={16} strokeWidth={1.9} />
+          Escolher arquivos
+        </label>
+        <span className="anexos-campo__estado">{estado}</span>
+      </div>
+      <p className="anexos-campo__dica">{HELP_TEXT}</p>
       {errors.length > 0 && (
-        <ul role="alert" className="text-sm" style={{ color: 'var(--danger)', margin: '4px 0 0', paddingLeft: 18 }}>
+        <ul role="alert" className="anexos-campo__erros">
           {errors.map((message) => (
             <li key={message}>{message}</li>
           ))}
         </ul>
       )}
       {files.length > 0 && (
-        <ul aria-label="Arquivos selecionados" style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
-          {files.map((item) => (
-            <li
-              key={item.key}
-              style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 6 }}
-            >
-              <span className="text-sm" style={{ flex: '1 1 160px', minWidth: 0, overflowWrap: 'anywhere' }}>
-                {item.file.name} · {formatFileSize(item.file.size)}
-              </span>
-              <select
-                className="select"
-                style={{ width: 'auto' }}
-                aria-label={`Tipo de ${item.file.name}`}
-                value={item.kind}
-                disabled={disabled}
-                onChange={(e) => changeKind(item.key, e.target.value as CommercialRequestAttachmentKind)}
-              >
-                {CR_ATTACHMENT_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {CR_ATTACHMENT_KIND_LABELS[kind]}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="ghost-button ghost-button--sm"
-                disabled={disabled}
-                aria-label={`Remover ${item.file.name} da seleção`}
-                onClick={() => removeFromSelection(item.key)}
-              >
-                Remover da seleção
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="anexos-campo__selecionados">
+          <strong className="anexos-campo__titulo">Arquivos selecionados</strong>
+          <ul aria-label="Arquivos selecionados" className="anexos-campo__lista">
+            {files.map((item) => (
+              <li key={item.key} className="anexos-campo__item">
+                <span className="anexos-campo__arquivo">
+                  <Icon name="file" size={16} strokeWidth={1.9} />
+                  <span className="anexos-campo__nome">{item.file.name}</span>
+                  <span className="anexos-campo__tamanho">
+                    {' '}· <span className="anexos-campo__mono">{formatFileSize(item.file.size)}</span>
+                  </span>
+                </span>
+                <select
+                  className="select anexos-campo__tipo"
+                  aria-label={`Tipo de ${item.file.name}`}
+                  value={item.kind}
+                  disabled={disabled}
+                  onChange={(e) => changeKind(item.key, e.target.value as CommercialRequestAttachmentKind)}
+                >
+                  {CR_ATTACHMENT_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {CR_ATTACHMENT_KIND_LABELS[kind]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--sm danger-button"
+                  disabled={disabled}
+                  aria-label={`Remover ${item.file.name} da seleção`}
+                  onClick={() => removeFromSelection(item.key)}
+                >
+                  Remover da seleção
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -242,51 +261,53 @@ export function AnexosLista({ requestId, attachments, canRemove = false }: Lista
   if (attachments.length === 0) return null;
 
   return (
-    <div>
-      <ul className="sol-items-list" style={{ listStyle: 'none', paddingLeft: 0 }}>
+    <div className="anexos-lista__bloco">
+      <ul className="anexos-lista">
         {attachments.map((attachment) => {
           const kindLabel =
             CR_ATTACHMENT_KIND_LABELS[attachment.kind as CommercialRequestAttachmentKind] ?? attachment.kind;
           const busy = busyId === attachment.id;
           return (
-            <li key={attachment.id} style={{ marginBottom: 4, overflowWrap: 'anywhere' }}>
-              <span className="badge">{kindLabel}</span> {attachment.fileName} ·{' '}
-              {formatFileSize(attachment.fileSize)}{' '}
+            <li key={attachment.id} className="anexos-lista__item">
+              <span className="badge badge--info anexos-lista__tipo">{kindLabel}</span>
+              <span className="anexos-lista__arquivo">
+                <span className="anexos-lista__nome">{attachment.fileName}</span>{' '}
+                <span className="anexos-lista__tamanho">
+                  · <span className="anexos-lista__mono">{formatFileSize(attachment.fileSize)}</span>
+                </span>
+              </span>
               <button
                 type="button"
-                className="ghost-button ghost-button--sm"
+                className="ghost-button ghost-button--sm anexos-lista__baixar"
                 disabled={busy}
                 aria-label={`Baixar ${attachment.fileName}`}
                 onClick={() => void handleDownload(attachment.id)}
               >
+                <Icon name="download" size={14} strokeWidth={1.9} />
                 Baixar
               </button>
               {canRemove && confirmId !== attachment.id && (
-                <>
-                  {' '}
-                  <button
-                    type="button"
-                    className="ghost-button ghost-button--sm danger-button"
-                    disabled={busy}
-                    aria-label={`Remover ${attachment.fileName}`}
-                    onClick={() => setConfirmId(attachment.id)}
-                  >
-                    Remover
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--sm danger-button"
+                  disabled={busy}
+                  aria-label={`Remover ${attachment.fileName}`}
+                  onClick={() => setConfirmId(attachment.id)}
+                >
+                  Remover
+                </button>
               )}
               {canRemove && confirmId === attachment.id && (
-                <>
-                  {' '}
-                  <span className="text-sm">Remover este anexo?</span>{' '}
+                <span className="anexos-lista__confirmar">
+                  <span className="anexos-lista__pergunta">Remover este anexo?</span>
                   <button
                     type="button"
-                    className="ghost-button ghost-button--sm danger-button"
+                    className="danger-button anexos-lista__confirmar-remocao"
                     disabled={busy}
                     onClick={() => void handleRemove(attachment.id)}
                   >
                     Confirmar remoção
-                  </button>{' '}
+                  </button>
                   <button
                     type="button"
                     className="ghost-button ghost-button--sm"
@@ -295,14 +316,15 @@ export function AnexosLista({ requestId, attachments, canRemove = false }: Lista
                   >
                     Cancelar
                   </button>
-                </>
+                </span>
               )}
             </li>
           );
         })}
       </ul>
       {error && (
-        <p role="alert" className="text-sm" style={{ color: 'var(--danger)', margin: '4px 0 0' }}>
+        <p role="alert" className="solicitacoes-alerta alert--error">
+          <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
           {error}
         </p>
       )}
@@ -344,7 +366,13 @@ export function AnexarArquivoModal({ requestId, existingCount, onClose }: Anexar
 
   return (
     <Modal isOpen onClose={busy ? () => undefined : onClose} title={`Anexar arquivos à solicitação #${requestId}`}>
-      <div style={{ textAlign: 'left' }}>
+      <div className="solicitacao-modal">
+        {existingCount > 0 && (
+          <p className="anexos-anexar__contagem">
+            Esta solicitação já tem {existingCount} {existingCount === 1 ? 'anexo' : 'anexos'}. Cabem mais{' '}
+            {Math.max(0, CR_ATTACHMENT_MAX_PER_REQUEST - existingCount)}.
+          </p>
+        )}
         <AnexosTecnicosCampo
           files={files}
           onChange={setFiles}
@@ -353,11 +381,12 @@ export function AnexarArquivoModal({ requestId, existingCount, onClose }: Anexar
           idPrefix="cr-attach-later"
         />
         {error && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+          <p role="alert" className="solicitacoes-alerta alert--error">
+            <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
             {error}
           </p>
         )}
-        <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
             Cancelar
           </button>
@@ -389,9 +418,10 @@ interface ReenvioProps {
 /** Modo "so anexos" do modal: a solicitacao ja foi criada, mas algum anexo falhou. */
 export function AnexosReenvioPainel({ error, files, onChange, uploaded, busy, onRetry, onClose }: ReenvioProps) {
   return (
-    <div>
+    <div className="anexos-reenvio">
       {error && (
-        <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+        <p role="alert" className="solicitacoes-alerta alert--error">
+          <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
           {error}
         </p>
       )}
@@ -402,9 +432,10 @@ export function AnexosReenvioPainel({ error, files, onChange, uploaded, busy, on
           existingCount={uploaded}
           disabled={busy}
           idPrefix="cr-attach-retry"
+          restantes
         />
       )}
-      <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+      <div className="modal-actions">
         <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
           Fechar
         </button>

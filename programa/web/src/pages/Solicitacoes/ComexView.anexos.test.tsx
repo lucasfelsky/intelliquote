@@ -101,7 +101,7 @@ describe('ComexView - anexos tecnicos', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Ver itens' }));
 
     expect(screen.getByText('Anexos técnicos')).toBeTruthy();
-    expect(screen.getByText('tds.pdf · 2,0 KB')).toBeTruthy();
+    expect(document.querySelector('.anexos-lista__arquivo')?.textContent).toBe('tds.pdf · 2,0 KB');
     expect(screen.getByRole('button', { name: 'Baixar tds.pdf' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Remover tds/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Anexar/ })).toBeNull();
