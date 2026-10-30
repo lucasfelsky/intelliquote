@@ -864,7 +864,7 @@ export function ComparacaoTab({
               <span className="sr-only">
                 {responseCount} {responseCount === 1 ? 'resposta' : 'respostas'} · ao vivo
               </span>
-              <span aria-hidden="true">
+              <span className="cmp-live__texto" aria-hidden="true">
                 <span className="cmp-live__num">{responseCount}</span> {responseCount === 1 ? 'resposta' : 'respostas'} · ao vivo
               </span>
             </span>

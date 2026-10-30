@@ -316,6 +316,9 @@ describe('F8: receitas dos boards (valores exatos)', () => {
     });
     expect(naRegiao('.cmp-live__dot')).toMatchObject({ width: '8px', height: '8px', background: 'var(--rf-primary)', animation: 'rf-cmp-pulso 1.8s var(--rf-ease-out) infinite' });
     expect(naRegiao('.cmp-live__num')).toEqual({ 'font-family': 'var(--rf-font-mono)' });
+    expect(naRegiao('.cmp-live__texto')).toEqual({ display: 'inline-flex', gap: '8px' });
+    expect(declaracoes(semMedia, ':root[data-theme="dark"] .cmp-head')).toEqual({ 'border-bottom-color': 'var(--rf-border)' });
+    expect(declaracoes(semMedia, ':root[data-theme="dark"] .cmp-criteria')).toEqual({ 'border-bottom-color': 'var(--rf-border)' });
   });
 
   it('criterios: faixa em --rf-cmp-criterio-faixa 18/24 com divisoria; chave em pilula de 36 (0 16, 1 px --rf-cmp-criterio-borda); ligada em --rf-action; foco com o anel duplo; transicao de 0,2 s', () => {

@@ -5153,7 +5153,14 @@ dialog.modal-dialog[open] {
   background: var(--rf-primary);
   animation: rf-cmp-pulso 1.8s var(--rf-ease-out) infinite;
 }
+.cmp-live__texto {
+  display: inline-flex;
+  gap: 8px;
+}
 .cmp-live__num { font-family: var(--rf-font-mono); }
+
+:root[data-theme="dark"] .cmp-head,
+:root[data-theme="dark"] .cmp-criteria { border-bottom-color: var(--rf-border); }
 
 /* ---- Criterios (faixa) e chaves ---- */
 .cmp-criteria {
