@@ -227,6 +227,22 @@
   --rf-falha-linha: #fffafa;
 
   /* tokens F7 (respostas) */
+  /* tokens F8 (comparacao) */
+  --rf-vencedora-borda: rgba(0, 120, 100, 0.35);
+  --rf-vencedora-selo-anel: rgba(0, 120, 100, 0.35);
+  --rf-divergente-anel: rgba(201, 138, 18, 0.45);
+  --rf-popover-aviso-borda: #e9cf96;
+  --rf-aviso-borda-suave: #f0d9a6;
+  --rf-aviso-icone-bg: #f8e6bd;
+  --rf-score-trilho: #e3ecea;
+  --rf-score-outros: #9fb1b8;
+  --rf-vencedora-brilho: rgba(20, 221, 167, 0.45);
+  --rf-vencedora-brilho-suave: rgba(20, 221, 167, 0.18);
+  --rf-pulso: rgba(20, 221, 167, 0.55);
+  --rf-cmp-criterio-borda: #d5e2de;
+  --rf-cmp-criterio-faixa: #f5f8f7;
+
+  /* tokens F9 (solicitacoes) */
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -394,6 +410,22 @@
   --rf-falha-linha: rgba(229, 72, 60, 0.08);
 
   /* tokens F7 (respostas) */
+  /* tokens F8 (comparacao) */
+  --rf-vencedora-borda: #14dda7;
+  --rf-vencedora-selo-anel: rgba(20, 221, 167, 0.45);
+  --rf-divergente-anel: rgba(242, 193, 78, 0.4);
+  --rf-popover-aviso-borda: rgba(242, 193, 78, 0.4);
+  --rf-aviso-borda-suave: rgba(242, 193, 78, 0.3);
+  --rf-aviso-icone-bg: rgba(242, 193, 78, 0.22);
+  --rf-score-trilho: rgba(159, 182, 191, 0.18);
+  --rf-score-outros: #5d7a84;
+  --rf-vencedora-brilho: rgba(20, 221, 167, 0.45);
+  --rf-vencedora-brilho-suave: rgba(20, 221, 167, 0.18);
+  --rf-pulso: rgba(20, 221, 167, 0.55);
+  --rf-cmp-criterio-borda: #3d5a62;
+  --rf-cmp-criterio-faixa: #0a222b;
+
+  /* tokens F9 (solicitacoes) */
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -5056,6 +5088,12 @@ dialog.modal-dialog[open] {
   }
 }
 /* <<< tela F7 <<< */
+
+/* >>> tela F8 (Suite COMEX) >>> */
+/* <<< tela F8 <<< */
+
+/* >>> tela F9 (Suite COMEX) >>> */
+/* <<< tela F9 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
    nenhum -- o espacamento entre input/select/botao dependia so do
