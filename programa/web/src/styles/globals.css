@@ -243,6 +243,12 @@
   --rf-cmp-criterio-faixa: #f5f8f7;
 
   /* tokens F9 (solicitacoes) */
+
+  /* tokens F10 (cadastros) */
+
+  /* tokens F11 (administracao) */
+  --rf-kpi-destaque-borda: rgba(0, 120, 100, 0.25);
+  --rf-cc-auto-borda: rgba(0, 120, 100, 0.3);
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -426,6 +432,12 @@
   --rf-cmp-criterio-faixa: #0a222b;
 
   /* tokens F9 (solicitacoes) */
+
+  /* tokens F10 (cadastros) */
+
+  /* tokens F11 (administracao) */
+  --rf-kpi-destaque-borda: rgba(20, 221, 167, 0.3);
+  --rf-cc-auto-borda: rgba(20, 221, 167, 0.35);
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -7105,6 +7117,12 @@ dialog.modal-dialog[open] {
   .vincular-catalogo__aba { transition: none; }
 }
 /* <<< tela F9 <<< */
+
+/* >>> tela F10 (Suite COMEX) >>> */
+/* <<< tela F10 <<< */
+
+/* >>> tela F11 (Suite COMEX) >>> */
+/* <<< tela F11 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
    nenhum -- o espacamento entre input/select/botao dependia so do

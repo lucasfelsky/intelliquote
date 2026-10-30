@@ -4,7 +4,8 @@ import type { SVGAttributes } from 'react';
 // 14 de navegacao (navConfig), Sair, os 3 do botao de tema (automatico, noturno, claro; canvas v72) e os 2 da topbar
 // (escudo SSO e usuario). F5: +12 (plus, search, filter, alert-triangle, refresh, arrow-right/left, check, link, lock, chevron-down/right).
 // F6/F7-0: +10 (edit, trash, download, info, file-text, grip, chevron-up, trophy, copy, eye); o envelope de "Enviar cotacao" reusa `templates`.
-// F8/F9-0: +3 (alert-circle, upload, file); "Baixar" reusa `download`, o envelope de "Responder" e "Enviar e-mail" reusa `templates`, "Anexar" e "Solicitar uma cotacao" reusam `plus`. F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
+// F8/F9-0: +3 (alert-circle, upload, file); "Baixar" reusa `download`, o envelope de "Responder" e "Enviar e-mail" reusa `templates`, "Anexar" e "Solicitar uma cotacao" reusam `plus`.
+// F10/F11-0: +10 (minus, file-plus, ship, dollar, package, clock, code, maximize, table, image); lupa e "i" reusam `search`/`info`, "Doc. vencido" reusa `file`, o cadeado do e-mail travado `lock`, "Ver" `eye`, "+" `plus`, o X de etiqueta `x`, o envelope dos cartoes `templates`. F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
 // paralelas nao editarem este objeto. Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
 export const ICONS = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
@@ -54,6 +55,16 @@ export const ICONS = {
   'alert-circle': 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8v4M12 16h.01',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
   file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5',
+  minus: 'M5 12h14',
+  'file-plus': 'M14 3H6v18h12V7zM14 3v4h4M12 11v6M9 14h6',
+  ship: 'M3 17h18l-2 3H5zM5 17V9h14v8M9 9V5h6v4',
+  dollar: 'M12 3v18M17 7.5c0-1.9-2.2-3-5-3s-5 1.1-5 3 2.2 2.7 5 3.2 5 1.4 5 3.3-2.2 3-5 3-5-1.1-5-3',
+  package: 'M12 3 3 7.5v9L12 21l9-4.5v-9zM3 7.5l9 4.5 9-4.5M12 12v9M7.5 5.2l9 4.6',
+  clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+  code: 'm8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14',
+  maximize: 'M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7',
+  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
 } as const;
 
 // Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.
