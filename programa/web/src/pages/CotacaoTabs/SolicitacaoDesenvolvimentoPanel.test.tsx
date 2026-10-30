@@ -112,7 +112,7 @@ describe('SolicitacaoDesenvolvimentoPanel', () => {
     ).toBeTruthy();
     expect(screen.queryByText(/Resina X/)).toBeNull();
     expect(screen.getByText('Anexos técnicos')).toBeTruthy();
-    expect(screen.getByText('msds.pdf · 1,0 KB')).toBeTruthy();
+    expect(document.querySelector('.anexos-lista__arquivo')?.textContent).toBe('msds.pdf · 1,0 KB');
     expect(screen.getByRole('button', { name: 'Baixar msds.pdf' })).toBeTruthy();
     // Somente leitura: o painel da cotacao nao remove anexo.
     expect(screen.queryByRole('button', { name: /Remover/ })).toBeNull();

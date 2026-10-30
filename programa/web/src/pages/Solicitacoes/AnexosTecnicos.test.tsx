@@ -101,7 +101,7 @@ async function openModalWithNewItem() {
   renderPage();
   fireEvent.click(await screen.findByRole('button', { name: 'Solicitar uma cotação' }));
   fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 'Aditivo Novo' } });
-  fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
 }
 
 function selectFiles(files: File[]) {
@@ -126,7 +126,7 @@ describe('Anexos tecnicos no modal da solicitacao', () => {
     expect(screen.queryByLabelText('Arquivos técnicos (opcional)')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 'Aditivo Novo' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Incluir "Aditivo Novo" como item novo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Incluir "Aditivo Novo" como item novo' }));
 
     expect(screen.getByLabelText('Arquivos técnicos (opcional)')).toBeTruthy();
     expect(
@@ -241,7 +241,7 @@ describe('Anexos tecnicos na lista do comercial', () => {
     mockApi([mineRow()]);
     renderPage();
 
-    expect(await screen.findByText('tds.pdf · 2,0 KB')).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('.anexos-lista__arquivo')?.textContent).toBe('tds.pdf · 2,0 KB'));
     expect(screen.getByRole('button', { name: 'Baixar tds.pdf' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Remover tds.pdf' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Anexar arquivo à solicitação #7' })).toBeTruthy();

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { Pagination } from '@/components/Pagination';
 import {
@@ -65,13 +66,13 @@ function messageOf(err: unknown): string {
 function statusBadgeClass(status: CommercialRequestStatus): string {
   switch (status) {
     case 'pending':
-      return 'badge badge--warning';
+      return 'badge badge--warning badge--dot';
     case 'quoting':
-      return 'badge badge--info';
+      return 'badge badge--info badge--dot';
     case 'rejected':
-      return 'badge badge--danger';
+      return 'badge badge--danger badge--dot';
     default:
-      return 'badge';
+      return 'badge badge--success badge--dot';
   }
 }
 
@@ -115,8 +116,31 @@ function parsePrice(raw: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : Number.NaN;
 }
 
-function labelOf(item: { commercialName: string; familyName: string | null }): string {
-  return item.familyName ? `${item.commercialName} · ${item.familyName}` : item.commercialName;
+// Nome · familia, com a familia em tom suave (o textContent e o mesmo de sempre).
+function ItemLabel({ item }: { item: { commercialName: string; familyName: string | null } }) {
+  return (
+    <>
+      {item.commercialName}
+      {item.familyName && (
+        <>
+          {' '}
+          <span className="solicitacao-item__familia">· {item.familyName}</span>
+        </>
+      )}
+    </>
+  );
+}
+
+// "1,85 USD" -> o numero em mono e o resto (moeda, unidade, incoterm) no corpo; o textContent nao muda.
+function ValorMono({ texto }: { texto: string }) {
+  const cut = texto.indexOf(' ');
+  if (cut < 0) return <span className="solicitacoes-mono">{texto}</span>;
+  return (
+    <>
+      <span className="solicitacoes-mono">{texto.slice(0, cut)}</span>
+      {texto.slice(cut)}
+    </>
+  );
 }
 
 export default function ComercialView() {
@@ -130,7 +154,7 @@ export default function ComercialView() {
   const [debouncedTerm, setDebouncedTerm] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   // A busca fecha ao escolher um item (o foco vai para a quantidade dele) e
-  // reabre pelo "+ Adicionar outro item". Sem itens, ela fica sempre aberta.
+  // reabre pelo "Adicionar outro item". Sem itens, ela fica sempre aberta.
   const [searchOpen, setSearchOpen] = useState(true);
   const [focusQtyId, setFocusQtyId] = useState<string | null>(null);
   const [focusAfterRemove, setFocusAfterRemove] = useState(false);
@@ -303,7 +327,7 @@ export default function ComercialView() {
     // Sem item novo nao ha solicitacao de desenvolvimento: descarta os arquivos escolhidos.
     if (!remaining.some((line) => line.catalogItemId === null)) setPendingFiles([]);
     setLines((current) => current.filter((line) => line.key !== key));
-    // O botão clicado some: devolve o foco para a busca (se reaparecer) ou para "+ Adicionar outro item".
+    // O botão clicado some: devolve o foco para a busca (se reaparecer) ou para "Adicionar outro item".
     setFocusAfterRemove(true);
   }
 
@@ -371,7 +395,7 @@ export default function ComercialView() {
     !lines.some((line) => line.key === newItemKey);
 
   return (
-    <div className="page">
+    <div className="page solicitacoes-page solicitacoes-page--comercial">
       <header className="page-header">
         <div>
           <p className="eyebrow">Comercial</p>
@@ -379,33 +403,50 @@ export default function ComercialView() {
           <p className="page-subtitle">Peça ao COMEX a cotação dos itens que seus clientes precisam.</p>
         </div>
         <button type="button" className="primary-button" onClick={openModal}>
+          <Icon name="plus" size={16} strokeWidth={2} />
           Solicitar uma cotação
         </button>
       </header>
 
-      <section className="card" aria-label="Minhas solicitações">
+      <section className="card solicitacoes-lista" aria-label="Minhas solicitações">
         {mine.isLoading && (
-          <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+          <div className="solicitacoes-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
             Carregando solicitações…
-          </p>
+          </div>
         )}
 
         {mine.isError && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
-            Não foi possível carregar as solicitações: {messageOf(mine.error)}
-          </p>
+          <div className="solicitacoes-estado">
+            <div
+              className="empty-state empty-state--erro"
+              role="alert"
+            >
+              <span className="empty-state__icon">
+                <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+              </span>
+              <strong className="empty-state__title">
+                Não foi possível carregar as solicitações: {messageOf(mine.error)}
+              </strong>
+            </div>
+          </div>
         )}
 
         {!mine.isLoading && !mine.isError && rows.length === 0 && (
-          <div className="empty-state">
-            <strong>Nenhuma solicitação ainda</strong>
-            <p>Use “Solicitar uma cotação” para pedir a cotação de um ou mais itens.</p>
+          <div className="solicitacoes-estado">
+            <div className="empty-state">
+              <span className="empty-state__icon">
+                <Icon name="solicitacoes" size={36} strokeWidth={1.5} />
+              </span>
+              <strong className="empty-state__title">Nenhuma solicitação ainda</strong>
+              <p className="empty-state__text">Use “Solicitar uma cotação” para pedir a cotação de um ou mais itens.</p>
+            </div>
           </div>
         )}
 
         {rows.length > 0 && (
           <div className="table-wrapper">
-            <table className="table table--dense sol-table">
+            <table className="table table--dense sol-table solicitacoes-tabela">
               <thead>
                 <tr>
                   <th>#</th>
@@ -420,28 +461,49 @@ export default function ComercialView() {
               </thead>
               <tbody>
                 {rows.map((request) => (
-                  <tr key={request.id}>
-                    <td data-label="Solicitação">#{request.id}</td>
-                    <td data-label="Criada em">{formatDate(request.createdAt)}</td>
-                    <td data-label="Cliente">{customerLabel(request.customerName)}</td>
+                  <tr key={request.id} className="solicitacoes-linha">
+                    <td data-label="Solicitação">
+                      <span className="solicitacoes-mono solicitacoes-id">#{request.id}</span>
+                    </td>
+                    <td className="solicitacoes-data" data-label="Criada em">
+                      <span className="solicitacoes-mono">{formatDate(request.createdAt)}</span>
+                    </td>
+                    <td
+                      className={request.customerName?.trim() ? 'solicitacoes-cliente' : 'solicitacoes-cliente solicitacoes-cliente--vazio'}
+                      data-label="Cliente"
+                    >
+                      {customerLabel(request.customerName)}
+                    </td>
                     <td data-label="Itens">
                       <ul className="sol-items-list">
                         {request.items.map((item) => (
-                          <li key={item.id}>
+                          <li key={item.id} className="sol-item-linha">
                             {item.isNewItem && (
                               <>
                                 <span className="badge badge--info">{NEW_ITEM_BADGE}</span>{' '}
                               </>
                             )}
-                            {item.commercialName} — {formatCommercialQuantity(item.quantity)} {item.unit}
-                            {item.targetPrice
-                              ? ` — alvo ${formatCommercialPrice(item.targetPrice, item.targetCurrency)}`
-                              : ''}
-                            {request.status === 'fulfilled'
-                              ? item.finalPrice
-                                ? ` — preço final ${formatFinalPrice(item.finalPrice)}`
-                                : ' — sem preço final'
-                              : ''}
+                            {item.commercialName} — <span className="solicitacoes-mono">{formatCommercialQuantity(item.quantity)}</span> {item.unit}
+                            {item.targetPrice ? (
+                              <>
+                                {' — alvo '}
+                                <ValorMono texto={formatCommercialPrice(item.targetPrice, item.targetCurrency)} />
+                              </>
+                            ) : (
+                              ''
+                            )}
+                            {request.status === 'fulfilled' ? (
+                              item.finalPrice ? (
+                                <strong className="sol-item-final">
+                                  {' — preço final '}
+                                  <ValorMono texto={formatFinalPrice(item.finalPrice)} />
+                                </strong>
+                              ) : (
+                                <span className="solicitacoes-suave">{' — sem preço final'}</span>
+                              )
+                            ) : (
+                              ''
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -457,7 +519,7 @@ export default function ComercialView() {
                         </>
                       )}
                     </td>
-                    <td className="cell-nowrap" data-label="Cotação">{request.quote?.requestCode ?? '—'}</td>
+                    <td className="cell-nowrap solicitacoes-codigo" data-label="Cotação">{request.quote?.requestCode ?? '—'}</td>
                     <td data-label="Anexos">
                       {(() => {
                         const attachments = request.attachments ?? [];
@@ -469,10 +531,11 @@ export default function ComercialView() {
                             {canEdit && attachments.length < CR_ATTACHMENT_MAX_PER_REQUEST && (
                               <button
                                 type="button"
-                                className="ghost-button ghost-button--sm"
+                                className="ghost-button ghost-button--sm solicitacoes-anexar"
                                 aria-label={`Anexar arquivo à solicitação #${request.id}`}
                                 onClick={() => setAttachTarget({ id: request.id, count: attachments.length })}
                               >
+                                <Icon name="plus" size={16} strokeWidth={1.9} />
                                 Anexar
                               </button>
                             )}
@@ -480,7 +543,7 @@ export default function ComercialView() {
                         );
                       })()}
                     </td>
-                    <td data-label="Observação do COMEX">
+                    <td className="solicitacoes-observacao" data-label="Observação do COMEX">
                       {request.status === 'rejected' && request.rejectionReason
                         ? `Motivo: ${request.rejectionReason}`
                         : request.status === 'fulfilled' && request.fulfillmentNote
@@ -523,7 +586,7 @@ export default function ComercialView() {
             onClose={closeModal}
           />
         ) : (
-        <form onSubmit={handleSubmit}>
+        <form className="solicitacao-form" onSubmit={handleSubmit}>
           <div className="form-grid">
             <div className="form-grid__full">
               <label className="field-label" htmlFor="cr-customer">Cliente (opcional)</label>
@@ -549,38 +612,30 @@ export default function ComercialView() {
             </div>
           </div>
 
-          <h3 style={{ margin: '18px 0 8px', fontSize: 15 }}>Itens da solicitação</h3>
+          <h3 className="solicitacao-form__titulo">Itens da solicitação</h3>
           {lines.length === 0 && (
-            <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+            <p className="solicitacao-form__vazio">
               Nenhum item adicionado. Busque abaixo e clique no item para incluí-lo.
             </p>
           )}
           {lines.map((line) => (
-            <fieldset
-              key={line.key}
-              style={{
-                border: '1px solid var(--border, #dde3ea)',
-                borderRadius: 8,
-                padding: 12,
-                margin: '0 0 10px',
-                minWidth: 0,
-              }}
-            >
-              <legend className="text-sm" style={{ padding: '0 6px' }}>
+            <fieldset key={line.key} className="solicitacao-item">
+              <legend className="solicitacao-item__legenda">
                 {line.catalogItemId === null ? (
                   <>
-                    {line.commercialName} · <span className="badge badge--info">{NEW_ITEM_BADGE}</span>
+                    {line.commercialName} <span className="solicitacao-item__familia">· </span>
+                    <span className="badge badge--info">{NEW_ITEM_BADGE}</span>
                   </>
                 ) : (
-                  labelOf(line)
+                  <ItemLabel item={line} />
                 )}
               </legend>
-              <div className="form-grid">
+              <div className="solicitacao-item__grade">
                 <div>
                   <label className="field-label" htmlFor={`cr-qty-${line.key}`}>Quantidade *</label>
                   <input
                     id={`cr-qty-${line.key}`}
-                    className="input"
+                    className="input solicitacao-item__numero"
                     type="number"
                     min={1}
                     step={1}
@@ -607,7 +662,7 @@ export default function ComercialView() {
                   <label className="field-label" htmlFor={`cr-price-${line.key}`}>Preço-alvo</label>
                   <input
                     id={`cr-price-${line.key}`}
-                    className="input"
+                    className="input solicitacao-item__numero"
                     inputMode="decimal"
                     placeholder="opcional"
                     value={line.targetPrice}
@@ -627,9 +682,17 @@ export default function ComercialView() {
                     ))}
                   </select>
                 </div>
+                <button
+                  type="button"
+                  className="ghost-button danger-button solicitacao-item__remover"
+                  onClick={() => removeLine(line.key)}
+                >
+                  <Icon name="trash" size={16} strokeWidth={1.9} />
+                  Remover item
+                </button>
               </div>
               {line.catalogItemId === null && (
-                <div style={{ marginTop: 8 }}>
+                <div className="solicitacao-item__obs">
                   <label className="field-label" htmlFor={`cr-item-notes-${line.key}`}>Observação do item</label>
                   <textarea
                     id={`cr-item-notes-${line.key}`}
@@ -642,30 +705,12 @@ export default function ComercialView() {
                   />
                 </div>
               )}
-              <div style={{ marginTop: 8, textAlign: 'right' }}>
-                <button
-                  type="button"
-                  className="ghost-button danger-button"
-                  onClick={() => removeLine(line.key)}
-                >
-                  Remover item
-                </button>
-              </div>
             </fieldset>
           ))}
 
           {hasNewItem && (
-            <p
-              role="status"
-              className="text-sm"
-              style={{
-                margin: '0 0 10px',
-                padding: '8px 12px',
-                background: 'var(--primary-50)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}
-            >
+            <p role="status" className="solicitacoes-alerta alert--info solicitacao-form__aviso">
+              <Icon name="info" size={18} strokeWidth={1.9} />
               Item novo: esta solicitação será de desenvolvimento. O COMEX cadastra o item antes de cotar.
             </p>
           )}
@@ -674,14 +719,13 @@ export default function ComercialView() {
           )}
 
           {showSearch ? (
-            <div style={{ marginTop: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+            <div className="solicitacao-busca">
+              <div className="solicitacao-busca__topo">
                 <label className="field-label" htmlFor="cr-search">Buscar item</label>
                 {lines.length > 0 && (
                   <button
                     type="button"
-                    className="link-button text-sm"
-                    style={{ background: 'none', border: 'none', padding: 0, color: 'var(--ink-soft)', cursor: 'pointer' }}
+                    className="link-button solicitacao-busca__fechar"
                     onClick={() => {
                       setSearchTerm('');
                       setDebouncedTerm('');
@@ -692,45 +736,61 @@ export default function ComercialView() {
                   </button>
                 )}
               </div>
-              <input
-                id="cr-search"
-                className="input"
-                placeholder="Digite o nome comercial do item"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                autoComplete="off"
-                // Reaberta pelo "+ Adicionar outro item": já vem com o cursor.
-                autoFocus={lines.length > 0}
-              />
+              <div className="solicitacao-busca__campo">
+                <Icon name="search" size={16} strokeWidth={1.9} />
+                <input
+                  id="cr-search"
+                  className="solicitacao-busca__input"
+                  placeholder="Digite o nome comercial do item"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  autoComplete="off"
+                  // Reaberta pelo "Adicionar outro item": já vem com o cursor.
+                  autoFocus={lines.length > 0}
+                />
+              </div>
               {showSearchHint && (
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                <p className="solicitacao-busca__dica">
                   Digite ao menos {MIN_SEARCH_LENGTH} caracteres.
                 </p>
               )}
               {search.isError && (
-                <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+                <p role="alert" className="solicitacoes-alerta alert--error">
+                  <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
                   {messageOf(search.error)}
                 </p>
               )}
               {debouncedTerm.length >= MIN_SEARCH_LENGTH && search.isSuccess && results.length === 0 && (
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                <p className="solicitacao-busca__aviso">
                   Nenhum item cadastrado com esse nome.
                 </p>
               )}
               {debouncedTerm.length >= MIN_SEARCH_LENGTH && results.length > 0 && (
-                <ul aria-label="Resultados da busca" style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
+                <ul aria-label="Resultados da busca" className="solicitacao-busca__lista">
                   {results.map((item) => (
                     <li key={item.id}>
                       <button
                         type="button"
-                        className="ghost-button"
-                        style={{ width: '100%', textAlign: 'left', marginBottom: 4 }}
+                        className="solicitacao-busca__resultado"
                         onClick={() => addItem(item)}
                         disabled={lines.some((line) => line.key === `c:${item.id}`)}
                       >
                         {lines.some((line) => line.key === `c:${item.id}`)
-                          ? <>{labelOf(item)} <span className="sol-added">Adicionado ✓</span></>
-                          : <>+ {labelOf(item)}</>}
+                          ? (
+                            <>
+                              <ItemLabel item={item} />{' '}
+                              <span className="sol-added">
+                                Adicionado
+                                <Icon name="check" size={14} strokeWidth={2.4} />
+                              </span>
+                            </>
+                          )
+                          : (
+                            <>
+                              <Icon name="plus" size={14} strokeWidth={2.4} />
+                              <ItemLabel item={item} />
+                            </>
+                          )}
                       </button>
                     </li>
                   ))}
@@ -739,39 +799,48 @@ export default function ComercialView() {
               {canOfferNewItem && (
                 <button
                   type="button"
-                  className="ghost-button"
-                  style={{ width: '100%', textAlign: 'left', marginTop: 4 }}
+                  className="solicitacao-busca__incluir"
                   onClick={() => addNewItem(debouncedTerm)}
                 >
-                  + Incluir &quot;{cleanProposedName(debouncedTerm)}&quot; como item novo
+                  <Icon name="plus" size={14} strokeWidth={2.4} />
+                  Incluir &quot;{cleanProposedName(debouncedTerm)}&quot; como item novo
                 </button>
               )}
               {exactMatch && (
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                <p className="solicitacao-busca__aviso">
                   Esse item já está cadastrado: selecione-o acima.
                 </p>
               )}
             </div>
           ) : (
             lines.length < MAX_ITEMS && (
-              <button id="cr-add-more" type="button" className="ghost-button" onClick={() => setSearchOpen(true)}>
-                + Adicionar outro item
+              <button id="cr-add-more" type="button" className="ghost-button solicitacao-form__outro" onClick={() => setSearchOpen(true)}>
+                <Icon name="plus" size={16} strokeWidth={2.2} />
+                Adicionar outro item
               </button>
             )
           )}
 
           {formError && (
-            <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+            <p role="alert" className="solicitacoes-alerta alert--error">
+              <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
               {formError}
             </p>
           )}
 
-          <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+          <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeModal} disabled={attachBusy}>
               Cancelar
             </button>
             <button type="submit" className="primary-button" disabled={!canSubmit}>
-              {create.isPending || attachBusy ? 'Enviando…' : 'Enviar'}
+              {create.isPending || attachBusy ? (
+                <>
+                  <span className="btn-spinner" aria-hidden="true" />
+                  Enviando…
+                </>
+              ) : (
+                'Enviar'
+              )}
             </button>
           </div>
         </form>

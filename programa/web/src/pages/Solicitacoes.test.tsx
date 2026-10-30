@@ -126,7 +126,7 @@ describe('Solicitacoes - comercial', () => {
   it('lista as proprias com status em portugues', async () => {
     renderPage();
     expect(await screen.findByText('Pendente')).toBeTruthy();
-    expect(screen.getByText(/Resina X — 5 KG/)).toBeTruthy();
+    expect(document.querySelector('li.sol-item-linha')?.textContent).toMatch(/Resina X — 5 KG/);
     expect(api.get).toHaveBeenCalledWith('/api/v1/commercial-requests/mine', {
       page: 1,
       status: undefined,
@@ -150,7 +150,7 @@ describe('Solicitacoes - comercial', () => {
     );
 
     // "Nome comercial · Familia" quando ha familia
-    const result = await screen.findByRole('button', { name: '+ Resina X · Resinas' });
+    const result = await screen.findByRole('button', { name: 'Resina X · Resinas' });
     fireEvent.click(result);
     expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(false);
 
@@ -167,7 +167,7 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
 
     fireEvent.change(screen.getByLabelText('Quantidade *'), { target: { value: '0' } });
     expect((screen.getByRole('button', { name: 'Enviar' }) as HTMLButtonElement).disabled).toBe(true);
@@ -185,7 +185,7 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
     fireEvent.change(screen.getByLabelText('Preço-alvo'), { target: { value: '12,5' } });
     fireEvent.change(screen.getByLabelText('Unidade'), { target: { value: 'TON' } });
 
@@ -202,13 +202,13 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
 
     expect(screen.queryByLabelText('Buscar item')).toBeNull();
     expect(screen.queryByRole('list', { name: 'Resultados da busca' })).toBeNull();
     const qty = screen.getByLabelText('Quantidade *');
     await waitFor(() => expect(document.activeElement).toBe(qty));
-    expect(screen.getByRole('button', { name: '+ Adicionar outro item' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Adicionar outro item' })).toBeTruthy();
   });
 
   it('"+ Adicionar outro item" reabre a busca vazia e "Fechar busca" volta ao botao', async () => {
@@ -216,16 +216,16 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar outro item' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar outro item' }));
     const search = screen.getByLabelText('Buscar item') as HTMLInputElement;
     expect(search.value).toBe('');
     expect(document.activeElement).toBe(search);
 
     fireEvent.click(screen.getByRole('button', { name: 'Fechar busca' }));
     expect(screen.queryByLabelText('Buscar item')).toBeNull();
-    expect(screen.getByRole('button', { name: '+ Adicionar outro item' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Adicionar outro item' })).toBeTruthy();
   });
 
   it('remover o unico item volta a mostrar a busca', async () => {
@@ -233,11 +233,11 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Remover item' }));
     const search = screen.getByLabelText('Buscar item');
-    expect(screen.queryByRole('button', { name: '+ Adicionar outro item' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Adicionar outro item' })).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(search));
   });
 
@@ -246,13 +246,13 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
-    fireEvent.click(screen.getByRole('button', { name: '+ Adicionar outro item' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar outro item' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
 
-    const added = await screen.findByRole('button', { name: /Resina X · Resinas\s+Adicionado ✓/ });
+    const added = await screen.findByRole('button', { name: /Resina X · Resinas\s+Adicionado/ });
     expect((added as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole('button', { name: '+ Resina X · Resinas' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Resina X · Resinas' })).toBeNull();
   });
 
   it('preco-alvo aceita virgula e separador de milhar (1.234,5)', async () => {
@@ -261,7 +261,7 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
     fireEvent.change(screen.getByLabelText('Preço-alvo'), { target: { value: '1.234,5' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
@@ -275,7 +275,7 @@ describe('Solicitacoes - comercial', () => {
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
   }
 
   it.each([
@@ -347,7 +347,7 @@ describe('Solicitacoes - comercial', () => {
     });
     renderPage();
 
-    expect(await screen.findByText(/Resina X — 12\.000 KG — alvo 1,85 USD/)).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('li.sol-item-linha')?.textContent).toMatch(/Resina X — 12\.000 KG — alvo 1,85 USD/));
     expect(screen.getByText('QR-2026-009').className).toContain('cell-nowrap');
   });
 
@@ -753,9 +753,9 @@ describe('Solicitacoes - comercial preco final (PR2)', () => {
     mockApi({ '/api/v1/commercial-requests/mine': page([FULFILLED_MINE, QUOTING_MINE]) });
     renderPage();
 
-    expect(await screen.findByText(/Resina X — 5 KG — preço final 1,85 EUR\/KG CIF/)).toBeTruthy();
-    expect(screen.getByText(/Solvente Y — 5 KG — sem preço final/)).toBeTruthy();
-    const quotingItem = screen.getByText(/Acetona Z — 5 KG/);
+    await waitFor(() => expect(document.querySelectorAll('li.sol-item-linha')[0]?.textContent).toMatch(/Resina X — 5 KG — preço final 1,85 EUR\/KG CIF/));
+    expect(document.querySelectorAll('li.sol-item-linha')[1]?.textContent).toMatch(/Solvente Y — 5 KG — sem preço final/);
+    const quotingItem = Array.from(document.querySelectorAll('li.sol-item-linha')).find((li) => /Acetona Z — 5 KG/.test(li.textContent ?? '')) as HTMLElement;
     expect(quotingItem.textContent).not.toContain('preço final');
     expect(screen.queryByText(/9,99/)).toBeNull();
   });
@@ -782,8 +782,8 @@ describe('Solicitacoes - ajustes de modal (QA)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Recusar' }));
     const confirm = await screen.findByRole('button', { name: 'Confirmar recusa' });
     const dialog = confirm.closest('dialog') as HTMLElement;
-    expect(dialog.parentElement?.style.textAlign).toBe('left');
-    expect((confirm.closest('.modal-body')?.firstElementChild as HTMLElement).style.textAlign).toBe('left');
+    expect(dialog.parentElement?.classList.contains('solicitacao-modal')).toBe(true);
+    expect(confirm.closest('.modal-body')?.firstElementChild?.classList.contains('solicitacao-modal')).toBe(true);
   });
 
   it('Q1: botoes da lista de cotacoes abertas alinhados a esquerda', async () => {
@@ -800,7 +800,7 @@ describe('Solicitacoes - ajustes de modal (QA)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Vincular a cotação' }));
     fireEvent.change(await screen.findByLabelText('Buscar cotação aberta'), { target: { value: 'qr' } });
     const option = await screen.findByRole('button', { name: /QR-OPEN-1/ });
-    expect(option.style.textAlign).toBe('left');
+    expect(option.className).toContain('solicitacao-cotacao');
   });
 
   it('Q2: erro do fulfill some ao alternar "Atender sem preco" e ao editar a nota', async () => {
@@ -845,6 +845,6 @@ describe('Solicitacoes - ajustes de modal (QA)', () => {
       ]),
     });
     renderPage();
-    expect(await screen.findByText(/preço final 1\.720,00 USD\/TON CIF/)).toBeTruthy();
+    await waitFor(() => expect(document.querySelector('li.sol-item-linha')?.textContent).toMatch(/preço final 1\.720,00 USD\/TON CIF/));
   });
 });
