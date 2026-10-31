@@ -275,10 +275,11 @@ describe('F11: receitas dos boards (valores exatos)', () => {
       'border-radius': 'var(--rf-radius-card-lg)',
       background: 'var(--rf-surface)',
       'box-shadow': 'var(--rf-shadow-rest)',
+      'container-type': 'inline-size',
     });
     expect(naRegiao('.overview-page .kpi__rotulo')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '11px', 'font-weight': '600', 'letter-spacing': '1.5px', color: 'var(--rf-primary-700)' });
     expect(naRegiao('.overview-page .kpi__icone')).toMatchObject({ width: '32px', height: '32px', 'border-radius': 'var(--rf-radius-control)', background: 'var(--rf-primary-50)', color: 'var(--rf-primary-700)' });
-    expect(naRegiao('.overview-page .kpi__value')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '34px', 'font-weight': '600', 'letter-spacing': '-0.02em', 'line-height': '1.1' });
+    expect(naRegiao('.overview-page .kpi__value')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': 'clamp(22px, 16cqw, 34px)', 'font-weight': '600', 'letter-spacing': '-0.02em', 'line-height': '1.1' });
     expect(naRegiao('.overview-page .overview-top')).toEqual({ padding: '0', overflow: 'hidden' });
     expect(naRegiao('.overview-top__cabecalho')).toMatchObject({ padding: '20px 24px 14px' });
   });
@@ -292,6 +293,11 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.relatorios-page .relatorios-tabela')).toEqual({ border: '1px solid var(--rf-divider)', 'border-radius': 'var(--rf-radius-alert)' });
     expect(naRegiao('.relatorios-linha')).toEqual({ display: 'grid', 'grid-template-columns': 'minmax(0, 1fr) minmax(0, 2fr)', gap: '20px' });
     expect(declaracoes(mediaDe('@media (max-width: 1199px)'), '.relatorios-linha')).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
+    // sem corte: o valor do KPI quebra/encolhe em vez de ser cortado, a grade da economia so tem 3 colunas com >= 240 e a tabela do Lead-time deixa o cabecalho quebrar
+    expect(naRegiao('.relatorios-page .kpi__value')).toMatchObject({ 'min-width': '0', 'overflow-wrap': 'anywhere' });
+    expect(naRegiao('.relatorios-page .kpi-grid--economia')).toEqual({ 'grid-template-columns': 'repeat(auto-fit, minmax(240px, 1fr))' });
+    expect(naRegiao('.relatorios-page .relatorios-tabela__tabela--lead > thead > tr > th')).toEqual({ 'padding-right': '8px', 'padding-left': '8px', 'white-space': 'normal' });
+    expect(naRegiao('.overview-page .kpi')).toMatchObject({ 'container-type': 'inline-size' });
   });
 
   it('Usuarios: busca 260 x 44 com icone, filtro 180, modal de 420, e-mail travado com cadeado e estilo por :disabled', () => {
@@ -310,8 +316,10 @@ describe('F11: receitas dos boards (valores exatos)', () => {
       'border-radius': 'var(--rf-radius-card-lg)',
     });
     expect(naRegiao('.auditoria-page .auditoria-eventos')).toEqual({ padding: '0', overflow: 'hidden' });
-    expect(naRegiao('.auditoria-page .auditoria-tabela > tbody > tr.auditoria-linha:has(.auditoria-diff[open]) > td')).toEqual({ background: 'var(--rf-surface-alt)' });
-    expect(naRegiao('.auditoria-diff__grade')).toMatchObject({ 'grid-template-columns': 'repeat(2, minmax(160px, 1fr))', gap: '12px' });
+    expect(naRegiao('.auditoria-page .auditoria-tabela > tbody > tr.auditoria-linha--aberta > td')).toEqual({ 'border-bottom': '0', background: 'var(--rf-surface-alt)' });
+    expect(naRegiao('.auditoria-page .auditoria-tabela > tbody > tr.auditoria-diff-linha > td')).toEqual({ padding: '0 20px 16px', 'border-bottom': '1px solid var(--rf-divider)', background: 'var(--rf-surface-alt)' });
+    expect(naRegiao('.auditoria-diff__grade')).toEqual({ display: 'grid', 'grid-template-columns': 'repeat(2, minmax(0, 1fr))', gap: '12px' });
+    expect(declaracoes(mediaDe('@media (max-width: 640px)'), '.auditoria-diff__grade')).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
     expect(naRegiao('.auditoria-diff__json')).toMatchObject({ background: 'var(--rf-surface)', border: '1px solid var(--rf-border)', 'font-size': '12px', 'line-height': '1.55', 'max-height': '240px' });
   });
 

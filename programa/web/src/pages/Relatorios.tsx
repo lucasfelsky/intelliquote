@@ -335,7 +335,7 @@ export default function Relatorios() {
           )}
           {leadTimeData && leadTimeData.bySupplier.length > 0 ? (
             <div className="table-wrapper relatorios-tabela">
-              <table className="table relatorios-tabela__tabela">
+              <table className="table relatorios-tabela__tabela relatorios-tabela__tabela--lead">
                 <thead>
                   <tr>
                     <th>Fornecedor</th>

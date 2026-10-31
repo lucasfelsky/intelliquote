@@ -7144,6 +7144,7 @@ dialog.modal-dialog[open] {
   border-radius: var(--rf-radius-card-lg);
   background: var(--rf-surface);
   box-shadow: var(--rf-shadow-rest);
+  container-type: inline-size;
 }
 .overview-page .kpi__topo {
   display: flex;
@@ -7171,7 +7172,8 @@ dialog.modal-dialog[open] {
 }
 .overview-page .kpi__value {
   font-family: var(--rf-font-mono);
-  font-size: 34px;
+  /* 34 no board; encolhe so quando o valor (ex.: US$ 184.500) nao cabe na largura do cartao */
+  font-size: clamp(22px, 16cqw, 34px);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -7327,7 +7329,7 @@ dialog.modal-dialog[open] {
   gap: 12px;
 }
 .relatorios-page .kpi-grid--resumo { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-.relatorios-page .kpi-grid--economia { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.relatorios-page .kpi-grid--economia { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .relatorios-page .kpi-grid--lead { grid-template-columns: minmax(0, 1fr); }
 .relatorios-page .kpi-grid--adjudicacao {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -7359,6 +7361,8 @@ dialog.modal-dialog[open] {
   letter-spacing: -0.02em;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .relatorios-page .kpi--destaque .kpi__rotulo,
 .relatorios-page .kpi--destaque .kpi__value { color: var(--rf-tone-success-fg); }
@@ -7374,6 +7378,15 @@ dialog.modal-dialog[open] {
 }
 .relatorios-page .relatorios-tabela__tabela > thead > tr > th { padding: 12px 14px; }
 .relatorios-page .relatorios-tabela__tabela > tbody > tr > td { padding: 12px 14px; }
+.relatorios-page .relatorios-tabela__tabela--lead > thead > tr > th {
+  padding-right: 8px;
+  padding-left: 8px;
+  white-space: normal;
+}
+.relatorios-page .relatorios-tabela__tabela--lead > tbody > tr > td {
+  padding-right: 8px;
+  padding-left: 8px;
+}
 .relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th,
 .relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td { padding-right: 16px; padding-left: 16px; }
 .relatorios-page .relatorios-tabela__tabela--compacta > tbody > tr > td { padding-top: 11px; padding-bottom: 11px; }
@@ -7629,7 +7642,8 @@ dialog.modal-dialog[open] {
 }
 .auditoria-page .auditoria-tabela > thead > tr > th:first-child { padding-left: 20px; }
 .auditoria-page .auditoria-tabela > thead > tr > th:last-child { padding-right: 20px; }
-.auditoria-page .auditoria-tabela > tbody > tr > td { padding: 10px 16px; vertical-align: top; }
+.auditoria-page .auditoria-tabela > tbody > tr > td { padding: 10px 16px; }
+.auditoria-page .auditoria-tabela > tbody > tr.auditoria-linha > td { vertical-align: top; }
 .auditoria-page .auditoria-tabela > tbody > tr > td:first-child { padding-left: 20px; }
 .auditoria-page .auditoria-tabela > tbody > tr > td:last-child { padding-right: 20px; }
 .auditoria-page .auditoria-tabela > tbody > tr > td.auditoria-data {
@@ -7673,8 +7687,7 @@ dialog.modal-dialog[open] {
   font-weight: 600;
 }
 
-/* "Ver diff": <details> na celula do identificador; aberto, o painel (Antes / Depois lado a lado) cresce dentro da celula e a linha ganha o fundo --rf-surface-alt */
-.auditoria-identificador { flex-wrap: wrap; }
+/* "Ver diff": <details> na celula do identificador; aberto, a linha irma (colspan) traz o painel Antes / Depois na largura da linha e ambas ficam em --rf-surface-alt */
 .auditoria-diff__resumo {
   display: inline-flex;
   align-items: center;
@@ -7686,7 +7699,6 @@ dialog.modal-dialog[open] {
   cursor: pointer;
 }
 .auditoria-diff__resumo::-webkit-details-marker { display: none; }
-.auditoria-diff[open] { flex-basis: 100%; }
 .auditoria-diff[open] .auditoria-diff__fechado { display: none; }
 .auditoria-diff:not([open]) .auditoria-diff__aberto { display: none; }
 .auditoria-diff__resumo:focus-visible {
@@ -7694,14 +7706,20 @@ dialog.modal-dialog[open] {
   border-radius: var(--rf-radius-xs);
   box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
 }
-.auditoria-page .auditoria-tabela > tbody > tr.auditoria-linha:has(.auditoria-diff[open]) > td { background: var(--rf-surface-alt); }
+.auditoria-page .auditoria-tabela > tbody > tr.auditoria-linha--aberta > td {
+  border-bottom: 0;
+  background: var(--rf-surface-alt);
+}
+.auditoria-page .auditoria-tabela > tbody > tr.auditoria-diff-linha > td {
+  padding: 0 20px 16px;
+  border-bottom: 1px solid var(--rf-divider);
+  background: var(--rf-surface-alt);
+}
+.auditoria-diff__painel { display: block; }
 .auditoria-diff__grade {
   display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  min-width: 360px;
-  max-width: 560px;
-  margin-top: 8px;
 }
 .auditoria-diff__lado {
   display: flex;
@@ -7709,6 +7727,7 @@ dialog.modal-dialog[open] {
   gap: 4px;
   min-width: 0;
 }
+.auditoria-diff__lado:only-child { grid-column: 1 / -1; }
 .auditoria-diff__lado > strong {
   color: var(--rf-ink-soft);
   font-size: 12px;
@@ -8725,10 +8744,7 @@ dialog.modal-dialog[open] {
   .template-cards > .template-card:nth-child(7):last-child { grid-column: auto; }
   .templates-previa__quadro { height: 436px; }
   .auditoria-filtros { grid-template-columns: minmax(0, 1fr); }
-  .auditoria-diff__grade {
-    grid-template-columns: minmax(0, 1fr);
-    min-width: 0;
-  }
+  .auditoria-diff__grade { grid-template-columns: minmax(0, 1fr); }
   .parceiro-credito-grade,
   .parceiro-credito-contato__grade { grid-template-columns: minmax(0, 1fr); }
   .parceiro-credito-campo--cheio { grid-column: auto; }

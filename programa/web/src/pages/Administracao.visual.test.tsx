@@ -218,7 +218,13 @@ describe('F11: Auditoria', () => {
     expect(container.querySelector('form[aria-label="Filtros de auditoria"]')).toBeTruthy();
     expect(container.querySelectorAll('details.auditoria-diff')).toHaveLength(1);
     expect(container.querySelector('details.auditoria-diff summary')?.textContent).toBe('Ver diff');
-    expect(container.querySelector('details.auditoria-diff .auditoria-diff__grade')).toBeTruthy();
+    // o painel so existe com o diff aberto: linha irma (colspan) com <details open> para o harness
+    expect(container.querySelector('.auditoria-diff-linha')).toBeNull();
+    fireEvent.click(container.querySelector('details.auditoria-diff summary') as HTMLElement);
+    expect(container.querySelector('details.auditoria-diff')?.hasAttribute('open')).toBe(true);
+    expect(container.querySelector('tr.auditoria-linha--aberta')).toBeTruthy();
+    expect(container.querySelector('tr.auditoria-diff-linha td')?.getAttribute('colspan')).toBe('5');
+    expect(container.querySelector('tr.auditoria-diff-linha details[open] .auditoria-diff__grade')).toBeTruthy();
     const lados = Array.from(container.querySelectorAll('.auditoria-diff__lado')).map((l) => l.querySelector('strong')?.textContent);
     expect(lados).toEqual(['Antes', 'Depois']);
     expect(container.querySelectorAll('pre.auditoria-diff__json')).toHaveLength(2);

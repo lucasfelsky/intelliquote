@@ -232,34 +232,54 @@ export default function Auditoria() {
 }
 
 function LogRow({ log }: { log: AuditLog }) {
+  const [aberto, setAberto] = useState(false);
   const actorName = log.performedBy?.name ?? 'Sistema';
   const actorEmail = log.performedBy?.email ?? '—';
   const actorRole = log.performedBy?.role?.name ?? '—';
   const showBefore = hasSnapshot(log.before);
   const showAfter = hasSnapshot(log.after);
+  const hasDiff = showBefore || showAfter;
 
+  // O <details> "Ver diff" fica na celula do Identificador; o painel Antes/Depois ocupa a largura da linha (linha irma com colspan, como o board).
   return (
-    <tr className="auditoria-linha">
-      <td className="auditoria-data">{formatDateTime(log.createdAt)}</td>
-      <td>
-        <span className="auditoria-ator">
-          <strong>{actorName}</strong>
-          <span className="badge badge--muted auditoria-papel">{actorRole}</span>
-        </span>
-        <span className="auditoria-email">{actorEmail}</span>
-      </td>
-      <td><span className="badge badge--muted auditoria-entidade">{log.entityType}</span></td>
-      <td><span className="badge badge--info auditoria-acao">{log.action}</span></td>
-      <td>
-        <span className="auditoria-identificador">
-          <span className="auditoria-id">{log.entityId}</span>
-          {(showBefore || showAfter) && (
-            <details className="auditoria-diff">
-              <summary className="auditoria-diff__resumo">
-                Ver diff
-                <Icon name="chevron-down" size={14} strokeWidth={2} className="auditoria-diff__fechado" />
-                <Icon name="chevron-up" size={14} strokeWidth={2} className="auditoria-diff__aberto" />
-              </summary>
+    <>
+      <tr className={`auditoria-linha${aberto ? ' auditoria-linha--aberta' : ''}`}>
+        <td className="auditoria-data">{formatDateTime(log.createdAt)}</td>
+        <td>
+          <span className="auditoria-ator">
+            <strong>{actorName}</strong>
+            <span className="badge badge--muted auditoria-papel">{actorRole}</span>
+          </span>
+          <span className="auditoria-email">{actorEmail}</span>
+        </td>
+        <td><span className="badge badge--muted auditoria-entidade">{log.entityType}</span></td>
+        <td><span className="badge badge--info auditoria-acao">{log.action}</span></td>
+        <td>
+          <span className="auditoria-identificador">
+            <span className="auditoria-id">{log.entityId}</span>
+            {hasDiff && (
+              <details className="auditoria-diff" open={aberto}>
+                <summary
+                  className="auditoria-diff__resumo"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setAberto((atual) => !atual);
+                  }}
+                >
+                  Ver diff
+                  <Icon name="chevron-down" size={14} strokeWidth={2} className="auditoria-diff__fechado" />
+                  <Icon name="chevron-up" size={14} strokeWidth={2} className="auditoria-diff__aberto" />
+                </summary>
+              </details>
+            )}
+          </span>
+        </td>
+      </tr>
+      {hasDiff && aberto && (
+        <tr className="auditoria-diff-linha">
+          <td colSpan={5}>
+            <details className="auditoria-diff__painel" open>
+              <summary className="sr-only" tabIndex={-1}>Diff do evento {log.id}</summary>
               <div className="auditoria-diff__grade">
                 {showBefore && (
                   <div className="auditoria-diff__lado">
@@ -275,9 +295,9 @@ function LogRow({ log }: { log: AuditLog }) {
                 )}
               </div>
             </details>
-          )}
-        </span>
-      </td>
-    </tr>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
