@@ -583,7 +583,9 @@ describe('F10: receitas dos boards (valores exatos)', () => {
       color: 'var(--rf-action)',
       'font-size': '11px',
     });
-    expect(naRegiao('.forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-endereco')).toEqual({ 'max-width': '320px' });
+    expect(naRegiao('.forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-endereco')).toEqual({ 'max-width': '240px' });
+    expect(naRegiao('.forwarders-page .forwarders-tabela > tbody > tr > td:last-child')).toEqual({ padding: '8px 20px 8px 12px', 'white-space': 'normal' });
+    expect(naRegiao('.forwarders-tabela .row-actions')).toEqual({ 'flex-wrap': 'wrap', 'justify-content': 'flex-end', gap: '4px' });
     expect(naRegiao('.forwarder-form__grade')).toEqual({
       display: 'grid',
       'grid-auto-flow': 'column',

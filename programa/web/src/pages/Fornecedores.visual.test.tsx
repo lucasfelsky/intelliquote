@@ -355,6 +355,8 @@ describe('Fornecedores (visual, F10)', () => {
     }
     expect(within(form).getByRole('button', { name: 'confiável' })).toBe(etiquetas[0]);
 
+    expect(within(form).getByRole('group', { name: 'Incoterms aceitos' }).querySelectorAll('button')).toHaveLength(11);
+    expect(within(form).getByRole('group', { name: 'Famílias que este fornecedor cota' }).querySelectorAll('button')).toHaveLength(2);
     const fob = within(form).getByRole('button', { name: 'FOB' });
     expect(fob.getAttribute('aria-pressed')).toBe('true');
     expect(fob.querySelector('svg[aria-hidden="true"]')).not.toBeNull();

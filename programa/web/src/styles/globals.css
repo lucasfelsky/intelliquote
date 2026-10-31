@@ -8457,9 +8457,12 @@ dialog.modal-dialog[open] {
   white-space: nowrap;
 }
 .forwarders-page .forwarders-tabela > tbody > tr > td:first-child { padding: 12px 12px 12px 20px; }
-.forwarders-page .forwarders-tabela > tbody > tr > td:last-child { padding: 8px 20px 8px 12px; }
+.forwarders-page .forwarders-tabela > tbody > tr > td:last-child {
+  padding: 8px 20px 8px 12px;
+  white-space: normal;
+}
 .forwarders-page .forwarders-tabela .col-status { text-align: left; }
-.forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-endereco { max-width: 320px; }
+.forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-endereco { max-width: 240px; }
 .forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-contatos { color: var(--rf-ink); }
 .forwarders-empresa {
   display: inline-flex;
@@ -8477,6 +8480,7 @@ dialog.modal-dialog[open] {
 }
 .forwarders-padrao > svg { flex: none; }
 .forwarders-tabela .row-actions {
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px;
 }

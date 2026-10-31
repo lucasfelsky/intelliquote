@@ -970,8 +970,8 @@ export default function Fornecedores() {
               </div>
             </div>
 
-            <div className="fornecedor-campo fornecedor-grupo">
-              <span className="fornecedor-grupo__titulo">
+            <div className="fornecedor-campo fornecedor-grupo" role="group" aria-labelledby="supplier-incoterms-label">
+              <span className="fornecedor-grupo__titulo" id="supplier-incoterms-label">
               Incoterms aceitos
               </span>
               <div className="fornecedor-chips fornecedor-chips--mono">
@@ -996,8 +996,8 @@ export default function Fornecedores() {
             </p>
             </div>
 
-            <div className="fornecedor-campo fornecedor-grupo fornecedor-grupo--familias">
-              <span className="fornecedor-grupo__titulo">
+            <div className="fornecedor-campo fornecedor-grupo fornecedor-grupo--familias" role="group" aria-labelledby="supplier-families-label">
+              <span className="fornecedor-grupo__titulo" id="supplier-families-label">
               Famílias que este fornecedor cota
               </span>
               <p className="fornecedor-dica">
