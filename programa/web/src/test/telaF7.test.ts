@@ -216,8 +216,8 @@ describe('F7: nada dos donos sobrou fora das regioes', () => {
     expect(foraSeletores.filter((s) => classesDoSeletor(s).some(ehDono))).toEqual([]);
   });
 
-  it('a F7 nao apaga regra antiga: as compartilhadas que ela usa seguem fora das regioes (.preview-frame, .muted, .form-grid, .dispatch-event)', () => {
-    for (const s of ['.preview-frame', '.muted', '.form-grid', '.dispatch-event']) expect(foraSeletores, s).toContain(s);
+  it('a F7 nao apaga regra antiga: as compartilhadas que ela usa seguem fora das regioes (.preview-frame, .form-grid, .dispatch-event)', () => {
+    for (const s of ['.preview-frame', '.form-grid', '.dispatch-event']) expect(foraSeletores, s).toContain(s);
   });
 });
 

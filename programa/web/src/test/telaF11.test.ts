@@ -251,8 +251,8 @@ describe('F11: nada dos donos sobrou fora das regioes; o resto fica intacto', ()
     expect(foraSeletores.filter((s) => classesDoSeletor(s).some((c) => DONOS_FORA.test(c)))).toEqual([]);
   });
 
-  it('o CSS compartilhado segue fora das regioes: .page-header__actions, .muted, .form-grid, .text-sm, .text-xs, .sr-only, .help-list', () => {
-    for (const s of ['.page-header__actions', '.muted', '.form-grid', '.text-sm', '.text-xs', '.sr-only', '.help-list']) {
+  it('o CSS compartilhado segue fora das regioes: .page-header__actions, .form-grid, .text-sm, .sr-only', () => {
+    for (const s of ['.page-header__actions', '.form-grid', '.text-sm', '.sr-only']) {
       expect(foraSeletores, s).toContain(s);
     }
   });

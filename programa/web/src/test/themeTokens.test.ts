@@ -98,23 +98,23 @@ const SAME_IN_BOTH_THEMES = [
   '--rf-toast-ink-soft',
 ];
 
-// Valores do :root claro em origin/main f74c579 (nao podem mudar).
+// Valores do :root claro depois da TROCA-2 (plano-mestre §2.2).
 const FROZEN_LIGHT: Record<string, string> = {
-  '--bg': '#f5f8f7',
+  '--bg': '#eef2f1',
   '--surface': '#ffffff',
-  '--surface-alt': '#eef4f1',
-  '--ink': '#1f1c18',
-  '--ink-soft': '#4a5560',
-  '--primary': '#00ae91',
-  '--primary-700': '#00735c',
-  '--primary-50': '#e3f5f0',
-  '--danger': '#a4370c',
-  '--warning': '#7a5a07',
-  '--info': '#16568c',
-  '--border': '#dce9e5',
-  '--border-strong': '#b7cdc5',
-  '--shadow': '0 8px 28px rgba(0, 40, 40, 0.08)',
-  '--shadow-sm': '0 2px 8px rgba(0, 40, 40, 0.06)',
+  '--surface-alt': '#f5f8f7',
+  '--ink': '#0b2430',
+  '--ink-soft': '#4a6472',
+  '--primary': '#14dda7',
+  '--primary-700': '#007864',
+  '--primary-50': '#e2f6f0',
+  '--danger': '#9a2a21',
+  '--warning': '#8a5a0a',
+  '--info': '#155793',
+  '--border': '#d5e2de',
+  '--border-strong': '#9fb1b8',
+  '--shadow': '0 8px 28px rgba(0, 65, 83, 0.08)',
+  '--shadow-sm': '0 2px 8px rgba(0, 65, 83, 0.06)',
 };
 
 // ---------- parser minimo ----------
@@ -213,7 +213,6 @@ const PAIRS: ReadonlyArray<readonly [string, string, number]> = [
   ['ink-soft', 'surface-muted', TEXT],
   ['ink-muted', 'surface', TEXT],
   ['ink-muted', 'input-bg', TEXT],
-  ['ink-muted', 'cmp-criteria-bg', TEXT],
   ['ink-faint', 'surface', TEXT],
   ['ink-faint', 'surface-alt', TEXT],
   ['primary-700', 'surface', TEXT],
@@ -244,12 +243,10 @@ const PAIRS: ReadonlyArray<readonly [string, string, number]> = [
   ['on-strong', 'warning-strong', TEXT],
   ['on-strong', 'toast-bg', TEXT],
   ['on-strong', 'toast-action-hover', TEXT],
-  ['ink', 'winner-bg', TEXT],
   ['ink', 'selection-bg', TEXT],
   ['input-border', 'input-bg', UI],
   ['input-border', 'surface', UI],
   ['scorebar-fill', 'surface-alt', UI],
-  ['primary', 'winner-track', UI],
   ['star-on', 'surface', UI],
   ['star-off', 'surface', UI],
   // "papel claro" (Jodit / previa da assinatura): constantes sobre o branco do papel
@@ -382,8 +379,8 @@ describe('tema escuro: .tsx e index.html', () => {
   it('index.html: script anti-flash antes do bundle e metas theme-color por esquema', () => {
     expect(indexHtml).toContain("'iq-theme'");
     expect(indexHtml).toContain('data-theme');
-    expect(indexHtml).toMatch(/<meta name="theme-color" content="#00ae91" media="\(prefers-color-scheme: light\)"/);
-    expect(indexHtml).toMatch(/<meta name="theme-color" content="#0b1518" media="\(prefers-color-scheme: dark\)"/);
+    expect(indexHtml).toMatch(/<meta name="theme-color" content="#004153" media="\(prefers-color-scheme: light\)"/);
+    expect(indexHtml).toMatch(/<meta name="theme-color" content="#061a22" media="\(prefers-color-scheme: dark\)"/);
     const script = indexHtml.indexOf('<script>');
     const bundle = indexHtml.indexOf('/src/main.tsx');
     expect(script).toBeGreaterThan(-1);

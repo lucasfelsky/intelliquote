@@ -197,8 +197,9 @@ describe('F3 compat: contraste nos 2 temas (tokens compostos sobre a linha tingi
     it(`${tema}: anel do selo, texto do selo, contorno e texto do botao`, () => {
       const t = TEMAS[tema];
       expect(t['--tone-danger-bg-soft'], 'a linha tingida do Forecast').toBeDefined();
-      const linha = rgbDoToken(tema, '--tone-danger-bg-soft', [255, 255, 255]);
+      // TROCA-2 (R4): no escuro o --tone-danger-bg-soft e translucido; compoe sobre o --rf-surface do tema (no claro e o mesmo branco).
       const superficie = rgbDoToken(tema, '--rf-surface', [255, 255, 255]);
+      const linha = rgbDoToken(tema, '--tone-danger-bg-soft', superficie);
       const fundoSelo = rgbDoToken(tema, '--rf-tone-danger-bg', linha);
       const medidos: Array<[nome: string, razao: number, minimo: number]> = [
         ['anel --rf-danger x linha', ratioOf(rgbDoToken(tema, '--rf-danger', linha), linha), UI],

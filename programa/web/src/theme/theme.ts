@@ -10,8 +10,8 @@ export type ThemePreference = 'light' | 'dark' | 'auto';
 export type ResolvedTheme = 'light' | 'dark';
 
 export const THEME_STORAGE_KEY = 'iq-theme';
-export const THEME_COLOR_LIGHT = '#00ae91';
-export const THEME_COLOR_DARK = '#0b1518';
+export const THEME_COLOR_LIGHT = '#004153';
+export const THEME_COLOR_DARK = '#061a22';
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 const SWITCHING_ATTR = 'data-theme-switching';
