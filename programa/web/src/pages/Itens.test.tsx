@@ -159,7 +159,7 @@ describe('Itens (catálogo) — DG saiu do cadastro', () => {
   it('7. formulario de novo item e de edicao nao tem o campo DG', async () => {
     const { findByText, getByRole, queryByText, queryByRole } = renderPage();
     await findByText('Item DG Legado');
-    fireEvent.click(getByRole('button', { name: '+ Novo item' }));
+    fireEvent.click(getByRole('button', { name: 'Novo item' }));
     await findByText('Código DBCorp');
     expect(queryByText(/perigosa/i)).toBeNull();
     expect(queryByRole('checkbox', { name: /DG|perigosa/i })).toBeNull();

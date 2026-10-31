@@ -106,7 +106,7 @@ describe('Forwarders (pagina)', () => {
     vi.mocked(api.post).mockResolvedValue(forwarder(9, 'Nova Cargo'));
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '+ Novo forwarder' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo forwarder' }));
     fireEvent.change(screen.getByLabelText('Empresa *'), { target: { value: ' Nova Cargo ' } });
     fireEvent.change(screen.getByLabelText('Endereço'), { target: { value: 'Rua Nova, 5' } });
     fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Ana' } });
@@ -132,7 +132,7 @@ describe('Forwarders (pagina)', () => {
     vi.mocked(api.post).mockResolvedValue(forwarder(9, 'Nova Cargo'));
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '+ Novo forwarder' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo forwarder' }));
     fireEvent.change(screen.getByLabelText('Empresa *'), { target: { value: 'Nova Cargo' } });
     fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Ana' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar forwarder' }));
@@ -183,7 +183,7 @@ describe('Forwarders (pagina)', () => {
     renderPage();
 
     expect(await screen.findByText('Global Cargo')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '+ Novo forwarder' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Novo forwarder' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Editar' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Excluir' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Definir como padrão' })).toBeNull();
@@ -200,7 +200,7 @@ describe('Forwarders (pagina)', () => {
     vi.mocked(api.post).mockRejectedValue(new ApiError(409, { message: 'Ja existe um forwarder com esse nome.' }));
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '+ Novo forwarder' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo forwarder' }));
     fireEvent.change(screen.getByLabelText('Empresa *'), { target: { value: 'Global Cargo' } });
     fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Ana' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar forwarder' }));
