@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon, type IconName } from '@/components/icons';
 
 interface ReportSummary {
   totals?: {
@@ -47,6 +49,22 @@ function formatCurrency(value: number | undefined, currency = 'USD'): string {
   });
 }
 
+function formatScore(value: number): string {
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+// Rotulo do KPI (o eyebrow de antes) com o icone em quadro (mock v68, Overview).
+function KpiTopo({ icon, children }: { icon: IconName; children: ReactNode }) {
+  return (
+    <span className="kpi__topo">
+      <span className="kpi__rotulo">{children}</span>
+      <span className="kpi__icone" aria-hidden="true">
+        <Icon name={icon} size={16} />
+      </span>
+    </span>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
 
@@ -75,7 +93,7 @@ export default function Home() {
   const topItems = topSuppliers.data?.items?.slice(0, 5) ?? [];
 
   return (
-    <div className="page">
+    <div className="page overview-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">Visão geral</p>
@@ -84,24 +102,26 @@ export default function Home() {
         </div>
       </div>
 
-      <section className="kpi-grid">
-        <article className="card kpi">
-          <p className="eyebrow">Cotações</p>
+      <section className="kpi-grid" aria-label="Indicadores">
+        <article className="kpi">
+          <KpiTopo icon="cotacoes">Cotações</KpiTopo>
           <strong className="kpi__value">{formatNumber(totals?.quoteRequests)}</strong>
-          <small>{formatNumber(totals?.responses)} respostas recebidas</small>
+          <small>
+            {formatNumber(totals?.responses)} {totals?.responses === 1 ? 'resposta recebida' : 'respostas recebidas'}
+          </small>
         </article>
-        <article className="card kpi">
-          <p className="eyebrow">Comparações</p>
+        <article className="kpi">
+          <KpiTopo icon="relatorios">Comparações</KpiTopo>
           <strong className="kpi__value">{formatNumber(totals?.comparisons)}</strong>
           <small>taxa de adjudicação: {typeof rate === 'number' ? `${rate}%` : '—'}</small>
         </article>
-        <article className="card kpi">
-          <p className="eyebrow">Fornecedores</p>
+        <article className="kpi">
+          <KpiTopo icon="fornecedores">Fornecedores</KpiTopo>
           <strong className="kpi__value">{formatNumber(totals?.suppliers)}</strong>
           <small>cadastrados e ativos</small>
         </article>
-        <article className="card kpi">
-          <p className="eyebrow">Economia gerada</p>
+        <article className="kpi">
+          <KpiTopo icon="dollar">Economia gerada</KpiTopo>
           <strong className="kpi__value">
             {formatCurrency(savings.data?.absoluteSaving, 'USD')}
           </strong>
@@ -113,46 +133,60 @@ export default function Home() {
         </article>
       </section>
 
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 12 }}>
-          <h2>Top fornecedores</h2>
+      <section className="card overview-top">
+        <div className="overview-top__cabecalho">
+          <h2 className="overview-top__titulo">Top fornecedores</h2>
         </div>
-        {topSuppliers.isLoading && <p>Carregando…</p>}
+        {topSuppliers.isLoading && (
+          <p className="overview-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando…
+          </p>
+        )}
         {topSuppliers.isError && (
-          <div className="empty-state">
-            <p>Não foi possível carregar o ranking.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
-              Verifique sua conexão e tente novamente.
-            </p>
-            <button className="ghost-button" onClick={() => topSuppliers.refetch()}>Tentar novamente</button>
+          <div className="overview-estado">
+            <div
+              className="empty-state empty-state--erro"
+              role="alert"
+            >
+              <span className="empty-state__icon">
+                <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+              </span>
+              <strong className="empty-state__title">Não foi possível carregar o ranking.</strong>
+              <p className="empty-state__text">Verifique sua conexão e tente novamente.</p>
+              <button type="button" className="ghost-button" onClick={() => topSuppliers.refetch()}>
+                <Icon name="refresh" size={14} strokeWidth={2} />
+                Tentar novamente
+              </button>
+            </div>
           </div>
         )}
         {topSuppliers.data && topItems.length > 0 ? (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table overview-tabela">
               <thead>
                 <tr>
                   <th>Fornecedor</th>
                   <th>País</th>
-                  <th>Respostas</th>
-                  <th>Vitórias</th>
+                  <th className="overview-num">Respostas</th>
+                  <th className="overview-num">Vitórias</th>
                   <th>Taxa</th>
-                  <th>Score médio</th>
+                  <th className="overview-num">Score médio</th>
                 </tr>
               </thead>
               <tbody>
                 {topItems.map((s) => (
                   <tr key={s.supplierId}>
                     <td><strong>{s.supplierName}</strong></td>
-                    <td>{s.country ?? '—'}</td>
-                    <td>{s.responses}</td>
-                    <td>{s.wins}</td>
+                    <td className="overview-pais">{s.country ?? '—'}</td>
+                    <td className="overview-num overview-mono">{s.responses}</td>
+                    <td className="overview-num overview-mono">{s.wins}</td>
                     <td>
-                      <span className={`badge ${s.winRate >= 50 ? '' : 'badge--muted'}`}>
+                      <span className={`badge overview-taxa ${s.winRate >= 50 ? '' : 'badge--muted'}`}>
                         {s.winRate}%
                       </span>
                     </td>
-                    <td>{s.averageScore.toFixed(1)}</td>
+                    <td className="overview-num overview-mono overview-score">{formatScore(s.averageScore)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -160,7 +194,14 @@ export default function Home() {
           </div>
         ) : (
           !topSuppliers.isLoading && !topSuppliers.isError && (
-            <p className="empty-state">Nenhuma resposta de fornecedor registrada ainda.</p>
+            <div className="overview-estado">
+              <div className="empty-state">
+                <span className="empty-state__icon">
+                  <Icon name="fornecedores" size={36} strokeWidth={1.5} />
+                </span>
+                <strong className="empty-state__title">Nenhuma resposta de fornecedor registrada ainda.</strong>
+              </div>
+            </div>
           )
         )}
       </section>

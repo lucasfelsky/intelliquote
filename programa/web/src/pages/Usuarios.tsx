@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { Modal } from '@/components/Modal';
+import { Icon } from '@/components/icons';
 
 interface User {
   id: number;
@@ -146,27 +147,31 @@ export default function Usuarios() {
     create.mutate(form);
   }
 
+  const senhaInvalida = formError === 'A senha deve ter pelo menos 8 caracteres.';
+
   return (
-    <div className="page">
+    <div className="page usuarios-page">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Administração</p>
           <h1>Usuários</h1>
           <p>Gerencie os usuários internos e seus perfis de acesso.</p>
         </div>
         <div className="page-header__actions">
-          <input
-            className="input"
-            placeholder="Buscar por nome ou e-mail"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ maxWidth: 240 }}
-          />
+          <div className="usuarios-busca">
+            <Icon name="search" size={16} />
+            <input
+              className="usuarios-busca__campo"
+              aria-label="Buscar por nome ou e-mail"
+              placeholder="Buscar por nome ou e-mail"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
           <select
-            className="select"
+            className="select usuarios-filtro"
+            aria-label="Filtrar por perfil"
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            style={{ maxWidth: 180 }}
           >
             <option value="">Todos os perfis</option>
             <option value="admin">Admin</option>
@@ -176,30 +181,50 @@ export default function Usuarios() {
             <option value="comercial">Comercial</option>
           </select>
           <button type="button" className="primary-button" onClick={() => setShowForm(true)}>
-            + Novo usuário
+            <Icon name="plus" size={16} strokeWidth={2.2} />
+            Novo usuário
           </button>
         </div>
       </div>
 
-      <section className="card">
-        {list.isLoading && <p>Carregando usuários…</p>}
+      <section className="card usuarios-lista" aria-label="Usuários">
+        {list.isLoading && (
+          <div className="usuarios-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando usuários…
+          </div>
+        )}
         {list.isError && (
-          <div className="empty-state">
-            <p>Não foi possível carregar a lista de usuários.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
-              Verifique sua conexão e tente novamente.
-            </p>
-            <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
+          <div className="usuarios-estado">
+            <div
+              className="empty-state empty-state--erro"
+              role="alert"
+            >
+              <span className="empty-state__icon">
+                <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+              </span>
+              <strong className="empty-state__title">Não foi possível carregar a lista de usuários.</strong>
+              <p className="empty-state__text">Verifique sua conexão e tente novamente.</p>
+              <button type="button" className="ghost-button" onClick={() => list.refetch()}>
+                <Icon name="refresh" size={14} strokeWidth={2} />
+                Tentar novamente
+              </button>
+            </div>
           </div>
         )}
         {list.data && list.data.length === 0 && !list.isLoading && (
-          <div className="empty-state">
-            <strong>Nenhum usuário encontrado</strong>
+          <div className="usuarios-estado">
+            <div className="empty-state">
+              <span className="empty-state__icon">
+                <Icon name="usuarios" size={36} strokeWidth={1.5} />
+              </span>
+              <strong className="empty-state__title">Nenhum usuário encontrado</strong>
+            </div>
           </div>
         )}
         {list.data && list.data.length > 0 && (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table usuarios-tabela">
               <thead>
                 <tr>
                   <th>Nome</th>
@@ -207,22 +232,22 @@ export default function Usuarios() {
                   <th>Perfil</th>
                   <th>Status</th>
                   <th>Criado em</th>
-                  <th></th>
+                  <th className="usuarios-acoes-cab"><span className="sr-only">Ações</span></th>
                 </tr>
               </thead>
               <tbody>
                 {list.data.map((u) => (
                   <tr key={u.id}>
-                    <td><strong>{u.name}</strong></td>
-                    <td>{u.email}</td>
-                    <td><span className="badge">{u.role}</span></td>
-                    <td>
-                      <span className={`badge ${u.isActive ? '' : 'badge--muted'}`}>
+                    <td className="usuarios-nome">{u.name}</td>
+                    <td className="usuarios-email">{u.email}</td>
+                    <td><span className="badge badge--muted">{u.role}</span></td>
+                    <td className="usuarios-status">
+                      <span className={`badge badge--dot ${u.isActive ? '' : 'badge--muted'}`}>
                         {u.isActive ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
-                    <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
-                    <td>
+                    <td className="usuarios-data">{u.createdAt ? new Date(u.createdAt).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td className="usuarios-acoes">
                       <div className="row-actions row-actions--nowrap">
                         <button
                           type="button"
@@ -251,68 +276,86 @@ export default function Usuarios() {
 
       <Modal isOpen={showForm} onClose={requestClose} title={editing ? 'Editar usuário' : 'Novo usuário'}>
         <form onSubmit={handleSubmit}>
-          <label className="field-label" htmlFor="user-name">Nome</label>
-          <input
-            id="user-name"
-            className="input"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            required
-          />
-
-          <label className="field-label" htmlFor="user-email" style={{ marginTop: 12 }}>E-mail</label>
-          <input
-            id="user-email"
-            className="input"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            // O e-mail liga o usuário ao login do Portal COMEX: não muda na edição.
-            disabled={editing !== null}
-            style={
-              editing ? { background: 'var(--surface-alt)', color: 'var(--ink-soft)' } : undefined
-            }
-            required
-          />
-
-          <label className="field-label" htmlFor="user-role" style={{ marginTop: 12 }}>Perfil</label>
-          <select
-            id="user-role"
-            className="select"
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value as User['role'] })}
-          >
-            <option value="admin">Admin</option>
-            <option value="comprador">Comprador</option>
-            <option value="gestor">Gestor</option>
-            <option value="viewer">Viewer</option>
-            <option value="comercial">Comercial</option>
-          </select>
-          {editing && (
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>
-              Para quem entra pelo Portal COMEX, só o perfil Comercial fica fixo; os demais são
-              reajustados pelo perfil do Portal a cada login.
-            </p>
-          )}
-
-          {!editing && (
-            <>
-              <label className="field-label" htmlFor="user-password" style={{ marginTop: 12 }}>Senha inicial</label>
+          <div className="usuario-form">
+            <div className="usuario-campo">
+              <label className="field-label" htmlFor="user-name">Nome</label>
               <input
-                id="user-password"
+                id="user-name"
                 className="input"
-                type="password"
-                minLength={8}
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
               />
-            </>
-          )}
+            </div>
 
-          {formError && (
-            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{formError}</p>
-          )}
+            <div className="usuario-campo">
+              <label className="field-label" htmlFor="user-email">E-mail</label>
+              <div className="usuario-campo__controle">
+                <input
+                  id="user-email"
+                  className="input"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  // O e-mail liga o usuário ao login do Portal COMEX: não muda na edição.
+                  disabled={editing !== null}
+                  required
+                />
+                {editing && <Icon name="lock" size={16} className="usuario-campo__cadeado" aria-hidden="true" />}
+              </div>
+            </div>
+
+            <div className="usuario-campo">
+              <label className="field-label" htmlFor="user-role">Perfil</label>
+              <select
+                id="user-role"
+                className="select"
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value as User['role'] })}
+                aria-describedby={editing ? 'user-role-hint' : undefined}
+              >
+                <option value="admin">Admin</option>
+                <option value="comprador">Comprador</option>
+                <option value="gestor">Gestor</option>
+                <option value="viewer">Viewer</option>
+                <option value="comercial">Comercial</option>
+              </select>
+              {editing && (
+                <p className="usuario-dica" id="user-role-hint">
+                  Para quem entra pelo Portal COMEX, só o perfil Comercial fica fixo; os demais são
+                  reajustados pelo perfil do Portal a cada login.
+                </p>
+              )}
+            </div>
+
+            {!editing && (
+              <div className="usuario-campo">
+                <label className="field-label" htmlFor="user-password">Senha inicial</label>
+                <input
+                  id="user-password"
+                  className="input"
+                  type="password"
+                  minLength={8}
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  aria-invalid={senhaInvalida ? true : undefined}
+                  aria-describedby={senhaInvalida ? 'user-form-error' : undefined}
+                  required
+                />
+              </div>
+            )}
+
+            {formError && (
+              <p
+                className="usuario-erro"
+                id="user-form-error"
+                role="alert"
+              >
+                <Icon name="alert-triangle" size={16} />
+                {formError}
+              </p>
+            )}
+          </div>
 
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={requestClose} disabled={saving}>

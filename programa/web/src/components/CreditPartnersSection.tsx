@@ -4,6 +4,7 @@ import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { Modal } from '@/components/Modal';
 import { useConfirm } from '@/components/useConfirm';
+import { Icon } from '@/components/icons';
 import {
   CreditPartner,
   CreditPartnerInput,
@@ -248,71 +249,65 @@ export function CreditPartnersSection() {
   }
 
   return (
-    <section className="card" style={{ marginTop: 20 }} aria-labelledby="credit-partners-title">
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h2 id="credit-partners-title" style={{ margin: 0 }}>
+    <section className="card parceiros-credito" aria-labelledby="credit-partners-title">
+      <div className="parceiros-credito__cabecalho">
+        <div className="parceiros-credito__titulos">
+          <h2 id="credit-partners-title" className="parceiros-credito__titulo">
             Parceiros de crédito (Credit Support)
           </h2>
-          <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+          <p className="parceiros-credito__subtitulo">
             Empresas que podem oferecer prazo de pagamento estendido sobre a proposta de um fornecedor.
           </p>
         </div>
         {canWrite && (
           <button type="button" className="primary-button" onClick={openCreate}>
+            <Icon name="plus" size={16} strokeWidth={2.2} />
             Novo parceiro
           </button>
         )}
       </div>
 
       {!canWrite && (
-        <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 12 }}>
+        <p className="parceiros-credito__aviso">
           Apenas consulta - seu perfil não pode alterar os parceiros de crédito.
         </p>
       )}
 
       {actionError && (
-        <p role="alert" style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
+        <p role="alert" className="alert alert--error parceiros-credito__alerta">
           {actionError}
         </p>
       )}
 
       {partners.isLoading && (
-        <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 12 }}>
+        <p className="parceiros-credito__carregando" role="status">
+          <span className="btn-spinner" aria-hidden="true" />
           Carregando parceiros…
         </p>
       )}
 
       {partners.isError && (
-        <p role="alert" style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
+        <p role="alert" className="alert alert--error parceiros-credito__alerta">
           Não foi possível carregar os parceiros de crédito: {messageOf(partners.error)}
         </p>
       )}
 
       {!partners.isLoading && !partners.isError && rows.length === 0 && (
-        <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 12 }}>
+        <p className="parceiros-credito__vazio">
           Nenhum parceiro de crédito cadastrado.
         </p>
       )}
 
       {rows.length > 0 && (
-        <div className="table-wrapper" style={{ marginTop: 12 }}>
-          <table className="table table--dense">
+        <div className="table-wrapper parceiros-credito__tabela">
+          <table className="table parceiros-credito__grade">
             <thead>
               <tr>
                 <th>Nome</th>
                 <th>Contato principal</th>
                 <th className="col-status">Status</th>
                 {canWrite && (
-                  <th>
+                  <th className="parceiros-credito__acoes-cab">
                     <span className="sr-only">Ações</span>
                   </th>
                 )}
@@ -325,31 +320,38 @@ export function CreditPartnersSection() {
                 return (
                   <tr key={partner.id}>
                     <td>
-                      <strong>{partner.name}</strong>
-                      {isDefault && (
-                        <span className="badge" style={{ marginLeft: 8 }}>
-                          Padrão
-                        </span>
-                      )}
+                      <span className="parceiro-credito__nome">
+                        <strong>{partner.name}</strong>
+                        {isDefault && (
+                          <span className="badge badge--info parceiro-credito__padrao">
+                            Padrão
+                          </span>
+                        )}
+                      </span>
                       {partner.country && (
-                        <div className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+                        <span className="parceiro-credito__pais">
                           {partner.country}
-                        </div>
+                        </span>
                       )}
                     </td>
                     <td
-                      className="cell-truncate"
+                      className="cell-truncate parceiro-credito__contato"
                       title={primary ? `${primary.name} <${primary.email}>` : undefined}
                     >
-                      {primary ? `${primary.name} · ${primary.email}` : '—'}
+                      {primary ? (
+                        <>
+                          {`${primary.name} · `}
+                          <span className="parceiro-credito__email">{primary.email}</span>
+                        </>
+                      ) : '—'}
                     </td>
                     <td className="col-status">
-                      <span className={`badge ${partner.isActive ? '' : 'badge--muted'}`}>
+                      <span className={`badge badge--dot ${partner.isActive ? '' : 'badge--muted'}`}>
                         {partner.isActive ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
                     {canWrite && (
-                      <td>
+                      <td className="parceiro-credito__acoes">
                         <div className="row-actions row-actions--nowrap">
                           <button
                             type="button"
@@ -384,165 +386,152 @@ export function CreditPartnersSection() {
         size="wide"
       >
         <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-grid__full">
-              <label className="field-label" htmlFor="cp-name">Nome *</label>
-              <input
-                id="cp-name"
-                className="input"
-                value={draft.name}
-                maxLength={200}
-                onChange={(e) => updateField('name', e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="cp-taxId">CNPJ / Tax ID</label>
-              <input
-                id="cp-taxId"
-                className="input"
-                value={draft.taxId}
-                onChange={(e) => updateField('taxId', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="cp-country">País</label>
-              <input
-                id="cp-country"
-                className="input"
-                value={draft.country}
-                onChange={(e) => updateField('country', e.target.value)}
-              />
-            </div>
-            <div className="form-grid__full">
-              <label className="field-label" htmlFor="cp-website">Website</label>
-              <input
-                id="cp-website"
-                className="input"
-                value={draft.website}
-                onChange={(e) => updateField('website', e.target.value)}
-              />
-            </div>
-            <div className="form-grid__full">
-              <label className="field-label" htmlFor="cp-notes">Observações</label>
-              <textarea
-                id="cp-notes"
-                className="input"
-                rows={2}
-                value={draft.notes}
-                onChange={(e) => updateField('notes', e.target.value)}
-              />
-            </div>
-          </div>
-
-          <label className="checkbox-field" style={{ marginTop: 12 }}>
-            <input
-              type="checkbox"
-              checked={draft.isActive}
-              onChange={(e) => updateField('isActive', e.target.checked)}
-            />
-            Parceiro ativo
-          </label>
-
-          <h3 style={{ margin: '18px 0 8px', fontSize: 15 }}>Contatos</h3>
-          {draft.contacts.map((contact, index) => (
-            <fieldset
-              key={contact.key}
-              style={{
-                border: '1px solid var(--border, #dde3ea)',
-                borderRadius: 8,
-                padding: 12,
-                margin: '0 0 10px',
-                minWidth: 0,
-              }}
-            >
-              <legend className="text-sm" style={{ padding: '0 6px' }}>
-                Contato {index + 1}
-              </legend>
-              <div className="form-grid">
-                <div>
-                  <label className="field-label" htmlFor={`${contact.key}-name`}>Nome *</label>
-                  <input
-                    id={`${contact.key}-name`}
-                    className="input"
-                    value={contact.name}
-                    onChange={(e) => updateContact(contact.key, { name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor={`${contact.key}-email`}>E-mail *</label>
-                  <input
-                    id={`${contact.key}-email`}
-                    className="input"
-                    type="email"
-                    value={contact.email}
-                    onChange={(e) => updateContact(contact.key, { email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor={`${contact.key}-phone`}>Telefone</label>
-                  <input
-                    id={`${contact.key}-phone`}
-                    className="input"
-                    value={contact.phone}
-                    onChange={(e) => updateContact(contact.key, { phone: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor={`${contact.key}-position`}>Cargo</label>
-                  <input
-                    id={`${contact.key}-position`}
-                    className="input"
-                    value={contact.position}
-                    onChange={(e) => updateContact(contact.key, { position: e.target.value })}
-                  />
-                </div>
+          <div className="parceiro-credito-form">
+            <div className="parceiro-credito-grade">
+              <div className="parceiro-credito-campo parceiro-credito-campo--cheio">
+                <label className="field-label" htmlFor="cp-name">Nome *</label>
+                <input
+                  id="cp-name"
+                  className="input"
+                  value={draft.name}
+                  maxLength={200}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  required
+                />
               </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginTop: 8,
-                  flexWrap: 'wrap',
-                }}
+              <div className="parceiro-credito-campo">
+                <label className="field-label" htmlFor="cp-taxId">CNPJ / Tax ID</label>
+                <input
+                  id="cp-taxId"
+                  className="input parceiro-credito-campo__mono"
+                  value={draft.taxId}
+                  onChange={(e) => updateField('taxId', e.target.value)}
+                />
+              </div>
+              <div className="parceiro-credito-campo">
+                <label className="field-label" htmlFor="cp-country">País</label>
+                <input
+                  id="cp-country"
+                  className="input"
+                  value={draft.country}
+                  onChange={(e) => updateField('country', e.target.value)}
+                />
+              </div>
+              <div className="parceiro-credito-campo parceiro-credito-campo--cheio">
+                <label className="field-label" htmlFor="cp-website">Website</label>
+                <input
+                  id="cp-website"
+                  className="input"
+                  value={draft.website}
+                  onChange={(e) => updateField('website', e.target.value)}
+                />
+              </div>
+              <div className="parceiro-credito-campo parceiro-credito-campo--cheio">
+                <label className="field-label" htmlFor="cp-notes">Observações</label>
+                <textarea
+                  id="cp-notes"
+                  className="input"
+                  rows={2}
+                  value={draft.notes}
+                  onChange={(e) => updateField('notes', e.target.value)}
+                />
+              </div>
+            </div>
+
+            <label className="checkbox-field">
+              <input
+                type="checkbox"
+                checked={draft.isActive}
+                onChange={(e) => updateField('isActive', e.target.checked)}
+              />
+              Parceiro ativo
+            </label>
+
+            <h3 className="parceiro-credito-titulo">Contatos</h3>
+            {draft.contacts.map((contact, index) => (
+              <fieldset key={contact.key} className="parceiro-credito-contato">
+                <legend>
+                  Contato {index + 1}
+                </legend>
+                <div className="parceiro-credito-contato__grade">
+                  <div className="parceiro-credito-campo">
+                    <label className="field-label" htmlFor={`${contact.key}-name`}>Nome *</label>
+                    <input
+                      id={`${contact.key}-name`}
+                      className="input"
+                      value={contact.name}
+                      onChange={(e) => updateContact(contact.key, { name: e.target.value })}
+                    />
+                  </div>
+                  <div className="parceiro-credito-campo">
+                    <label className="field-label" htmlFor={`${contact.key}-email`}>E-mail *</label>
+                    <input
+                      id={`${contact.key}-email`}
+                      className="input"
+                      type="email"
+                      value={contact.email}
+                      onChange={(e) => updateContact(contact.key, { email: e.target.value })}
+                    />
+                  </div>
+                  <div className="parceiro-credito-campo">
+                    <label className="field-label" htmlFor={`${contact.key}-phone`}>Telefone</label>
+                    <input
+                      id={`${contact.key}-phone`}
+                      className="input parceiro-credito-campo__mono"
+                      value={contact.phone}
+                      onChange={(e) => updateContact(contact.key, { phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="parceiro-credito-campo">
+                    <label className="field-label" htmlFor={`${contact.key}-position`}>Cargo</label>
+                    <input
+                      id={`${contact.key}-position`}
+                      className="input"
+                      value={contact.position}
+                      onChange={(e) => updateContact(contact.key, { position: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="parceiro-credito-contato__rodape">
+                  <label className="checkbox-field">
+                    <input
+                      type="radio"
+                      name="cp-primary-contact"
+                      checked={draft.primaryKey === contact.key}
+                      onChange={() => updateField('primaryKey', contact.key)}
+                    />
+                    Contato principal
+                  </label>
+                  {draft.contacts.length > 1 && (
+                    <button
+                      type="button"
+                      className="ghost-button danger-button"
+                      onClick={() => removeContact(contact.key)}
+                    >
+                      Remover contato
+                    </button>
+                  )}
+                </div>
+              </fieldset>
+            ))}
+            <div>
+              <button
+                type="button"
+                className="ghost-button parceiro-credito-adicionar"
+                onClick={addContact}
+                disabled={draft.contacts.length >= MAX_CONTACTS}
               >
-                <label className="checkbox-field">
-                  <input
-                    type="radio"
-                    name="cp-primary-contact"
-                    checked={draft.primaryKey === contact.key}
-                    onChange={() => updateField('primaryKey', contact.key)}
-                  />
-                  Contato principal
-                </label>
-                {draft.contacts.length > 1 && (
-                  <button
-                    type="button"
-                    className="ghost-button danger-button"
-                    onClick={() => removeContact(contact.key)}
-                  >
-                    Remover contato
-                  </button>
-                )}
-              </div>
-            </fieldset>
-          ))}
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={addContact}
-            disabled={draft.contacts.length >= MAX_CONTACTS}
-          >
-            Adicionar contato
-          </button>
+                <Icon name="plus" size={16} strokeWidth={2.2} />
+                Adicionar contato
+              </button>
+            </div>
 
-          {formError && (
-            <p role="alert" style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
-              {formError}
-            </p>
-          )}
+            {formError && (
+              <p role="alert" className="parceiro-credito-erro">
+                {formError}
+              </p>
+            )}
+          </div>
 
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={closeModal}>

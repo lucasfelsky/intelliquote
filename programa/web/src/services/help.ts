@@ -71,7 +71,7 @@ export const FAQ_BY_CATEGORY: readonly HelpCategoryFaq[] = [
       {
         question: 'Como crio uma nova cotação?',
         answer:
-          'No menu Cotações, clique em "+ Nova cotação". Preencha código, produto, quantidade, ' +
+          'No menu Cotações, clique em "Nova cotação". Preencha código, produto, quantidade, ' +
           'incoterm desejado, moeda e prazo. Adicione ao menos um item do catálogo antes de ' +
           'enviar para fornecedores.',
       },
@@ -98,7 +98,7 @@ export const FAQ_BY_CATEGORY: readonly HelpCategoryFaq[] = [
       {
         question: 'Como cadastro um fornecedor?',
         answer:
-          'Menu Fornecedores → "+ Novo fornecedor". Informe nome, país, prazo de pagamento ' +
+          'Menu Fornecedores → "Novo fornecedor". Informe nome, país, prazo de pagamento ' +
           'padrão e dados de contato. Adicione um ou mais contatos (cada um com nome, e-mail, ' +
           'cargo). Marque o contato principal — ele será o destinatário padrão do envio.',
       },
@@ -198,7 +198,7 @@ export const FAQ_BY_CATEGORY: readonly HelpCategoryFaq[] = [
       {
         question: 'Como adiciono um novo usuário?',
         answer:
-          'Menu Usuários → "+ Novo usuário". Informe nome, e-mail e perfil (admin, comprador, ' +
+          'Menu Usuários → "Novo usuário". Informe nome, e-mail e perfil (admin, comprador, ' +
           'gestor ou visualizador). O sistema gera uma senha temporária que deve ser trocada no ' +
           'primeiro acesso.',
       },

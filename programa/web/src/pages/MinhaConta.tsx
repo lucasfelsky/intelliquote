@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { useConfirm } from '@/components/useConfirm';
+import { Icon } from '@/components/icons';
 import {
   SIGNATURE_IMAGE_MAX_HEIGHT,
   SIGNATURE_IMAGE_MAX_WIDTH,
@@ -146,20 +147,30 @@ export default function MinhaConta() {
 
   if (signature.isLoading) {
     return (
-      <div className="page">
+      <div className="page minha-conta-page">
         <h1>Minha conta</h1>
-        <p>Carregando…</p>
+        <p className="minha-conta-carregando" role="status">
+          <span className="btn-spinner" aria-hidden="true" />
+          Carregando…
+        </p>
       </div>
     );
   }
 
   if (signature.isError || !signature.data) {
     return (
-      <div className="page">
+      <div className="page minha-conta-page">
         <h1>Minha conta</h1>
-        <div className="empty-state">
-          <p>Não foi possível carregar a sua assinatura.</p>
-          <button className="ghost-button" onClick={() => void signature.refetch()}>
+        <div
+          className="empty-state empty-state--erro"
+          role="alert"
+        >
+          <span className="empty-state__icon">
+            <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+          </span>
+          <strong className="empty-state__title">Não foi possível carregar a sua assinatura.</strong>
+          <button type="button" className="ghost-button" onClick={() => void signature.refetch()}>
+            <Icon name="refresh" size={14} strokeWidth={2} />
             Tentar novamente
           </button>
         </div>
@@ -176,7 +187,7 @@ export default function MinhaConta() {
   const image = data.image;
 
   return (
-    <div className="page">
+    <div className="page minha-conta-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">Minha conta</p>
@@ -188,128 +199,141 @@ export default function MinhaConta() {
         </div>
       </div>
 
-      <section className="card" aria-labelledby="sig-text-title">
-        <h2 id="sig-text-title" style={{ marginTop: 0 }}>Texto da assinatura</h2>
-        <label className="field-label" htmlFor="signatureText">
-          Texto (opcional)
-        </label>
-        <textarea
-          id="signatureText"
-          className="textarea"
-          rows={5}
-          value={draft}
-          onChange={(e) => setTextDraft(e.target.value)}
-          placeholder={'Ex.:\nMaria Santos\nCompras | SQ Quimica\n+55 47 99999-0000'}
-        />
-        <p
-          style={{
-            fontSize: 12,
-            marginTop: 4,
-            color: textTooLong ? 'var(--danger)' : 'var(--ink-soft)',
-          }}
-        >
-          {draft.length}/{SIGNATURE_TEXT_MAX_LENGTH}
-        </p>
-        {textMessage && (
-          <p
-            role={textMessage.kind === 'error' ? 'alert' : 'status'}
-            className={`alert alert--${textMessage.kind === 'error' ? 'error' : 'success'}`}
-          >
-            {textMessage.text}
-          </p>
-        )}
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="primary-button"
-            disabled={saveText.isPending || textTooLong || !textDirty}
-            onClick={handleSaveText}
-          >
-            {saveText.isPending ? 'Salvando…' : 'Salvar texto'}
-          </button>
-        </div>
-      </section>
+      <div className="minha-conta-grade">
+        <div className="minha-conta-coluna">
+          <section className="card assinatura-cartao" aria-labelledby="sig-text-title">
+            <h2 id="sig-text-title" className="assinatura-cartao__titulo">Texto da assinatura</h2>
+            <div className="assinatura-campo">
+              <label className="field-label" htmlFor="signatureText">
+                Texto (opcional)
+              </label>
+              <textarea
+                id="signatureText"
+                className="textarea"
+                rows={5}
+                value={draft}
+                onChange={(e) => setTextDraft(e.target.value)}
+                placeholder={'Ex.:\nMaria Santos\nCompras | SQ Quimica\n+55 47 99999-0000'}
+              />
+              <p className={`assinatura-contador ${textTooLong ? 'assinatura-contador--excedido' : ''}`}>
+                {draft.length}/{SIGNATURE_TEXT_MAX_LENGTH}
+              </p>
+            </div>
+            {textMessage && (
+              <p
+                role={textMessage.kind === 'error' ? 'alert' : 'status'}
+                className={`alert alert--${textMessage.kind === 'error' ? 'error' : 'success'}`}
+              >
+                {textMessage.text}
+              </p>
+            )}
+            <div className="assinatura-acoes">
+              <button
+                type="button"
+                className="primary-button"
+                disabled={saveText.isPending || textTooLong || !textDirty}
+                onClick={handleSaveText}
+              >
+                {saveText.isPending ? 'Salvando…' : 'Salvar texto'}
+              </button>
+            </div>
+          </section>
 
-      <section className="card" aria-labelledby="sig-image-title">
-        <h2 id="sig-image-title" style={{ marginTop: 0 }}>Imagem da assinatura</h2>
-        <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 0 }}>
-          PNG ou JPEG, até 300 KB e no máximo {SIGNATURE_IMAGE_MAX_WIDTH}×{SIGNATURE_IMAGE_MAX_HEIGHT} px.
-          A imagem não é redimensionada: envie já no tamanho final.
-        </p>
-        {image && (
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-            Imagem atual: {image.width}×{image.height} px · {(image.size / 1024).toFixed(1)} KB
-          </p>
-        )}
-        <label className="field-label" htmlFor="signatureImage">
-          {image ? 'Substituir imagem' : 'Enviar imagem'}
-        </label>
-        <input
-          id="signatureImage"
-          type="file"
-          accept="image/png,image/jpeg"
-          disabled={uploadImage.isPending}
-          onChange={(e) => void handleFileChange(e)}
-        />
-        {uploadImage.isPending && <p style={{ fontSize: 12 }}>Enviando…</p>}
-        {imageMessage && (
-          <p
-            role={imageMessage.kind === 'error' ? 'alert' : 'status'}
-            className={`alert alert--${imageMessage.kind === 'error' ? 'error' : 'success'}`}
+          <section className="card assinatura-cartao" aria-labelledby="sig-image-title">
+            <h2 id="sig-image-title" className="assinatura-cartao__titulo">Imagem da assinatura</h2>
+            <p className="assinatura-dica">
+              PNG ou JPEG, até 300 KB e no máximo{' '}
+              <span className="assinatura-mono assinatura-mono--dica">
+                {SIGNATURE_IMAGE_MAX_WIDTH}×{SIGNATURE_IMAGE_MAX_HEIGHT}
+              </span>{' '}
+              px. A imagem não é redimensionada: envie já no tamanho final.
+            </p>
+            {image && (
+              <p className="assinatura-atual">
+                <Icon name="image" size={16} />
+                Imagem atual:{' '}
+                <span className="assinatura-mono assinatura-mono--atual">
+                  {image.width}×{image.height} px · {(image.size / 1024).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB
+                </span>
+              </p>
+            )}
+            <div className="assinatura-arquivo">
+              <input
+                id="signatureImage"
+                className="assinatura-arquivo__input"
+                type="file"
+                accept="image/png,image/jpeg"
+                disabled={uploadImage.isPending}
+                onChange={(e) => void handleFileChange(e)}
+              />
+              <label className="ghost-button assinatura-arquivo__botao" htmlFor="signatureImage">
+                <Icon name="upload" size={14} strokeWidth={1.9} />
+                {image ? 'Substituir imagem' : 'Enviar imagem'}
+              </label>
+              <span className="assinatura-arquivo__estado">Nenhum arquivo escolhido</span>
+            </div>
+            {uploadImage.isPending && <p className="assinatura-enviando" role="status">Enviando…</p>}
+            {imageMessage && (
+              <p
+                role={imageMessage.kind === 'error' ? 'alert' : 'status'}
+                className={`alert alert--${imageMessage.kind === 'error' ? 'error' : 'success'}`}
+              >
+                {imageMessage.text}
+              </p>
+            )}
+            {image && (
+              <div className="assinatura-acoes">
+                <button
+                  type="button"
+                  className="ghost-button danger-button"
+                  disabled={removeImage.isPending}
+                  onClick={() => void handleRemoveImage()}
+                >
+                  <Icon name="trash" size={16} />
+                  Remover imagem
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <section className="card assinatura-cartao assinatura-cartao--previa" aria-labelledby="sig-preview-title">
+          <h2 id="sig-preview-title" className="assinatura-cartao__titulo">Como sai no e-mail</h2>
+          <div
+            className="paper-surface"
+            data-testid="signature-preview"
+            style={{
+              background: '#fff',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: '20px 24px',
+              fontFamily: 'Arial, sans-serif',
+              fontSize: 15,
+              lineHeight: '22px',
+              color: '#1F2933',
+            }}
           >
-            {imageMessage.text}
-          </p>
-        )}
-        {image && (
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="ghost-button danger-button"
-              disabled={removeImage.isPending}
-              onClick={() => void handleRemoveImage()}
-            >
-              Remover imagem
-            </button>
+            <p style={{ margin: '0 0 12px 0' }}>Dear all,</p>
+            <p style={{ margin: '0 0 12px 0', color: '#7A848C', fontStyle: 'italic' }}>… corpo do e-mail …</p>
+            {draftTrimmed ? (
+              <div style={{ whiteSpace: 'pre-wrap', marginBottom: image ? 8 : 0 }}>{draftTrimmed}</div>
+            ) : image ? (
+              <div style={{ marginBottom: 8 }}>Best regards,</div>
+            ) : (
+              <div style={{ whiteSpace: 'pre-wrap' }}>{data.fallbackSignature}</div>
+            )}
+            {image && (
+              <img
+                src={image.dataUri}
+                alt="Imagem da assinatura"
+                width={image.width}
+                height={image.height}
+                style={{ display: 'block', border: 0, maxWidth: '100%', height: 'auto' }}
+              />
+            )}
           </div>
-        )}
-      </section>
-
-      <section className="card" aria-labelledby="sig-preview-title">
-        <h2 id="sig-preview-title" style={{ marginTop: 0 }}>Como sai no e-mail</h2>
-        <div
-          className="paper-surface"
-          data-testid="signature-preview"
-          style={{
-            background: '#fff',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '16px 24px',
-            fontFamily: 'Arial, sans-serif',
-            fontSize: 15,
-            lineHeight: '22px',
-            color: '#1F2933',
-          }}
-        >
-          <p style={{ margin: '0 0 12px 0' }}>Dear all,</p>
-          <p style={{ margin: '0 0 12px 0', color: '#7A848C' }}>… corpo do e-mail …</p>
-          {draftTrimmed ? (
-            <div style={{ whiteSpace: 'pre-wrap', marginBottom: image ? 8 : 0 }}>{draftTrimmed}</div>
-          ) : image ? (
-            <div style={{ marginBottom: 8 }}>Best regards,</div>
-          ) : (
-            <div style={{ whiteSpace: 'pre-wrap' }}>{data.fallbackSignature}</div>
-          )}
-          {image && (
-            <img
-              src={image.dataUri}
-              alt="Imagem da assinatura"
-              width={image.width}
-              height={image.height}
-              style={{ display: 'block', border: 0, maxWidth: '100%', height: 'auto' }}
-            />
-          )}
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

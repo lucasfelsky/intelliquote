@@ -11,12 +11,13 @@ import {
 } from '@/services/emailTemplates';
 import type { EmailTemplateDraft } from '@/services/templates';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon, type IconName } from '@/components/icons';
 
 const TEMPLATE_CARDS: Array<{
   key: string;
   title: string;
   description: string;
-  icon: string;
+  icon: IconName;
   // Locale em que o template e' ENVIADO (o renderer usa este locale como
   // default). Selecionar o card troca o seletor pra ca — editar em outro
   // locale nao teria efeito no envio.
@@ -26,44 +27,44 @@ const TEMPLATE_CARDS: Array<{
     key: 'quote_dispatch',
     title: 'Envio de cotação',
     description: 'E-mail enviado aos fornecedores com o link do portal para responderem.',
-    icon: '✉',
+    icon: 'templates',
   },
   {
     key: 'quote_reply',
     title: 'Resposta ao fornecedor',
     description: 'E-mail enviado ao fornecedor vencedor ao clicar em “Responder”.',
-    icon: '✓',
+    icon: 'check',
   },
   {
     key: 'quote_po',
     title: 'Ordem de compra',
     description: 'E-mail enviado ao fornecedor vencedor ao clicar em “Enviar Ordem de Compra”, com o PDF anexado.',
-    icon: '📦',
+    icon: 'package',
   },
   {
     key: 'quote_reminder',
     title: 'Lembrete de cotação pendente',
     description: 'E-mail automático diário (seg a sex) ao fornecedor que ainda não respondeu (com link novo). Com 2 ou mais cotações pendentes no mesmo e-mail, vai um resumo único (modelo fixo, em inglês).',
-    icon: '⏰',
+    icon: 'clock',
   },
   {
     key: 'quote_regret',
     title: 'Fornecedor não selecionado',
     description: 'E-mail opcional aos fornecedores não escolhidos, ao concluir a cotação.',
-    icon: '✕',
+    icon: 'x',
   },
   {
     key: 'supplier_response_received',
     title: 'Aviso de resposta recebida',
     description: 'E-mail interno avisando o comprador quando um fornecedor responde pelo portal.',
-    icon: '✉',
+    icon: 'templates',
     defaultLocale: 'pt',
   },
   {
     key: 'credit_partner_response_received',
     title: 'Aviso de resposta do parceiro de crédito',
     description: 'E-mail interno avisando quem encaminhou e quem criou a cotação quando o parceiro de crédito responde pelo portal.',
-    icon: '✉',
+    icon: 'templates',
     defaultLocale: 'pt',
   },
 ];
@@ -308,17 +309,17 @@ export default function Templates() {
     : false;
 
   return (
-    <div className="page page--templates">
-      <header className="page__header">
+    <div className="page templates-page">
+      <header className="page-header">
         <div>
           <h1>Templates de e-mail</h1>
-          <p className="page__subtitle">
+          <p className="page-subtitle">
             Personalize os e-mails enviados pelo sistema. Escolha um template abaixo para editá-lo.
           </p>
         </div>
       </header>
 
-      <div className="template-cards">
+      <div className="template-cards" role="group" aria-label="Templates">
         {TEMPLATE_CARDS.map((card) => {
           const isActive = selectedKey === card.key;
           return (
@@ -326,20 +327,23 @@ export default function Templates() {
               key={card.key}
               type="button"
               className={`template-card${isActive ? ' template-card--active' : ''}`}
+              aria-pressed={isActive}
               onClick={() => { setSelectedKey(card.key); setLocale(card.defaultLocale ?? 'en'); }}
             >
-              <span className="template-card__icon">{card.icon}</span>
-              <div className="template-card__body">
+              <span className="template-card__icone">
+                <Icon name={card.icon} size={18} />
+              </span>
+              <span className="template-card__body">
                 <strong className="template-card__title">{card.title}</strong>
-                <p className="template-card__desc">{card.description}</p>
-              </div>
+                <span className="template-card__desc">{card.description}</span>
+              </span>
             </button>
           );
         })}
       </div>
 
       {!isAdmin && (
-        <p className="banner banner--warning">
+        <p className="alert alert--warning" role="status">
           Somente administradores podem salvar alterações. Você pode visualizar livremente.
         </p>
       )}
@@ -355,189 +359,209 @@ export default function Templates() {
 
       {selectedKey && cardInfo && (
         <>
-          <section className="card">
-            <div className="template-toolbar">
-              <div className="template-toolbar__left">
-                <label className="field field--inline">
-                  <span>Idioma</span>
-                  <select value={locale} onChange={(e) => setLocale(e.target.value)}>
-                    {availableLocales.map((loc) => (
-                      <option key={loc} value={loc}>
-                        {LOCALE_LABELS[loc] ?? loc}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <span className="template-source-badge">
-                  {hasCustomization ? '✓ Personalizado' : 'Padrão do sistema'}
-                  {isModified && ' · alterações não salvas'}
-                </span>
-              </div>
-              <div className="template-toolbar__right">
-                {isAdmin && (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={async () => {
-                      if (await confirm('Restaurar este template para o padrão do sistema? As personalizações serão perdidas.')) {
-                        reset.mutate();
-                      }
-                    }}
-                    disabled={reset.isPending || !hasCustomization}
-                    title="Volta para o template original do sistema"
-                  >
-                    {reset.isPending ? 'Restaurando…' : 'Restaurar padrão'}
-                  </button>
+          <section className="templates-barra" aria-label="Idioma e ações do template">
+            <div className="template-toolbar__left">
+              <label className="field field--inline template-idioma">
+                <span>Idioma</span>
+                <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+                  {availableLocales.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {LOCALE_LABELS[loc] ?? loc}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className={`template-source-badge${hasCustomization ? ' template-source-badge--personalizado' : ''}`}>
+                {hasCustomization ? (
+                  <>
+                    <Icon name="check" size={14} strokeWidth={2.4} />
+                    Personalizado
+                  </>
+                ) : (
+                  'Padrão do sistema'
                 )}
-                {isAdmin && (
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => draft && save.mutate(draft)}
-                    disabled={!draft || save.isPending}
-                  >
-                    {save.isPending ? 'Salvando…' : 'Salvar'}
-                  </button>
-                )}
-              </div>
+                {isModified && <span className="template-source-badge__aviso"> · alterações não salvas</span>}
+              </span>
+            </div>
+            <div className="template-toolbar__right">
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={async () => {
+                    if (await confirm('Restaurar este template para o padrão do sistema? As personalizações serão perdidas.')) {
+                      reset.mutate();
+                    }
+                  }}
+                  disabled={reset.isPending || !hasCustomization}
+                  title="Volta para o template original do sistema"
+                >
+                  <Icon name="refresh" size={16} />
+                  {reset.isPending ? 'Restaurando…' : 'Restaurar padrão'}
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => draft && save.mutate(draft)}
+                  disabled={!draft || save.isPending}
+                >
+                  {save.isPending ? 'Salvando…' : 'Salvar'}
+                </button>
+              )}
             </div>
           </section>
 
           {variables.length > 0 && (
-            <section className="card">
-              <div className="template-variables">
-                <div className="template-variables__header">
-                  <h3>Variáveis</h3>
-                  <p className="muted">Clique para inserir no conteúdo do e-mail.</p>
-                </div>
-                <div className="chip-list">
-                  {variables.map((v) => (
-                    <button
-                      type="button"
-                      key={v.token}
-                      className="chip"
-                      onClick={() => insertChip(v.token)}
-                      title={`Inserir ${v.token}`}
-                      disabled={!isAdmin}
-                    >
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
+            <section className="templates-variaveis" aria-labelledby="tp-vars">
+              <div className="template-variables__header">
+                <h3 id="tp-vars" className="template-variables__titulo">Variáveis</h3>
+                <p className="template-variables__dica">Clique para inserir no conteúdo do e-mail.</p>
+              </div>
+              <div className="template-variables__chips">
+                {variables.map((v) => (
+                  <button
+                    type="button"
+                    key={v.token}
+                    className="chip"
+                    onClick={() => insertChip(v.token)}
+                    title={`Inserir ${v.token}`}
+                    disabled={!isAdmin}
+                  >
+                    <Icon name="plus" size={12} strokeWidth={2.4} />
+                    {v.label}
+                  </button>
+                ))}
               </div>
             </section>
           )}
 
-          {draft && (
-            <section className="card">
-              <label className="field">
-                <span>Assunto</span>
-                <input
-                  type="text"
-                  className="input"
-                  value={draft.subject}
-                  onChange={(e) => setField('subject', e.target.value)}
-                  disabled={!isAdmin}
-                  placeholder="Assunto do e-mail"
-                />
-              </label>
+          <div className="templates-grade">
+            {draft && (
+              <section className="card templates-conteudo" aria-label="Conteúdo do template">
+                <label className="field templates-assunto">
+                  <span>Assunto</span>
+                  <input
+                    type="text"
+                    className="input"
+                    value={draft.subject}
+                    onChange={(e) => setField('subject', e.target.value)}
+                    disabled={!isAdmin}
+                    placeholder="Assunto do e-mail"
+                  />
+                </label>
 
-              <div className="template-editor-label">
-                <h3>Conteúdo do e-mail</h3>
-                {isAdmin && (
+                <div className="template-editor-label">
+                  <h3 className="template-editor-label__titulo">Conteúdo do e-mail</h3>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="ghost-button ghost-button--sm"
+                      onClick={() => {
+                        if (showTextFallback) {
+                          setHtmlBackup(draft.htmlBody);
+                        } else {
+                          if (htmlBackup) setField('htmlBody', htmlBackup);
+                        }
+                        setShowTextFallback(!showTextFallback);
+                      }}
+                    >
+                      <Icon name="code" size={14} />
+                      {showTextFallback ? 'Editor visual' : 'Editar texto puro'}
+                    </button>
+                  )}
+                </div>
+
+                {showTextFallback ? (
+                  <textarea
+                    className="textarea textarea--code"
+                    rows={20}
+                    value={draft.htmlBody}
+                    onChange={(e) => setField('htmlBody', e.target.value)}
+                    disabled={!isAdmin}
+                    placeholder="HTML do e-mail"
+                  />
+                ) : (
+                  <div className="templates-editor">
+                    <JoditEditor
+                      ref={editorRef}
+                      value={draft.htmlBody}
+                      config={{
+                        ...joditConfig,
+                        readonly: !isAdmin,
+                      }}
+                      onChange={(newVal: string) => setField('htmlBody', newVal)}
+                    />
+                  </div>
+                )}
+
+                <details className="template-text-toggle">
+                  <summary>
+                    <Icon name="chevron-right" size={16} strokeWidth={2} className="template-text-toggle__fechado" />
+                    <Icon name="chevron-down" size={16} strokeWidth={2} className="template-text-toggle__aberto" />
+                    Versão texto (fallback para clientes que não suportam HTML)
+                  </summary>
+                  <textarea
+                    className="textarea"
+                    rows={8}
+                    value={draft.textBody}
+                    onChange={(e) => setField('textBody', e.target.value)}
+                    disabled={!isAdmin}
+                    placeholder="Versão em texto puro do e-mail"
+                  />
+                </details>
+
+                <label className="checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={draft.isActive}
+                    onChange={(e) => setField('isActive', e.target.checked)}
+                    disabled={!isAdmin}
+                  />
+                  <span>Template ativo</span>
+                </label>
+              </section>
+            )}
+
+            {selectedKey && (
+              <section className="card templates-previa" aria-labelledby="tp-prev">
+                <div className="template-preview-header">
+                  <div className="template-preview-header__textos">
+                    <h3 id="tp-prev" className="template-preview-header__titulo">Preview do e-mail</h3>
+                    <p className="template-preview-header__assunto">
+                      Assunto: <strong>{preview.data?.subject || draft?.subject || '(vazio)'}</strong>
+                    </p>
+                  </div>
                   <button
                     type="button"
                     className="ghost-button ghost-button--sm"
-                    onClick={() => {
-                      if (showTextFallback) {
-                        setHtmlBackup(draft.htmlBody);
-                      } else {
-                        if (htmlBackup) setField('htmlBody', htmlBackup);
-                      }
-                      setShowTextFallback(!showTextFallback);
-                    }}
+                    onClick={() => setPreviewPoppedOut(true)}
+                    aria-expanded={previewPoppedOut}
+                    title="Abrir preview em tela cheia"
                   >
-                    {showTextFallback ? 'Editor visual' : 'Editar texto puro'}
+                    <Icon name="maximize" size={14} />
+                    Expandir
                   </button>
-                )}
-              </div>
-
-              {showTextFallback ? (
-                <textarea
-                  className="textarea textarea--code"
-                  rows={20}
-                  value={draft.htmlBody}
-                  onChange={(e) => setField('htmlBody', e.target.value)}
-                  disabled={!isAdmin}
-                  placeholder="HTML do e-mail"
-                />
-              ) : (
-                <JoditEditor
-                  ref={editorRef}
-                  value={draft.htmlBody}
-                  config={{
-                    ...joditConfig,
-                    readonly: !isAdmin,
-                  }}
-                  onChange={(newVal: string) => setField('htmlBody', newVal)}
-                />
-              )}
-
-              <details className="template-text-toggle">
-                <summary>Versão texto (fallback para clientes que não suportam HTML)</summary>
-                <textarea
-                  className="textarea"
-                  rows={8}
-                  value={draft.textBody}
-                  onChange={(e) => setField('textBody', e.target.value)}
-                  disabled={!isAdmin}
-                  placeholder="Versão em texto puro do e-mail"
-                  style={{ marginTop: 8 }}
-                />
-              </details>
-
-              <label className="checkbox-field" style={{ marginTop: 12 }}>
-                <input
-                  type="checkbox"
-                  checked={draft.isActive}
-                  onChange={(e) => setField('isActive', e.target.checked)}
-                  disabled={!isAdmin}
-                />
-                <span>Template ativo</span>
-              </label>
-            </section>
-          )}
-
-          {selectedKey && (
-            <section className="card">
-              <div className="template-preview-header">
-                <div>
-                  <h3>Preview do e-mail</h3>
-                  <p className="muted">
-                    Assunto: <strong>{preview.data?.subject || draft?.subject || '(vazio)'}</strong>
+                </div>
+                {preview.isLoading && (
+                  <p className="templates-carregando" role="status">
+                    <span className="btn-spinner" aria-hidden="true" />
+                    Carregando preview…
                   </p>
-                </div>
-                <button
-                  type="button"
-                  className="ghost-button ghost-button--sm"
-                  onClick={() => setPreviewPoppedOut(true)}
-                  title="Abrir preview em tela cheia"
-                >
-                  Expandir
-                </button>
-              </div>
-              {preview.isLoading && <p>Carregando preview…</p>}
-              {preview.data && (
-                <div className="preview-frame">
-                  <iframe
-                    sandbox=""
-                    title="preview-email"
-                    srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
-                  />
-                </div>
-              )}
-            </section>
-          )}
+                )}
+                {preview.data && (
+                  <div className="templates-previa__quadro">
+                    <iframe
+                      sandbox=""
+                      title="preview-email"
+                      srcDoc={preview.data.html || '<p style=\"padding:24px;color:#888;\">Sem conteúdo no template.</p>'}
+                    />
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </>
       )}
 
@@ -545,9 +569,9 @@ export default function Templates() {
         <div className="preview-popout-backdrop" onClick={() => setPreviewPoppedOut(false)}>
           <div className="preview-popout" onClick={(e) => e.stopPropagation()}>
             <div className="preview-popout__header">
-              <div>
+              <div className="preview-popout__titulos">
                 <strong>Preview do e-mail</strong>
-                <span className="muted" style={{ marginLeft: 8 }}>
+                <span className="preview-popout__assunto">
                   {preview.data?.subject || draft?.subject || '(vazio)'}
                 </span>
               </div>
