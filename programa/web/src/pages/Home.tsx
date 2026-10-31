@@ -127,7 +127,7 @@ export default function Home() {
           </strong>
           <small>
             {typeof savings.data?.averagePercentSaving === 'number'
-              ? `${savings.data.averagePercentSaving}% em média por comparação`
+              ? `${formatNumber(savings.data.averagePercentSaving)}% em média por comparação`
               : 'sem dados no período'}
           </small>
         </article>

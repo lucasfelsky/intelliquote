@@ -61,6 +61,7 @@ describe('F11: Overview (Home)', () => {
     const caminho = (n: number) => kpis[n]?.querySelector('.kpi__icone path')?.getAttribute('d') ?? '';
     expect(caminho(3)).toMatch(/^M12 3v18M17 7\.5/); // dollar
     expect(caminho(0)).toMatch(/^M9 3h6v3H9z/); // cotacoes
+    expect(kpis[3]?.querySelector('small')?.textContent).toBe('7,4% em média por comparação'); // virgula pt-BR
     expect(Array.from(kpis).map((k) => k.querySelector('.kpi__rotulo')?.textContent)).toEqual([
       'Cotações',
       'Comparações',
