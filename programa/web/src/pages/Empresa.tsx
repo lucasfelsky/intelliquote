@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { CreditPartnersSection } from '@/components/CreditPartnersSection';
+import { Icon } from '@/components/icons';
 
 interface DirectoryUser {
   id: number;
@@ -230,23 +231,33 @@ export default function Empresa() {
 
   if (profile.isLoading || draft === null) {
     return (
-      <div className="page">
+      <div className="page empresa-page">
         <h1>Empresa</h1>
-        <p>Carregando perfil da empresa…</p>
+        <p className="empresa-carregando" role="status">
+          <span className="btn-spinner" aria-hidden="true" />
+          Carregando perfil da empresa…
+        </p>
       </div>
     );
   }
 
   if (profile.isError) {
     return (
-      <div className="page">
+      <div className="page empresa-page">
         <h1>Empresa</h1>
-        <div className="empty-state">
-          <p>Não foi possível carregar o perfil da empresa.</p>
-          <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
-            Verifique sua conexão e tente novamente.
-          </p>
-          <button className="ghost-button" onClick={() => profile.refetch()}>Tentar novamente</button>
+        <div
+          className="empty-state empty-state--erro"
+          role="alert"
+        >
+          <span className="empty-state__icon">
+            <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+          </span>
+          <strong className="empty-state__title">Não foi possível carregar o perfil da empresa.</strong>
+          <p className="empty-state__text">Verifique sua conexão e tente novamente.</p>
+          <button type="button" className="ghost-button" onClick={() => profile.refetch()}>
+            <Icon name="refresh" size={14} strokeWidth={2} />
+            Tentar novamente
+          </button>
         </div>
       </div>
     );
@@ -415,145 +426,181 @@ export default function Empresa() {
   const activeUsers = (directory.data ?? []).filter((u) => u.isActive);
   const inactiveUsers = (directory.data ?? []).filter((u) => !u.isActive);
 
+  const plural = (n: number) => (n === 1 ? '' : 's');
+  const emCopia = allActiveUserIds.size - excludedProfileIds.size;
+  const totalCc = normalizeCcList(draft.dispatchCc ?? []).length;
+  const ccResumo = autoIncludeProfiles ? (
+    <>
+      Modo automático ligado: <span className="cc-mono">{emCopia}</span>
+      {` perfil${plural(emCopia)} em cópia`}
+      {excludedProfileIds.size > 0 && (
+        <>
+          {' ('}
+          <span className="cc-mono">{excludedProfileIds.size}</span>
+          {` excluído${plural(excludedProfileIds.size)})`}
+        </>
+      )}
+      {', mais '}
+      <span className="cc-mono">{externalEmails.length}</span>
+      {` e-mail${plural(externalEmails.length)} externo${plural(externalEmails.length)}.`}
+    </>
+  ) : (
+    <>
+      Total: <span className="cc-mono">{totalCc}</span>
+      {` endereço${plural(totalCc)} em cópia automática (`}
+      <span className="cc-mono">{selectedUserIds.size}</span>
+      {` perfil${plural(selectedUserIds.size)} + `}
+      <span className="cc-mono">{externalEmails.length}</span>
+      {` externo${plural(externalEmails.length)}).`}
+    </>
+  );
+
   return (
-    <div className="page">
+    <div className="page empresa-page">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Administração</p>
           <h1>Perfil da empresa</h1>
           <p>Esses dados aparecem nos documentos de cotação e nos e-mails automáticos.</p>
         </div>
-        {savedAt && <span className="badge">Salvo às {savedAt}</span>}
+        {savedAt && (
+          <span className="badge empresa-salvo" role="status">
+            <Icon name="check" size={14} strokeWidth={2.2} />
+            Salvo às <span className="empresa-mono">{savedAt}</span>
+          </span>
+        )}
       </div>
 
-      <form className="card" onSubmit={handleSubmit}>
+      <form className="card empresa-formulario" onSubmit={handleSubmit} aria-label="Perfil da empresa">
         {!canEditProfile && (
-          <p className="text-sm" style={{ color: 'var(--ink-soft)', marginBottom: 12 }}>
+          <p className="alert empresa-aviso">
             Somente leitura - seu perfil não pode editar os dados da empresa.
           </p>
         )}
-        <fieldset
-          disabled={!canEditProfile}
-          style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-        >
-        <div className="form-grid">
-          <div>
-            <label className="field-label">Razão social *</label>
-            <input
-              className="input"
-              value={draft.companyName}
-              onChange={(e) => update('companyName', e.target.value)}
-              required
-            />
+        <fieldset className="empresa-conjunto" disabled={!canEditProfile}>
+        <section className="empresa-secao empresa-secao--dados" aria-labelledby="em-dados">
+          <h2 id="em-dados" className="empresa-secao__eyebrow">Dados cadastrais</h2>
+          <div className="empresa-grade">
+            <div className="empresa-campo">
+              <label className="field-label">Razão social *</label>
+              <input
+                className="input"
+                value={draft.companyName}
+                onChange={(e) => update('companyName', e.target.value)}
+                required
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">Nome fantasia</label>
+              <input
+                className="input"
+                value={draft.tradeName ?? ''}
+                onChange={(e) => update('tradeName', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">CNPJ / Tax ID</label>
+              <input
+                className="input empresa-campo__mono"
+                value={draft.taxId ?? ''}
+                onChange={(e) => update('taxId', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">Website</label>
+              <input
+                className="input"
+                value={draft.website ?? ''}
+                onChange={(e) => update('website', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo empresa-campo--duplo">
+              <label className="field-label">Endereço (linha 1)</label>
+              <input
+                className="input"
+                value={draft.addressLine1 ?? ''}
+                onChange={(e) => update('addressLine1', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo empresa-campo--duplo">
+              <label className="field-label">Endereço (linha 2)</label>
+              <input
+                className="input"
+                value={draft.addressLine2 ?? ''}
+                onChange={(e) => update('addressLine2', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">Cidade</label>
+              <input
+                className="input"
+                value={draft.city ?? ''}
+                onChange={(e) => update('city', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">UF / Estado</label>
+              <input
+                className="input"
+                value={draft.state ?? ''}
+                onChange={(e) => update('state', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">CEP</label>
+              <input
+                className="input empresa-campo__mono"
+                value={draft.postalCode ?? ''}
+                onChange={(e) => update('postalCode', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">País</label>
+              <input
+                className="input"
+                value={draft.country ?? ''}
+                onChange={(e) => update('country', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">E-mail de compras</label>
+              <input
+                className="input"
+                type="email"
+                value={draft.purchasingEmail ?? ''}
+                onChange={(e) => update('purchasingEmail', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo">
+              <label className="field-label">Telefone de compras</label>
+              <input
+                className="input empresa-campo__mono"
+                value={draft.purchasingPhone ?? ''}
+                onChange={(e) => update('purchasingPhone', e.target.value)}
+              />
+            </div>
+            <div className="empresa-campo empresa-campo--duplo">
+              <label className="field-label">URL do logotipo</label>
+              <input
+                className="input"
+                value={draft.logoUrl ?? ''}
+                onChange={(e) => update('logoUrl', e.target.value)}
+                placeholder="https://…"
+              />
+            </div>
           </div>
-          <div>
-            <label className="field-label">Nome fantasia</label>
-            <input
-              className="input"
-              value={draft.tradeName ?? ''}
-              onChange={(e) => update('tradeName', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">CNPJ / Tax ID</label>
-            <input
-              className="input"
-              value={draft.taxId ?? ''}
-              onChange={(e) => update('taxId', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">Website</label>
-            <input
-              className="input"
-              value={draft.website ?? ''}
-              onChange={(e) => update('website', e.target.value)}
-            />
-          </div>
-          <div className="form-grid__full">
-            <label className="field-label">Endereço (linha 1)</label>
-            <input
-              className="input"
-              value={draft.addressLine1 ?? ''}
-              onChange={(e) => update('addressLine1', e.target.value)}
-            />
-          </div>
-          <div className="form-grid__full">
-            <label className="field-label">Endereço (linha 2)</label>
-            <input
-              className="input"
-              value={draft.addressLine2 ?? ''}
-              onChange={(e) => update('addressLine2', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">Cidade</label>
-            <input
-              className="input"
-              value={draft.city ?? ''}
-              onChange={(e) => update('city', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">UF / Estado</label>
-            <input
-              className="input"
-              value={draft.state ?? ''}
-              onChange={(e) => update('state', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">CEP</label>
-            <input
-              className="input"
-              value={draft.postalCode ?? ''}
-              onChange={(e) => update('postalCode', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">País</label>
-            <input
-              className="input"
-              value={draft.country ?? ''}
-              onChange={(e) => update('country', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">E-mail de compras</label>
-            <input
-              className="input"
-              type="email"
-              value={draft.purchasingEmail ?? ''}
-              onChange={(e) => update('purchasingEmail', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="field-label">Telefone de compras</label>
-            <input
-              className="input"
-              value={draft.purchasingPhone ?? ''}
-              onChange={(e) => update('purchasingPhone', e.target.value)}
-            />
-          </div>
-          <div className="form-grid__full">
-            <label className="field-label">URL do logotipo</label>
-            <input
-              className="input"
-              value={draft.logoUrl ?? ''}
-              onChange={(e) => update('logoUrl', e.target.value)}
-              placeholder="https://…"
-            />
-          </div>
-        </div>
+        </section>
 
-        <div className="form-grid__full" style={{ marginTop: 28 }}>
-          <label className="field-label">Gatilho de Aprovação de Adjudicação (R$)</label>
-          <p className="field-hint" style={{ marginBottom: 12 }}>
+        <section className="empresa-secao" aria-labelledby="em-gatilho">
+          <label id="em-gatilho" className="empresa-secao__titulo" htmlFor="em-threshold">
+            Gatilho de Aprovação de Adjudicação (R$)
+          </label>
+          <p className="empresa-dica">
             Valores (Landed Cost CIF BRL) acima deste limite exigirão a aprovação de um Gestor ou Administrador.
             Deixe em branco para não exigir aprovação baseada em valor.
           </p>
           <input
-            className="input"
+            id="em-threshold"
+            className="input empresa-gatilho"
             type="number"
             min="0"
             step="0.01"
@@ -564,298 +611,201 @@ export default function Empresa() {
               update('awardApprovalThreshold', val);
             }}
             placeholder="Ex.: 50000"
-            style={{ maxWidth: 200 }}
           />
-        </div>
+        </section>
 
-        <div className="form-grid__full" style={{ marginTop: 28 }}>
-          <label className="field-label">Cópia automática (CC)</label>
-          <p className="field-hint">
+        <section className="empresa-secao empresa-secao--cc" aria-labelledby="em-cc">
+          <h3 id="em-cc" className="empresa-secao__titulo">Cópia automática (CC)</h3>
+          <p className="empresa-dica empresa-dica--cc">
             Esses e-mails recebem cópia de <strong>todos</strong> os envios de cotação desta empresa,
             além dos destinatários escolhidos no modal de envio. Útil para manter o escritório de
             compras, a gerência ou o financeiro informados.
           </p>
 
-          <div
-            className="cc-mode-toggle"
-            style={{
-              marginTop: 12,
-              padding: 12,
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              background: 'var(--surface-alt)',
-            }}
-          >
-            <label
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={autoIncludeProfiles}
-                onChange={(e) => setAutoIncludeProfiles(e.target.checked)}
-                style={{ width: 16, height: 16, marginTop: 2 }}
-              />
+          <label className="cc-mode-toggle" htmlFor="em-auto">
+            <input
+              id="em-auto"
+              type="checkbox"
+              checked={autoIncludeProfiles}
+              onChange={(e) => setAutoIncludeProfiles(e.target.checked)}
+            />
+            <span className="cc-mode-toggle__texto">
+              <strong>Incluir todos os perfis ativos automaticamente</strong>
               <span>
-                <strong>Incluir todos os perfis ativos automaticamente</strong>
-                <span
-                  style={{
-                    display: 'block',
-                    color: 'var(--ink-soft)',
-                    fontSize: 12,
-                    marginTop: 2,
-                  }}
-                >
-                  Quando ligado, todo perfil ativo (admin, comprador, gestor, visualizador)
-                  entra em cópia dos envios. Desmarque abaixo quem você não quer
-                  receber. Adicione e-mails externos no campo ao lado para
-                  destinatários que não têm login (ex: financeiro externo, auditoria).
-                </span>
+                Quando ligado, todo perfil ativo (admin, comprador, gestor, visualizador)
+                entra em cópia dos envios. Desmarque abaixo quem você não quer
+                receber. Adicione e-mails externos no campo ao lado para
+                destinatários que não têm login (ex: financeiro externo, auditoria).
               </span>
-            </label>
-          </div>
+            </span>
+          </label>
 
-          <fieldset
-            className="cc-users"
-            style={{
-              marginTop: 12,
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              padding: 12,
-            }}
-          >
-            <legend className="field-label text-sm" style={{ padding: '0 6px' }}>
-              {autoIncludeProfiles
-                ? `Perfis do sistema (${allActiveUserIds.size - excludedProfileIds.size} de ${allActiveUserIds.size} em cópia)`
-                : `Perfis do sistema (${selectedUserIds.size} selecionado${selectedUserIds.size === 1 ? '' : 's'})`}
-            </legend>
-            {directory.isLoading && (
-              <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
-                Carregando perfis…
-              </p>
-            )}
-            {!directory.isLoading && activeUsers.length === 0 && (
-              <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
-                Nenhum perfil ativo cadastrado.
-              </p>
-            )}
-            {activeUsers.length > 0 && (
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {activeUsers.map((user) => {
-                  const checked = autoIncludeProfiles
-                    ? !excludedProfileIds.has(user.id)
-                    : selectedUserIds.has(user.id);
-                  return (
-                    <li
-                      key={user.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '6px 4px',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        id={`cc-user-${user.id}`}
-                        checked={checked}
-                        onChange={(e) => toggleUser(user, e.target.checked)}
-                        style={{ width: 16, height: 16 }}
-                      />
-                      <label
-                        htmlFor={`cc-user-${user.id}`}
-                        style={{ flex: 1, cursor: 'pointer' }}
-                       className="text-sm">
-                        <strong>{user.name}</strong>{' '}
-                        <span style={{ color: 'var(--ink-soft)' }}>
-                          &lt;{user.email}&gt;
-                        </span>
-                      </label>
-                      <span
-                        className="badge"
-                        style={{ fontSize: 11, padding: '2px 8px' }}
-                      >
-                        {roleLabel(user.role)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {inactiveUsers.length > 0 && (
-              <details style={{ marginTop: 8 }}>
-                <summary
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--ink-soft)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {inactiveUsers.length} perfil{inactiveUsers.length === 1 ? '' : 's'} inativo
-                  {inactiveUsers.length === 1 ? '' : 's'} (desmarcado{selectedUserIds.size === 0 ? '' : 's'} automaticamente)
-                </summary>
-                <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0 0' }}>
-                  {inactiveUsers.map((user) => {
+          <div className="cc-colunas">
+            <fieldset className="cc-users">
+              <legend>
+                {autoIncludeProfiles ? (
+                  <>
+                    Perfis do sistema (<span className="cc-mono">{allActiveUserIds.size - excludedProfileIds.size}</span> de{' '}
+                    <span className="cc-mono">{allActiveUserIds.size}</span> em cópia)
+                  </>
+                ) : (
+                  <>
+                    Perfis do sistema (<span className="cc-mono">{selectedUserIds.size}</span>
+                    {` selecionado${selectedUserIds.size === 1 ? '' : 's'})`}
+                  </>
+                )}
+              </legend>
+              {directory.isLoading && (
+                <p className="cc-users__vazio" role="status">
+                  Carregando perfis…
+                </p>
+              )}
+              {!directory.isLoading && activeUsers.length === 0 && (
+                <p className="cc-users__vazio">
+                  Nenhum perfil ativo cadastrado.
+                </p>
+              )}
+              {activeUsers.length > 0 && (
+                <ul className="cc-users__lista">
+                  {activeUsers.map((user) => {
                     const checked = autoIncludeProfiles
                       ? !excludedProfileIds.has(user.id)
                       : selectedUserIds.has(user.id);
                     return (
-                      <li
-                        key={user.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '4px 4px',
-                          opacity: 0.6,
-                        }}
-                      >
+                      <li key={user.id} className={`cc-users__item${checked ? '' : ' cc-users__item--desmarcado'}`}>
                         <input
                           type="checkbox"
                           id={`cc-user-${user.id}`}
                           checked={checked}
                           onChange={(e) => toggleUser(user, e.target.checked)}
-                          style={{ width: 16, height: 16 }}
                         />
-                        <label
-                          htmlFor={`cc-user-${user.id}`}
-                          style={{ flex: 1, cursor: 'pointer' }}
-                         className="text-sm">
-                          {user.name}{' '}
-                          <span style={{ color: 'var(--ink-soft)' }}>
+                        <label htmlFor={`cc-user-${user.id}`}>
+                          <strong>{user.name}</strong>{' '}
+                          <span className="cc-users__email">
                             &lt;{user.email}&gt;
                           </span>
                         </label>
-                        <span style={{ fontSize: 11, color: 'var(--ink-soft)' }}>
+                        <span className="badge badge--muted cc-users__papel">
                           {roleLabel(user.role)}
                         </span>
                       </li>
                     );
                   })}
                 </ul>
-              </details>
-            )}
-          </fieldset>
+              )}
+              {inactiveUsers.length > 0 && (
+                <details className="cc-users__inativos">
+                  <summary>
+                    <Icon name="chevron-right" size={14} strokeWidth={2} className="cc-users__fechado" />
+                    <Icon name="chevron-down" size={14} strokeWidth={2} className="cc-users__aberto" />
+                    <span className="cc-mono">{inactiveUsers.length}</span>
+                    {` perfil${inactiveUsers.length === 1 ? '' : 's'} inativo${inactiveUsers.length === 1 ? '' : 's'} (desmarcado${selectedUserIds.size === 0 ? '' : 's'} automaticamente)`}
+                  </summary>
+                  <ul className="cc-users__lista cc-users__lista--inativos">
+                    {inactiveUsers.map((user) => {
+                      const checked = autoIncludeProfiles
+                        ? !excludedProfileIds.has(user.id)
+                        : selectedUserIds.has(user.id);
+                      return (
+                        <li key={user.id} className="cc-users__item cc-users__item--inativo">
+                          <input
+                            type="checkbox"
+                            id={`cc-user-${user.id}`}
+                            checked={checked}
+                            onChange={(e) => toggleUser(user, e.target.checked)}
+                          />
+                          <label htmlFor={`cc-user-${user.id}`}>
+                            {user.name}{' '}
+                            <span className="cc-users__email">
+                              &lt;{user.email}&gt;
+                            </span>
+                          </label>
+                          <span className="cc-users__papel-inativo">
+                            {roleLabel(user.role)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              )}
+            </fieldset>
 
-          <div style={{ marginTop: 16 }}>
-            <label className="field-label text-sm" >
-              E-mails externos
-            </label>
-            <p
-              className="field-hint text-xs"
-              style={{ marginTop: 2, marginBottom: 6 }}
-            >
-              Para destinatários que não têm login no IntelliQuote (ex: financeiro externo,
-              auditoria). Limite de 50 endereços somando perfis + externos.
-            </p>
-            <div className="cc-input-row" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input
-                className="input"
-                type="email"
-                value={ccDraft}
-                onChange={(e) => {
-                  setCcDraft(e.target.value);
-                  if (ccError) setCcError(null);
-                }}
-                onKeyDown={handleCcKeyDown}
-                onBlur={() => {
-                  if (ccDraft.trim().length > 0) addExternal();
-                }}
-                placeholder="ex.: financeiro@sqquimica.com"
-              />
-              <button type="button" className="ghost-button" onClick={addExternal}>
-                Adicionar
-              </button>
-            </div>
-            {ccError && (
-              <p style={{ color: 'var(--danger)', marginTop: 6 }} className="text-sm">{ccError}</p>
-            )}
-
-            {externalEmails.length > 0 && (
-              <ul className="cc-list" style={{ marginTop: 12, padding: 0, listStyle: 'none' }}>
-                {externalEmails.map((email) => (
-                  <li
-                    key={email}
-                    className="cc-list__item"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      marginBottom: 6,
-                      background: 'var(--surface-alt)',
-                      fontSize: 14,
-                    }}
-                  >
-                    <span>{email}</span>
-                    <button
-                      type="button"
-                      className="link-button"
-                      onClick={() => removeExternal(email)}
-                      style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
-                    >
-                      Remover
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {externalEmails.length === 0 && selectedUserIds.size === 0 && !autoIncludeProfiles && (
-              <p
-                style={{
-                  color: 'var(--ink-soft)',
-                  fontSize: 13,
-                  fontStyle: 'italic',
-                  marginTop: 12,
-                }}
-              >
-                Nenhum destinatário em cópia automática. Envios sairão apenas para os
-                destinatários escolhidos no modal.
+            <div className="cc-externos">
+              <label className="cc-externos__rotulo" htmlFor="em-ext">
+                E-mails externos
+              </label>
+              <p className="empresa-dica empresa-dica--externos">
+                Para destinatários que não têm login no IntelliQuote (ex: financeiro externo,
+                auditoria). Limite de 50 endereços somando perfis + externos.
               </p>
-            )}
+              <div className="cc-input-row">
+                <input
+                  id="em-ext"
+                  className="input"
+                  type="email"
+                  value={ccDraft}
+                  onChange={(e) => {
+                    setCcDraft(e.target.value);
+                    if (ccError) setCcError(null);
+                  }}
+                  onKeyDown={handleCcKeyDown}
+                  onBlur={() => {
+                    if (ccDraft.trim().length > 0) addExternal();
+                  }}
+                  placeholder="ex.: financeiro@sqquimica.com"
+                />
+                <button type="button" className="ghost-button" onClick={addExternal}>
+                  Adicionar
+                </button>
+              </div>
+              {ccError && (
+                <p className="empresa-erro" role="alert">{ccError}</p>
+              )}
+
+              {externalEmails.length > 0 && (
+                <ul className="cc-list">
+                  {externalEmails.map((email) => (
+                    <li key={email} className="cc-list__item">
+                      <span>
+                        <Icon name="templates" size={16} />
+                        {email}
+                      </span>
+                      <button
+                        type="button"
+                        className="link-button cc-list__remover"
+                        onClick={() => removeExternal(email)}
+                      >
+                        Remover
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {externalEmails.length === 0 && selectedUserIds.size === 0 && !autoIncludeProfiles && (
+                <p className="cc-vazio">
+                  Nenhum destinatário em cópia automática. Envios sairão apenas para os
+                  destinatários escolhidos no modal.
+                </p>
+              )}
+            </div>
           </div>
 
-          <p
-            className="field-hint text-xs"
-            style={{ marginTop: 12 }}
-          >
-            {autoIncludeProfiles
-              ? `Modo automático ligado: ${allActiveUserIds.size - excludedProfileIds.size} perfil${
-                  allActiveUserIds.size - excludedProfileIds.size === 1 ? '' : 's'
-                } em cópia${
-                  excludedProfileIds.size > 0
-                    ? ` (${excludedProfileIds.size} excluído${excludedProfileIds.size === 1 ? '' : 's'})`
-                    : ''
-                }, mais ${externalEmails.length} e-mail${
-                  externalEmails.length === 1 ? '' : 's'
-                } externo${externalEmails.length === 1 ? '' : 's'}.`
-              : `Total: ${normalizeCcList(draft.dispatchCc ?? []).length} endereço${
-                  normalizeCcList(draft.dispatchCc ?? []).length === 1 ? '' : 's'
-                } em cópia automática (${selectedUserIds.size} perfil${
-                  selectedUserIds.size === 1 ? '' : 's'
-                } + ${externalEmails.length} externo${
-                  externalEmails.length === 1 ? '' : 's'
-                }).`}
+          <p className="cc-resumo">
+            <Icon name="info" size={16} />
+            <span>{ccResumo}</span>
           </p>
-        </div>
+        </section>
 
-        <div className="form-grid__full" style={{ marginTop: 28 }}>
-          <label className="field-label" htmlFor="notify-email-input">
+        <section className="empresa-secao empresa-secao--avisos" aria-labelledby="em-avisos">
+          <label id="em-avisos" className="empresa-secao__titulo" htmlFor="notify-email-input">
             Avisos de nova solicitação (Comercial)
           </label>
-          <p className="field-hint">
+          <p className="empresa-dica">
             Quem recebe o e-mail quando o Comercial cria uma solicitação. Se ficar vazio, vai para a
             Equipe COMEX em cópia.
           </p>
-          <div className="cc-input-row" style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div className="cc-input-row cc-input-row--avisos">
             <input
               id="notify-email-input"
               className="input"
@@ -876,33 +826,21 @@ export default function Empresa() {
             </button>
           </div>
           {notifyError && (
-            <p style={{ color: 'var(--danger)', marginTop: 6 }} className="text-sm">{notifyError}</p>
+            <p className="empresa-erro" role="alert">{notifyError}</p>
           )}
           {notifyEmails.length > 0 && (
-            <ul className="cc-list" style={{ marginTop: 12, padding: 0, listStyle: 'none' }}>
+            <ul className="cc-list cc-list--avisos">
               {notifyEmails.map((email) => (
-                <li
-                  key={email}
-                  className="cc-list__item"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '8px 12px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    marginBottom: 6,
-                    background: 'var(--surface-alt)',
-                    fontSize: 14,
-                  }}
-                >
-                  <span>{email}</span>
+                <li key={email} className="cc-list__item">
+                  <span>
+                    <Icon name="templates" size={16} />
+                    {email}
+                  </span>
                   <button
                     type="button"
-                    className="link-button"
+                    className="link-button cc-list__remover"
                     onClick={() => removeNotifyEmail(email)}
                     aria-label={`Remover ${email} dos avisos de nova solicitação`}
-                    style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}
                   >
                     Remover
                   </button>
@@ -910,13 +848,13 @@ export default function Empresa() {
               ))}
             </ul>
           )}
-        </div>
+        </section>
 
         {formError && (
-          <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{formError}</p>
+          <p className="alert alert--error empresa-erro-geral" role="alert">{formError}</p>
         )}
 
-        <div className="page-header__actions" style={{ marginTop: 18, justifyContent: 'flex-end' }}>
+        <div className="empresa-rodape">
           <button
             type="submit"
             className="primary-button"
