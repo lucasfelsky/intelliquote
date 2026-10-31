@@ -2225,7 +2225,7 @@ describe('Comparison routes - alternativa via parceiro (Credit Support, PR4a)', 
       currency: 'USD',
       offeredIncoterm: 'FOB',
       revokedAt: null,
-      respondedAt: new Date('2026-10-01T00:00:00.000Z'),
+      respondedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // relativo ao relogio: validade de 30d nunca vence durante o teste
       expiresAt: new Date('2099-01-01T00:00:00.000Z'),
       partnerPaymentTermsDays: 90,
       partnerValidityDays: 30,
@@ -2314,7 +2314,7 @@ describe('Comparison routes - alternativa via parceiro (Credit Support, PR4a)', 
       creditPartner: { id: 5, name: 'Banco Alfa' },
       partnerContact: { id: 50, name: 'Ana Credito', email: 'ana@alfa.example' },
       partnerValidityDays: 30,
-      validityExpired: false, // respondida em 2026-10-01 + 30d ainda vale
+      validityExpired: false, // respondida ha 5 dias + 30d ainda vale
       quantityAdjusted: false,
       isWinner: true,
     });
