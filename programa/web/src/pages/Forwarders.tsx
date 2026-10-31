@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { useConfirm } from '@/components/useConfirm';
 import {
@@ -260,7 +261,7 @@ export default function Forwarders() {
       : 'Editar forwarder';
 
   return (
-    <div className="page">
+    <div className="page forwarders-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Cadastros</p>
@@ -269,46 +270,70 @@ export default function Forwarders() {
         </div>
         {canWrite && (
           <button type="button" className="primary-button" onClick={openCreate}>
-            + Novo forwarder
+            <Icon name="plus" size={16} strokeWidth={2.2} />
+            Novo forwarder
           </button>
         )}
       </header>
 
-      <section className="card" aria-label="Lista de forwarders">
+      <section className="card forwarders-lista" aria-label="Lista de forwarders">
         {!canWrite && (
-          <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 0 }}>
+          <p className="forwarders-aviso">
+            <Icon name="info" size={16} strokeWidth={1.9} />
             Apenas consulta - seu perfil não pode alterar os forwarders.
           </p>
         )}
 
         {actionError && (
-          <p role="alert" style={{ color: 'var(--danger)', marginTop: 0 }} className="text-sm">
+          <div className="forwarders-lista__aviso">
+            <div
+              role="alert"
+              className="forwarders-alerta alert--error"
+            >
+              <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
             {actionError}
-          </p>
+            </div>
+          </div>
         )}
 
         {forwarders.isLoading && (
-          <p className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+          <div className="forwarders-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
             Carregando forwarders…
-          </p>
+          </div>
         )}
 
         {forwarders.isError && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+          <div className="forwarders-estado">
+            <div
+              className="empty-state empty-state--erro"
+              role="alert"
+            >
+              <span className="empty-state__icon">
+                <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+              </span>
+              <strong className="empty-state__title">
             Não foi possível carregar os forwarders: {messageOf(forwarders.error)}
-          </p>
+              </strong>
+            </div>
+          </div>
         )}
 
         {!forwarders.isLoading && !forwarders.isError && rows.length === 0 && (
+          <div className="forwarders-estado">
           <div className="empty-state">
-            <strong>Nenhum forwarder cadastrado</strong>
-            <p>Cadastre o primeiro para preencher o contato do despachante no envio da PO.</p>
+              <span className="empty-state__icon">
+                <Icon name="ship" size={36} strokeWidth={1.5} />
+              </span>
+              <strong className="empty-state__title">Nenhum forwarder cadastrado</strong>
+              <p className="empty-state__text">Cadastre o primeiro para preencher o contato do despachante no envio da PO.</p>
+            </div>
           </div>
         )}
 
         {rows.length > 0 && (
           <div className="table-wrapper">
-            <table className="table table--dense">
+            <table className="table table--dense forwarders-tabela">
               <thead>
                 <tr>
                   <th>Empresa</th>
@@ -324,19 +349,22 @@ export default function Forwarders() {
                 {rows.map((forwarder) => (
                   <tr key={forwarder.id}>
                     <td>
+                      <span className="forwarders-empresa">
                       <strong>{forwarder.companyName}</strong>
                       {forwarder.isDefault && (
-                        <span className="badge" style={{ marginLeft: 8 }}>
+                          <span className="badge forwarders-padrao">
+                            <Icon name="check" size={12} strokeWidth={2.4} />
                           Padrão
                         </span>
                       )}
+                      </span>
                     </td>
-                    <td className="cell-truncate" title={forwarder.address ?? undefined}>
+                    <td className="cell-truncate forwarders-endereco" title={forwarder.address ?? undefined}>
                       {forwarder.address ?? '—'}
                     </td>
-                    <td>{contactsSummary(forwarder)}</td>
+                    <td className="forwarders-contatos">{contactsSummary(forwarder)}</td>
                     <td className="col-status">
-                      <span className={`badge ${forwarder.isActive ? '' : 'badge--muted'}`}>
+                      <span className={`badge badge--dot ${forwarder.isActive ? '' : 'badge--muted'}`}>
                         {forwarder.isActive ? 'Ativo' : 'Inativo'}
                       </span>
                     </td>
@@ -376,6 +404,7 @@ export default function Forwarders() {
                             className="ghost-button"
                             onClick={() => openEdit(forwarder, true)}
                           >
+                            <Icon name="eye" size={16} strokeWidth={1.9} />
                             Ver
                           </button>
                         )}
@@ -390,10 +419,10 @@ export default function Forwarders() {
       </section>
 
       <Modal isOpen={modalOpen} onClose={closeModal} title={modalTitle} size="wide">
-        <form onSubmit={handleSubmit}>
-          <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-            <div className="form-grid">
-              <div className="form-grid__full">
+        <form className="forwarder-form" onSubmit={handleSubmit}>
+          <fieldset disabled={readOnly} className="forwarder-form__campos">
+            <div className="forwarder-form__grade">
+              <div className="forwarder-campo">
                 <label className="field-label" htmlFor="fw-company">Empresa *</label>
                 <input
                   id="fw-company"
@@ -404,7 +433,7 @@ export default function Forwarders() {
                   required
                 />
               </div>
-              <div className="form-grid__full">
+              <div className="forwarder-campo">
                 <label className="field-label" htmlFor="fw-address">Endereço</label>
                 <textarea
                   id="fw-address"
@@ -415,7 +444,7 @@ export default function Forwarders() {
                   onChange={(e) => updateField('address', e.target.value)}
                 />
               </div>
-              <div className="form-grid__full">
+              <div className="forwarder-campo">
                 <label className="field-label" htmlFor="fw-website">Website</label>
                 <input
                   id="fw-website"
@@ -425,7 +454,7 @@ export default function Forwarders() {
                   onChange={(e) => updateField('website', e.target.value)}
                 />
               </div>
-              <div className="form-grid__full">
+              <div className="forwarder-campo">
                 <label className="field-label" htmlFor="fw-notes">Observações</label>
                 <textarea
                   id="fw-notes"
@@ -435,13 +464,14 @@ export default function Forwarders() {
                   value={draft.notes}
                   onChange={(e) => updateField('notes', e.target.value)}
                 />
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                <p className="forwarder-dica">
                   Uso interno; não vai no e-mail.
                 </p>
               </div>
             </div>
 
-            <label className="checkbox-field" style={{ marginTop: 12 }}>
+            <div className="forwarder-form__opcoes">
+              <label className="checkbox-field">
               <input
                 type="checkbox"
                 checked={draft.isActive}
@@ -455,7 +485,7 @@ export default function Forwarders() {
               />
               Forwarder ativo
             </label>
-            <label className="checkbox-field" style={{ marginTop: 8 }}>
+              <label className="checkbox-field">
               <input
                 type="checkbox"
                 checked={draft.isDefault}
@@ -464,24 +494,19 @@ export default function Forwarders() {
               />
               Padrão no envio da PO
             </label>
+            </div>
 
-            <h3 style={{ margin: '18px 0 8px', fontSize: 15 }}>Contatos</h3>
+            <h3 className="forwarder-form__titulo">Contatos</h3>
             {draft.contacts.map((contact, index) => (
               <fieldset
                 key={contact.key}
-                style={{
-                  border: '1px solid var(--border, #dde3ea)',
-                  borderRadius: 8,
-                  padding: 12,
-                  margin: '0 0 10px',
-                  minWidth: 0,
-                }}
+                className="forwarder-contato"
               >
-                <legend className="text-sm" style={{ padding: '0 6px' }}>
+                <legend className="forwarder-contato__legenda">
                   Contato {index + 1}
                 </legend>
-                <div className="form-grid">
-                  <div>
+                <div className="forwarder-contato__grade">
+                  <div className="forwarder-campo">
                     <label className="field-label" htmlFor={`${contact.key}-name`}>Nome *</label>
                     <input
                       id={`${contact.key}-name`}
@@ -491,7 +516,7 @@ export default function Forwarders() {
                       onChange={(e) => updateContact(contact.key, { name: e.target.value })}
                     />
                   </div>
-                  <div>
+                  <div className="forwarder-campo">
                     <label className="field-label" htmlFor={`${contact.key}-email`}>E-mail</label>
                     <input
                       id={`${contact.key}-email`}
@@ -501,7 +526,7 @@ export default function Forwarders() {
                       onChange={(e) => updateContact(contact.key, { email: e.target.value })}
                     />
                   </div>
-                  <div>
+                  <div className="forwarder-campo">
                     <label className="field-label" htmlFor={`${contact.key}-phone`}>Telefone</label>
                     <input
                       id={`${contact.key}-phone`}
@@ -513,12 +538,13 @@ export default function Forwarders() {
                   </div>
                 </div>
                 {!readOnly && draft.contacts.length > 1 && (
-                  <div style={{ marginTop: 8, textAlign: 'right' }}>
+                  <div className="forwarder-contato__acoes">
                     <button
                       type="button"
                       className="ghost-button danger-button"
                       onClick={() => removeContact(contact.key)}
                     >
+                      <Icon name="trash" size={14} strokeWidth={2} />
                       Remover contato
                     </button>
                   </div>
@@ -528,19 +554,24 @@ export default function Forwarders() {
             {!readOnly && (
               <button
                 type="button"
-                className="ghost-button"
+                className="ghost-button forwarder-form__adicionar"
                 onClick={addContact}
                 disabled={draft.contacts.length >= MAX_CONTACTS}
               >
+                <Icon name="plus" size={14} strokeWidth={2.2} />
                 Adicionar contato
               </button>
             )}
           </fieldset>
 
           {formError && (
-            <p role="alert" style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
+            <div
+              role="alert"
+              className="forwarders-alerta alert--error"
+            >
+              <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
               {formError}
-            </p>
+            </div>
           )}
 
           <div className="modal-actions">

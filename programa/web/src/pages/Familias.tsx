@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { useConfirm } from '@/components/useConfirm';
 import { messageOf } from '@/services/quoteResponses';
@@ -104,7 +105,7 @@ export default function Familias() {
   };
 
   return (
-    <div className="page itens-page">
+    <div className="page familias-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">Catálogo</p>
@@ -114,40 +115,66 @@ export default function Familias() {
           </p>
         </div>
         <button type="button" className="primary-button" onClick={() => setIsModalOpen(true)}>
-          + Nova Família
+          <Icon name="plus" size={16} strokeWidth={2.2} />
+          Nova Família
         </button>
       </header>
 
-      <section className="card" aria-label="Lista de famílias">
+      <section className="card familias-lista" aria-label="Lista de famílias">
         {feedback && (
+          <div className="familias-lista__aviso">
           <div
-            className={`alert ${feedback.kind === 'success' ? 'alert--success' : 'alert--error'}`}
-            style={{ marginBottom: 16 }}
+              role={feedback.kind === 'success' ? 'status' : 'alert'}
+              className={`familias-alerta ${feedback.kind === 'success' ? 'alert--success' : 'alert--error'}`}
           >
+              <Icon
+                name={feedback.kind === 'success' ? 'check' : 'alert-triangle'}
+                size={18}
+                strokeWidth={feedback.kind === 'success' ? 2 : 1.9}
+              />
             {feedback.message}
           </div>
+          </div>
         )}
-        {familiesQuery.isLoading && <p>Carregando famílias…</p>}
+        {familiesQuery.isLoading && (
+          <div className="familias-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando famílias…
+          </div>
+        )}
         {familiesQuery.isError && (
-          <div className="empty-state">
-            <p>Não foi possível carregar a lista de famílias.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
+          <div className="familias-estado">
+            <div
+              className="empty-state empty-state--erro"
+              role="alert"
+            >
+              <span className="empty-state__icon">
+                <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+              </span>
+              <strong className="empty-state__title">Não foi possível carregar a lista de famílias.</strong>
+              <p className="empty-state__text">
               Verifique sua conexão e tente novamente.
             </p>
             <button className="ghost-button" onClick={() => familiesQuery.refetch()}>
               Tentar novamente
             </button>
           </div>
+          </div>
         )}
         {!familiesQuery.isLoading && !familiesQuery.isError && families.length === 0 && (
+          <div className="familias-estado">
           <div className="empty-state">
-            <strong>Nenhuma família encontrada</strong>
-            <p>Cadastre a primeira família para começar.</p>
+              <span className="empty-state__icon">
+                <Icon name="familias" size={36} strokeWidth={1.5} />
+              </span>
+              <strong className="empty-state__title">Nenhuma família encontrada</strong>
+              <p className="empty-state__text">Cadastre a primeira família para começar.</p>
+            </div>
           </div>
         )}
         {families.length > 0 && (
           <div className="table-wrapper">
-            <table className="table">
+            <table className="table familias-tabela">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -159,10 +186,10 @@ export default function Familias() {
               <tbody>
                 {families.map((f) => (
                   <tr key={f.id}>
-                    <td>{f.id}</td>
+                    <td className="familias-id">{f.id}</td>
                     <td><strong>{f.name}</strong></td>
                     <td>
-                      <span className={`badge ${f.isActive ? '' : 'badge--muted'}`}>
+                      <span className={`badge badge--dot ${f.isActive ? '' : 'badge--muted'}`}>
                         {f.isActive ? 'Ativa' : 'Inativa'}
                       </span>
                     </td>
@@ -177,6 +204,7 @@ export default function Familias() {
                             setEditError('');
                           }}
                         >
+                          <Icon name="edit" size={14} strokeWidth={1.9} />
                           Editar
                         </button>
                         <button
@@ -202,7 +230,7 @@ export default function Familias() {
         onClose={() => setIsModalOpen(false)}
         title="Nova Família"
       >
-        <form onSubmit={handleSubmit}>
+        <form className="familias-form" onSubmit={handleSubmit}>
           <label className="field">
             <span>Nome da Família *</span>
             <input
@@ -211,11 +239,20 @@ export default function Familias() {
               value={newFamilyName}
               onChange={(e) => setNewFamilyName(e.target.value)}
               placeholder="Ex: Embalagens"
+              aria-invalid={errorMsg ? 'true' : undefined}
               autoFocus
             />
           </label>
-          {errorMsg && <div className="alert alert--error" style={{ marginBottom: 16 }}>{errorMsg}</div>}
-          <div className="modal-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
+          {errorMsg && (
+            <div
+              role="alert"
+              className="familias-alerta alert--error"
+            >
+              <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+              {errorMsg}
+            </div>
+          )}
+          <div className="modal-actions">
             <button
               type="button"
               className="ghost-button"
@@ -240,7 +277,7 @@ export default function Familias() {
         onClose={() => setEditing(null)}
         title="Editar Família"
       >
-        <form onSubmit={handleEditSubmit}>
+        <form className="familias-form" onSubmit={handleEditSubmit}>
           <label className="field">
             <span>Nome da Família *</span>
             <input
@@ -249,11 +286,20 @@ export default function Familias() {
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               placeholder="Ex: Embalagens"
+              aria-invalid={editError ? 'true' : undefined}
               autoFocus
             />
           </label>
-          {editError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{editError}</div>}
-          <div className="modal-actions" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 16 }}>
+          {editError && (
+            <div
+              role="alert"
+              className="familias-alerta alert--error"
+            >
+              <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+              {editError}
+            </div>
+          )}
+          <div className="modal-actions">
             <button
               type="button"
               className="ghost-button"

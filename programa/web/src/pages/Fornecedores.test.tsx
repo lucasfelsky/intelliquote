@@ -115,7 +115,7 @@ describe('Fornecedores', () => {
   it('2. "+ Novo fornecedor" abre só o índice 1 (fornecedor)', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     expect(dialogAt(container, 1).open).toBe(true);
     expect(dialogAt(container, 0).open).toBe(false);
     expect(dialogAt(container, 1).querySelector('.modal-header h2')?.textContent).toBe('Novo fornecedor');
@@ -133,7 +133,7 @@ describe('Fornecedores', () => {
   it('4. tamanho default do modal de fornecedor: contém modal-dialog e não modal-dialog--wide', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     const dialog = dialogAt(container, 1);
     expect(dialog.className).toContain('modal-dialog');
     expect(dialog.className).not.toContain('modal-dialog--wide');
@@ -142,7 +142,7 @@ describe('Fornecedores', () => {
   it('5. "Cancelar" no modal de fornecedor fecha e não chama api.post', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     const dialog = dialogAt(container, 1);
     expect(dialog.open).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
@@ -153,7 +153,7 @@ describe('Fornecedores', () => {
   it('6. sem título duplicado: modal de fornecedor aberto tem só 1 h2 escopado nele', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     const dialog = dialogAt(container, 1);
     expect(dialog.querySelectorAll('h2').length).toBe(1);
     expect(dialog.querySelector('.modal-body h2')).toBeNull();
@@ -172,7 +172,7 @@ describe('Fornecedores', () => {
     await findByText('ACME Ltda');
     await expandContacts(getByLabelText);
     await waitFor(() => expect(listSupplierContacts).toHaveBeenCalled());
-    fireEvent.click(getByRole('button', { name: '+ Adicionar contato' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar contato' }));
     const dialog = dialogAt(container, 0);
     expect(dialog.open).toBe(true);
     expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Novo contato');
@@ -198,7 +198,7 @@ describe('Fornecedores', () => {
     await findByText('ACME Ltda');
     await expandContacts(getByLabelText);
     await findByText('Contato Um');
-    fireEvent.click(getByRole('button', { name: '+ Adicionar contato' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar contato' }));
     const dialog = dialogAt(container, 0);
     expect(dialog.open).toBe(true);
     const closeButtons = getAllByLabelText('Fechar');
@@ -239,7 +239,7 @@ describe('Fornecedores', () => {
     expect(within(dialog).getByText('Resina').className).not.toContain('chip--active');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
 
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     dialog = dialogAt(container, 1);
     await waitFor(() => {
       expect(within(dialog).getByText('Silano')).toBeTruthy();
@@ -259,7 +259,7 @@ describe('Fornecedores', () => {
 
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     const dialog = dialogAt(container, 1);
     await waitFor(() => {
       expect(within(dialog).getByText('Resina')).toBeTruthy();
@@ -338,7 +338,7 @@ describe('Fornecedores', () => {
     });
     const { container, findByText, getByRole } = renderPage();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Novo fornecedor' }));
+    fireEvent.click(getByRole('button', { name: 'Novo fornecedor' }));
     const dialog = dialogAt(container, 1);
 
     fireEvent.change(dialog.querySelector('#name') as HTMLInputElement, {

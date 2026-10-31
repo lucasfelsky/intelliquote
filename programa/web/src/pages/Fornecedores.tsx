@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import StarRating from '@/components/StarRating';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import SupplierImportModal from '@/components/SupplierImportModal';
 import { SupplierDocumentsSection } from '@/components/SupplierDocumentsSection';
@@ -490,38 +491,40 @@ export default function Fornecedores() {
       : list.data?.find((s) => s.id === expandedSupplierId)?.name ?? `Fornecedor #${expandedSupplierId}`;
 
   return (
-    <div className="page">
-      <div className="page-header">
+    <div className="page fornecedores-page">
+      <header className="page-header">
         <div>
           <p className="eyebrow">Cadastros</p>
           <h1>Fornecedores</h1>
-          <p>Gerencie a base de fornecedores, Incoterms aceitos e status.</p>
+          <p className="page-subtitle">Gerencie a base de fornecedores, Incoterms aceitos e status.</p>
         </div>
         <div className="page-header__actions">
+          <div className="fornecedores-busca">
+            <Icon name="search" size={16} strokeWidth={1.9} />
           <input
-            className="input"
+              className="fornecedores-busca__campo"
             placeholder="Buscar por nome ou país"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ maxWidth: 280 }}
           />
+          </div>
           <button type="button" className="ghost-button" onClick={() => setIsImportOpen(true)}>
+            <Icon name="upload" size={16} strokeWidth={1.9} />
             Importar planilha
           </button>
           <button type="button" className="primary-button" onClick={openNew}>
-            + Novo fornecedor
+            <Icon name="plus" size={16} strokeWidth={2.2} />
+            Novo fornecedor
           </button>
         </div>
-      </div>
+      </header>
 
-      <section className="card">
-        {list.isLoading && <p>Carregando fornecedores…</p>}
+      <section className="card fornecedores-lista" aria-label="Lista de fornecedores">
+        {list.isLoading && <p className="fornecedores-carregando">Carregando fornecedores…</p>}
         {list.isError && (
           <div className="empty-state">
             <p>Não foi possível carregar os fornecedores.</p>
-            <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 12 }}>
-              Verifique sua conexão e tente novamente.
-            </p>
+            <p className="fornecedores-dica">Verifique sua conexão e tente novamente.</p>
             <button className="ghost-button" onClick={() => list.refetch()}>Tentar novamente</button>
           </div>
         )}
@@ -532,10 +535,11 @@ export default function Fornecedores() {
           </div>
         )}
         {allTags.length > 0 && (
-          <div className="chip-row" style={{ marginBottom: 12 }}>
+          <div className="fornecedores-filtro" role="group" aria-label="Filtrar por etiqueta">
             <button
               type="button"
               className={`chip${tagFilter === null ? ' chip--active' : ''}`}
+              aria-pressed={tagFilter === null}
               onClick={() => setTagFilter(null)}
             >
               Todas
@@ -545,6 +549,7 @@ export default function Fornecedores() {
                 key={tag}
                 type="button"
                 className={`chip${tagFilter === tag ? ' chip--active' : ''}`}
+                aria-pressed={tagFilter === tag}
                 onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
               >
                 {tag}
@@ -559,7 +564,7 @@ export default function Fornecedores() {
         )}
         {displayedSuppliers.length > 0 && (
           <div className="table-wrapper">
-            <table className="table table--dense">
+            <table className="table table--dense fornecedores-tabela">
             <thead>
               <tr>
                 <th></th>
@@ -580,36 +585,44 @@ export default function Fornecedores() {
                 const docSummary = documentsSummaryBySupplier[String(s.id)];
                 return (
                   <>
-                    <tr key={s.id} id={`supplier-row-${s.id}`}>
-                      <td style={{ width: 32 }}>
+                    <tr
+                      key={s.id}
+                      id={`supplier-row-${s.id}`}
+                      className={isExpanded ? 'fornecedores-linha fornecedores-linha--aberta' : 'fornecedores-linha'}
+                    >
+                      <td className="fornecedores-expandir">
                         <button
                           type="button"
-                          className="ghost-button"
+                          className="fornecedores-expandir__botao"
                           aria-label={isExpanded ? 'Ocultar contatos' : 'Mostrar contatos'}
+                          aria-expanded={isExpanded}
                           onClick={() => toggleExpanded(s.id)}
                           disabled={contactsBySupplier.isLoading}
-                          style={{ padding: '4px 8px', fontSize: 12 }}
                         >
-                          {isExpanded ? '−' : '+'}
+                          <Icon name={isExpanded ? 'minus' : 'plus'} size={16} strokeWidth={2.2} />
                         </button>
                       </td>
                       <td>
+                        <div className="fornecedores-nome">
                         <strong>{s.name}</strong>
                         {docSummary && docSummary.expired > 0 ? (
-                          <span className="badge badge--danger" style={{ marginLeft: 8, fontSize: 11 }}>
+                            <span className="badge badge--danger fornecedores-doc">
+                              <Icon name="file" size={12} strokeWidth={2.2} />
                             Doc. vencido
                           </span>
                         ) : docSummary && docSummary.expiring > 0 ? (
-                          <span className="badge badge--warning" style={{ marginLeft: 8, fontSize: 11 }}>
+                            <span className="badge badge--warning fornecedores-doc">
+                              <Icon name="file" size={12} strokeWidth={2.2} />
                             {typeof docSummary.nextDaysLeft === 'number'
                               ? `Doc. vence em ${docSummary.nextDaysLeft} d`
                               : 'Doc. a vencer'}
                           </span>
                         ) : null}
+                        </div>
                         {s.tags.length > 0 && (
-                          <div className="chip-row" style={{ marginTop: 4 }}>
+                          <div className="fornecedores-tags">
                             {s.tags.map((tag) => (
-                              <span key={tag} className="chip" style={{ fontSize: 11, padding: '1px 6px' }}>
+                              <span className="fornecedores-tag" key={tag}>
                                 {tag}
                               </span>
                             ))}
@@ -617,7 +630,13 @@ export default function Fornecedores() {
                         )}
                       </td>
                       <td>{s.country ?? '—'}</td>
-                              <td>
+                      <td
+                        className={
+                          coversAllIncoterms(s.acceptedIncoterms)
+                            ? 'fornecedores-incoterms fornecedores-incoterms--todos'
+                            : 'fornecedores-incoterms'
+                        }
+                      >
                                 {coversAllIncoterms(s.acceptedIncoterms)
                                   ? 'Todos'
                                   : s.acceptedIncoterms.length > 0
@@ -626,14 +645,14 @@ export default function Fornecedores() {
                               </td>
                               <td>
                                 {s.reviewStats && s.reviewStats.count > 0 && s.reviewStats.avgRating !== null ? (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span className="fornecedores-avaliacao">
                                     <StarRating value={s.reviewStats.avgRating} readOnly showValue />
-                                    <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                            <span className="fornecedores-avaliacao__n">
                                       ({s.reviewStats.count})
                                     </span>
                                   </span>
                                 ) : (
-                                  <span style={{ color: 'var(--ink-soft)' }}>—</span>
+                          <span className="fornecedores-sem-dado">—</span>
                                 )}
                               </td>
                               <td
@@ -644,7 +663,7 @@ export default function Fornecedores() {
                               </td>
                               <td className="col-status">
                                 <span
-                                  className={`badge ${
+                          className={`badge badge--dot ${
                                     s.status === 'active'
                                       ? ''
                                       : s.status === 'blocked'
@@ -683,22 +702,25 @@ export default function Fornecedores() {
                               </td>
                             </tr>
                             {isExpanded && (
-                              <tr key={`${s.id}-contacts`}>
-                                <td colSpan={8} style={{ background: 'var(--surface-alt)', padding: 12 }}>
-                                  <div className="page-header" style={{ marginBottom: 8 }}>
-                                    <h3 style={{ margin: 0 }}>Contatos</h3>
+                      <tr key={`${s.id}-contacts`} className="fornecedores-linha-detalhe">
+                        <td colSpan={8} className="fornecedores-expandida">
+                          <div className="fornecedores-expandida__grade">
+                            <section className="fornecedores-secao">
+                              <div className="fornecedores-secao__cabecalho">
+                                <h3>Contatos</h3>
                                     <button
                                       type="button"
                                       className="ghost-button"
                                       onClick={() => openNewContact(s.id)}
                                     >
-                                      + Adicionar contato
+                                  <Icon name="plus" size={14} strokeWidth={2.2} />
+                                  Adicionar contato
                                     </button>
                                   </div>
                                   {contactsQuery.isLoading && contactsQuery.data === undefined ? (
-                                    <p>Carregando contatos…</p>
+                                <p className="fornecedores-secao__vazio">Carregando contatos…</p>
                                   ) : supplierContacts.length === 0 ? (
-                                    <p style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
+                                <p className="fornecedores-secao__vazio">
                                       Nenhum contato cadastrado. Adicione ao menos um para poder
                                       enviar cotacoes para este fornecedor.
                                     </p>
@@ -712,14 +734,11 @@ export default function Fornecedores() {
                                             disabled
                                             aria-label="Contato principal"
                                           />
-                                          <div>
+                                      <div className="contact-row__info">
                                             <div className="contact-row__name">
                                               {c.name}
                                               {c.isPrimary && (
-                                                <span
-                                                  className="badge"
-                                                  style={{ marginLeft: 8, fontSize: 10 }}
-                                                >
+                                            <span className="badge badge--success contact-row__principal">
                                                   Principal
                                                 </span>
                                               )}
@@ -730,7 +749,7 @@ export default function Fornecedores() {
                                               {c.position ? ` · ${c.position}` : ''}
                                             </div>
                                           </div>
-                                          <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+                                      <span className="contact-row__data">
                                             {new Date(c.updatedAt).toLocaleDateString('pt-BR')}
                                           </span>
                                           <div className="contact-row__actions">
@@ -761,7 +780,9 @@ export default function Fornecedores() {
                                       ))}
                                     </div>
                                   )}
+                            </section>
                                   <SupplierDocumentsSection supplierId={s.id} supplierName={s.name} />
+                          </div>
                                 </td>
                               </tr>
                             )}
@@ -782,11 +803,12 @@ export default function Fornecedores() {
         {/* Guard: o corpo faz deref de expandedSupplierId; sem isso renderizaria
             "Fornecedor #null" com o modal fechado. */}
         {isContactModalOpen && (
-          <form onSubmit={handleContactSubmit}>
-            <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
+          <form className="fornecedor-form" onSubmit={handleContactSubmit}>
+            <p className="fornecedor-form__fornecedor">
               Fornecedor: <strong>{contactSupplierName}</strong>
             </p>
 
+            <div className="fornecedor-campo">
             <label className="field-label" htmlFor="contactName">Nome *</label>
             <input
               id="contactName"
@@ -795,8 +817,10 @@ export default function Fornecedores() {
               onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
               required
             />
+            </div>
 
-            <label className="field-label" htmlFor="contactEmail" style={{ marginTop: 12 }}>
+            <div className="fornecedor-campo">
+              <label className="field-label" htmlFor="contactEmail">
               E-mail *
             </label>
             <input
@@ -807,9 +831,10 @@ export default function Fornecedores() {
               onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
               required
             />
+            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-              <div>
+            <div className="fornecedor-form__duplo">
+              <div className="fornecedor-campo">
                 <label className="field-label" htmlFor="contactPhone">Telefone</label>
                 <input
                   id="contactPhone"
@@ -818,7 +843,7 @@ export default function Fornecedores() {
                   onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
                 />
               </div>
-              <div>
+              <div className="fornecedor-campo">
                 <label className="field-label" htmlFor="contactPosition">Cargo</label>
                 <input
                   id="contactPosition"
@@ -829,7 +854,7 @@ export default function Fornecedores() {
               </div>
             </div>
 
-            <label className="checkbox-field" style={{ marginTop: 12 }}>
+            <label className="checkbox-field">
               <input
                 type="checkbox"
                 checked={contactForm.isPrimary}
@@ -839,7 +864,10 @@ export default function Fornecedores() {
             </label>
 
             {contactError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>
+              <p
+                role="alert"
+                className="fornecedor-form__erro"
+              >
                 {contactError}
               </p>
             )}
@@ -865,7 +893,8 @@ export default function Fornecedores() {
         onClose={closeForm}
         title={editing ? 'Editar fornecedor' : 'Novo fornecedor'}
       >
-        <form onSubmit={handleSubmit}>
+        <form className="fornecedor-form" onSubmit={handleSubmit}>
+            <div className="fornecedor-campo">
             <label className="field-label" htmlFor="name">Nome *</label>
             <input
               id="name"
@@ -874,14 +903,14 @@ export default function Fornecedores() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
-
-            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              <p className="fornecedor-dica">
               Cadastre os contatos do fornecedor logo abaixo — cada contato possui seu próprio
               e-mail, que sera usado para o envio das cotacoes.
             </p>
+            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-              <div>
+            <div className="fornecedor-form__duplo">
+              <div className="fornecedor-campo">
                 <label className="field-label" htmlFor="website">Website</label>
                 <input
                   id="website"
@@ -890,7 +919,7 @@ export default function Fornecedores() {
                   onChange={(e) => setForm({ ...form, website: e.target.value })}
                 />
               </div>
-              <div>
+              <div className="fornecedor-campo">
                 <label className="field-label" htmlFor="country">País</label>
                 <input
                   id="country"
@@ -901,7 +930,9 @@ export default function Fornecedores() {
               </div>
             </div>
 
-            <label className="field-label" htmlFor="status" style={{ marginTop: 12 }}>Status</label>
+            <div className="fornecedor-form__duplo">
+              <div className="fornecedor-campo">
+                <label className="field-label" htmlFor="status">Status</label>
             <select
               id="status"
               className="select"
@@ -914,13 +945,14 @@ export default function Fornecedores() {
               <option value="inactive">Inativo</option>
               <option value="blocked">Bloqueado</option>
             </select>
-
-            <label className="field-label" htmlFor="paymentTermsDays" style={{ marginTop: 12 }}>
+              </div>
+              <div className="fornecedor-campo">
+                <label className="field-label" htmlFor="paymentTermsDays">
               Prazo de pagamento (dias)
             </label>
             <input
               id="paymentTermsDays"
-              className="input"
+                  className="input fornecedor-form__numero"
               type="number"
               min={0}
               max={365}
@@ -932,14 +964,17 @@ export default function Fornecedores() {
                 })
               }
             />
-            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                <p className="fornecedor-dica">
               Pré-preenchido no portal do fornecedor ao enviar a cotação.
             </p>
+              </div>
+            </div>
 
-            <label className="field-label" style={{ marginTop: 12 }}>
+            <div className="fornecedor-campo fornecedor-grupo">
+              <span className="fornecedor-grupo__titulo">
               Incoterms aceitos
-            </label>
-            <div className="chip-row">
+              </span>
+              <div className="fornecedor-chips fornecedor-chips--mono">
               {INCOTERMS.map((term) => {
                 const active = form.acceptedIncoterms.includes(term);
                 return (
@@ -947,24 +982,28 @@ export default function Fornecedores() {
                     key={term}
                     type="button"
                     className={`chip${active ? ' chip--active' : ''}`}
+                      aria-pressed={active}
                     onClick={() => toggleIncoterm(term)}
                   >
+                      {active && <Icon name="check" size={12} strokeWidth={2.6} />}
                     {term}
                   </button>
                 );
               })}
             </div>
-            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              <p className="fornecedor-dica">
               Nenhum selecionado = todos os Incoterms.
             </p>
+            </div>
 
-            <label className="field-label" style={{ marginTop: 12 }}>
+            <div className="fornecedor-campo fornecedor-grupo fornecedor-grupo--familias">
+              <span className="fornecedor-grupo__titulo">
               Famílias que este fornecedor cota
-            </label>
-            <p className="muted" style={{ fontSize: 12, marginTop: 4, marginBottom: 6 }}>
+              </span>
+              <p className="fornecedor-dica">
               Usado para pré-selecionar os fornecedores certos ao enviar uma cotação.
             </p>
-            <div className="chip-row">
+              <div className="fornecedor-chips">
               {familyOptions.map((family) => {
                 const active = form.familyIds.includes(family.id);
                 return (
@@ -972,36 +1011,41 @@ export default function Fornecedores() {
                     key={family.id}
                     type="button"
                     className={`chip${active ? ' chip--active' : ''}`}
+                      aria-pressed={active}
                     onClick={() => toggleFamily(family.id)}
                   >
+                      {active && <Icon name="check" size={12} strokeWidth={2.6} />}
                     {family.name}
                   </button>
                 );
               })}
               {familyOptions.length === 0 && (
-                <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                  <span className="fornecedor-dica">
                   Nenhuma família cadastrada.
                 </span>
               )}
             </div>
+            </div>
 
-            <label className="field-label" htmlFor="tagInput" style={{ marginTop: 12 }}>
+            <div className="fornecedor-campo">
+              <label className="field-label" htmlFor="tagInput">
               Etiquetas
             </label>
-            <div className="chip-row" style={{ marginBottom: 6 }}>
+              <div className="fornecedor-chips">
               {form.tags.map((tag) => (
                 <button
                   key={tag}
                   type="button"
-                  className="chip chip--active"
+                    className="chip chip--active fornecedor-etiqueta"
                   onClick={() => removeTag(tag)}
                   title="Remover etiqueta"
                 >
-                  {tag} ✕
+                    {tag}
+                    <Icon name="x" size={14} strokeWidth={2.2} />
                 </button>
               ))}
               {form.tags.length === 0 && (
-                <span style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Nenhuma etiqueta.</span>
+                  <span className="fornecedor-dica">Nenhuma etiqueta.</span>
               )}
             </div>
             <input
@@ -1025,8 +1069,10 @@ export default function Fornecedores() {
                 }
               }}
             />
+            </div>
 
-            <label className="field-label" htmlFor="notes" style={{ marginTop: 12 }}>Observações</label>
+            <div className="fornecedor-campo">
+              <label className="field-label" htmlFor="notes">Observações</label>
             <textarea
               id="notes"
               className="textarea"
@@ -1034,9 +1080,13 @@ export default function Fornecedores() {
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
+            </div>
 
             {formError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>
+              <p
+                role="alert"
+                className="fornecedor-form__erro"
+              >
                 {formError}
               </p>
             )}

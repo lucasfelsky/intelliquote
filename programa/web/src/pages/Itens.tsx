@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { messageOf } from '@/services/quoteResponses';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { Pagination } from '@/components/Pagination';
 
@@ -316,19 +317,21 @@ export default function Itens() {
             interno; o nome de mercado é o que o fornecedor vê no portal.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div className="page-header__actions">
           <button type="button" className="ghost-button" onClick={openImportModal}>
+            <Icon name="upload" size={16} strokeWidth={1.9} />
             Importar
           </button>
           <button type="button" className="primary-button" onClick={openCreate}>
-            + Novo item
+            <Icon name="plus" size={16} strokeWidth={2.2} />
+            Novo item
           </button>
         </div>
       </header>
 
       <section className="itens-filters" aria-label="Filtros do catálogo">
         <div className="itens-filters__search">
-          <span className="itens-filters__search-icon" aria-hidden="true">🔎</span>
+          <Icon name="search" size={16} strokeWidth={1.9} />
           <input
             type="search"
             placeholder="Buscar por nome comercial, de mercado, NCM ou código DBCorp"
@@ -351,24 +354,29 @@ export default function Itens() {
       </section>
 
       {feedback && (
-        <div className={`alert alert--${feedback.kind}`} role="status">
+        <div
+          role="status"
+          className={`itens-page__alerta alert--${feedback.kind}`}
+        >
+          <Icon name={feedback.kind === 'success' ? 'check' : 'alert-triangle'} size={18} strokeWidth={feedback.kind === 'success' ? 2 : 1.9} />
           {feedback.message}
         </div>
       )}
 
       <div className="itens-page__split">
-        <section className="card" aria-label="Lista de itens do catálogo">
-          <header className="page-header" style={{ marginBottom: 12 }}>
-            <div>
+        <section className="card itens-page__catalogo" aria-label="Lista de itens do catálogo">
+          <div className="itens-page__catalogo-cabecalho">
               <h2>Catálogo</h2>
-              <p className="muted">Clique em um cartão para editar.</p>
+            <p>Clique em um cartão para editar.</p>
             </div>
-          </header>
 
           {itemsQuery.isLoading ? (
-            <div className="itens-empty">Carregando…</div>
+            <div className="itens-empty" role="status">
+              <span className="btn-spinner" aria-hidden="true" />
+              Carregando…
+            </div>
           ) : itemsQuery.isError ? (
-            <div className="itens-empty" style={{ color: 'var(--danger)' }}>{messageOf(itemsQuery.error)}</div>
+            <div role="alert" className="itens-empty itens-empty--erro">{messageOf(itemsQuery.error)}</div>
           ) : items.length === 0 ? (
             <div className="itens-empty">
               <strong>Nenhum item encontrado</strong>
@@ -384,31 +392,32 @@ export default function Itens() {
                 <button
                   type="button"
                   key={item.id}
-                  className={`itens-card${item.isActive ? '' : ' itens-card--inactive'}`}
+                  className={`itens-card${item.isActive ? '' : ' itens-card--inactive'}${editing?.id === item.id ? ' itens-card--editando' : ''}`}
                   onClick={() => openEdit(item)}
                   aria-label={`Editar item ${item.commercialName}`}
                 >
                   <div className="itens-card__head">
-                    <div>
+                    <div className="itens-card__titulos">
                       <div className="itens-card__name">{item.commercialName}</div>
                       <div className="itens-card__market">{item.marketName}</div>
                     </div>
                     <div className="itens-card__badges">
                       <span
-                        className={`itens-card__badge ${
-                          item.isActive ? 'itens-card__badge--active' : 'itens-card__badge--inactive'
-                        }`}
+                        className={`badge itens-card__badge${item.isActive ? '' : ' badge--muted'}`}
                       >
                         {item.isActive ? 'Ativo' : 'Inativo'}
                       </span>
                       {item.family && (
-                        <span className="itens-card__badge" style={{ backgroundColor: 'var(--tone-neutral-bg)', color: 'var(--tone-neutral-fg)' }}>
+                        <span className="badge badge--muted itens-card__badge">
                           {item.family.name}
                         </span>
                       )}
                     </div>
                   </div>
 
+                  {item.notes && <div className="itens-card__notes">{item.notes}</div>}
+
+                  <div className="itens-card__rodape">
                   <div className="itens-card__meta">
                     {item.ncm && (
                       <span>NCM <strong>{item.ncm}</strong></span>
@@ -418,8 +427,6 @@ export default function Itens() {
                     )}
                     {!item.ncm && !item.dbcorpCode && <span>Sem NCM nem DBCorp</span>}
                   </div>
-
-                  {item.notes && <div className="itens-card__notes">{item.notes}</div>}
 
                   <div className="itens-card__actions">
                     <span
@@ -463,7 +470,7 @@ export default function Itens() {
                       <span
                         role="button"
                         tabIndex={0}
-                        className="itens-card__action"
+                          className="itens-card__action itens-card__action--reativar"
                         onClick={(e) => {
                           e.stopPropagation();
                           void handleReactivate(item);
@@ -479,6 +486,7 @@ export default function Itens() {
                         Reativar
                       </span>
                     )}
+                    </div>
                   </div>
                 </button>
               ))}
@@ -496,16 +504,16 @@ export default function Itens() {
           )}
         </section>
 
-        <section className="card itens-form-card" aria-label="Formulário de item">
-          <h2>
-            {editing ? editing.commercialName : 'Cadastrar item'}
+        <aside className="card itens-form-card" aria-label="Formulário de item">
+          <div className="itens-form__cabecalho">
             <span className="eyebrow">{editing ? 'Editando' : 'Novo'}</span>
-          </h2>
+            <h2>{editing ? editing.commercialName : 'Cadastrar item'}</h2>
           <p className="itens-form__hint">
             Preencha os dados abaixo. O NCM é validado com 8 dígitos e o nome de mercado
             deve ser único.
           </p>
-          <form onSubmit={handleSubmit}>
+          </div>
+          <form className="itens-form" onSubmit={handleSubmit}>
             <label className="field">
               <span>Nome comercial *</span>
               <input
@@ -565,7 +573,7 @@ export default function Itens() {
                 />
               </label>
             </div>
-            <label className="field" style={{ marginTop: 12 }}>
+            <label className="field">
               <span>Observações</span>
               <textarea
                 className="textarea"
@@ -586,28 +594,60 @@ export default function Itens() {
               </button>
             </div>
           </form>
-        </section>
+        </aside>
       </div>
 
       <Modal isOpen={isImportModalOpen} onClose={closeImportModal} title="Importar Itens do Catálogo">
-        <div className="import-modal-content" style={{ minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+        <div className="import-modal-content importacao-itens">
           {importStep === 'upload' && (
-            <div style={{ flex: 1 }}>
-              <p style={{ marginBottom: 16 }}>
-                Selecione uma planilha (xlsx) com as colunas na seguinte ordem:<br/>
-                <strong>1. Nome Comercial, 2. Nome de Mercado, 3. NCM, 4. Código DB, 5. Família, 6. (coluna ignorada — DG agora é informado pelo fornecedor na resposta), 7. Notas</strong>
+            <div className="importacao-passo">
+              <div className="importacao-introducao">
+                <p className="importacao-texto">
+                  Selecione uma planilha (xlsx) com as colunas na seguinte ordem:
               </p>
+                <ol className="importacao-colunas">
+                  <li>Nome Comercial</li>
+                  <li>Nome de Mercado</li>
+                  <li>NCM</li>
+                  <li>Código DB</li>
+                  <li>Família</li>
+                  <li>
+                    <span className="importacao-colunas__ignorada">
+                      (coluna ignorada — DG agora é informado pelo fornecedor na resposta)
+                    </span>
+                  </li>
+                  <li>Notas</li>
+                </ol>
+              </div>
+              <label className="importacao-arquivo importacao-arquivo--itens">
               <input
                 type="file"
                 accept=".xlsx"
                 ref={fileInputRef}
                 onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                className="file-input"
+                  className="importacao-arquivo__input"
               />
-              {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
-              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+                <span className="importacao-arquivo__icone">
+                  <Icon name="file-text" size={20} strokeWidth={1.9} />
+                </span>
+                <span className="importacao-arquivo__botao">Escolher arquivo</span>
+                <span className="importacao-arquivo__nome importacao-mono">
+                  {importFile ? importFile.name : 'Nenhum arquivo escolhido'}
+                </span>
+              </label>
+              {importError && (
+                <div
+                  role="alert"
+                  className="importacao-alerta alert--error"
+                >
+                  <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                  <div className="importacao-alerta__corpo">{importError}</div>
+                </div>
+              )}
+              <div className="modal-actions">
                 <button type="button" className="ghost-button" onClick={closeImportModal} disabled={previewImport.isPending}>Cancelar</button>
                 <button type="button" className="primary-button" onClick={handlePreviewImport} disabled={!importFile || previewImport.isPending}>
+                  <Icon name="upload" size={16} strokeWidth={1.9} />
                   {previewImport.isPending ? 'Processando...' : 'Carregar e Validar'}
                 </button>
               </div>
@@ -615,36 +655,56 @@ export default function Itens() {
           )}
 
           {importStep === 'preview' && importPreview && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <p style={{ marginBottom: 16 }}>
-                Encontramos <strong>{importPreview.validLines.length}</strong> itens válidos e <strong>{importPreview.errorLines.length}</strong> linhas com erro.
+            <div className="importacao-passo">
+              <p className="importacao-resumo">
+                Encontramos <strong className="importacao-resumo__ok">{importPreview.validLines.length}</strong> itens válidos e <strong className="importacao-resumo__erro">{importPreview.errorLines.length}</strong> linhas com erro.
               </p>
               
               {importPreview.errorLines.length > 0 && (
-                <div className="alert alert--error" style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto' }}>
-                  <strong style={{ display: 'block', marginBottom: 8 }}>Linhas com erro (serão ignoradas):</strong>
-                  <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                <div
+                  role="alert"
+                  className="importacao-alerta alert--error"
+                >
+                  <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                  <div className="importacao-alerta__corpo">
+                    <strong className="importacao-alerta__titulo">Linhas com erro (serão ignoradas):</strong>
+                    <ul className="importacao-alerta__lista">
                     {importPreview.errorLines.map((e, idx) => (
-                      <li key={idx}>Linha {e.row}: {e.reason}</li>
+                        <li key={idx}>Linha <span className="importacao-mono">{e.row}</span>: {e.reason}</li>
                     ))}
                   </ul>
+                  </div>
                 </div>
               )}
 
               {(importPreview.warnings?.length ?? 0) > 0 && (
-                <div className="alert" role="status" style={{ marginBottom: 16 }}>
-                  <strong style={{ display: 'block', marginBottom: 8 }}>Avisos:</strong>
-                  <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                <div
+                  role="status"
+                  className="importacao-alerta alert--warning"
+                >
+                  <Icon name="info" size={18} strokeWidth={1.9} />
+                  <div className="importacao-alerta__corpo">
+                    <strong className="importacao-alerta__titulo">Avisos:</strong>
+                    <ul className="importacao-alerta__lista">
                     {importPreview.warnings?.map((w, idx) => (
                       <li key={idx}>{w}</li>
                     ))}
                   </ul>
                 </div>
+                </div>
               )}
 
-              {importError && <div className="alert alert--error" style={{ marginBottom: 16 }}>{importError}</div>}
+              {importError && (
+                <div
+                  role="alert"
+                  className="importacao-alerta alert--error"
+                >
+                  <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                  <div className="importacao-alerta__corpo">{importError}</div>
+                </div>
+              )}
 
-              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+              <div className="modal-actions">
                 <button type="button" className="ghost-button" onClick={() => setImportStep('upload')} disabled={confirmImport.isPending}>Voltar</button>
                 <button type="button" className="primary-button" onClick={handleConfirmImport} disabled={importPreview.validLines.length === 0 || confirmImport.isPending}>
                   {confirmImport.isPending ? 'Importando...' : 'Confirmar Importação'}
@@ -654,23 +714,35 @@ export default function Itens() {
           )}
 
           {importStep === 'result' && importResult && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div className="alert alert--success" style={{ marginBottom: 16 }}>
-                <strong>{importResult.successLines.length}</strong> itens importados com sucesso!
+            <div className="importacao-passo">
+              <div
+                role="status"
+                className="importacao-alerta importacao-alerta--centro alert--success"
+              >
+                <Icon name="check" size={18} strokeWidth={2} />
+                <span>
+                  <strong className="importacao-mono">{importResult.successLines.length}</strong> itens importados com sucesso!
+                </span>
               </div>
 
               {importResult.errorLines.length > 0 && (
-                <div className="alert alert--error" style={{ marginBottom: 16, maxHeight: 150, overflowY: 'auto' }}>
-                  <strong style={{ display: 'block', marginBottom: 8 }}>Erros ao salvar no banco:</strong>
-                  <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                <div
+                  role="alert"
+                  className="importacao-alerta alert--error"
+                >
+                  <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                  <div className="importacao-alerta__corpo">
+                    <strong className="importacao-alerta__titulo">Erros ao salvar no banco:</strong>
+                    <ul className="importacao-alerta__lista">
                     {importResult.errorLines.map((e, idx) => (
-                      <li key={idx}>Linha {e.row}: {e.reason}</li>
+                        <li key={idx}>Linha <span className="importacao-mono">{e.row}</span>: {e.reason}</li>
                     ))}
                   </ul>
                 </div>
+                </div>
               )}
 
-              <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+              <div className="modal-actions">
                 <button type="button" className="primary-button" onClick={closeImportModal}>Concluir</button>
               </div>
             </div>

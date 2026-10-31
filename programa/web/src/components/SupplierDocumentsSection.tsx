@@ -2,6 +2,7 @@ import { CSSProperties, FormEvent, ReactNode, useEffect, useRef, useState } from
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { useConfirm } from '@/components/useConfirm';
 import {
@@ -326,7 +327,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
 
   function renderActions(doc: SupplierDocument): ReactNode {
     return (
-      <div className="row-actions">
+      <div className="row-actions documentos-acoes">
         <button
           type="button"
           className="ghost-button"
@@ -370,54 +371,54 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
   // inteira sticky, com a largura visivel do ancestral rolavel.
   const rootStyle: CSSProperties = isNarrow
     ? {
-        marginTop: 16,
         position: 'sticky',
         left: narrowBox?.left ?? 0,
         width: narrowBox ? narrowBox.width : '100%',
         boxSizing: 'border-box',
       }
-    : { marginTop: 16, width: 0, minWidth: '100%' };
+    : { width: 0, minWidth: '100%' };
 
   return (
-    <div ref={rootRef} style={rootStyle}>
-      <div className="page-header" style={{ marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Documentos</h3>
+    <div ref={rootRef} style={rootStyle} className="documentos-secao">
+      <div className="page-header documentos-cabecalho">
+        <h3>Documentos</h3>
         {canManage && (
           <button type="button" className="ghost-button" onClick={openNew}>
+            <Icon name="file-plus" size={14} strokeWidth={2} />
             Novo documento
           </button>
         )}
       </div>
 
       {actionError && (
-        <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+        <p role="alert" className="text-sm documentos-erro">
           {actionError}
         </p>
       )}
 
-      {documents.isLoading && <p className="text-sm">Carregando documentos…</p>}
+      {documents.isLoading && <p className="text-sm documentos-estado">Carregando documentos…</p>}
 
       {documents.isError && (
-        <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+        <p role="alert" className="text-sm documentos-erro">
           Não foi possível carregar os documentos: {messageOf(documents.error)}
         </p>
       )}
 
       {!documents.isLoading && !documents.isError && rows.length === 0 && (
-        <p style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Nenhum documento cadastrado.</p>
+        <p className="documentos-vazio">Nenhum documento cadastrado.</p>
       )}
 
       {rows.length > 0 && !isNarrow && (
-        <div className="table-wrapper">
+        <div className="table-wrapper documentos-tabela">
           <table className="table table--dense" style={{ tableLayout: 'fixed', width: '100%' }}>
             <thead>
               <tr>
-                <th style={{ width: '24%' }}>Documento</th>
+                <th style={{ width: '23%' }}>Documento</th>
                 <th style={{ width: '11%' }}>Vencimento</th>
                 <th style={{ width: '15%' }}>Situação</th>
-                <th style={{ width: '13%' }}>Observação</th>
-                <th style={{ width: '13%' }}>Arquivo</th>
-                <th style={{ width: '24%' }}>
+                <th style={{ width: '14%' }}>Observação</th>
+                <th style={{ width: '14%' }}>Arquivo</th>
+                <th style={{ width: '23%' }}>
                   <span className="sr-only">Ações</span>
                 </th>
               </tr>
@@ -427,20 +428,20 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
                 const status = statusLabel(doc);
                 return (
                   <tr key={doc.id}>
-                    <td style={{ overflowWrap: 'anywhere' }}>
+                    <td className="documentos-nome">
                       <strong>{doc.name}</strong>
                     </td>
-                    <td className="cell-nowrap">{formatDateKeyBR(doc.expiresOn)}</td>
+                    <td className="cell-nowrap documentos-vencimento">{formatDateKeyBR(doc.expiresOn)}</td>
                     <td>
-                      <span className={status.badgeClass}>{status.text}</span>
+                      <span className={`${status.badgeClass} documentos-situacao`}>{status.text}</span>
                     </td>
-                    <td className="cell-truncate" title={doc.notes ?? undefined}>
+                    <td className="cell-truncate documentos-observacao" title={doc.notes ?? undefined}>
                       {doc.notes ?? '—'}
                     </td>
-                    <td className="cell-truncate" title={doc.fileName}>
-                      {doc.fileName} · {formatFileSize(doc.fileSize)}
+                    <td className="cell-truncate documentos-arquivo-celula" title={doc.fileName}>
+                      {doc.fileName} · <span className="documentos-tamanho">{formatFileSize(doc.fileSize)}</span>
                     </td>
-                    <td>{renderActions(doc)}</td>
+                    <td className="documentos-acoes-celula">{renderActions(doc)}</td>
                   </tr>
                 );
               })}
@@ -450,45 +451,31 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
       )}
 
       {rows.length > 0 && isNarrow && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="documentos-cartoes">
           {rows.map((doc) => {
             const status = statusLabel(doc);
             return (
               <article
                 key={doc.id}
                 aria-label={doc.name}
-                style={{
-                  border: '1px solid var(--border, #dde3ea)',
-                  borderRadius: 8,
-                  padding: 12,
-                  background: 'var(--surface, #fff)',
-                  minWidth: 0,
-                }}
+                className="documentos-cartao"
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    gap: 8,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <strong style={{ overflowWrap: 'anywhere' }}>{doc.name}</strong>
-                  <span className={status.badgeClass}>{status.text}</span>
+                <div className="documentos-cartao__topo">
+                  <strong className="documentos-cartao__nome">{doc.name}</strong>
+                  <span className={`${status.badgeClass} documentos-situacao`}>{status.text}</span>
                 </div>
-                <div className="text-sm" style={{ marginTop: 6 }}>
+                <div className="text-sm documentos-cartao__vencimento">
                   Vencimento: {formatDateKeyBR(doc.expiresOn)}
                 </div>
                 {doc.notes && (
-                  <div className="text-sm" style={{ color: 'var(--ink-soft)', overflowWrap: 'anywhere' }}>
+                  <div className="text-sm documentos-cartao__texto">
                     {doc.notes}
                   </div>
                 )}
-                <div className="text-sm" style={{ color: 'var(--ink-soft)', overflowWrap: 'anywhere' }}>
+                <div className="text-sm documentos-cartao__texto">
                   {doc.fileName} · {formatFileSize(doc.fileSize)}
                 </div>
-                <div style={{ marginTop: 8 }}>{renderActions(doc)}</div>
+                <div className="documentos-cartao__acoes">{renderActions(doc)}</div>
               </article>
             );
           })}
@@ -499,23 +486,28 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
           Fornecedores.test.tsx localiza os dialogs da página por índice. */}
       {mode && (
         <Modal isOpen onClose={closeForm} title={modalTitle}>
-          <form onSubmit={handleSubmit}>
-            <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 0 }}>
+          <form className="documentos-form" onSubmit={handleSubmit}>
+            <p className="text-sm documentos-form__fornecedor">
               Fornecedor: {supplierName}
             </p>
             {mode.kind === 'replace' && (
-              <div className="text-sm" style={{ marginBottom: 12 }}>
+              <div className="text-sm documentos-atual">
+                <span className="documentos-atual__icone">
+                  <Icon name="file-text" size={18} strokeWidth={1.9} />
+                </span>
+                <div className="documentos-atual__texto">
                 <div>
                   Documento: <strong>{mode.doc.name}</strong>
                 </div>
-                <div style={{ color: 'var(--ink-soft)', overflowWrap: 'anywhere' }}>
+                  <div className="documentos-atual__arquivo">
                   Arquivo atual: {mode.doc.fileName} · {formatFileSize(mode.doc.fileSize)}
                 </div>
               </div>
+              </div>
             )}
-            <div className="form-grid">
+            <div className="documentos-form__grade">
               {mode.kind !== 'replace' && (
-                <div className="form-grid__full">
+                <div className="documentos-campo documentos-campo--cheio">
                   <label className="field-label" htmlFor="sd-name">Nome do documento *</label>
                   <input
                     id="sd-name"
@@ -526,36 +518,45 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
                   />
                 </div>
               )}
-              <div>
+              <div className="documentos-campo">
                 <label className="field-label" htmlFor="sd-expires">Vencimento *</label>
                 <input
                   id="sd-expires"
-                  className="input"
+                  className="input documentos-form__data"
                   type="date"
                   value={expiresOn}
                   onChange={(e) => setExpiresOn(e.target.value)}
                 />
-                <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                <p className="text-sm documentos-dica">
                   Último dia de validade.
                 </p>
               </div>
               {mode.kind !== 'edit' && (
-                <div>
+                <div className="documentos-campo">
                   <label className="field-label" htmlFor="sd-file">Arquivo *</label>
+                  <div className="documentos-arquivo">
                   <input
                     id="sd-file"
-                    className="input"
+                      className="documentos-arquivo__input"
                     type="file"
                     accept="application/pdf,image/png,image/jpeg,.pdf,.png,.jpg,.jpeg"
                     onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
                   />
-                  <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
+                    <label className="documentos-arquivo__botao" htmlFor="sd-file">
+                      <Icon name="upload" size={14} strokeWidth={2} />
+                      {mode.kind === 'replace' ? 'Escolher' : 'Escolher arquivo'}
+                    </label>
+                    <span className={file ? 'documentos-arquivo__nome' : 'documentos-arquivo__nome documentos-arquivo__nome--vazio'}>
+                      {file ? file.name : mode.kind === 'replace' ? 'Nenhum arquivo' : 'Nenhum arquivo escolhido'}
+                    </span>
+                  </div>
+                  <p className="text-sm documentos-dica">
                     PDF, PNG ou JPEG, até 10 MB.
                   </p>
                 </div>
               )}
               {mode.kind !== 'replace' && (
-                <div className="form-grid__full">
+                <div className="documentos-campo documentos-campo--cheio">
                   <label className="field-label" htmlFor="sd-notes">Observação</label>
                   <textarea
                     id="sd-notes"
@@ -570,7 +571,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
             </div>
 
             {formError && (
-              <p role="alert" style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
+              <p role="alert" className="text-sm documentos-erro">
                 {formError}
               </p>
             )}

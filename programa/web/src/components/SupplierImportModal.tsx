@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 
 interface SupplierImportContact {
@@ -165,38 +166,61 @@ export default function SupplierImportModal({ onClose }: SupplierImportModalProp
 
   return (
     <Modal isOpen onClose={handleClose} title="Importar fornecedores" size="wide">
-      <div className="import-modal-content" style={{ minHeight: 300, display: 'flex', flexDirection: 'column' }}>
+      <div className="import-modal-content importacao-fornecedores">
         {step === 'upload' && (
-          <div style={{ flex: 1 }}>
-            <p style={{ marginBottom: 8 }}>
+          <div className="importacao-passo">
+            <p className="importacao-texto">
               Selecione uma planilha (.xlsx) com as colunas, nesta ordem:
             </p>
-            <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--ink-soft)' }}>
-              Nome*, País, Website, Incoterms, Prazo pagamento (dias), Famílias, Tags,
-              Observações, Contato nome, Contato e-mail, Contato telefone, Contato cargo.
-            </p>
+            <ol className="importacao-colunas importacao-colunas--grade">
+              <li>Nome*</li>
+              <li>País</li>
+              <li>Website</li>
+              <li>Incoterms</li>
+              <li>Prazo pagamento (dias)</li>
+              <li>Famílias</li>
+              <li>Tags</li>
+              <li>Observações</li>
+              <li>Contato nome</li>
+              <li>Contato e-mail</li>
+              <li>Contato telefone</li>
+              <li>Contato cargo</li>
+            </ol>
             <button
               type="button"
-              className="ghost-button"
+              className="ghost-button importacao-modelo"
               onClick={() => downloadTemplate.mutate()}
               disabled={downloadTemplate.isPending}
-              style={{ marginBottom: 16 }}
             >
+              <Icon name="download" size={14} strokeWidth={2} />
               {downloadTemplate.isPending ? 'Baixando…' : 'Baixar modelo'}
             </button>
+            <label className="importacao-arquivo">
             <input
               type="file"
               accept=".xlsx"
               ref={fileInputRef}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="file-input"
+                className="importacao-arquivo__input"
             />
+              <span className="importacao-arquivo__icone">
+                <Icon name="file-text" size={18} strokeWidth={1.9} />
+              </span>
+              <span className="importacao-arquivo__texto">
+                <span className="importacao-arquivo__nome">{file ? file.name : 'Nenhum arquivo escolhido'}</span>
+                <span className="importacao-arquivo__acao">{file ? 'Escolher outro arquivo' : 'Escolher arquivo'}</span>
+              </span>
+            </label>
             {error && (
-              <div className="alert alert--error" style={{ marginTop: 16, marginBottom: 16 }}>
-                {error}
+              <div
+                role="alert"
+                className="importacao-alerta alert--error"
+              >
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                <div className="importacao-alerta__corpo">{error}</div>
               </div>
             )}
-            <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={handleClose} disabled={previewImport.isPending}>
                 Cancelar
               </button>
@@ -213,30 +237,44 @@ export default function SupplierImportModal({ onClose }: SupplierImportModalProp
         )}
 
         {step === 'preview' && preview && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <p style={{ marginBottom: 16 }}>
-              Encontramos <strong>{preview.validLines.length}</strong> fornecedores válidos e{' '}
-              <strong>{preview.errorLines.length}</strong> linhas com erro.
+          <div className="importacao-passo">
+            <p className="importacao-resumo">
+              Encontramos <strong className="importacao-resumo__ok">{preview.validLines.length}</strong> fornecedores válidos e{' '}
+              <strong className="importacao-resumo__erro">{preview.errorLines.length}</strong> linhas com erro.
             </p>
 
             {preview.errorLines.length > 0 && (
-              <div className="alert alert--error" style={{ marginBottom: 16, maxHeight: 200, overflowY: 'auto' }}>
-                <strong style={{ display: 'block', marginBottom: 8 }}>
+              <div
+                role="alert"
+                className="importacao-alerta alert--error"
+              >
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                <div className="importacao-alerta__corpo">
+                  <strong className="importacao-alerta__titulo">
                   Linhas com erro (serão ignoradas):
                 </strong>
-                <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
+                  <ul className="importacao-alerta__lista">
                   {preview.errorLines.map((e, idx) => (
                     <li key={idx}>
-                      Linha {e.row} ({e.name || '—'}): {e.reason}
+                        Linha <span className="importacao-mono">{e.row}</span> ({e.name || '—'}): {e.reason}
                     </li>
                   ))}
                 </ul>
               </div>
+              </div>
             )}
 
-            {error && <div className="alert alert--error" style={{ marginBottom: 16 }}>{error}</div>}
+            {error && (
+              <div
+                role="alert"
+                className="importacao-alerta alert--error"
+              >
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                <div className="importacao-alerta__corpo">{error}</div>
+              </div>
+            )}
 
-            <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={() => setStep('upload')} disabled={confirmImport.isPending}>
                 Voltar
               </button>
@@ -253,25 +291,37 @@ export default function SupplierImportModal({ onClose }: SupplierImportModalProp
         )}
 
         {step === 'result' && result && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div className="alert alert--success" style={{ marginBottom: 16 }}>
-              <strong>{result.successLines.length}</strong> fornecedores importados com sucesso.
+          <div className="importacao-passo">
+            <div
+              role="status"
+              className="importacao-alerta importacao-alerta--centro alert--success"
+            >
+              <Icon name="check" size={18} strokeWidth={2} />
+              <span>
+                <strong className="importacao-mono">{result.successLines.length}</strong> fornecedores importados com sucesso.
+              </span>
             </div>
 
             {result.errorLines.length > 0 && (
-              <div className="alert alert--error" style={{ marginBottom: 16, maxHeight: 200, overflowY: 'auto' }}>
-                <strong style={{ display: 'block', marginBottom: 8 }}>Erros ao salvar:</strong>
-                <ul style={{ fontSize: 14, paddingLeft: 20, margin: 0 }}>
+              <div
+                role="alert"
+                className="importacao-alerta alert--error"
+              >
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+                <div className="importacao-alerta__corpo">
+                  <strong className="importacao-alerta__titulo">Erros ao salvar:</strong>
+                  <ul className="importacao-alerta__lista">
                   {result.errorLines.map((e, idx) => (
                     <li key={idx}>
-                      Linha {e.row} ({e.name || '—'}): {e.reason}
+                        Linha <span className="importacao-mono">{e.row}</span> ({e.name || '—'}): {e.reason}
                     </li>
                   ))}
                 </ul>
               </div>
+              </div>
             )}
 
-            <div className="modal-actions" style={{ marginTop: 'auto', paddingTop: 16 }}>
+            <div className="modal-actions">
               <button type="button" className="primary-button" onClick={handleClose}>
                 Concluir
               </button>
