@@ -253,16 +253,16 @@ describe('F8: nada dos donos sobrou fora das regioes', () => {
     expect(foraLimpo).not.toContain('.info-popover__list');
   });
 
-  it('a F8 nao apaga regra compartilhada: seguem fora das regioes .preview-frame, .form-grid, .muted, .text-sm, .sol-items-list e .weight-grid', () => {
-    for (const s of ['.preview-frame', '.form-grid', '.muted', '.text-sm', '.sol-items-list', '.weight-grid']) {
+  it('a F8 nao apaga regra compartilhada: seguem fora das regioes .preview-frame, .form-grid, .text-sm e .sol-items-list (.muted e .weight-grid, sem uso, sairam na TROCA-2)', () => {
+    for (const s of ['.preview-frame', '.form-grid', '.text-sm', '.sol-items-list']) {
       expect(foraSeletores, s).toContain(s);
     }
   });
 
-  it('os tokens antigos --winner-* e --cmp-criteria-bg seguem declarados (o themeTokens.test.ts os le; sem uso ate a TROCA-2, D-F8-12)', () => {
+  it('os 7 tokens antigos --winner-* e --cmp-criteria-bg nao existem mais nos 2 blocos (sairam na TROCA-2, D-F8-12)', () => {
     for (const t of ['--winner-bg', '--winner-border', '--winner-track', '--winner-glow', '--winner-glow-soft', '--winner-glow-none', '--cmp-criteria-bg']) {
-      expect(lightTokens[t], t).toBeDefined();
-      expect(darkTokens[t], t).toBeDefined();
+      expect(lightTokens[t], t).toBeUndefined();
+      expect(darkTokens[t], t).toBeUndefined();
     }
     expect(regiao?.limpo).not.toMatch(/--winner-|--cmp-criteria-bg|--scorebar-fill/);
   });

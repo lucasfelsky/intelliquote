@@ -51,7 +51,7 @@ const PERMITIDAS_F3C = new Set([
 ]);
 
 // Classes cujas regras tem de morar so na regiao (seletor fora dela so passa com classe de tela/Forecast). `primary-button` e da F3a;
-// `.toast--success/--danger/--warning` (0 usos no TSX) ficam fora, como estao, e nao entram aqui.
+// `.toast--success/--danger/--warning` (0 usos no TSX) sairam do CSS na TROCA-2 e nao entram aqui.
 const MIGRADAS_F3C = new Set([...PERMITIDAS_F3C].filter((c) => c !== 'primary-button'));
 
 const REDUZIDO = '@media (prefers-reduced-motion: reduce)';
@@ -446,9 +446,9 @@ describe('F3c: aviso de nova versao (toast)', () => {
     });
   });
 
-  it('.toast--success/--danger/--warning (0 usos no TSX) ficam fora da regiao, como estao', () => {
+  it('.toast--success/--danger/--warning (0 usos no TSX) nao existem mais no CSS (sairam na TROCA-2)', () => {
     const fora = foraDasRegioes(css, regs);
-    for (const v of ['success', 'danger', 'warning']) expect(fora).toContain(`.toast--${v} {`);
+    for (const v of ['success', 'danger', 'warning']) expect(fora).not.toContain(`.toast--${v} {`);
     expect(limpo).not.toContain('toast--');
   });
 });

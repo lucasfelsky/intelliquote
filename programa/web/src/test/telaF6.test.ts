@@ -259,7 +259,7 @@ describe('F6: nada dos donos sobrou fora das regioes; o que e compartilhado segu
     expect(foraSeletores.filter((s) => classesDoSeletor(s).some((c) => donosApagados.test(c)))).toEqual([]);
   });
 
-  it('as regras compartilhadas ficam: .dispatcher-* (afirmadas pelo EnvioPastas.test), .dispatch-event*, .dispatch-token, .preview-frame, .item-form__error, .form-grid, .muted, .text-sm, .sol-items-list, .sr-only', () => {
+  it('as regras compartilhadas ficam: .dispatcher-* (afirmadas pelo EnvioPastas.test), .dispatch-event*, .preview-frame, .item-form__error, .form-grid, .text-sm, .sol-items-list, .sr-only', () => {
     for (const s of [
       '.dispatcher-master-detail',
       '.dispatcher-folders',
@@ -269,13 +269,10 @@ describe('F6: nada dos donos sobrou fora das regioes; o que e compartilhado segu
       '.dispatcher-row',
       '.dispatch-event',
       '.dispatch-event__header',
-      '.dispatch-token',
       '.preview-frame',
       '.item-form__error',
       '.form-grid',
-      '.muted',
       '.text-sm',
-      '.text-xs',
       '.sol-items-list',
       '.sr-only',
     ]) {

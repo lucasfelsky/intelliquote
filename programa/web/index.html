@@ -5,8 +5,8 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#00ae91" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0b1518" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#004153" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#061a22" media="(prefers-color-scheme: dark)" />
     <!-- Anti-flash do tema: resolve claro/escuro ANTES do bundle e grava <html data-theme>.
          Mesma logica de resolveTheme em src/theme/theme.ts (chave 'iq-theme'): ao mudar uma, mude a outra. -->
     <script>
@@ -18,7 +18,7 @@
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
         if (pref !== 'auto') {
           var m = document.querySelectorAll('meta[name="theme-color"]');
-          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', dark ? '#0b1518' : '#00ae91');
+          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', dark ? '#061a22' : '#004153');
         }
       })();
     </script>

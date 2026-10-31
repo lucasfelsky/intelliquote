@@ -223,9 +223,9 @@ describe('F10: nada dos donos sobrou fora das regioes', () => {
     expect(foraSeletores.filter((s) => classesDoSeletor(s).some((c) => DONO_ANTIGO.test(c)))).toEqual([]);
   });
 
-  it('a F10 nao apaga regra compartilhada nem de outro dono: .itens-tab* (F6), .text-sm, .text-xs, .sr-only e .form-grid seguem fora das regioes', () => {
+  it('a F10 nao apaga regra compartilhada nem de outro dono: .itens-tab* (F6), .text-sm, .sr-only e .form-grid seguem fora das regioes', () => {
     expect(cssInteiro).toMatch(/\.itens-tab(?![\w-])/);
-    for (const s of ['.text-sm', '.text-xs', '.sr-only', '.form-grid']) expect(foraSeletores, s).toContain(s);
+    for (const s of ['.text-sm', '.sr-only', '.form-grid']) expect(foraSeletores, s).toContain(s);
   });
 });
 

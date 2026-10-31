@@ -202,9 +202,9 @@ describe('F5: nada dos donos sobrou fora das regioes', () => {
     expect(foraSeletores.filter((s) => classesDoSeletor(s).some(ehDono))).toEqual([]);
   });
 
-  it('as regras que ficam fora e sao usadas pelo Detalhe (F6) seguem no lugar: .item-form__scope, __check e __error', () => {
-    expect(foraSeletores).toContain('.item-form__scope');
-    expect(foraSeletores).toContain('.item-form__check');
+  it('as regras que ficam fora e sao usadas pelo Detalhe (F6) seguem no lugar: .item-form__error e .form-grid (.item-form__scope e __check, sem uso, sairam na TROCA-2)', () => {
+    expect(foraSeletores).not.toContain('.item-form__scope');
+    expect(foraSeletores).not.toContain('.item-form__check');
     expect(foraSeletores).toContain('.item-form__error');
     expect(foraSeletores).toContain('.form-grid');
   });

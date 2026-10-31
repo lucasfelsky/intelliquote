@@ -204,15 +204,15 @@ describe('TROCA-1: fundo da pagina', () => {
     for (const r of regs) expect(r.limpo, r.nome).not.toContain('var(--bg)');
   });
 
-  it('os valores dos tokens usados pelos boards v68 ficam como estao (a TROCA-2 e que troca os antigos)', () => {
+  it('depois da TROCA-2 os tokens usados pelos boards v68 e o --bg legado tem o mesmo valor do --rf-bg nos 2 temas', () => {
     expect(lightTokens['--rf-bg']).toBe('#eef2f1');
     expect(darkTokens['--rf-bg']).toBe('#061a22');
     expect(lightTokens['--rf-ink']).toBe('#0b2430');
     expect(darkTokens['--rf-ink']).toBe('#e8f4f6');
     expect(lightTokens['--rf-primary-700']).toBe('#007864');
     expect(darkTokens['--rf-primary-700']).toBe('#14dda7');
-    expect(lightTokens['--bg']).toBe('#f5f8f7');
-    expect(darkTokens['--bg']).toBe('#0b1518');
+    expect(lightTokens['--bg']).toBe('#eef2f1');
+    expect(darkTokens['--bg']).toBe('#061a22');
   });
 });
 
