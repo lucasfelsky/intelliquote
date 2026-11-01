@@ -133,9 +133,10 @@ describe('F9: regiao `tela F9`', () => {
     expect(usados.filter((t) => !t.startsWith('--rf-'))).toEqual([]);
   });
 
-  it('at-rules permitidas: 1199, 720, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
+  it('at-rules permitidas: 1439, 1199, 720, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
     const atRules = topo.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     const permitidas = [
+      '@media (max-width: 1439px)',
       '@media (max-width: 1199px)',
       '@media (max-width: 720px)',
       '@media (max-width: 640px)',
@@ -145,7 +146,7 @@ describe('F9: regiao `tela F9`', () => {
     ];
     expect(atRules.filter((a) => !permitidas.includes(a))).toEqual([]);
     expect(new Set(atRules).size).toBe(atRules.length);
-    for (const a of ['@media (max-width: 720px)', '@media (max-width: 540px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)']) {
+    for (const a of ['@media (max-width: 1439px)', '@media (max-width: 720px)', '@media (max-width: 540px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)']) {
       expect(atRules, a).toContain(a);
     }
     expect(regiao?.limpo).not.toContain('@keyframes');
@@ -280,6 +281,23 @@ describe('F9: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.solicitacoes-page .solicitacoes-itens td.solicitacoes-valor')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'text-align': 'right', 'white-space': 'nowrap' });
     expect(naRegiao('.solicitacoes-page .solicitacoes-itens td.solicitacoes-na-cotacao--sim')).toEqual({ color: 'var(--rf-tone-success-fg)' });
     expect(naRegiao('.solicitacoes-page .solicitacoes-vincular')).toMatchObject({ padding: '0 16px', border: '1.5px solid var(--rf-ghost-escuro-borda)', 'border-radius': 'var(--rf-radius-button)' });
+    // F12-B (B5): o botao de vincular centraliza o texto e pode quebrar (N-I89-01) so ate 1439; a 1440 segue em 1 linha (36 px, como o board); o cabecalho da tabela de itens quebra
+    expect(naRegiao('.solicitacoes-page .solicitacoes-vincular')).toMatchObject({ 'white-space': 'nowrap', 'text-align': 'center' });
+    expect(declaracoes(mediaDe('@media (max-width: 1439px)'), '.solicitacoes-page .solicitacoes-vincular')).toEqual({ 'white-space': 'normal' });
+    expect(naRegiao('.solicitacoes-page .solicitacoes-itens > thead > tr > th')).toEqual({ 'white-space': 'normal' });
+  });
+
+  it('P-ACOES (F12-B, B7): ate 1439 as colunas Acoes e Ver itens ficam fixas a direita; o painel aberto tem a largura visivel; a coluna do catalogo fica fixa', () => {
+    const m = mediaDe('@media (max-width: 1439px)');
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-sizing': 'border-box', width: '164px', 'min-width': '164px', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver')).toMatchObject(fixa);
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)')).toMatchObject({ position: 'sticky', right: '164px', 'z-index': '1' });
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper')).toEqual({ 'container-type': 'inline-size' });
+    expect(
+      declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr.solicitacoes-linha-detalhe > td.sol-cell-detail > .solicitacoes-detalhe'),
+    ).toEqual({ position: 'sticky', left: '20px', 'box-sizing': 'border-box', width: 'calc(100cqw - 40px)' });
+    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens > tbody > tr > td.sol-cell-actions')).toMatchObject({ position: 'sticky', right: '0', 'min-width': '136px', background: 'var(--rf-surface)' });
+    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens > tbody > tr > td:not(.sol-cell-actions)')).toEqual({ 'overflow-wrap': 'anywhere' });
   });
 
   it('alertas e erros: .solicitacoes-alerta (flex, gap 10, 12/16, raio 14, 14/600) com o tom vindo de .alert--error / .alert--info; icone de 18 sem encolher', () => {

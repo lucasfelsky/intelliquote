@@ -6232,9 +6232,12 @@ dialog.modal-dialog[open] {
   background: var(--rf-surface);
   font-size: 14px;
   gap: 8px;
+  text-align: center;
   white-space: nowrap;
 }
 .solicitacoes-page .solicitacoes-vincular:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+/* P-ACOES (F12-B): os rotulos do cabecalho da tabela de itens quebram (necessario para o botao de vincular caber a 1440) */
+.solicitacoes-page .solicitacoes-itens > thead > tr > th { white-space: normal; }
 .solicitacoes-anexos {
   display: flex;
   flex-direction: column;
@@ -6808,6 +6811,63 @@ dialog.modal-dialog[open] {
   margin-left: auto;
   color: var(--rf-tone-success-fg);
   font-weight: 700;
+}
+
+/* ---- P-ACOES (F12-B, B7): ate 1439 as colunas "Acoes" e "Ver itens" ficam fixas a direita dentro do .table-wrapper (nunca so por rolagem);
+   o painel da linha aberta tem a largura visivel do wrapper (nao alarga a tabela) e a coluna do catalogo da tabela de itens fica fixa a direita ---- */
+@media (max-width: 1439px) {
+  .solicitacoes-page--comex .solicitacoes-lista > .table-wrapper { container-type: inline-size; }
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-itens-celula { white-space: normal; }
+  .solicitacoes-page--comex .solicitacoes-tabela > thead > tr > th:not(:first-child):not(:last-child),
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td:not(:first-child):not(:last-child):not(.sol-cell-detail) {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .solicitacoes-page--comex .solicitacoes-tabela > thead > tr > th:last-child,
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-sizing: border-box;
+    width: 164px;
+    min-width: 164px;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .solicitacoes-page--comex .solicitacoes-tabela:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)) > thead > tr > th:nth-last-child(2),
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver) {
+    position: sticky;
+    right: 164px;
+    z-index: 1;
+    box-sizing: border-box;
+    width: 176px;
+    min-width: 176px;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver,
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver) { background: var(--rf-surface); }
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr:hover > td.solicitacoes-ver,
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr:hover > td.sol-cell-actions:not(.solicitacoes-ver) { background: var(--rf-surface-alt); }
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr.solicitacoes-linha--aberta > td.solicitacoes-ver,
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr.solicitacoes-linha--aberta > td.sol-cell-actions:not(.solicitacoes-ver) { background: var(--rf-action-hover-bg); }
+  .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr.solicitacoes-linha-detalhe > td.sol-cell-detail > .solicitacoes-detalhe {
+    position: sticky;
+    left: 20px;
+    box-sizing: border-box;
+    width: calc(100cqw - 40px);
+  }
+  .solicitacoes-page .solicitacoes-itens > tbody > tr > td:not(.sol-cell-actions) { overflow-wrap: anywhere; }
+  .solicitacoes-page .solicitacoes-vincular { white-space: normal; }
+  .solicitacoes-page .solicitacoes-itens > tbody > tr > td.solicitacoes-valor { white-space: normal; }
+  .solicitacoes-page .solicitacoes-itens > thead > tr > th:has(> .sr-only),
+  .solicitacoes-page .solicitacoes-itens > tbody > tr > td.sol-cell-actions {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    min-width: 136px;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .solicitacoes-page .solicitacoes-itens > tbody > tr > td.sol-cell-actions { background: var(--rf-surface); }
+  .solicitacoes-page .solicitacoes-itens > tbody > tr:hover > td.sol-cell-actions { background: var(--rf-surface-alt); }
 }
 
 /* ---- Telas medias: a tabela encolhe as colunas do meio ---- */
@@ -10078,6 +10138,25 @@ dialog.modal-dialog[open] {
   color-scheme: light;
 }
 
+/* ---- Larguras: 1439 (notebook), P-ACOES (F12-B): nas tabelas dos Relatorios os rotulos do cabecalho quebram, Produto e Fornecedor vencedor quebram em qualquer ponto
+   (codigos e valores seguem nowrap) e o recuo lateral diminui para a tabela nao rolar; acima de 1439 nada muda ---- */
+@media (max-width: 1439px) {
+  .relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th,
+  .relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th { white-space: normal; }
+  .relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td:nth-child(2),
+  .relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td:nth-child(3) { overflow-wrap: anywhere; }
+  .relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th,
+  .relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th,
+  .relatorios-page .relatorios-tabela__tabela--compacta > tbody > tr > td {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+}
+
 /* ---- Larguras: 1199 (Relatorios, Templates e Auditoria em menos colunas; grade da Empresa em 2) ---- */
 @media (max-width: 1199px) {
   .relatorios-linha { grid-template-columns: minmax(0, 1fr); }
@@ -10087,6 +10166,35 @@ dialog.modal-dialog[open] {
   .empresa-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auditoria-filtros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .auditoria-acoes { grid-column: 1 / -1; }
+  /* P-ACOES (F12-B): o texto quebra e a coluna de acoes fica fixa a direita dentro do .table-wrapper (nunca so por rolagem) */
+  .usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-email { overflow-wrap: anywhere; }
+  .usuarios-page .usuarios-tabela > thead > tr > th.usuarios-acoes-cab,
+  .usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-acoes {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-acoes { background: var(--rf-surface); }
+  .usuarios-page .usuarios-tabela > tbody > tr:hover > td.usuarios-acoes { background: var(--rf-surface-alt); }
+  .auditoria-id,
+  .auditoria-email { overflow-wrap: anywhere; }
+  .auditoria-id { min-width: 0; }
+  .auditoria-page .auditoria-tabela > thead > tr > th,
+  .auditoria-page .auditoria-tabela > tbody > tr > td {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .parceiros-credito .parceiros-credito__grade > tbody > tr > td.parceiro-credito__contato { max-width: 240px; }
+  .parceiros-credito .parceiros-credito__grade > thead > tr > th.parceiros-credito__acoes-cab,
+  .parceiros-credito .parceiros-credito__grade > tbody > tr > td.parceiro-credito__acoes {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .parceiros-credito .parceiros-credito__grade > tbody > tr > td.parceiro-credito__acoes { background: var(--rf-surface); }
+  .parceiros-credito .parceiros-credito__grade > tbody > tr:hover > td.parceiro-credito__acoes { background: var(--rf-surface-alt); }
 }
 
 /* ---- 1023 ---- */
@@ -10095,6 +10203,11 @@ dialog.modal-dialog[open] {
   .template-cards > .template-card:nth-child(7):last-child { grid-column: span 2; }
   .templates-variaveis { grid-template-columns: minmax(0, 1fr); }
   .minha-conta-grade { grid-template-columns: minmax(0, 1fr); }
+  .usuarios-page .usuarios-tabela .row-actions,
+  .parceiros-credito .parceiros-credito__grade .row-actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
 }
 
 /* ---- 720 ---- */
@@ -10142,6 +10255,49 @@ dialog.modal-dialog[open] {
   .templates-page .template-editor-label .ghost-button,
   .templates-page .template-preview-header .ghost-button,
   .preview-popout .ghost-button { min-height: 44px; }
+  /* Caixas de selecao de 18: a area de toque vai a 44 pelo ::after (mesmo padrao do .info-chip); o rotulo ao lado ja aciona o campo */
+  .cc-mode-toggle > input,
+  .cc-users__item > input,
+  .parceiro-credito-form > .checkbox-field > input,
+  .parceiro-credito-contato__rodape .checkbox-field > input,
+  .templates-conteudo .checkbox-field > input { position: relative; }
+  .cc-mode-toggle > input::after,
+  .cc-users__item > input::after,
+  .parceiro-credito-form > .checkbox-field > input::after,
+  .parceiro-credito-contato__rodape .checkbox-field > input::after,
+  .templates-conteudo .checkbox-field > input::after {
+    content: "";
+    position: absolute;
+    top: -13px;
+    right: -13px;
+    bottom: -13px;
+    left: -13px;
+  }
+  /* Perfis inativos com o <details> fechado: a lista nao e desenhada, entao nao ha alvo de toque (a sonda contava as caixas escondidas) */
+  .cc-users__inativos:not([open]) > .cc-users__lista { display: none; }
+  /* Editor Jodit: botoes da barra (28), link do rodape e links do texto (a area de toque vai a 44; o texto nao muda) */
+  .templates-editor .jodit-toolbar-button_size_small {
+    min-width: 44px;
+    height: 44px;
+  }
+  .templates-editor .jodit-toolbar-button__button {
+    min-width: 44px;
+    height: 44px;
+  }
+  .templates-editor .jodit-status-bar-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .templates-editor .jodit-wysiwyg a { position: relative; }
+  .templates-editor .jodit-wysiwyg a::after {
+    content: "";
+    position: absolute;
+    top: -14px;
+    right: 0;
+    bottom: -14px;
+    left: 0;
+  }
 }
 
 /* ---- Movimento reduzido: so ficam as trocas de estado, sem transicao nem entrada animada ---- */
