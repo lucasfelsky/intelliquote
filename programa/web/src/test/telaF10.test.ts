@@ -163,7 +163,7 @@ describe('F10: regiao `tela F10`', () => {
   it('at-rules permitidas: 1399, 1080, 1023, 719, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
     const atRules = topo.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     const permitidas = [
-      '@media (max-width: 1399px)',
+      '@media screen and (max-width: 1399px)',
       '@media (max-width: 1080px)',
       '@media (max-width: 1023px)',
       '@media (max-width: 719px)',
@@ -305,10 +305,15 @@ describe('F10: receitas dos boards (valores exatos)', () => {
   });
 
   it('P-ACOES (A1/A2, D-F12-01) em Fornecedores: abaixo de 1400 o texto quebra, o contato segue truncado, o nome tem ate 292 e 2 linhas, a coluna de acoes fica fixa a direita (fundo opaco, hover) e empilha ate 1023', () => {
-    const p = mediaDe('@media (max-width: 1399px)');
+    const p = mediaDe('@media screen and (max-width: 1399px)');
     const linha = '.fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha';
     expect(declaracoes(p, `${linha} > td`)).toEqual({ 'white-space': 'normal' });
-    expect(declaracoes(p, `${linha} > td.cell-truncate`)).toEqual({ 'white-space': 'nowrap' });
+    expect(declaracoes(p, `${linha} > td.cell-truncate`)).toEqual({ 'max-width': '140px', 'white-space': 'nowrap' });
+    // r2: celulas do meio com padding 8 e bordas da tabela mais justas (0 px de rolagem a 1280)
+    const meio = { 'padding-right': '8px', 'padding-left': '8px' };
+    expect(declaracoes(p, `${linha} > td:nth-child(n+2):nth-child(-n+7)`)).toEqual(meio);
+    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > thead > tr > th:nth-child(n+2):nth-child(-n+7)')).toEqual(meio);
+    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > tbody > tr > td.fornecedores-expandir')).toEqual({ 'padding-left': '16px' });
     expect(declaracoes(p, `${linha} > td.fornecedores-incoterms`)).toEqual({ 'overflow-wrap': 'anywhere' });
     expect(declaracoes(p, `${linha} > td:nth-child(2)`)).toEqual({ 'max-width': '292px' });
     expect(declaracoes(p, '.fornecedores-nome > strong')).toEqual({
@@ -319,8 +324,8 @@ describe('F10: receitas dos boards (valores exatos)', () => {
       '-webkit-line-clamp': '2',
     });
     const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
-    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > thead > tr > th:last-child')).toEqual(fixa);
-    expect(declaracoes(p, `${linha} > td:last-child`)).toEqual({ ...fixa, background: 'var(--rf-surface)' });
+    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > thead > tr > th:last-child')).toEqual({ ...fixa, 'padding-left': '8px' });
+    expect(declaracoes(p, `${linha} > td:last-child`)).toEqual({ ...fixa, 'padding-left': '8px', background: 'var(--rf-surface)' });
     expect(declaracoes(p, `${linha}:hover > td:last-child`)).toEqual({ background: 'var(--rf-surface-alt)' });
     expect(declaracoes(p, '.documentos-tabela .documentos-situacao')).toEqual({ 'white-space': 'normal' });
     expect(declaracoes(mediaDe('@media (max-width: 1023px)'), `${linha} .row-actions`)).toEqual({ 'flex-direction': 'column', 'align-items': 'stretch', gap: '4px' });
@@ -353,11 +358,11 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     // A4: o "Carregando contatos" divide a regra do vazio (mesmo visual) e conta como conteudo: a grade nao abre em 2 colunas enquanto carrega
     expect(naRegiao('.fornecedores-secao__carregando')).toEqual(naRegiao('.fornecedores-secao__vazio'));
     // A3: abaixo de 1400 o conteudo da linha expandida acompanha a area visivel do wrapper (container query), sem mudar a 1440
-    const p = mediaDe('@media (max-width: 1399px)');
+    const p = mediaDe('@media screen and (max-width: 1399px)');
     expect(declaracoes(p, '.fornecedores-lista > .table-wrapper')).toEqual({ 'container-type': 'inline-size' });
     expect(
       declaracoes(p, '.fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha-detalhe > td.fornecedores-expandida > .fornecedores-expandida__grade'),
-    ).toEqual({ position: 'sticky', left: '0', width: 'calc(100cqw - 40px)' });
+    ).toEqual({ position: 'sticky', left: '0', width: 'min(100%, calc(100cqw - 40px))' });
     expect(naRegiao('.fornecedores-lista > .table-wrapper')).toEqual({});
   });
 
@@ -393,6 +398,8 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.contact-row__meta')).toMatchObject({ color: 'var(--rf-ink-soft)', 'font-size': '12px', 'white-space': 'nowrap' });
     expect(naRegiao('.contact-row__data')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '12px', 'font-weight': '500' });
     expect(naRegiao('.contact-row .contact-row__actions .ghost-button')).toEqual({ 'min-height': '32px', padding: '0 10px' });
+    // F12-A r2: a <= 719 (grade de 316 px a 390) o selo "Principal" quebra para a linha de baixo em vez de cobrir o botao Editar
+    expect(declaracoes(mediaDe('@media (max-width: 719px)'), '.contact-row__name')).toEqual({ 'flex-wrap': 'wrap' });
   });
 
   it('Documentos: cartao raio 14 com layout fixo no TSX, th 9/12 (1a 9/12/9/14), td 8/12, vencimento mono 12, situacao com ponto, acoes de 32', () => {
@@ -651,14 +658,15 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.forwarder-form__opcoes')).toEqual({ display: 'flex', 'flex-wrap': 'wrap', gap: '10px 28px' });
     expect(naRegiao('.forwarder-contato .forwarder-contato__acoes .ghost-button')).toMatchObject({ 'min-height': '36px', padding: '0 12px', gap: '6px' });
     // A6 (P-ACOES, D-F12-01): abaixo de 1400 os textos quebram, o Endereco fica em 200 com reticencia, as acoes ficam fixas a direita e empilham ate 1023
-    const p = mediaDe('@media (max-width: 1399px)');
+    const p = mediaDe('@media screen and (max-width: 1399px)');
     const td = '.forwarders-page .forwarders-tabela > tbody > tr > td';
     expect(declaracoes(p, td)).toEqual({ 'white-space': 'normal' });
-    expect(declaracoes(p, `${td}.forwarders-endereco`)).toEqual({ 'max-width': '200px', 'white-space': 'nowrap' });
+    expect(declaracoes(p, `${td}.forwarders-endereco`)).toEqual({ 'max-width': '160px', 'white-space': 'nowrap' });
     expect(declaracoes(p, `${td}.forwarders-contatos`)).toEqual({ 'overflow-wrap': 'break-word' });
     const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
-    expect(declaracoes(p, '.forwarders-page .forwarders-tabela > thead > tr > th:last-child')).toEqual(fixa);
-    expect(declaracoes(p, `${td}:last-child`)).toEqual({ ...fixa, background: 'var(--rf-surface)' });
+    expect(declaracoes(p, '.forwarders-page .forwarders-tabela > thead > tr > th:last-child')).toEqual({ ...fixa, 'padding-left': '8px' });
+    expect(declaracoes(p, `${td}:last-child`)).toEqual({ ...fixa, 'padding-left': '8px', background: 'var(--rf-surface)' });
+    expect(declaracoes(p, `${td}:nth-child(n+2):nth-child(-n+4)`)).toEqual({ 'padding-right': '8px', 'padding-left': '8px' });
     expect(declaracoes(p, '.forwarders-page .forwarders-tabela > tbody > tr:hover > td:last-child')).toEqual({ background: 'var(--rf-surface-alt)' });
     expect(declaracoes(mediaDe('@media (max-width: 1023px)'), '.forwarders-tabela .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'stretch', gap: '4px' });
   });
