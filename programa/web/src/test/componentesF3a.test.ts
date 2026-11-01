@@ -225,9 +225,9 @@ describe('F3a: botoes (PLAN 2.3)', () => {
   it('secundario (.ghost-button): borda 1,5 --rf-action, fundo --rf-surface, hover/pressionado/desabilitado', () => {
     expect(naRegiao('.ghost-button')).toMatchObject({
       padding: '0 16px',
-      border: '1.5px solid var(--rf-action)',
+      border: '1.5px solid var(--rf-ghost-escuro-borda)',
       background: 'var(--rf-surface)',
-      color: 'var(--rf-action)',
+      color: 'var(--rf-ghost-escuro-texto)',
     });
     expect(naRegiao('.ghost-button:hover:not(:disabled)').background).toBe('var(--rf-action-hover-bg)');
     expect(naRegiao('.ghost-button:active:not(:disabled)')).toMatchObject({
@@ -430,7 +430,7 @@ describe('F3a: campos e selecao', () => {
     expect(naRegiao('.file-input::file-selector-button')).toMatchObject({
       'min-height': '36px',
       padding: '0 12px',
-      border: '1.5px solid var(--rf-action)',
+      border: '1.5px solid var(--rf-ghost-escuro-borda)',
       'border-radius': 'var(--rf-radius-control)',
       'font-size': '13px',
       'font-weight': '700',

@@ -244,7 +244,7 @@ describe('F9: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.solicitacoes-page .solicitacoes-tabela .sol-cell-actions .row-actions .ghost-button')).toEqual({ padding: '0 10px' });
     expect(naRegiao('.solicitacoes-dica')).toEqual({ 'flex-basis': '100%', color: 'var(--rf-tone-warning-fg)', 'font-size': '12px', 'font-weight': '600' });
     expect(naRegiao('.solicitacoes-page .solicitacoes-cotacao')).toMatchObject({
-      border: '1.5px solid var(--rf-action)',
+      border: '1.5px solid var(--rf-ghost-escuro-borda)',
       'border-radius': 'var(--rf-radius-control)',
       background: 'var(--rf-surface)',
       'font-family': 'var(--rf-font-mono)',
@@ -279,7 +279,7 @@ describe('F9: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.solicitacoes-page .solicitacoes-itens td')).toEqual({ padding: '9px 14px', 'vertical-align': 'middle' });
     expect(naRegiao('.solicitacoes-page .solicitacoes-itens td.solicitacoes-valor')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'text-align': 'right', 'white-space': 'nowrap' });
     expect(naRegiao('.solicitacoes-page .solicitacoes-itens td.solicitacoes-na-cotacao--sim')).toEqual({ color: 'var(--rf-tone-success-fg)' });
-    expect(naRegiao('.solicitacoes-page .solicitacoes-vincular')).toMatchObject({ padding: '0 16px', border: '1.5px solid var(--rf-action)', 'border-radius': 'var(--rf-radius-button)' });
+    expect(naRegiao('.solicitacoes-page .solicitacoes-vincular')).toMatchObject({ padding: '0 16px', border: '1.5px solid var(--rf-ghost-escuro-borda)', 'border-radius': 'var(--rf-radius-button)' });
   });
 
   it('alertas e erros: .solicitacoes-alerta (flex, gap 10, 12/16, raio 14, 14/600) com o tom vindo de .alert--error / .alert--info; icone de 18 sem encolher', () => {

@@ -1,0 +1,18 @@
+[
+  {
+    "token": "--rf-ghost-escuro-borda",
+    "claro": "#004153",
+    "escuro": "rgba(20, 221, 167, 0.55)",
+    "constante": false,
+    "fonte": "decisao",
+    "ref": "board 12b"
+  },
+  {
+    "token": "--rf-ghost-escuro-texto",
+    "claro": "#004153",
+    "escuro": "#5ff0c8",
+    "constante": false,
+    "fonte": "decisao",
+    "ref": "board 12b"
+  }
+]
