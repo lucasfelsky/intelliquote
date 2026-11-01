@@ -604,7 +604,7 @@ export default function Fornecedores() {
                       </td>
                       <td>
                         <div className="fornecedores-nome">
-                        <strong>{s.name}</strong>
+                        <strong title={s.name}>{s.name}</strong>
                         {docSummary && docSummary.expired > 0 ? (
                             <span className="badge badge--danger fornecedores-doc">
                               <Icon name="file" size={12} strokeWidth={2.2} />
@@ -718,7 +718,7 @@ export default function Fornecedores() {
                                     </button>
                                   </div>
                                   {contactsQuery.isLoading && contactsQuery.data === undefined ? (
-                                <p className="fornecedores-secao__vazio">Carregando contatos…</p>
+                                <p className="fornecedores-secao__vazio fornecedores-secao__carregando">Carregando contatos…</p>
                                   ) : supplierContacts.length === 0 ? (
                                 <p className="fornecedores-secao__vazio">
                                       Nenhum contato cadastrado. Adicione ao menos um para poder

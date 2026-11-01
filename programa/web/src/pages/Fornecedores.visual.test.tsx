@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Fornecedores from './Fornecedores';
 
@@ -458,5 +458,66 @@ describe('Fornecedores (visual, F10)', () => {
     expect(permitidos.size).toBe(8);
     expect(comEstilo.filter((el) => !permitidos.has(el))).toEqual([]);
     expect(comEstilo).toHaveLength(8);
+  });
+
+  // F12-A (A2): nome com title (ate 2 linhas no CSS: o title guarda o nome inteiro). O title do Contato principal segue "nome <e-mail>" (travado no Fornecedores.test.tsx:227)
+  it('A2: o nome do fornecedor tem title igual ao nome (celula do nome em ate 2 linhas)', async () => {
+    const { container, findByText } = renderPage();
+    await findByText('ACME Ltda');
+    await findByText('Contato Um');
+    const nomes = Array.from(container.querySelectorAll('.fornecedores-tabela tbody tr.fornecedores-linha .fornecedores-nome > strong'));
+    expect(nomes.map((n) => n.textContent)).toEqual(['ACME Ltda', 'Beta Química']);
+    for (const n of nomes) expect(n.getAttribute('title')).toBe(n.textContent);
+  });
+
+  // F12-A (A4): enquanto contatos e documentos carregam a grade ja tem conteudo (o :has() de 2 colunas nao casa); so depois de carregar vazios ela abre em 2 colunas
+  it('A4: com as consultas pendentes a grade expandida tem o "Carregando" (nao casa o seletor de 2 colunas); vazia so depois de carregar', async () => {
+    const conteudo = '.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado';
+    let resolveContatos: (v: never[]) => void = () => undefined;
+    let resolveDocs: (v: never[]) => void = () => undefined;
+    vi.mocked(listSupplierContacts).mockImplementation(() => new Promise((res) => { resolveContatos = res as (v: never[]) => void; }));
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/api/v1/suppliers') return Promise.resolve(suppliers);
+      if (url === '/api/v1/supplier-contacts') return Promise.resolve({ bySupplier: {} });
+      if (url === '/api/v1/item-families') return Promise.resolve({ data: families });
+      if (url === '/api/v1/supplier-documents') return new Promise((res) => { resolveDocs = res as (v: never[]) => void; });
+      return Promise.resolve({ bySupplier: {} });
+    });
+    const { container, findByText, getAllByLabelText } = renderPage();
+    await findByText('ACME Ltda');
+    await waitFor(() => expect((getAllByLabelText('Mostrar contatos')[0] as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(getAllByLabelText('Mostrar contatos')[0] as HTMLElement);
+    const carregando = await findByText('Carregando contatos…');
+    await findByText('Carregando documentos…');
+    expect(carregando.className).toBe('fornecedores-secao__vazio fornecedores-secao__carregando');
+    const grade = container.querySelector('.fornecedores-expandida__grade') as HTMLElement;
+    expect(grade.querySelector('.documentos-estado')).not.toBeNull();
+    expect(grade.querySelector(conteudo)).not.toBeNull();
+
+    await act(async () => {
+      resolveContatos([]);
+      resolveDocs([]);
+    });
+    await findByText(/Nenhum contato cadastrado/);
+    await findByText('Nenhum documento cadastrado.');
+    expect(grade.querySelector('.fornecedores-secao__carregando')).toBeNull();
+    expect(grade.querySelector(conteudo)).toBeNull();
+  });
+
+  // F12-A (A5): "nome . tamanho" em spans (so o nome leva a reticencia); title e textContent da celula continuam IGUAIS
+  it('A5: a celula do arquivo separa nome, separador e tamanho, com title igual ao textContent', async () => {
+    const utils = renderPage();
+    await expandir(utils);
+    const celulas = Array.from(utils.container.querySelectorAll('.documentos-tabela td.documentos-arquivo-celula')) as HTMLElement[];
+    expect(celulas).toHaveLength(4);
+    for (const td of celulas) {
+      expect(td.getAttribute('title')).toBe(td.textContent);
+      const linha = td.querySelector(':scope > .documentos-arquivo-celula__linha') as HTMLElement;
+      expect(Array.from(linha.children).map((c) => c.className)).toEqual(['documentos-arquivo-celula__nome', 'documentos-arquivo-celula__sep', 'documentos-tamanho']);
+      expect(linha.querySelector('.documentos-arquivo-celula__sep')?.textContent).toBe(' · ');
+      expect(linha.querySelector('.documentos-tamanho')?.textContent).toBe('2,0 KB');
+    }
+    expect(celulas[0]?.querySelector('.documentos-arquivo-celula__nome')?.textContent).toBe('Certificado ISO.pdf');
+    expect(celulas[0]?.getAttribute('title')).toBe('Certificado ISO.pdf · 2,0 KB');
   });
 });
