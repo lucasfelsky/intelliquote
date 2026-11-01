@@ -160,9 +160,10 @@ describe('F10: regiao `tela F10`', () => {
     expect(usados.filter((t) => !t.startsWith('--rf-'))).toEqual([]);
   });
 
-  it('at-rules permitidas: 1080, 1023, 719, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
+  it('at-rules permitidas: 1399, 1080, 1023, 719, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
     const atRules = topo.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     const permitidas = [
+      '@media screen and (max-width: 1399px)',
       '@media (max-width: 1080px)',
       '@media (max-width: 1023px)',
       '@media (max-width: 719px)',
@@ -209,6 +210,10 @@ describe('F10: prefixos donos e classes de contexto', () => {
     for (const s of comHas) {
       expect(s, s).toMatch(/fornecedores-expandida__grade|documentos-arquivo|importacao-arquivo|itens-filters__toggle/);
     }
+    // A4: enquanto contatos ou documentos carregam, a grade fica empilhada (nao casa o seletor de 2 colunas)
+    const grade = comHas.filter((s) => s.includes('fornecedores-expandida__grade'));
+    expect(grade.length).toBeGreaterThan(0);
+    for (const s of grade) expect(s, s).toContain(':has(.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado)');
   });
 });
 
@@ -299,6 +304,36 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha--aberta > td')).toEqual({ 'border-bottom': '0' });
   });
 
+  it('P-ACOES (A1/A2, D-F12-01) em Fornecedores: abaixo de 1400 o texto quebra, o contato segue truncado, o nome tem ate 292 e 2 linhas, a coluna de acoes fica fixa a direita (fundo opaco, hover) e empilha ate 1023', () => {
+    const p = mediaDe('@media screen and (max-width: 1399px)');
+    const linha = '.fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha';
+    expect(declaracoes(p, `${linha} > td`)).toEqual({ 'white-space': 'normal' });
+    expect(declaracoes(p, `${linha} > td.cell-truncate`)).toEqual({ 'max-width': '140px', 'white-space': 'nowrap' });
+    // r2: celulas do meio com padding 8 e bordas da tabela mais justas (0 px de rolagem a 1280)
+    const meio = { 'padding-right': '8px', 'padding-left': '8px' };
+    expect(declaracoes(p, `${linha} > td:nth-child(n+2):nth-child(-n+7)`)).toEqual(meio);
+    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > thead > tr > th:nth-child(n+2):nth-child(-n+7)')).toEqual(meio);
+    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > tbody > tr > td.fornecedores-expandir')).toEqual({ 'padding-left': '16px' });
+    expect(declaracoes(p, `${linha} > td.fornecedores-incoterms`)).toEqual({ 'overflow-wrap': 'anywhere' });
+    expect(declaracoes(p, `${linha} > td:nth-child(2)`)).toEqual({ 'max-width': '292px' });
+    expect(declaracoes(p, '.fornecedores-nome > strong')).toEqual({
+      display: '-webkit-box',
+      overflow: 'hidden',
+      'overflow-wrap': 'anywhere',
+      '-webkit-box-orient': 'vertical',
+      '-webkit-line-clamp': '2',
+    });
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+    expect(declaracoes(p, '.fornecedores-page .fornecedores-tabela > thead > tr > th:last-child')).toEqual({ ...fixa, 'padding-left': '8px' });
+    expect(declaracoes(p, `${linha} > td:last-child`)).toEqual({ ...fixa, 'padding-left': '8px', background: 'var(--rf-surface)' });
+    expect(declaracoes(p, `${linha}:hover > td:last-child`)).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(p, '.documentos-tabela .documentos-situacao')).toEqual({ 'white-space': 'normal' });
+    expect(declaracoes(mediaDe('@media (max-width: 1023px)'), `${linha} .row-actions`)).toEqual({ 'flex-direction': 'column', 'align-items': 'stretch', gap: '4px' });
+    // a 1440 nada muda: nenhuma dessas regras existe fora do @media
+    expect(naRegiao(`${linha} > td:nth-child(2)`)).toEqual({ 'white-space': 'normal' });
+    expect(naRegiao('.fornecedores-nome > strong')).toEqual({ 'font-weight': '700' });
+  });
+
   it('selo de documento 22 (11/700, gap 5, padding 0 8) e avaliacao com "(n)" 12 em --rf-ink-soft', () => {
     expect(naRegiao('.fornecedores-page .fornecedores-doc')).toEqual({ gap: '5px', 'min-height': '22px', padding: '0 8px', 'font-size': '11px' });
     expect(naRegiao('.fornecedores-avaliacao')).toEqual({ display: 'inline-flex', 'align-items': 'center', gap: '2px' });
@@ -314,12 +349,21 @@ describe('F10: receitas dos boards (valores exatos)', () => {
       'box-shadow': 'inset 3px 0 0 var(--rf-primary)',
     });
     expect(naRegiao('.fornecedores-expandida__grade')).toEqual({ display: 'grid', 'grid-template-columns': 'minmax(0, 1fr)', 'row-gap': '20px' });
-    const vazia = '.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes))';
+    const vazia = '.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado))';
     expect(naRegiao(vazia)).toEqual({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))', gap: '16px', 'align-items': 'start' });
     expect(declaracoes(mediaDe('@media (max-width: 1023px)'), vazia)).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
     expect(naRegiao('.fornecedores-secao')).toEqual({ display: 'flex', 'flex-direction': 'column', gap: '10px', 'min-width': '0' });
     expect(naRegiao(`${vazia} .fornecedores-secao`)).toEqual({ gap: '8px' });
     expect(naRegiao('.fornecedores-secao__vazio')).toEqual({ margin: '0', color: 'var(--rf-ink-soft)', 'font-size': '13px', 'line-height': '1.5' });
+    // A4: o "Carregando contatos" divide a regra do vazio (mesmo visual) e conta como conteudo: a grade nao abre em 2 colunas enquanto carrega
+    expect(naRegiao('.fornecedores-secao__carregando')).toEqual(naRegiao('.fornecedores-secao__vazio'));
+    // A3: abaixo de 1400 o conteudo da linha expandida acompanha a area visivel do wrapper (container query), sem mudar a 1440
+    const p = mediaDe('@media screen and (max-width: 1399px)');
+    expect(declaracoes(p, '.fornecedores-lista > .table-wrapper')).toEqual({ 'container-type': 'inline-size' });
+    expect(
+      declaracoes(p, '.fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha-detalhe > td.fornecedores-expandida > .fornecedores-expandida__grade'),
+    ).toEqual({ position: 'sticky', left: '0', width: 'min(100%, calc(100cqw - 40px))' });
+    expect(naRegiao('.fornecedores-lista > .table-wrapper')).toEqual({});
   });
 
   it('"Adicionar contato" e "Novo documento": secundario de 36 (raio 10, borda 1,5 --rf-action) mesmo dentro da tabela', () => {
@@ -354,6 +398,8 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.contact-row__meta')).toMatchObject({ color: 'var(--rf-ink-soft)', 'font-size': '12px', 'white-space': 'nowrap' });
     expect(naRegiao('.contact-row__data')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '12px', 'font-weight': '500' });
     expect(naRegiao('.contact-row .contact-row__actions .ghost-button')).toEqual({ 'min-height': '32px', padding: '0 10px' });
+    // F12-A r2: a <= 719 (grade de 316 px a 390) o selo "Principal" quebra para a linha de baixo em vez de cobrir o botao Editar
+    expect(declaracoes(mediaDe('@media (max-width: 719px)'), '.contact-row__name')).toEqual({ 'flex-wrap': 'wrap' });
   });
 
   it('Documentos: cartao raio 14 com layout fixo no TSX, th 9/12 (1a 9/12/9/14), td 8/12, vencimento mono 12, situacao com ponto, acoes de 32', () => {
@@ -385,6 +431,11 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.documentos-situacao.badge--danger::before')).toEqual({ background: 'var(--rf-tone-danger-solid)' });
     expect(naRegiao('.documentos-tabela .documentos-acoes .ghost-button')).toEqual({ 'min-height': '32px', padding: '0 8px' });
     expect(naRegiao('.documentos-acoes')).toEqual({ 'justify-content': 'flex-end', gap: '2px' });
+    // A5: "nome . tamanho" numa linha; so o nome leva a reticencia, o tamanho e o separador nunca encolhem
+    expect(naRegiao('.documentos-arquivo-celula__linha')).toEqual({ display: 'flex', 'align-items': 'baseline', 'min-width': '0' });
+    expect(naRegiao('.documentos-arquivo-celula__nome')).toEqual({ 'min-width': '0', overflow: 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap' });
+    expect(naRegiao('.documentos-arquivo-celula__sep')).toEqual({ flex: 'none', 'white-space': 'pre' });
+    expect(naRegiao('.documentos-tamanho')).toMatchObject({ flex: 'none', color: 'var(--rf-ink-soft)', 'font-family': 'var(--rf-font-mono)', 'font-size': '12px' });
   });
 
   it('modais do documento: grade 150 / 1fr (gap 14/12), campo de arquivo em caixa de 44 com botao de 32 e nome em --rf-ink (vazio em --rf-ink-soft)', () => {
@@ -606,6 +657,18 @@ describe('F10: receitas dos boards (valores exatos)', () => {
     expect(declaracoes(mediaDe('@media (max-width: 640px)'), '.forwarder-contato__grade')).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
     expect(naRegiao('.forwarder-form__opcoes')).toEqual({ display: 'flex', 'flex-wrap': 'wrap', gap: '10px 28px' });
     expect(naRegiao('.forwarder-contato .forwarder-contato__acoes .ghost-button')).toMatchObject({ 'min-height': '36px', padding: '0 12px', gap: '6px' });
+    // A6 (P-ACOES, D-F12-01): abaixo de 1400 os textos quebram, o Endereco fica em 200 com reticencia, as acoes ficam fixas a direita e empilham ate 1023
+    const p = mediaDe('@media screen and (max-width: 1399px)');
+    const td = '.forwarders-page .forwarders-tabela > tbody > tr > td';
+    expect(declaracoes(p, td)).toEqual({ 'white-space': 'normal' });
+    expect(declaracoes(p, `${td}.forwarders-endereco`)).toEqual({ 'max-width': '160px', 'white-space': 'nowrap' });
+    expect(declaracoes(p, `${td}.forwarders-contatos`)).toEqual({ 'overflow-wrap': 'break-word' });
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+    expect(declaracoes(p, '.forwarders-page .forwarders-tabela > thead > tr > th:last-child')).toEqual({ ...fixa, 'padding-left': '8px' });
+    expect(declaracoes(p, `${td}:last-child`)).toEqual({ ...fixa, 'padding-left': '8px', background: 'var(--rf-surface)' });
+    expect(declaracoes(p, `${td}:nth-child(n+2):nth-child(-n+4)`)).toEqual({ 'padding-right': '8px', 'padding-left': '8px' });
+    expect(declaracoes(p, '.forwarders-page .forwarders-tabela > tbody > tr:hover > td:last-child')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(mediaDe('@media (max-width: 1023px)'), '.forwarders-tabela .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'stretch', gap: '4px' });
   });
 
   it('pointer: coarse leva os alvos de 28 a 36 a 44 (expandir, acoes, chips, botoes de contato e de arquivo, cartoes e acoes do Itens)', () => {
@@ -629,12 +692,20 @@ describe('F10: receitas dos boards (valores exatos)', () => {
       '.importacao-arquivo__botao',
       '.itens-filters__toggle',
       '.itens-card .itens-card__action',
+      '.contact-row > input[type="checkbox"]',
+      '.fornecedor-form .checkbox-field input',
+      '.forwarder-form__opcoes .checkbox-field input',
+      '.documentos-campo > .field-label[for="sd-file"]',
     ]) {
       expect(alvos44, s).toContain(s);
     }
     // a busca (borda de 1,5 + campo interno de 100%) vai a 48 para o campo medir >= 44
     expect(declaracoes(coarse, '.fornecedores-busca')).toEqual({ height: '48px' });
     expect(declaracoes(coarse, '.itens-filters__search')).toEqual({ height: '48px' });
+    // A7: estados (checkbox do contato e dos modais) e o rotulo do campo de arquivo (label[for] do input de arquivo: 44 de altura)
+    expect(declaracoes(coarse, '.contact-row')).toEqual({ 'grid-template-columns': '44px minmax(0, 1fr) auto auto' });
+    expect(declaracoes(coarse, '.contact-row > input[type="checkbox"]')).toEqual({ width: '44px', height: '44px' });
+    expect(declaracoes(coarse, '.documentos-campo > .field-label[for="sd-file"]')).toEqual({ display: 'flex', 'align-items': 'flex-end', 'min-height': '44px' });
   });
 
   it('toda transicao da regiao tem contrapartida no bloco reduced-motion da MESMA regiao; o unico deslocamento e o hover do cartao do item (zerado em reduced-motion); sem animation', () => {

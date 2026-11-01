@@ -7156,14 +7156,15 @@ dialog.modal-dialog[open] {
   white-space: normal;
   text-align: left;
 }
-/* Empilhado quando ha contatos ou documentos (a tabela de documentos precisa da largura toda); lado a lado (Contatos | Documentos) quando os dois estao
-   vazios (board "Fornecedor sem contatos e sem documentos"). 1 coluna ate 1023. */
+/* Empilhado quando ha contatos ou documentos (a tabela de documentos precisa da largura toda) e ENQUANTO CARREGAM (F12-A, A4: sem salto de layout ao
+   chegar o dado); lado a lado (Contatos | Documentos) so quando os dois ja carregaram vazios (board "Fornecedor sem contatos e sem documentos").
+   1 coluna ate 1023. */
 .fornecedores-expandida__grade {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   row-gap: 20px;
 }
-.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes)) {
+.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado)) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
@@ -7174,7 +7175,7 @@ dialog.modal-dialog[open] {
   gap: 10px;
   min-width: 0;
 }
-.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes)) .fornecedores-secao { gap: 8px; }
+.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado)) .fornecedores-secao { gap: 8px; }
 .fornecedores-secao__cabecalho,
 .documentos-cabecalho {
   display: flex;
@@ -7186,7 +7187,7 @@ dialog.modal-dialog[open] {
 .fornecedores-secao__cabecalho > h3,
 .documentos-cabecalho > h3 { margin: 0; }
 .documentos-cabecalho { margin-bottom: 10px; }
-.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes)) .documentos-cabecalho { margin-bottom: 8px; }
+.fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado)) .documentos-cabecalho { margin-bottom: 8px; }
 /* "Adicionar contato" e "Novo documento": secundario de 36 (dentro da tabela o .ghost-button viraria fantasma) */
 .fornecedores-page .fornecedores-secao__cabecalho .ghost-button,
 .fornecedores-page .documentos-cabecalho .ghost-button {
@@ -7213,7 +7214,8 @@ dialog.modal-dialog[open] {
   background: var(--rf-surface);
   color: var(--rf-disabled-fg);
 }
-.fornecedores-secao__vazio {
+.fornecedores-secao__vazio,
+.fornecedores-secao__carregando {
   margin: 0;
   color: var(--rf-ink-soft);
   font-size: 13px;
@@ -7340,7 +7342,24 @@ dialog.modal-dialog[open] {
   color: var(--rf-ink-soft);
 }
 .documentos-tabela .table tbody > tr > td.documentos-arquivo-celula { max-width: none; }
+/* Arquivo: "nome . tamanho" numa linha; so o nome leva a reticencia, o tamanho (e o separador) nunca encolhem (F12-A, A5). title e textContent da celula iguais. */
+.documentos-arquivo-celula__linha {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+.documentos-arquivo-celula__nome {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.documentos-arquivo-celula__sep {
+  flex: none;
+  white-space: pre;
+}
 .documentos-tamanho {
+  flex: none;
   color: var(--rf-ink-soft);
   font-family: var(--rf-font-mono);
   font-size: 12px;
@@ -8412,17 +8431,89 @@ dialog.modal-dialog[open] {
 }
 
 /* ======================= Responsivo ======================= */
+/* P-ACOES (D-F12-01; F12-A: A1, A2, A3 e A6): so na TELA (no papel A4 o nome nao pode ser cortado), abaixo de 1400 o texto das tabelas de Fornecedores e Forwarders quebra e a coluna de acoes fica fixa a direita
+   dentro do .table-wrapper (nenhuma acao so por rolagem); a 1440 nada muda. O corte e 1399 (e nao 1365): a 1366 ainda sobravam 9 px de rolagem. */
+@media screen and (max-width: 1399px) {
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td { white-space: normal; }
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td.cell-truncate {
+    max-width: 140px;
+    white-space: nowrap;
+  }
+  .fornecedores-page .fornecedores-tabela > thead > tr > th:nth-child(n+2):nth-child(-n+7),
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td:nth-child(n+2):nth-child(-n+7) {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td.fornecedores-incoterms { overflow-wrap: anywhere; }
+  /* A2: celula do nome ate 292 e nome em no maximo 2 linhas (o title com o nome inteiro vem do TSX) */
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td:nth-child(2) { max-width: 292px; }
+  .fornecedores-nome > strong {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .fornecedores-page .fornecedores-tabela > thead > tr > th:last-child,
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td:last-child,
+  .forwarders-page .forwarders-tabela > thead > tr > th:last-child,
+  .forwarders-page .forwarders-tabela > tbody > tr > td:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .fornecedores-page .fornecedores-tabela > thead > tr > th:first-child,
+  .fornecedores-page .fornecedores-tabela > tbody > tr > td.fornecedores-expandir { padding-left: 16px; }
+  .fornecedores-page .fornecedores-tabela > thead > tr > th:last-child,
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td:last-child { padding-left: 8px; }
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td:last-child,
+  .forwarders-page .forwarders-tabela > tbody > tr > td:last-child { background: var(--rf-surface); }
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha:hover > td:last-child,
+  .forwarders-page .forwarders-tabela > tbody > tr:hover > td:last-child { background: var(--rf-surface-alt); }
+  /* A3: o conteudo da linha expandida ocupa so a area visivel do wrapper (a td tem a largura da tabela) */
+  .fornecedores-lista > .table-wrapper { container-type: inline-size; }
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha-detalhe > td.fornecedores-expandida > .fornecedores-expandida__grade {
+    position: sticky;
+    left: 0;
+    width: min(100%, calc(100cqw - 40px));
+  }
+  /* a tabela de Documentos passa a ter so a area visivel: a situacao quebra em vez de invadir a coluna vizinha */
+  .documentos-tabela .documentos-situacao { white-space: normal; }
+  /* A6: Forwarders (Endereco 160, Contatos quebram, celulas do meio com padding 8) */
+  .forwarders-page .forwarders-tabela > tbody > tr > td { white-space: normal; }
+  .forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-endereco {
+    max-width: 160px;
+    white-space: nowrap;
+  }
+  .forwarders-page .forwarders-tabela > thead > tr > th:nth-child(n+2):nth-child(-n+4),
+  .forwarders-page .forwarders-tabela > tbody > tr > td:nth-child(n+2):nth-child(-n+4) {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .forwarders-page .forwarders-tabela > thead > tr > th:last-child,
+  .forwarders-page .forwarders-tabela > tbody > tr > td:last-child { padding-left: 8px; }
+  .forwarders-page .forwarders-tabela > tbody > tr > td.forwarders-contatos { overflow-wrap: break-word; }
+}
 @media (max-width: 1080px) {
   .itens-page__split { grid-template-columns: 1fr; }
   .itens-page .itens-form-card { position: static; }
 }
 @media (max-width: 1023px) {
-  .fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes)) { grid-template-columns: minmax(0, 1fr); }
+  .fornecedores-expandida__grade:not(:has(.contact-list, .documentos-tabela, .documentos-cartoes, .fornecedores-secao__carregando, .documentos-estado)) { grid-template-columns: minmax(0, 1fr); }
+  .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha .row-actions,
+  .forwarders-tabela .row-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
 }
 @media (max-width: 719px) {
   .documentos-form__grade { grid-template-columns: minmax(0, 1fr); }
   .contact-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .contact-row__data { display: none; }
+  /* a 316 px (grade na area visivel) o selo "Principal" desce para a linha de baixo em vez de cobrir o botao Editar */
+  .contact-row__name { flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
   .fornecedores-busca {
@@ -8473,6 +8564,19 @@ dialog.modal-dialog[open] {
   .itens-card .itens-card__action { min-height: 44px; }
   .fornecedores-busca,
   .itens-filters__search { height: 48px; }
+  /* F12-A, A7: estados (linha expandida, modais de contato e de forwarder) e o rotulo do campo de arquivo (label[for] do input de arquivo: 18 -> 44 de altura) */
+  .contact-row { grid-template-columns: 44px minmax(0, 1fr) auto auto; }
+  .contact-row > input[type="checkbox"],
+  .fornecedor-form .checkbox-field input,
+  .forwarder-form__opcoes .checkbox-field input {
+    width: 44px;
+    height: 44px;
+  }
+  .documentos-campo > .field-label[for="sd-file"] {
+    display: flex;
+    align-items: flex-end;
+    min-height: 44px;
+  }
 }
 
 /* Movimento reduzido: sem transicao nem deslocamento nos estados de hover/foco */

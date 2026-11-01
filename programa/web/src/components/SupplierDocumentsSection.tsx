@@ -438,8 +438,12 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
                     <td className="cell-truncate documentos-observacao" title={doc.notes ?? undefined}>
                       {doc.notes ?? '—'}
                     </td>
-                    <td className="cell-truncate documentos-arquivo-celula" title={doc.fileName}>
-                      {doc.fileName} · <span className="documentos-tamanho">{formatFileSize(doc.fileSize)}</span>
+                    <td className="cell-truncate documentos-arquivo-celula" title={`${doc.fileName} · ${formatFileSize(doc.fileSize)}`}>
+                      <div className="documentos-arquivo-celula__linha">
+                        <span className="documentos-arquivo-celula__nome">{doc.fileName}</span>
+                        <span className="documentos-arquivo-celula__sep"> · </span>
+                        <span className="documentos-tamanho">{formatFileSize(doc.fileSize)}</span>
+                      </div>
                     </td>
                     <td className="documentos-acoes-celula">{renderActions(doc)}</td>
                   </tr>
