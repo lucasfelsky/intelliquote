@@ -355,7 +355,7 @@ describe('F7: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.credit-support-modal__contato')).toMatchObject({ 'min-height': '40px', padding: '0 12px', 'border-radius': 'var(--rf-radius-button)', background: 'var(--rf-surface)' });
     expect(naRegiao('.credit-support-modal__contato:has(input:checked)')).toMatchObject({ background: 'var(--rf-primary-50)' });
     expect(naRegiao('.credit-support-modal__previa.preview-frame')).toMatchObject({ border: '1px solid var(--rf-border)', 'border-radius': 'var(--rf-radius-alert)', background: 'var(--paper)' });
-    expect(naRegiao('.modal-actions .credit-support-modal__previsualizar')).toMatchObject({ border: '1.5px solid var(--rf-action)', background: 'var(--rf-surface)' });
+    expect(naRegiao('.modal-actions .credit-support-modal__previsualizar')).toMatchObject({ border: '1.5px solid var(--rf-ghost-escuro-borda)', background: 'var(--rf-surface)' });
   });
 
   it('Historico de precos: contorno raio 16, 13 px sem quebra, 1a coluna fixa (sticky) com divisor, celula alterada com a tinta menta (--rf-primary-50) em 700, incoterm alterado navy', () => {

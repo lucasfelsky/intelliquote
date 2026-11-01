@@ -467,7 +467,7 @@ describe('F6: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.cotacao-links__contato')).toMatchObject({ display: 'flex', 'flex-direction': 'column', gap: '2px' });
     expect(naRegiao('.cotacao-links__expira')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '12px', 'white-space': 'nowrap' });
     expect(naRegiao('.cotacao-links__acoes')).toMatchObject({ 'justify-content': 'flex-end', gap: '4px' });
-    expect(naRegiao('.cotacao-links__acoes .ghost-button:not(.danger-button)')).toEqual({ border: '1.5px solid var(--rf-action)', background: 'var(--rf-surface)' });
+    expect(naRegiao('.cotacao-links__acoes .ghost-button:not(.danger-button)')).toEqual({ border: '1.5px solid var(--rf-ghost-escuro-borda)', background: 'var(--rf-surface)' });
     expect(naRegiao('.cotacao-links__acoes .ghost-button.cotacao-links__copiado')).toEqual({
       'border-color': 'var(--rf-selecao-anel)',
       background: 'var(--rf-tone-success-bg)',

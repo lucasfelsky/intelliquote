@@ -327,10 +327,10 @@ describe('F10: receitas dos boards (valores exatos)', () => {
       'min-height': '36px',
       padding: '0 12px',
       gap: '6px',
-      border: '1.5px solid var(--rf-action)',
+      border: '1.5px solid var(--rf-ghost-escuro-borda)',
       'border-radius': 'var(--rf-radius-control)',
       background: 'var(--rf-surface)',
-      color: 'var(--rf-action)',
+      color: 'var(--rf-ghost-escuro-texto)',
       'font-size': '13px',
     });
     expect(naRegiao('.documentos-cabecalho')).toMatchObject({ display: 'flex', 'justify-content': 'space-between', gap: '12px', 'margin-bottom': '10px' });
@@ -453,7 +453,7 @@ describe('F10: receitas dos boards (valores exatos)', () => {
       'border-radius': 'var(--rf-radius-alert)',
     });
     expect(naRegiao('.importacao-arquivo__icone')).toMatchObject({ width: '40px', height: '40px', 'border-radius': 'var(--rf-radius-control)', background: 'var(--rf-tone-success-bg)' });
-    expect(naRegiao('.importacao-arquivo__botao')).toMatchObject({ height: '38px', padding: '0 12px', border: '1.5px solid var(--rf-action)', 'border-radius': 'var(--rf-radius-control)' });
+    expect(naRegiao('.importacao-arquivo__botao')).toMatchObject({ height: '38px', padding: '0 12px', border: '1.5px solid var(--rf-ghost-escuro-borda)', 'border-radius': 'var(--rf-radius-control)' });
     expect(naRegiao('.importacao-alerta')).toMatchObject({ display: 'flex', gap: '10px', padding: '12px 16px', 'border-radius': 'var(--rf-radius-alert)', 'font-size': '14px', 'font-weight': '600' });
     expect(naRegiao('.importacao-alerta__lista')).toEqual({ margin: '0', 'padding-left': '18px', 'font-size': '13px', 'font-weight': '500', 'line-height': '1.55' });
     expect(naRegiao('.importacao-alerta > svg')).toEqual({ flex: 'none', 'margin-top': '1px' });

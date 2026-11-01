@@ -135,12 +135,21 @@ export function initTheme(): () => void {
   };
   window.addEventListener('storage', onStorage);
 
+  // Impressao (F12-S): o papel e sempre claro. O navegador dispara beforeprint antes do layout de impressao e afterprint depois;
+  // o afterprint reaplica o tema RESOLVIDO (lido da preferencia), nao um valor guardado.
+  const onBeforePrint = () => applyTheme('light', readThemePreference());
+  const onAfterPrint = () => reapply();
+  window.addEventListener('beforeprint', onBeforePrint);
+  window.addEventListener('afterprint', onAfterPrint);
+
   teardown = () => {
     if (mql) {
       if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onSystemChange);
       else if (typeof mql.removeListener === 'function') mql.removeListener(onSystemChange);
     }
     window.removeEventListener('storage', onStorage);
+    window.removeEventListener('beforeprint', onBeforePrint);
+    window.removeEventListener('afterprint', onAfterPrint);
     teardown = null;
   };
   return teardown;

@@ -242,6 +242,10 @@
   /* tokens F11 (administracao) */
   --rf-kpi-destaque-borda: rgba(0, 120, 100, 0.25);
   --rf-cc-auto-borda: rgba(0, 120, 100, 0.3);
+
+  /* tokens F12 (qa) */
+  --rf-ghost-escuro-borda: #004153;
+  --rf-ghost-escuro-texto: #004153;
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -424,6 +428,10 @@
   /* tokens F11 (administracao) */
   --rf-kpi-destaque-borda: rgba(20, 221, 167, 0.3);
   --rf-cc-auto-borda: rgba(20, 221, 167, 0.35);
+
+  /* tokens F12 (qa) */
+  --rf-ghost-escuro-borda: rgba(20, 221, 167, 0.55);
+  --rf-ghost-escuro-texto: #5ff0c8;
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -454,6 +462,15 @@
 }
 :root[data-theme="dark"] :is(.paper-surface, .jodit-container, .jodit-popup, .jodit-dialog) ::placeholder {
   color: var(--paper-placeholder);
+}
+/* Titulo e link do conteudo no papel claro (F12-S, S2): a base da pagina pinta h1-h3 com --rf-ink e a com --rf-primary-700 fora do escopo;
+   aqui os tokens ja sao os do papel (--paper-ink, --paper-link). */
+:root[data-theme="dark"] :is(.paper-surface, .jodit-container, .jodit-popup, .jodit-dialog) :is(h1, h2, h3) {
+  color: var(--ink);
+}
+:root[data-theme="dark"] :is(.paper-surface, .jodit-container, .jodit-popup, .jodit-dialog) a,
+:root[data-theme="dark"] :is(.paper-surface, .jodit-container, .jodit-popup, .jodit-dialog) a:hover {
+  color: var(--primary-700);
 }
 /* Troca de tema sem animacao: o atributo existe so durante a troca (theme.ts). */
 :root[data-theme-switching] *,
@@ -1015,9 +1032,9 @@ h3 {
 /* Secundario (padrao do .ghost-button: acoes de pagina, cartoes e formularios) */
 .ghost-button {
   padding: 0 16px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   background: var(--rf-surface);
-  color: var(--rf-action);
+  color: var(--rf-ghost-escuro-texto);
 }
 .ghost-button:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
 .ghost-button:active:not(:disabled) {
@@ -1341,10 +1358,10 @@ select.input,
   min-height: 36px;
   margin-right: 12px;
   padding: 0 12px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
-  color: var(--rf-action);
+  color: var(--rf-ghost-escuro-texto);
   font-family: var(--rf-font-sans);
   font-size: 13px;
   font-weight: 700;
@@ -3952,7 +3969,7 @@ dialog.modal-dialog[open] {
   white-space: nowrap;
 }
 .cotacao-links__acoes .ghost-button:not(.danger-button) {
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   background: var(--rf-surface);
 }
 .cotacao-links__acoes .ghost-button:not(.danger-button):hover:not(:disabled) { background: var(--rf-action-hover-bg); }
@@ -4739,7 +4756,7 @@ dialog.modal-dialog[open] {
 /* Secundario com contorno no rodape do modal (o "Cancelar" fantasma do F3c e sem borda): "Pre-visualizar e-mail" e "Fechar" do historico */
 .modal-actions .credit-support-modal__previsualizar,
 .modal-actions .price-history__fechar {
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   background: var(--rf-surface);
 }
 .modal-actions .credit-support-modal__previsualizar:hover:not(:disabled),
@@ -5853,10 +5870,10 @@ dialog.modal-dialog[open] {
   height: 36px;
   padding: 0 12px;
   box-sizing: border-box;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
-  color: var(--rf-action);
+  color: var(--rf-ghost-escuro-texto);
   font-size: 13px;
   font-weight: 700;
 }
@@ -6102,7 +6119,7 @@ dialog.modal-dialog[open] {
 /* Codigo da cotacao como botao (COMEX): contorno --rf-action, mono 12/600 */
 .solicitacoes-page .solicitacoes-cotacao {
   padding: 0 10px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
   font-family: var(--rf-font-mono);
@@ -6210,7 +6227,7 @@ dialog.modal-dialog[open] {
 .solicitacoes-page .solicitacoes-itens td.solicitacoes-na-cotacao--sim { color: var(--rf-tone-success-fg); }
 .solicitacoes-page .solicitacoes-vincular {
   padding: 0 16px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-button);
   background: var(--rf-surface);
   font-size: 14px;
@@ -7176,10 +7193,10 @@ dialog.modal-dialog[open] {
   min-height: 36px;
   padding: 0 12px;
   gap: 6px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
-  color: var(--rf-action);
+  color: var(--rf-ghost-escuro-texto);
   font-size: 13px;
 }
 .fornecedores-page .fornecedores-secao__cabecalho .ghost-button:hover:not(:disabled),
@@ -7746,9 +7763,9 @@ dialog.modal-dialog[open] {
   align-items: center;
   height: 38px;
   padding: 0 12px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
-  color: var(--rf-action);
+  color: var(--rf-ghost-escuro-texto);
   font-size: 13px;
   font-weight: 700;
   box-sizing: border-box;
@@ -8569,7 +8586,7 @@ dialog.modal-dialog[open] {
   min-height: 36px;
   margin-top: 8px;
   padding: 0 14px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
   font-size: 13px;
@@ -8843,7 +8860,7 @@ dialog.modal-dialog[open] {
   min-height: 36px;
   margin-top: 8px;
   padding: 0 14px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
   font-size: 13px;
@@ -9905,7 +9922,7 @@ dialog.modal-dialog[open] {
   min-height: 36px;
   padding: 0 12px;
   gap: 6px;
-  border: 1.5px solid var(--rf-action);
+  border: 1.5px solid var(--rf-ghost-escuro-borda);
   border-radius: var(--rf-radius-control);
   background: var(--rf-surface);
   font-size: 13px;
@@ -10135,6 +10152,33 @@ dialog.modal-dialog[open] {
   .preview-popout-backdrop { animation: none; }
 }
 /* <<< tela F11 <<< */
+
+/* >>> tela F12 (Suite COMEX) >>> */
+/* F12-S (S3): impressao das telas principais (Visao geral, Cotacoes, Detalhe, Solicitacoes, Relatorios, Auditoria, Fornecedores). So @media print;
+   todo seletor sob body:has(<as 7 raizes>): o Forecast fica de fora por construcao (tem o proprio bloco de impressao). O tema vira claro em
+   theme.ts (beforeprint), entao nada aqui depende de token de cor. O papel imprime os fundos como na tela (print-color-adjust: exact herdado do
+   .app-shell): o navegador, por padrao, nao imprime fundo, e o texto claro dos estados ativos (chip, alternancia, ranking) sumiria no branco.
+   As 3 regras de tabela de Respostas e Fornecedores tiram a largura fixa e o nowrap que estouravam o papel A4. Guarda: src/test/telaF12.test.ts. */
+@media print {
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)),
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) #root { height: auto; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) :is(.sidebar, .topbar, .page-header__actions, .pagination) { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .app-shell { display: block; min-height: 0; background: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .app-shell__content { max-width: none; padding: 0; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) :is(.card, .kpi, .cmp-card) { box-shadow: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table-wrapper { overflow: visible; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table { min-width: 0; font-size: 12px; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table > :is(thead, tbody) > tr > :is(th, td) { padding: 8px 6px; white-space: normal; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table:has(> tbody > tr > td:not([colspan]):last-child > .row-actions) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .solicitacoes-tabela:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):nth-last-child(-n+2) { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .solicitacoes-tabela:not(:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver))) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .respostas-tab__tabela :is(.respostas-tab__fornecedor, .respostas-tab__th-pagamento) { width: auto; min-width: 0; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .respostas-tab__tabela .respostas-tab__num { white-space: normal; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td { padding: 8px 6px; white-space: normal; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) thead { display: table-header-group; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) tr { break-inside: avoid; }
+}
+/* <<< tela F12 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
    nenhum -- o espacamento entre input/select/botao dependia so do

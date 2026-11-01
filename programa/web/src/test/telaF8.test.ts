@@ -508,7 +508,7 @@ describe('F8: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.cmp-po__linha--suave')).toEqual({ color: 'var(--rf-ink-soft)' });
     expect(naRegiao('.cmp-po__arquivo')).toMatchObject({ gap: '12px', padding: '12px 14px', border: '1.5px dashed var(--rf-input-border)', 'border-radius': 'var(--rf-radius-button)', background: 'var(--rf-surface-alt)' });
     expect(naRegiao('.cmp-po__arquivo--ok')).toMatchObject({ gap: '14px', padding: '14px 16px', border: '1.5px solid var(--rf-vencedora-selo-anel)', background: 'var(--rf-tone-success-bg)' });
-    expect(naRegiao('.cmp-po__arquivo-botao')).toMatchObject({ height: '36px', padding: '0 12px', border: '1.5px solid var(--rf-action)', 'border-radius': 'var(--rf-radius-control)', 'font-size': '13px' });
+    expect(naRegiao('.cmp-po__arquivo-botao')).toMatchObject({ height: '36px', padding: '0 12px', border: '1.5px solid var(--rf-ghost-escuro-borda)', 'border-radius': 'var(--rf-radius-control)', 'font-size': '13px' });
     expect(naRegiao('.cmp-po__arquivo-input')).toMatchObject({ position: 'absolute', width: '1px', height: '1px', opacity: '0' });
     expect(naRegiao('.cmp-po__contador')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '12px', 'align-self': 'flex-end' });
     expect(naRegiao('.cmp-po__contador--excedido')).toEqual({ color: 'var(--rf-tone-danger-fg)' });

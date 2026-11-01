@@ -270,6 +270,9 @@ describe('shell F2: <= 880px (sem hamburguer; F12)', () => {
   });
 });
 
+// Impressao das 7 telas principais (F12-S, regiao `tela F12`): as regras de `.sidebar`/`.topbar`/`.app-shell` sob este prefixo exato sao as unicas aceitas alem do Forecast.
+const PREFIXO_IMPRESSAO_F12 = 'body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page))';
+
 describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
   it('fora da regiao, .sidebar / .topbar / .app-shell so aparecem na impressao do relatorio de compras', () => {
     const offenders: string[] = [];
@@ -278,7 +281,7 @@ describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
         if (rule.prelude.startsWith('@') && !rule.prelude.startsWith('@keyframes')) {
           visit(parseRules(rule.body));
         } else if (/\.(sidebar|topbar|app-shell|sq-logo|brand-mark)(?![A-Za-z0-9])/.test(rule.prelude)) {
-          if (!rule.prelude.startsWith('body:has(.fcr-resumo)')) offenders.push(rule.prelude);
+          if (!rule.prelude.startsWith('body:has(.fcr-resumo)') && !rule.prelude.startsWith(PREFIXO_IMPRESSAO_F12)) offenders.push(rule.prelude);
         }
       }
     };
