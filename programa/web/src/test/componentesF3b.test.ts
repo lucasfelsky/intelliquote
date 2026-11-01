@@ -396,18 +396,21 @@ describe('F3b: alerta que ja traz o proprio icone', () => {
     expect(limpo.indexOf('.alert:has(> svg)')).toBeGreaterThan(limpo.indexOf('.alert--error::before'));
   });
 
-  it('so a aba Itens e a Nova cotacao tem .alert/.banner com icone filho no TSX', () => {
+  it('so a aba Itens e a Nova cotacao tem .alert/.banner com icone filho no TSX (contagem por arquivo)', () => {
     const fontes = import.meta.glob(['../**/*.tsx', '!../**/*.test.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-    const achados: string[] = [];
+    const porArquivo: Record<string, number> = {};
     for (const [arquivo, texto] of Object.entries(fontes)) {
       const linhas = texto.split(/\r?\n/);
       linhas.forEach((linha, i) => {
         if (!/className=/.test(linha)) return;
         if (!/(^|[\s"'`{])(alert|banner)([\s"'`}]|$)/.test(linha.slice(linha.indexOf('className=')))) return;
-        if (/<svg|<\w*Icon\b/.test(linhas.slice(i, i + 3).join(' '))) achados.push(`${arquivo.replace('../', '')}:${i + 1}`);
+        if (/<svg|<\w*Icon\b/.test(linhas.slice(i, i + 3).join(' '))) {
+          const nome = arquivo.replace('../', '');
+          porArquivo[nome] = (porArquivo[nome] ?? 0) + 1;
+        }
       });
     }
-    expect(achados).toEqual(['pages/CotacaoNova.tsx:392', 'pages/CotacaoTabs/ItensTab.tsx:605']);
+    expect(porArquivo).toEqual({ 'pages/CotacaoNova.tsx': 1, 'pages/CotacaoTabs/ItensTab.tsx': 1 });
   });
 });
 
