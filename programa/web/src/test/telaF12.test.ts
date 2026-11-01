@@ -93,7 +93,7 @@ describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', ()
     for (const [caminho, src] of forecast) for (const raiz of RAIZES) expect(src, `${caminho}: ${raiz}`).not.toContain(raiz);
   });
 
-  it('nenhuma classe do Forecast (fc*-, fdec-, fgc-) e so as classes previstas (as 7 raizes, o shell, a tabela, o cartao, a paginacao e as tabelas de Respostas e Fornecedores)', () => {
+  it('nenhuma classe do Forecast (fc*-, fdec-, fgc-) e so as classes previstas (as 7 raizes, o shell, a tabela, o cartao, a paginacao, as tabelas de Respostas e Fornecedores e as colunas de acoes)', () => {
     const classes = new Set(seletores.flatMap((s) => classesDoSeletor(s)));
     expect([...classes].filter((c) => /^(fc[a-z]*-|fdec|fgc|fcr)/.test(c))).toEqual([]);
     const previstas = new Set<string>([
@@ -116,6 +116,11 @@ describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', ()
       'respostas-tab__num',
       'fornecedores-tabela',
       'fornecedores-linha',
+      // coluna de acoes (some no papel)
+      'row-actions',
+      'solicitacoes-tabela',
+      'sol-cell-actions',
+      'solicitacoes-ver',
     ]);
     expect([...classes].filter((c) => !previstas.has(c))).toEqual([]);
     for (const raiz of RAIZES) expect(classes.has(raiz), raiz).toBe(true);
@@ -145,17 +150,34 @@ describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', ()
     expect(decl(`${ESCOPO} :is(.card, .kpi, .cmp-card)`)).toEqual({ 'box-shadow': 'none' });
     expect(decl(`${ESCOPO} .table-wrapper`)).toEqual({ overflow: 'visible' });
     expect(decl(`${ESCOPO} .table`)).toEqual({ 'min-width': '0', 'font-size': '12px' });
-    expect(decl(`${ESCOPO} .table :is(th, td)`)).toEqual({ padding: '8px', 'white-space': 'normal', 'overflow-wrap': 'anywhere' });
+    expect(decl(`${ESCOPO} .table > :is(thead, tbody) > tr > :is(th, td)`)).toEqual({ padding: '8px 6px', 'white-space': 'normal' });
     expect(decl(`${ESCOPO} thead`)).toEqual({ display: 'table-header-group' });
     expect(decl(`${ESCOPO} tr`)).toEqual({ 'break-inside': 'avoid' });
     expect(decl(ESCOPO)).toEqual({ height: 'auto' });
+  });
+
+  it('nenhuma regra de impressao quebra palavra no meio: sem overflow-wrap/word-break/hyphens (so quebra em espaco; a sonda --impressao mede 0 palavra quebrada)', () => {
+    expect(regiao?.limpo ?? '').not.toMatch(/overflow-wrap|word-break|word-wrap|hyphens/);
+  });
+
+  it('a coluna de acoes some no papel: ultima coluna das tabelas com .row-actions e as 2 (ou 1) colunas de acoes e "Ver itens" da Solicitacoes COMEX, sem tocar a linha de detalhe (colspan)', () => {
+    const decl = (seletor: string) => interiores.find((r) => listaDeSeletores(r.prelude).includes(seletor))?.body.replace(/\s+/g, ' ').trim();
+    const cont = (seletor: string) => seletores.filter((s) => s.startsWith(`${ESCOPO} ${seletor}`));
+    expect(cont('.table:has(> tbody > tr > td:not([colspan]):last-child > .row-actions)')).toEqual([
+      `${ESCOPO} .table:has(> tbody > tr > td:not([colspan]):last-child > .row-actions) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child`,
+    ]);
+    expect(decl(cont('.table:has(> tbody > tr > td:not([colspan]):last-child > .row-actions)')[0] ?? '')).toBe('display: none;');
+    const comexComAcoes = `${ESCOPO} .solicitacoes-tabela:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):nth-last-child(-n+2)`;
+    const comexSemAcoes = `${ESCOPO} .solicitacoes-tabela:not(:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver))) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child`;
+    expect(decl(comexComAcoes)).toBe('display: none;');
+    expect(decl(comexSemAcoes)).toBe('display: none;');
   });
 
   it('3 regras de tabela por pagina (Respostas e Fornecedores): sem largura fixa e sem nowrap que estouram o papel A4', () => {
     const decl = (seletor: string) => interiores.find((r) => listaDeSeletores(r.prelude).includes(seletor))?.body.replace(/\s+/g, ' ').trim();
     expect(decl(`${ESCOPO} .respostas-tab__tabela :is(.respostas-tab__fornecedor, .respostas-tab__th-pagamento)`)).toBe('width: auto; min-width: 0;');
     expect(decl(`${ESCOPO} .respostas-tab__tabela .respostas-tab__num`)).toBe('white-space: normal;');
-    expect(decl(`${ESCOPO} .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td`)).toBe('white-space: normal;');
+    expect(decl(`${ESCOPO} .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td`)).toBe('padding: 8px 6px; white-space: normal;');
   });
 });
 
@@ -287,15 +309,6 @@ describe('F12-S S5: nenhum ESTADO depende so de borda decorativa (< 3:1)', () =>
   ];
 
   it('as DECORATIVAS tem a razao medida nos 2 temas (e todas existem)', () => {
-    const medidas: Record<string, { claro: number | null; escuro: number | null }> = {};
-    for (const d of DECORATIVAS) {
-      const bg = d.bg ?? '--rf-surface';
-      medidas[d.token] = {
-        claro: d.claro === null ? null : Number(ratio('claro', d.token, bg).toFixed(2)),
-        escuro: d.escuro === null ? null : Number(ratio('escuro', d.token, bg).toFixed(2)),
-      };
-    }
-    console.table(medidas);
     for (const d of DECORATIVAS) {
       if (d.claro !== null) expect(ratio('claro', d.token, d.bg ?? '--rf-surface'), `claro ${d.token}`).toBeCloseTo(d.claro, 2);
       if (d.escuro !== null) expect(ratio('escuro', d.token, d.bg ?? '--rf-surface'), `escuro ${d.token}`).toBeCloseTo(d.escuro, 2);
