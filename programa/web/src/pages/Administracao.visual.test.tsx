@@ -2,13 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfirmProvider } from '@/components/useConfirm';
-import { FAQ_BY_CATEGORY } from '@/services/help';
 import Usuarios from './Usuarios';
 import Empresa from './Empresa';
 import Auditoria from './Auditoria';
 import Templates from './Templates';
 import MinhaConta from './MinhaConta';
-import Ajuda from './Ajuda';
 
 // F11 (Suite COMEX, boards Usuarios, Empresa, Auditoria, Templates, MinhaConta e ModaisAdmin): markup, texto e ARIA das telas de Administracao.
 // O CSS e conferido por telaF11.test.ts e pelo harness; as regras de negocio seguem nos testes de cada tela.
@@ -327,21 +325,5 @@ describe('F11: Minha conta', () => {
     expect(dica?.textContent).toBe('PNG ou JPEG, até 300 KB e no máximo 600×300 px. A imagem não é redimensionada: envie já no tamanho final.');
     expect(dica?.querySelector('.assinatura-mono')?.textContent).toBe('600×300');
     expect(screen.getByText('0/2000')).toBeTruthy();
-  });
-});
-
-describe('F11: copy do Ajuda e do help.ts', () => {
-  it('FAQ sem nenhum "+ " nos nomes de botao das respostas', () => {
-    const respostas = FAQ_BY_CATEGORY.flatMap((g) => g.questions.map((q) => q.answer));
-    expect(respostas.filter((r) => r.includes('"+ '))).toEqual([]);
-    expect(respostas.some((r) => r.includes('clique em "Nova cotação"'))).toBe(true);
-  });
-
-  it('Ajuda: "1 resposta" no singular quando o filtro deixa uma pergunta; plural com varias', () => {
-    const primeira = FAQ_BY_CATEGORY[0]?.questions[0]?.question ?? '';
-    const { container } = render(<Ajuda />);
-    expect(container.querySelector('.chip--static')?.textContent).toMatch(/^\d+ respostas$/);
-    fireEvent.change(screen.getByPlaceholderText('Palavras-chave da pergunta'), { target: { value: primeira } });
-    expect(container.querySelector('.chip--static')?.textContent).toBe('1 resposta');
   });
 });

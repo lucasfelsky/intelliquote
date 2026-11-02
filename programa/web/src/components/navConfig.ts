@@ -11,7 +11,7 @@ export interface NavItem {
   tag?: string;       // selo curto ao lado do rotulo (ex.: 'Beta')
 }
 
-// Papeis da equipe COMEX (acesso interno). `comercial` fica de fora: so ve /solicitacoes.
+// Papeis da equipe COMEX (acesso interno). `comercial` fica de fora: so ve /solicitacoes e o Manual (/manual, so o capitulo Solicitacoes).
 export const COMEX_ROLES = ['admin', 'comprador', 'gestor', 'viewer'];
 
 export function isComercialRole(role?: string | null): boolean {
@@ -28,7 +28,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/forwarders', label: 'Forwarders',       icon: 'forwarders',             group: 'main', roles: COMEX_ROLES },
   { to: '/familias',  label: 'Famílias',           icon: 'familias',             group: 'main', roles: COMEX_ROLES },
   { to: '/relatorios',label: 'Relatórios',         icon: 'relatorios',             group: 'main', roles: COMEX_ROLES },
-  { to: '/ajuda',     label: 'Ajuda',              icon: 'ajuda',             group: 'main', roles: COMEX_ROLES },
+  { to: '/manual',    label: 'Manual',             icon: 'ajuda',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

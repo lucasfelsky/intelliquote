@@ -77,8 +77,8 @@ const naRegiao = (seletor: string) => declaracoes(semMedia, seletor);
 const mediaDe = (nome: string) => parseRules(topo.find((r) => r.prelude === nome)?.body ?? '');
 
 // ---------- listas da fase ----------
-// Prefixos DONOS: todo seletor da regiao (cada item da lista, sozinho) tem ao menos 1 classe com um destes prefixos. `manual-` fica reservado ao
-// Manual de uso (fase M): aceito, sem regras.
+// Prefixos DONOS: todo seletor da regiao (cada item da lista, sozinho) tem ao menos 1 classe com um destes prefixos. `manual-` e do Manual de uso
+// (fase M): as regras ficam no bloco aberto por `/* ---- Manual de uso (fase M) ---- */` e, so as de largura, de toque e de movimento, no fim dos at-rules (telaM.test.ts).
 const PREFIXOS_DONOS = [
   'overview-',
   'kpi',
@@ -214,10 +214,14 @@ describe('F11: regiao `tela F11`', () => {
 describe('F11: prefixos donos e classes de contexto', () => {
   const seletores = planas.flatMap((r) => listaDeSeletores(r.prelude));
 
-  it('todo seletor tem ao menos 1 classe com prefixo dono; `manual-` aceito sem nenhuma regra', () => {
+  it('todo seletor tem dono; regras `manual-` fora de at-rule so depois do marcador do bloco da fase M', () => {
     expect(seletores.length).toBeGreaterThan(300);
     expect(seletores.filter((s) => !classesDoSeletor(s).some(ehDono))).toEqual([]);
-    expect(seletores.filter((s) => classesDoSeletor(s).some((c) => c.startsWith('manual-')))).toEqual([]);
+    const marcador = regiao?.bruto.indexOf('/* ---- Manual de uso (fase M) ---- */') ?? -1;
+    expect(marcador).toBeGreaterThan(0);
+    const antes = parseRules(stripComments((regiao?.bruto ?? '').slice(0, marcador))).filter((r) => !r.prelude.startsWith('@'));
+    const manualAntes = antes.flatMap((r) => listaDeSeletores(r.prelude)).filter((s) => classesDoSeletor(s).some((c) => c.startsWith('manual-')));
+    expect(manualAntes).toEqual([]);
   });
 
   it('as demais classes de cada seletor sao de CONTEXTO; nenhum dono das fases F4-F10 aparece', () => {
@@ -320,8 +324,9 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td')).toEqual({ 'padding-right': '12px', 'padding-left': '12px' });
     expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th')).toMatchObject({ 'padding-right': '10px', 'padding-left': '10px' });
     expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--compacta > tbody > tr > td')).toEqual({ 'padding-right': '10px', 'padding-left': '10px' });
-    // papel: sticky so dentro de @media screen (nenhuma regra de P-ACOES vale na impressao)
-    expect(semMedia.filter((r) => /position:\s*sticky/.test(r.body))).toEqual([]);
+    // papel: sticky so dentro de @media screen (nenhuma regra de P-ACOES vale na impressao). Excecao da fase M: o indice do Manual (.manual-indice) fica fixo em
+    // qualquer largura acima de 1199 (nao ha at-rule so de tela sem teto; as de tela daqui sao max-width) e some no papel (tela F12, M6)
+    expect(semMedia.filter((r) => /position:\s*sticky/.test(r.body) && !listaDeSeletores(r.prelude).every((s) => s === '.manual-indice'))).toEqual([]);
     expect(topo.filter((r) => r.prelude.startsWith('@media') && /position:\s*sticky/.test(r.body)).map((r) => r.prelude).filter((p) => !p.startsWith('@media screen'))).toEqual([]);
   });
 
@@ -599,11 +604,6 @@ describe('F11: TSX da fase sem estilo inline, token, cor literal, glifo nem SVG 
     expect(src).toMatch(/icon: IconName;/);
     expect(contar(src, /<iframe\s+sandbox=""/g)).toBe(2);
     expect(contar(src, /color:#888/g)).toBe(2);
-  });
-
-  it('help.ts sem "+ " nos nomes de botao (74, 101 e 201) e Ajuda com o singular de "resposta"', () => {
-    expect(fonte('services/help.ts')).not.toMatch(/"\+ /);
-    expect(fonte('pages/Ajuda.tsx')).toContain("totalAnswers === 1 ? 'resposta' : 'respostas'");
   });
 });
 

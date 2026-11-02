@@ -157,9 +157,9 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
     expect(() => fireEvent.click(screen.getByRole('button', { name: 'Sair' }))).not.toThrow();
   });
 
-  it('comercial: so Solicitacoes, sem Administracao e sem contador; rodape completo (tema, Sair, assinatura; sem versao)', () => {
+  it('comercial: so Solicitacoes e Manual, sem Administracao e sem contador; rodape completo (tema, Sair, assinatura; sem versao)', () => {
     const { container } = renderAt('comercial', '/solicitacoes');
-    expect(screen.getAllByRole('link').map((l) => l.textContent)).toEqual(['Solicitações']);
+    expect(screen.getAllByRole('link').map((l) => l.textContent)).toEqual(['Solicitações', 'Manual']);
     expect(container.querySelector('.sidebar__group')).toBeNull();
     expect(screen.queryByText('Administração')).toBeNull();
     expect(container.querySelector('.sidebar__badge')).toBeNull();

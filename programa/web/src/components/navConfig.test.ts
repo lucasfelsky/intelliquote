@@ -16,8 +16,18 @@ function visiblePaths(role: string | null | undefined): string[] {
 }
 
 describe('navConfig', () => {
-  it('comercial ve somente /solicitacoes (principal + admin)', () => {
-    expect(visiblePaths('comercial')).toEqual(['/solicitacoes']);
+  it('comercial ve somente /solicitacoes e /manual (principal + admin)', () => {
+    expect(visiblePaths('comercial')).toEqual(['/solicitacoes', '/manual']);
+  });
+
+  it('Manual: rota /manual, rotulo Manual, icone ajuda, visivel para os 5 perfis, sem selo, logo depois de Relatorios', () => {
+    const manual = PRIMARY_NAV.find((item) => item.to === '/manual');
+    expect(manual).toMatchObject({ label: 'Manual', icon: 'ajuda', group: 'main' });
+    expect(manual?.tag).toBeUndefined();
+    for (const role of [...COMEX_ROLES, 'comercial']) expect(visiblePaths(role), role).toContain('/manual');
+    expect(PRIMARY_NAV.some((item) => item.to === '/ajuda')).toBe(false);
+    const paths = PRIMARY_NAV.map((item) => item.to);
+    expect(paths.indexOf('/manual')).toBe(paths.indexOf('/relatorios') + 1);
   });
 
   it('isComercialRole so e verdadeiro para comercial', () => {
@@ -90,7 +100,7 @@ describe('navConfig', () => {
       ].map((item) => item.to);
       expect(visiblePaths(role), role).toEqual(esperado);
     }
-    expect(visiblePaths('comercial')).toEqual(['/solicitacoes']);
+    expect(visiblePaths('comercial')).toEqual(['/solicitacoes', '/manual']);
   });
 
   it('papel ausente: so itens sem roles (nenhum no menu principal)', () => {
