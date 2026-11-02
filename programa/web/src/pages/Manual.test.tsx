@@ -279,6 +279,151 @@ describe('Manual: busca com destaque e contador', () => {
   });
 });
 
+describe('Manual: capitulos 1 a 7 (M2)', () => {
+  const texto = (container: HTMLElement, id: string) => container.querySelector(`#${id}`)?.textContent ?? '';
+
+  it('matriz de perfis: 13 linhas x 5 perfis, cada celula com "Sim"/"Não" para leitor de tela (ou o selo ver/parcial)', () => {
+    const { container } = renderManual();
+    const tabela = container.querySelector('#perfis table') as HTMLTableElement;
+    expect([...tabela.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['O que a pessoa pode fazer', 'Admin', 'Comprador', 'Gestor', 'Viewer', 'Comercial']);
+    const linhas = [...tabela.querySelectorAll('tbody tr')];
+    expect(linhas).toHaveLength(13);
+    const celulas = (i: number) => [...(linhas[i]?.querySelectorAll('td') ?? [])].slice(1).map((td) => td.textContent?.replace('—', '').trim());
+    for (const linha of linhas) expect(linha.querySelectorAll('td')).toHaveLength(6);
+    // "Criar e editar cotacoes...": o gestor gera link novo e revoga links existentes = parcial (achado D8; o texto descreve o codigo atual)
+    expect(celulas(1)).toEqual(['Sim', 'Sim', 'parcial', 'Não', 'Não']);
+    expect(celulas(7)).toEqual(['Sim', 'Sim', 'ver', 'ver', 'Não']);
+    expect(celulas(8)).toEqual(['Não', 'Não', 'Não', 'Não', 'Sim']);
+    expect(celulas(9)).toEqual(['Sim', 'parcial', 'Sim', 'Não', 'Não']);
+    expect(celulas(12)).toEqual(['Sim', 'Não', 'Não', 'Não', 'Não']);
+    expect(tabela.querySelectorAll('.sr-only').length).toBeGreaterThan(40);
+    expect(tabela.querySelectorAll('[aria-hidden="true"]:not(svg)').length).toBeGreaterThan(10);
+    expect(texto(container, 'perfis')).toContain('o gestor, nas cotações, gera link novo e revoga links existentes');
+  });
+
+  it('tabelas e figuras que rolam na horizontal sao regioes focaveis com nome', () => {
+    const { container } = renderManual();
+    const regioes = [...container.querySelectorAll<HTMLElement>('.manual-rolagem')];
+    expect(regioes.length).toBeGreaterThanOrEqual(3);
+    for (const regiao of regioes) {
+      expect(regiao.getAttribute('tabindex'), regiao.className).toBe('0');
+      expect(regiao.getAttribute('role')).toBe('region');
+      expect(regiao.getAttribute('aria-label')).toMatch(/^(Figura|Tabela): .+, role na horizontal$/);
+    }
+    expect(screen.getByRole('region', { name: 'Figura: fluxo completo de uma compra, role na horizontal' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Tabela: o que cada perfil pode fazer, role na horizontal' })).toBeTruthy();
+  });
+
+  it('swimlane: svg com role="img" e <title> (aria-labelledby), ids unicos na pagina e nada de <mark> dentro', () => {
+    const { container } = renderManual();
+    const svg = container.querySelector('#comece-aqui svg.manual-svg') as SVGElement;
+    expect(svg.getAttribute('role')).toBe('img');
+    const titulo = svg.querySelector('title');
+    expect(titulo?.id).toBeTruthy();
+    expect(svg.getAttribute('aria-labelledby')).toBe(titulo?.id);
+    expect(titulo?.textContent).toContain('Fluxo completo: solicitação do Comercial');
+    const ids = [...container.querySelectorAll('[id]')].map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const marcador of svg.querySelectorAll('marker')) expect(marcador.id).toBeTruthy();
+    expect(svg.textContent).toContain('lembretes seg–sex');
+  });
+
+  it('avisos: caixa propria (nunca .alert), role="note" com o tipo e icone aria-hidden', () => {
+    const { container } = renderManual();
+    expect(container.querySelectorAll('.alert')).toHaveLength(0);
+    const avisos = [...container.querySelectorAll('.manual-aviso')];
+    expect(avisos.length).toBeGreaterThanOrEqual(4);
+    for (const aviso of avisos) {
+      expect(aviso.getAttribute('role')).toBe('note');
+      expect(['Dica', 'Atenção', 'Informação']).toContain(aviso.getAttribute('aria-label'));
+      expect(aviso.querySelector('.manual-aviso__icone svg')?.getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(container.querySelector('#comece-aqui .manual-aviso--info')?.textContent).toContain('Esqueceu a senha?');
+    expect(container.querySelector('#itens .manual-aviso--dica')?.textContent).toContain('criada automaticamente');
+  });
+
+  it('Comece aqui: texto do codigo atual (perfil derivado, Sair e Tema no rodape do menu, sem "barra superior")', () => {
+    const { container } = renderManual();
+    const t = texto(container, 'comece-aqui');
+    expect(t).toContain('com um perfil derivado do Portal (admin e viewer iguais; os demais entram como comprador; quem é da Área Comercial entra como comercial)');
+    expect(t).toContain('Sair no rodapé do menu lateral');
+    expect(t).toContain('O botão Tema, no rodapé do menu lateral, alterna Automático (segue o computador), Noturno e Claro.');
+    expect(t).toContain('admin, gestor, comprador e viewer, conforme o caso');
+    expect(t).not.toContain('barra superior');
+    expect(t).not.toContain('Experimente aqui em cima');
+    expect(container.querySelectorAll('#comece-aqui .manual-passos > li')).toHaveLength(3);
+    expect(container.querySelectorAll('#comece-aqui .manual-mini')).toHaveLength(3);
+  });
+
+  it('Perfis e Overview: Comercial ve "só este capítulo"; taxa "50% ou mais"; sem "sempre em dólar"', () => {
+    const { container } = renderManual();
+    expect(texto(container, 'perfis')).toContain('vê a tela Solicitações e, no Manual, só este capítulo');
+    const overview = texto(container, 'overview');
+    expect(overview).toContain('Taxa de 50% ou mais ganha destaque.');
+    expect(overview).not.toContain('sempre em dólar');
+    expect(overview).not.toContain('acima de 50%');
+    expect(container.querySelectorAll('#overview .manual-kpi')).toHaveLength(4);
+    expect(container.querySelector('#overview .manual-exemplo')?.textContent).toBe('Exemplo fictício');
+    expect(container.querySelector('#overview a')?.getAttribute('href')).toBe('#relatorios');
+  });
+
+  it('Solicitacoes: botoes com o rotulo real e icone plus (sem "+ "), item novo/desenvolvimento e atender sem preco', () => {
+    const { container } = renderManual();
+    const t = texto(container, 'solicitacoes');
+    expect(t).toContain('Solicitar uma cotação');
+    expect(t).not.toContain('Nova solicitação');
+    expect(t).toContain('Item que não está no catálogo');
+    expect(t).toContain('a solicitação passa a ser de desenvolvimento e o COMEX cadastra o item antes de cotar');
+    expect(t).toContain('TDS, MSDS ou outro');
+    expect(t).toContain('o admin pode marcar como atendida sem preço, com uma nota');
+    expect(t).toContain('Exige um motivo de 3 a 500 caracteres');
+    const primario = container.querySelector('#solicitacoes .manual-ui--primario');
+    expect(primario?.textContent).toBe('Solicitar uma cotação');
+    expect(primario?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelectorAll('#solicitacoes .manual-passos > li')).toHaveLength(5);
+    expect(container.querySelectorAll('#solicitacoes .manual-mini')).toHaveLength(4);
+    expect(container.querySelectorAll('#solicitacoes .manual-fluxo')).toHaveLength(2);
+  });
+
+  it('nenhum rotulo de botao com "+ " no texto: o + e sempre o icone plus', () => {
+    const { container } = renderManual();
+    const rotulos = [...container.querySelectorAll('.manual-ui')];
+    expect(rotulos.filter((r) => /^\+/.test(r.textContent ?? ''))).toEqual([]);
+    for (const nome of ['Novo item', 'Novo fornecedor', 'Adicionar contato', 'Novo forwarder', 'Adicionar outro item']) {
+      const rotulo = rotulos.find((e) => e.textContent === nome);
+      expect(rotulo, nome).toBeDefined();
+      expect(rotulo?.querySelector('svg'), nome).not.toBeNull();
+    }
+    expect(texto(container, 'fornecedores')).toContain('use o botão de expandir (ícone +) da linha');
+  });
+
+  it('Itens, Fornecedores e Forwarders: tabela de exemplo, passos da importacao, regua com 5 marcas e lista do forwarder', () => {
+    const { container } = renderManual();
+    expect([...container.querySelectorAll('#itens tbody tr')].map((tr) => tr.querySelector('td')?.textContent)).toEqual(['Ácido cítrico anidro', 'Benzoato de sódio']);
+    expect(container.querySelectorAll('#itens .manual-passos > li')).toHaveLength(3);
+    const regua = container.querySelector('#fornecedores .manual-regua');
+    expect(regua?.getAttribute('role')).toBe('img');
+    expect(regua?.getAttribute('aria-label')).toContain('D-30');
+    expect(regua?.querySelectorAll('.manual-regua__marca')).toHaveLength(5);
+    expect(regua?.querySelectorAll('.manual-regua__marca--vermelha')).toHaveLength(2);
+    expect(container.querySelectorAll('#fornecedores .badge')).toHaveLength(2);
+    expect(container.querySelectorAll('#forwarders li')).toHaveLength(3);
+  });
+
+  it('a busca destaca texto dentro de rotulos, minis, tabelas e legendas (componentes que recebem texto por prop tambem)', async () => {
+    const { container } = renderManual();
+    await buscar('marcar atendida');
+    expect(container.querySelector('#solicitacoes .manual-ui mark.manual-marca')?.textContent?.toLowerCase()).toBe('marcar atendida');
+    await buscar('resposta manual');
+    expect(container.querySelector('#perfis td mark.manual-marca')?.textContent?.toLowerCase()).toBe('resposta manual');
+    await buscar('quatro indicadores');
+    expect(container.querySelector('#overview .manual-figura__legenda mark.manual-marca')).not.toBeNull();
+    await buscar('mesma moeda');
+    expect(container.querySelector('#solicitacoes .manual-mini mark.manual-marca')).not.toBeNull();
+    expect(container.querySelectorAll('svg mark')).toHaveLength(0);
+  });
+});
+
 describe('Manual: perfil Comercial', () => {
   it('ve SO o capitulo Solicitacoes: sem indice, sem seletor e sem texto de outro capitulo', () => {
     const { container } = renderManual('comercial');

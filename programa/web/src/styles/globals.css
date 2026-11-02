@@ -10450,6 +10450,428 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   color: var(--rf-ink);
 }
 
+/* Texto corrido do capitulo */
+.manual-secao {
+  margin: 8px 0 0;
+  font-size: 16px;
+}
+.manual-capitulo > p,
+.manual-capitulo li { max-width: 72ch; }
+.manual-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.55;
+  color: var(--rf-ink-soft);
+}
+.manual-nota { font-size: 12.5px; }
+.manual-capitulo code {
+  padding: 0 4px;
+  border: 1px solid var(--rf-border);
+  border-radius: 4px;
+  background: var(--rf-surface-alt);
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  color: var(--rf-ink);
+}
+.manual-capitulo a:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+
+/* Rotulo de botao ou campo da interface dentro do texto */
+.manual-ui {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 1px solid var(--rf-empty-border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  color: var(--rf-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.manual-ui--primario {
+  border-color: var(--rf-primary-700);
+  background: var(--rf-primary);
+  color: var(--rf-on-primary);
+}
+
+/* Passos numerados (so onde a ordem importa): o numero vem do contador */
+.manual-passos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: manual-passo;
+}
+.manual-passos__item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  line-height: 1.55;
+  color: var(--rf-ink-soft);
+  counter-increment: manual-passo;
+}
+.manual-passos__item::before {
+  content: counter(manual-passo);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--rf-vencedora-borda);
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-primary-50);
+  color: var(--rf-primary-700);
+  font-size: 13px;
+  font-weight: 800;
+}
+.manual-passos__conteudo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 3px;
+}
+
+/* Avisos: dica, atencao e informacao (nunca a classe .alert) */
+.manual-aviso {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface-alt);
+  line-height: 1.55;
+  color: var(--rf-ink-soft);
+}
+.manual-aviso__icone {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--rf-radius-pill);
+}
+.manual-aviso--dica {
+  border-color: var(--rf-vencedora-borda);
+  background: var(--rf-tone-success-bg);
+}
+.manual-aviso--dica .manual-aviso__icone {
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+}
+.manual-aviso--atencao {
+  border-color: var(--rf-aviso-borda-suave);
+  background: var(--rf-tone-warning-bg);
+}
+.manual-aviso--atencao .manual-aviso__icone {
+  background: var(--rf-tone-warning-fg);
+  color: var(--rf-surface);
+}
+.manual-aviso--info {
+  border-color: var(--rf-tone-info-bg);
+  background: var(--rf-tone-info-bg);
+}
+.manual-aviso--info .manual-aviso__icone {
+  background: var(--rf-tone-info-fg);
+  color: var(--rf-surface);
+}
+
+/* Figuras: caixa, legenda e selo de exemplo; .manual-rolagem e a regiao que rola na horizontal (focavel) */
+.manual-figura {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+}
+.manual-figura__caixa {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface-alt);
+}
+.manual-figura__legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+.manual-exemplo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--rf-aviso-borda-suave);
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-tone-warning-bg);
+  color: var(--rf-tone-warning-fg);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.manual-rolagem { overflow-x: auto; }
+.manual-rolagem:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+
+/* Grades e minis */
+.manual-grade {
+  display: grid;
+  gap: 14px;
+}
+.manual-grade--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.manual-grade--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.manual-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface-alt);
+}
+.manual-mini__titulo {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--rf-ink);
+}
+.manual-mini p {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Tabelas do manual: a .table da Suite com recuo e tipografia da previa */
+.manual-tabela {
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+}
+.manual-tabela__tabela { font-size: 13px; }
+.manual-tabela__tabela th,
+.manual-tabela__tabela td {
+  padding: 9px 12px;
+  vertical-align: top;
+}
+.manual-tabela__tabela th {
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--rf-ink-soft);
+}
+.manual-tabela__tabela td { color: var(--rf-ink-soft); }
+.manual-tabela__tabela tr:last-child td { border-bottom: 0; }
+.manual-tabela__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.manual-tabela__tabela th.manual-tabela__centro,
+.manual-tabela__tabela td.manual-tabela__centro { text-align: center; }
+
+/* Matriz de perfis: sim (check), ver e parcial (selo de texto) e nao (traco) */
+.manual-matriz__sim {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-primary-50);
+  color: var(--rf-primary-700);
+}
+.manual-matriz__parcial {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-tone-warning-bg);
+  color: var(--rf-tone-warning-fg);
+  font-size: 11px;
+  font-weight: 800;
+}
+.manual-matriz__nao { color: var(--rf-ink-soft); }
+
+/* Fluxo de status (selos ligados por setas) */
+.manual-fluxo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.manual-fluxo + .manual-fluxo { margin-top: 10px; }
+.manual-fluxo__seta {
+  display: inline-flex;
+  color: var(--rf-ink-soft);
+}
+.manual-fluxo__rotulo {
+  font-size: 11.5px;
+  color: var(--rf-ink-soft);
+}
+
+/* Indicadores de exemplo (Overview) */
+.manual-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.manual-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface);
+}
+.manual-kpi__rotulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--rf-ink-soft);
+}
+.manual-kpi__valor {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.manual-kpi__detalhe {
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+
+/* Regua dos avisos de vencimento: marcas de largura 0 centradas no ponto (sem transform); a posicao vem de uma classe por marca */
+.manual-regua {
+  position: relative;
+  height: 70px;
+  margin: 8px 36px 0;
+}
+.manual-regua__trilho {
+  position: absolute;
+  top: 22px;
+  right: 0;
+  left: 0;
+  height: 8px;
+  border-radius: var(--rf-radius-pill);
+  background: linear-gradient(to right, var(--rf-tone-success-bg) 0 0%, var(--rf-aviso-borda-suave) 0% 85.7%, var(--rf-danger) 85.7% 100%);
+}
+.manual-regua__marca {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--rf-ink);
+}
+.manual-regua__marca--d30 { left: 0%; }
+.manual-regua__marca--d15 { left: 42.9%; }
+.manual-regua__marca--d7 { left: 65.7%; }
+.manual-regua__marca--d0 { left: 85.7%; }
+.manual-regua__marca--vencido { left: 100%; }
+.manual-regua__dia {
+  position: absolute;
+  top: -2px;
+}
+.manual-regua__ponto {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin-top: 19px;
+  border: 3px solid var(--rf-tone-warning-solid);
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-surface);
+}
+.manual-regua__marca--vermelha .manual-regua__ponto { border-color: var(--rf-danger); }
+.manual-regua__rotulo {
+  font-weight: 500;
+  color: var(--rf-ink-soft);
+}
+
+/* SVG das figuras (swimlane): texto e traco por classe, so tokens */
+.manual-svg {
+  display: block;
+  width: 100%;
+}
+.manual-svg--fluxo { min-width: 760px; }
+.manual-svg text { font-family: var(--rf-font-sans); }
+.manual-sv-faixa {
+  fill: var(--rf-surface);
+  stroke: var(--rf-border);
+}
+.manual-sv-faixa--alt { fill: var(--rf-surface-alt); }
+.manual-sv-raia {
+  fill: var(--rf-ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.manual-sv-no {
+  fill: var(--rf-surface);
+  stroke: var(--rf-primary);
+  stroke-width: 1.5;
+}
+.manual-sv-no--opcional {
+  stroke: var(--rf-empty-border);
+  stroke-dasharray: 4 3;
+}
+.manual-sv-no--chave {
+  fill: var(--rf-action);
+  stroke: var(--rf-action);
+}
+.manual-sv-t {
+  fill: var(--rf-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.manual-sv-t--leve {
+  fill: var(--rf-ink-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+.manual-sv-t--sobre { fill: var(--rf-on-action); }
+.manual-sv-seta {
+  fill: none;
+  stroke: var(--rf-ink-soft);
+  stroke-width: 1.5;
+}
+.manual-sv-seta--tracejada {
+  stroke: var(--rf-primary);
+  stroke-dasharray: 4 4;
+}
+.manual-sv-ponta { fill: var(--rf-ink-soft); }
+.manual-sv-ponta--destaque { fill: var(--rf-primary); }
+.manual-sv-nota {
+  fill: var(--rf-primary-700);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 /* ---- Larguras: 1439 (notebook), P-ACOES (F12-B), so em tela (o papel nao muda): nas tabelas dos Relatorios os rotulos do cabecalho quebram, Produto e Fornecedor vencedor
    quebram em qualquer ponto (codigos e valores seguem nowrap) e o recuo lateral diminui para a tabela nao rolar; acima de 1439 nada muda ---- */
 @media screen and (max-width: 1439px) {
@@ -10541,6 +10963,9 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   }
   /* Manual (fase M) */
   .manual-capitulo { padding: 20px 16px 22px; }
+  .manual-grade--2,
+  .manual-grade--3 { grid-template-columns: minmax(0, 1fr); }
+  .manual-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ---- 720 ---- */

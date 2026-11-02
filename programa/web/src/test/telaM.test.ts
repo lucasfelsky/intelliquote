@@ -141,12 +141,12 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect([...new Set(manual.map((r) => r.atRule))].filter((a) => !permitidas.includes(a))).toEqual([]);
   });
 
-  it('as regras de at-rule vem DEPOIS das regras base do Manual (vencem pela ordem de cascata)', () => {
-    const bruto = regiao?.bruto ?? '';
-    const baseFim = bruto.lastIndexOf('.manual-vazio');
-    for (const a of ['@media screen and (max-width: 1199px)', '@media screen and (max-width: 1023px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)']) {
-      expect(bruto.indexOf(a), a).toBeGreaterThan(baseFim);
-    }
+  it('as regras de at-rule vem DEPOIS de todas as regras base do Manual (vencem pela ordem de cascata)', () => {
+    const ordem = topo.map((r) => (r.prelude.startsWith('@') ? (regrasDoManual([r]).length > 0 ? 'at-manual' : 'at') : regrasDoManual([r]).length > 0 ? 'base-manual' : 'outra'));
+    const ultimaBase = ordem.lastIndexOf('base-manual');
+    const primeiraAt = ordem.indexOf('at-manual');
+    expect(ultimaBase).toBeGreaterThan(0);
+    expect(primeiraAt).toBeGreaterThan(ultimaBase);
   });
 
   it('1199: uma coluna, o indice lateral some e entra o seletor de capitulo; 1023: capitulo com padding 20/16', () => {
@@ -169,6 +169,39 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
       'scroll-margin-top': '16px',
     });
     expect(declaracoes('.manual-capitulo[hidden]')).toEqual({ display: 'none' });
+  });
+
+  it('componentes do texto (M2): rotulo de botao, passos pelo contador, aviso por tipo, figura, selo de exemplo e tabela da previa', () => {
+    expect(declaracoes('.manual-ui')).toMatchObject({ 'border-bottom-width': '2px', 'border-radius': '6px', 'white-space': 'nowrap', background: 'var(--rf-surface-alt)', color: 'var(--rf-ink)' });
+    expect(declaracoes('.manual-ui--primario')).toEqual({ 'border-color': 'var(--rf-primary-700)', background: 'var(--rf-primary)', color: 'var(--rf-on-primary)' });
+    expect(declaracoes('.manual-passos')).toMatchObject({ 'list-style': 'none', 'counter-reset': 'manual-passo' });
+    expect(declaracoes('.manual-passos__item')).toMatchObject({ 'grid-template-columns': '28px minmax(0, 1fr)', 'counter-increment': 'manual-passo' });
+    expect(declaracoes('.manual-passos__item::before')).toMatchObject({ content: 'counter(manual-passo)', width: '28px', height: '28px', background: 'var(--rf-primary-50)', color: 'var(--rf-primary-700)' });
+    expect(declaracoes('.manual-aviso--dica .manual-aviso__icone')).toEqual({ background: 'var(--rf-action)', color: 'var(--rf-on-action)' });
+    expect(declaracoes('.manual-aviso--atencao')).toEqual({ 'border-color': 'var(--rf-aviso-borda-suave)', background: 'var(--rf-tone-warning-bg)' });
+    expect(declaracoes('.manual-aviso--atencao .manual-aviso__icone')).toEqual({ background: 'var(--rf-tone-warning-fg)', color: 'var(--rf-surface)' });
+    expect(declaracoes('.manual-aviso--info .manual-aviso__icone')).toEqual({ background: 'var(--rf-tone-info-fg)', color: 'var(--rf-surface)' });
+    expect(declaracoes('.manual-figura__caixa')).toMatchObject({ padding: '18px', background: 'var(--rf-surface-alt)', 'border-radius': 'var(--rf-radius-xs)' });
+    expect(declaracoes('.manual-exemplo')).toMatchObject({ background: 'var(--rf-tone-warning-bg)', color: 'var(--rf-tone-warning-fg)', 'text-transform': 'uppercase' });
+    expect(declaracoes('.manual-tabela__tabela th')).toMatchObject({ 'text-transform': 'uppercase', color: 'var(--rf-ink-soft)' });
+    expect(declaracoes('.manual-tabela__tabela td')).toMatchObject({ padding: '9px 12px', color: 'var(--rf-ink-soft)' });
+    expect(declaracoes('.manual-svg--fluxo')).toEqual({ 'min-width': '760px' });
+  });
+
+  it('regiao que rola na horizontal (.manual-rolagem): overflow-x e anel de foco da Suite; a regua usa uma classe de posicao por marca, sem transform', () => {
+    expect(declaracoes('.manual-rolagem')).toEqual({ 'overflow-x': 'auto' });
+    expect(declaracoes('.manual-rolagem:focus-visible')).toMatchObject({ outline: '2px solid transparent', 'box-shadow': '0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action)' });
+    expect(declaracoes('.manual-regua__marca')).toMatchObject({ position: 'absolute', width: '0', 'align-items': 'center' });
+    const esquerda = (m: string) => declaracoes(`.manual-regua__marca--${m}`).left;
+    expect(['d30', 'd15', 'd7', 'd0', 'vencido'].map(esquerda)).toEqual(['0%', '42.9%', '65.7%', '85.7%', '100%']);
+  });
+
+  it('1023 (tela): grades de 2 e 3 colunas viram 1; indicadores de 4 viram 2', () => {
+    const m1023 = '@media screen and (max-width: 1023px)';
+    expect(declaracoes('.manual-grade--2', m1023)).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
+    expect(declaracoes('.manual-grade--3', m1023)).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
+    expect(declaracoes('.manual-kpis')).toMatchObject({ 'grid-template-columns': 'repeat(4, minmax(0, 1fr))' });
+    expect(declaracoes('.manual-kpis', m1023)).toEqual({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))' });
   });
 
   it('o indice fica sticky so na regra `.manual-indice` e a rolagem do html e suave, com `auto` no movimento reduzido', () => {
@@ -205,13 +238,18 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
   it('toda classe `manual-*` usada nos TSX do Manual (className) tem regra no CSS', () => {
     const comRegra = (classe: string) => manual.some((r) => r.seletores.some((s) => classesDoSeletor(s).includes(classe)));
     const faltando: string[] = [];
+    let achadas = 0;
     for (const [arquivo, fonte] of arquivos) {
-      for (const [, valor] of fonte.matchAll(/className=(?:"([^"]*)"|\{([^}]*)\})/g)) {
-        for (const [classe] of (valor ?? '').matchAll(/(?<![\w-])manual-[\w-]*[a-z0-9]/g)) {
+      // className="..." / className={...} e os mapas de classe dos componentes e dos dados (`classe: '...'`)
+      for (const m of fonte.matchAll(/(?:className=|classe:\s*)(?:"([^"]*)"|'([^']*)'|\{([^}]*)\})/g)) {
+        const valor = m[1] ?? m[2] ?? m[3] ?? '';
+        for (const [classe] of valor.matchAll(/(?<![\w-])manual-[\w-]*[a-z0-9]/g)) {
+          achadas++;
           if (!comRegra(classe)) faltando.push(`${arquivo}: .${classe}`);
         }
       }
     }
+    expect(achadas).toBeGreaterThan(30);
     expect([...new Set(faltando)]).toEqual([]);
     expect(arquivos.some(([arquivo]) => arquivo.endsWith('Manual.tsx'))).toBe(true);
   });
