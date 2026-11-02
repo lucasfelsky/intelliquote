@@ -537,6 +537,147 @@ describe('Manual: capitulos 8 a 10 (M3)', () => {
   });
 });
 
+describe('Manual: capitulos 11 a 13 (M4)', () => {
+  const texto = (container: HTMLElement, id: string) => container.querySelector(`#${id}`)?.textContent ?? '';
+  const chip = (container: HTMLElement, nome: string) => within(container.querySelector<HTMLElement>('#comparacao .manual-sim__chips')!).getByRole('button', { name: nome });
+  const nomesDoRanking = (container: HTMLElement) => [...container.querySelectorAll('#comparacao .manual-sim__linha .manual-sim__nome')].map((n) => n.firstChild?.textContent);
+
+  it('Respostas: tabela de 3 propostas com sinais, 4 minis com rotulos reais (Nova resposta com icone plus) e 2 avisos', () => {
+    const { container } = renderManual();
+    expect([...container.querySelectorAll('#respostas tbody tr')].map((tr) => tr.querySelector('strong')?.textContent)).toEqual(['Lianyun Fine Chemicals', 'Jinhai Industrial', 'Shenghua Trading']);
+    expect(container.querySelectorAll('#respostas tbody .badge')).toHaveLength(5);
+    expect(container.querySelectorAll('#respostas .manual-mini')).toHaveLength(4);
+    const nova = [...container.querySelectorAll('#respostas .manual-ui')].find((e) => e.textContent === 'Nova resposta');
+    expect(nova?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelectorAll('#respostas .manual-aviso')).toHaveLength(2);
+    expect(texto(container, 'respostas')).not.toContain('+ Nova resposta');
+  });
+
+  it('simulador: 4 chips com aria-pressed (Preco e Pagamento ligados), grupo rotulado e ranking da previa (Jinhai 1,92)', () => {
+    const { container } = renderManual();
+    const grupo = container.querySelector('#comparacao [role="group"]');
+    expect(grupo?.getAttribute('aria-label')).toBe('Critérios da comparação');
+    const chips = [...container.querySelectorAll<HTMLButtonElement>('#comparacao .manual-sim__chip')];
+    expect(chips.map((c) => [c.textContent, c.getAttribute('aria-pressed')])).toEqual([
+      ['Preço', 'true'],
+      ['Condição de pagamento', 'true'],
+      ['Incoterm', 'false'],
+      ['Qualidade', 'false'],
+    ]);
+    expect(chips.every((c) => c.classList.contains('chip'))).toBe(true);
+    expect(chips.map((c) => c.classList.contains('chip--active'))).toEqual([true, true, false, false]);
+    expect(nomesDoRanking(container)).toEqual(['Jinhai Industrial', 'Lianyun Fine Chemicals', 'Nordmar Química', 'Qingdao Harbor Chem']);
+    expect([...container.querySelectorAll('#comparacao .manual-sim__total')].map((t) => t.textContent)).toEqual(['1,92', '1,63', '1,48', '1,33']);
+    expect(container.querySelector('#comparacao .manual-sim__selo')?.textContent).toBe('Vencedora');
+    expect(container.querySelectorAll('#comparacao .manual-sim__selo')).toHaveLength(1);
+  });
+
+  it('simulador: so Preco ranqueia a Qingdao Harbor Chem em 1o; barra com role="img" e titulo "Score X de N"; eixo acompanha', () => {
+    const { container } = renderManual();
+    fireEvent.click(chip(container, 'Condição de pagamento'));
+    expect(chip(container, 'Condição de pagamento').getAttribute('aria-pressed')).toBe('false');
+    expect(nomesDoRanking(container)[0]).toBe('Qingdao Harbor Chem');
+    const barra = container.querySelector('#comparacao .manual-sim__linha svg');
+    expect(barra?.getAttribute('role')).toBe('img');
+    expect(barra?.getAttribute('preserveAspectRatio')).toBe('none');
+    const titulo = barra?.querySelector('title');
+    expect(titulo?.textContent).toBe('Score 1,00 de 1');
+    expect(barra?.getAttribute('aria-labelledby')).toBe(titulo?.id);
+    const eixo = [...container.querySelectorAll('#comparacao .manual-sim__eixo > div > span')].map((s) => s.textContent);
+    expect(eixo).toEqual(['0', '0,5', '1']);
+    expect(container.querySelectorAll('#comparacao .manual-sim__linha svg rect')).toHaveLength(4);
+  });
+
+  it('simulador: largura das barras vem de atributos SVG (x/width), nunca de estilo inline', () => {
+    const { container } = renderManual();
+    const retangulos = [...container.querySelectorAll('#comparacao .manual-sim__linha:first-child svg rect')];
+    expect(retangulos.map((r) => [r.getAttribute('x'), r.getAttribute('width')])).toEqual([
+      ['0', '460'],
+      ['460', '500'],
+    ]);
+    expect(container.querySelectorAll('#comparacao [style]')).toHaveLength(0);
+  });
+
+  it('simulador: 3o criterio bloqueado e o ultimo nao desliga, com a mensagem em aria-live="polite"', () => {
+    const { container } = renderManual();
+    const msg = container.querySelector('#comparacao .manual-sim__msg');
+    expect(msg?.getAttribute('aria-live')).toBe('polite');
+    expect(msg?.textContent).toBe('');
+    fireEvent.click(chip(container, 'Incoterm'));
+    expect(msg?.textContent).toBe('Selecione no máximo 2 critérios.');
+    expect(chip(container, 'Incoterm').getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(chip(container, 'Preço'));
+    expect(msg?.textContent).toBe('');
+    fireEvent.click(chip(container, 'Condição de pagamento'));
+    expect(msg?.textContent).toBe('Selecione ao menos 1 critério.');
+    expect(chip(container, 'Condição de pagamento').getAttribute('aria-pressed')).toBe('true');
+    // trocar um por outro: desliga um e liga o outro
+    fireEvent.click(chip(container, 'Qualidade'));
+    expect(msg?.textContent).toBe('');
+    expect(chip(container, 'Qualidade').getAttribute('aria-pressed')).toBe('true');
+    expect(nomesDoRanking(container)[0]).toBe('Jinhai Industrial');
+  });
+
+  it('simulador: tabela de dados com estrela + media na Qualidade e "sem avaliacao"', () => {
+    const { container } = renderManual();
+    const linhas = [...container.querySelectorAll('#comparacao [aria-label="Tabela: propostas do simulador, role na horizontal"] tbody tr')];
+    expect(linhas).toHaveLength(4);
+    expect(linhas[0]?.textContent).toContain('Lianyun Fine Chemicals');
+    expect(linhas[0]?.querySelector('td:last-child svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(linhas[0]?.querySelector('td:last-child')?.textContent).toBe('4,3 ');
+    expect(linhas[3]?.querySelector('td:last-child')?.textContent).toBe('sem avaliação');
+    expect(linhas[3]?.querySelector('td:nth-child(4)')?.textContent).toBe('CIF (nível 4)');
+  });
+
+  it('waterfall: 9 linhas, total R$ 326.181,42, gatilho de R$ 300.000 em texto e trilhos SVG decorativos', () => {
+    const { container } = renderManual();
+    const linhas = [...container.querySelectorAll('#comparacao .manual-wf__linha')];
+    expect(linhas).toHaveLength(9);
+    expect(linhas.filter((l) => l.classList.contains('manual-wf__linha--total')).map((l) => l.querySelector('.manual-wf__k')?.textContent)).toEqual(['CIF', 'Total landed']);
+    expect(linhas[8]?.querySelector('.manual-wf__v')?.textContent).toBe('R$ 326.181,42');
+    expect(linhas[1]?.querySelector('.manual-wf__v')?.textContent).toBe('+ R$ 18.500,00');
+    expect(container.querySelectorAll('#comparacao .manual-wf__gatilho')).toHaveLength(1);
+    expect(container.querySelector('#comparacao .manual-wf__gatilho')?.textContent).toBe('gatilho R$ 300.000');
+    const trilhos = container.querySelectorAll('#comparacao .manual-wf__svg');
+    expect(trilhos).toHaveLength(9);
+    for (const t of trilhos) expect(t.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelectorAll('#comparacao .manual-wf__linha-gatilho')).toHaveLength(1);
+    expect(container.querySelector('#comparacao .manual-wf__linha-gatilho')?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+  });
+
+  it('Comparacao: texto do codigo atual (quantidade diferente, falta de cambio na alcada e ranking que comeca so com Preco)', () => {
+    const { container } = renderManual();
+    const t = texto(container, 'comparacao');
+    expect(t).toContain('item indisponível, item faltando, quantidade diferente ou alternativa de parceiro desatualizada');
+    expect(t).toContain('ou quando falta o câmbio da proposta, só gestor ou admin podem adjudicar');
+    expect(t).toContain('Na aba Comparações o ranking começa só com Preço.');
+    expect(container.querySelectorAll('#comparacao h3')).toHaveLength(5);
+    expect(container.querySelectorAll('#comparacao .manual-aviso--info')).toHaveLength(1);
+  });
+
+  it('Ordem de Compra: 5 passos; quem conclui a cotacao e admin ou gestor (o comprador recebe 403)', () => {
+    const { container } = renderManual();
+    const passos = [...container.querySelectorAll('#ordem-de-compra .manual-passos > li')];
+    expect(passos).toHaveLength(5);
+    expect(passos[4]?.textContent).toBe('Admin ou gestor clicam em Concluir cotação. A cotação fica Fechada.');
+    expect(passos[3]?.textContent).toContain('Avaliar fornecedor');
+    expect(passos[2]?.querySelector('a')?.getAttribute('href')).toBe('#administracao');
+    expect(container.querySelector('#ordem-de-compra .manual-aviso--dica')).not.toBeNull();
+    expect(container.querySelector('#ordem-de-compra .manual-ui--primario')?.textContent).toBe('Enviar Ordem de Compra');
+  });
+
+  it('a busca nao marca nada dentro do simulador nem do waterfall, mas marca o resto do capitulo', async () => {
+    const { container } = renderManual();
+    await buscar('qingdao');
+    expect(container.querySelectorAll('#comparacao .manual-sim mark')).toHaveLength(0);
+    expect(container.querySelector('#comparacao .manual-figura__legenda mark.manual-marca')).not.toBeNull();
+    await buscar('landed');
+    expect(container.querySelectorAll('#comparacao .manual-wf mark')).toHaveLength(0);
+    expect(container.querySelector('#comparacao p mark.manual-marca')).not.toBeNull();
+    expect(container.querySelectorAll('svg mark')).toHaveLength(0);
+  });
+});
+
 describe('Manual: perfil Comercial', () => {
   it('ve SO o capitulo Solicitacoes: sem indice, sem seletor e sem texto de outro capitulo', () => {
     const { container } = renderManual('comercial');

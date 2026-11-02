@@ -16,6 +16,7 @@ import {
   type ThemeName,
 } from './rfCss';
 import { CAPITULOS } from '../pages/Manual/capitulos';
+import { calcularWaterfall } from '../pages/Manual/waterfall';
 
 // Fase M (Suite COMEX; Manual de uso, previa aprovada manual-previa.html): CSS na regiao `tela F11` (D-M-01), prefixo `manual-`. Esta guarda cobre: toda regra
 // do Manual dentro da regiao (nenhuma fora), seletores so com classes `manual-*`, so token `--rf-*` (sem cor literal, !important, transform, token
@@ -239,10 +240,52 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(comAnimacao.filter((s) => !semAnimacao.includes(s))).toEqual([]);
   });
 
-  it('pointer: coarse leva o link do indice, o campo de busca e o seletor de capitulo a 44', () => {
+  it('pointer: coarse leva o link do indice, o campo de busca, o seletor de capitulo e os chips do simulador a 44', () => {
     const coarse = manual.filter((r) => r.atRule === '@media (pointer: coarse)');
     const alvos44 = coarse.filter((r) => /min-height:\s*44px/.test(r.corpo)).flatMap((r) => r.seletores);
-    for (const s of ['.manual-indice__link', '.manual-busca__input', '.manual-indice-select__campo']) expect(alvos44, s).toContain(s);
+    for (const s of ['.manual-indice__link', '.manual-busca__input', '.manual-indice-select__campo', '.manual-sim__chip']) expect(alvos44, s).toContain(s);
+  });
+
+  it('capitulos 11 a 13 (M4): chips do simulador com estado ligado na cor de acao, foco da Suite e series por token; Qualidade usa --rf-score-outros (sem token novo)', () => {
+    expect(declaracoes('.manual-sim__chip[aria-pressed="true"]')).toMatchObject({ background: 'var(--rf-action)', color: 'var(--rf-on-action)', 'font-weight': '700' });
+    expect(declaracoes('.manual-sim__chip')).toMatchObject({ background: 'var(--rf-surface-alt)', color: 'var(--rf-ink-soft)' });
+    const foco = declaracoes('.manual-sim__chip:focus-visible');
+    expect(foco.outline).toBe('2px solid transparent');
+    expect(foco['box-shadow']).toMatch(/var\(--rf-action\)/);
+    expect(declaracoes('.manual-sim__seg--preco')).toEqual({ fill: 'var(--rf-primary)' });
+    expect(declaracoes('.manual-sim__seg--pagamento')).toEqual({ fill: 'var(--rf-tone-info-solid)' });
+    expect(declaracoes('.manual-sim__seg--incoterm')).toEqual({ fill: 'var(--rf-tone-warning-solid)' });
+    expect(declaracoes('.manual-sim__seg--qualidade')).toEqual({ fill: 'var(--rf-score-outros)' });
+    expect(declaracoes('.manual-sim__amostra--qualidade')).toEqual({ background: 'var(--rf-score-outros)' });
+    expect(Object.keys(THEMES.claro).filter((t) => /manual|serie/.test(t))).toEqual([]);
+    expect(declaracoes('.manual-sim > .manual-sim__msg')).toMatchObject({ color: 'var(--rf-tone-warning-fg)', 'min-height': '16px' });
+    expect(declaracoes('.manual-sim__ranking > .manual-sim__linha')).toMatchObject({ display: 'grid', 'grid-template-columns': '26px minmax(110px, 190px) minmax(0, 1fr) 52px' });
+    expect(declaracoes('.manual-sim__trilho')).toMatchObject({ height: '18px', background: 'var(--rf-surface-alt)', border: '1px solid var(--rf-border)' });
+    expect(declaracoes('.manual-wf__linha')).toMatchObject({ display: 'grid', 'grid-template-columns': 'minmax(120px, 170px) minmax(0, 1fr) 104px' });
+    expect(declaracoes('.manual-wf__barra')).toMatchObject({ fill: 'var(--rf-tone-info-solid)' });
+    expect(declaracoes('.manual-wf__barra--total')).toMatchObject({ fill: 'var(--rf-action)' });
+    expect(declaracoes('.manual-wf__linha-gatilho')).toMatchObject({ stroke: 'var(--rf-danger)', 'stroke-dasharray': '4 3' });
+  });
+
+  it('o rotulo do gatilho do waterfall acaba na linha tracejada: right em CSS = 100% menos a posicao calculada em waterfall.ts', () => {
+    const { gatilhoPct } = calcularWaterfall();
+    expect(declaracoes('.manual-wf__gatilho').right).toBe(`${(100 - gatilhoPct).toFixed(1)}%`);
+    expect(declaracoes('.manual-wf__gatilho')).toMatchObject({ position: 'absolute', color: 'var(--rf-danger)' });
+  });
+
+  it('1023 (tela): linhas do simulador e do waterfall levam o trilho para a 2a linha, o eixo some e o rotulo do gatilho desce para nao cobrir o valor', () => {
+    const m1023 = '@media screen and (max-width: 1023px)';
+    expect(declaracoes('.manual-sim__eixo', m1023)).toMatchObject({ 'grid-template-columns': '20px minmax(0, 1fr) 46px', display: 'none' });
+    expect(declaracoes('.manual-sim__linha > .manual-sim__trilho', m1023)).toEqual({ 'grid-column': '2 / 4', 'grid-row': '2' });
+    expect(declaracoes('.manual-wf__linha', m1023)).toEqual({ 'grid-template-columns': 'minmax(0, 1fr) 96px' });
+    expect(declaracoes('.manual-wf__linha > .manual-wf__trilho', m1023)).toEqual({ 'grid-column': '1 / 3', 'grid-row': '2' });
+    expect(declaracoes('.manual-wf__gatilho', m1023)).toEqual({ top: '26px' });
+  });
+
+  it('movimento reduzido: chips e barras do simulador sem transicao', () => {
+    const reduzido = manual.filter((r) => r.atRule === '@media (prefers-reduced-motion: reduce)' && /transition:\s*none/.test(r.corpo)).flatMap((r) => r.seletores);
+    expect(reduzido).toEqual(expect.arrayContaining(['.manual-sim__chip', '.manual-sim__seg']));
+    expect(declaracoes('.manual-sim__seg')).toHaveProperty('transition');
   });
 
   it('foco: link do indice e titulo do capitulo mostram o anel da Suite (outline transparente para forced-colors + sombra dupla)', () => {

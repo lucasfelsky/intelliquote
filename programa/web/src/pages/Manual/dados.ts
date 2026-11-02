@@ -168,3 +168,38 @@ export const MARCAS_DA_REGUA: readonly MarcaDaRegua[] = [
   { id: 'd0', dia: 'D0', rotulo: 'vence hoje', classe: 'manual-regua__marca manual-regua__marca--d0 manual-regua__marca--vermelha' },
   { id: 'vencido', dia: 'Vencido', rotulo: 'aviso único', classe: 'manual-regua__marca manual-regua__marca--vencido manual-regua__marca--vermelha' },
 ];
+
+// ---------- Capitulo 12: simulador de score e waterfall do landed cost ----------
+export interface SimFornecedor {
+  nome: string;
+  // Cesta: soma de preco unitario x quantidade pedida, na moeda da proposta (US$).
+  cesta: number;
+  // Prazo de pagamento em dias.
+  dias: number;
+  incoterm: string;
+  // Nivel de risco do incoterm (1 a 5).
+  nivel: number;
+  // Media das estrelas (0 = sem avaliacao).
+  qualidade: number;
+}
+
+export const SIM_FORNECEDORES: readonly SimFornecedor[] = [
+  { nome: 'Lianyun Fine Chemicals', cesta: 41250, dias: 60, incoterm: 'FOB', nivel: 3, qualidade: 4.3 },
+  { nome: 'Qingdao Harbor Chem', cesta: 39800, dias: 30, incoterm: 'FOB', nivel: 3, qualidade: 3.8 },
+  { nome: 'Jinhai Industrial', cesta: 43100, dias: 90, incoterm: 'CFR', nivel: 3, qualidade: 4.6 },
+  { nome: 'Nordmar Química', cesta: 40600, dias: 45, incoterm: 'CIF', nivel: 4, qualidade: 0 },
+];
+
+// Proposta da Jinhai (US$ 43.100) com cambio e aliquotas ilustrativas; o total passa do gatilho de aprovacao.
+export const WATERFALL = {
+  precoUsd: 43100,
+  cambio: 5.42,
+  frete: 18500,
+  seguro: 1200,
+  aliquotaIi: 0.12,
+  aliquotaIpi: 0.0325,
+  aliquotaPis: 0.021,
+  aliquotaCofins: 0.0965,
+  outrasTaxas: 3500,
+  gatilho: 300000,
+} as const;
