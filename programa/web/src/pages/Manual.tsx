@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { capitulosVisiveis, kickerDoCapitulo, type CapituloMeta } from './Manual/capitulos';
+import { RODAPE_DO_MANUAL } from './Manual/dados';
 import { textoParaIndice } from './Manual/busca';
 import Busca from './Manual/componentes/Busca';
 import { MetaProvider, PerfilProvider } from './Manual/componentes/Capitulo';
@@ -145,6 +146,7 @@ export default function Manual() {
               <p>Tente outra palavra, como “link”, “PO” ou “aprovação”.</p>
             </div>
           ) : null}
+          <p className="manual-rodape">{RODAPE_DO_MANUAL}</p>
         </div>
       </div>
     </div>

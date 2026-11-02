@@ -1,11 +1,24 @@
 import Capitulo from '../componentes/Capitulo';
+import { GradeMini, Mini } from '../componentes/GradeMini';
+import RotuloUi from '../componentes/RotuloUi';
+import { CARTOES_RELATORIOS } from '../dados';
 
-// M5: o rotulo "Atualizar" do lead vira <RotuloUi> quando o componente entrar no capitulo.
-// Corpo do capitulo: entra nos passos seguintes da fase M (M1 so tem o cabecalho).
 export default function Relatorios() {
   return (
     <Capitulo
-      lead={<>Indicadores do período escolhido em <strong>De</strong> e <strong>Até</strong> (padrão: últimos 30 dias). Clique em <strong>Atualizar</strong> depois de mudar as datas.</>}
-    />
+      lead={
+        <>
+          Indicadores do período escolhido em <strong>De</strong> e <strong>Até</strong> (padrão: últimos 30 dias). Clique em <RotuloUi>Atualizar</RotuloUi> depois de mudar as datas.
+        </>
+      }
+    >
+      <GradeMini colunas={3}>
+        {CARTOES_RELATORIOS.map((cartao) => (
+          <Mini key={cartao.titulo} titulo={cartao.titulo}>
+            <p>{cartao.texto}</p>
+          </Mini>
+        ))}
+      </GradeMini>
+    </Capitulo>
   );
 }

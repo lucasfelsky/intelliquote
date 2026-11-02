@@ -11322,6 +11322,81 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   color: var(--rf-danger);
 }
 
+/* Capitulos 14 a 17 (M5): variaveis de template, perguntas frequentes (details), glossario e rodape */
+.manual-variaveis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.manual-faq-lista { min-width: 0; }
+.manual-faq {
+  padding: 4px 0;
+  border-top: 1px solid var(--rf-divider);
+}
+.manual-faq:first-of-type { border-top: 0; }
+.manual-faq__resumo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  list-style: none;
+  font-weight: 700;
+  color: var(--rf-ink);
+  cursor: pointer;
+}
+.manual-faq__resumo::-webkit-details-marker { display: none; }
+.manual-faq__resumo:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  border-radius: var(--rf-radius-xs);
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.manual-faq__icone {
+  display: inline-flex;
+  flex: none;
+  color: var(--rf-primary-700);
+}
+.manual-faq[open] .manual-faq__mais,
+.manual-faq:not([open]) .manual-faq__menos { display: none; }
+.manual-faq > .manual-faq__resposta {
+  max-width: 72ch;
+  padding: 0 0 12px;
+}
+
+.manual-glossario {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) minmax(0, 1fr);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+}
+.manual-glossario__termo,
+.manual-glossario__def {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rf-border);
+  line-height: 1.5;
+}
+.manual-glossario__termo {
+  background: var(--rf-surface-alt);
+  font-weight: 800;
+  color: var(--rf-ink);
+}
+.manual-glossario__def { color: var(--rf-ink-soft); }
+.manual-glossario__termo:last-of-type,
+.manual-glossario__def:last-of-type { border-bottom: 0; }
+
+.manual-rodape {
+  margin: 0;
+  padding: 8px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+
 /* ---- Larguras: 1439 (notebook), P-ACOES (F12-B), so em tela (o papel nao muda): nas tabelas dos Relatorios os rotulos do cabecalho quebram, Produto e Fornecedor vencedor
    quebram em qualquer ponto (codigos e valores seguem nowrap) e o recuo lateral diminui para a tabela nao rolar; acima de 1439 nada muda ---- */
 @media screen and (max-width: 1439px) {
@@ -11433,6 +11508,11 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   }
   .manual-wf__linha:last-child { margin-bottom: 28px; }
   .manual-wf__gatilho { top: 26px; }
+  .manual-glossario { grid-template-columns: minmax(0, 1fr); }
+  .manual-glossario__termo {
+    padding-bottom: 2px;
+    border-bottom: 0;
+  }
 }
 
 /* ---- 720 ---- */
@@ -11529,6 +11609,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .manual-indice-select__campo { min-height: 44px; }
   .manual-indice__link { align-items: center; }
   .manual-sim__chip { min-height: 44px; }
+  .manual-faq__resumo { min-height: 44px; }
 }
 
 /* ---- Movimento reduzido: so ficam as trocas de estado, sem transicao nem entrada animada ---- */

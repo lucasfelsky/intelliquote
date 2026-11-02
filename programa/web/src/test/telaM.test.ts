@@ -240,10 +240,10 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(comAnimacao.filter((s) => !semAnimacao.includes(s))).toEqual([]);
   });
 
-  it('pointer: coarse leva o link do indice, o campo de busca, o seletor de capitulo e os chips do simulador a 44', () => {
+  it('pointer: coarse leva o link do indice, o campo de busca, o seletor de capitulo, os chips do simulador e o resumo do FAQ a 44', () => {
     const coarse = manual.filter((r) => r.atRule === '@media (pointer: coarse)');
     const alvos44 = coarse.filter((r) => /min-height:\s*44px/.test(r.corpo)).flatMap((r) => r.seletores);
-    for (const s of ['.manual-indice__link', '.manual-busca__input', '.manual-indice-select__campo', '.manual-sim__chip']) expect(alvos44, s).toContain(s);
+    for (const s of ['.manual-indice__link', '.manual-busca__input', '.manual-indice-select__campo', '.manual-sim__chip', '.manual-faq__resumo']) expect(alvos44, s).toContain(s);
   });
 
   it('capitulos 11 a 13 (M4): chips do simulador com estado ligado na cor de acao, foco da Suite e series por token; Qualidade usa --rf-score-outros (sem token novo)', () => {
@@ -302,6 +302,26 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(reduzido).toEqual(expect.arrayContaining(['.manual-busca__input', '.manual-indice-select__campo']));
   });
 
+  it('capitulos 14 a 17 (M5): FAQ em details com divisoria, icone plus/minus por [open], foco da Suite e glossario em grade de 2 colunas (1 no estreito)', () => {
+    expect(declaracoes('.manual-faq')).toEqual({ padding: '4px 0', 'border-top': '1px solid var(--rf-divider)' });
+    expect(declaracoes('.manual-faq__resumo')).toMatchObject({ display: 'flex', 'justify-content': 'space-between', 'list-style': 'none', cursor: 'pointer', color: 'var(--rf-ink)' });
+    expect(declaracoes('.manual-faq__resumo::-webkit-details-marker')).toEqual({ display: 'none' });
+    expect(declaracoes('.manual-faq[open] .manual-faq__mais')).toEqual({ display: 'none' });
+    expect(declaracoes('.manual-faq:not([open]) .manual-faq__menos')).toEqual({ display: 'none' });
+    const foco = declaracoes('.manual-faq__resumo:focus-visible');
+    expect(foco.outline).toBe('2px solid transparent');
+    expect(foco['box-shadow']).toMatch(/var\(--rf-action\)/);
+    expect(declaracoes('.manual-faq__icone')).toMatchObject({ color: 'var(--rf-primary-700)' });
+    expect(declaracoes('.manual-faq > .manual-faq__resposta')).toEqual({ 'max-width': '72ch', padding: '0 0 12px' });
+    expect(declaracoes('.manual-glossario')).toMatchObject({ display: 'grid', 'grid-template-columns': 'minmax(120px, 170px) minmax(0, 1fr)', border: '1px solid var(--rf-border)', 'border-radius': 'var(--rf-radius-xs)' });
+    expect(declaracoes('.manual-glossario__termo')).toMatchObject({ background: 'var(--rf-surface-alt)', color: 'var(--rf-ink)', 'font-weight': '800' });
+    expect(declaracoes('.manual-glossario__def')).toMatchObject({ color: 'var(--rf-ink-soft)' });
+    expect(declaracoes('.manual-glossario', '@media screen and (max-width: 1023px)')).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
+    expect(declaracoes('.manual-glossario__termo', '@media screen and (max-width: 1023px)')).toEqual({ 'padding-bottom': '2px', 'border-bottom': '0' });
+    expect(declaracoes('.manual-rodape')).toMatchObject({ 'text-align': 'center', color: 'var(--rf-ink-soft)' });
+    expect(declaracoes('.manual-variaveis')).toMatchObject({ display: 'flex', 'flex-wrap': 'wrap', gap: '8px' });
+  });
+
   it('foco: link do indice e titulo do capitulo mostram o anel da Suite (outline transparente para forced-colors + sombra dupla)', () => {
     for (const s of ['.manual-indice__link:focus-visible', '.manual-capitulo__titulo:focus-visible']) {
       const d = declaracoes(s);
@@ -344,6 +364,7 @@ const PARES: ReadonlyArray<Par> = [
   par(rf('ink-soft'), rf('tone-warning-bg')),
   par(rf('ink-soft'), rf('tone-info-bg')), // texto dos avisos
   par(rf('ink'), rf('surface')),
+  par(rf('ink'), rf('surface-alt')), // termo do glossario
   par(rf('ink'), rf('tone-warning-bg')), // marca da busca
   par(rf('primary-700'), rf('primary-50')), // kicker, indice ativo, numero dos passos
   par(rf('primary-700'), rf('surface')), // links, kicker

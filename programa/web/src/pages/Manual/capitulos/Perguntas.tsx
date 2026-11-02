@@ -1,8 +1,11 @@
 import Capitulo from '../componentes/Capitulo';
+import Faq from '../componentes/Faq';
+import { PERGUNTAS_FREQUENTES } from '../dados';
 
-// Corpo do capitulo: entra nos passos seguintes da fase M (M1 so tem o cabecalho).
 export default function Perguntas() {
   return (
-    <Capitulo />
+    <Capitulo>
+      <Faq perguntas={PERGUNTAS_FREQUENTES} />
+    </Capitulo>
   );
 }

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Manual from './Manual';
+import { normalizar as normalizarBusca } from './Manual/busca';
+import { dataBr, GLOSSARIO, MANUAL_ATUALIZADO_EM, PERGUNTAS_FREQUENTES, RODAPE_DO_MANUAL } from './Manual/dados';
 
 // Fase M (Manual de uso): estrutura, indice, busca e ancoras. O CSS e conferido por telaM.test.ts e pelo harness.
 
@@ -219,7 +221,7 @@ describe('Manual: busca com destaque e contador', () => {
 
   it('termo com ocorrencia: status "N capitulos encontrados", marca no texto e o indice acompanha os capitulos visiveis', async () => {
     const { container } = renderManual();
-    await buscar('fornecedor');
+    await buscar('forwarder');
     const n = visiveis(container).length;
     expect(n).toBeGreaterThan(1);
     expect(n).toBeLessThan(17);
@@ -784,6 +786,138 @@ describe('Manual: bloco "Para o COMEX" so para a equipe interna', () => {
     const outro = renderManual('comercial', '/manual#vincular');
     expect(outro.container.querySelector('#vincular')).toBeNull();
     expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('Manual: capitulos 14 a 17 e rodape (M5)', () => {
+  const texto = (container: HTMLElement, id: string) => container.querySelector(`#${id}`)?.textContent ?? '';
+  const detalhes = (container: HTMLElement) => [...container.querySelectorAll<HTMLDetailsElement>('#perguntas details')];
+  const abertos = (container: HTMLElement) => detalhes(container).filter((d) => d.open);
+
+  it('Relatorios: 6 cartoes de indicadores e o rotulo Atualizar como pilula da interface', () => {
+    const { container } = renderManual();
+    expect([...container.querySelectorAll('#relatorios .manual-mini__titulo')].map((t) => t.textContent)).toEqual([
+      'Resumo',
+      'Economia estimada',
+      'Lead-time médio',
+      'Top fornecedores',
+      'Taxa de adjudicação',
+      'Engajamento',
+    ]);
+    expect(container.querySelector('#relatorios .manual-capitulo__lead .manual-ui')?.textContent).toBe('Atualizar');
+    expect(container.querySelectorAll('#relatorios .manual-grade--3')).toHaveLength(1);
+  });
+
+  it('Administracao: 5 secoes, avisos de nova solicitacao com a copia automatica, 6 variaveis de template e rotulos reais', () => {
+    const { container } = renderManual();
+    expect([...container.querySelectorAll('#administracao h3')].map((h) => h.textContent)).toEqual(['Empresa', 'Usuários', 'Templates de e-mail', 'Auditoria', 'Minha conta']);
+    expect(texto(container, 'administracao')).toContain('Vazio, vai para a equipe COMEX e para a cópia automática.');
+    expect([...container.querySelectorAll('#administracao .manual-variaveis code')].map((c) => c.textContent)).toEqual([
+      '{{requestCode}}',
+      '{{productName}}',
+      '{{supplierContactName}}',
+      '{{portalLink}}',
+      '{{expiresAt}}',
+      '{{companyName}}',
+    ]);
+    expect([...container.querySelectorAll('#administracao .manual-ui')].map((r) => r.textContent)).toEqual(['Restaurar padrão', 'Ver diff']);
+    expect(container.querySelectorAll('#administracao ul > li')).toHaveLength(5);
+  });
+
+  it('FAQ: 11 perguntas em <details> fechados, com resumo, icone plus/minus aria-hidden e resposta', () => {
+    const { container } = renderManual();
+    expect(detalhes(container)).toHaveLength(11);
+    expect(PERGUNTAS_FREQUENTES).toHaveLength(11);
+    expect(abertos(container)).toHaveLength(0);
+    for (const d of detalhes(container)) {
+      expect(d.querySelector('summary')?.textContent).not.toBe('');
+      expect(d.querySelector('summary .manual-faq__icone')?.getAttribute('aria-hidden')).toBe('true');
+      expect(d.querySelectorAll('summary svg')).toHaveLength(2);
+      expect(d.querySelector('.manual-faq__resposta')?.textContent).not.toBe('');
+    }
+    expect(detalhes(container)[0]?.querySelector('summary')?.textContent).toBe('O fornecedor precisa de login para responder?');
+  });
+
+  it('FAQ: clicar no resumo abre e fecha a pergunta (estado do React, nao do navegador)', () => {
+    const { container } = renderManual();
+    const resumo = detalhes(container)[2]!.querySelector('summary')!;
+    fireEvent.click(resumo);
+    expect(detalhes(container)[2]!.open).toBe(true);
+    fireEvent.click(resumo);
+    expect(detalhes(container)[2]!.open).toBe(false);
+  });
+
+  it('FAQ: o termo da busca abre as perguntas que o contem e, ao limpar, tudo volta ao estado de antes (a aberta pelo leitor continua aberta)', async () => {
+    const { container } = renderManual();
+    fireEvent.click(detalhes(container)[8]!.querySelector('summary')!);
+    expect(abertos(container)).toHaveLength(1);
+    await buscar('senha');
+    const esperadas = PERGUNTAS_FREQUENTES.filter((p) => normalizarBusca(`${p.pergunta} ${p.resposta}`).includes('senha')).map((p) => p.pergunta);
+    expect(esperadas.length).toBeGreaterThanOrEqual(2);
+    const abertas = abertos(container).map((d) => d.querySelector('summary')?.textContent);
+    expect(abertas).toEqual(expect.arrayContaining([...esperadas, 'Dá para comparar propostas em moedas diferentes?']));
+    expect(abertas).toHaveLength(esperadas.length + 1);
+    expect(container.querySelector('#perguntas summary mark.manual-marca, #perguntas .manual-faq__resposta mark.manual-marca')).not.toBeNull();
+    await buscar('');
+    expect(abertos(container).map((d) => d.querySelector('summary')?.textContent)).toEqual(['Dá para comparar propostas em moedas diferentes?']);
+  });
+
+  it('FAQ: durante a busca o leitor ainda fecha a pergunta aberta pelo termo; trocar o termo devolve o controle ao termo', async () => {
+    const { container } = renderManual();
+    await buscar('esqueci a senha');
+    expect(abertos(container)).toHaveLength(1);
+    fireEvent.click(abertos(container)[0]!.querySelector('summary')!);
+    expect(abertos(container)).toHaveLength(0);
+    await buscar('esqueci a senha.');
+    expect(abertos(container)).toHaveLength(1);
+  });
+
+  it('FAQ: termo que so existe em outro capitulo nao abre nenhuma pergunta', async () => {
+    const { container } = renderManual();
+    await buscar('importar planilha');
+    expect(abertos(container)).toHaveLength(0);
+    expect(container.querySelector('#perguntas')?.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('comecar e terminar a busca nao remonta o capitulo: o criterio escolhido no simulador continua ligado', async () => {
+    const { container } = renderManual();
+    fireEvent.click(within(container.querySelector<HTMLElement>('#comparacao .manual-sim__chips')!).getByRole('button', { name: 'Condição de pagamento' }));
+    const pressionados = () => [...container.querySelectorAll('#comparacao .manual-sim__chip')].map((c) => c.getAttribute('aria-pressed'));
+    expect(pressionados()).toEqual(['true', 'false', 'false', 'false']);
+    await buscar('landed');
+    expect(pressionados()).toEqual(['true', 'false', 'false', 'false']);
+    await buscar('');
+    expect(pressionados()).toEqual(['true', 'false', 'false', 'false']);
+  });
+
+  it('Glossario: 13 termos em <dl> (dt/dd) e o lead time como media dos itens, arredondada', () => {
+    const { container } = renderManual();
+    expect(container.querySelectorAll('#glossario dl.manual-glossario > dt')).toHaveLength(13);
+    expect(container.querySelectorAll('#glossario dl.manual-glossario > dd')).toHaveLength(13);
+    expect([...container.querySelectorAll('#glossario dt')].map((d) => d.textContent)).toEqual(GLOSSARIO.map((t) => t.termo));
+    expect(texto(container, 'glossario')).toContain('Na comparação vale a média dos itens, arredondada.');
+    expect(texto(container, 'glossario')).not.toContain('o maior entre os itens');
+  });
+
+  it('a busca marca termo e definicao do glossario', async () => {
+    const { container } = renderManual();
+    await buscar('cif');
+    expect(container.querySelector('#glossario dt mark.manual-marca')?.textContent?.toLowerCase()).toBe('cif');
+    expect(container.querySelector('#glossario dd mark.manual-marca')).not.toBeNull();
+  });
+
+  it('rodape: "Manual do IntelliQuote · atualizado em 02/11/2026", data fixa (nao vem do relogio) e fora dos capitulos', () => {
+    const { container } = renderManual();
+    const rodape = container.querySelector('.manual-artigo > .manual-rodape');
+    expect(rodape?.textContent).toBe('Manual do IntelliQuote · atualizado em 02/11/2026');
+    expect(MANUAL_ATUALIZADO_EM).toBe('2026-11-02');
+    expect(dataBr('2026-01-05')).toBe('05/01/2026');
+    expect(rodape?.closest('section')).toBeNull();
+  });
+
+  it('rodape tambem para o Comercial', () => {
+    const { container } = renderManual('comercial');
+    expect(container.querySelector('.manual-rodape')?.textContent).toBe(RODAPE_DO_MANUAL);
   });
 });
 

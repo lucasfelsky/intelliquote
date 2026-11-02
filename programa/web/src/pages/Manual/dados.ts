@@ -203,3 +203,114 @@ export const WATERFALL = {
   outrasTaxas: 3500,
   gatilho: 300000,
 } as const;
+
+
+// ---------- Capitulo 14: cartoes dos Relatorios ----------
+export interface CartaoDeRelatorio {
+  titulo: string;
+  texto: string;
+}
+
+export const CARTOES_RELATORIOS: readonly CartaoDeRelatorio[] = [
+  { titulo: 'Resumo', texto: 'Cotações, propostas, comparações, fornecedores e taxa de adjudicação.' },
+  { titulo: 'Economia estimada', texto: 'Quanto a vencedora ficou abaixo da proposta mais cara, por cotação. Só entram comparações com duas ou mais propostas.' },
+  { titulo: 'Lead-time médio', texto: 'Média geral em dias e média por fornecedor.' },
+  { titulo: 'Top fornecedores', texto: 'Os dez com mais vitórias: taxa de vitória, score médio, avaliação e propostas.' },
+  { titulo: 'Taxa de adjudicação', texto: 'Quantas comparações terminaram com vencedora.' },
+  { titulo: 'Engajamento', texto: 'Links enviados, respondidos, taxa de resposta e tempo médio até a resposta.' },
+];
+
+// ---------- Capitulo 15: variaveis dos templates de e-mail ----------
+export const VARIAVEIS_DE_TEMPLATE: readonly string[] = [
+  '{{requestCode}}',
+  '{{productName}}',
+  '{{supplierContactName}}',
+  '{{portalLink}}',
+  '{{expiresAt}}',
+  '{{companyName}}',
+];
+
+// ---------- Capitulo 16: perguntas frequentes ----------
+export interface PerguntaFrequente {
+  pergunta: string;
+  resposta: string;
+}
+
+export const PERGUNTAS_FREQUENTES: readonly PerguntaFrequente[] = [
+  {
+    pergunta: 'O fornecedor precisa de login para responder?',
+    resposta: 'Não. Cada contato recebe um link único que vale pelo prazo escolhido no envio. Quem tem o link responde sem senha.',
+  },
+  {
+    pergunta: 'O fornecedor perdeu o e-mail ou o link expirou. E agora?',
+    resposta: 'Em Links do portal, clique em Gerar novo link. O link novo é copiado para você enviar e o anterior para de funcionar na hora.',
+  },
+  {
+    pergunta: 'Por que um fornecedor não aparece na hora do envio?',
+    resposta: 'Ele está Inativo ou Bloqueado, ou não tem nenhum contato cadastrado. Confira em Fornecedores. Se ele não cota a família dos itens, procure na pasta Todos.',
+  },
+  {
+    pergunta: 'O mais barato não ficou em primeiro. Está errado?',
+    resposta:
+      'Não necessariamente. Se o critério Condição de pagamento, Incoterm ou Qualidade estiver ativo, ele pesa tanto quanto o preço. Deixe só Preço para ordenar pela cesta mais barata.',
+  },
+  {
+    pergunta: 'Por que uma proposta está em “Fora do ranking”?',
+    resposta: 'Ela tem item indisponível, item faltando, quantidade diferente ou foi lançada à mão sem itens. O motivo aparece na própria linha.',
+  },
+  {
+    pergunta: 'O fornecedor pode corrigir a proposta depois de enviar?',
+    resposta: 'Sim, enquanto o link valer. Cada revisão vira uma nova versão no Histórico e desfaz a vencedora, se já houver uma.',
+  },
+  {
+    pergunta: 'Por que não consigo definir a vencedora?',
+    resposta: 'O landed cost passou do gatilho de aprovação da Empresa, ou falta o câmbio da proposta. Nesse caso, só gestor ou admin podem adjudicar.',
+  },
+  {
+    pergunta: 'Como paro os lembretes de um fornecedor?',
+    resposta: 'Eles param sozinhos quando o fornecedor responde, quando a vencedora é escolhida, quando a PO é enviada, quando a cotação fecha ou quando o prazo vence.',
+  },
+  {
+    pergunta: 'Dá para comparar propostas em moedas diferentes?',
+    resposta: 'Não. O ranking pede todas as propostas na mesma moeda. Peça ao fornecedor que responda na moeda da cotação.',
+  },
+  {
+    pergunta: 'Apareceu “Há uma nova versão do IntelliQuote”. O que faço?',
+    resposta: 'Salve o que estiver editando e clique em Recarregar. Se algo continuar estranho depois de uma atualização, abra o sistema numa aba nova.',
+  },
+  { pergunta: 'Esqueci a senha.', resposta: 'A senha é a do Portal COMEX. Recupere por lá.' },
+];
+
+// ---------- Capitulo 17: glossario ----------
+export interface TermoDoGlossario {
+  termo: string;
+  definicao: string;
+}
+
+export const GLOSSARIO: readonly TermoDoGlossario[] = [
+  { termo: 'Adjudicação', definicao: 'Escolha formal da proposta vencedora.' },
+  { termo: 'Alçada', definicao: 'Valor acima do qual a adjudicação precisa de gestor ou admin. Definida em Empresa.' },
+  { termo: 'Cesta', definicao: 'Soma de preço unitário × quantidade pedida de todos os itens de uma proposta.' },
+  { termo: 'CIF', definicao: 'Valor da mercadoria + frete + seguro, base dos impostos de importação.' },
+  { termo: 'Credit Support', definicao: 'Encaminhar a proposta a um parceiro de crédito, que compra do fornecedor e revende com prazo próprio.' },
+  { termo: 'DG', definicao: 'Dangerous goods: carga perigosa, informada pelo fornecedor por item.' },
+  { termo: 'Forwarder', definicao: 'Agente de carga que organiza o embarque.' },
+  { termo: 'Incoterm', definicao: 'Regra internacional que define até onde vão os custos e riscos do vendedor (FOB, CFR, CIF…).' },
+  { termo: 'Landed cost', definicao: 'Custo da mercadoria posta no Brasil: CIF + II + IPI + PIS/COFINS + outras taxas.' },
+  { termo: 'Lead time', definicao: 'Dias entre o pedido e a disponibilidade da carga. Na comparação vale a média dos itens, arredondada.' },
+  { termo: 'Link do portal', definicao: 'Endereço único por contato e cotação que dá acesso ao Supplier Portal sem senha.' },
+  { termo: 'PO', definicao: 'Purchase Order, a Ordem de Compra enviada ao fornecedor.' },
+  { termo: 'PTAX', definicao: 'Taxa de câmbio oficial do Banco Central, atualizada todo dia no sistema.' },
+];
+
+// ---------- Rodape: data da ultima conferencia do conteudo (D-M-09) ----------
+// ISO (AAAA-MM-DD) e fixa: o manual nao le a data do relogio, entao o texto e igual para todos e testavel. Atualize junto com a revisao do conteudo.
+export const MANUAL_ATUALIZADO_EM = '2026-11-02';
+
+// AAAA-MM-DD -> DD/MM/AAAA, sem Date (nada de fuso horario).
+export function dataBr(iso: string): string {
+  const [ano, mes, dia] = iso.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+export const RODAPE_DO_MANUAL = `Manual do IntelliQuote · atualizado em ${dataBr(MANUAL_ATUALIZADO_EM)}`;

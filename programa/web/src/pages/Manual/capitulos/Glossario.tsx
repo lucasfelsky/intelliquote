@@ -1,8 +1,11 @@
 import Capitulo from '../componentes/Capitulo';
+import Glossario from '../componentes/Glossario';
+import { GLOSSARIO } from '../dados';
 
-// Corpo do capitulo: entra nos passos seguintes da fase M (M1 so tem o cabecalho).
-export default function Glossario() {
+export default function GlossarioDoManual() {
   return (
-    <Capitulo />
+    <Capitulo>
+      <Glossario termos={GLOSSARIO} />
+    </Capitulo>
   );
 }

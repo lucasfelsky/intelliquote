@@ -27,6 +27,7 @@ function ehExcluido(elemento: ReactElement): boolean {
 
 function marcar(no: ReactNode, termo: string): ReactNode {
   if (typeof no === 'string') {
+    if (!termo) return no;
     const fatias = fatiar(no, termo);
     if (fatias.length === 1 && !fatias[0]?.marca) return no;
     return fatias.map((fatia, i) =>
@@ -49,6 +50,7 @@ function marcar(no: ReactNode, termo: string): ReactNode {
 
 export default function Destacar({ children }: { children?: ReactNode }) {
   const termo = useContext(TermoContext);
-  if (!termo) return <>{children}</>;
+  // Sem termo o percurso e o mesmo (so as strings passam direto): as chaves dos filhos nao mudam quando a busca comeca ou termina,
+  // entao um componente com estado dentro do capitulo (FAQ, simulador) nao e remontado.
   return <>{Children.toArray(children).map((filho) => marcar(filho, termo))}</>;
 }
