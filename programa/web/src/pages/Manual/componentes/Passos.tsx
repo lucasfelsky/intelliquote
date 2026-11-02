@@ -9,10 +9,13 @@ export function Passos({ children }: { children: ReactNode }) {
   );
 }
 
+// O texto do passo (nos, <strong>, pilulas) vai num unico <span>: o .manual-passos__conteudo empilha BLOCOS, entao sem o span cada fragmento viraria uma linha propria.
 export function Passo({ children }: { children: ReactNode }) {
   return (
     <li className="manual-passos__item">
-      <div className="manual-passos__conteudo">{children}</div>
+      <div className="manual-passos__conteudo">
+        <span>{children}</span>
+      </div>
     </li>
   );
 }

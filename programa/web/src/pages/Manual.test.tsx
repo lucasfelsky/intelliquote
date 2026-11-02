@@ -510,7 +510,7 @@ describe('Manual: capitulos 8 a 10 (M3)', () => {
     expect([...portal.querySelectorAll('.manual-portal__marca')].map((m) => m.textContent)).toEqual(['Temporarily unavailable', 'Dangerous goods (DG)']);
     expect(container.querySelectorAll('#portal > ul > li, #portal ul.manual-lista > li')).toHaveLength(5);
     expect(container.querySelector('#portal .manual-aviso--info')?.textContent).toContain('This page was updated. Please reload it (Ctrl+F5)');
-    expect(container.querySelector('#portal .manual-figura__legenda')?.textContent).toBe('Exemplo fictícioProposta da Lianyun Fine Chemicals: 1,62 × 20.000 + 1,77 × 5.000 (benzoato) = US$ 41.250.');
+    expect(container.querySelector('#portal .manual-figura__legenda')?.textContent).toBe('Exemplo fictício Proposta da Lianyun Fine Chemicals: 1,62 × 20.000 + 1,77 × 5.000 (benzoato) = US$ 41.250.');
   });
 
   it('a busca por "lembrete" acha o capitulo Enviar, marca o texto e nunca marca dentro de SVG', async () => {
@@ -641,8 +641,8 @@ describe('Manual: capitulos 11 a 13 (M4)', () => {
     const trilhos = container.querySelectorAll('#comparacao .manual-wf__svg');
     expect(trilhos).toHaveLength(9);
     for (const t of trilhos) expect(t.getAttribute('aria-hidden')).toBe('true');
-    expect(container.querySelectorAll('#comparacao .manual-wf__linha-gatilho')).toHaveLength(1);
-    expect(container.querySelector('#comparacao .manual-wf__linha-gatilho')?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+    expect(container.querySelectorAll('#comparacao .manual-wf__marca-gatilho')).toHaveLength(1);
+    expect(container.querySelector('#comparacao .manual-wf__marca-gatilho')?.getAttribute('vector-effect')).toBe('non-scaling-stroke');
   });
 
   it('Comparacao: texto do codigo atual (quantidade diferente, falta de cambio na alcada e ranking que comeca so com Preco)', () => {
@@ -675,6 +675,115 @@ describe('Manual: capitulos 11 a 13 (M4)', () => {
     expect(container.querySelectorAll('#comparacao .manual-wf mark')).toHaveLength(0);
     expect(container.querySelector('#comparacao p mark.manual-marca')).not.toBeNull();
     expect(container.querySelectorAll('svg mark')).toHaveLength(0);
+  });
+});
+
+describe('Manual: correcoes da revisao M1-M3 (r2)', () => {
+  it('passos: cada passo tem UM span com o texto inteiro (no de texto, strong e pilulas juntos); o conteudo so empilha blocos', () => {
+    const { container } = renderManual();
+    const conteudos = [...container.querySelectorAll<HTMLElement>('.manual-passos__conteudo')];
+    expect(conteudos.length).toBeGreaterThan(20);
+    for (const conteudo of conteudos) {
+      expect([...conteudo.children].map((f) => f.tagName), conteudo.textContent ?? '').toEqual(['SPAN']);
+      const span = conteudo.firstElementChild as HTMLElement;
+      // todo <strong> e toda pilula de botao do passo estao dentro do span (nada solto no flex)
+      expect(conteudo.querySelectorAll(':scope > strong, :scope > .manual-ui')).toHaveLength(0);
+      expect(span.textContent).toBe(conteudo.textContent);
+    }
+    // exemplo concreto: "Clique em [Entrar]" e uma frase so
+    const passoEntrar = [...conteudos].find((c) => c.querySelector('.manual-ui')?.textContent === 'Entrar');
+    expect(passoEntrar?.querySelector(':scope > span > .manual-ui')).not.toBeNull();
+  });
+
+  it('/manual#comparacao ao abrir: salto direto (behavior instant), sem a rolagem suave do CSS; o clique no indice segue suave', () => {
+    renderManual('admin', '/manual#comparacao');
+    const chamadas = scrollIntoView.mock.calls as unknown[][];
+    const abertura = chamadas.find((_, i) => scrollIntoView.mock.contexts[i] instanceof HTMLElement && (scrollIntoView.mock.contexts[i] as HTMLElement).id === 'comparacao');
+    expect(abertura?.[0]).toEqual({ block: 'start', behavior: 'instant' });
+    scrollIntoView.mockClear();
+    fireEvent.click(screen.getByRole('link', { name: /Enviar aos fornecedores/ }));
+    expect((scrollIntoView.mock.calls as unknown[][]).at(-1)?.[0]).toEqual({ block: 'start' });
+  });
+
+  it('scrollspy no fim da pagina: o ultimo capitulo visivel vira o ativo (Administracao, Perguntas e Glossario nunca cruzam a faixa do topo)', () => {
+    renderManual();
+    const indice = screen.getByRole('navigation', { name: 'Capítulos do manual' });
+    const ativos = () => [...indice.querySelectorAll('a[aria-current="location"]')].map((a) => a.getAttribute('href'));
+    expect(ativos()).toEqual(['#comece-aqui']);
+    const total = vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(5000);
+    const alto = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(800);
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 4000 });
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(ativos()).toEqual(['#comece-aqui']);
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 4200 });
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(ativos()).toEqual(['#glossario']);
+    total.mockRestore();
+    alto.mockRestore();
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+  });
+
+  it('regua de avisos: figura que rola na horizontal (regiao focavel) para os rotulos nao se sobreporem no estreito', () => {
+    const { container } = renderManual();
+    const regiao = container.querySelector('#fornecedores .manual-rolagem');
+    expect(regiao?.getAttribute('aria-label')).toBe('Figura: régua dos avisos de vencimento, role na horizontal');
+    expect(regiao?.querySelector('.manual-regua')).not.toBeNull();
+  });
+
+  it('selo "Exemplo fictício" fica na mesma linha da legenda: o figcaption e texto corrido (sem flex), com um espaco depois do selo', () => {
+    const { container } = renderManual();
+    const legenda = container.querySelector('#portal .manual-figura__legenda');
+    expect(legenda?.firstElementChild?.className).toBe('manual-exemplo');
+    expect(legenda?.firstElementChild?.nextSibling?.nodeValue).toBe(' ');
+  });
+
+  it('fim de semana da semana de lembretes: o travessao e aria-hidden e o leitor ouve "sem envio"', () => {
+    const { container } = renderManual();
+    const folgas = [...container.querySelectorAll('#envio .manual-dia--folga')];
+    expect(folgas).toHaveLength(2);
+    for (const dia of folgas) {
+      expect(dia.querySelector('.manual-dia__hora')?.getAttribute('aria-hidden')).toBe('true');
+      expect(dia.querySelector('.sr-only')?.textContent).toBe('sem envio');
+    }
+  });
+});
+
+describe('Manual: bloco "Para o COMEX" so para a equipe interna', () => {
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o bloco "Para o COMEX" com os 4 cartoes (Criar cotacao, Vincular, Marcar atendida, Recusar)', (role) => {
+    const { container } = renderManual(role);
+    expect(container.querySelector('#solicitacoes')?.textContent).toContain('Para o COMEX: atender o pedido');
+    expect([...container.querySelectorAll('#solicitacoes .manual-mini__titulo')].map((t) => t.textContent)).toEqual(['Criar cotação', 'Vincular a cotação', 'Marcar atendida', 'Recusar']);
+  });
+
+  it('Comercial nao tem o bloco no DOM, mas ve o resto do capitulo (fluxo de status, passos de pedir cotacao e item fora do catalogo)', () => {
+    const { container } = renderManual('comercial');
+    const t = container.querySelector('#solicitacoes')?.textContent ?? '';
+    expect(t).not.toContain('Para o COMEX');
+    expect(t).not.toContain('Vincular a cotação');
+    expect(t).not.toContain('Solicitação do comercial #N');
+    expect(container.querySelectorAll('#solicitacoes .manual-mini')).toHaveLength(0);
+    expect(container.querySelectorAll('#solicitacoes .manual-passos > li')).toHaveLength(5);
+    expect(container.querySelectorAll('#solicitacoes .manual-fluxo')).toHaveLength(2);
+    expect(t).toContain('Para o Comercial: pedir uma cotação');
+    expect(t).toContain('Item que não está no catálogo');
+  });
+
+  it('a busca do Comercial nao acha o bloco (nem pelo texto dos cartoes) e o hash nao o revela', async () => {
+    const { container } = renderManual('comercial');
+    await buscar('vincular a cotação');
+    expect(visiveis(container)).toHaveLength(0);
+    expect(screen.getByText('Nada encontrado')).toBeTruthy();
+    await buscar('preço-alvo só acompanha');
+    expect(visiveis(container)).toHaveLength(0);
+    cleanup();
+    scrollIntoView.mockClear();
+    const outro = renderManual('comercial', '/manual#vincular');
+    expect(outro.container.querySelector('#vincular')).toBeNull();
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });
 

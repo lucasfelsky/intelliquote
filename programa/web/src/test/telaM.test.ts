@@ -264,7 +264,7 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(declaracoes('.manual-wf__linha')).toMatchObject({ display: 'grid', 'grid-template-columns': 'minmax(120px, 170px) minmax(0, 1fr) 104px' });
     expect(declaracoes('.manual-wf__barra')).toMatchObject({ fill: 'var(--rf-tone-info-solid)' });
     expect(declaracoes('.manual-wf__barra--total')).toMatchObject({ fill: 'var(--rf-action)' });
-    expect(declaracoes('.manual-wf__linha-gatilho')).toMatchObject({ stroke: 'var(--rf-danger)', 'stroke-dasharray': '4 3' });
+    expect(declaracoes('.manual-wf__marca-gatilho')).toMatchObject({ stroke: 'var(--rf-danger)', 'stroke-dasharray': '4 3' });
   });
 
   it('o rotulo do gatilho do waterfall acaba na linha tracejada: right em CSS = 100% menos a posicao calculada em waterfall.ts', () => {
@@ -286,6 +286,20 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     const reduzido = manual.filter((r) => r.atRule === '@media (prefers-reduced-motion: reduce)' && /transition:\s*none/.test(r.corpo)).flatMap((r) => r.seletores);
     expect(reduzido).toEqual(expect.arrayContaining(['.manual-sim__chip', '.manual-sim__seg']));
     expect(declaracoes('.manual-sim__seg')).toHaveProperty('transition');
+  });
+
+  it('revisao r2: legenda da figura e texto corrido (selo na mesma linha), regua com largura minima (sem sobrepor rotulos no estreito) e corpo em 14px como a previa', () => {
+    const legenda = declaracoes('.manual-figura__legenda');
+    expect(legenda.display).toBeUndefined();
+    expect(legenda['flex-wrap']).toBeUndefined();
+    expect(declaracoes('.manual-regua')).toMatchObject({ 'min-width': '480px', position: 'relative' });
+    expect(declaracoes('.manual-artigo')).toMatchObject({ 'font-size': '14px' });
+    expect(declaracoes('.manual-capitulo__lead')).toMatchObject({ 'font-size': '15px' });
+  });
+
+  it('revisao r2: o campo de busca e o seletor de capitulo herdam transicao da Suite e a perdem no movimento reduzido', () => {
+    const reduzido = manual.filter((r) => r.atRule === '@media (prefers-reduced-motion: reduce)' && /transition:\s*none/.test(r.corpo)).flatMap((r) => r.seletores);
+    expect(reduzido).toEqual(expect.arrayContaining(['.manual-busca__input', '.manual-indice-select__campo']));
   });
 
   it('foco: link do indice e titulo do capitulo mostram o anel da Suite (outline transparente para forced-colors + sombra dupla)', () => {

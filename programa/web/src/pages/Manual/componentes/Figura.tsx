@@ -26,6 +26,7 @@ export default function Figura({ legenda, exemplo = false, rolagem, semCaixa = f
       )}
       <figcaption className="manual-figura__legenda">
         {exemplo ? <span className="manual-exemplo">Exemplo fictício</span> : null}
+        {exemplo ? ' ' : null}
         <Destacar>{legenda}</Destacar>
       </figcaption>
     </figure>

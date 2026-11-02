@@ -8,7 +8,16 @@ export default function Semana() {
         <li key={dia.dia} className={dia.folga ? 'manual-dia manual-dia--folga' : 'manual-dia'}>
           <b className="manual-dia__nome">{dia.dia}</b>
           <i className="manual-dia__ponto" aria-hidden="true" />
-          <span className="manual-dia__hora">{dia.hora}</span>
+          {dia.folga ? (
+            <>
+              <span className="manual-dia__hora" aria-hidden="true">
+                {dia.hora}
+              </span>
+              <span className="sr-only">sem envio</span>
+            </>
+          ) : (
+            <span className="manual-dia__hora">{dia.hora}</span>
+          )}
         </li>
       ))}
     </ul>

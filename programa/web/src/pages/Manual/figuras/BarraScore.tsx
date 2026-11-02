@@ -17,6 +17,7 @@ export default function BarraScore({ segmentos, descricao }: BarraScoreProps) {
       viewBox={`0 0 ${LARGURA_DA_BARRA} 18`}
       preserveAspectRatio="none"
       role="img"
+      aria-label={descricao}
       aria-labelledby={idTitulo}
     >
       <title id={idTitulo}>{descricao}</title>

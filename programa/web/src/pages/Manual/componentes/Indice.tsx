@@ -55,7 +55,7 @@ export function SeletorCapitulo({ capitulos, ativo, onIr }: IndiceProps) {
       <label className="field-label" htmlFor="manual-indice-select">
         Ir para o capítulo
       </label>
-      <select id="manual-indice-select" className="select" value={ativo} onChange={(e) => onIr(e.target.value)}>
+      <select id="manual-indice-select" className="select manual-indice-select__campo" value={ativo} onChange={(e) => onIr(e.target.value)}>
         {grupos.map((grupo) => (
           <optgroup key={grupo.grupo} label={grupo.grupo}>
             {grupo.itens.map((capitulo) => (

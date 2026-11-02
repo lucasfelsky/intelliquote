@@ -1,4 +1,5 @@
-import Capitulo from '../componentes/Capitulo';
+import { isComercialRole } from '@/components/navConfig';
+import Capitulo, { usePerfil } from '../componentes/Capitulo';
 import Figura from '../componentes/Figura';
 import { FluxoStatus, Rotulo, Seta } from '../componentes/FluxoStatus';
 import { GradeMini, Mini } from '../componentes/GradeMini';
@@ -6,6 +7,8 @@ import { Passo, Passos } from '../componentes/Passos';
 import RotuloUi from '../componentes/RotuloUi';
 
 export default function Solicitacoes() {
+  // O bloco "Para o COMEX" e da equipe interna: para o Comercial ele nem entra no DOM (a busca e o hash tambem nao o alcancam).
+  const paraComex = !isComercialRole(usePerfil());
   return (
     <Capitulo
       lead="O Comercial pede ao COMEX a cotação dos itens que um cliente precisa. O COMEX transforma o pedido em cotação e, no fim, o Comercial vê o preço final, sem acesso aos dados do fornecedor."
@@ -62,26 +65,30 @@ export default function Solicitacoes() {
         anexar documentos técnicos (TDS, MSDS ou outro), em PDF, PNG ou JPEG, de até 10 MB cada e no máximo 5.
       </p>
 
-      <h3 className="manual-secao">Para o COMEX: atender o pedido</h3>
-      <GradeMini colunas={2}>
-        <Mini titulo={<RotuloUi>Criar cotação</RotuloUi>}>
-          <p>
-            Abre a Nova cotação já com itens, quantidades, unidades e preços-alvo. A descrição fica “Solicitação do comercial #N”. O preço-alvo só acompanha o item se estiver na mesma moeda
-            da cotação.
-          </p>
-        </Mini>
-        <Mini titulo={<RotuloUi>Vincular a cotação</RotuloUi>}>
-          <p>Junta o pedido a uma cotação aberta que já existe. Busque pelo código ou descrição. Itens novos não entram nos links já enviados aos fornecedores.</p>
-        </Mini>
-        <Mini titulo={<RotuloUi>Marcar atendida</RotuloUi>}>
-          <p>
-            Disponível quando a cotação tem vencedora com preço para os itens do pedido (o admin pode marcar como atendida sem preço, com uma nota). O Comercial passa a ver o preço final.
-          </p>
-        </Mini>
-        <Mini titulo={<RotuloUi>Recusar</RotuloUi>}>
-          <p>Exige um motivo de 3 a 500 caracteres, que o solicitante vai ler.</p>
-        </Mini>
-      </GradeMini>
+      {paraComex ? (
+        <>
+          <h3 className="manual-secao">Para o COMEX: atender o pedido</h3>
+          <GradeMini colunas={2}>
+            <Mini titulo={<RotuloUi>Criar cotação</RotuloUi>}>
+              <p>
+                Abre a Nova cotação já com itens, quantidades, unidades e preços-alvo. A descrição fica “Solicitação do comercial #N”. O preço-alvo só acompanha o item se estiver na mesma moeda
+                da cotação.
+              </p>
+            </Mini>
+            <Mini titulo={<RotuloUi>Vincular a cotação</RotuloUi>}>
+              <p>Junta o pedido a uma cotação aberta que já existe. Busque pelo código ou descrição. Itens novos não entram nos links já enviados aos fornecedores.</p>
+            </Mini>
+            <Mini titulo={<RotuloUi>Marcar atendida</RotuloUi>}>
+              <p>
+                Disponível quando a cotação tem vencedora com preço para os itens do pedido (o admin pode marcar como atendida sem preço, com uma nota). O Comercial passa a ver o preço final.
+              </p>
+            </Mini>
+            <Mini titulo={<RotuloUi>Recusar</RotuloUi>}>
+              <p>Exige um motivo de 3 a 500 caracteres, que o solicitante vai ler.</p>
+            </Mini>
+          </GradeMini>
+        </>
+      ) : null}
     </Capitulo>
   );
 }

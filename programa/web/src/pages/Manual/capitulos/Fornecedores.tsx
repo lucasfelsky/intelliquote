@@ -47,7 +47,10 @@ export default function Fornecedores() {
         Na linha expandida, a seção <strong>Documentos</strong> guarda certificados, licenças e afins: PDF, PNG ou JPEG de até 10 MB, sempre com data de vencimento. A lista mostra o selo{' '}
         <span className="badge badge--warning">Doc. vence em 7 d</span> ou <span className="badge badge--danger">Doc. vencido</span> ao lado do nome.
       </p>
-      <Figura legenda="Quando a equipe COMEX recebe o e-mail de aviso de um documento. Os avisos do dia chegam agrupados num único e-mail, com link direto para o fornecedor.">
+      <Figura
+        rolagem="régua dos avisos de vencimento"
+        legenda="Quando a equipe COMEX recebe o e-mail de aviso de um documento. Os avisos do dia chegam agrupados num único e-mail, com link direto para o fornecedor."
+      >
         <Regua />
       </Figura>
     </Capitulo>

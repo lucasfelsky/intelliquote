@@ -10364,6 +10364,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   flex-direction: column;
   gap: 22px;
   min-width: 0;
+  font-size: 14px;
 }
 .manual-capitulo {
   display: flex;
@@ -10603,10 +10604,6 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   background: var(--rf-surface-alt);
 }
 .manual-figura__legenda {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   font-size: 12px;
   color: var(--rf-ink-soft);
 }
@@ -10614,6 +10611,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  vertical-align: middle;
   padding: 1px 7px;
   border: 1px solid var(--rf-aviso-borda-suave);
   border-radius: var(--rf-radius-pill);
@@ -10765,6 +10763,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 .manual-regua {
   position: relative;
   height: 70px;
+  min-width: 480px;
   margin: 8px 36px 0;
 }
 .manual-regua__trilho {
@@ -11307,7 +11306,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   fill: var(--rf-action);
   opacity: 1;
 }
-.manual-wf__linha-gatilho {
+.manual-wf__marca-gatilho {
   stroke: var(--rf-danger);
   stroke-width: 2;
   stroke-dasharray: 4 3;
@@ -11540,6 +11539,8 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .preview-popout-backdrop { animation: none; }
   /* Manual (fase M) */
   html:has(.manual-page) { scroll-behavior: auto; }
+  .manual-busca__input,
+  .manual-indice-select__campo { transition: none; }
   .manual-sim__chip,
   .manual-sim__seg { transition: none; }
 }

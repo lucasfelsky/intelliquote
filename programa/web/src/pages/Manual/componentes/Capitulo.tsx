@@ -11,6 +11,15 @@ export interface MetaDoCapitulo {
 
 const MetaContext = createContext<MetaDoCapitulo | null>(null);
 
+// Perfil de quem le o manual (Manual.tsx fornece): um capitulo pode esconder blocos da equipe interna do Comercial.
+const PerfilContext = createContext<string | null | undefined>(undefined);
+
+export const PerfilProvider = PerfilContext.Provider;
+
+export function usePerfil(): string | null | undefined {
+  return useContext(PerfilContext);
+}
+
 export const MetaProvider = MetaContext.Provider;
 
 interface CapituloProps {
