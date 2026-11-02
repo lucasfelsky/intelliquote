@@ -124,19 +124,19 @@ describe('F9: regiao `tela F9`', () => {
   });
 
   it('a regiao nao declara token (--*), consome var(--rf-*), sem cor literal, !important nem @media print', () => {
-    expect(regiao?.limpo).not.toMatch(/(^|[;{\s])--[\w-]+\s*:/);
+    expect([...(regiao?.limpo ?? '').matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g)].map((m) => m[1] ?? '').filter((t) => t !== '--val')).toEqual([]);
     expect(regiao?.limpo).toContain('var(--rf-');
     expect(regiao?.limpo).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
     expect(regiao?.limpo).not.toContain('!important');
     expect(regiao?.limpo).not.toContain('@media print');
     const usados = [...(regiao?.limpo ?? '').matchAll(/var\((--[\w-]+)/g)].map((m) => m[1] ?? '');
-    expect(usados.filter((t) => !t.startsWith('--rf-'))).toEqual([]);
+    expect(usados.filter((t) => !t.startsWith('--rf-') && t !== '--val')).toEqual([]);
   });
 
-  it('at-rules permitidas: 1439, 1199, 720, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
+  it('at-rules permitidas: screen 721-1439, 1199, 720, 640, 540, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
     const atRules = topo.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     const permitidas = [
-      '@media (max-width: 1439px)',
+      '@media screen and (min-width: 721px) and (max-width: 1439px)',
       '@media (max-width: 1199px)',
       '@media (max-width: 720px)',
       '@media (max-width: 640px)',
@@ -146,7 +146,7 @@ describe('F9: regiao `tela F9`', () => {
     ];
     expect(atRules.filter((a) => !permitidas.includes(a))).toEqual([]);
     expect(new Set(atRules).size).toBe(atRules.length);
-    for (const a of ['@media (max-width: 1439px)', '@media (max-width: 720px)', '@media (max-width: 540px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)']) {
+    for (const a of ['@media screen and (min-width: 721px) and (max-width: 1439px)', '@media (max-width: 720px)', '@media (max-width: 540px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)']) {
       expect(atRules, a).toContain(a);
     }
     expect(regiao?.limpo).not.toContain('@keyframes');
@@ -283,21 +283,28 @@ describe('F9: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.solicitacoes-page .solicitacoes-vincular')).toMatchObject({ padding: '0 16px', border: '1.5px solid var(--rf-ghost-escuro-borda)', 'border-radius': 'var(--rf-radius-button)' });
     // F12-B (B5): o botao de vincular centraliza o texto e pode quebrar (N-I89-01) so ate 1439; a 1440 segue em 1 linha (36 px, como o board); o cabecalho da tabela de itens quebra
     expect(naRegiao('.solicitacoes-page .solicitacoes-vincular')).toMatchObject({ 'white-space': 'nowrap', 'text-align': 'center' });
-    expect(declaracoes(mediaDe('@media (max-width: 1439px)'), '.solicitacoes-page .solicitacoes-vincular')).toEqual({ 'white-space': 'normal' });
+    expect(declaracoes(mediaDe('@media screen and (min-width: 721px) and (max-width: 1439px)'), '.solicitacoes-page .solicitacoes-vincular')).toEqual({ 'white-space': 'normal' });
     expect(naRegiao('.solicitacoes-page .solicitacoes-itens > thead > tr > th')).toEqual({ 'white-space': 'normal' });
   });
 
-  it('P-ACOES (F12-B, B7): ate 1439 as colunas Acoes e Ver itens ficam fixas a direita; o painel aberto tem a largura visivel; a coluna do catalogo fica fixa', () => {
-    const m = mediaDe('@media (max-width: 1439px)');
-    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-sizing': 'border-box', width: '164px', 'min-width': '164px', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+  it('P-ACOES (F12-B, B7): so em tela, de 721 a 1439, as colunas Acoes e Ver itens ficam fixas a direita; o painel aberto tem a largura visivel; a coluna do catalogo fica fixa', () => {
+    const m = mediaDe('@media screen and (min-width: 721px) and (max-width: 1439px)');
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-sizing': 'border-box', width: 'var(--val)', 'min-width': 'var(--val)', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
     expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver')).toMatchObject(fixa);
-    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)')).toMatchObject({ position: 'sticky', right: '164px', 'z-index': '1' });
-    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper')).toEqual({ 'container-type': 'inline-size' });
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)')).toMatchObject({ position: 'sticky', right: 'var(--val)', width: 'calc(var(--val) + 12px)', 'min-width': 'calc(var(--val) + 12px)', 'z-index': '1' });
+    // uma so fonte para as larguras (--val, unica propriedade local aceita pelo themeTokens): scroll-padding = Ver + Acoes (Ver + 12); so Ver quando nao ha coluna de acoes
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper')).toMatchObject({ '--val': '164px', 'scroll-padding-right': 'calc(var(--val) * 2 + 12px)' });
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper:not(:has(> .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)))')).toEqual({ 'scroll-padding-right': 'var(--val)' });
+    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens-tabela:has(td.sol-cell-actions)')).toEqual({ '--val': '172px', 'scroll-padding-right': 'var(--val)' });
+    expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper')).toMatchObject({ 'container-type': 'inline-size' });
     expect(
       declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr.solicitacoes-linha-detalhe > td.sol-cell-detail > .solicitacoes-detalhe'),
     ).toEqual({ position: 'sticky', left: '20px', 'box-sizing': 'border-box', width: 'calc(100cqw - 40px)' });
-    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens > tbody > tr > td.sol-cell-actions')).toMatchObject({ position: 'sticky', right: '0', 'min-width': '136px', background: 'var(--rf-surface)' });
+    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens > tbody > tr > td.sol-cell-actions')).toMatchObject({ position: 'sticky', right: '0', 'min-width': 'var(--val)', background: 'var(--rf-surface)' });
     expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens > tbody > tr > td:not(.sol-cell-actions)')).toEqual({ 'overflow-wrap': 'anywhere' });
+    // papel e cartoes (ate 720): nenhuma coluna fixa nem scroll-padding fora de @media screen (o PDF e o layout de cartoes ficam como na base)
+    expect(semMedia.filter((r) => /position:\s*sticky|scroll-padding/.test(r.body))).toEqual([]);
+    expect(topo.filter((r) => r.prelude.startsWith('@media') && !r.prelude.startsWith('@media screen') && /position:\s*sticky|scroll-padding/.test(r.body)).map((r) => r.prelude)).toEqual([]);
   });
 
   it('alertas e erros: .solicitacoes-alerta (flex, gap 10, 12/16, raio 14, 14/600) com o tom vindo de .alert--error / .alert--info; icone de 18 sem encolher', () => {

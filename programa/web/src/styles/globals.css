@@ -6813,10 +6813,18 @@ dialog.modal-dialog[open] {
   font-weight: 700;
 }
 
-/* ---- P-ACOES (F12-B, B7): ate 1439 as colunas "Acoes" e "Ver itens" ficam fixas a direita dentro do .table-wrapper (nunca so por rolagem);
-   o painel da linha aberta tem a largura visivel do wrapper (nao alarga a tabela) e a coluna do catalogo da tabela de itens fica fixa a direita ---- */
-@media (max-width: 1439px) {
-  .solicitacoes-page--comex .solicitacoes-lista > .table-wrapper { container-type: inline-size; }
+/* ---- P-ACOES (F12-B, B7): so em tela (nao no papel) e acima do layout de cartoes (721) ate 1439: as colunas "Acoes" e "Ver itens" ficam fixas a direita dentro
+   do .table-wrapper (nunca so por rolagem) e o foco por teclado nao fica atras delas (scroll-padding-right = largura das colunas fixas);
+   o painel da linha aberta tem a largura visivel do wrapper (nao alarga a tabela) e a coluna do catalogo da tabela de itens fica fixa.
+   A largura da coluna "Ver itens" vive numa so propriedade local (--val, a unica que o themeTokens aceita como local): a largura dela, o "right" e a largura de Acoes
+   (Ver + 12) e o scroll-padding saem do mesmo valor ---- */
+@media screen and (min-width: 721px) and (max-width: 1439px) {
+  .solicitacoes-page--comex .solicitacoes-lista > .table-wrapper {
+    --val: 164px;
+    container-type: inline-size;
+    scroll-padding-right: calc(var(--val) * 2 + 12px);
+  }
+  .solicitacoes-page--comex .solicitacoes-lista > .table-wrapper:not(:has(> .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver))) { scroll-padding-right: var(--val); }
   .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-itens-celula { white-space: normal; }
   .solicitacoes-page--comex .solicitacoes-tabela > thead > tr > th:not(:first-child):not(:last-child),
   .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td:not(:first-child):not(:last-child):not(.sol-cell-detail) {
@@ -6829,18 +6837,18 @@ dialog.modal-dialog[open] {
     right: 0;
     z-index: 1;
     box-sizing: border-box;
-    width: 164px;
-    min-width: 164px;
+    width: var(--val);
+    min-width: var(--val);
     box-shadow: inset 1px 0 0 var(--rf-divider);
   }
   .solicitacoes-page--comex .solicitacoes-tabela:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)) > thead > tr > th:nth-last-child(2),
   .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver) {
     position: sticky;
-    right: 164px;
+    right: var(--val);
     z-index: 1;
     box-sizing: border-box;
-    width: 176px;
-    min-width: 176px;
+    width: calc(var(--val) + 12px);
+    min-width: calc(var(--val) + 12px);
     box-shadow: inset 1px 0 0 var(--rf-divider);
   }
   .solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver,
@@ -6855,6 +6863,15 @@ dialog.modal-dialog[open] {
     box-sizing: border-box;
     width: calc(100cqw - 40px);
   }
+  .solicitacoes-page .solicitacoes-itens-tabela:has(td.sol-cell-actions) {
+    --val: 172px;
+    scroll-padding-right: var(--val);
+  }
+  .solicitacoes-page .solicitacoes-itens > thead > tr > th,
+  .solicitacoes-page .solicitacoes-itens > tbody > tr > td {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
   .solicitacoes-page .solicitacoes-itens > tbody > tr > td:not(.sol-cell-actions) { overflow-wrap: anywhere; }
   .solicitacoes-page .solicitacoes-vincular { white-space: normal; }
   .solicitacoes-page .solicitacoes-itens > tbody > tr > td.solicitacoes-valor { white-space: normal; }
@@ -6863,7 +6880,8 @@ dialog.modal-dialog[open] {
     position: sticky;
     right: 0;
     z-index: 1;
-    min-width: 136px;
+    box-sizing: border-box;
+    min-width: var(--val);
     box-shadow: inset 1px 0 0 var(--rf-divider);
   }
   .solicitacoes-page .solicitacoes-itens > tbody > tr > td.sol-cell-actions { background: var(--rf-surface); }
@@ -10138,9 +10156,9 @@ dialog.modal-dialog[open] {
   color-scheme: light;
 }
 
-/* ---- Larguras: 1439 (notebook), P-ACOES (F12-B): nas tabelas dos Relatorios os rotulos do cabecalho quebram, Produto e Fornecedor vencedor quebram em qualquer ponto
-   (codigos e valores seguem nowrap) e o recuo lateral diminui para a tabela nao rolar; acima de 1439 nada muda ---- */
-@media (max-width: 1439px) {
+/* ---- Larguras: 1439 (notebook), P-ACOES (F12-B), so em tela (o papel nao muda): nas tabelas dos Relatorios os rotulos do cabecalho quebram, Produto e Fornecedor vencedor
+   quebram em qualquer ponto (codigos e valores seguem nowrap) e o recuo lateral diminui para a tabela nao rolar; acima de 1439 nada muda ---- */
+@media screen and (max-width: 1439px) {
   .relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th,
   .relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th { white-space: normal; }
   .relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td:nth-child(2),
@@ -10166,8 +10184,19 @@ dialog.modal-dialog[open] {
   .empresa-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auditoria-filtros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .auditoria-acoes { grid-column: 1 / -1; }
-  /* P-ACOES (F12-B): o texto quebra e a coluna de acoes fica fixa a direita dentro do .table-wrapper (nunca so por rolagem) */
-  .usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-email { overflow-wrap: anywhere; }
+}
+
+/* ---- Larguras: 1199, P-ACOES (F12-B), so em tela (o papel nao muda): o texto quebra e a coluna de acoes fica fixa a direita dentro do .table-wrapper (nunca so por rolagem) ---- */
+@media screen and (max-width: 1199px) {
+  .usuarios-page .usuarios-tabela > thead > tr > th,
+  .usuarios-page .usuarios-tabela > tbody > tr > td {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-email {
+    min-width: 128px;
+    overflow-wrap: anywhere;
+  }
   .usuarios-page .usuarios-tabela > thead > tr > th.usuarios-acoes-cab,
   .usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-acoes {
     position: sticky;
@@ -10203,6 +10232,10 @@ dialog.modal-dialog[open] {
   .template-cards > .template-card:nth-child(7):last-child { grid-column: span 2; }
   .templates-variaveis { grid-template-columns: minmax(0, 1fr); }
   .minha-conta-grade { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- 1023, P-ACOES (F12-B), so em tela: os botoes de acao empilham ---- */
+@media screen and (max-width: 1023px) {
   .usuarios-page .usuarios-tabela .row-actions,
   .parceiros-credito .parceiros-credito__grade .row-actions {
     flex-direction: column;
