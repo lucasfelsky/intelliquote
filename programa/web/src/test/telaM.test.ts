@@ -196,6 +196,24 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(['d30', 'd15', 'd7', 'd0', 'vencido'].map(esquerda)).toEqual(['0%', '42.9%', '65.7%', '85.7%', '100%']);
   });
 
+  it('capitulos 8 a 10 (M3): PO agrupada em 3 colunas, e-mail em grade 54 + 1fr, semana de 7 dias, tela do portal na cor de acao e ciclo em SVG', () => {
+    expect(declaracoes('.manual-po-colunas')).toMatchObject({ display: 'grid', 'grid-template-columns': 'repeat(3, minmax(0, 1fr))' });
+    expect(declaracoes('.manual-po--sem')).toEqual({ 'border-style': 'dashed', background: 'var(--rf-surface-alt)' });
+    expect(declaracoes('.manual-email__linha')).toMatchObject({ display: 'grid', 'grid-template-columns': '54px minmax(0, 1fr)' });
+    expect(declaracoes('.manual-email__endereco--principal')).toEqual({ 'border-color': 'var(--rf-vencedora-borda)', background: 'var(--rf-primary-50)', color: 'var(--rf-primary-700)' });
+    expect(declaracoes('.manual-email__endereco--primeiro')).toEqual({ 'border-color': 'var(--rf-aviso-borda-suave)', background: 'var(--rf-tone-warning-bg)', color: 'var(--rf-tone-warning-fg)' });
+    expect(declaracoes('.manual-semana')).toMatchObject({ display: 'grid', 'grid-template-columns': 'repeat(7, minmax(0, 1fr))', gap: '6px' });
+    expect(declaracoes('.manual-dia__ponto')).toMatchObject({ background: 'var(--rf-primary)' });
+    expect(declaracoes('.manual-dia--folga .manual-dia__ponto')).toEqual({ border: '1.5px dashed var(--rf-empty-border)', background: 'transparent' });
+    expect(declaracoes('.manual-portal__barra')).toMatchObject({ background: 'var(--rf-action)', color: 'var(--rf-on-action)' });
+    expect(declaracoes('.manual-portal__campos')).toMatchObject({ 'grid-template-columns': 'repeat(auto-fit, minmax(130px, 1fr))' });
+    expect(declaracoes('.manual-svg--ciclo')).toEqual({ 'min-width': '520px' });
+    const m1023 = '@media screen and (max-width: 1023px)';
+    expect(declaracoes('.manual-po-colunas', m1023)).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
+    expect(declaracoes('.manual-semana', m1023)).toEqual({ gap: '4px' });
+    expect(declaracoes('.manual-dia', m1023)).toEqual({ padding: '8px 2px' });
+  });
+
   it('1023 (tela): grades de 2 e 3 colunas viram 1; indicadores de 4 viram 2', () => {
     const m1023 = '@media screen and (max-width: 1023px)';
     expect(declaracoes('.manual-grade--2', m1023)).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });

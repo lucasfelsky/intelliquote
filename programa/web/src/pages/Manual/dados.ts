@@ -57,6 +57,101 @@ export const ITENS_DE_EXEMPLO: readonly ItemDeExemplo[] = [
   { nomeComercial: 'Benzoato de sódio', nomeDeMercado: 'Sodium Benzoate', familia: 'Conservantes', ncm: '29163100', dbcorp: 'MP-0233' },
 ];
 
+// ---------- Capitulo 8: a cotacao de exemplo que acompanha o resto do manual ----------
+export const COTACAO_DE_EXEMPLO = {
+  codigo: 'COT-2026-0412',
+  incoterms: ['FOB', 'CFR', 'CIF'],
+  embarque: 'Shanghai',
+  destino: 'Porto de Santos',
+  moeda: 'USD',
+  prazo: '31/10/2026',
+  itens: [
+    { nome: 'Ácido cítrico anidro', quantidade: '20.000 KG' },
+    { nome: 'Benzoato de sódio', quantidade: '5.000 KG' },
+  ],
+} as const;
+
+// PO agrupada: os dois itens do exemplo em 2 POs, mais a coluna "Sem PO" vazia.
+export interface GrupoDePo {
+  id: string;
+  titulo: string;
+  contagem: string;
+  itens: readonly { nome: string; quantidade: string }[];
+  // Texto da coluna vazia ("Sem PO").
+  dica?: string;
+  semPo?: boolean;
+}
+
+export const GRUPOS_DE_PO: readonly GrupoDePo[] = [
+  { id: 'po1', titulo: 'PO 1 · Acidulantes', contagem: '1 item', itens: [{ nome: 'Ácido cítrico anidro', quantidade: '20.000 KG' }] },
+  { id: 'po2', titulo: 'PO 2 · Conservantes', contagem: '1 item', itens: [{ nome: 'Benzoato de sódio', quantidade: '5.000 KG' }] },
+  { id: 'sem-po', titulo: 'Sem PO', contagem: '0', itens: [], dica: 'Arraste para uma PO ou use “Mover”.', semPo: true },
+];
+
+// ---------- Capitulo 9: e-mail de envio e semana de lembretes ----------
+export interface LinhaDeEmail {
+  rotulo: string;
+  // Enderecos (cada um vira uma pilula); o tipo muda a cor: principal (destinatario), primeiro (copia so no 1o e-mail do envio) ou comum.
+  enderecos?: readonly { endereco: string; tipo: 'principal' | 'primeiro' | 'comum' }[];
+  nota?: string;
+  texto?: string;
+}
+
+export const EMAIL_DE_EXEMPLO: readonly LinhaDeEmail[] = [
+  { rotulo: 'Para', enderecos: [{ endereco: 'mei.chen@lianyun-chem.example', tipo: 'principal' }], nota: 'contato principal' },
+  {
+    rotulo: 'Cc',
+    enderecos: [
+      { endereco: 'sales@lianyun-chem.example', tipo: 'comum' },
+      { endereco: 'export@lianyun-chem.example', tipo: 'comum' },
+    ],
+    nota: 'demais contatos, em todos os e-mails',
+  },
+  { rotulo: 'Cc', enderecos: [{ endereco: 'comex@sqquimica.example', tipo: 'primeiro' }], nota: 'Equipe COMEX + cópia fixa da empresa, só no 1º e-mail do envio' },
+  { rotulo: 'Assunto', texto: 'Sourcing request COT-2026-0412 - Citric Acid Anhydrous' },
+];
+
+export interface DiaDaSemana {
+  dia: string;
+  // 04:00 nos dias uteis; "—" no fim de semana.
+  hora: string;
+  folga: boolean;
+}
+
+export const SEMANA_DE_LEMBRETES: readonly DiaDaSemana[] = [
+  { dia: 'Seg', hora: '04:00', folga: false },
+  { dia: 'Ter', hora: '04:00', folga: false },
+  { dia: 'Qua', hora: '04:00', folga: false },
+  { dia: 'Qui', hora: '04:00', folga: false },
+  { dia: 'Sex', hora: '04:00', folga: false },
+  { dia: 'Sáb', hora: '—', folga: true },
+  { dia: 'Dom', hora: '—', folga: true },
+];
+
+// ---------- Capitulo 10: portal do fornecedor (em ingles, como o fornecedor ve) ----------
+export const PORTAL_DE_EXEMPLO = {
+  empresa: 'SQ Quimica · Supplier Portal',
+  cotacao: 'Sourcing request COT-2026-0412',
+  campos: [
+    { rotulo: 'Currency', valor: 'USD' },
+    { rotulo: 'Main incoterm', valor: 'FOB' },
+    { rotulo: 'Payment terms (days)', valor: '60' },
+    { rotulo: 'Offer validity (days)', valor: '30' },
+  ],
+  item: {
+    nome: 'Citric Acid Anhydrous · 20,000 KG',
+    po: 'PO 1 · Acidulantes',
+    precos: [
+      { rotulo: 'FOB · USD / KG', valor: '1.62', principal: true },
+      { rotulo: 'CFR · USD / KG', valor: '1.71', principal: false },
+      { rotulo: 'CIF · USD / KG', valor: '1.73', principal: false },
+    ],
+    leadTime: { rotulo: 'Lead time (days)', valor: '25' },
+    marcas: ['Temporarily unavailable', 'Dangerous goods (DG)'],
+  },
+  total: { rotulo: 'Total price', valor: '41,250.00' },
+} as const;
+
 // ---------- Capitulo 6: regua dos avisos de vencimento de documento ----------
 export interface MarcaDaRegua {
   id: string;

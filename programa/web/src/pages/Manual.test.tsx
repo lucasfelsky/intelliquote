@@ -424,6 +424,119 @@ describe('Manual: capitulos 1 a 7 (M2)', () => {
   });
 });
 
+describe('Manual: capitulos 8 a 10 (M3)', () => {
+  const texto = (container: HTMLElement, id: string) => container.querySelector(`#${id}`)?.textContent ?? '';
+
+  it('Criar uma cotacao: 4 passos, rotulos reais com icone plus, exemplo da cotacao e rotulos de INCOTERM do codigo atual', () => {
+    const { container } = renderManual();
+    expect(container.querySelectorAll('#criar-cotacao .manual-passos > li')).toHaveLength(4);
+    const t = texto(container, 'criar-cotacao');
+    for (const rotulo of ['Nova cotação', 'Adicionar item', 'Criar cotação', 'Agrupar por PO', 'Mover']) {
+      expect([...container.querySelectorAll('#criar-cotacao .manual-ui')].map((e) => e.textContent), rotulo).toContain(rotulo);
+    }
+    expect([...container.querySelectorAll('#criar-cotacao .manual-ui')].filter((e) => e.querySelector('svg')).map((e) => e.textContent)).toEqual(['Nova cotação', 'Adicionar item']);
+    expect(t).toContain('desmarque “Usar o INCOTERM da cotação” (ou “Usar os INCOTERMS da cotação”, quando a cotação aceita mais de um) ou “Usar o porto da cotação”');
+    expect(t).not.toContain('Usar o(s) INCOTERM');
+    expect(t).toContain('Apagar (só admin) remove a cotação com as respostas e os itens');
+    expect(t).toContain('Reabrir (admin e gestor) desfaz a escolha da vencedora.');
+    expect(t).not.toMatch(/\+ (Nova|Adicionar)/);
+    const linhas = [...container.querySelectorAll('#criar-cotacao table tbody tr')].map((tr) => tr.querySelector('td')?.textContent);
+    expect(linhas).toEqual(['Código', 'Incoterms aceitáveis', 'Embarque  para  destino', 'Moeda · prazo', 'Itens']);
+    expect(container.querySelector('#criar-cotacao table tbody tr:nth-child(3) td:nth-child(2)')?.textContent).toBe('Shanghai  para  Porto de Santos');
+    expect(container.querySelectorAll('#criar-cotacao table .badge')).toHaveLength(3);
+    expect(container.querySelectorAll('#criar-cotacao table svg')).toHaveLength(2);
+  });
+
+  it('Criar uma cotacao: POs agrupadas (3 colunas), aviso de atencao e ciclo da cotacao em SVG com titulo', () => {
+    const { container } = renderManual();
+    const colunas = [...container.querySelectorAll('#criar-cotacao .manual-po')];
+    expect(colunas.map((c) => c.querySelector('.manual-po__cabecalho span')?.textContent)).toEqual(['PO 1 · Acidulantes', 'PO 2 · Conservantes', 'Sem PO']);
+    expect(colunas[2]?.className).toContain('manual-po--sem');
+    expect(colunas[2]?.textContent).toContain('Arraste para uma PO ou use “Mover”.');
+    expect(container.querySelector('#criar-cotacao .manual-aviso--atencao')?.textContent).toContain('Remover a penúltima PO desfaz o agrupamento.');
+    const ciclo = container.querySelector('#criar-cotacao svg.manual-svg--ciclo') as SVGElement;
+    expect(ciclo.getAttribute('role')).toBe('img');
+    expect(ciclo.querySelector('title')?.id).toBe(ciclo.getAttribute('aria-labelledby'));
+    expect(ciclo.textContent).toContain('Fechar ou Concluir');
+    expect(screen.getByRole('region', { name: 'Figura: ciclo de status da cotação, role na horizontal' })).toBeTruthy();
+    expect(container.querySelector('#criar-cotacao .manual-papeis')?.textContent).toBe('Quem faz:admincomprador');
+  });
+
+  it('Enviar: 4 passos, e-mail de exemplo (Para, Cc, Cc so no 1o e Assunto), links do portal e semana de lembretes', () => {
+    const { container } = renderManual();
+    expect(container.querySelectorAll('#envio .manual-passos > li')).toHaveLength(4);
+    const email = container.querySelector('#envio dl.manual-email') as HTMLElement;
+    expect([...email.querySelectorAll('dt')].map((e) => e.textContent)).toEqual(['Para', 'Cc', 'Cc', 'Assunto']);
+    expect([...email.querySelectorAll('dd')].map((e) => e.querySelectorAll('.manual-email__endereco').length)).toEqual([1, 2, 1, 0]);
+    expect(email.querySelector('.manual-email__endereco--principal')?.textContent).toBe('mei.chen@lianyun-chem.example');
+    expect(email.querySelector('.manual-email__endereco--primeiro')?.textContent).toBe('comex@sqquimica.example');
+    expect(email.textContent).toContain('Sourcing request COT-2026-0412 - Citric Acid Anhydrous');
+    expect(email.textContent).toContain('Equipe COMEX + cópia fixa da empresa, só no 1º e-mail do envio');
+    const t = texto(container, 'envio');
+    expect(t).toContain('a tela sugere 7');
+    expect(t).toContain('Gerar novo link');
+    expect(t).toContain('desativa o anterior na hora');
+    expect(t).toContain('cria links só para quem ainda não tem um ativo');
+    expect(container.querySelectorAll('#envio p > .badge')).toHaveLength(3);
+    const dias = [...container.querySelectorAll('#envio .manual-dia')];
+    expect(dias.map((d) => d.querySelector('.manual-dia__nome')?.textContent)).toEqual(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']);
+    expect(dias.map((d) => d.querySelector('.manual-dia__hora')?.textContent)).toEqual(['04:00', '04:00', '04:00', '04:00', '04:00', '—', '—']);
+    expect(container.querySelectorAll('#envio .manual-dia--folga')).toHaveLength(2);
+    expect(t).toContain('Horário de Brasília. Quem tem várias cotações pendentes recebe um único e-mail com o resumo.');
+    expect(container.querySelectorAll('#envio .manual-grade--2 li')).toHaveLength(6);
+    expect(t).toContain('o link foi criado hoje ou aberto nas últimas 24 horas');
+  });
+
+  it('O que o fornecedor ve: tela do portal em ingles (so ilustracao), 5 observacoes e o aviso do Ctrl+F5', () => {
+    const { container } = renderManual();
+    const portal = container.querySelector('#portal .manual-portal') as HTMLElement;
+    expect(portal.getAttribute('role')).toBe('group');
+    expect(portal.getAttribute('aria-label')).toBe('Exemplo da tela do portal do fornecedor');
+    expect(portal.querySelector('input, button, select')).toBeNull();
+    expect(portal.querySelector('.manual-portal__barra')?.textContent).toBe('SQ Quimica · Supplier PortalSourcing request COT-2026-0412');
+    expect([...portal.querySelectorAll('.manual-portal__campo')].map((c) => c.querySelector('span')?.textContent)).toEqual([
+      'Currency',
+      'Main incoterm',
+      'Payment terms (days)',
+      'Offer validity (days)',
+      'FOB · USD / KG',
+      'CFR · USD / KG',
+      'CIF · USD / KG',
+      'Lead time (days)',
+      'Total price',
+    ]);
+    expect(portal.querySelector('.manual-portal__valor .badge')?.textContent).toBe('Main');
+    expect(portal.textContent).toContain('41,250.00');
+    expect([...portal.querySelectorAll('.manual-portal__marca')].map((m) => m.textContent)).toEqual(['Temporarily unavailable', 'Dangerous goods (DG)']);
+    expect(container.querySelectorAll('#portal > ul > li, #portal ul.manual-lista > li')).toHaveLength(5);
+    expect(container.querySelector('#portal .manual-aviso--info')?.textContent).toContain('This page was updated. Please reload it (Ctrl+F5)');
+    expect(container.querySelector('#portal .manual-figura__legenda')?.textContent).toBe('Exemplo fictícioProposta da Lianyun Fine Chemicals: 1,62 × 20.000 + 1,77 × 5.000 (benzoato) = US$ 41.250.');
+  });
+
+  it('a busca por "lembrete" acha o capitulo Enviar, marca o texto e nunca marca dentro de SVG', async () => {
+    const { container } = renderManual();
+    await buscar('lembrete');
+    const ids = visiveis(container).map((s) => s.id);
+    expect(ids).toContain('envio');
+    expect(container.querySelectorAll('#envio mark.manual-marca').length).toBeGreaterThan(1);
+    expect(container.querySelector('.manual-busca__status')?.textContent).toBe(`${ids.length} ${ids.length === 1 ? 'capítulo encontrado' : 'capítulos encontrados'}`);
+    expect(container.querySelectorAll('svg mark')).toHaveLength(0);
+    await buscar('lembretes seg');
+    expect(visiveis(container).map((s) => s.id)).toContain('comece-aqui');
+    expect(container.querySelectorAll('svg mark')).toHaveLength(0);
+  });
+
+  it('a busca destaca dentro da tela do portal, do e-mail de exemplo e da PO agrupada (texto de dados.ts)', async () => {
+    const { container } = renderManual();
+    await buscar('main incoterm');
+    expect(container.querySelector('#portal .manual-portal mark.manual-marca')?.textContent?.toLowerCase()).toBe('main incoterm');
+    await buscar('mei.chen');
+    expect(container.querySelector('#envio .manual-email mark.manual-marca')?.textContent).toBe('mei.chen');
+    await buscar('conservantes');
+    expect(container.querySelector('#criar-cotacao .manual-po mark.manual-marca')).not.toBeNull();
+  });
+});
+
 describe('Manual: perfil Comercial', () => {
   it('ve SO o capitulo Solicitacoes: sem indice, sem seletor e sem texto de outro capitulo', () => {
     const { container } = renderManual('comercial');

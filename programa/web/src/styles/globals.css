@@ -10872,6 +10872,250 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   font-weight: 600;
 }
 
+/* Capitulos 8 a 10 (M3): seta e selos dentro de tabela, PO agrupada, e-mail de envio, semana de lembretes, tela do portal e ciclo da cotacao */
+.manual-seta-texto {
+  vertical-align: -2px;
+  color: var(--rf-ink-soft);
+}
+.manual-tabela__selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.manual-tabela__linha { display: block; }
+
+.manual-po-colunas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.manual-po {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface);
+}
+.manual-po--sem {
+  border-style: dashed;
+  background: var(--rf-surface-alt);
+}
+.manual-po__cabecalho {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--rf-ink);
+}
+.manual-po__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--rf-border);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+.manual-po__item b {
+  font-weight: 600;
+  color: var(--rf-ink);
+}
+.manual-po__dica { font-size: 12px; }
+
+.manual-email {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface);
+}
+.manual-email__linha {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--rf-border);
+  font-size: 13px;
+}
+.manual-email__linha:last-child { border-bottom: 0; }
+.manual-email__k {
+  margin: 0;
+  padding-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rf-ink-soft);
+}
+.manual-email__v {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  color: var(--rf-ink);
+}
+.manual-email__endereco {
+  padding: 1px 8px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-surface-alt);
+  font-family: var(--rf-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.manual-email__endereco--principal {
+  border-color: var(--rf-vencedora-borda);
+  background: var(--rf-primary-50);
+  color: var(--rf-primary-700);
+}
+.manual-email__endereco--primeiro {
+  border-color: var(--rf-aviso-borda-suave);
+  background: var(--rf-tone-warning-bg);
+  color: var(--rf-tone-warning-fg);
+}
+.manual-email__nota {
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+
+.manual-semana {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.manual-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface);
+  text-align: center;
+}
+.manual-dia__nome {
+  font-size: 12px;
+  color: var(--rf-ink);
+}
+.manual-dia__ponto {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--rf-radius-pill);
+  background: var(--rf-primary);
+}
+.manual-dia__hora {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-ink-soft);
+}
+.manual-dia--folga { background: var(--rf-surface-alt); }
+.manual-dia--folga .manual-dia__ponto {
+  border: 1.5px dashed var(--rf-empty-border);
+  background: transparent;
+}
+
+.manual-portal {
+  overflow: hidden;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface);
+}
+.manual-portal__barra {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--rf-action);
+  color: var(--rf-on-action);
+  font-size: 12px;
+  font-weight: 700;
+}
+.manual-portal__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+.manual-portal__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+}
+.manual-portal__item-cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rf-ink);
+}
+.manual-portal__campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.manual-portal__campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rf-ink-soft);
+}
+.manual-portal__campo--total { max-width: 220px; }
+.manual-portal__valor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--rf-empty-border);
+  border-radius: 6px;
+  background: var(--rf-surface-alt);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-ink);
+}
+.manual-portal__marcas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+.manual-portal__marca::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 1.5px solid var(--rf-empty-border);
+  border-radius: 3px;
+  vertical-align: -2px;
+}
+
+.manual-svg--ciclo { min-width: 520px; }
+
 /* ---- Larguras: 1439 (notebook), P-ACOES (F12-B), so em tela (o papel nao muda): nas tabelas dos Relatorios os rotulos do cabecalho quebram, Produto e Fornecedor vencedor
    quebram em qualquer ponto (codigos e valores seguem nowrap) e o recuo lateral diminui para a tabela nao rolar; acima de 1439 nada muda ---- */
 @media screen and (max-width: 1439px) {
@@ -10966,6 +11210,9 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .manual-grade--2,
   .manual-grade--3 { grid-template-columns: minmax(0, 1fr); }
   .manual-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-po-colunas { grid-template-columns: minmax(0, 1fr); }
+  .manual-semana { gap: 4px; }
+  .manual-dia { padding: 8px 2px; }
 }
 
 /* ---- 720 ---- */
