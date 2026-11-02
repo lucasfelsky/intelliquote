@@ -32,7 +32,7 @@ const indexHtml = readSource('../../index.html');
 const opaque = (tema: ThemeName, nome: string) => opaqueOf(THEMES[tema], nome);
 const ratio = (tema: ThemeName, fg: string, bg: string) => ratioOf(opaque(tema, fg), opaque(tema, bg));
 
-const RAIZES = ['overview-page', 'cotacoes-page', 'cotacao-detalhe-page', 'solicitacoes-page', 'relatorios-page', 'auditoria-page', 'fornecedores-page'] as const;
+const RAIZES = ['overview-page', 'cotacoes-page', 'cotacao-detalhe-page', 'solicitacoes-page', 'relatorios-page', 'auditoria-page', 'fornecedores-page', 'manual-page'] as const;
 const ESCOPO = `body:has(:is(${RAIZES.map((r) => `.${r}`).join(', ')}))`;
 
 const sources = import.meta.glob(['../**/*.tsx', '../**/*.ts', '!../test/**', '!../**/*.test.ts', '!../**/*.test.tsx'], {
@@ -62,7 +62,7 @@ const interiores: CssRule[] = topo.flatMap((r) => (r.prelude === '@media print' 
 const seletores = interiores.flatMap((r) => listaDeSeletores(r.prelude));
 
 // ---------- S3: regiao `tela F12` (impressao) ----------
-describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', () => {
+describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais e do Manual)', () => {
   it('existe uma vez, logo depois da tela F11 (so espaco entre elas) e e a ultima das regioes', () => {
     expect(regiao).toBeDefined();
     const nomes = regs.map((r) => r.nome);
@@ -80,12 +80,12 @@ describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', ()
     for (const r of interiores) expect(r.prelude.startsWith('@'), r.prelude).toBe(false);
   });
 
-  it('todo seletor (cada item da lista) comeca por body:has(:is(as 7 raizes)): o Forecast fica de fora por construcao', () => {
+  it('todo seletor (cada item da lista) comeca por body:has(:is(as 8 raizes)): o Forecast fica de fora por construcao', () => {
     expect(seletores.length).toBeGreaterThan(8);
     expect(seletores.filter((s) => !s.startsWith(`${ESCOPO} `) && s !== ESCOPO)).toEqual([]);
   });
 
-  it('as 7 raizes existem no codigo, cada uma em ao menos 1 pagina, e nenhuma esta no Forecast', () => {
+  it('as 8 raizes existem no codigo, cada uma em ao menos 1 pagina, e nenhuma esta no Forecast', () => {
     const paginas = Object.entries(sources).filter(([caminho]) => /\/pages\//.test(caminho));
     for (const raiz of RAIZES) expect(paginas.some(([, src]) => new RegExp(`['"\`\\s]${raiz}['"\`\\s]`).test(src)), raiz).toBe(true);
     const forecast = Object.entries(sources).filter(([caminho]) => /\/pages\/Forecast(\.tsx|\/)/.test(caminho));
@@ -93,7 +93,7 @@ describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', ()
     for (const [caminho, src] of forecast) for (const raiz of RAIZES) expect(src, `${caminho}: ${raiz}`).not.toContain(raiz);
   });
 
-  it('nenhuma classe do Forecast (fc*-, fdec-, fgc-) e so as classes previstas (as 7 raizes, o shell, a tabela, o cartao, a paginacao, as tabelas de Respostas e Fornecedores e as colunas de acoes)', () => {
+  it('nenhuma classe do Forecast (fc*-, fdec-, fgc-) e so as classes previstas (as 8 raizes, o shell, a tabela, o cartao, a paginacao, as tabelas de Respostas e Fornecedores e as colunas de acoes)', () => {
     const classes = new Set(seletores.flatMap((s) => classesDoSeletor(s)));
     expect([...classes].filter((c) => /^(fc[a-z]*-|fdec|fgc|fcr)/.test(c))).toEqual([]);
     const previstas = new Set<string>([
@@ -121,9 +121,41 @@ describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais)', ()
       'solicitacoes-tabela',
       'sol-cell-actions',
       'solicitacoes-ver',
+      // Manual (M6): o que some ou perde rolagem no papel
+      'manual-indice',
+      'manual-indice-select',
+      'manual-busca',
+      'manual-layout',
+      'manual-capitulo',
+      'manual-rolagem',
+      'manual-svg--fluxo',
+      'manual-svg--ciclo',
+      'manual-regua',
+      'manual-figura',
     ]);
     expect([...classes].filter((c) => !previstas.has(c))).toEqual([]);
     for (const raiz of RAIZES) expect(classes.has(raiz), raiz).toBe(true);
+  });
+
+  it('Manual no papel (M6): some indice, seletor e busca; capitulo em bloco sem sombra; figuras e tabelas sem rolagem e sem min-width; figura nao quebra no meio', () => {
+    const decl = (seletor: string) => {
+      const out: Record<string, string> = {};
+      for (const r of interiores) {
+        if (!listaDeSeletores(r.prelude).includes(seletor)) continue;
+        for (const [, prop, valor] of r.body.matchAll(/([\w-]+)\s*:\s*([^;]+);?/g)) {
+          if (prop !== undefined && valor !== undefined) out[prop] = valor.replace(/\s+/g, ' ').trim();
+        }
+      }
+      return out;
+    };
+    expect(decl(`${ESCOPO} :is(.manual-indice, .manual-indice-select, .manual-busca)`)).toEqual({ display: 'none' });
+    expect(decl(`${ESCOPO} .manual-layout`)).toEqual({ display: 'block' });
+    expect(decl(`${ESCOPO} .manual-capitulo`)).toEqual({ 'box-shadow': 'none' });
+    expect(decl(`${ESCOPO} .manual-rolagem`)).toEqual({ overflow: 'visible' });
+    expect(decl(`${ESCOPO} :is(.manual-svg--fluxo, .manual-svg--ciclo, .manual-regua)`)).toEqual({ 'min-width': '0' });
+    expect(decl(`${ESCOPO} .manual-figura`)).toEqual({ 'break-inside': 'avoid' });
+    // so ha regras manual-* na regiao quando sob o escopo da impressao (as 8 raizes)
+    expect(seletores.filter((s) => /manual-/.test(s.replace(ESCOPO, '')) && !s.startsWith(`${ESCOPO} `))).toEqual([]);
   });
 
   it('sem !important, sem cor literal e sem declaracao de token; so a regiao muda o papel (nada de print nos tokens)', () => {

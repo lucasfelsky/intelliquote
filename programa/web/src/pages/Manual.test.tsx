@@ -921,6 +921,51 @@ describe('Manual: capitulos 14 a 17 e rodape (M5)', () => {
   });
 });
 
+describe('Manual: impressao (M6)', () => {
+  const detalhes = (container: HTMLElement) => [...container.querySelectorAll<HTMLDetailsElement>('#perguntas details')];
+
+  it('beforeprint abre as 11 perguntas do FAQ e afterprint devolve cada uma ao estado de antes (a aberta pelo leitor continua aberta)', () => {
+    const { container } = renderManual();
+    fireEvent.click(detalhes(container)[3]!.querySelector('summary')!);
+    expect(detalhes(container).filter((d) => d.open)).toHaveLength(1);
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    expect(detalhes(container)).toHaveLength(11);
+    expect(detalhes(container).every((d) => d.open)).toBe(true);
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'));
+    });
+    expect(detalhes(container).filter((d) => d.open).map((d) => d.querySelector('summary')?.textContent)).toEqual(['O mais barato não ficou em primeiro. Está errado?']);
+    // o estado do React segue valendo: um clique depois da impressao fecha e abre normalmente
+    fireEvent.click(detalhes(container)[3]!.querySelector('summary')!);
+    expect(detalhes(container).filter((d) => d.open)).toHaveLength(0);
+    fireEvent.click(detalhes(container)[5]!.querySelector('summary')!);
+    expect(detalhes(container)[5]!.open).toBe(true);
+  });
+
+  it('os listeners saem no desmonte: beforeprint depois de fechar a pagina nao mexe em nada', () => {
+    const adicionar = vi.spyOn(window, 'addEventListener');
+    const remover = vi.spyOn(window, 'removeEventListener');
+    const { container, unmount } = renderManual();
+    const registrados = adicionar.mock.calls.filter(([tipo]) => tipo === 'beforeprint' || tipo === 'afterprint').map(([tipo]) => tipo);
+    expect(registrados).toEqual(['beforeprint', 'afterprint']);
+    const detalhesAntes = detalhes(container);
+    unmount();
+    expect(remover.mock.calls.filter(([tipo]) => tipo === 'beforeprint' || tipo === 'afterprint').map(([tipo]) => tipo)).toEqual(['beforeprint', 'afterprint']);
+    window.dispatchEvent(new Event('beforeprint'));
+    expect(detalhesAntes.every((d) => !d.open)).toBe(true);
+    adicionar.mockRestore();
+    remover.mockRestore();
+  });
+
+  it('Comercial: nao ha FAQ, e beforeprint nao quebra', () => {
+    const { container } = renderManual('comercial');
+    expect(container.querySelectorAll('details')).toHaveLength(0);
+    expect(() => window.dispatchEvent(new Event('beforeprint'))).not.toThrow();
+  });
+});
+
 describe('Manual: perfil Comercial', () => {
   it('ve SO o capitulo Solicitacoes: sem indice, sem seletor e sem texto de outro capitulo', () => {
     const { container } = renderManual('comercial');

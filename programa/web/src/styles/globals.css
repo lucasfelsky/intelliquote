@@ -11628,29 +11628,37 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 /* <<< tela F11 <<< */
 
 /* >>> tela F12 (Suite COMEX) >>> */
-/* F12-S (S3): impressao das telas principais (Visao geral, Cotacoes, Detalhe, Solicitacoes, Relatorios, Auditoria, Fornecedores). So @media print;
-   todo seletor sob body:has(<as 7 raizes>): o Forecast fica de fora por construcao (tem o proprio bloco de impressao). O tema vira claro em
+/* F12-S (S3) + M6: impressao das telas principais (Visao geral, Cotacoes, Detalhe, Solicitacoes, Relatorios, Auditoria, Fornecedores e o Manual). So @media print;
+   todo seletor sob body:has(<as 8 raizes>): o Forecast fica de fora por construcao (tem o proprio bloco de impressao). O tema vira claro em
    theme.ts (beforeprint), entao nada aqui depende de token de cor. O papel imprime os fundos como na tela (print-color-adjust: exact herdado do
    .app-shell): o navegador, por padrao, nao imprime fundo, e o texto claro dos estados ativos (chip, alternancia, ranking) sumiria no branco.
-   As 3 regras de tabela de Respostas e Fornecedores tiram a largura fixa e o nowrap que estouravam o papel A4. Guarda: src/test/telaF12.test.ts. */
+   As 3 regras de tabela de Respostas e Fornecedores tiram a largura fixa e o nowrap que estouravam o papel A4. Guarda: src/test/telaF12.test.ts.
+   M6 (Manual): no papel somem o indice, o seletor de capitulo e a busca; o capitulo vira bloco sem sombra; figuras e tabelas perdem a rolagem e o min-width (o SVG escala pelo viewBox) e nao
+   quebram no meio; o FAQ abre no beforeprint (Manual.tsx). */
 @media print {
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)),
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) #root { height: auto; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) :is(.sidebar, .topbar, .page-header__actions, .pagination) { display: none; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .app-shell { display: block; min-height: 0; background: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .app-shell__content { max-width: none; padding: 0; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) :is(.card, .kpi, .cmp-card) { box-shadow: none; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table-wrapper { overflow: visible; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table { min-width: 0; font-size: 12px; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table > :is(thead, tbody) > tr > :is(th, td) { padding: 8px 6px; white-space: normal; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .table:has(> tbody > tr > td:not([colspan]):last-child > .row-actions) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child { display: none; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .solicitacoes-tabela:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):nth-last-child(-n+2) { display: none; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .solicitacoes-tabela:not(:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver))) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child { display: none; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .respostas-tab__tabela :is(.respostas-tab__fornecedor, .respostas-tab__th-pagamento) { width: auto; min-width: 0; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .respostas-tab__tabela .respostas-tab__num { white-space: normal; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td { padding: 8px 6px; white-space: normal; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) thead { display: table-header-group; }
-  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page)) tr { break-inside: avoid; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)),
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) #root { height: auto; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) :is(.sidebar, .topbar, .page-header__actions, .pagination) { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .app-shell { display: block; min-height: 0; background: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .app-shell__content { max-width: none; padding: 0; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) :is(.card, .kpi, .cmp-card) { box-shadow: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .table-wrapper { overflow: visible; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .table { min-width: 0; font-size: 12px; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .table > :is(thead, tbody) > tr > :is(th, td) { padding: 8px 6px; white-space: normal; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .table:has(> tbody > tr > td:not([colspan]):last-child > .row-actions) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .solicitacoes-tabela:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):nth-last-child(-n+2) { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .solicitacoes-tabela:not(:has(> tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver))) > :is(thead, tbody) > tr > :is(th, td):not([colspan]):last-child { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .respostas-tab__tabela :is(.respostas-tab__fornecedor, .respostas-tab__th-pagamento) { width: auto; min-width: 0; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .respostas-tab__tabela .respostas-tab__num { white-space: normal; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .fornecedores-page .fornecedores-tabela > tbody > tr.fornecedores-linha > td { padding: 8px 6px; white-space: normal; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) thead { display: table-header-group; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) tr { break-inside: avoid; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) :is(.manual-indice, .manual-indice-select, .manual-busca) { display: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .manual-layout { display: block; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .manual-capitulo { box-shadow: none; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .manual-rolagem { overflow: visible; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) :is(.manual-svg--fluxo, .manual-svg--ciclo, .manual-regua) { min-width: 0; }
+  body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .manual-figura { break-inside: avoid; }
 }
 /* <<< tela F12 <<< */
 

@@ -109,7 +109,8 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
       r.prelude.startsWith('@') ? parseRules(r.body).flatMap((i) => listaDeSeletores(i.prelude)) : listaDeSeletores(r.prelude),
     );
     expect(seletoresFora.filter(ehManual)).toEqual([]);
-    for (const r of regs.filter((x) => x.nome !== NOME)) expect(r.limpo, r.nome).not.toContain('manual-');
+    // M6: a impressao do Manual mora na regiao `tela F12` (so @media print, sob o escopo das 8 raizes; telaF12.test confere); nas demais regioes nada de manual-
+    for (const r of regs.filter((x) => x.nome !== NOME && x.nome !== 'tela F12')) expect(r.limpo, r.nome).not.toContain('manual-');
     expect(Object.keys(THEMES.claro).filter((t) => t.includes('manual'))).toEqual([]);
   });
 

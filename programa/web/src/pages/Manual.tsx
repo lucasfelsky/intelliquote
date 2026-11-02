@@ -107,6 +107,28 @@ export default function Manual() {
     return () => window.removeEventListener('scroll', noFim);
   }, [comIndice, ultimoVisivel]);
 
+  // Impressao (M6): no papel o FAQ sai aberto. No beforeprint abrem os <details> fechados e no afterprint voltam so os que a impressao abriu
+  // (o que o leitor ja tinha aberto continua aberto). Mexe so no DOM: o estado do React das perguntas nao muda.
+  useEffect(() => {
+    const abertosPelaImpressao: HTMLDetailsElement[] = [];
+    const antes = () => {
+      artigoRef.current?.querySelectorAll<HTMLDetailsElement>('details:not([open])').forEach((detalhe) => {
+        detalhe.open = true;
+        abertosPelaImpressao.push(detalhe);
+      });
+    };
+    const depois = () => {
+      for (const detalhe of abertosPelaImpressao) detalhe.open = false;
+      abertosPelaImpressao.length = 0;
+    };
+    window.addEventListener('beforeprint', antes);
+    window.addEventListener('afterprint', depois);
+    return () => {
+      window.removeEventListener('beforeprint', antes);
+      window.removeEventListener('afterprint', depois);
+    };
+  }, []);
+
   const ir = useCallback(
     (id: string) => {
       setAtivo(id);
