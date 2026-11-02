@@ -173,22 +173,24 @@ describe('F6: regiao `tela F6`', () => {
   });
 
   it('a regiao nao declara token (--*), consome so var(--rf-*) (e --paper* na previa em papel) e nao tem cor literal, !important nem @media print', () => {
-    expect(regiao?.limpo).not.toMatch(/(^|[;{\s])--[\w-]+\s*:/);
+    expect([...(regiao?.limpo ?? '').matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g)].map((m) => m[1] ?? '').filter((t) => t !== '--val')).toEqual([]);
     expect(regiao?.limpo).toContain('var(--rf-');
     expect(regiao?.limpo).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
     expect(regiao?.limpo).not.toContain('!important');
     expect(regiao?.limpo).not.toContain('@media print');
     expect(regiao?.limpo).not.toContain('@keyframes');
     const usados = [...(regiao?.limpo ?? '').matchAll(/var\((--[\w-]+)/g)].map((m) => m[1] ?? '');
-    const estranhos = [...new Set(usados)].filter((v) => !v.startsWith('--rf-') && !['--paper', '--paper-ink', '--paper-ink-soft'].includes(v));
+    const estranhos = [...new Set(usados)].filter((v) => !v.startsWith('--rf-') && v !== '--val' && !['--paper', '--paper-ink', '--paper-ink-soft'].includes(v));
     expect(estranhos).toEqual([]);
     for (const v of new Set(usados)) {
       if (v.startsWith('--rf-')) expect(lightTokens[v], v).toBeDefined();
     }
   });
 
-  it('at-rules permitidas: 1199, 720, 640, pointer: coarse e reduced-motion (so regras planas dentro delas)', () => {
+  it('at-rules permitidas: 1199, 720, 640, screen (F12-C), screen ate 1023 (F12-C), pointer: coarse e reduced-motion (so regras planas dentro delas)', () => {
     const permitidas = new Set([
+      '@media screen',
+      '@media screen and (max-width: 1023px)',
       '@media (max-width: 1199px)',
       '@media (max-width: 720px)',
       '@media (max-width: 640px)',
@@ -603,6 +605,32 @@ describe('F6: contraste nos 2 temas (alpha composto sobre --rf-surface)', () => 
       expect(ratio, e.id).toBeGreaterThan(e.esperado - 0.15);
       expect(ratio, e.id).toBeLessThan(e.esperado + 0.15);
       expect(ratio, `${e.id} segue abaixo de 3:1 (excecao registrada)`).toBeLessThan(UI);
+    }
+  });
+});
+
+describe('F6: P-ACOES na aba Itens (F12-C)', () => {
+  it('so em tela: coluna de acoes fixa a direita com fundo por estado (repouso, hover, PO de destino), texto quebra, --val = largura da coluna = scroll-padding-right, empilha ate 1023 e contraste nos 2 temas', () => {
+    const tela = mediaDe('@media screen');
+    const ate1023 = mediaDe('@media screen and (max-width: 1023px)');
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+    expect(declaracoes(tela, '.po-table td:has(> .row-actions)')).toMatchObject({ ...fixa, background: 'var(--rf-surface)' });
+    expect(declaracoes(tela, '.po-table:has(.item-action) > thead > tr > th:last-child')).toMatchObject({ ...fixa, background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(tela, '.po-table tr:hover > td:has(> .row-actions)')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(tela, '.po-group--drop-target > tr > td:has(> .row-actions)')).toEqual({ background: 'linear-gradient(var(--rf-tone-success-bg), var(--rf-tone-success-bg)), var(--rf-surface)' });
+    expect(declaracoes(tela, '.po-table td:first-child:not([colspan])')).toEqual({ 'white-space': 'normal' });
+    expect(declaracoes(tela, '.po-table td.cell-nowrap:not(.po-cell-mono)')).toEqual({ 'white-space': 'normal' });
+    // --val = largura medida da coluna de 3 acoes (196 px em linha, 92 empilhada); o scroll-padding-right e a mesma largura (foco por Tab fora da coluna fixa)
+    expect(declaracoes(tela, '.po-table-wrapper')).toEqual({ '--val': '196px', 'scroll-padding-right': 'var(--val)' });
+    expect(declaracoes(ate1023, '.po-table-wrapper')).toEqual({ '--val': '92px' });
+    expect(declaracoes(ate1023, '.po-table .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px' });
+    // coluna fixa e scroll-padding so em @media screen: o papel (impressao) e os cartoes ficam como na base (os sticky de topo da base nao contam: so as at-rules sao varridas)
+    expect(topo.filter((r) => r.prelude.startsWith('@media') && !r.prelude.startsWith('@media screen') && /position:\s*sticky|scroll-padding/.test(r.body)).map((r) => r.prelude)).toEqual([]);
+    for (const theme of ['claro', 'escuro'] as const) {
+      const opaque = (name: string): Rgb => opaqueOf(THEMES[theme], name);
+      for (const [fg, bg] of [[rf('action'), rf('surface-alt')], [rf('tone-danger-fg'), rf('surface-alt')], [rf('ink'), rf('surface-alt')], [rf('action'), rf('tone-success-bg')]] as const) {
+        expect(ratioOf(opaque(fg), opaque(bg)), `${theme}: ${fg} / ${bg}`).toBeGreaterThanOrEqual(TEXT);
+      }
     }
   });
 });

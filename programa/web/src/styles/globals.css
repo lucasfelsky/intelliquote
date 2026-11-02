@@ -3979,6 +3979,38 @@ dialog.modal-dialog[open] {
   color: var(--rf-tone-success-fg);
 }
 
+/* ---- F12-C (P-ACOES, so em tela): a coluna de acoes da tabela de itens (Editar, Mover, Remover) fica fixa a direita e o texto quebra; nenhuma acao depende da rolagem horizontal.
+   --val = largura da coluna de acoes (a unica propriedade local aceita pelo themeTokens); scroll-padding-right = a mesma largura, para o foco por Tab nao ficar sob a coluna fixa.
+   O fundo da celula fixa acompanha o estado da linha (repouso, hover e PO de destino do arrasto): as regras de fundo da base perdem para a especificidade da celula fixa. ---- */
+@media screen {
+  .po-table-wrapper {
+    --val: 196px;
+    scroll-padding-right: var(--val);
+  }
+  .po-table td:has(> .row-actions),
+  .po-table:has(.item-action) > thead > tr > th:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .po-table td:has(> .row-actions) { background: var(--rf-surface); }
+  .po-table:has(.item-action) > thead > tr > th:last-child { background: var(--rf-surface-alt); }
+  .po-table tr:hover > td:has(> .row-actions) { background: var(--rf-surface-alt); }
+  /* o tom da PO-alvo e translucido no escuro: em camadas sobre --rf-surface a celula fixa segue opaca (nada do que rola por baixo aparece) */
+  .po-group--drop-target > tr > td:has(> .row-actions) { background: linear-gradient(var(--rf-tone-success-bg), var(--rf-tone-success-bg)), var(--rf-surface); }
+  .po-table td:first-child:not([colspan]),
+  .po-table td.cell-nowrap:not(.po-cell-mono) { white-space: normal; }
+}
+@media screen and (max-width: 1023px) {
+  .po-table-wrapper { --val: 92px; }
+  .po-table .row-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+}
+
 /* ---- Telas estreitas ---- */
 @media (max-width: 720px) {
   .cotacao-resumo__grade { grid-template-columns: minmax(0, 1fr); }
@@ -4854,6 +4886,47 @@ dialog.modal-dialog[open] {
 :root[data-theme="dark"] .price-history__tabela .price-history__incoterm--alterado:hover {
   background: var(--rf-action);
   color: var(--rf-on-action);
+}
+
+/* F12-C (P-ACOES, so em tela, ate 1439; a 1440 a tabela cabe e nada muda): a coluna de acoes (Responder, Historico, Credit Support, Apagar) fica fixa a direita, o fornecedor
+   encolhe e o nome quebra (antes: reticencias sem title). --val = largura da coluna de acoes (a unica propriedade local aceita pelo themeTokens) e vira o scroll-padding-right,
+   para o foco por Tab (botao do fornecedor, "ver mais") nao ficar sob a coluna fixa. A regra de 640 abaixo (fornecedor em 292) segue vencendo ate 640 pela ordem. */
+@media screen and (max-width: 1439px) {
+  .respostas-tab__tabela {
+    --val: 359px;
+    scroll-padding-right: var(--val);
+  }
+  .respostas-tab__tabela .respostas-tab__fornecedor {
+    width: auto;
+    min-width: 240px;
+  }
+  .respostas-tab__tabela .resposta-linha { flex-wrap: wrap; }
+  .respostas-tab__tabela .resposta-fornecedor {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .respostas-tab__tabela .resposta-meta {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .respostas-tab__tabela .respostas-tab__acoes,
+  .respostas-tab__tabela .table > thead > tr > th:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    box-shadow: inset 1px 0 0 var(--rf-divider);
+  }
+  .respostas-tab__tabela .respostas-tab__acoes { background: var(--rf-surface); }
+  .respostas-tab__tabela .table > thead > tr > th:last-child { background: var(--rf-surface-alt); }
+  .respostas-tab__tabela .table tr:hover > .respostas-tab__acoes { background: var(--rf-surface-alt); }
+}
+@media screen and (max-width: 1023px) {
+  .respostas-tab__tabela { --val: 134px; }
+  .respostas-tab__tabela .row-actions {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
 }
 
 /* Largura media e celular: tudo em 1 coluna; a tabela rola dentro do contorno */
