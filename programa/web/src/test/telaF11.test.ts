@@ -152,6 +152,10 @@ const CONTEXTO = new Set([
   'paper-surface',
   'jodit-container',
   'jodit_inline',
+  'jodit-wysiwyg',
+  'jodit-toolbar-button_size_small',
+  'jodit-toolbar-button__button',
+  'jodit-status-bar-link',
 ]);
 
 describe('F11: regiao `tela F11`', () => {
@@ -183,9 +187,12 @@ describe('F11: regiao `tela F11`', () => {
     expect(usados).toContain('--rf-cc-auto-borda');
   });
 
-  it('at-rules permitidas: 1199, 1023, 720, 640, 600, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
+  it('at-rules permitidas: screen 1439, 1199 e 1023 (F12-B), 1199, 1023, 720, 640, 600, pointer: coarse e reduced-motion; sem @keyframes; sem aninhamento', () => {
     const atRules = topo.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     const permitidas = [
+      '@media screen and (max-width: 1439px)',
+      '@media screen and (max-width: 1199px)',
+      '@media screen and (max-width: 1023px)',
       '@media (max-width: 1199px)',
       '@media (max-width: 1023px)',
       '@media (max-width: 720px)',
@@ -298,6 +305,24 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.relatorios-page .kpi-grid--economia')).toEqual({ 'grid-template-columns': 'repeat(auto-fit, minmax(240px, 1fr))' });
     expect(naRegiao('.relatorios-page .relatorios-tabela__tabela--lead > thead > tr > th')).toEqual({ 'padding-right': '8px', 'padding-left': '8px', 'white-space': 'normal' });
     expect(naRegiao('.overview-page .kpi')).toMatchObject({ 'container-type': 'inline-size' });
+    // F12-B (B2): codigo e valores seguem nowrap; so em tela e ate 1439 (notebook; acima disso e no papel nada muda) o cabecalho das tabelas da economia e da compacta quebra, Produto / Fornecedor vencedor
+    // quebram em qualquer ponto e o recuo lateral diminui (economia 12, compacta 10) para a tabela nao rolar
+    expect(naRegiao('.relatorios-page .relatorios-tabela__tabela > tbody > tr > td.relatorios-codigo')).toMatchObject({ 'white-space': 'nowrap' });
+    expect(naRegiao('.relatorios-page .relatorios-tabela__tabela > tbody > tr > td.relatorios-valor')).toEqual({ 'white-space': 'nowrap' });
+    expect(naRegiao('.relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th')).not.toHaveProperty('white-space');
+    expect(naRegiao('.relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th')).not.toHaveProperty('white-space');
+    const m1439 = mediaDe('@media screen and (max-width: 1439px)');
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th')).toMatchObject({ 'white-space': 'normal' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th')).toMatchObject({ 'white-space': 'normal' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td:nth-child(2)')).toEqual({ 'overflow-wrap': 'anywhere' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td:nth-child(3)')).toEqual({ 'overflow-wrap': 'anywhere' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--economia > thead > tr > th')).toMatchObject({ 'padding-right': '12px', 'padding-left': '12px' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--economia > tbody > tr > td')).toEqual({ 'padding-right': '12px', 'padding-left': '12px' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--compacta > thead > tr > th')).toMatchObject({ 'padding-right': '10px', 'padding-left': '10px' });
+    expect(declaracoes(m1439, '.relatorios-page .relatorios-tabela__tabela--compacta > tbody > tr > td')).toEqual({ 'padding-right': '10px', 'padding-left': '10px' });
+    // papel: sticky so dentro de @media screen (nenhuma regra de P-ACOES vale na impressao)
+    expect(semMedia.filter((r) => /position:\s*sticky/.test(r.body))).toEqual([]);
+    expect(topo.filter((r) => r.prelude.startsWith('@media') && /position:\s*sticky/.test(r.body)).map((r) => r.prelude).filter((p) => !p.startsWith('@media screen'))).toEqual([]);
   });
 
   it('Usuarios: busca 260 x 44 com icone, filtro 180, modal de 420, e-mail travado com cadeado e estilo por :disabled', () => {
@@ -307,6 +332,16 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.usuario-campo__controle .input:disabled')).toEqual({ 'padding-right': '40px', 'border-color': 'var(--rf-border)' });
     expect(naRegiao('.usuario-campo__cadeado')).toEqual({ position: 'absolute', top: '14px', right: '14px', color: 'var(--rf-disabled-fg)' });
     expect(naRegiao('.usuario-form')).toMatchObject({ gap: '14px' });
+    // F12-B (B1, P-ACOES): ate 1199 o e-mail quebra e a coluna de acoes fica fixa a direita; ate 1023 os botoes empilham
+    const m1199 = mediaDe('@media screen and (max-width: 1199px)');
+    expect(declaracoes(m1199, '.usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-email')).toEqual({ 'min-width': '128px', 'overflow-wrap': 'anywhere' });
+    expect(declaracoes(m1199, '.usuarios-page .usuarios-tabela > tbody > tr > td')).toEqual({ 'padding-right': '8px', 'padding-left': '8px' });
+    for (const s of ['.usuarios-page .usuarios-tabela > thead > tr > th.usuarios-acoes-cab', '.usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-acoes']) {
+      expect(declaracoes(m1199, s), s).toMatchObject({ position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' });
+    }
+    expect(declaracoes(m1199, '.usuarios-page .usuarios-tabela > tbody > tr > td.usuarios-acoes')).toMatchObject({ background: 'var(--rf-surface)' });
+    expect(declaracoes(m1199, '.usuarios-page .usuarios-tabela > tbody > tr:hover > td.usuarios-acoes')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(mediaDe('@media screen and (max-width: 1023px)'), '.usuarios-page .usuarios-tabela .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'flex-end' });
   });
 
   it('Auditoria: grade de filtros do board, cartao colado e painel do diff dentro da celula (details aberto: linha em --rf-surface-alt)', () => {
@@ -321,6 +356,11 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.auditoria-diff__grade')).toEqual({ display: 'grid', 'grid-template-columns': 'repeat(2, minmax(0, 1fr))', gap: '12px' });
     expect(declaracoes(mediaDe('@media (max-width: 640px)'), '.auditoria-diff__grade')).toEqual({ 'grid-template-columns': 'minmax(0, 1fr)' });
     expect(naRegiao('.auditoria-diff__json')).toMatchObject({ background: 'var(--rf-surface)', border: '1px solid var(--rf-border)', 'font-size': '12px', 'line-height': '1.55', 'max-height': '240px' });
+    // F12-B (B3): ate 1199 o identificador e o e-mail do ator quebram em qualquer ponto
+    const m1199 = mediaDe('@media screen and (max-width: 1199px)');
+    expect(declaracoes(m1199, '.auditoria-id')).toEqual({ 'overflow-wrap': 'anywhere', 'min-width': '0' });
+    expect(declaracoes(m1199, '.auditoria-email')).toEqual({ 'overflow-wrap': 'anywhere' });
+    expect(declaracoes(m1199, '.auditoria-page .auditoria-tabela > tbody > tr > td')).toEqual({ 'padding-right': '12px', 'padding-left': '12px' });
   });
 
   it('Empresa: grade de 4 colunas (2 em 1199, 1 em 600), caixa do CC automatico menta com borda --rf-cc-auto-borda, resumo e rodape', () => {
@@ -344,6 +384,17 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     expect(naRegiao('.parceiros-credito .parceiros-credito__grade > tbody > tr > td')).toEqual({ padding: '10px 14px' });
     expect(naRegiao('.parceiro-credito-contato')).toMatchObject({ padding: '6px 14px 12px', border: '1px solid var(--rf-border)', 'border-radius': 'var(--rf-radius-alert)' });
     expect(naRegiao('.parceiro-credito-grade')).toMatchObject({ 'grid-template-columns': 'repeat(2, minmax(0, 1fr))', gap: '12px' });
+    // F12-B (B4, P-ACOES): ate 1199 a coluna de acoes fica fixa a direita; ate 1023 os botoes empilham
+    const m1199 = mediaDe('@media screen and (max-width: 1199px)');
+    for (const s of [
+      '.parceiros-credito .parceiros-credito__grade > thead > tr > th.parceiros-credito__acoes-cab',
+      '.parceiros-credito .parceiros-credito__grade > tbody > tr > td.parceiro-credito__acoes',
+    ]) {
+      expect(declaracoes(m1199, s), s).toMatchObject({ position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' });
+    }
+    expect(declaracoes(m1199, '.parceiros-credito .parceiros-credito__grade > tbody > tr:hover > td.parceiro-credito__acoes')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(m1199, '.parceiros-credito .parceiros-credito__grade > tbody > tr > td.parceiro-credito__contato')).toEqual({ 'max-width': '240px' });
+    expect(declaracoes(mediaDe('@media screen and (max-width: 1023px)'), '.parceiros-credito .parceiros-credito__grade .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'flex-end' });
   });
 
   it('Templates: cartoes em 4 colunas (7o em 2), ativo com anel --rf-action, barra, variaveis em 210 + 1fr, conteudo 1,25fr x previa 1fr e moldura do Jodit', () => {
@@ -390,6 +441,21 @@ describe('F11: receitas dos boards (valores exatos)', () => {
     ]) {
       expect(alvos44, s).toContain(s);
     }
+    // F12-B (B6): caixas de selecao de 18 ganham area de toque de 44 pelo ::after (-13 em cada lado) e o editor Jodit leva barra, rodape e links a 44
+    for (const s of [
+      '.cc-mode-toggle > input',
+      '.cc-users__item > input',
+      '.parceiro-credito-form > .checkbox-field > input',
+      '.parceiro-credito-contato__rodape .checkbox-field > input',
+      '.templates-conteudo .checkbox-field > input',
+    ]) {
+      expect(declaracoes(coarse, s), s).toEqual({ position: 'relative' });
+      expect(declaracoes(coarse, `${s}::after`), s).toEqual({ content: '""', position: 'absolute', top: '-13px', right: '-13px', bottom: '-13px', left: '-13px' });
+    }
+    expect(declaracoes(coarse, '.templates-editor .jodit-toolbar-button_size_small')).toEqual({ 'min-width': '44px', height: '44px' });
+    expect(declaracoes(coarse, '.templates-editor .jodit-toolbar-button__button')).toEqual({ 'min-width': '44px', height: '44px' });
+    expect(declaracoes(coarse, '.templates-editor .jodit-status-bar-link')).toMatchObject({ 'min-height': '44px' });
+    expect(declaracoes(coarse, '.templates-editor .jodit-wysiwyg a::after')).toEqual({ content: '""', position: 'absolute', top: '-14px', right: '0', bottom: '-14px', left: '0' });
   });
 
   it('toda transicao e animacao da regiao tem contrapartida no bloco reduced-motion da MESMA regiao; sem transform', () => {
