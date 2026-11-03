@@ -11280,8 +11280,16 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   text-overflow: ellipsis;
   color: var(--rf-ink);
 }
+/* Na 1a linha o selo "Vencedora" mora dentro do nome: com overflow oculto o selo era cortado ("Vence") quando o nome da vencedora e longo (so Preco: "Qingdao Harbor Chem").
+   Ali o conjunto quebra de linha (o selo nunca e cortado nem perde o nome); as demais linhas seguem com reticencias. */
+.manual-sim__linha--primeira .manual-sim__nome {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .manual-sim__selo {
   margin-left: 6px;
+  white-space: nowrap;
   padding: 1px 6px;
   border-radius: var(--rf-radius-pill);
   background: var(--rf-action);
