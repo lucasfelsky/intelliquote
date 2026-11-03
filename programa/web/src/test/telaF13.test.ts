@@ -149,3 +149,90 @@ describe('F13: tokens (ancora `tokens F13 (forecast)` nos 2 blocos e uso so dent
     }
   });
 });
+
+// ---------- F13-0b: sentinelas de tokens por frente ----------
+// Cada frente (B, C, D, E) declara os tokens do SEU par, nos 2 blocos (:root claro e :root[data-theme="dark"]), logo depois da ancora
+// "tokens F13 (forecast)"; nenhum par tem token hoje. A frente que criar o 1o token cria tambem a fixture src/test/fixtures/suiteComexTokens.f13.json
+// (fonte: "mock", ref = nome do board; o suiteComexTokens.test.ts ja aceita o nome .f13.json) — sem ela a paridade CSS x fixtures da suiteComexTokens falha.
+// Ate la nao ha fixture (esta guarda nao a exige com 0 tokens). Todo token declarado num par e --rf-fc-* (prefixo unico do Forecast) e nenhum --rf-* e declarado
+// fora de um par, na faixa da ancora.
+describe('F13-0b: sentinelas de tokens por frente na ancora (nos 2 blocos)', () => {
+  const ANCORA = '/* tokens F13 (forecast) */';
+  const tAbre = (s: string) => `/* -- tokens F13-${s} >>> -- */`;
+  const tFecha = (s: string) => `/* -- <<< tokens F13-${s} -- */`;
+  const posicoes = [...rawLf.matchAll(/\/\* tokens F13 \(forecast\) \*\//g)].map((m) => m.index ?? 0);
+  // faixa da ancora: da ancora ate o fim do bloco de token (a "}" que fecha o :root)
+  const faixas = posicoes.map((p) => rawLf.slice(p, rawLf.indexOf('\n}', p)));
+  const nomesBloco = ['claro', 'escuro'];
+
+  function pares(faixa: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const s of SENTINELAS) out[s] = faixa.slice(faixa.indexOf(tAbre(s)) + tAbre(s).length, faixa.indexOf(tFecha(s)));
+    return out;
+  }
+  const declaracoesDe = (texto: string) => [...stripComments(texto).matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1] ?? '', (m[2] ?? '').replace(/\s+/g, ' ').trim()] as const);
+
+  it('a ancora tem 1 faixa por bloco (claro e escuro) com os 4 pares B, C, D, E na ordem, cada marcador 1 vez, separados por exatamente 1 linha em branco', () => {
+    expect(rawLf.split(ANCORA)).toHaveLength(3);
+    expect(faixas).toHaveLength(2);
+    faixas.forEach((faixa, i) => {
+      const bloco = nomesBloco[i];
+      for (const s of SENTINELAS) {
+        expect(faixa.split(tAbre(s)), `${bloco}: ${tAbre(s)}`).toHaveLength(2);
+        expect(faixa.split(tFecha(s)), `${bloco}: ${tFecha(s)}`).toHaveLength(2);
+        expect(faixa.indexOf(tAbre(s)), `${bloco}: ${s}`).toBeLessThan(faixa.indexOf(tFecha(s)));
+      }
+      const ordem = SENTINELAS.flatMap((s) => [faixa.indexOf(tAbre(s)), faixa.indexOf(tFecha(s))]);
+      expect([...ordem].sort((a, b) => a - b), bloco).toEqual(ordem);
+      SENTINELAS.slice(1).forEach((s, k) => {
+        const anterior = SENTINELAS[k] ?? 'B';
+        expect(faixa.slice(faixa.indexOf(tFecha(anterior)) + tFecha(anterior).length, faixa.indexOf(tAbre(s))), `${bloco}: ${anterior} -> ${s}`).toBe('\n\n  ');
+      });
+    });
+  });
+
+  it('os marcadores de token nao se confundem com os da regiao `tela F13` (prefixo "tokens ") e a regiao segue com 4 pares proprios', () => {
+    expect((rawLf.match(/\/\* -- tokens F13-[BCDE] >>> -- \*\//g) ?? []).length).toBe(8);
+    expect((rawLf.match(/\/\* -- <<< tokens F13-[BCDE] -- \*\//g) ?? []).length).toBe(8);
+    expect((rawLf.match(/\/\* -- F13-[BCDE] >>> -- \*\//g) ?? []).length).toBe(4);
+    expect((regiao?.bruto ?? '').includes('tokens F13-')).toBe(false);
+  });
+
+  it('todo token declarado num par e --rf-fc-*; nenhum --rf-* e declarado na faixa da ancora fora dos pares; so declaracoes (nada de regra) dentro dos pares', () => {
+    faixas.forEach((faixa, i) => {
+      const bloco = nomesBloco[i];
+      const p = pares(faixa);
+      for (const s of SENTINELAS) {
+        const corpo = stripComments(p[s] ?? '').trim();
+        expect(corpo.replace(/--[\w-]+\s*:\s*[^;{}]+;/g, '').trim(), `${bloco} ${s}: so declaracoes de token`).toBe('');
+        for (const [nome] of declaracoesDe(p[s] ?? '')) expect(nome, `${bloco} ${s}`).toMatch(/^--rf-fc-[a-z0-9-]+$/);
+      }
+      let resto = faixa;
+      for (const s of SENTINELAS) resto = resto.slice(0, resto.indexOf(tAbre(s))) + resto.slice(resto.indexOf(tFecha(s)) + tFecha(s).length);
+      expect(declaracoesDe(resto).filter(([nome]) => nome.startsWith('--rf-')), `${bloco}: --rf-* fora de um par`).toEqual([]);
+    });
+  });
+
+  it('cada token do escuro tem o par no claro; o que existe so no claro e constante (como a fixture f12); a fixture .f13.json e obrigatoria a partir do 1o token', () => {
+    const [claro, escuro] = faixas.map((faixa) => Object.values(pares(faixa)).flatMap((corpo) => declaracoesDe(corpo)));
+    const nomesClaro = (claro ?? []).map(([n]) => n);
+    const nomesEscuro = (escuro ?? []).map(([n]) => n);
+    expect(new Set(nomesClaro).size, 'sem repeticao no claro').toBe(nomesClaro.length);
+    expect(new Set(nomesEscuro).size, 'sem repeticao no escuro').toBe(nomesEscuro.length);
+    for (const n of nomesEscuro) expect(nomesClaro, `${n} no escuro sem par no claro`).toContain(n);
+    const fixtureF13 = fixtureUniao().filter((t) => t.arquivo === 'suiteComexTokens.f13.json');
+    if (nomesClaro.length > 0) {
+      expect(fixtureF13.map((t) => t.token).sort(), 'fixture f13 = tokens dos pares').toEqual([...nomesClaro].sort());
+      for (const t of fixtureF13) expect(t.constante, t.token).toBe(!nomesEscuro.includes(t.token));
+    } else {
+      expect(fixtureF13).toEqual([]);
+    }
+  });
+
+  it('nenhuma cor literal na faixa da ancora fora de uma declaracao de token (so os valores dos tokens dos pares podem ter cor)', () => {
+    faixas.forEach((faixa, i) => {
+      const resto = stripComments(faixa).replace(/--[\w-]+\s*:\s*[^;]+;/g, '');
+      expect(resto, nomesBloco[i]).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
+    });
+  });
+});

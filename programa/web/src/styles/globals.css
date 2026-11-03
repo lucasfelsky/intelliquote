@@ -248,6 +248,17 @@
   --rf-ghost-escuro-texto: #004153;
 
   /* tokens F13 (forecast) */
+  /* -- tokens F13-B >>> -- */
+  /* -- <<< tokens F13-B -- */
+
+  /* -- tokens F13-C >>> -- */
+  /* -- <<< tokens F13-C -- */
+
+  /* -- tokens F13-D >>> -- */
+  /* -- <<< tokens F13-D -- */
+
+  /* -- tokens F13-E >>> -- */
+  /* -- <<< tokens F13-E -- */
 
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
@@ -437,6 +448,17 @@
   --rf-ghost-escuro-texto: #5ff0c8;
 
   /* tokens F13 (forecast) */
+  /* -- tokens F13-B >>> -- */
+  /* -- <<< tokens F13-B -- */
+
+  /* -- tokens F13-C >>> -- */
+  /* -- <<< tokens F13-C -- */
+
+  /* -- tokens F13-D >>> -- */
+  /* -- <<< tokens F13-D -- */
+
+  /* -- tokens F13-E >>> -- */
+  /* -- <<< tokens F13-E -- */
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
