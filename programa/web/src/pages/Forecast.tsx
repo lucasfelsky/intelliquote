@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { Icon } from '@/components/icons';
 import Spinner from '@/components/Spinner';
@@ -26,7 +26,7 @@ import { useDialogoFontes } from './Forecast/useDialogoFontes';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
-import ForecastMemoria from './Forecast/ForecastMemoria';
+import ForecastItemPagina from './Forecast/ForecastItemPagina';
 import ForecastMenuMais from './Forecast/ForecastMenuMais';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
 import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
@@ -79,18 +79,65 @@ function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
 
 interface PainelProps {
   detail: ForecastSnapshotDetail;
-  podeEditar: boolean;
   mostrarSemVenda: boolean;
   onMostrarSemVenda: (mostrar: boolean) => void;
   ocultaveis: number;
 }
 
-function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: PainelProps) {
-  const [filtro, setFiltro] = useState<FiltroId>('todos');
-  const [busca, setBusca] = useState('');
-  const [ocultas, setOcultas] = useState(false);
-  const [sel, setSel] = useState<number | null>(null);
+function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: PainelProps) {
+  // Filtro, busca e colunas ocultas vivem na URL (`filtro`, `busca`, `ocultas`): abrir um item e voltar pela aba Painel
+  // devolve a grade como estava. A busca digitada fica em estado local (digitacao fluida, sem uma navegacao por tecla)
+  // e vai para a URL depois de uma pausa.
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const filtroUrl = params.get('filtro');
+  const filtro: FiltroId = FILTROS.find((f) => f.id === filtroUrl)?.id ?? 'todos';
+  const ocultas = params.get('ocultas') === '1';
+  const buscaUrl = params.get('busca') ?? '';
+  const [busca, setBusca] = useState(buscaUrl);
   const termo = useDeferredValue(busca);
+
+  const atualizarUrl = useCallback(
+    (mudar: (next: URLSearchParams) => void) =>
+      setParams(
+        (atual) => {
+          const next = new URLSearchParams(atual);
+          mudar(next);
+          return next;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+  useEffect(() => {
+    if (busca === buscaUrl) return undefined;
+    const t = window.setTimeout(() => atualizarUrl((n) => (busca ? n.set('busca', busca) : n.delete('busca'))), 300);
+    return () => window.clearTimeout(t);
+  }, [busca, buscaUrl, atualizarUrl]);
+  const setFiltro = (id: FiltroId) => atualizarUrl((n) => (id === 'todos' ? n.delete('filtro') : n.set('filtro', id)));
+  const alternarOcultas = () => atualizarUrl((n) => (ocultas ? n.delete('ocultas') : n.set('ocultas', '1')));
+
+  // A grade abre a pagina do item (/forecast/item/:linha) levando quinzena, filtro, busca e colunas ocultas. O estado
+  // atual vem de uma ref para o callback ficar estavel (as linhas da grade sao memoizadas).
+  const estado = useRef({ params, filtro, busca, ocultas });
+  estado.current = { params, filtro, busca, ocultas };
+  const idDaQuinzena = detail.id;
+  const onSelect = useCallback(
+    (linha: number) => {
+      const e = estado.current;
+      const next = new URLSearchParams(e.params);
+      next.set('quinzena', String(idDaQuinzena));
+      next.delete('visao');
+      if (e.filtro === 'todos') next.delete('filtro');
+      else next.set('filtro', e.filtro);
+      if (e.busca) next.set('busca', e.busca);
+      else next.delete('busca');
+      if (e.ocultas) next.set('ocultas', '1');
+      else next.delete('ocultas');
+      navigate({ pathname: `/forecast/item/${linha}`, search: `?${next.toString()}` });
+    },
+    [navigate, idDaQuinzena],
+  );
 
   // Quantidades decididas pelo comprador: mesma chave do relatorio de compras (salvar la atualiza a grade). A grade
   // nunca some: sem dados (carregando ou erro sem cache) a coluna ANALISE FORECAST mostra o valor congelado.
@@ -134,9 +181,6 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
     mensagemVazia = `Nenhum produto visível com esses filtros: ${ocultosQueCasariam} sem venda há 6 meses ou mais ${ocultosQueCasariam === 1 ? 'está oculto' : 'estão ocultos'}.`;
   }
 
-  const selecionada = base.find((l) => l.linha === sel) ?? base[0];
-  const onSelect = useCallback((linha: number) => setSel(linha), []);
-
   return (
     <>
       <Selo detail={detail} />
@@ -175,7 +219,7 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
               role="switch"
               aria-checked={ocultas}
               className="fc-chave"
-              onClick={() => setOcultas((v) => !v)}
+              onClick={alternarOcultas}
             >
               <span className={ocultas ? 'fc-trilho fc-trilho--on' : 'fc-trilho'} aria-hidden="true">
                 <span />
@@ -218,28 +262,20 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
         <ForecastGrid
           colunas={colunas}
           linhas={visiveis}
-          selecionada={selecionada?.linha ?? null}
+          selecionada={null}
           divergencias={divergencias}
           onSelect={onSelect}
           legenda={`Forecast da quinzena ${detail.label}: ${visiveis.length} de ${detail.linhas.length} produtos`}
           mensagemVazia={mensagemVazia}
         />
       </section>
-      {selecionada && (
-        <ForecastMemoria
-          linha={selecionada}
-          half={detail.half}
-          baseDate={detail.baseDate}
-          hoje={detail.hoje}
-          podeEditar={podeEditar}
-        />
-      )}
     </>
   );
 }
 
 export default function Forecast() {
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const podeImportar = user?.role === 'admin' || user?.role === 'comprador';
@@ -264,7 +300,10 @@ export default function Forecast() {
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
-  const visao = params.get('visao') === 'compras' ? 'compras' : 'painel';
+  // Pagina do item (/forecast/item/:linha): a linha vem da rota; nao numerica = item inexistente (NaN nunca casa).
+  const rotaItem = useMatch('/forecast/item/:linha');
+  const linhaDoItem = rotaItem ? Number(rotaItem.params.linha) : null;
+  const visao = linhaDoItem === null && params.get('visao') === 'compras' ? 'compras' : 'painel';
   const pedida = Number(params.get('quinzena'));
   const escolhida = quinzenas.find((q) => q.id === pedida) ?? quinzenas[0];
   const escolhidaId = escolhida?.id;
@@ -324,23 +363,32 @@ export default function Forecast() {
     }
   }, [abaFontesAberta]);
 
-  // Trocar de visao preserva a quinzena da URL.
+  // Sempre volta para o painel/relatorio (/forecast), nunca fica na pagina de um item de outra quinzena.
+  const irPara = useCallback(
+    (next: URLSearchParams | Record<string, string>) => {
+      const busca = new URLSearchParams(next).toString();
+      navigate({ pathname: '/forecast', search: busca ? `?${busca}` : '' });
+    },
+    [navigate],
+  );
+
+  // Trocar de visao (ou voltar do item pela aba Painel) preserva quinzena, filtro, busca e colunas ocultas da URL.
   const mudarVisao = (proxima: 'painel' | 'compras') => {
     const next = new URLSearchParams(params);
     if (proxima === 'compras') next.set('visao', 'compras');
     else next.delete('visao');
-    setParams(next);
+    irPara(next);
   };
 
   const aoImportar = useCallback(
     async (snapshotId: number, label: string) => {
       setImportando(false);
       await queryClient.invalidateQueries({ queryKey: ['forecast'] });
-      setParams({ quinzena: String(snapshotId) });
+      irPara({ quinzena: String(snapshotId) });
       setExcluida(null);
       setImportada(label);
     },
-    [queryClient, setParams],
+    [queryClient, irPara],
   );
 
   // Exclusao confirmada: a quinzena some da lista na hora, as consultas dela saem do cache (um GET so daria 404),
@@ -363,10 +411,10 @@ export default function Forecast() {
       const proximos: Record<string, string> = {};
       if (proxima) proximos.quinzena = String(proxima.id);
       if (visao === 'compras') proximos.visao = visao;
-      setParams(proximos);
+      irPara(proximos);
       await queryClient.invalidateQueries({ queryKey: ['forecast'] });
     },
-    [queryClient, setParams, visao],
+    [queryClient, irPara, visao],
   );
 
   const subtitulo = escolhida
@@ -412,7 +460,7 @@ export default function Forecast() {
                     onChange={(e) => {
                       setImportada(null);
                       setExcluida(null);
-                      setParams(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
+                      irPara(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
                     }}
                   >
                     {quinzenas.map((q) => (
@@ -516,14 +564,14 @@ export default function Forecast() {
           </button>
         </div>
       )}
-      {detail && detail.origin === 'dbcorp' && (
+      {detail && detail.origin === 'dbcorp' && linhaDoItem === null && (
         <ForecastPendentesCadastro key={`pendentes-${detail.id}`} snapshotId={detail.id} label={detail.label} podeEditar={podeImportar} />
       )}
-      {detail && visao === 'painel' && (
+      {detail && linhaDoItem !== null && <ForecastItemPagina detail={detail} linha={linhaDoItem} podeEditar={podeImportar} />}
+      {detail && linhaDoItem === null && visao === 'painel' && (
         <Painel
           key={detail.id}
           detail={detail}
-          podeEditar={podeImportar}
           mostrarSemVenda={mostrarSemVenda}
           onMostrarSemVenda={setMostrarSemVenda}
           ocultaveis={ocultaveis}
