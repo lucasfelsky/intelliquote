@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Icon } from '@/components/icons';
 import Spinner from '@/components/Spinner';
 import { forecastFontesKeys, listForecastSources, type ForecastFonte } from '@/services/forecastFontes';
 import {
@@ -196,6 +197,7 @@ export default function ForecastOcasioesPanel({ podeEditar, hoje: hojeProp }: Pr
               nome: g.membros.length > 1 ? `${g.nome} (${g.membros.length} alvos)` : g.nome,
               alcance: g.membros.map((o) => textoAlcance(o, nomeDoPais)).join(', '),
               ativa: g.membros.some((o) => o.isActive),
+              escopo: g.membros[0]?.scopeType,
               ocorrencias,
             },
           ]
@@ -292,6 +294,7 @@ export default function ForecastOcasioesPanel({ podeEditar, hoje: hojeProp }: Pr
                 className="primary-button"
                 onClick={() => abrirForm({}, 'nova')}
               >
+                <Icon name="plus" size={16} />
                 Novo evento
               </button>
               <ForecastUsarModelo
@@ -300,6 +303,9 @@ export default function ForecastOcasioesPanel({ podeEditar, hoje: hojeProp }: Pr
                 registrarBotao={registrarBotao}
                 onUsar={(modelo) => abrirForm({ modelo }, 'modelo')}
               />
+              <p className="fcd-dica fco-barra__nota">
+                Os dias e a janela são sugestões: ajuste ao que a fonte costuma informar. Nada é gravado até você salvar.
+              </p>
             </div>
           )}
           {todas.length === 0 ? (

@@ -13,7 +13,7 @@ import {
   type ForecastPrazoRealEstatistica,
   type ForecastPrazoRealFonte,
 } from '@/services/forecastFontes';
-import { diferencaTexto, ordenarFontes, textoIndisponivel, textoPrazoReal } from './forecastFontes';
+import { diferencaDias, diferencaTexto, ordenarFontes, textoIndisponivel, textoPrazoReal } from './forecastFontes';
 import { contarSemPais, opcoesDePais, paisPorFonte, textoFontesSemPais } from './forecastOcasioes';
 import { LEAD_TIME_MAX_DIAS, lerLeadTime } from './forecastPendentes';
 import ForecastFontePais from './ForecastFontePais';
@@ -42,6 +42,14 @@ function PrazoReal({ e }: { e: ForecastPrazoRealEstatistica | null | undefined }
     );
   }
   return <>{textoPrazoReal(e)}</>;
+}
+
+/** Diferenca real - cadastrado como selo (board v68): acima do cadastrado = aviso, abaixo = ok, igual = neutro; sem dado = traco. */
+function Diferenca({ e, leadTimeDays }: { e: ForecastPrazoRealEstatistica | null | undefined; leadTimeDays: number | null }) {
+  const dias = diferencaDias(e, leadTimeDays);
+  if (dias === null) return <>{diferencaTexto(e, leadTimeDays)}</>;
+  const tom = dias > 0 ? 'badge--warning' : dias < 0 ? 'badge--success' : 'badge--muted';
+  return <span className={`badge ${tom}`}>{diferencaTexto(e, leadTimeDays)}</span>;
 }
 
 function textoTopo(dados: ForecastPrazoReal): string {
@@ -164,7 +172,6 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
               <th scope="col">Diferença</th>
               <th scope="col">ETD → ETA FINAL (real)</th>
               <th scope="col">ETD + dias usado no FUP</th>
-              {podeEditar && <th scope="col">Ação</th>}
             </tr>
           </thead>
           <tbody>
@@ -217,40 +224,41 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
                           </button>
                         </div>
                       </form>
-                    ) : f.leadTimeDays === null ? (
-                      SEM_DADO
                     ) : (
-                      `${f.leadTimeDays} dias`
+                      <>
+                        {f.leadTimeDays === null ? SEM_DADO : `${f.leadTimeDays} dias`}
+                        {podeEditar && (
+                          <>
+                            {' '}
+                            <button
+                              ref={(el) => {
+                                if (el) botoes.current.set(f.sourceId, el);
+                                else botoes.current.delete(f.sourceId);
+                              }}
+                              type="button"
+                              className="ghost-button"
+                              aria-label={`Editar lead time de ${f.nome}`}
+                              onClick={() => iniciar(f)}
+                              disabled={pendente}
+                            >
+                              Editar
+                            </button>
+                          </>
+                        )}
+                      </>
                     )}
                   </td>
                   <td>{f.clearanceDays === null ? SEM_DADO : `${f.clearanceDays} dias`}</td>
                   <td>
                     <PrazoReal e={f.real?.po} />
                   </td>
-                  <td>{diferencaTexto(f.real?.po, f.leadTimeDays)}</td>
+                  <td>
+                    <Diferenca e={f.real?.po} leadTimeDays={f.leadTimeDays} />
+                  </td>
                   <td>
                     <PrazoReal e={f.real?.etd} />
                   </td>
                   <td>{f.etdDiasUsado} dias</td>
-                  {podeEditar && (
-                    <td>
-                      {!emEdicao && (
-                        <button
-                          ref={(el) => {
-                            if (el) botoes.current.set(f.sourceId, el);
-                            else botoes.current.delete(f.sourceId);
-                          }}
-                          type="button"
-                          className="ghost-button"
-                          aria-label={`Editar lead time de ${f.nome}`}
-                          onClick={() => iniciar(f)}
-                          disabled={pendente}
-                        >
-                          Editar
-                        </button>
-                      )}
-                    </td>
-                  )}
                 </tr>
               );
             })}
@@ -260,6 +268,9 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
       {dados.semFonte.chegadas > 0 && (
         <p className="fcd-dica">Chegadas sem fonte no cadastro: {dados.semFonte.chegadas}</p>
       )}
+      <p className="fcd-dica">
+        Prazo real = prazo real médio da PO ao ETA FINAL (dias). “Poucas chegadas” aparece quando a amostra é pequena. Diferença = real − cadastrado.
+      </p>
     </>
   );
 }
@@ -276,7 +287,6 @@ function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean
       role="tabpanel"
       id={`${ABAS_BASE_ID}-panel-${valor}`}
       aria-labelledby={`${ABAS_BASE_ID}-tab-${valor}`}
-      tabIndex={0}
       className="tabs-panel"
       style={{ outline: 'none' }}
       hidden={!ativo}
@@ -325,6 +335,11 @@ export default function ForecastFontesModal({ podeEditar, abaInicial, onFechar }
             {abriuOcasioes && <ForecastOcasioesPanel podeEditar={podeEditar} />}
           </PainelDaAba>
         </Tabs>
+        <div className="modal-actions">
+          <button type="button" className="ghost-button" onClick={onFechar}>
+            Fechar
+          </button>
+        </div>
       </div>
     </Modal>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
 import {
@@ -147,7 +148,7 @@ function Formulario({ grupo, grupos, onVoltar }: VoltarProps & { grupo?: Forecas
 
   if (confirmando) {
     return (
-      <form className="fcd-form fcg-form" onSubmit={aoEnviar} noValidate>
+      <form className="fcd-form fcg-form fcg-confirmar" onSubmit={aoEnviar} noValidate>
         <h3 className="fcg-titulo" tabIndex={-1} ref={titulo}>
           Confirmar o grupo {nome.trim()}
         </h3>
@@ -221,15 +222,18 @@ function Formulario({ grupo, grupos, onVoltar }: VoltarProps & { grupo?: Forecas
         <label className="sr-only" htmlFor={id('busca')}>
           Buscar produto por nome ou código
         </label>
-        <input
-          id={id('busca')}
-          className="input"
-          type="search"
-          placeholder="Buscar produto por nome ou código"
-          autoComplete="off"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-        />
+        <div className="fcg-busca">
+          <Icon name="search" size={16} />
+          <input
+            id={id('busca')}
+            className="input"
+            type="search"
+            placeholder="Buscar produto por nome ou código"
+            autoComplete="off"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
         {produtos.isLoading && (
           <div className="fcd-carregando" role="status">
             <Spinner /> Carregando produtos…
@@ -423,6 +427,7 @@ function Lista({ podeEditar, grupos, onNovo, onEditar, onDesfazer }: ListaProps)
       {podeEditar && (
         <div>
           <button type="button" className="primary-button" onClick={onNovo}>
+            <Icon name="plus" size={16} />
             Novo grupo
           </button>
         </div>
@@ -464,7 +469,7 @@ function Lista({ podeEditar, grupos, onNovo, onEditar, onDesfazer }: ListaProps)
                       Editar
                     </button>
                     <button type="button" className="ghost-button" onClick={() => onDesfazer(g)} aria-label={`Desfazer o grupo ${g.nome}`}>
-                      Desfazer
+                      Desfazer grupo
                     </button>
                   </div>
                 )}
@@ -487,7 +492,7 @@ export default function ForecastGruposModal({ podeEditar, onFechar }: Props) {
   };
 
   return (
-    <Modal isOpen onClose={onFechar} title="Grupos de equivalência" size="wide">
+    <Modal isOpen onClose={onFechar} title="Grupos de equivalência" size="wide" className="fcg-dialogo">
       {aviso && modo.tipo === 'lista' && (
         <div className="alert alert--success" role="status">
           {aviso}
