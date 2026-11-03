@@ -390,7 +390,6 @@
   ],
   "web": {
     "pages": [
-      "Ajuda.tsx",
       "Auditoria.tsx",
       "CotacaoDetalhe.tsx",
       "CotacaoNova.tsx",
@@ -403,6 +402,7 @@
       "Home.tsx",
       "Itens.tsx",
       "LoginGate.tsx",
+      "Manual.tsx",
       "MinhaConta.tsx",
       "PlaceholderPage.tsx",
       "Relatorios.tsx",
@@ -445,6 +445,7 @@
       "/forwarders",
       "/itens",
       "/login",
+      "/manual",
       "/minha-conta",
       "/relatorios",
       "/respostas",

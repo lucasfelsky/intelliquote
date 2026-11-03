@@ -187,8 +187,10 @@ describe('F6: regiao `tela F6`', () => {
     }
   });
 
-  it('at-rules permitidas: 1199, 720, 640, pointer: coarse e reduced-motion (so regras planas dentro delas)', () => {
+  it('at-rules permitidas: 1199, 720, 640, screen (F12-C), screen ate 1023 (F12-C), pointer: coarse e reduced-motion (so regras planas dentro delas)', () => {
     const permitidas = new Set([
+      '@media screen',
+      '@media screen and (max-width: 1023px)',
       '@media (max-width: 1199px)',
       '@media (max-width: 720px)',
       '@media (max-width: 640px)',
@@ -603,6 +605,33 @@ describe('F6: contraste nos 2 temas (alpha composto sobre --rf-surface)', () => 
       expect(ratio, e.id).toBeGreaterThan(e.esperado - 0.15);
       expect(ratio, e.id).toBeLessThan(e.esperado + 0.15);
       expect(ratio, `${e.id} segue abaixo de 3:1 (excecao registrada)`).toBeLessThan(UI);
+    }
+  });
+});
+
+describe('F6: P-ACOES na aba Itens (F12-C)', () => {
+  it('so em tela: coluna de acoes fixa a direita com fundo por estado (repouso, hover, PO de destino), texto quebra, sem scroll-padding, empilha ate 1023 e contraste nos 2 temas', () => {
+    const tela = mediaDe('@media screen');
+    const ate1023 = mediaDe('@media screen and (max-width: 1023px)');
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+    expect(declaracoes(tela, '.po-table td:has(> .row-actions)')).toMatchObject({ ...fixa, background: 'var(--rf-surface)' });
+    expect(declaracoes(tela, '.po-table:has(.item-action) > thead > tr > th:last-child')).toMatchObject({ ...fixa, background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(tela, '.po-table tr:hover > td:has(> .row-actions)')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(tela, '.po-group--drop-target > tr > td:has(> .row-actions)')).toEqual({ background: 'linear-gradient(var(--rf-tone-success-bg), var(--rf-tone-success-bg)), var(--rf-surface)' });
+    expect(declaracoes(tela, '.po-table td:first-child:not([colspan])')).toEqual({ 'white-space': 'normal' });
+    expect(declaracoes(tela, '.po-table td.cell-nowrap:not(.po-cell-mono)')).toEqual({ 'white-space': 'normal' });
+    // r2: sem scroll-padding nem --val (a coluna fixa nao cobre focavel algum e o scroll-padding faria o wrapper pular ao focar uma acao)
+    expect(declaracoes(tela, '.po-table-wrapper')).toEqual({});
+    expect(declaracoes(ate1023, '.po-table-wrapper')).toEqual({});
+    expect(regiao?.limpo).not.toContain('scroll-padding');
+    expect(declaracoes(ate1023, '.po-table .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px' });
+    // coluna fixa e scroll-padding so em @media screen: o papel (impressao) e os cartoes ficam como na base (os sticky de topo da base nao contam: so as at-rules sao varridas)
+    expect(topo.filter((r) => r.prelude.startsWith('@media') && !r.prelude.startsWith('@media screen') && /position:\s*sticky|scroll-padding/.test(r.body)).map((r) => r.prelude)).toEqual([]);
+    for (const theme of ['claro', 'escuro'] as const) {
+      const opaque = (name: string): Rgb => opaqueOf(THEMES[theme], name);
+      for (const [fg, bg] of [[rf('action'), rf('surface-alt')], [rf('tone-danger-fg'), rf('surface-alt')], [rf('ink'), rf('surface-alt')], [rf('action'), rf('tone-success-bg')]] as const) {
+        expect(ratioOf(opaque(fg), opaque(bg)), `${theme}: ${fg} / ${bg}`).toBeGreaterThanOrEqual(TEXT);
+      }
     }
   });
 });
