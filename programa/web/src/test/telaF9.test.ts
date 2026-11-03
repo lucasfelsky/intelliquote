@@ -292,10 +292,10 @@ describe('F9: receitas dos boards (valores exatos)', () => {
     const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-sizing': 'border-box', width: 'var(--val)', 'min-width': 'var(--val)', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
     expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.solicitacoes-ver')).toMatchObject(fixa);
     expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)')).toMatchObject({ position: 'sticky', right: 'var(--val)', width: 'calc(var(--val) + 12px)', 'min-width': 'calc(var(--val) + 12px)', 'z-index': '1' });
-    // uma so fonte para as larguras (--val, unica propriedade local aceita pelo themeTokens): scroll-padding = Ver + Acoes (Ver + 12); so Ver quando nao ha coluna de acoes
+    // uma so fonte para as larguras (--val, unica propriedade local aceita pelo themeTokens): scroll-padding = Ver + Acoes (Ver + 12); so Ver quando nao ha coluna de acoes; a tabela de itens da linha aberta so tem --val (sem scroll-padding: so 1 focavel e o wrapper pulava)
     expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper')).toMatchObject({ '--val': '164px', 'scroll-padding-right': 'calc(var(--val) * 2 + 12px)' });
     expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper:not(:has(> .solicitacoes-tabela > tbody > tr > td.sol-cell-actions:not(.solicitacoes-ver)))')).toEqual({ 'scroll-padding-right': 'var(--val)' });
-    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens-tabela:has(td.sol-cell-actions)')).toEqual({ '--val': '172px', 'scroll-padding-right': 'var(--val)' });
+    expect(declaracoes(m, '.solicitacoes-page .solicitacoes-itens-tabela:has(td.sol-cell-actions)')).toEqual({ '--val': '172px' });
     expect(declaracoes(m, '.solicitacoes-page--comex .solicitacoes-lista > .table-wrapper')).toMatchObject({ 'container-type': 'inline-size' });
     expect(
       declaracoes(m, '.solicitacoes-page--comex .solicitacoes-tabela > tbody > tr.solicitacoes-linha-detalhe > td.sol-cell-detail > .solicitacoes-detalhe'),

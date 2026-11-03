@@ -304,6 +304,7 @@ export default function MinhaConta() {
             data-testid="signature-preview"
             style={{
               background: '#fff',
+              backgroundClip: 'padding-box',
               border: '1px solid var(--border)',
               borderRadius: 14,
               padding: '20px 24px',
@@ -314,7 +315,7 @@ export default function MinhaConta() {
             }}
           >
             <p style={{ margin: '0 0 12px 0' }}>Dear all,</p>
-            <p style={{ margin: '0 0 12px 0', color: '#7A848C', fontStyle: 'italic' }}>… corpo do e-mail …</p>
+            <p style={{ margin: '0 0 12px 0', color: '#4A5560', fontStyle: 'italic' }}>… corpo do e-mail …</p>
             {draftTrimmed ? (
               <div style={{ whiteSpace: 'pre-wrap', marginBottom: image ? 8 : 0 }}>{draftTrimmed}</div>
             ) : image ? (

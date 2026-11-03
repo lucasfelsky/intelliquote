@@ -587,7 +587,7 @@ describe('F11: TSX da fase sem estilo inline, token, cor literal, glifo nem SVG 
   it('Templates e MinhaConta: so as cores literais da allowlist do themeTokens (srcDoc "#888" e a previa em papel)', () => {
     for (const arquivo of ['pages/Templates.tsx', 'pages/MinhaConta.tsx']) {
       const linhas = fonte(arquivo).split(/\r?\n/).filter((l) => /#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(l));
-      const permitido = arquivo === 'pages/Templates.tsx' ? ['color:#888'] : ["'#fff'", "'#1F2933'", "'#7A848C'"];
+      const permitido = arquivo === 'pages/Templates.tsx' ? ['color:#888'] : ["'#fff'", "'#1F2933'", "'#4A5560'"];
       expect(linhas.filter((l) => !permitido.some((p) => l.includes(p))), arquivo).toEqual([]);
     }
   });

@@ -6879,7 +6879,7 @@ dialog.modal-dialog[open] {
    do .table-wrapper (nunca so por rolagem) e o foco por teclado nao fica atras delas (scroll-padding-right = largura das colunas fixas);
    o painel da linha aberta tem a largura visivel do wrapper (nao alarga a tabela) e a coluna do catalogo da tabela de itens fica fixa.
    A largura da coluna "Ver itens" vive numa so propriedade local (--val, a unica que o themeTokens aceita como local): a largura dela, o "right" e a largura de Acoes
-   (Ver + 12) e o scroll-padding saem do mesmo valor ---- */
+   (Ver + 12) e o scroll-padding saem do mesmo valor; a tabela de itens da linha aberta so usa --val (largura): so tem 1 focavel e o scroll-padding fazia o wrapper pular) ---- */
 @media screen and (min-width: 721px) and (max-width: 1439px) {
   .solicitacoes-page--comex .solicitacoes-lista > .table-wrapper {
     --val: 164px;
@@ -6927,7 +6927,6 @@ dialog.modal-dialog[open] {
   }
   .solicitacoes-page .solicitacoes-itens-tabela:has(td.sol-cell-actions) {
     --val: 172px;
-    scroll-padding-right: var(--val);
   }
   .solicitacoes-page .solicitacoes-itens > thead > tr > th,
   .solicitacoes-page .solicitacoes-itens > tbody > tr > td {
