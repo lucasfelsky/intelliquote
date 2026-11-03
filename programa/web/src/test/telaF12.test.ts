@@ -63,12 +63,13 @@ const seletores = interiores.flatMap((r) => listaDeSeletores(r.prelude));
 
 // ---------- S3: regiao `tela F12` (impressao) ----------
 describe('F12-S S3: regiao `tela F12` (so impressao das 7 telas principais e do Manual)', () => {
-  it('existe uma vez, logo depois da tela F11 (so espaco entre elas) e e a ultima das regioes', () => {
+  it('existe uma vez, logo depois da tela F11 (so espaco entre elas) e so e seguida da tela F13 (a ultima das regioes)', () => {
     expect(regiao).toBeDefined();
     const nomes = regs.map((r) => r.nome);
     expect(nomes.filter((n) => n === NOME)).toHaveLength(1);
-    expect(nomes.at(-1)).toBe(NOME);
-    expect(nomes.at(-2)).toBe('tela F11');
+    expect(nomes.at(-1)).toBe('tela F13');
+    expect(nomes.at(-2)).toBe(NOME);
+    expect(nomes.at(-3)).toBe('tela F11');
     const f11 = regs.find((r) => r.nome === 'tela F11');
     expect(rawLf.slice(f11?.fim ?? 0, regiao?.inicio ?? 0).trim()).toBe('');
   });

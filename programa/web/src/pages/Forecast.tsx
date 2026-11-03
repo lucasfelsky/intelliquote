@@ -365,7 +365,7 @@ export default function Forecast() {
     : 'Projeção de estoque e demanda por quinzena, no layout da planilha FORECAST (MACRO).';
 
   return (
-    <div className="page">
+    <div className="page fc-pagina">
       <div className="page-header">
         <div>
           <p className="eyebrow">Planejamento · PO.COMP.01</p>

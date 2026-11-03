@@ -246,6 +246,9 @@
   /* tokens F12 (qa) */
   --rf-ghost-escuro-borda: #004153;
   --rf-ghost-escuro-texto: #004153;
+
+  /* tokens F13 (forecast) */
+
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -432,6 +435,8 @@
   /* tokens F12 (qa) */
   --rf-ghost-escuro-borda: rgba(20, 221, 167, 0.55);
   --rf-ghost-escuro-texto: #5ff0c8;
+
+  /* tokens F13 (forecast) */
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -11734,6 +11739,24 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .manual-figura { break-inside: avoid; }
 }
 /* <<< tela F12 <<< */
+
+/* >>> tela F13 (Suite COMEX) >>> */
+/* F13 (Forecast na identidade nova): regiao so de TELA, dona do Forecast pela raiz `.fc-pagina` (Forecast.tsx). Nasce vazia (F13-0, sem mudanca visual); cada frente escreve SO entre o seu par
+   de sentinelas (B pagina do item, C cabecalho/Mais/painel/estados, D relatorio e modais de operacao, E modais de apoio), com 1 linha em branco entre os pares. Todo seletor comeca por `.fc-pagina` (ou
+   `:root[data-theme="dark"] .fc-pagina`): vence o bloco legado do Forecast, que vem DEPOIS no arquivo, por especificidade (nunca !important). So var(--rf-*) e --val; regras novas dentro de
+   `@media screen` (o papel segue como esta). Guarda: src/test/telaF13.test.ts. */
+/* -- F13-B >>> -- */
+/* -- <<< F13-B -- */
+
+/* -- F13-C >>> -- */
+/* -- <<< F13-C -- */
+
+/* -- F13-D >>> -- */
+/* -- <<< F13-D -- */
+
+/* -- F13-E >>> -- */
+/* -- <<< F13-E -- */
+/* <<< tela F13 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
    nenhum -- o espacamento entre input/select/botao dependia so do
