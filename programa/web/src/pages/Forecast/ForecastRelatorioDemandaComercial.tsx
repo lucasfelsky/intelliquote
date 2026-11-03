@@ -274,7 +274,7 @@ export default function ForecastRelatorioDemandaComercial({ dados, podeEditar, h
                           <button
                             key={status}
                             type="button"
-                            className="ghost-button"
+                            className={status === 'cancelada' ? 'ghost-button danger-button' : 'ghost-button'}
                             aria-haspopup="dialog"
                             aria-label={`${ROTULO_FECHAMENTO[status].botao}: pedido de ${i.item} para ${dataBr(i.necessidade)}`}
                             onClick={(e) => abrir(e, { tipo: 'fechar', item: i, status })}

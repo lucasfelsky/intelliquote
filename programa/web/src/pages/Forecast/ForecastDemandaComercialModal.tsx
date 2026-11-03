@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
+import { Icon } from '@/components/icons';
 import {
   createForecastDemandaComercial,
   FORECAST_DEMANDA_CLIENTE_MAX,
@@ -175,15 +176,18 @@ function Formulario({ hoje, demanda, onFechar, onSalvo }: Props) {
           <label className="sr-only" htmlFor={id('busca')}>
             Buscar produto por nome ou código
           </label>
-          <input
-            id={id('busca')}
-            className="input"
-            type="search"
-            placeholder="Buscar produto por nome ou código"
-            autoComplete="off"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
+          <div className="fcd-busca">
+            <Icon name="search" size={16} />
+            <input
+              id={id('busca')}
+              className="input"
+              type="search"
+              placeholder="Buscar produto por nome ou código"
+              autoComplete="off"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
           {produtos.isLoading && (
             <div className="fcd-carregando" role="status">
               <Spinner /> Carregando produtos…
