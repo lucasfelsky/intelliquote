@@ -141,10 +141,10 @@ export default function ForecastPrazosPorFonte({
                   return (
                     <tr key={f.sourceId}>
                       <th scope="row">{f.nome}</th>
-                      <td>
+                      <td data-rotulo="Por DATA PRONTIDÃO">
                         <Contagem valor={f.prontidao} />
                       </td>
-                      <td>
+                      <td data-rotulo="Prontidão → chegada (dias)">
                         <CampoDias
                           id={`${base}-${f.sourceId}-prontidao`}
                           rotulo={`Dias da DATA PRONTIDÃO até a chegada - ${f.nome}`}
@@ -154,10 +154,10 @@ export default function ForecastPrazosPorFonte({
                           onMudar={(texto) => onMudar(f.sourceId, 'prontidao', texto)}
                         />
                       </td>
-                      <td>
+                      <td data-rotulo="Por ETD">
                         <Contagem valor={f.etd} />
                       </td>
-                      <td>
+                      <td data-rotulo="ETD → chegada (dias)">
                         <CampoDias
                           id={`${base}-${f.sourceId}-etd`}
                           rotulo={`Dias do ETD até a chegada - ${f.nome}`}
@@ -167,22 +167,22 @@ export default function ForecastPrazosPorFonte({
                           onMudar={(texto) => onMudar(f.sourceId, 'etd', texto)}
                         />
                       </td>
-                      <td>{textoPadraoSalvo(f.salvo)}</td>
+                      <td data-rotulo="Padrão salvo">{textoPadraoSalvo(f.salvo)}</td>
                     </tr>
                   );
                 })}
                 {temSemFonte && (
                   <tr>
                     <th scope="row">Sem fonte no cadastro</th>
-                    <td>
+                    <td data-rotulo="Por DATA PRONTIDÃO">
                       <Contagem valor={semFonte.prontidao} />
                     </td>
-                    <td>{semFonte.prontidao.linhas > 0 ? `${prazos.padrao.prontidaoDias} (padrão)` : '—'}</td>
-                    <td>
+                    <td data-rotulo="Prontidão → chegada (dias)">{semFonte.prontidao.linhas > 0 ? `${prazos.padrao.prontidaoDias} (padrão)` : '—'}</td>
+                    <td data-rotulo="Por ETD">
                       <Contagem valor={semFonte.etd} />
                     </td>
-                    <td>{semFonte.etd.linhas > 0 ? `${prazos.padrao.etdDias} (padrão)` : '—'}</td>
-                    <td>—</td>
+                    <td data-rotulo="ETD → chegada (dias)">{semFonte.etd.linhas > 0 ? `${prazos.padrao.etdDias} (padrão)` : '—'}</td>
+                    <td data-rotulo="Padrão salvo">—</td>
                   </tr>
                 )}
               </tbody>
