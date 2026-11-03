@@ -246,6 +246,20 @@
   /* tokens F12 (qa) */
   --rf-ghost-escuro-borda: #004153;
   --rf-ghost-escuro-texto: #004153;
+
+  /* tokens F13 (forecast) */
+  /* -- tokens F13-B >>> -- */
+  /* -- <<< tokens F13-B -- */
+
+  /* -- tokens F13-C >>> -- */
+  /* -- <<< tokens F13-C -- */
+
+  /* -- tokens F13-D >>> -- */
+  /* -- <<< tokens F13-D -- */
+
+  /* -- tokens F13-E >>> -- */
+  /* -- <<< tokens F13-E -- */
+
   color-scheme: light;
   font-family: 'Manrope', system-ui, -apple-system, Segoe UI, sans-serif;
 }
@@ -432,6 +446,19 @@
   /* tokens F12 (qa) */
   --rf-ghost-escuro-borda: rgba(20, 221, 167, 0.55);
   --rf-ghost-escuro-texto: #5ff0c8;
+
+  /* tokens F13 (forecast) */
+  /* -- tokens F13-B >>> -- */
+  /* -- <<< tokens F13-B -- */
+
+  /* -- tokens F13-C >>> -- */
+  /* -- <<< tokens F13-C -- */
+
+  /* -- tokens F13-D >>> -- */
+  /* -- <<< tokens F13-D -- */
+
+  /* -- tokens F13-E >>> -- */
+  /* -- <<< tokens F13-E -- */
 }
 
 :root[data-theme="dark"] ::selection { background: var(--selection-bg); color: var(--ink); }
@@ -6879,7 +6906,7 @@ dialog.modal-dialog[open] {
    do .table-wrapper (nunca so por rolagem) e o foco por teclado nao fica atras delas (scroll-padding-right = largura das colunas fixas);
    o painel da linha aberta tem a largura visivel do wrapper (nao alarga a tabela) e a coluna do catalogo da tabela de itens fica fixa.
    A largura da coluna "Ver itens" vive numa so propriedade local (--val, a unica que o themeTokens aceita como local): a largura dela, o "right" e a largura de Acoes
-   (Ver + 12) e o scroll-padding saem do mesmo valor ---- */
+   (Ver + 12) e o scroll-padding saem do mesmo valor; a tabela de itens da linha aberta so usa --val (largura): so tem 1 focavel e o scroll-padding fazia o wrapper pular) ---- */
 @media screen and (min-width: 721px) and (max-width: 1439px) {
   .solicitacoes-page--comex .solicitacoes-lista > .table-wrapper {
     --val: 164px;
@@ -6927,7 +6954,6 @@ dialog.modal-dialog[open] {
   }
   .solicitacoes-page .solicitacoes-itens-tabela:has(td.sol-cell-actions) {
     --val: 172px;
-    scroll-padding-right: var(--val);
   }
   .solicitacoes-page .solicitacoes-itens > thead > tr > th,
   .solicitacoes-page .solicitacoes-itens > tbody > tr > td {
@@ -11281,8 +11307,16 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   text-overflow: ellipsis;
   color: var(--rf-ink);
 }
+/* Na 1a linha o selo "Vencedora" mora dentro do nome: com overflow oculto o selo era cortado ("Vence") quando o nome da vencedora e longo (so Preco: "Qingdao Harbor Chem").
+   Ali o conjunto quebra de linha (o selo nunca e cortado nem perde o nome); as demais linhas seguem com reticencias. */
+.manual-sim__linha--primeira .manual-sim__nome {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .manual-sim__selo {
   margin-left: 6px;
+  white-space: nowrap;
   padding: 1px 6px;
   border-radius: var(--rf-radius-pill);
   background: var(--rf-action);
@@ -11727,6 +11761,24 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   body:has(:is(.overview-page, .cotacoes-page, .cotacao-detalhe-page, .solicitacoes-page, .relatorios-page, .auditoria-page, .fornecedores-page, .manual-page)) .manual-figura { break-inside: avoid; }
 }
 /* <<< tela F12 <<< */
+
+/* >>> tela F13 (Suite COMEX) >>> */
+/* F13 (Forecast na identidade nova): regiao so de TELA, dona do Forecast pela raiz `.fc-pagina` (Forecast.tsx). Nasce vazia (F13-0, sem mudanca visual); cada frente escreve SO entre o seu par
+   de sentinelas (B pagina do item, C cabecalho/Mais/painel/estados, D relatorio e modais de operacao, E modais de apoio), com 1 linha em branco entre os pares. Todo seletor comeca por `.fc-pagina` (ou
+   `:root[data-theme="dark"] .fc-pagina`): vence o bloco legado do Forecast, que vem DEPOIS no arquivo, por especificidade (nunca !important). So var(--rf-*) e --val; regras novas dentro de
+   `@media screen` (o papel segue como esta). Guarda: src/test/telaF13.test.ts. */
+/* -- F13-B >>> -- */
+/* -- <<< F13-B -- */
+
+/* -- F13-C >>> -- */
+/* -- <<< F13-C -- */
+
+/* -- F13-D >>> -- */
+/* -- <<< F13-D -- */
+
+/* -- F13-E >>> -- */
+/* -- <<< F13-E -- */
+/* <<< tela F13 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
    nenhum -- o espacamento entre input/select/botao dependia so do

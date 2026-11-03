@@ -128,9 +128,7 @@ const CONTEXTO = new Set([
   'modal-actions',
   'preview-frame',
   'dispatch-event',
-  'muted',
   'text-sm',
-  'text-xs',
   'sr-only',
 ]);
 

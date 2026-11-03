@@ -321,6 +321,15 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(declaracoes('.manual-capitulo__lead')).toMatchObject({ 'font-size': '15px' });
   });
 
+  it('selo "Vencedora" do simulador nunca e cortado: o nome continua com reticencias nas demais linhas, mas na 1a linha (onde mora o selo) o conjunto quebra de linha, sem overflow oculto', () => {
+    expect(declaracoes('.manual-sim__nome')).toMatchObject({ overflow: 'hidden', 'white-space': 'nowrap', 'text-overflow': 'ellipsis' });
+    expect(declaracoes('.manual-sim__linha--primeira .manual-sim__nome')).toEqual({ overflow: 'visible', 'white-space': 'normal', 'overflow-wrap': 'anywhere' });
+    expect(declaracoes('.manual-sim__selo')).toMatchObject({ 'white-space': 'nowrap' });
+    // a regra da 1a linha vence a do nome (2 classes x 1) e nao ha outra regra do nome que reponha overflow oculto
+    const doNome = manual.filter((r) => r.seletores.some((s) => /\.manual-sim__nome(?![A-Za-z0-9_-])/.test(s)));
+    expect(doNome.filter((r) => /overflow:\s*hidden/.test(r.corpo)).flatMap((r) => r.seletores)).toEqual(['.manual-sim__nome']);
+  });
+
   it('revisao r2: o campo de busca e o seletor de capitulo herdam transicao da Suite e a perdem no movimento reduzido', () => {
     const reduzido = manual.filter((r) => r.atRule === '@media (prefers-reduced-motion: reduce)' && /transition:\s*none/.test(r.corpo)).flatMap((r) => r.seletores);
     expect(reduzido).toEqual(expect.arrayContaining(['.manual-busca__input', '.manual-indice-select__campo']));

@@ -349,7 +349,7 @@ describe('tema escuro: .tsx e index.html', () => {
     'pages/Forwarders.tsx': ['var(--border, #dde3ea)'],
     'pages/Solicitacoes/ComercialView.tsx': ['var(--border, #dde3ea)'],
     // previa da assinatura de e-mail: papel branco por definicao
-    'pages/MinhaConta.tsx': ["'#fff'", "'#1F2933'", "'#7A848C'"],
+    'pages/MinhaConta.tsx': ["'#fff'", "'#1F2933'", "'#4A5560'"],
     // srcDoc da previa de e-mail (iframe claro)
     'pages/Templates.tsx': ['color:#888'],
     // stops da <mask> do fundo do login: luminancia da mascara, nao cor visivel
