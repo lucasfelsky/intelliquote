@@ -249,6 +249,7 @@
 
   /* tokens F13 (forecast) */
   /* -- tokens F13-B >>> -- */
+  --rf-fc-mes-falta-borda: #c2362b;
   /* -- <<< tokens F13-B -- */
 
   /* -- tokens F13-C >>> -- */
@@ -449,6 +450,7 @@
 
   /* tokens F13 (forecast) */
   /* -- tokens F13-B >>> -- */
+  --rf-fc-mes-falta-borda: #ff9b90;
   /* -- <<< tokens F13-B -- */
 
   /* -- tokens F13-C >>> -- */
@@ -11768,6 +11770,104 @@ html:has(.manual-page) { scroll-behavior: smooth; }
    `:root[data-theme="dark"] .fc-pagina`): vence o bloco legado do Forecast, que vem DEPOIS no arquivo, por especificidade (nunca !important). So var(--rf-*) e --val; regras novas dentro de
    `@media screen` (o papel segue como esta). Guarda: src/test/telaF13.test.ts. */
 /* -- F13-B >>> -- */
+/* Pagina do item (board F2/F2b; ForecastItemPagina e a secao "Memoria de calculo"): memoria (2/3) + cartao lateral (1/3) + cartao do ultimo preco (inteiro, so o estado atual). Cores 100% por token;
+   o unico token novo e --rf-fc-mes-falta-borda (borda do mes em falta, que no escuro e o rosa do texto e nao o vermelho solido). */
+@media screen {
+  .fc-pagina .fc-memoria { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); align-items: start; gap: 16px; }
+  .fc-pagina .fc-memoria > .card { display: flex; flex-direction: column; min-width: 0; }
+  .fc-pagina .fc-calculo { gap: 16px; padding: 24px; }
+  .fc-pagina .fc-lado { gap: 10px; padding: 22px; }
+  .fc-pagina .fc-calculo__titulo { display: flex; flex-direction: column; gap: 4px; }
+  .fc-pagina .fc-calculo__titulo .eyebrow,
+  .fc-pagina .fc-lado .eyebrow { margin: 0; line-height: normal; }
+  .fc-pagina .fc-calculo__titulo h2 { margin: 0; font-family: var(--rf-font-display); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; color: var(--rf-ink); }
+
+  /* passos do calculo */
+  .fc-pagina .fc-passos { gap: 8px; }
+  .fc-pagina .fc-passo { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; padding: 10px 14px; border-radius: var(--rf-radius-button); background: var(--rf-surface-alt); }
+  .fc-pagina .fc-passo__num { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--rf-radius-pill); background: var(--rf-primary-50); color: var(--rf-primary-700); font-family: var(--rf-font-mono); font-size: 13px; font-weight: 700; }
+  .fc-pagina .fc-passo__corpo { gap: 2px; }
+  .fc-pagina .fc-passo__corpo > strong { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--rf-ink); }
+  .fc-pagina .fc-passo__coluna { font-family: var(--rf-font-mono); font-size: 12px; font-weight: 500; color: var(--rf-ink-soft); }
+  .fc-pagina .fc-passo__conta { font-family: var(--rf-font-mono); font-size: 12px; font-weight: 500; color: var(--rf-ink); }
+  .fc-pagina .fc-passo__nota { color: var(--rf-ink-soft); }
+  .fc-pagina .fc-passo__resultado { font-family: var(--rf-font-mono); font-size: 15px; font-weight: 700; color: var(--rf-ink); }
+  .fc-pagina .fc-passo__resultado.fc-valor--neg,
+  .fc-pagina .fc-passo__resultado.fc-valor--falta { color: var(--rf-tone-danger-fg); }
+  .fc-pagina .fc-passo__resultado.fc-valor--atencao { color: var(--rf-tone-warning-fg); }
+  .fc-pagina .fc-meses { gap: 6px; margin-top: 6px; }
+  .fc-pagina .fc-mes { display: inline-flex; align-items: center; column-gap: 7px; height: 28px; padding: 0 10px; border: 1.5px solid var(--rf-border); border-radius: var(--rf-radius-pill); background: transparent; font-family: var(--rf-font-mono); font-size: 12px; font-weight: 600; color: var(--rf-ink); }
+  .fc-pagina .fc-mes b { font-weight: inherit; }
+  .fc-pagina .fc-mes.fc-valor--neg,
+  .fc-pagina .fc-mes.fc-valor--falta { border-color: var(--rf-fc-mes-falta-borda); }
+  .fc-pagina .fc-mes.fc-valor--atencao { border-color: var(--rf-tone-warning-solid); }
+
+  /* cartao lateral: lead time, chegada, risco */
+  .fc-pagina .fc-lado__grande { font-size: 32px; font-weight: 800; line-height: 1; color: var(--rf-ink); }
+  .fc-pagina .fc-lado__grande small { font-size: 14px; font-weight: 600; color: var(--rf-ink-soft); }
+  .fc-pagina .fc-lado__fraco { font-size: 13px; color: var(--rf-ink-soft); }
+  .fc-pagina .fc-lado__rodape { font-size: 12px; }
+  .fc-pagina .fc-lado__medio { font-size: 20px; font-weight: 700; color: var(--rf-ink); }
+  .fc-pagina .fc-lado .fcoc-memoria { margin: 0; color: var(--rf-ink); }
+  .fc-pagina .fc-lado .fcoc-estimativa { border-color: var(--rf-input-border); color: var(--rf-ink-soft); }
+  .fc-pagina .fc-risco { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: var(--rf-radius-alert); font-size: 14px; font-weight: 600; line-height: 1.5; }
+  .fc-pagina .fc-risco--aviso::before,
+  .fc-pagina .fc-risco--erro::before { content: ""; flex: none; width: 18px; height: 18px; margin-top: 1px; background-color: currentColor; mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 2 20h20zM12 10v4M12 17h.01'/%3E%3C/svg%3E"); mask-repeat: no-repeat; mask-position: center; mask-size: contain; }
+  .fc-pagina .fc-risco--ok { background: var(--rf-tone-success-bg); color: var(--rf-tone-success-fg); }
+  .fc-pagina .fc-risco--aviso { background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); }
+  .fc-pagina .fc-risco--erro { background: var(--rf-tone-danger-bg); color: var(--rf-tone-danger-fg); }
+
+  /* linhas Codigos / Embalagens / Compra / Grupo / Meses atipicos */
+  .fc-pagina .fc-lado__lista { gap: 0; margin: 0; font-size: 13px; }
+  .fc-pagina .fc-lado__lista > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: start; gap: 12px; padding: 10px 0; border-top: 1px solid var(--rf-border); }
+  .fc-pagina .fc-lado__lista dt { color: var(--rf-ink-soft); }
+  .fc-pagina .fc-lado__lista dd { text-align: left; color: var(--rf-ink); }
+  .fc-pagina .fc-lado__codigos,
+  .fc-pagina .fcu-mono { font-family: var(--rf-font-mono); font-variant-numeric: tabular-nums; }
+  .fc-pagina .fc-lado .ghost-button,
+  .fc-pagina .fcu-cartao .ghost-button { min-height: 36px; }
+  .fc-pagina .fc-compra { gap: 8px; }
+  .fc-pagina .fc-compra .checkbox-field { align-items: center; }
+  .fc-pagina .fc-compra .checkbox-field input { margin: 0; }
+  .fc-pagina .fc-compra .field-label { margin: 0 0 -2px; }
+  .fc-pagina .fc-compra__salvar { align-self: flex-start; }
+  .fc-pagina .fc-lado .fcg-selo__nota { margin-top: 6px; font-size: 12px; color: var(--rf-ink-soft); }
+  .fc-pagina .fc-atipicos { gap: 0; margin: 0 0 8px; }
+
+  /* detalhe do item */
+  .fc-pagina .fcu-detalhe { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px 0 0; border-top: 1px solid var(--rf-border); font-size: 13px; }
+  .fc-pagina .fcu-detalhe h3 { margin: 0; font-family: var(--rf-font-display); font-size: 14px; font-weight: 700; color: var(--rf-ink); }
+  .fc-pagina .fcu-lista { gap: 0; }
+  .fc-pagina .fcu-lista > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: start; gap: 8px; padding: 6px 0; }
+  .fc-pagina .fcu-lista dt { color: var(--rf-ink-soft); }
+  .fc-pagina .fcu-lista dd { color: var(--rf-ink); }
+  .fc-pagina .fcu-selo { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 10px; border-radius: var(--rf-radius-pill); background: var(--rf-tone-info-bg); color: var(--rf-tone-info-fg); font-size: 12px; font-weight: 700; }
+
+  /* cartao do ultimo preco (inteiro, abaixo da memoria e do lateral) */
+  .fc-pagina .fc-memoria > .fcu-cartao { grid-column: 1 / -1; gap: 14px; padding: 22px; }
+  .fc-pagina .fcu-cartao h2 { margin: 0; font-family: var(--rf-font-display); font-size: 16px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; color: var(--rf-ink); }
+  .fc-pagina .fcu-cartao .fcu-resultado { gap: 8px; max-width: calc((100% - 32px) / 3); margin: 0; font-size: 13px; }
+  .fc-pagina .fcu-cartao .fcu-resultado > p[role="status"] { color: var(--rf-ink-soft); }
+  .fc-pagina .fcu-cartao .fcu-resultado .alert { line-height: 1.5; }
+  .fc-pagina .fcu-cartao .fcu-resultado .alert--error::before { mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3 2 20h20zM12 10v4M12 17h.01'/%3E%3C/svg%3E"); }
+  .fc-pagina .fcu-preco { gap: 4px; padding: 12px 14px; border-left: 0; border-radius: var(--rf-radius-alert); background: var(--rf-surface-alt); font-size: 13px; }
+  .fc-pagina .fcu-preco__valor { font-family: var(--rf-font-mono); font-size: 15px; font-weight: 700; color: var(--rf-ink); }
+  .fc-pagina .fcu-preco__data { color: var(--rf-ink); }
+  .fc-pagina .fcu-nota { font-size: 12px; color: var(--rf-ink-soft); }
+
+  @media (pointer: coarse) {
+    .fc-pagina .fc-lado .ghost-button,
+    .fc-pagina .fcu-cartao .ghost-button { min-height: 44px; }
+    .fc-pagina .fcu-preco a { display: inline-block; padding: 13px 0; margin: -13px 0; }
+    .fc-pagina .fc-compra .checkbox-field > input { position: relative; }
+    .fc-pagina .fc-compra .checkbox-field > input::after { content: ""; position: absolute; top: -13px; right: -13px; bottom: -13px; left: -13px; }
+  }
+}
+
+@media screen and (max-width: 900px) {
+  .fc-pagina .fc-memoria { grid-template-columns: 1fr; }
+  .fc-pagina .fcu-cartao .fcu-resultado { max-width: none; }
+}
 /* -- <<< F13-B -- */
 
 /* -- F13-C >>> -- */

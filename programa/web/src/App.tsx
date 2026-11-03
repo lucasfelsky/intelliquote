@@ -88,6 +88,7 @@ export default function App() {
                   <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/forecast" element={<Forecast />} />
+                  <Route path="/forecast/item/:linha" element={<Forecast />} />
                   <Route path="/manual" element={<Manual />} />
                   <Route path="/ajuda" element={<Navigate to="/manual" replace />} />
                   <Route path="/auditoria" element={<Auditoria />} />

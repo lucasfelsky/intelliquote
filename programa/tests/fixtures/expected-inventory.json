@@ -441,6 +441,7 @@
       "/empresa",
       "/familias",
       "/forecast",
+      "/forecast/item/:linha",
       "/fornecedores",
       "/forwarders",
       "/itens",

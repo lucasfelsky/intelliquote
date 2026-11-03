@@ -6,7 +6,7 @@ import {
   forecastSobDemandaErrorMessage,
   patchForecastSobDemanda,
 } from '@/services/forecastSobDemanda';
-import ForecastDetalheItem from './ForecastDetalheItem';
+import ForecastDetalheItem, { ForecastUltimoPrecoCartao, useUltimoPreco } from './ForecastDetalheItem';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastMesesAtipicosModal from './ForecastMesesAtipicosModal';
 import { OcasioesNaMemoria } from './ForecastOcasiaoSelo';
@@ -170,14 +170,18 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
       botaoAtipicos.current?.focus();
     }
   }, [atipicos]);
+  // O botao fica no cartao lateral ("Detalhe do item"); o resultado, num cartao inteiro abaixo (board F2).
+  const ultimoPreco = useUltimoPreco(linha.productId);
   const passos = passosDaMemoria(linha, half, baseDate);
   const situacao = risco(linha, baseDate);
   const codigos = linha.codigos.join(' · ');
   return (
     <section className="fc-memoria" aria-label="Memória de cálculo">
-      <div className="card">
-        <p className="eyebrow">MEMÓRIA DE CÁLCULO · LINHA {linha.linha} DA PLANILHA</p>
-        <h2>{linha.item}</h2>
+      <div className="card fc-calculo">
+        <div className="fc-calculo__titulo">
+          <p className="eyebrow">MEMÓRIA DE CÁLCULO · LINHA {linha.linha} DA PLANILHA</p>
+          <h2>{linha.item}</h2>
+        </div>
         <ol className="fc-passos">
           {passos.map((passo, i) => (
             <li key={passo.titulo} className="fc-passo">
@@ -217,7 +221,7 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
         <dl className="fc-lado__lista">
           <div>
             <dt>Códigos</dt>
-            <dd>{codigos || '—'}</dd>
+            <dd>{codigos ? <span className="fc-lado__codigos">{codigos}</span> : '—'}</dd>
           </div>
           <div>
             <dt>Embalagens</dt>
@@ -305,9 +309,10 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
             </dd>
           </div>
         </dl>
-        <ForecastDetalheItem key={linha.productId ?? `sem-${linha.linha}`} linha={linha} />
-        <span className="fc-lado__fraco">CHEG. calculada com hoje = {dataBr(hoje)}</span>
+        <ForecastDetalheItem key={linha.productId ?? `sem-${linha.linha}`} linha={linha} ultimoPreco={ultimoPreco} />
+        <span className="fc-lado__fraco fc-lado__rodape">CHEG. calculada com hoje = {dataBr(hoje)}</span>
       </div>
+      <ForecastUltimoPrecoCartao controle={ultimoPreco} />
       {atipicos && linha.productId != null && (
         <ForecastMesesAtipicosModal
           productId={linha.productId}
