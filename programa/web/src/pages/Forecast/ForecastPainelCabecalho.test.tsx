@@ -170,6 +170,65 @@ describe('Forecast - subtitulo com a proxima analise', () => {
   });
 });
 
+describe('Forecast - cabecalho em cartao (mock v68, D-F13-06)', () => {
+  it('o cartao traz Quinzena, "Próxima análise" com a data, Exportar, Importar e Mais; mantem page-header__actions (o papel do relatorio o esconde)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-27T15:00:00Z'));
+    mockApi();
+    const { container } = renderPage();
+    const cartao = container.querySelector('.fc-cabecalho') as HTMLElement;
+    await screen.findByRole('button', { name: 'Exportar planilha MACRO (XLSX)' });
+    expect(cartao.classList.contains('page-header__actions')).toBe(true);
+    expect(within(cartao).getByLabelText('Quinzena')).toBeTruthy();
+    expect((cartao.querySelector('.fc-proxima') as HTMLElement).textContent).toBe('Próxima análise04/11/2026');
+    expect(within(cartao).getByRole('button', { name: 'Importar quinzena' })).toBeTruthy();
+    expect(within(cartao).getByRole('button', { name: 'Mais' })).toBeTruthy();
+    // as 3 consultas e o Excluir foram para o Mais: nao ha mais botao avulso
+    for (const nome of ['Fontes e lead time', 'Eventos estrangeiros', 'Grupos de equivalência', 'Excluir quinzena']) {
+      expect(within(cartao).queryByRole('button', { name: nome })).toBeNull();
+    }
+  });
+
+  it('subtitulo, "PO.COMP.01" e aviso "Em validação" ficam so para o papel (classe fc-so-papel, escondida na tela)', async () => {
+    mockApi();
+    const { container } = renderPage();
+    await screen.findByText(SUBTITULO);
+    expect(screen.getByText(SUBTITULO).closest('p')?.classList.contains('fc-so-papel')).toBe(true);
+    expect(screen.getByText(/Em validação/).classList.contains('fc-so-papel')).toBe(true);
+    expect(container.querySelector('.eyebrow .fc-so-papel')?.textContent).toBe(' · PO.COMP.01');
+    expect(container.querySelector('.eyebrow')?.textContent).toBe('Planejamento · PO.COMP.01');
+  });
+
+  it('fora da tabela de feriados o cartao nao mostra "Próxima análise"', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-12-20T15:00:00Z'));
+    mockApi();
+    const { container } = renderPage();
+    await screen.findByText(SUBTITULO);
+    expect(container.querySelector('.fc-proxima')).toBeNull();
+  });
+
+  it('o menu Mais traz Excluir quinzena so para admin e comprador', async () => {
+    mockRole = 'viewer';
+    mockApi();
+    renderPage();
+    await screen.findByText(SUBTITULO);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Fontes e lead time', 'Eventos estrangeiros', 'Grupos de equivalência']);
+  });
+
+  it('o erro da lista de quinzenas oferece "Tentar de novo" e refaz o GET', async () => {
+    mockApi();
+    get.mockRejectedValueOnce(new ApiError(500, null, 'boom'));
+    renderPage();
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toBeTruthy();
+    const antes = get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots').length;
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    await waitFor(() => expect(get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots').length).toBeGreaterThan(antes));
+  });
+});
+
 describe('Forecast - exportar planilha MACRO pelo cabecalho do painel', () => {
   const NOME_BOTAO = 'Exportar planilha MACRO (XLSX)';
   const originais = { criar: URL.createObjectURL, revogar: URL.revokeObjectURL };
@@ -187,12 +246,12 @@ describe('Forecast - exportar planilha MACRO pelo cabecalho do painel', () => {
     vi.restoreAllMocks();
   });
 
-  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao, direto em .page-header__actions', async (papel) => {
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao, direto em .fc-cabecalho__acoes (grupo de acoes do cartao do cabecalho)', async (papel) => {
     mockRole = papel;
     mockApi();
     renderPage();
     const botao = await botaoExportar();
-    expect(botao.parentElement?.classList.contains('page-header__actions')).toBe(true);
+    expect(botao.parentElement?.classList.contains('fc-cabecalho__acoes')).toBe(true);
   });
 
   it('o clique baixa o MACRO com layout=macro e o hoje da quinzena, e mostra o nome gerado', async () => {

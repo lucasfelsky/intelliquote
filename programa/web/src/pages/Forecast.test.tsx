@@ -1096,19 +1096,19 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     mockComGrupos();
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    fireEvent.click(screen.getByRole('button', { name: 'Grupos de equivalência' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' })); fireEvent.click(screen.getByRole('menuitem', { name: 'Grupos de equivalência' }));
     expect(await screen.findByRole('heading', { name: 'GRUPO SINTETICO' })).toBeTruthy();
     const podeEditar = role === 'admin' || role === 'comprador';
     expect(screen.queryByRole('button', { name: 'Novo grupo' }) !== null).toBe(podeEditar);
   });
 
-  it('ao fechar o modal o foco volta ao botao "Grupos de equivalência"', async () => {
+  it('ao fechar o modal o foco volta ao botao "Mais"', async () => {
     mockRole = 'comprador';
     mockComGrupos();
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    const abrir = screen.getByRole('button', { name: 'Grupos de equivalência' });
-    fireEvent.click(abrir);
+    const abrir = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(abrir); fireEvent.click(screen.getByRole('menuitem', { name: 'Grupos de equivalência' }));
     await screen.findByRole('heading', { name: 'GRUPO SINTETICO' });
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'GRUPO SINTETICO' })).toBeNull());
@@ -1120,7 +1120,7 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     mockApi({}, []);
     renderPage();
     await screen.findByText('Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.');
-    expect(screen.getByRole('button', { name: 'Grupos de equivalência' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' })); expect(screen.getByRole('menuitem', { name: 'Grupos de equivalência' })).toBeTruthy();
   });
 
   it('memoria de calculo: selo "Grupo: nome" no produto que esta num grupo; produto avulso e backend antigo sem selo', async () => {
@@ -1141,7 +1141,7 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     expect(memoria().queryByText('Grupo')).toBeNull();
   });
 
-  it('viewer abre "Fontes e lead time" e fechar devolve o foco ao botao', async () => {
+  it('viewer abre "Fontes e lead time" e fechar devolve o foco ao botao "Mais"', async () => {
     mockRole = 'viewer';
     mockApi({ 7: detalhe() });
     // O ramo generico de mockApi faz Number(path.split('/').pop()): a rota do prazo real responde ANTES dele.
@@ -1164,8 +1164,8 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     );
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    const abrir = screen.getByRole('button', { name: 'Fontes e lead time' });
-    fireEvent.click(abrir);
+    const abrir = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(abrir); fireEvent.click(screen.getByRole('menuitem', { name: 'Fontes e lead time' }));
     expect(await screen.findByRole('table', { name: 'Lead time cadastrado e prazo real por fonte' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Editar lead time/ })).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);

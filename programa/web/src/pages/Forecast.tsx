@@ -2,6 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon } from '@/components/icons';
 import Spinner from '@/components/Spinner';
 import {
   forecastErrorMessage,
@@ -26,6 +27,7 @@ import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastMemoria from './Forecast/ForecastMemoria';
+import ForecastMenuMais from './Forecast/ForecastMenuMais';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
 import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
@@ -158,6 +160,7 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
               <label className="sr-only" htmlFor="fc-busca">
                 Buscar produto, código ou fonte
               </label>
+              <Icon name="search" size={16} />
               <input
                 id="fc-busca"
                 className="input"
@@ -247,15 +250,15 @@ export default function Forecast() {
   // Excluir quinzena: o alvo e capturado ao abrir (a lista pode mudar por baixo do dialogo).
   const [excluirAlvo, setExcluirAlvo] = useState<ForecastSnapshotSummary | null>(null);
   const [excluida, setExcluida] = useState<string | null>(null);
-  const botaoExcluir = useRef<HTMLButtonElement>(null);
+  const botaoMais = useRef<HTMLButtonElement>(null);
   const seletor = useRef<HTMLSelectElement>(null);
   const excluirAbriuAntes = useRef(false);
   const focoAposExcluir = useRef<'seletor' | 'importar' | null>(null);
   const excluirAberto = excluirAlvo !== null;
   // Grupos de equivalencia (PR 6b): todos os papeis COMEX veem; admin/comprador editam.
   const [gruposAberto, setGruposAberto] = useState(false);
-  const botaoGrupos = useRef<HTMLButtonElement>(null);
   const gruposAbriuAntes = useRef(false);
+  const fontesAbriuAntes = useRef(false);
   // Fontes e lead time (3C) / Eventos estrangeiros (PR 2): todos os papeis COMEX veem; admin/comprador editam.
   const dialogoFontes = useDialogoFontes();
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
@@ -296,7 +299,7 @@ export default function Forecast() {
       focoAposExcluir.current = null;
       if (alvo === 'seletor') seletor.current?.focus();
       else if (alvo === 'importar') botaoImportar.current?.focus();
-      else botaoExcluir.current?.focus();
+      else botaoMais.current?.focus();
     }
   }, [excluirAberto]);
 
@@ -305,9 +308,21 @@ export default function Forecast() {
       gruposAbriuAntes.current = true;
     } else if (gruposAbriuAntes.current) {
       gruposAbriuAntes.current = false;
-      botaoGrupos.current?.focus();
+      botaoMais.current?.focus();
     }
   }, [gruposAberto]);
+
+  // Fontes e lead time / Eventos estrangeiros tambem abrem pelo menu "Mais" (que fecha ao escolher): ao fechar o dialogo o foco
+  // volta ao botao "Mais".
+  const abaFontesAberta = dialogoFontes.aba !== null;
+  useEffect(() => {
+    if (abaFontesAberta) {
+      fontesAbriuAntes.current = true;
+    } else if (fontesAbriuAntes.current) {
+      fontesAbriuAntes.current = false;
+      botaoMais.current?.focus();
+    }
+  }, [abaFontesAberta]);
 
   // Trocar de visao preserva a quinzena da URL.
   const mudarVisao = (proxima: 'painel' | 'compras') => {
@@ -368,86 +383,71 @@ export default function Forecast() {
     <div className="page fc-pagina">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Planejamento · PO.COMP.01</p>
+          <p className="eyebrow">
+            Planejamento<span className="fc-so-papel"> · PO.COMP.01</span>
+          </p>
           <h1>
             Forecast de compras <span className="badge badge--warning fc-beta">Beta</span>
           </h1>
-          <p>
+          {/* Subtitulo e aviso: so no papel (o mock tira da tela; o relatorio impresso segue identificando a quinzena e a origem). */}
+          <p className="fc-so-papel">
             {subtitulo}
             {escolhida && proxima && <span className="fcpa-proxima"> · próxima análise {dataBr(proxima)}</span>}
           </p>
-          <p className="fc-beta-aviso">Em validação: confira os números com a planilha do Forecast.</p>
+          <p className="fc-beta-aviso fc-so-papel">Em validação: confira os números com a planilha do Forecast.</p>
         </div>
         {(quinzenas.length > 0 || podeImportar || lista.isSuccess) && (
-          <div className="page-header__actions">
+          <div className="page-header__actions fc-cabecalho">
             {quinzenas.length > 0 && (
-              <div className="fc-quinzena">
-                <label className="field-label" htmlFor="fc-quinzena">
-                  Quinzena
-                </label>
-                <select
-                  ref={seletor}
-                  id="fc-quinzena"
-                  className="select"
-                  value={escolhidaId}
-                  onChange={(e) => {
-                    setImportada(null);
-                    setExcluida(null);
-                    setParams(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
-                  }}
-                >
-                  {quinzenas.map((q) => (
-                    <option key={q.id} value={q.id}>
-                      {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
-                    </option>
-                  ))}
-                </select>
+              <div className="fc-cabecalho__quinzena">
+                <div className="fc-quinzena">
+                  <label className="field-label" htmlFor="fc-quinzena">
+                    Quinzena
+                  </label>
+                  <select
+                    ref={seletor}
+                    id="fc-quinzena"
+                    className="select"
+                    value={escolhidaId}
+                    onChange={(e) => {
+                      setImportada(null);
+                      setExcluida(null);
+                      setParams(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
+                    }}
+                  >
+                    {quinzenas.map((q) => (
+                      <option key={q.id} value={q.id}>
+                        {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {escolhida && proxima && (
+                  <span className="fc-proxima">
+                    Próxima análise
+                    <br />
+                    <strong>{dataBr(proxima)}</strong>
+                  </span>
+                )}
               </div>
             )}
-            <button
-              ref={dialogoFontes.botaoFontes}
-              type="button"
-              className="ghost-button"
-              aria-haspopup="dialog"
-              onClick={() => dialogoFontes.abrir('fontes')}
-            >
-              Fontes e lead time
-            </button>
-            <button
-              ref={dialogoFontes.botaoEventos}
-              type="button"
-              className="ghost-button"
-              aria-haspopup="dialog"
-              onClick={() => dialogoFontes.abrir('ocasioes')}
-            >
-              Eventos estrangeiros
-            </button>
-            <button
-              ref={botaoGrupos}
-              type="button"
-              className="ghost-button"
-              aria-haspopup="dialog"
-              onClick={() => setGruposAberto(true)}
-            >
-              Grupos de equivalência
-            </button>
-            {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
-            {podeImportar && (
-              <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
-                Importar quinzena
-              </button>
-            )}
-            {podeImportar && escolhida && (
-              <button
-                ref={botaoExcluir}
-                type="button"
-                className="ghost-button danger-button fcx-gatilho"
-                aria-haspopup="dialog"
-                onClick={() => setExcluirAlvo(escolhida)}
-              >
-                Excluir quinzena
-              </button>
-            )}
+            <div className="fc-cabecalho__acoes">
+              {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
+              {podeImportar && (
+                <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
+                  <Icon name="upload" size={16} />
+                  Importar quinzena
+                </button>
+              )}
+              <ForecastMenuMais
+                ref={botaoMais}
+                podeExcluir={podeImportar && escolhida !== undefined}
+                onFontes={() => dialogoFontes.abrir('fontes')}
+                onEventos={() => dialogoFontes.abrir('ocasioes')}
+                onGrupos={() => setGruposAberto(true)}
+                onExcluir={() => escolhida && setExcluirAlvo(escolhida)}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -462,23 +462,48 @@ export default function Forecast() {
           Quinzena {excluida} excluída.
         </div>
       )}
-      {lista.isLoading && <Spinner />}
+      {lista.isLoading && (
+        <div className="fc-carregando">
+          <Spinner size="sm" />
+          <span>Carregando a lista de quinzenas…</span>
+        </div>
+      )}
       {lista.isError && (
-        <div className="alert alert--error" role="alert">
-          {forecastErrorMessage(lista.error)}
+        <div className="fc-estado-erro">
+          <div className="alert alert--error" role="alert">
+            {forecastErrorMessage(lista.error)}
+          </div>
+          <button type="button" className="ghost-button" onClick={() => void lista.refetch()}>
+            Tentar de novo
+          </button>
         </div>
       )}
       {lista.isSuccess && quinzenas.length === 0 && (
-        <div className="empty-state">
+        <div className="empty-state fc-vazio-quinzena">
+          <span className="empty-state__icon">
+            <Icon name="layers" size={36} strokeWidth={1.5} />
+          </span>
+          {'Nenhuma quinzena importada ainda.'}{' '}
+          <br />
           {podeImportar
-            ? 'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar os relatórios do DBCorp.'
-            : 'Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.'}
+            ? 'Use “Importar quinzena” para enviar os relatórios do DBCorp.'
+            : 'Peça a um comprador ou administrador para importar.'}
         </div>
       )}
-      {escolhida && detalhe.isLoading && <Spinner />}
+      {escolhida && detalhe.isLoading && (
+        <div className="fc-carregando">
+          <Spinner size="sm" />
+          <span>Carregando a quinzena…</span>
+        </div>
+      )}
       {escolhida && detalhe.isError && (
-        <div className="alert alert--error" role="alert">
-          {forecastErrorMessage(detalhe.error)}
+        <div className="fc-estado-erro">
+          <div className="alert alert--error" role="alert">
+            {forecastErrorMessage(detalhe.error)}
+          </div>
+          <button type="button" className="ghost-button" onClick={() => void detalhe.refetch()}>
+            Tentar de novo
+          </button>
         </div>
       )}
       {detail && (
