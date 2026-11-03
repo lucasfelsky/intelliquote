@@ -14,7 +14,7 @@ export default function Relatorios() {
     >
       <GradeMini colunas={3}>
         {CARTOES_RELATORIOS.map((cartao) => (
-          <Mini key={cartao.titulo} titulo={cartao.titulo}>
+          <Mini key={cartao.titulo} titulo={cartao.titulo} nivel={3}>
             <p>{cartao.texto}</p>
           </Mini>
         ))}

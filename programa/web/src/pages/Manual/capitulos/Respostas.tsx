@@ -75,19 +75,19 @@ export default function Respostas() {
       </p>
 
       <GradeMini colunas={2}>
-        <Mini titulo={<RotuloUi>Responder</RotuloUi>}>
+        <Mini nivel={3} titulo={<RotuloUi>Responder</RotuloUi>}>
           <p>
             Escreve ao fornecedor com <strong>preço-alvo</strong> (um por item, se houver mais de um) e mostra o histórico de negociação. Com a cotação aberta, o e-mail leva um link novo para o
             fornecedor revisar o preço.
           </p>
         </Mini>
-        <Mini titulo={<RotuloUi>Histórico</RotuloUi>}>
-          <p>Todas as versões da proposta lado a lado, com as células que mudaram em destaque.</p>
+        <Mini nivel={3} titulo={<RotuloUi>Histórico</RotuloUi>}>
+          <p>Uma linha por versão da proposta em que o preço mudou (pelo portal ou por edição manual), lado a lado, com as células que mudaram em destaque.</p>
         </Mini>
-        <Mini titulo={<RotuloUi>Credit Support</RotuloUi>}>
+        <Mini nivel={3} titulo={<RotuloUi>Credit Support</RotuloUi>}>
           <p>Encaminha a proposta a um parceiro de crédito, que devolve preço e prazo próprios. A proposta do parceiro entra no ranking como alternativa “via parceiro”.</p>
         </Mini>
-        <Mini titulo={<RotuloUi icone="plus">Nova resposta</RotuloUi>}>
+        <Mini nivel={3} titulo={<RotuloUi icone="plus">Nova resposta</RotuloUi>}>
           <p>Lança à mão uma proposta recebida fora do portal, com frete, seguro, impostos e câmbio.</p>
         </Mini>
       </GradeMini>

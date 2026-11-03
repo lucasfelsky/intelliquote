@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Manual from './Manual';
@@ -736,7 +737,7 @@ describe('Manual: correcoes da revisao M1-M3 (r2)', () => {
     expect(regiao?.querySelector('.manual-regua')).not.toBeNull();
   });
 
-  it('selo "Exemplo fictício" fica na mesma linha da legenda: o figcaption e texto corrido (sem flex), com um espaco depois do selo', () => {
+  it('selo "Exemplo fictício" vem ANTES do texto na ordem de leitura, com um espaco entre os dois (o textContent le "Exemplo fictício Proposta...")', () => {
     const { container } = renderManual();
     const legenda = container.querySelector('#portal .manual-figura__legenda');
     expect(legenda?.firstElementChild?.className).toBe('manual-exemplo');
@@ -802,7 +803,7 @@ describe('Manual: capitulos 14 a 17 e rodape (M5)', () => {
       'Lead-time médio',
       'Top fornecedores',
       'Taxa de adjudicação',
-      'Engajamento',
+      'Engajamento de fornecedores',
     ]);
     expect(container.querySelector('#relatorios .manual-capitulo__lead .manual-ui')?.textContent).toBe('Atualizar');
     expect(container.querySelectorAll('#relatorios .manual-grade--3')).toHaveLength(1);
@@ -963,6 +964,105 @@ describe('Manual: impressao (M6)', () => {
     const { container } = renderManual('comercial');
     expect(container.querySelectorAll('details')).toHaveLength(0);
     expect(() => window.dispatchEvent(new Event('beforeprint'))).not.toThrow();
+  });
+});
+
+describe('Manual: correcoes da revisao M (r3)', () => {
+  const texto = (container: HTMLElement, id: string) => container.querySelector(`#${id}`)?.textContent ?? '';
+
+  it('hierarquia de titulos sem salto em nenhum capitulo (h2 > h3 > h4): Respostas e Relatorios abrem a grade com h3', () => {
+    const { container } = renderManual();
+    for (const secao of secoes(container)) {
+      let anterior = 2;
+      for (const h of secao.querySelectorAll('h2, h3, h4')) {
+        const nivel = Number(h.tagName.slice(1));
+        expect(nivel - anterior, `${secao.id}: ${h.tagName} "${h.textContent}" depois de h${anterior}`).toBeLessThanOrEqual(1);
+        anterior = nivel;
+      }
+    }
+    expect([...container.querySelectorAll('#respostas h3')].map((h) => h.textContent)).toEqual(['Responder', 'Histórico', 'Credit Support', 'Nova resposta']);
+    expect(container.querySelectorAll('#relatorios h3')).toHaveLength(6);
+    expect(container.querySelectorAll('#respostas h3.manual-mini__titulo')).toHaveLength(4);
+    // a grade do Para o COMEX (sob um h3 da secao) segue com h4
+    expect(container.querySelectorAll('#solicitacoes h4.manual-mini__titulo')).toHaveLength(4);
+  });
+
+  it('textos fieis ao codigo (D-M-05): Historico, Credit Support, "mesmo assim" e Engajamento de fornecedores', () => {
+    const { container } = renderManual();
+    expect(texto(container, 'respostas')).toContain('Uma linha por versão da proposta em que o preço mudou (pelo portal ou por edição manual)');
+    expect(texto(container, 'respostas')).not.toContain('Todas as versões da proposta');
+    expect(texto(container, 'glossario')).toContain('que cota preço e prazo próprios sobre a proposta do fornecedor');
+    expect(texto(container, 'glossario')).not.toContain('revende');
+    expect(texto(container, 'comparacao')).toContain('Se faltam itens ou a quantidade é diferente (e nenhum item está indisponível), você ainda pode usar');
+    expect(texto(container, 'comparacao')).not.toContain('Se só faltam itens');
+    expect([...container.querySelectorAll('#relatorios .manual-mini__titulo')].map((t) => t.textContent)).toContain('Engajamento de fornecedores');
+  });
+
+  describe('hash na abertura (idempotente e cancelavel)', () => {
+    let resolverFontes: () => void = () => {};
+    let fontesAntes: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      fontesAntes = Object.getOwnPropertyDescriptor(document, 'fonts');
+      const ready = new Promise<void>((resolve) => {
+        resolverFontes = resolve;
+      });
+      Object.defineProperty(document, 'fonts', { configurable: true, value: { ready } });
+    });
+
+    afterEach(() => {
+      if (fontesAntes) Object.defineProperty(document, 'fonts', fontesAntes);
+      else delete (document as unknown as Record<string, unknown>).fonts;
+    });
+
+    const chamadasDo = (id: string) =>
+      (scrollIntoView.mock.calls as unknown[][]).filter((_, i) => (scrollIntoView.mock.contexts[i] as HTMLElement | undefined)?.id === id).map((c) => c[0]);
+    const liberarFontes = async () => {
+      await act(async () => {
+        resolverFontes();
+        await Promise.resolve();
+      });
+    };
+
+    it('abre direto (instant) e realinha UMA vez quando as fontes carregam; sob StrictMode (2 execucoes do efeito) o resultado e o mesmo', async () => {
+      mockRole = 'admin';
+      render(
+        <StrictMode>
+          <MemoryRouter initialEntries={['/manual#comparacao']}>
+            <Manual />
+          </MemoryRouter>
+        </StrictMode>,
+      );
+      // nenhuma chamada suave: toda rolagem da abertura e instantanea
+      expect(chamadasDo('comparacao').length).toBeGreaterThanOrEqual(1);
+      for (const arg of chamadasDo('comparacao')) expect(arg).toEqual({ block: 'start', behavior: 'instant' });
+      const antes = chamadasDo('comparacao').length;
+      await liberarFontes();
+      // o realinhamento da execucao que ficou valendo (a primeira foi cancelada pelo cleanup do StrictMode)
+      expect(chamadasDo('comparacao').length).toBe(antes + 1);
+      for (const arg of chamadasDo('comparacao')) expect(arg).toEqual({ block: 'start', behavior: 'instant' });
+    });
+
+    it.each(['wheel', 'touchstart', 'keydown', 'pointerdown'])('se o leitor agir antes das fontes (%s), NAO ha realinhamento: ninguem e puxado de volta', async (tipo) => {
+      renderManual('admin', '/manual#itens');
+      const antes = scrollIntoView.mock.calls.length;
+      act(() => {
+        window.dispatchEvent(new Event(tipo));
+      });
+      await liberarFontes();
+      expect(scrollIntoView.mock.calls.length).toBe(antes);
+    });
+
+    it('clicar no indice antes das fontes tambem cancela; o clique segue suave e nao ha puxada depois', async () => {
+      const { container } = renderManual('admin', '/manual#itens');
+      fireEvent.pointerDown(screen.getByRole('link', { name: /Enviar aos fornecedores/ }));
+      fireEvent.click(screen.getByRole('link', { name: /Enviar aos fornecedores/ }));
+      const noEnvio = chamadasDo('envio');
+      expect(noEnvio).toEqual([{ block: 'start' }]);
+      await liberarFontes();
+      expect(chamadasDo('itens')).toHaveLength(1);
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(container.querySelector('#envio'));
+    });
   });
 });
 

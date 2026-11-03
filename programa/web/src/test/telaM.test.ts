@@ -289,10 +289,33 @@ describe('M: CSS do Manual na regiao `tela F11`', () => {
     expect(declaracoes('.manual-sim__seg')).toHaveProperty('transition');
   });
 
-  it('revisao r2: legenda da figura e texto corrido (selo na mesma linha), regua com largura minima (sem sobrepor rotulos no estreito) e corpo em 14px como a previa', () => {
-    const legenda = declaracoes('.manual-figura__legenda');
-    expect(legenda.display).toBeUndefined();
-    expect(legenda['flex-wrap']).toBeUndefined();
+  it('revisao r3: a coluna numerica alinha a direita DE FATO: o seletor vence em especificidade o `.table th, .table td` (text-align: left) da Suite', () => {
+    // especificidade (a, b, c): ids, classes/atributos/pseudo-classes, elementos/pseudo-elementos (aproximacao suficiente para seletores simples)
+    const espec = (seletor: string): [number, number, number] => {
+      const s = seletor.replace(/"[^"]*"/g, '').replace(/\[[^\]]*\]/g, '.x');
+      const a = (s.match(/#[\w-]+/g) ?? []).length;
+      const b = (s.match(/\.[\w-]+|:[\w-]+/g) ?? []).length;
+      const c = (s.replace(/#[\w-]+|\.[\w-]+|:[\w-]+(\([^)]*\))?/g, ' ').match(/[a-z][\w-]*/g) ?? []).length;
+      return [a, b, c];
+    };
+    const maior = (x: [number, number, number], y: [number, number, number]) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    const alvo = '.manual-tabela__tabela .manual-tabela__num';
+    expect(declaracoes(alvo)).toMatchObject({ 'text-align': 'right', 'white-space': 'nowrap' });
+    // toda regra da Suite que alinha th/td da .table (so a classe table + elementos) e que atinge a tabela do Manual
+    const regrasDaSuite = parseRules(stripComments(rawLf))
+      .filter((r) => !r.prelude.startsWith('@') && /text-align\s*:/.test(r.body))
+      .flatMap((r) => listaDeSeletores(r.prelude))
+      .filter((s) => /(^|\s)\.table\s+(th|td)(\s|$|,)/.test(`${s} `) && classesDoSeletor(s).every((c) => c === 'table'));
+    expect(regrasDaSuite.length).toBeGreaterThan(0);
+    for (const s of regrasDaSuite) expect(maior(espec(alvo), espec(s)), `${alvo} precisa vencer ${s}`).toBeGreaterThan(0);
+    // o seletor do alvo existe de verdade no CSS efetivo e nenhum seletor do Manual ficou com so 1 classe para alinhar o numero
+    expect(manual.some((r) => r.seletores.includes('.manual-tabela__num'))).toBe(false);
+    // a centralizacao ja tinha especificidade maior (th/td + classe dentro da tabela do Manual)
+    expect(maior(espec('.manual-tabela__tabela th.manual-tabela__centro'), espec('.table th'))).toBeGreaterThan(0);
+  });
+
+  it('revisao r2/r3: legenda da figura em flex com quebra como a previa (selo e texto longo na linha propria quando nao cabem), regua com largura minima (sem sobrepor rotulos no estreito) e corpo em 14px como a previa', () => {
+    expect(declaracoes('.manual-figura__legenda')).toMatchObject({ display: 'flex', 'flex-wrap': 'wrap', 'align-items': 'center', gap: '8px' });
     expect(declaracoes('.manual-regua')).toMatchObject({ 'min-width': '480px', position: 'relative' });
     expect(declaracoes('.manual-artigo')).toMatchObject({ 'font-size': '14px' });
     expect(declaracoes('.manual-capitulo__lead')).toMatchObject({ 'font-size': '15px' });

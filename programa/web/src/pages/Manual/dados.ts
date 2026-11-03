@@ -217,7 +217,7 @@ export const CARTOES_RELATORIOS: readonly CartaoDeRelatorio[] = [
   { titulo: 'Lead-time médio', texto: 'Média geral em dias e média por fornecedor.' },
   { titulo: 'Top fornecedores', texto: 'Os dez com mais vitórias: taxa de vitória, score médio, avaliação e propostas.' },
   { titulo: 'Taxa de adjudicação', texto: 'Quantas comparações terminaram com vencedora.' },
-  { titulo: 'Engajamento', texto: 'Links enviados, respondidos, taxa de resposta e tempo médio até a resposta.' },
+  { titulo: 'Engajamento de fornecedores', texto: 'Links enviados, respondidos, taxa de resposta e tempo médio até a resposta.' },
 ];
 
 // ---------- Capitulo 15: variaveis dos templates de e-mail ----------
@@ -292,7 +292,7 @@ export const GLOSSARIO: readonly TermoDoGlossario[] = [
   { termo: 'Alçada', definicao: 'Valor acima do qual a adjudicação precisa de gestor ou admin. Definida em Empresa.' },
   { termo: 'Cesta', definicao: 'Soma de preço unitário × quantidade pedida de todos os itens de uma proposta.' },
   { termo: 'CIF', definicao: 'Valor da mercadoria + frete + seguro, base dos impostos de importação.' },
-  { termo: 'Credit Support', definicao: 'Encaminhar a proposta a um parceiro de crédito, que compra do fornecedor e revende com prazo próprio.' },
+  { termo: 'Credit Support', definicao: 'Encaminhar a proposta a um parceiro de crédito, que cota preço e prazo próprios sobre a proposta do fornecedor. Entra no ranking como alternativa “via parceiro”.' },
   { termo: 'DG', definicao: 'Dangerous goods: carga perigosa, informada pelo fornecedor por item.' },
   { termo: 'Forwarder', definicao: 'Agente de carga que organiza o embarque.' },
   { termo: 'Incoterm', definicao: 'Regra internacional que define até onde vão os custos e riscos do vendedor (FOB, CFR, CIF…).' },

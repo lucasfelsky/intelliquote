@@ -76,21 +76,29 @@ export default function Manual() {
   }, [comIndice, capitulos]);
 
   // /manual#comparacao (e links do proprio texto): rola ate o capitulo. A chave da navegacao muda a cada clique, mesmo no mesmo hash.
-  const abriu = useRef(false);
+  // "Abertura" = a navegacao que trouxe o leitor a pagina (a chave da 1a localizacao); depois dela, cada clique gera uma chave nova. Nada de booleano "primeira vez":
+  // sob StrictMode o efeito roda duas vezes e a 2a execucao precisa chegar ao mesmo resultado (idempotente).
+  const chaveDaAbertura = useRef(location.key);
   useEffect(() => {
     const id = location.hash.replace(/^#/, '');
     if (!id || !capitulos.some((c) => c.id === id)) return undefined;
-    const naAbertura = !abriu.current;
-    abriu.current = true;
+    const naAbertura = location.key === chaveDaAbertura.current;
     if (irParaCapitulo(id, naAbertura)) setAtivo(id);
     if (!naAbertura || typeof document === 'undefined' || !document.fonts?.ready) return undefined;
-    // Na abertura as fontes ainda podem mudar a altura do que vem antes do capitulo: realinha uma vez quando carregarem.
+    // Na abertura as fontes ainda podem mudar a altura do que vem antes do capitulo: realinha UMA vez quando carregarem, a menos que o leitor ja tenha
+    // agido (roda, toque, tecla ou clique): quem rolou para outro capitulo nao pode ser puxado de volta.
     let vigente = true;
+    const cancelar = () => {
+      vigente = false;
+    };
+    const interacoes = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+    for (const tipo of interacoes) window.addEventListener(tipo, cancelar, { passive: true });
     void document.fonts.ready.then(() => {
       if (vigente) irParaCapitulo(id, true, false);
     });
     return () => {
       vigente = false;
+      for (const tipo of interacoes) window.removeEventListener(tipo, cancelar);
     };
   }, [location.key, location.hash, capitulos]);
 

@@ -116,7 +116,7 @@ export default function Comparacao() {
 
       <h3 className="manual-secao">Fora do ranking</h3>
       <p>
-        Proposta com item indisponível, item faltando, quantidade diferente ou alternativa de parceiro desatualizada fica abaixo do ranking, com o motivo. Se só faltam itens, você ainda pode usar{' '}
+        Proposta com item indisponível, item faltando, quantidade diferente ou alternativa de parceiro desatualizada fica abaixo do ranking, com o motivo. Se faltam itens ou a quantidade é diferente (e nenhum item está indisponível), você ainda pode usar{' '}
         <RotuloUi>Definir como vencedora mesmo assim</RotuloUi>. Para comparar, todas as propostas precisam estar <strong>na mesma moeda</strong>.
       </p>
 

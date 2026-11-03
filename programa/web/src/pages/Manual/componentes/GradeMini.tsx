@@ -6,12 +6,14 @@ export function GradeMini({ colunas, children }: { colunas: 2 | 3; children: Rea
   return <div className={colunas === 3 ? 'manual-grade manual-grade--3' : 'manual-grade manual-grade--2'}>{children}</div>;
 }
 
-export function Mini({ titulo, children }: { titulo: ReactNode; children: ReactNode }) {
+// `nivel`: h4 por padrao (o mini fica sob um h3 da secao); nos capitulos que abrem direto com a grade (Respostas, Relatorios) o titulo e h3, sem pular de h2 para h4.
+export function Mini({ titulo, children, nivel = 4 }: { titulo: ReactNode; children: ReactNode; nivel?: 3 | 4 }) {
+  const Titulo = nivel === 3 ? 'h3' : 'h4';
   return (
     <div className="manual-mini">
-      <h4 className="manual-mini__titulo">
+      <Titulo className="manual-mini__titulo">
         <Destacar>{titulo}</Destacar>
-      </h4>
+      </Titulo>
       {children}
     </div>
   );
