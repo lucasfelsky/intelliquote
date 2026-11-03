@@ -238,4 +238,12 @@ describe('Modal', () => {
     expect(Array.from(dialog.querySelector('.modal-content')?.children ?? []).map((c) => c.className)).toEqual(['modal-header', 'modal-body']);
     showModal.mockRestore();
   });
+
+  it('18. className extra (opcional) entra depois das classes do tamanho; sem ele o className e o mesmo de antes', () => {
+    const sem = render(<Modal isOpen={true} onClose={vi.fn()} title="Título" size="wide"><p>Conteúdo</p></Modal>);
+    expect(getDialog(sem.container).className).toBe('modal-dialog modal-dialog--wide');
+    sem.unmount();
+    const com = render(<Modal isOpen={true} onClose={vi.fn()} title="Título" size="wide" className="fc-portal"><p>Conteúdo</p></Modal>);
+    expect(getDialog(com.container).className).toBe('modal-dialog modal-dialog--wide fc-portal');
+  });
 });

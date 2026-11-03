@@ -9,9 +9,11 @@ interface ModalProps {
   subtitle?: React.ReactNode;
   children: React.ReactNode;
   size?: 'default' | 'wide' | 'xl';
+  /** Classe EXTRA no <dialog> (ex.: raiz de portal do Forecast). Opcional; sem ela o className segue como antes. */
+  className?: string;
 }
 
-export function Modal({ isOpen, onClose, title, subtitle, children, size }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, children, size, className: extra }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mousedownTargetRef = useRef<EventTarget | null>(null);
 
@@ -63,10 +65,11 @@ export function Modal({ isOpen, onClose, title, subtitle, children, size }: Moda
     };
   }, [onClose]);
 
-  const className =
+  const base =
     size === 'xl' ? 'modal-dialog modal-dialog--xl'
     : size === 'wide' ? 'modal-dialog modal-dialog--wide'
     : 'modal-dialog';
+  const className = extra ? `${base} ${extra}` : base;
 
   return (
     <dialog ref={dialogRef} className={className}>

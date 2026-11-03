@@ -314,7 +314,7 @@ export default function ForecastRelatorioDemandaComercial({ dados, podeEditar, h
         )}
       {dialogo?.tipo === 'fechar' &&
         createPortal(
-          <Modal isOpen onClose={fecharDialogo} title={ROTULO_FECHAMENTO[dialogo.status].titulo}>
+          <Modal isOpen onClose={fecharDialogo} title={ROTULO_FECHAMENTO[dialogo.status].titulo} className="fc-portal">
             <FormularioDeFechamento
               item={dialogo.item}
               status={dialogo.status}
