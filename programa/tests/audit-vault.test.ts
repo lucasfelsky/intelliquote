@@ -71,7 +71,7 @@ describe('audit-vault (IntelliQuote)', () => {
     expect(result.stdout).toMatch(/web pages = 19/);
     expect(result.stdout).toMatch(/web AuthContextValue = 7/);
     expect(result.stdout).toMatch(/web tokenStore = 8/);
-    expect(result.stdout).toMatch(/web routes = 21/);
+    expect(result.stdout).toMatch(/web routes = 22/);
   });
 
   describe('deteccao de drift', () => {

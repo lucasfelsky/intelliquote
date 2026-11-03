@@ -18,7 +18,7 @@ import Itens from '@/pages/Itens';
 import Familias from '@/pages/Familias';
 
 import Relatorios from '@/pages/Relatorios';
-import Ajuda from '@/pages/Ajuda';
+import Manual from '@/pages/Manual';
 import Auditoria from '@/pages/Auditoria';
 import Templates from '@/pages/Templates';
 import MinhaConta from '@/pages/MinhaConta';
@@ -88,7 +88,8 @@ export default function App() {
                   <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/forecast" element={<Forecast />} />
-                  <Route path="/ajuda" element={<Ajuda />} />
+                  <Route path="/manual" element={<Manual />} />
+                  <Route path="/ajuda" element={<Navigate to="/manual" replace />} />
                   <Route path="/auditoria" element={<Auditoria />} />
                   <Route path="/templates" element={<Templates />} />
                   <Route path="/minha-conta" element={<MinhaConta />} />
