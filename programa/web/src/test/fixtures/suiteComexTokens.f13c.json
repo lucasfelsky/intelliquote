@@ -1,0 +1,42 @@
+[
+  {
+    "token": "--rf-fc-faixa-danger",
+    "claro": "#c2362b",
+    "escuro": "#ff9b90",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "board Forecast Painel (faixa CONSUMO e CHEGADAS)"
+  },
+  {
+    "token": "--rf-fc-faixa-warning",
+    "claro": "#c98a12",
+    "escuro": "#f2c14e",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "board Forecast Painel (faixa ESTOQUE e PROGRAMACOES)"
+  },
+  {
+    "token": "--rf-fc-faixa-info",
+    "claro": "#1e6fb6",
+    "escuro": "#9cc3ff",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "board Forecast Painel (faixa COMPRAS)"
+  },
+  {
+    "token": "--rf-fc-conta-bg",
+    "claro": "#eceff0",
+    "escuro": "#163845",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "board Forecast Painel (contagem dos chips)"
+  },
+  {
+    "token": "--rf-fc-chave-knob",
+    "claro": "#ffffff",
+    "escuro": "#ffffff",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "board Forecast Painel (chave liga/desliga)"
+  }
+]

@@ -69,16 +69,16 @@ beforeEach(() => {
   mockApi();
 });
 
-describe('botao "Eventos estrangeiros" no cabecalho do Forecast', () => {
-  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao logo depois de "Fontes e lead time"', async (papel) => {
+describe('item "Eventos estrangeiros" no menu Mais do cabecalho do Forecast', () => {
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o item logo depois de "Fontes e lead time"', async (papel) => {
     mockRole = papel;
     renderPage();
     await screen.findByText(NADA_IMPORTADO);
-    const fontes = screen.getByRole('button', { name: 'Fontes e lead time' });
-    const eventos = screen.getByRole('button', { name: 'Eventos estrangeiros' });
-    expect(fontes.nextElementSibling).toBe(eventos);
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    const fontes = screen.getByRole('menuitem', { name: 'Fontes e lead time' });
+    const eventos = screen.getByRole('menuitem', { name: 'Eventos estrangeiros' });
     expect(fontes.compareDocumentPosition(eventos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(eventos.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(screen.getByRole('button', { name: 'Mais' }).getAttribute('aria-haspopup')).toBe('menu');
     expect(eventos.className).toBe(fontes.className);
   });
 
@@ -92,7 +92,8 @@ describe('botao "Eventos estrangeiros" no cabecalho do Forecast', () => {
     renderPage();
     await screen.findByText(NADA_IMPORTADO);
     expect(chamouEventos()).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Eventos estrangeiros' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Eventos estrangeiros' }));
     expect(await screen.findByRole('heading', { name: 'Eventos estrangeiros' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Eventos estrangeiros' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Lead time por fonte' }).getAttribute('aria-selected')).toBe('false');
@@ -106,30 +107,32 @@ describe('botao "Eventos estrangeiros" no cabecalho do Forecast', () => {
     }
   });
 
-  it('fechar devolve o foco ao botao "Eventos estrangeiros"', async () => {
+  it('fechar devolve o foco ao botao "Mais"', async () => {
     mockRole = 'viewer';
     renderPage();
     await screen.findByText(NADA_IMPORTADO);
-    const eventos = screen.getByRole('button', { name: 'Eventos estrangeiros' });
-    fireEvent.click(eventos);
+    const mais = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(mais);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Eventos estrangeiros' }));
     await screen.findByRole('heading', { name: 'Eventos estrangeiros' });
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Eventos estrangeiros' })).toBeNull());
-    expect(document.activeElement).toBe(eventos);
+    expect(document.activeElement).toBe(mais);
   });
 
-  it('"Fontes e lead time" continua abrindo na aba de lead time e devolvendo o foco ao proprio botao', async () => {
+  it('"Fontes e lead time" continua abrindo na aba de lead time e devolvendo o foco ao botao "Mais"', async () => {
     mockRole = 'viewer';
     renderPage();
     await screen.findByText(NADA_IMPORTADO);
-    const fontes = screen.getByRole('button', { name: 'Fontes e lead time' });
-    fireEvent.click(fontes);
+    const mais = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(mais);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fontes e lead time' }));
     expect(await screen.findByRole('heading', { name: 'Fontes e lead time' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Lead time por fonte' }).getAttribute('aria-selected')).toBe('true');
     expect(chamouEventos()).toBe(false);
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Fontes e lead time' })).toBeNull());
-    expect(document.activeElement).toBe(fontes);
+    expect(document.activeElement).toBe(mais);
   });
 });
 

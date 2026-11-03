@@ -135,7 +135,13 @@ export default function ForecastGrid({
               <th
                 key={c.id}
                 scope="col"
-                className={['fc-rotulo', inicios[i] ? 'fc-cell--divisa' : '', c.esquerda ? 'fc-cell--esq' : '']
+                className={[
+                  'fc-rotulo',
+                  // Rotulos em tom de atencao (mock v68): grupo ESTOQUE e a coluna do mes atual.
+                  c.grupo === 'est' || c.rotulo.includes('(ATUAL)') ? 'fc-rotulo--atencao' : '',
+                  inicios[i] ? 'fc-cell--divisa' : '',
+                  c.esquerda ? 'fc-cell--esq' : '',
+                ]
                   .filter(Boolean)
                   .join(' ')}
               >

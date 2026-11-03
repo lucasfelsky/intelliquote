@@ -62,11 +62,15 @@ const MOCK: Record<string, string> = {
   maximize: 'M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7',
   table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 7.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
+  globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
+  layers: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
+  ellipsis: 'M5 12h.01M12 12h.01M19 12h.01',
+  'file-x': 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13l4 5M13 13l-4 5',
 };
 
 describe('icons', () => {
-  it('tem os 57 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5, os 10 da F6/F7, os 3 da F8/F9 e os 10 da F10/F11)', () => {
-    expect(ICON_NAMES).toHaveLength(57);
+  it('tem os 61 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5, os 10 da F6/F7, os 3 da F8/F9 os 10 da F10/F11 e os 4 da F13-C)', () => {
+    expect(ICON_NAMES).toHaveLength(61);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
@@ -93,7 +97,7 @@ describe('icons', () => {
     expect(ICONS).not.toHaveProperty('monitor');
   });
 
-  it('so o theme-half tem camada preenchida (currentColor); os demais 56 so tem traco', () => {
+  it('so o theme-half tem camada preenchida (currentColor); os demais 60 so tem traco', () => {
     expect(Object.keys(ICON_FILLS)).toEqual(['theme-half']);
     const meio = render(<Icon name="theme-half" />).container.querySelectorAll('svg path');
     expect(meio).toHaveLength(2);
@@ -108,7 +112,7 @@ describe('icons', () => {
   });
 
   it('nenhum icone repete o path de outro', () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(57);
+    expect(new Set(Object.values(ICONS)).size).toBe(61);
   });
 
   it.each(ICON_NAMES)('<Icon name="%s"> renderiza svg decorativo de traco com currentColor', (name) => {

@@ -310,7 +310,8 @@ describe('Painel - coluna ANALISE FORECAST com a quantidade decidida', () => {
     });
     expect(client.getQueryData(['forecast', 'decisoes', 7])).toBeDefined();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir quinzena' }));
     const dialogo = document.querySelector('dialog[open]') as HTMLElement;
     fireEvent.change(within(dialogo).getByLabelText(/Para confirmar, digite/), { target: { value: '10-2' } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Excluir quinzena' }));
