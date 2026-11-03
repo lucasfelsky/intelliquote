@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import RegiaoRolavel from './RegiaoRolavel';
 
 interface TabelaManualProps {
   // Nome da tabela para a regiao que rola na horizontal ("Tabela: <rotulo>, role na horizontal").
@@ -6,11 +7,11 @@ interface TabelaManualProps {
   children: ReactNode;
 }
 
-// Tabela da Suite (.table) dentro de uma regiao focavel: a rolagem horizontal nunca esconde coluna nem acao sem o teclado alcancar.
+// Tabela da Suite (.table) dentro de uma regiao focavel: quando a rolagem horizontal aparece, o teclado alcanca a regiao (sem rolagem, sem parada de Tab).
 export default function TabelaManual({ rotulo, children }: TabelaManualProps) {
   return (
-    <div className="table-wrapper manual-tabela manual-rolagem" tabIndex={0} role="region" aria-label={`Tabela: ${rotulo}, role na horizontal`}>
+    <RegiaoRolavel className="table-wrapper manual-tabela manual-rolagem" nome={`Tabela: ${rotulo}, role na horizontal`}>
       <table className="table manual-tabela__tabela">{children}</table>
-    </div>
+    </RegiaoRolavel>
   );
 }

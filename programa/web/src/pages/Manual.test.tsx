@@ -77,6 +77,12 @@ async function buscar(valor: string) {
   });
 }
 
+// jsdom nao faz layout (scrollWidth/clientWidth = 0): as regioes do Manual so viram focaveis quando rolam, entao o teste simula a medida.
+function simularRolagemHorizontal(rola = true) {
+  vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockReturnValue(rola ? 900 : 300);
+  vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(300);
+}
+
 beforeEach(() => {
   scrollIntoView.mockClear();
   observadores = [];
@@ -86,6 +92,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -305,6 +312,7 @@ describe('Manual: capitulos 1 a 7 (M2)', () => {
   });
 
   it('tabelas e figuras que rolam na horizontal sao regioes focaveis com nome', () => {
+    simularRolagemHorizontal();
     const { container } = renderManual();
     const regioes = [...container.querySelectorAll<HTMLElement>('.manual-rolagem')];
     expect(regioes.length).toBeGreaterThanOrEqual(3);
@@ -315,6 +323,20 @@ describe('Manual: capitulos 1 a 7 (M2)', () => {
     }
     expect(screen.getByRole('region', { name: 'Figura: fluxo completo de uma compra, role na horizontal' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Tabela: o que cada perfil pode fazer, role na horizontal' })).toBeTruthy();
+  });
+
+  it('tabelas e figuras que NAO rolam na horizontal nao tem tabindex, role nem nome (sem parada de Tab a toa)', () => {
+    simularRolagemHorizontal(false);
+    const { container } = renderManual();
+    const regioes = [...container.querySelectorAll<HTMLElement>('.manual-rolagem')];
+    expect(regioes.length).toBeGreaterThanOrEqual(3);
+    for (const regiao of regioes) {
+      expect(regiao.hasAttribute('tabindex'), regiao.className).toBe(false);
+      expect(regiao.hasAttribute('role')).toBe(false);
+      expect(regiao.hasAttribute('aria-label')).toBe(false);
+    }
+    expect(container.querySelectorAll('.manual-rolagem[tabindex]')).toHaveLength(0);
+    expect(screen.queryAllByRole('region', { name: /role na horizontal/ })).toHaveLength(0);
   });
 
   it('swimlane: svg com role="img" e <title> (aria-labelledby), ids unicos na pagina e nada de <mark> dentro', () => {
@@ -451,6 +473,7 @@ describe('Manual: capitulos 8 a 10 (M3)', () => {
   });
 
   it('Criar uma cotacao: POs agrupadas (3 colunas), aviso de atencao e ciclo da cotacao em SVG com titulo', () => {
+    simularRolagemHorizontal();
     const { container } = renderManual();
     const colunas = [...container.querySelectorAll('#criar-cotacao .manual-po')];
     expect(colunas.map((c) => c.querySelector('.manual-po__cabecalho span')?.textContent)).toEqual(['PO 1 · Acidulantes', 'PO 2 · Conservantes', 'Sem PO']);
@@ -622,6 +645,7 @@ describe('Manual: capitulos 11 a 13 (M4)', () => {
   });
 
   it('simulador: tabela de dados com estrela + media na Qualidade e "sem avaliacao"', () => {
+    simularRolagemHorizontal();
     const { container } = renderManual();
     const linhas = [...container.querySelectorAll('#comparacao [aria-label="Tabela: propostas do simulador, role na horizontal"] tbody tr')];
     expect(linhas).toHaveLength(4);
@@ -731,6 +755,7 @@ describe('Manual: correcoes da revisao M1-M3 (r2)', () => {
   });
 
   it('regua de avisos: figura que rola na horizontal (regiao focavel) para os rotulos nao se sobreporem no estreito', () => {
+    simularRolagemHorizontal();
     const { container } = renderManual();
     const regiao = container.querySelector('#fornecedores .manual-rolagem');
     expect(regiao?.getAttribute('aria-label')).toBe('Figura: régua dos avisos de vencimento, role na horizontal');

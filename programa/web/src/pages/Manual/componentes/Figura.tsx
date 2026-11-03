@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import Destacar from './Destacar';
+import RegiaoRolavel from './RegiaoRolavel';
 
 interface FiguraProps {
   legenda: ReactNode;
   // Mostra o selo "Exemplo ficticio" antes da legenda (dados inventados).
   exemplo?: boolean;
-  // Descricao da figura que rola na horizontal no estreito (vira a regiao focavel "Figura: ..., role na horizontal").
+  // Descricao da figura que rola na horizontal no estreito (vira a regiao focavel "Figura: ..., role na horizontal" so quando de fato rola).
   rolagem?: string;
   // Sem a caixa da figura (tabela larga, que ja tem a propria moldura).
   semCaixa?: boolean;
@@ -18,9 +19,9 @@ export default function Figura({ legenda, exemplo = false, rolagem, semCaixa = f
       {semCaixa ? (
         children
       ) : rolagem !== undefined ? (
-        <div className="manual-figura__caixa manual-rolagem" tabIndex={0} role="region" aria-label={`Figura: ${rolagem}, role na horizontal`}>
+        <RegiaoRolavel className="manual-figura__caixa manual-rolagem" nome={`Figura: ${rolagem}, role na horizontal`}>
           {children}
-        </div>
+        </RegiaoRolavel>
       ) : (
         <div className="manual-figura__caixa">{children}</div>
       )}
