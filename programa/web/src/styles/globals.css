@@ -12244,6 +12244,232 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 /* -- <<< F13-C -- */
 
 /* -- F13-D >>> -- */
+/* Relatorio de compras e modais de operacao no mock v68 (boards ForecastRelatorio, ForecastRelatorioSecoes e ForecastModaisOperacao). So tela: o papel segue como esta (D-F13-05). Modais em portal: raiz `.fc-portal`. */
+@media screen {
+  /* ---- Resumo: cartao 18, sem sombra, acoes de 40, chips de 40 com a contagem em pilula ---- */
+  .fc-pagina .fcr-resumo { gap: 10px; padding: 16px 20px; border-color: var(--rf-border); border-radius: var(--rf-radius-card-lg); background: var(--rf-surface); box-shadow: none; }
+  /* a tabela larga rola dentro do cartao: sem folga o Chrome nao revela um botao com so 10 px visiveis ao focar (sonda a 1024: 3 focos sob a barra lateral) */
+  .fc-pagina .fcr-scroll { scroll-padding-inline: 16px; }
+  .fc-pagina .fcr-resumo__titulo { color: var(--rf-ink); font-size: 16px; font-weight: 700; }
+  .fc-pagina .fcr-acoes { gap: 8px; margin: 0; }
+  .fc-pagina .fcr-acoes .ghost-button { min-height: 40px; gap: 8px; }
+  .fc-pagina .fcr-acoes .ghost-button svg { flex: none; }
+  .fc-pagina .fcr-acoes__dica { color: var(--rf-ink-soft); font-size: 12px; }
+  .fc-pagina .fcr-resumo__lista { gap: 6px 18px; color: var(--rf-ink); font-size: 13px; }
+  .fc-pagina .fcr-resumo__alerta { color: var(--rf-tone-danger-fg); font-weight: 700; }
+  .fc-pagina .fcr-resumo__fora, .fc-pagina .fcr-mostrando { color: var(--rf-ink-soft); }
+  .fc-pagina .fcr-mostrando { font-size: 12px; }
+  .fc-pagina .fcr-resumo .fcoc-apoio { max-width: 980px; font-size: 12px; line-height: 1.5; }
+  .fc-pagina .fcr-controles { gap: 12px; margin-top: 0; }
+  .fc-pagina .fcr-controles .fc-filtros { gap: 8px; }
+  .fc-pagina .fcr-controles .fc-filtro { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1.5px solid var(--rf-input-border); border-radius: var(--rf-radius-pill); background: transparent; color: var(--rf-ink); font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .fc-pagina .fcr-controles .fc-filtro:hover { background: var(--rf-action-hover-bg); }
+  .fc-pagina .fcr-controles .fc-filtro[aria-pressed="true"] { border-color: var(--rf-primary-700); background: var(--rf-primary-50); color: var(--rf-primary-700); }
+  .fc-pagina .fcr-controles .fc-filtro__conta { margin-left: 0; padding: 2px 8px; border-radius: var(--rf-radius-pill); background: var(--rf-tone-neutral-bg); font-family: var(--rf-font-mono); font-size: 11px; font-weight: 700; }
+  .fc-pagina .fcr-controles .fc-filtro[aria-pressed="true"] .fc-filtro__conta { background: var(--rf-count-chip); color: var(--rf-ink); }
+  .fc-pagina .fcr-regra { margin-top: 0; color: var(--rf-ink); font-size: 13px; }
+  .fc-pagina .fcr-regra summary { display: flex; align-items: center; min-height: 32px; color: var(--rf-ink); font-weight: 700; }
+  .fc-pagina .fcr-regra p { color: var(--rf-ink-soft); }
+
+  /* ---- Cartoes das faixas e das secoes de apoio: cartao 18 sem sombra; legenda sobre o papel do cartao; cabecalho 10x12 sem espacamento de letras ---- */
+  .fc-pagina .fcr-grupo { margin-top: 20px; border-color: var(--rf-border); border-radius: var(--rf-radius-card-lg); background: var(--rf-surface); box-shadow: none; }
+  .fc-pagina .fcr-caption { padding: 12px 16px; border-bottom: 0; background: var(--rf-surface); color: var(--rf-ink); }
+  .fc-pagina .fcr-tabela { color: var(--rf-ink); }
+  .fc-pagina .fcr-tabela thead th { padding: 10px 12px; border-bottom: 1px solid var(--rf-border); background: var(--rf-surface-alt); color: var(--rf-ink-soft); font-size: 11px; font-weight: 700; letter-spacing: normal; white-space: nowrap; }
+  .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) thead th:nth-last-child(5) { text-align: left; }
+  .fc-pagina .fcr-tabela tbody th, .fc-pagina .fcr-tabela tbody td { padding: 12px; border-bottom: 1px solid var(--rf-border); color: var(--rf-ink); font-size: 12.5px; }
+  .fc-pagina .fcr-tabela tbody tr:last-child > th, .fc-pagina .fcr-tabela tbody tr:last-child > td { border-bottom: 0; }
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-linha-grupo, + .fcoc-linha) > th, .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-linha-grupo, + .fcoc-linha) > td { border-bottom: 0; }
+  .fc-pagina .fcr-tabela .fcr-linha-grupo > td, .fc-pagina .fcr-tabela .fcoc-linha > td { padding: 0 12px 12px; background: var(--rf-surface); }
+  /* o board nao pinta a linha inteira (urgencia e vencida vao na pilula e na data): sem tom e sem faixa de 3 px */
+  .fc-pagina .fcr-linha--vencida th, .fc-pagina .fcr-linha--vencida td, .fc-pagina .fcr-linha--sem-estoque th, .fc-pagina .fcr-linha--sem-estoque td,
+  .fc-pagina .fcr-linha--critico th, .fc-pagina .fcr-linha--critico td { background: var(--rf-surface); }
+  :root[data-theme="dark"] .fc-pagina .fcr-linha--vencida th, :root[data-theme="dark"] .fc-pagina .fcr-linha--critico th { background: var(--rf-surface); }
+  .fc-pagina .fcr-linha--vencida th, .fc-pagina .fcr-linha--sem-estoque th { border-left: 0; }
+  .fc-pagina .fcr-tabela .badge--danger { box-shadow: none; }
+  .fc-pagina .fcr-tabela .badge { white-space: nowrap; }
+  .fc-pagina .fcr-tabela td.fcr-num { font-family: var(--rf-font-mono); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .fc-pagina .fcr-tabela td.fcr-num.fcr-forte { font-weight: 700; }
+  .fc-pagina .fcr-tabela td.fcr-fraco, .fc-pagina .fcr-tabela td .fcr-fraco { color: var(--rf-ink-soft); }
+  .fc-pagina .fcr-tabela .fcr-mono { font-family: var(--rf-font-mono); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .fc-pagina .fcr-limite .fcr-forte { font-family: var(--rf-font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .fc-pagina .fcr-limite__data--vencida { color: var(--rf-tone-danger-fg); }
+
+  /* ---- Celula Item, Urgencia, Embalagem e Em andamento ---- */
+  .fc-pagina .fcr-item { gap: 4px; min-width: 200px; }
+  .fc-pagina .fcr-item__nome { font-size: 13px; font-weight: 700; }
+  .fc-pagina .fcr-item__codigos { color: var(--rf-ink-soft); font-family: var(--rf-font-mono); font-size: 11px; font-weight: 500; }
+  .fc-pagina .fcr-item > .fcg-selo { align-self: stretch; }
+  .fc-pagina .fcr-item__media, .fc-pagina .fcr-item__demanda { padding: 0; border-radius: 0; background: transparent; color: var(--rf-ink-soft); font-size: 11px; font-weight: 400; line-height: normal; }
+  .fc-pagina .fcr-item__obs, .fc-pagina .fcr-item__grupo { color: var(--rf-ink-soft); }
+  .fc-pagina .fcoc-selo { height: 22px; min-height: 22px; padding: 0 8px; font-size: 11px; }
+  .fc-pagina .fcr-urgencia { gap: 0; min-width: 130px; }
+  .fc-pagina .fcr-urgencia__dias { margin-top: 4px; color: var(--rf-ink-soft); font-size: 11px; }
+  .fc-pagina .fcr-embalagem { gap: 0; min-width: 190px; font-size: 12px; }
+  .fc-pagina .fcr-embalagem > .badge { margin-top: 4px; }
+  .fc-pagina .fcr-embalagem__outras, .fc-pagina .fcr-embalagem__pallet { color: var(--rf-ink-soft); font-size: 12px; line-height: normal; }
+  .fc-pagina .fcr-embalagem__editar { margin-top: 6px; }
+  .fc-pagina .fcr-andamento { gap: 0; min-width: 150px; color: var(--rf-ink); font-size: 12px; line-height: 1.5; }
+  .fc-pagina .fcr-andamento .fcr-fraco { color: var(--rf-ink); }
+
+  /* ---- Botoes fantasma das tabelas: 32 sem contorno, 12/700 (sobrescrevem a compat Forecast F3 por especificidade) ---- */
+  .fc-pagina .fcr-tabela .ghost-button { gap: 6px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--rf-radius-control); background: transparent; color: var(--rf-action); font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .fc-pagina .fcr-tabela .ghost-button:hover:not(:disabled) { background: var(--rf-bg); }
+  .fc-pagina .fcr-tabela .ghost-button:active:not(:disabled) { border-color: transparent; background: var(--rf-disabled-bg); color: var(--rf-action-pressed); }
+  .fc-pagina .fcr-tabela .ghost-button:disabled { border-color: transparent; background: transparent; color: var(--rf-disabled-fg); }
+  .fc-pagina .fcr-tabela .ghost-button.danger-button { border-color: transparent; color: var(--rf-tone-danger-fg); }
+  .fc-pagina .fcr-tabela .ghost-button.danger-button:hover:not(:disabled) { background: var(--rf-tone-danger-bg); }
+  .fc-pagina .fcr-tabela .fcr-embalagem__editar { padding: 0 8px; font-size: 12px; }
+
+  /* ---- Quantidade decidida: campos de 36 no cartao de 210; Salvar e a data do ultimo salvamento na mesma linha; Gerar cotacao com contorno ---- */
+  .fc-pagina .fdec-celula { min-width: 210px; }
+  .fc-pagina .fdec-editor { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; align-items: center; }
+  .fc-pagina .fdec-editor > .fdec-linha:first-child, .fc-pagina .fdec-editor > .fdec-status, .fc-pagina .fdec-editor > .fdec-obs, .fc-pagina .fdec-editor > .fdec-erro { grid-column: 1 / -1; }
+  .fc-pagina .fdec-editor > .fdec-linha.fdec-acoes { grid-column: 1; }
+  .fc-pagina .fdec-editor > .fdec-estado { grid-column: 2; }
+  .fc-pagina .fdec-editor > .fdec-erro { order: 2; }
+  .fc-pagina .fdec-linha { flex-wrap: nowrap; gap: 6px; }
+  .fc-pagina .fdec-kg { width: 90px; min-height: 36px; padding: 0 8px; font-family: var(--rf-font-mono); font-size: 12.5px; font-weight: 500; text-align: left; }
+  .fc-pagina .fdec-status { min-height: 36px; padding-left: 8px; font-size: 12.5px; font-weight: 600; }
+  .fc-pagina .fdec-obs { min-height: 36px; padding: 0 8px; font-size: 12.5px; font-weight: 500; }
+  .fc-pagina .fdec-salvar { min-height: 44px; padding: 0 18px; font-size: 14px; }
+  .fc-pagina .fdec-estado { color: var(--rf-ink-soft); font-size: 11px; }
+  .fc-pagina .fgc-acao { gap: 4px; margin-top: 6px; }
+  .fc-pagina .fcr-tabela .fgc-botao { min-height: 32px; padding: 0 16px; border-width: 1.5px; border-style: solid; border-color: var(--rf-action); border-radius: var(--rf-radius-button); background: var(--rf-surface); color: var(--rf-action); font-size: 14px; }
+  .fc-pagina .fcr-tabela .fgc-botao:hover:not(:disabled) { background: var(--rf-action-hover-bg); }
+  .fc-pagina .fcr-tabela .fgc-botao[aria-disabled="true"] { padding: 0 10px; border-color: var(--rf-border); border-radius: var(--rf-radius-control); background: transparent; color: var(--rf-disabled-fg); font-size: 12px; opacity: 1; }
+  .fc-pagina .fgc-motivo { color: var(--rf-ink-soft); font-size: 11px; }
+
+  /* ---- Detalhe dos eventos estrangeiros (sublinha do item) ---- */
+  .fc-pagina .fcoc-detalhe { gap: 6px; padding: 8px 12px; border-left-color: var(--rf-tone-info-solid); border-radius: var(--rf-radius-control); background: var(--rf-surface-alt); }
+  .fc-pagina .fcoc-detalhe__titulo { margin: 0 0 6px; }
+  .fc-pagina .fcoc-detalhe__lista dt { color: var(--rf-ink-soft); }
+  .fc-pagina .fcoc-estimativa { border-color: var(--rf-input-border); color: var(--rf-ink-soft); }
+  .fc-pagina .fcoc-aviso { border-radius: var(--rf-radius-control); background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); }
+
+  /* ---- Secoes de apoio (Demanda do comercial, Cobertos pelo grupo, Sem consumo, Sob demanda): colunas numericas a esquerda em mono, nota de 12 ---- */
+  .fc-pagina :is(.fcd-secao, .fcg-cobertos, .fcr-sem-consumo, .fcr-sob-demanda) .fcr-num { text-align: left; }
+  .fc-pagina .fcr-sem-consumo__nota { padding: 10px 16px 14px; color: var(--rf-ink-soft); font-size: 12px; }
+  .fc-pagina .fcd-tabela .fcr-item { min-width: 150px; }
+  .fc-pagina .fcd-aviso { margin-top: 4px; padding: 4px 8px; border-radius: var(--rf-radius-xs); background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); font-size: 11px; line-height: 1.35; }
+  .fc-pagina .fcd-acoes { gap: 4px; }
+  .fc-pagina .fcd-acoes .ghost-button { padding: 0 8px; text-align: left; }
+  .fc-pagina .fcd-tabela .fcd-col-acoes { background: var(--rf-surface); }
+  .fc-pagina .fcd-tabela thead .fcd-col-acoes { background: var(--rf-surface-alt); }
+}
+
+@media screen {
+  /* ---- Modais de operacao (Embalagens, Meses fora da media, Demanda do comercial, fechamento de pedido): 700 (o fechamento segue 560), campos de 36 na tabela, rodape em faixa ---- */
+  .fc-portal.modal-dialog--wide:has(.fcd-form), .fc-pagina .modal-dialog:has(.fca-tabela) { max-width: 700px; }
+  .fc-portal .fce-modal, .fc-portal .fce-form, .fc-pagina .fce-form, .fc-portal .fcd-form { gap: 14px; }
+  .fc-portal .fce-cabecalho, .fc-pagina .fce-cabecalho { gap: 8px; }
+  .fc-portal .fce-regra, .fc-portal .fce-dica, .fc-pagina .fce-regra, .fc-pagina .fce-dica { color: var(--rf-ink-soft); font-size: 13px; line-height: 1.55; }
+  .fc-portal .fcd-dica, .fc-portal .fcd-produto__fonte, .fc-portal .fcsl-resumo { color: var(--rf-ink-soft); }
+  .fc-portal .fcd-form > .fcd-dica:first-child { font-size: 13px; line-height: 1.55; }
+  .fc-portal .fce-scroll, .fc-pagina .fce-scroll { overflow-x: auto; }
+  .fc-portal .fce-tabela, .fc-pagina .fce-tabela { min-width: 0; color: var(--rf-ink); }
+  .fc-portal .fce-tabela thead th, .fc-pagina .fce-tabela thead th { padding: 10px 8px; border-bottom: 1px solid var(--rf-border); background: var(--rf-surface-alt); color: var(--rf-ink-soft); font-size: 11px; font-weight: 700; letter-spacing: normal; white-space: nowrap; }
+  .fc-portal .fce-tabela tbody th, .fc-portal .fce-tabela tbody td, .fc-pagina .fce-tabela tbody th, .fc-pagina .fce-tabela tbody td { padding: 12px 8px; border-bottom: 1px solid var(--rf-border); color: var(--rf-ink); font-size: 12.5px; font-weight: 400; }
+  .fc-portal .fce-tabela tbody tr:last-child > th, .fc-portal .fce-tabela tbody tr:last-child > td, .fc-pagina .fce-tabela tbody tr:last-child > th, .fc-pagina .fce-tabela tbody tr:last-child > td { border-bottom: 0; }
+  .fc-portal .fce-tabela tbody th, .fc-pagina .fce-tabela tbody th { white-space: nowrap; }
+  .fc-portal .fce-codigo, .fc-pagina .fce-codigo { gap: 4px; }
+  .fc-portal .fce-codigo > span:first-child, .fc-pagina .fce-codigo > span:first-child { font-family: var(--rf-font-mono); font-variant-numeric: tabular-nums; }
+  .fc-portal .fce-tabela .input, .fc-pagina .fce-tabela .input { min-height: 36px; padding: 0 8px; font-family: var(--rf-font-mono); font-size: 12.5px; font-weight: 500; text-align: left; }
+  .fc-portal .fce-tabela td.fce-num, .fc-pagina .fce-tabela td.fce-num { text-align: left; }
+  .fc-portal .fce-tabela:not(.fca-tabela) thead th.fce-num, .fc-pagina .fce-tabela:not(.fca-tabela) thead th.fce-num { text-align: left; }
+  .fc-portal .fce-tabela td input[type="radio"], .fc-pagina .fce-tabela td input[type="radio"] { width: 18px; height: 18px; accent-color: var(--rf-action); }
+  .fc-portal .fce-origem, .fc-pagina .fce-origem { color: var(--rf-ink); font-size: 12.5px; white-space: normal; }
+  .fc-portal .fce-nenhuma, .fc-pagina .fce-nenhuma { min-height: 36px; padding: 0; font-size: 14px; font-weight: 400; }
+  .fc-portal .fce-nenhuma input[type="radio"], .fc-pagina .fce-nenhuma input[type="radio"] { accent-color: var(--rf-action); }
+  .fc-portal .fce-erro, .fc-pagina .fce-erro { color: var(--rf-tone-danger-fg); }
+  .fc-portal .fce-aviso, .fc-pagina .fce-aviso { color: var(--rf-tone-warning-fg); }
+  /* Embalagens: o formulario nao e filho direto do corpo; a faixa do rodape entra aqui (as outras ja vem da F3c) */
+  .fc-portal .fce-modal .modal-actions:last-child { margin: 6px -24px -20px; padding: 16px 24px; border-top: 1px solid var(--rf-divider); background: var(--rf-surface-alt); }
+
+  /* Meses fora da media */
+  .fc-pagina .fca-tabela tbody th { font-family: var(--rf-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .fc-pagina .fca-tabela td.fce-num { text-align: right; font-family: var(--rf-font-mono); font-variant-numeric: tabular-nums; }
+  .fc-pagina .fca-atual { display: block; color: var(--rf-ink-soft); font-family: var(--rf-font-sans); font-size: 11px; font-weight: 400; }
+  .fc-pagina .fca-tabela .checkbox-field { align-items: flex-start; gap: 10px; min-height: 32px; font-size: 14px; font-weight: 400; line-height: 1.5; }
+  .fc-pagina .fca-tabela .checkbox-field input { margin: 2px 0 0; }
+  .fc-pagina .fca-tabela .fca-motivo { min-width: 220px; font-family: var(--rf-font-sans); font-size: 13px; }
+  .fc-pagina .fca-tabela .fca-motivo:disabled { visibility: hidden; }
+  .fc-pagina .fca-linha--marcada th, .fc-pagina .fca-linha--marcada td { background: transparent; }
+  .fc-pagina .fce-dica.fca-aviso { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: var(--rf-radius-alert); background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); font-size: 14px; font-weight: 600; line-height: 1.5; }
+  .fc-pagina .fca-aviso svg { flex: none; margin-top: 1px; }
+
+  /* Demanda do comercial: busca com lupa, campos de 44 em mono onde e numero, lista de produtos, Puxar de uma Solicitacao */
+  .fc-portal .fcd-campo > legend { padding: 0 0 6px; font-weight: 700; }
+  .fc-portal .fcd-busca { position: relative; display: flex; align-items: center; }
+  .fc-portal .fcd-busca svg { position: absolute; left: 12px; color: var(--rf-ink-soft); pointer-events: none; }
+  .fc-portal .fcd-busca .input { padding-left: 38px; }
+  .fc-portal .fcd-input-num, .fc-portal .fcd-form input[type="date"] { font-family: var(--rf-font-mono); text-align: left; }
+  .fc-portal .fcd-motivo { padding: 12px 14px; line-height: 1.5; resize: none; }
+  .fc-portal .fcd-produtos { border-color: var(--rf-border); border-radius: var(--rf-radius-control); }
+  .fc-portal .fcd-produto { min-height: 36px; border-bottom-color: var(--rf-border); font-size: 14px; }
+  /* o resumo do pedido no fechamento (p.fcd-produto) herdava a linha de lista (flex, borda): volta a ser um paragrafo corrido, como no board */
+  .fc-portal .fcd-form > p.fcd-produto { display: block; min-height: 0; padding: 0; border-bottom: 0; font-size: 14px; }
+  .fc-portal .fcd-produto input { width: 18px; height: 18px; accent-color: var(--rf-action); }
+  .fc-portal .fcd-produto:has(input:checked) { background: var(--rf-surface-alt); }
+  .fc-portal .fcsl-botao { min-height: 40px; }
+  .fc-portal .fcsl-resumo:not(:empty) { padding: 10px 14px; border-radius: var(--rf-radius-button); background: var(--rf-tone-success-bg); color: var(--rf-tone-success-fg); font-size: 13px; font-weight: 600; }
+  .fc-portal .fcsl-painel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 8px; padding: 0; border: 0; background: transparent; }
+  .fc-portal .fcsl-painel > :not(.fcsl-titulo, .ghost-button:first-of-type) { grid-column: 1 / -1; }
+  .fc-portal .fcsl-painel > .ghost-button:first-of-type { justify-self: end; min-height: 36px; padding: 0 10px; border: 0; border-radius: var(--rf-radius-control); background: transparent; color: var(--rf-action); font-size: 13px; }
+  .fc-portal .fcsl-titulo { color: var(--rf-ink); font-size: 15px; font-weight: 700; }
+  .fc-portal .fcsl-lista { gap: 10px; }
+  .fc-portal .fcsl-solicitacao { gap: 8px; padding: 12px 14px; border: 1px solid var(--rf-border); border-radius: var(--rf-radius-alert); font-size: 13px; }
+  .fc-portal .fcsl-itens { gap: 0; }
+  .fc-portal .fcsl-item { flex-wrap: nowrap; padding: 8px 0; border-top: 1px solid var(--rf-border); }
+  .fc-portal .fcsl-item .ghost-button { min-height: 36px; }
+  .fc-portal .fcsl-motivo { color: var(--rf-ink-soft); }
+  .fc-portal .fcsl-item__nome { font-size: 13px; font-weight: 700; }
+}
+
+@media screen {
+  /* sublinhas dos grupos de equivalencia (tabela aninhada, fora do board): mantem o espacamento proprio de antes */
+  .fc-pagina .fcg-tabela tbody th, .fc-pagina .fcg-tabela tbody td { padding: 6px 8px; background: transparent; }
+}
+
+/* Telas estreitas: o legado empilha as tabelas em blocos com rotulo; as regras acima (mais especificas) devolvem o espacamento do bloco e o alvo de toque de 44 */
+@media screen and (max-width: 700px) {
+  .fc-pagina .fcd-tabela tbody th, .fc-pagina .fcd-tabela tbody td { padding: 4px 0; border-bottom: 0; }
+  .fc-pagina .fcg-tabela tbody th, .fc-pagina .fcg-tabela tbody td { padding: 2px 0; }
+  .fc-pagina .fcr-tabela .ghost-button, .fc-pagina .fcr-tabela .fgc-botao, .fc-pagina .fdec-kg, .fc-pagina .fdec-status, .fc-pagina .fdec-obs, .fc-pagina .fdec-editor .ghost-button { min-height: 44px; }
+  .fc-pagina .fcr-controles .fc-filtro { min-height: 44px; }
+  .fc-portal .fcd-form .ghost-button, .fc-portal .fcd-form .modal-actions button, .fc-portal .fcsl-item .ghost-button, .fc-portal .fcsl-painel > .ghost-button:first-of-type { min-height: 44px; }
+  .fc-portal .fcd-produto { min-height: 44px; }
+}
+@media screen and (max-width: 560px) {
+  .fc-pagina .fca-tabela tbody th, .fc-pagina .fca-tabela tbody td { padding: 4px 0; border-bottom: 0; }
+  .fc-pagina .fca-tabela .fca-motivo { min-width: 0; }
+  /* cabecalho so para leitor de tela (recorte por clip-path, sem overflow:hidden que cortaria o th) */
+  .fc-pagina .fca-tabela thead { position: absolute; width: 1px; height: 1px; overflow: visible; clip: auto; clip-path: inset(50%); white-space: nowrap; }
+}
+/* Embalagens (7 colunas): abaixo de 720 px o corpo (<670) nao comporta a tabela; cada codigo vira um bloco com o rotulo de cada coluna, sem rolagem horizontal */
+@media screen and (max-width: 720px) {
+  .fc-portal .fce-tabela:not(.fca-tabela) thead, .fc-pagina .fce-tabela:not(.fca-tabela) thead { position: absolute; width: 1px; height: 1px; overflow: visible; clip: auto; clip-path: inset(50%); white-space: nowrap; }
+  /* Embalagens: cada codigo vira um bloco com o rotulo de cada coluna (390 px sem rolagem horizontal) */
+  .fc-portal .fce-tabela:not(.fca-tabela), .fc-portal .fce-tabela:not(.fca-tabela) tbody, .fc-portal .fce-tabela:not(.fca-tabela) tbody tr, .fc-pagina .fce-tabela:not(.fca-tabela), .fc-pagina .fce-tabela:not(.fca-tabela) tbody, .fc-pagina .fce-tabela:not(.fca-tabela) tbody tr { display: block; }
+  .fc-portal .fce-tabela:not(.fca-tabela) tbody tr, .fc-pagina .fce-tabela:not(.fca-tabela) tbody tr { padding: 8px 0; border-bottom: 1px solid var(--rf-border); }
+  .fc-portal .fce-tabela:not(.fca-tabela) tbody tr:last-child, .fc-pagina .fce-tabela:not(.fca-tabela) tbody tr:last-child { border-bottom: 0; }
+  .fc-portal .fce-tabela:not(.fca-tabela) tbody th, .fc-pagina .fce-tabela:not(.fca-tabela) tbody th { display: block; padding: 4px 0; border-bottom: 0; }
+  .fc-portal .fce-tabela:not(.fca-tabela) tbody td, .fc-pagina .fce-tabela:not(.fca-tabela) tbody td { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 0; text-align: right; }
+  .fc-portal .fce-tabela:not(.fca-tabela) tbody td::before, .fc-pagina .fce-tabela:not(.fca-tabela) tbody td::before { content: attr(data-rotulo); flex: none; color: var(--rf-ink-soft); font-size: 11px; font-weight: 700; text-align: left; }
+  .fc-portal .fce-tabela:not(.fca-tabela) .input, .fc-pagina .fce-tabela:not(.fca-tabela) .input { min-width: 0; width: 62%; }
+}
+@media screen {
+  @media (pointer: coarse) {
+    .fc-pagina .fcr-tabela .ghost-button, .fc-pagina .fcr-tabela .fgc-botao, .fc-pagina .fdec-kg, .fc-pagina .fdec-status, .fc-pagina .fdec-obs, .fc-pagina .fdec-editor .ghost-button { min-height: 44px; }
+    .fc-pagina .fcr-controles .fc-filtro { min-height: 44px; }
+    .fc-portal .fce-tabela .input, .fc-pagina .fce-tabela .input { min-height: 44px; }
+    .fc-portal .fcd-form .ghost-button, .fc-portal .fcsl-item .ghost-button, .fc-portal .fcsl-painel > .ghost-button:first-of-type { min-height: 44px; }
+    .fc-portal .fcd-produto, .fc-portal .fce-nenhuma, .fc-pagina .fce-nenhuma, .fc-pagina .fca-tabela .checkbox-field { min-height: 44px; }
+    .fc-pagina .fcr-acoes .ghost-button { min-height: 44px; }
+    .fc-pagina .fcr-regra summary { min-height: 44px; }
+    .fc-portal .fcd-produto input, .fc-portal .fce-tabela td input[type="radio"], .fc-pagina .fce-tabela td input[type="radio"], .fc-portal .fce-nenhuma input[type="radio"], .fc-pagina .fce-nenhuma input[type="radio"], .fc-pagina .fca-tabela .checkbox-field input { width: 44px; height: 44px; }
+  }
+}
 /* -- <<< F13-D -- */
 
 /* -- F13-E >>> -- */
