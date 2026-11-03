@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import exceljs from 'exceljs';
 import { describe, expect, it } from 'vitest';
 import {
-  FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS,
+  FORECAST_DBCORP_DEPOSITOS_PERMITIDOS,
   FORECAST_DBCORP_SEM_DEPOSITO,
 } from '../src/constants/forecast';
 import {
@@ -61,8 +61,10 @@ const SALDO_HEADERS = [
   'Empresa',
 ];
 
+// "Saldo Físico Disponível" recebe SENTINELA (+1000): qualquer leitura da coluna errada quebra os totais.
 function saldoRow(codigo: string, deposito: string | null, saldo: number | string, empresa = 'SQ QUIMICA'): Cell[] {
-  return [codigo, `Produto ${codigo}`, deposito, 'KG', saldo, 0, saldo, empresa];
+  const fisico = typeof saldo === 'number' ? saldo + 1000 : saldo;
+  return [codigo, `Produto ${codigo}`, deposito, 'KG', fisico, 0, saldo, empresa];
 }
 
 describe('normalizeDbcorpText / dateKeyDaCelula', () => {
@@ -84,28 +86,28 @@ describe('normalizeDbcorpText / dateKeyDaCelula', () => {
 });
 
 describe('parseSaldo', () => {
-  it('so a empresa da regra; exclui os depositos da nota (grafias, acento e caixa); vazio entra', async () => {
+  it('so a empresa da regra; so os depositos da allowlist (grafias, acento e caixa)', async () => {
     const rows: Cell[][] = [
-      saldoRow('tst0001 ', 'DEPOSITO TESTE', 100),
-      saldoRow('TST0002', ' ', 20), // deposito so com espaco
-      saldoRow('TST0003', null, 5), // deposito ausente
+      saldoRow('tst0001 ', 'DEPOSITO ITAJAI', 100),
+      saldoRow('TST0002', ' ', 20), // deposito so com espaco: fora
+      saldoRow('TST0003', null, 5), // deposito ausente: fora
       saldoRow('TST0004', 'laboratorio - amostra', 10),
       saldoRow('TST0004', 'LAB - AMOSTRA', 11),
       saldoRow('TST0004', 'Separacao', 12),
       saldoRow('TST0004', 'SEPARAÇÃO', 13),
       saldoRow('TST0004', 'Correção', 14),
       saldoRow('TST0004', 'qualidade sul', 15),
-      saldoRow('TST0005', 'DEPOSITO TESTE', 1000, 'OUTRA EMPRESA'),
-      saldoRow('TST0006', 'DEPOSITO TESTE', 'n/d'), // quantidade nao numerica
-      saldoRow('', 'DEPOSITO TESTE', 7), // sem codigo
+      saldoRow('TST0005', 'DEPOSITO ITAJAI', 1000, 'OUTRA EMPRESA'),
+      saldoRow('TST0006', 'DEPOSITO ITAJAI', 'n/d'), // quantidade nao numerica
+      saldoRow('', 'DEPOSITO ITAJAI', 7), // sem codigo
     ];
     const r = await parseSaldo(await xlsx(SALDO_HEADERS, rows));
 
     expect(r.erros).toEqual([]);
     expect(r.linhas).toEqual([
       { codigo: 'TST0001', qtd: 100 },
-      { codigo: 'TST0002', qtd: 20 },
-      { codigo: 'TST0003', qtd: 5 },
+      { codigo: 'TST0004', qtd: 12 },
+      { codigo: 'TST0004', qtd: 13 },
     ]);
     expect(r.usadas).toBe(3);
     expect(r.total).toBe(125);
@@ -119,30 +121,31 @@ describe('parseSaldo', () => {
 
     const incluidos = r.porDeposito.filter((x) => x.incluido);
     expect(incluidos.map((x) => [x.deposito, x.saldo])).toEqual([
-      ['DEPOSITO TESTE', 100],
-      [FORECAST_DBCORP_SEM_DEPOSITO, 25],
+      ['DEPOSITO ITAJAI', 100],
+      ['SEPARACAO', 25],
     ]);
     const excluidos = r.porDeposito.filter((x) => !x.incluido);
     expect(excluidos.map((x) => x.deposito).sort()).toEqual(
-      ['CORRECAO', 'LAB - AMOSTRA', 'LABORATORIO - AMOSTRA', 'QUALIDADE SUL', 'SEPARACAO'].sort(),
+      [FORECAST_DBCORP_SEM_DEPOSITO, 'CORRECAO', 'LAB - AMOSTRA', 'LABORATORIO - AMOSTRA', 'QUALIDADE SUL'].sort(),
     );
-    expect(excluidos.find((x) => x.deposito === 'SEPARACAO')).toMatchObject({ linhas: 2, saldo: 25 });
+    expect(excluidos.find((x) => x.deposito === FORECAST_DBCORP_SEM_DEPOSITO)).toMatchObject({ linhas: 2, saldo: 25 });
+    expect(incluidos.find((x) => x.deposito === 'SEPARACAO')).toMatchObject({ linhas: 2, saldo: 25 });
     // Soma de porDeposito = total da empresa (incluidos + excluidos).
     const somaDepositos = r.porDeposito.reduce((acc, x) => acc + x.saldo, 0);
-    expect(somaDepositos).toBe(125 + 10 + 11 + 12 + 13 + 14 + 15);
+    expect(somaDepositos).toBe(125 + 20 + 5 + 10 + 11 + 14 + 15);
     expect(r.outrasEmpresas).toEqual([{ empresa: 'OUTRA EMPRESA', linhas: 1, saldo: 1000 }]);
   });
 
-  it('cada deposito da constante e excluido', async () => {
-    const rows = FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS.map((deposito, i) => saldoRow(`TST${i}`, deposito, 1));
-    rows.push(saldoRow('TSTOK', 'DEPOSITO TESTE', 3));
+  it('cada deposito da allowlist entra; deposito fora dela nao', async () => {
+    const rows = FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.map((deposito, i) => saldoRow(`TST${i}`, deposito, 1));
+    rows.push(saldoRow('TSTFORA', 'QUALIDADE', 3));
     const r = await parseSaldo(await xlsx(SALDO_HEADERS, rows));
-    expect(r.linhas).toEqual([{ codigo: 'TSTOK', qtd: 3 }]);
-    expect(r.ignoradas['deposito excluido']).toBe(FORECAST_DBCORP_DEPOSITOS_EXCLUIDOS.length);
+    expect(r.linhas).toEqual(FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.map((_, i) => ({ codigo: `TST${i}`, qtd: 1 })));
+    expect(r.ignoradas['deposito excluido']).toBe(1);
   });
 
   it('cabecalho na linha 1 e na linha 5 funcionam', async () => {
-    const rows = [saldoRow('TST0001', 'DEPOSITO TESTE', 8)];
+    const rows = [saldoRow('TST0001', 'DEPOSITO ITAJAI', 8)];
     const na1 = await parseSaldo(await xlsx(SALDO_HEADERS, rows, { headerRow: 1 }));
     const na5 = await parseSaldo(await xlsx(SALDO_HEADERS, rows, { headerRow: 5, sheetName: 'Itens' }));
     expect(na1.linhas).toEqual([{ codigo: 'TST0001', qtd: 8 }]);
@@ -151,11 +154,11 @@ describe('parseSaldo', () => {
   });
 
   it('coluna obrigatoria ausente -> erro com o nome da coluna', async () => {
-    const headers = SALDO_HEADERS.filter((h) => h !== 'Saldo Físico Disponível');
-    const r = await parseSaldo(await xlsx(headers, [['TST0001', 'x', 'DEPOSITO TESTE', 'KG', 0, 0, 'SQ QUIMICA']]));
-    expect(r.erros).toHaveLength(1);
-    expect(r.erros[0]).toMatch(/SALDO/);
-    expect(r.erros[0]).toContain('"Saldo Físico Disponível"');
+    const headers = SALDO_HEADERS.filter((h) => h !== 'Saldo Final');
+    const r = await parseSaldo(await xlsx(headers, [['TST0001', 'x', 'DEPOSITO ITAJAI', 'KG', 0, 0, 'SQ QUIMICA']]));
+    expect(r.erros).toEqual([
+      'Relatorio SALDO: coluna "Saldo Final" nao encontrada nas 10 primeiras linhas. O estoque usa so a coluna "Saldo Final" (saldo do depósito); "Saldo Físico Disponível" não substitui porque desconta pedido de venda.',
+    ]);
     expect(r.linhas).toEqual([]);
   });
 

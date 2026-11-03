@@ -56,7 +56,7 @@ const VAZIO = ' ';
 const file = (fileName: string, contentBase64: string) => ({ fileName, contentBase64 });
 
 const SALDO_HEADERS = ['Código', 'Descrição', 'Depósito', 'Unidade', 'Saldo Físico Disponível', 'Saldo Ped. Venda', 'Saldo Final', 'Empresa'];
-const saldoRow = (codigo: string, qtd: number): Cell[] => [codigo, 'x', 'DEPOSITO TESTE', 'KG', qtd, 0, qtd, 'SQ QUIMICA'];
+const saldoRow = (codigo: string, qtd: number): Cell[] => [codigo, 'x', 'DEPOSITO ITAJAI', 'KG', qtd + 1000, 0, qtd, 'SQ QUIMICA']; // Físico: SENTINELA (+1000); o estoque so le "Saldo Final"
 const VENDAS_HEADERS = ['Descr. Item', 'Item', 'Unid. Medida', 'Quantidade ', 'Empresa'];
 const vendasRow = (codigo: string, qtd: number): Cell[] => ['x', codigo, 'KG', qtd, 'SQ QUIMICA'];
 const PROG_HEADERS = ['Orçamento', 'Status', 'Data Faturamento', 'Cód. Item', 'Qtde.'];
