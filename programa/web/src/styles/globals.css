@@ -11994,11 +11994,13 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 i.fc-status--nao { background: var(--ink-faint); }
 i.fc-status--cotando { background: var(--tone-warning-border-strong); }
 i.fc-status--confirmado { background: var(--star-on); }
-i.fc-status--po { background: var(--primary); }
+i.fc-status--po { background: var(--primary-700); }
 i.fc-status--preco { background: var(--info); }
 
 /* grade no layout da planilha */
 .fc-scroll { max-height: min(660px, 72vh); overflow: auto; border-top: 1px solid var(--border); }
+/* contem o .sr-only (absoluto) das celulas: sem isto escapa e a pagina rola na horizontal. So em tela: o papel fica como esta. */
+@media screen { .fc-scroll { position: relative; } }
 .fc-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
 .fc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; font-size: 13px; font-variant-numeric: tabular-nums; }
 .fc-grid th,
@@ -12023,9 +12025,10 @@ i.fc-status--preco { background: var(--info); }
 .fc-grid .fc-cell { height: 44px; border-bottom: 1px solid var(--border); color: var(--ink); }
 .fc-grid .fc-cell--esq { text-align: left; }
 .fc-grid .fc-cell--divisa { border-left: 1px solid var(--border); }
-.fc-grid .fc-cell--vazio { color: var(--ink-muted); }
+.fc-grid .fc-cell--vazio { color: var(--ink-soft); }
 .fc-grid .fc-cell--neg { color: var(--danger); }
 .fc-grid .fc-cell--seg { background: var(--tone-warning-bg-soft); }
+:root[data-theme="dark"] .fc-grid .fc-cell--seg:not(.fc-cell--diverge) { background: var(--tone-warning-bg); }
 .fc-grid .fc-cell--acima-media { background: var(--tone-warning-bg); color: var(--tone-warning-fg-strong); font-weight: 700; }
 .fc-grid .fc-cell--diverge { background: var(--tone-danger-bg-soft); color: var(--danger); outline: 2px solid var(--danger); outline-offset: -3px; }
 .fc-grid .fc-cell--forte { color: var(--primary-700); font-weight: 700; }
@@ -12034,13 +12037,15 @@ i.fc-status--preco { background: var(--info); }
 
 .fc-grid .fc-fixa { position: sticky; z-index: 2; background: inherit; }
 .fc-grid thead .fc-fixa { z-index: 6; background: var(--surface-alt); }
+/* escuro: --primary-50 e translucido; com background: inherit a celula fixa compunha o tom 2x. Opaca, com o tom 1x. */
+:root[data-theme="dark"] .fc-grid .fc-row--selecionada .fc-fixa { background: linear-gradient(var(--primary-50), var(--primary-50)), var(--surface); }
 .fc-grid .fc-fixa--n { left: 0; width: 44px; font-size: 11px; color: var(--ink-soft); }
 .fc-grid .fc-fixa--item { left: 44px; padding: 0; text-align: left; border-right: 1px solid var(--border-strong); }
 .fc-grid th.fc-fixa--item { padding: 0 10px; }
 .fc-grid td.fc-status--nao { box-shadow: inset 4px 0 0 var(--ink-faint); }
 .fc-grid td.fc-status--cotando { box-shadow: inset 4px 0 0 var(--tone-warning-border-strong); }
 .fc-grid td.fc-status--confirmado { box-shadow: inset 4px 0 0 var(--star-on); }
-.fc-grid td.fc-status--po { box-shadow: inset 4px 0 0 var(--primary); }
+.fc-grid td.fc-status--po { box-shadow: inset 4px 0 0 var(--primary-700); }
 .fc-grid td.fc-status--preco { box-shadow: inset 4px 0 0 var(--info); }
 
 .fc-item {
@@ -12201,7 +12206,7 @@ i.fc-status--preco { background: var(--info); }
 .fcr-tabela tbody th { font-weight: 400; }
 .fcr-tabela .fcr-num { text-align: right; }
 .fcr-forte { font-weight: 700; }
-.fcr-fraco { color: var(--ink-muted); }
+.fcr-fraco { color: var(--ink-soft); }
 .fcr-item { display: flex; flex-direction: column; gap: 2px; min-width: 180px; }
 .fcr-item__nome { font-weight: 700; }
 .fcr-item__codigos { font-size: 11px; color: var(--ink-soft); }
@@ -12251,6 +12256,8 @@ i.fc-status--preco { background: var(--info); }
 .fcr-linha--sem-estoque th { border-left: 3px solid var(--danger); }
 .fcr-linha--sem-estoque .fcr-fraco,
 .fcr-linha--critico .fcr-fraco { color: var(--ink-soft); }
+/* escuro: o tom soft (alfa .11) apagava as linhas criticas; o tom cheio as mostra. */
+:root[data-theme="dark"] :is(.fcr-linha--vencida, .fcr-linha--critico) th { background: var(--tone-danger-bg); }
 .fcr-tabela--compacta { min-width: 900px; font-size: 12px; }
 .fcr-sem-consumo__nota { margin: 0; padding: 8px 14px 12px; font-size: 12px; color: var(--ink-soft); }
 .fc-selo-conferencia--aviso { background: var(--tone-warning-bg); border-color: var(--tone-warning-border-strong); color: var(--tone-warning-fg-strong); }
@@ -12554,7 +12561,7 @@ i.fc-status--preco { background: var(--info); }
 .fcx-dica {
   margin: 4px 0 12px;
   font-size: 12px;
-  color: var(--ink-muted);
+  color: var(--ink-soft);
 }
 @media (max-width: 700px) {
   .fcx-gatilho,
@@ -12917,7 +12924,7 @@ i.fc-status--preco { background: var(--info); }
 .fcad-decidida--nao::before { background: var(--ink-faint); }
 .fcad-decidida--cotando::before { background: var(--tone-warning-border-strong); }
 .fcad-decidida--confirmado::before { background: var(--star-on); }
-.fcad-decidida--po::before { background: var(--primary); }
+.fcad-decidida--po::before { background: var(--primary-700); }
 .fcad-decidida--preco::before { background: var(--info); }
 .fcad-aviso { display: flex; gap: 10px; align-items: center; margin: 6px 12px; font-size: 12px; color: var(--ink-soft); }
 /* Forecast: exportar planilha MACRO pelo cabecalho do painel. */
