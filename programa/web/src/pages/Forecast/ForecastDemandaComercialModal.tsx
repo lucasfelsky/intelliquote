@@ -375,6 +375,7 @@ export default function ForecastDemandaComercialModal(props: Props) {
       onClose={props.onFechar}
       title={props.demanda ? `Editar demanda do comercial · ${props.demanda.item}` : 'Lançar demanda do comercial'}
       size="wide"
+      className="fc-portal"
     >
       <Formulario {...props} />
     </Modal>

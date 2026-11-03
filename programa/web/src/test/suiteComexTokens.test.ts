@@ -79,7 +79,7 @@ describe('--rf-*: paridade CSS x fixtures (mock v68)', () => {
     for (const t of fixtureBase) expect(fixture.map((x) => x.token), t.token).toContain(t.token);
     const arquivos = [...new Set(fixture.map((t) => t.arquivo))];
     expect(arquivos).toContain('suiteComexTokens.json');
-    for (const arquivo of arquivos) expect(arquivo, arquivo).toMatch(/^suiteComexTokens(\.f(3[a-d]|\d{1,2}))?\.json$/);
+    for (const arquivo of arquivos) expect(arquivo, arquivo).toMatch(/^suiteComexTokens(\.f(3[a-d]|[4-9]|1[0-2]|13[b-e]))?\.json$/);
   });
 
   it('os 3 tokens da F2 (desenhados pelo mock) estao na fixture', () => {

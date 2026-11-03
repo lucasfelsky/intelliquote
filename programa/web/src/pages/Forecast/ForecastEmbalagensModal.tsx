@@ -392,7 +392,7 @@ function Corpo({ productId, podeEditar, onFechar }: Props) {
 
 export default function ForecastEmbalagensModal(props: Props) {
   return (
-    <Modal isOpen onClose={props.onFechar} title="Embalagens do item" size="wide">
+    <Modal isOpen onClose={props.onFechar} title="Embalagens do item" size="wide" className="fc-portal">
       <Corpo {...props} />
     </Modal>
   );
