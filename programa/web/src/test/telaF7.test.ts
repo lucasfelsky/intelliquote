@@ -161,9 +161,9 @@ describe('F7: regiao `tela F7`', () => {
     expect(usados.filter((t) => !t.startsWith('--rf-') && t !== '--paper')).toEqual([]);
   });
 
-  it('at-rules permitidas: so 640, pointer: coarse e reduced-motion; sem @keyframes e sem @media print; sem aninhamento', () => {
+  it('at-rules permitidas: so 640, screen ate 1439 e ate 1023 (F12-C), pointer: coarse e reduced-motion; sem @keyframes e sem @media print; sem aninhamento', () => {
     const atRules = topo.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
-    const permitidas = ['@media (max-width: 1199px)', '@media (max-width: 720px)', '@media (max-width: 640px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)'];
+    const permitidas = ['@media screen and (max-width: 1439px)', '@media screen and (max-width: 1023px)', '@media (max-width: 1199px)', '@media (max-width: 720px)', '@media (max-width: 640px)', '@media (pointer: coarse)', '@media (prefers-reduced-motion: reduce)'];
     expect(atRules.filter((a) => !permitidas.includes(a))).toEqual([]);
     expect(new Set(atRules).size).toBe(atRules.length);
     expect(atRules).toContain('@media (max-width: 640px)');
@@ -453,6 +453,35 @@ describe('F7: contraste nos 2 temas (alpha composto sobre --rf-surface)', () => 
 
   it('todos os pares passam', () => {
     expect(rows.filter((r) => !r.ok).map((r) => `${r.id}: ${r.ratio} < ${r.min}`)).toEqual([]);
+  });
+});
+
+describe('F7: P-ACOES na aba Respostas (F12-C)', () => {
+  it('so em tela, ate 1439: coluna de acoes fixa a direita com fundo por estado, fornecedor encolhe e quebra, sem scroll-padding, empilha ate 1023 e contraste nos 2 temas', () => {
+    const ate1439 = mediaDe('@media screen and (max-width: 1439px)');
+    const ate1023 = mediaDe('@media screen and (max-width: 1023px)');
+    const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .respostas-tab__acoes')).toMatchObject({ ...fixa, background: 'var(--rf-surface)' });
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .table > thead > tr > th:last-child')).toMatchObject({ ...fixa, background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .table tr:hover > .respostas-tab__acoes')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .respostas-tab__fornecedor')).toEqual({ width: 'auto', 'min-width': '240px' });
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .resposta-linha')).toEqual({ 'flex-wrap': 'wrap' });
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .resposta-fornecedor')).toEqual({ 'white-space': 'normal', 'overflow-wrap': 'anywhere' });
+    expect(declaracoes(ate1439, '.respostas-tab__tabela .resposta-meta')).toEqual({ 'flex-wrap': 'wrap', 'white-space': 'normal' });
+    // r2: sem scroll-padding nem --val (so ha focavel na 1a coluna e nas acoes; o scroll-padding faria o wrapper pular ao focar uma acao)
+    expect(declaracoes(ate1439, '.respostas-tab__tabela')).toEqual({});
+    expect(declaracoes(ate1023, '.respostas-tab__tabela')).toEqual({});
+    expect(regiao?.limpo).not.toContain('scroll-padding');
+    expect(declaracoes(ate1023, '.respostas-tab__tabela .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px' });
+    // a regra de 640 (fornecedor em 292) vem DEPOIS da de 1439 e segue vencendo ate 640 pela ordem; coluna fixa e scroll-padding so em @media screen (papel intacto)
+    expect(topo.findIndex((r) => r.prelude === '@media screen and (max-width: 1439px)')).toBeLessThan(topo.findIndex((r) => r.prelude === '@media (max-width: 640px)'));
+    expect(topo.filter((r) => r.prelude.startsWith('@media') && !r.prelude.startsWith('@media screen') && /position:\s*sticky|scroll-padding/.test(r.body)).map((r) => r.prelude)).toEqual([]);
+    for (const theme of ['claro', 'escuro'] as const) {
+      const opaque = (name: string): Rgb => opaqueOf(THEMES[theme], name);
+      for (const fg of [rf('action'), rf('tone-danger-fg'), rf('ink')]) {
+        expect(ratioOf(opaque(fg), opaque(rf('surface-alt'))), `${theme}: ${fg} / --rf-surface-alt`).toBeGreaterThanOrEqual(TEXT);
+      }
+    }
   });
 });
 
