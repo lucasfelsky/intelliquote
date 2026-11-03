@@ -3980,13 +3980,9 @@ dialog.modal-dialog[open] {
 }
 
 /* ---- F12-C (P-ACOES, so em tela): a coluna de acoes da tabela de itens (Editar, Mover, Remover) fica fixa a direita e o texto quebra; nenhuma acao depende da rolagem horizontal.
-   --val = largura da coluna de acoes (a unica propriedade local aceita pelo themeTokens); scroll-padding-right = a mesma largura, para o foco por Tab nao ficar sob a coluna fixa.
+   Sem scroll-padding: a coluna fixa nao cobre nenhum focavel (so ha focavel na 1a coluna e nas acoes) e o scroll-padding faria o wrapper pular ao focar uma acao.
    O fundo da celula fixa acompanha o estado da linha (repouso, hover e PO de destino do arrasto): as regras de fundo da base perdem para a especificidade da celula fixa. ---- */
 @media screen {
-  .po-table-wrapper {
-    --val: 196px;
-    scroll-padding-right: var(--val);
-  }
   .po-table td:has(> .row-actions),
   .po-table:has(.item-action) > thead > tr > th:last-child {
     position: sticky;
@@ -4003,7 +3999,6 @@ dialog.modal-dialog[open] {
   .po-table td.cell-nowrap:not(.po-cell-mono) { white-space: normal; }
 }
 @media screen and (max-width: 1023px) {
-  .po-table-wrapper { --val: 92px; }
   .po-table .row-actions {
     flex-direction: column;
     align-items: flex-end;
@@ -4889,13 +4884,8 @@ dialog.modal-dialog[open] {
 }
 
 /* F12-C (P-ACOES, so em tela, ate 1439; a 1440 a tabela cabe e nada muda): a coluna de acoes (Responder, Historico, Credit Support, Apagar) fica fixa a direita, o fornecedor
-   encolhe e o nome quebra (antes: reticencias sem title). --val = largura da coluna de acoes (a unica propriedade local aceita pelo themeTokens) e vira o scroll-padding-right,
-   para o foco por Tab (botao do fornecedor, "ver mais") nao ficar sob a coluna fixa. A regra de 640 abaixo (fornecedor em 292) segue vencendo ate 640 pela ordem. */
+   encolhe e o nome quebra (antes: reticencias sem title). Sem scroll-padding (ver a tela F6). A regra de 640 abaixo (fornecedor em 292) segue vencendo ate 640 pela ordem. */
 @media screen and (max-width: 1439px) {
-  .respostas-tab__tabela {
-    --val: 359px;
-    scroll-padding-right: var(--val);
-  }
   .respostas-tab__tabela .respostas-tab__fornecedor {
     width: auto;
     min-width: 240px;
@@ -4921,7 +4911,6 @@ dialog.modal-dialog[open] {
   .respostas-tab__tabela .table tr:hover > .respostas-tab__acoes { background: var(--rf-surface-alt); }
 }
 @media screen and (max-width: 1023px) {
-  .respostas-tab__tabela { --val: 134px; }
   .respostas-tab__tabela .row-actions {
     flex-direction: column;
     align-items: flex-end;

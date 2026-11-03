@@ -152,13 +152,13 @@ describe('F7: regiao `tela F7`', () => {
   });
 
   it('a regiao nao declara token (--*), consome var(--rf-* (e var(--paper) na previa), sem cor literal, !important nem opacity', () => {
-    expect([...(regiao?.limpo ?? '').matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g)].map((m) => m[1] ?? '').filter((t) => t !== '--val')).toEqual([]);
+    expect(regiao?.limpo).not.toMatch(/(^|[;{\s])--[\w-]+\s*:/);
     expect(regiao?.limpo).toContain('var(--rf-');
     expect(regiao?.limpo).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/);
     expect(regiao?.limpo).not.toContain('!important');
     expect(regiao?.limpo).not.toMatch(/(^|[;{\s])opacity\s*:/);
     const usados = [...(regiao?.limpo ?? '').matchAll(/var\((--[\w-]+)/g)].map((m) => m[1] ?? '');
-    expect(usados.filter((t) => !t.startsWith('--rf-') && t !== '--paper' && t !== '--val')).toEqual([]);
+    expect(usados.filter((t) => !t.startsWith('--rf-') && t !== '--paper')).toEqual([]);
   });
 
   it('at-rules permitidas: so 640, screen ate 1439 e ate 1023 (F12-C), pointer: coarse e reduced-motion; sem @keyframes e sem @media print; sem aninhamento', () => {
@@ -457,7 +457,7 @@ describe('F7: contraste nos 2 temas (alpha composto sobre --rf-surface)', () => 
 });
 
 describe('F7: P-ACOES na aba Respostas (F12-C)', () => {
-  it('so em tela, ate 1439: coluna de acoes fixa a direita com fundo por estado, fornecedor encolhe e quebra, --val = largura da coluna = scroll-padding-right, empilha ate 1023 e contraste nos 2 temas', () => {
+  it('so em tela, ate 1439: coluna de acoes fixa a direita com fundo por estado, fornecedor encolhe e quebra, sem scroll-padding, empilha ate 1023 e contraste nos 2 temas', () => {
     const ate1439 = mediaDe('@media screen and (max-width: 1439px)');
     const ate1023 = mediaDe('@media screen and (max-width: 1023px)');
     const fixa = { position: 'sticky', right: '0', 'z-index': '1', 'box-shadow': 'inset 1px 0 0 var(--rf-divider)' };
@@ -468,9 +468,10 @@ describe('F7: P-ACOES na aba Respostas (F12-C)', () => {
     expect(declaracoes(ate1439, '.respostas-tab__tabela .resposta-linha')).toEqual({ 'flex-wrap': 'wrap' });
     expect(declaracoes(ate1439, '.respostas-tab__tabela .resposta-fornecedor')).toEqual({ 'white-space': 'normal', 'overflow-wrap': 'anywhere' });
     expect(declaracoes(ate1439, '.respostas-tab__tabela .resposta-meta')).toEqual({ 'flex-wrap': 'wrap', 'white-space': 'normal' });
-    // --val = largura medida da coluna de 4 acoes (359 px em linha, 134 empilhada); o scroll-padding-right e a mesma largura (foco por Tab no fornecedor e no "ver mais")
-    expect(declaracoes(ate1439, '.respostas-tab__tabela')).toEqual({ '--val': '359px', 'scroll-padding-right': 'var(--val)' });
-    expect(declaracoes(ate1023, '.respostas-tab__tabela')).toEqual({ '--val': '134px' });
+    // r2: sem scroll-padding nem --val (so ha focavel na 1a coluna e nas acoes; o scroll-padding faria o wrapper pular ao focar uma acao)
+    expect(declaracoes(ate1439, '.respostas-tab__tabela')).toEqual({});
+    expect(declaracoes(ate1023, '.respostas-tab__tabela')).toEqual({});
+    expect(regiao?.limpo).not.toContain('scroll-padding');
     expect(declaracoes(ate1023, '.respostas-tab__tabela .row-actions')).toEqual({ 'flex-direction': 'column', 'align-items': 'flex-end', gap: '4px' });
     // a regra de 640 (fornecedor em 292) vem DEPOIS da de 1439 e segue vencendo ate 640 pela ordem; coluna fixa e scroll-padding so em @media screen (papel intacto)
     expect(topo.findIndex((r) => r.prelude === '@media screen and (max-width: 1439px)')).toBeLessThan(topo.findIndex((r) => r.prelude === '@media (max-width: 640px)'));
