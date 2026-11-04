@@ -146,7 +146,7 @@ const query = () => new URLSearchParams(local().split('?')[1] ?? '');
 const memoria = () => screen.findByRole('region', { name: 'Memória de cálculo' });
 const NAO_ENCONTRADO = 'Item não encontrado nesta quinzena';
 const itensDaGrade = () =>
-  screen.queryAllByRole('button', { name: /(PRODUTO|ITEM OITO) [A-C]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
+  screen.queryAllByRole('link', { name: /(PRODUTO|ITEM OITO) [A-C]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -201,10 +201,55 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
     fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
     await waitFor(() => expect(itensDaGrade()).toEqual(['PRODUTO B']));
-    fireEvent.click(screen.getByRole('button', { name: /PRODUTO B/ }));
+    fireEvent.click(screen.getByRole('link', { name: /PRODUTO B/ }));
     await memoria();
     expect(local().startsWith('/forecast/item/4?')).toBe(true);
     expect(Object.fromEntries(query())).toEqual({ quinzena: '7', filtro: 'demanda', busca: 'FONTE 2', ocultas: '1' });
+  });
+
+  it('F13-H: o item da grade e um link (<a href>) para a pagina do item, com quinzena, filtro, busca e ocultas; sem aria-pressed', async () => {
+    renderRota('/forecast?quinzena=7');
+    fireEvent.click(await screen.findByRole('button', { name: 'Demanda ≤ 0 1' }));
+    fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
+    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    await waitFor(() => expect(itensDaGrade()).toEqual(['PRODUTO B']));
+    const link = screen.getByRole('link', { name: /PRODUTO B/ });
+    expect(link.tagName).toBe('A');
+    expect(link.hasAttribute('aria-pressed')).toBe(false);
+    expect(link.getAttribute('tabindex')).toBeNull();
+    const href = link.getAttribute('href') ?? '';
+    expect(href.startsWith('/forecast/item/4?')).toBe(true);
+    expect(Object.fromEntries(new URLSearchParams(href.split('?')[1]))).toEqual({ quinzena: '7', filtro: 'demanda', busca: 'FONTE 2', ocultas: '1' });
+    expect(document.querySelectorAll('.fc-grid button[aria-pressed], .fc-row--selecionada')).toHaveLength(0);
+  });
+
+  it('F13-H: digitar na busca atualiza o href do item na hora (antes de a URL ganhar `busca` pelo debounce de 300 ms)', async () => {
+    renderRota('/forecast?quinzena=7');
+    await screen.findByRole('link', { name: /PRODUTO A/ });
+    fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
+    await waitFor(() => expect(itensDaGrade()).toEqual(['PRODUTO B']));
+    expect(query().get('busca')).toBeNull();
+    const href = screen.getByRole('link', { name: /PRODUTO B/ }).getAttribute('href') ?? '';
+    expect(Object.fromEntries(new URLSearchParams(href.split('?')[1]))).toEqual({ quinzena: '7', busca: 'FONTE 2' });
+    fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: '' } });
+    await waitFor(() => expect(itensDaGrade()).toHaveLength(3));
+    expect(screen.getByRole('link', { name: /PRODUTO A/ }).getAttribute('href')).toBe('/forecast/item/3?quinzena=7');
+  });
+
+  it('F13-H: sem filtro/busca/ocultas o href leva so a quinzena; Ctrl+clique e clique com meta deixam o navegador abrir em nova aba (a rota nao muda)', async () => {
+    renderRota('/forecast?quinzena=7');
+    const link = await screen.findByRole('link', { name: /PRODUTO A/ });
+    expect(link.getAttribute('href')).toBe('/forecast/item/3?quinzena=7');
+    // jsdom nao abre aba: o clique com modificador cai na navegacao nativa do <a>; o ouvinte so evita o aviso do jsdom
+    const semNavegacaoNativa = (e: Event) => e.preventDefault();
+    document.addEventListener('click', semNavegacaoNativa);
+    fireEvent.click(link, { ctrlKey: true });
+    fireEvent.click(link, { metaKey: true });
+    document.removeEventListener('click', semNavegacaoNativa);
+    expect(local()).toBe('/forecast?quinzena=7');
+    fireEvent.click(link);
+    await memoria();
+    expect(local()).toBe('/forecast/item/3?quinzena=7');
   });
 
   it('a aba Painel volta com a mesma quinzena, filtro, busca e colunas ocultas', async () => {
@@ -212,7 +257,7 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Demanda ≤ 0 1' }));
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
     fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
-    fireEvent.click(screen.getByRole('button', { name: /PRODUTO B/ }));
+    fireEvent.click(screen.getByRole('link', { name: /PRODUTO B/ }));
     await memoria();
 
     fireEvent.click(screen.getByRole('button', { name: 'Painel' }));

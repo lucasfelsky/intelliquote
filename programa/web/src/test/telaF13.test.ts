@@ -137,6 +137,14 @@ describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
     expect((bruto.match(/\/\* -- <<< F13-[BCDE] -- \*\//g) ?? []).length).toBe(4);
   });
 
+  it('F13-H: o item da grade e um <a class="fc-item">; `.fc-pagina .fc-item` (par C) zera o sublinhado, senao o `a:hover` global sublinha nome e fonte', () => {
+    const bruto = regiao?.bruto ?? '';
+    const parC = stripComments(bruto.slice(bruto.indexOf(abre('C')), bruto.indexOf(fecha('C'))));
+    const corpos = [...parC.matchAll(/(?:^|[\s}{])\.fc-pagina \.fc-item\s*\{([^}]*)\}/g)].map((x) => x[1] ?? '');
+    expect(corpos).toHaveLength(1);
+    expect(corpos[0]).toMatch(/(?:^|;|\s)text-decoration\s*:\s*none\s*(?:;|$)/);
+  });
+
   it('toda regra da regiao esta DENTRO de um par de sentinelas (fora deles so o comentario de abertura)', () => {
     const bruto = regiao?.bruto ?? '';
     let resto = bruto;

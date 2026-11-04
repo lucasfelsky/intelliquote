@@ -12088,8 +12088,6 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 
   .fc-pagina .fc-grid .fc-row { background: var(--rf-surface); }
   .fc-pagina .fc-grid .fc-row:nth-child(even) { background: var(--rf-surface-alt); }
-  .fc-pagina .fc-grid .fc-row.fc-row--selecionada { background: var(--rf-primary-50); }
-  .fc-pagina .fc-grid .fc-row--selecionada .fc-fixa { background: linear-gradient(var(--rf-primary-50), var(--rf-primary-50)), var(--rf-surface); }
   .fc-pagina .fc-grid .fc-cell {
     height: 48px;
     border-bottom: 1px solid var(--rf-border);
@@ -12112,9 +12110,8 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .fc-pagina .fc-grid td.fc-status--confirmado { box-shadow: inset 4px 0 0 var(--rf-fc-status-confirmado), var(--rf-shadow-sticky); }
   .fc-pagina .fc-grid td.fc-status--po { box-shadow: inset 4px 0 0 var(--rf-fc-status-po), var(--rf-shadow-sticky); }
   .fc-pagina .fc-grid td.fc-status--preco { box-shadow: inset 4px 0 0 var(--rf-fc-status-preco), var(--rf-shadow-sticky); }
-  .fc-pagina .fc-item { height: 48px; gap: 1px; padding: 0 12px 0 16px; }
+  .fc-pagina .fc-item { height: 48px; gap: 1px; padding: 0 12px 0 16px; text-decoration: none; }
   .fc-pagina .fc-item__nome { font-size: 13px; font-weight: 700; color: var(--rf-ink); }
-  .fc-pagina .fc-item[aria-pressed="true"] .fc-item__nome { color: var(--rf-primary-700); }
   .fc-pagina .fc-item__fonte { font-size: 11px; font-weight: 500; color: var(--rf-ink-soft); }
   .fc-pagina .fc-pill--falta {
     display: inline-flex;
@@ -13107,7 +13104,6 @@ i.fc-status--preco { background: var(--info); }
 
 .fc-grid .fc-row { background: var(--surface); }
 .fc-grid .fc-row:nth-child(even) { background: var(--surface-muted); }
-.fc-grid .fc-row.fc-row--selecionada { background: var(--primary-50); }
 .fc-grid .fc-cell { height: 44px; border-bottom: 1px solid var(--border); color: var(--ink); }
 .fc-grid .fc-cell--esq { text-align: left; }
 .fc-grid .fc-cell--divisa { border-left: 1px solid var(--border); }
@@ -13123,8 +13119,6 @@ i.fc-status--preco { background: var(--info); }
 
 .fc-grid .fc-fixa { position: sticky; z-index: 2; background: inherit; }
 .fc-grid thead .fc-fixa { z-index: 6; background: var(--surface-alt); }
-/* escuro: --primary-50 e translucido; com background: inherit a celula fixa compunha o tom 2x. Opaca, com o tom 1x. */
-:root[data-theme="dark"] .fc-grid .fc-row--selecionada .fc-fixa { background: linear-gradient(var(--primary-50), var(--primary-50)), var(--surface); }
 .fc-grid .fc-fixa--n { left: 0; width: 44px; font-size: 11px; color: var(--ink-soft); }
 .fc-grid .fc-fixa--item { left: 44px; padding: 0; text-align: left; border-right: 1px solid var(--border-strong); }
 .fc-grid th.fc-fixa--item { padding: 0 10px; }
@@ -13151,7 +13145,6 @@ i.fc-status--preco { background: var(--info); }
 }
 .fc-item:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
 .fc-item__nome { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
-.fc-item[aria-pressed="true"] .fc-item__nome { color: var(--primary-700); }
 .fc-item__fonte { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 11px; color: var(--ink-soft); }
 .fc-pill--falta { padding: 3px 8px; border-radius: 6px; background: var(--tone-danger-bg); color: var(--danger); font-weight: 700; }
 .fc-selo { padding: 3px 10px; border-radius: 999px; background: var(--tone-info-bg); color: var(--info); font-size: 12px; font-weight: 600; }

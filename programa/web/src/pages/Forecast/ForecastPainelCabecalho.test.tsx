@@ -177,7 +177,7 @@ describe('Forecast - cabecalho em cartao (mock v68, D-F13-06)', () => {
     mockApi();
     const { container } = renderPage();
     const cartao = container.querySelector('.fc-cabecalho') as HTMLElement;
-    await screen.findByRole('button', { name: 'Exportar planilha MACRO (XLSX)' });
+    await screen.findByRole('button', { name: 'Exportar MACRO (planilha XLSX)' });
     expect(cartao.classList.contains('page-header__actions')).toBe(true);
     expect(within(cartao).getByLabelText('Quinzena')).toBeTruthy();
     expect((cartao.querySelector('.fc-proxima') as HTMLElement).textContent).toBe('Próxima análise04/11/2026');
@@ -230,7 +230,7 @@ describe('Forecast - cabecalho em cartao (mock v68, D-F13-06)', () => {
 });
 
 describe('Forecast - exportar planilha MACRO pelo cabecalho do painel', () => {
-  const NOME_BOTAO = 'Exportar planilha MACRO (XLSX)';
+  const NOME_BOTAO = 'Exportar MACRO (planilha XLSX)';
   const originais = { criar: URL.createObjectURL, revogar: URL.revokeObjectURL };
   const botaoExportar = () => screen.findByRole('button', { name: NOME_BOTAO }) as Promise<HTMLButtonElement>;
 
@@ -252,6 +252,17 @@ describe('Forecast - exportar planilha MACRO pelo cabecalho do painel', () => {
     renderPage();
     const botao = await botaoExportar();
     expect(botao.parentElement?.classList.contains('fc-cabecalho__acoes')).toBe(true);
+  });
+
+  it('F13-H: rotulo visivel curto "Exportar MACRO"; o aria-label comeca com o rotulo visivel (WCAG 2.5.3) e traz o nome completo', async () => {
+    mockApi();
+    renderPage();
+    const botao = await botaoExportar();
+    const visivel = (botao.textContent ?? '').replace(/\s+/g, ' ').trim();
+    expect(visivel).toBe('Exportar MACRO');
+    const nome = botao.getAttribute('aria-label') ?? '';
+    expect(nome.startsWith(visivel)).toBe(true);
+    expect(nome).toBe('Exportar MACRO (planilha XLSX)');
   });
 
   it('o clique baixa o MACRO com layout=macro e o hoje da quinzena, e mostra o nome gerado', async () => {

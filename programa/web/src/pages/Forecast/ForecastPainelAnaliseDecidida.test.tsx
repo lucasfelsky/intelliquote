@@ -197,7 +197,7 @@ async function celulaAnalise(nomeDoItem: string): Promise<HTMLTableCellElement> 
   const rotulos = Array.from(grade.querySelectorAll('tr.fc-rotulos th'));
   const i = rotulos.findIndex((th) => th.textContent === 'ANÁLISE FORECAST');
   expect(i).toBeGreaterThanOrEqual(0);
-  const botao = Array.from(grade.querySelectorAll('button.fc-item')).find((b) => b.textContent?.includes(nomeDoItem));
+  const botao = Array.from(grade.querySelectorAll('a.fc-item')).find((b) => b.textContent?.includes(nomeDoItem));
   expect(botao).toBeTruthy();
   const td = botao!.closest('tr')!.querySelectorAll('td')[i + 2];
   return td as HTMLTableCellElement;

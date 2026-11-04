@@ -166,7 +166,7 @@ function renderPage(url = '/forecast') {
 }
 
 const nomesDosItens = () =>
-  screen.queryAllByRole('button', { name: /PRODUTO [A-E]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
+  screen.queryAllByRole('link', { name: /PRODUTO [A-E]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
 const NOME_CHAVE = /^Mostrar produtos sem venda há 6 meses ou mais/;
 const chave = () => screen.getByRole('switch', { name: NOME_CHAVE });
