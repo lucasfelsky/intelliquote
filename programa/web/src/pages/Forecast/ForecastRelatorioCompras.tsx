@@ -690,7 +690,13 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
         )}
         <p className="fcr-resumo__fora">
           Fora do relatório: {fora.semLeadTime} sem lead time, {fora.semConsumoSemFalta} sem consumo e sem falta
+          {(fora.semCadastro ?? 0) > 0 && `, ${fora.semCadastro} sem cadastro`}
         </p>
+        {(fora.semCadastro ?? 0) > 0 && (
+          <p className="fcr-resumo__fora">
+            {fora.semCadastro} sem cadastro: código do DBCorp ainda não cadastrado, sem fonte, sem lead time e sem sugestão de compra.
+          </p>
+        )}
         {semConsumo && (
           <p className="fcr-resumo__fora">
             {resumoSemConsumo(semConsumo.itens.length, fora.semConsumoSemMovimento ?? 0)}

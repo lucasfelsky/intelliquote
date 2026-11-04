@@ -12238,6 +12238,20 @@ html:has(.manual-page) { scroll-behavior: smooth; }
     .fc-pagina .fcp-tabela .ghost-button--sm { min-height: 44px; }
   }
 }
+
+/* FZ1 (pos-release): grade a 390/360. As colunas fixas N + Item somavam 368 px num scroller de 356: as colunas de dados nunca apareciam e o status do item cortava. Ate 480 px o N cai para 36 e o Item
+   para 164 (200 no total: sobram 156 px a 390 e 126 a 360 para os dados, que se alcancam rolando na horizontal); o rodape do item (fonte + status) quebra linha em vez de cortar e a linha cresce so
+   quando precisa. Os <col> inline (44/240 + largura de cada dado) mandariam na largura: somem ate 480 e cada celula manda na sua (so tela; acima de 480 e o desenho de sempre). */
+@media screen and (max-width: 480px) {
+  .fc-pagina .fc-grid col { display: none; }
+  .fc-pagina .fc-grid .fc-fixa--n { width: 36px; min-width: 36px; max-width: 36px; padding: 0 6px; }
+  .fc-pagina .fc-grid .fc-fixa--item { left: 36px; width: 164px; min-width: 164px; max-width: 164px; }
+  .fc-pagina .fc-grid thead th.fc-fixa--item { padding: 0 8px; }
+  .fc-pagina a.fc-item { height: auto; min-height: 48px; padding: 4px 8px 4px 12px; }
+  .fc-pagina .fc-item__nome,
+  .fc-pagina .fc-item__fonte { line-height: 1.25; }
+  .fc-pagina .fc-item__fonte { white-space: normal; }
+}
 /* -- <<< F13-C -- */
 
 /* -- F13-D >>> -- */
@@ -12382,6 +12396,10 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .fc-portal .fce-aviso, .fc-pagina .fce-aviso { color: var(--rf-tone-warning-fg); }
   /* Embalagens: o formulario nao e filho direto do corpo; a faixa do rodape entra aqui (as outras ja vem da F3c) */
   .fc-portal .fce-modal .modal-actions:last-child { margin: 6px -24px -20px; padding: 16px 24px; border-top: 1px solid var(--rf-divider); background: var(--rf-surface-alt); }
+  /* FZ1: em viewport baixo (notebook 1536x730 e menores; 390) o corpo rola dentro do .modal-content e Cancelar/Salvar ficavam fora da tela. A faixa gruda no fundo do proprio scroller que ja existe
+     (sem scroller novo; com o modal inteiro visivel nada muda) e o scroll-padding (16 + 44 + 16 + 1 de borda, folga ate 80) impede o foco de parar sob ela. */
+  .fc-portal .fce-modal .modal-actions:last-child { position: sticky; bottom: 0; }
+  .fc-portal .modal-content:has(.fce-modal) { scroll-padding-bottom: 80px; }
 
   /* Meses fora da media */
   .fc-pagina .fca-tabela tbody th { font-family: var(--rf-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -12760,6 +12778,29 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .fc-pagina .fit-resumo-nota { color: var(--rf-tone-warning-fg); }
   .fc-pagina .fci-prazo__input { min-height: 40px; border-radius: var(--rf-radius-control); font-family: var(--rf-font-mono); text-align: left; }
 }
+/* -- FZ3 >>> -- */
+/* FZ3 (pos-release): rodape (faixa) dos modais de apoio do Forecast: Importar, Excluir quinzena, Grupos (lista e formularios), Eventos e Fontes. A faixa compartilhada acima grudava a 20 px do fundo
+   (`bottom: 20px` com margem -20): o corpo aparecia numa faixa de 20 px ABAIXO da barra e a barra (16 + 44 + 16 + 1 = 77 px) tomava ate 97 px do <dialog>. `bottom: 0` fecha a faixa (a barra e o
+   fim do scroller) e o padding vertical cai para 12 (12 + 44 + 12 + 1 = 69 px; o botao de 44 fica). O scroll-padding-bottom do scroller reserva a altura REAL da barra (69) mais o anel de foco
+   (outline 2 + offset 2 = 4) = 76, em vez de 120: o foco/scrollIntoView para logo acima dela, com o anel inteiro a vista. O scroller vira o bloco de contencao dos filhos absolutos (`position: relative`):
+   os <caption class="sr-only"> das tabelas sem .table-wrapper (pendentes do Importar, Eventos) tinham o <dialog> como bloco de contencao e escapavam do scroller. Sem scroller novo (nenhum overflow aqui);
+   Embalagens (faixa propria da FZ1, 77 px) fica de fora. A confirmacao de Grupos (.fcg-confirmar) nao e faixa e segue de fora. */
+@media screen {
+  .fc-pagina .fci-modal > .modal-actions:last-child,
+  .fc-pagina .fcx-excluir > form > .modal-actions:last-child,
+  .fc-pagina div.fcg-form > .modal-actions:last-child,
+  .fc-pagina .fcg-form:not(.fcg-confirmar) > .modal-actions:last-child,
+  .fc-pagina .fcg-dialogo .modal-body > .modal-actions:last-child,
+  .fc-pagina .fco-abas > .modal-actions:last-child,
+  .fc-pagina .fco-form > .modal-actions:last-child { bottom: 0; padding: 12px 24px; }
+  .fc-pagina .modal-content:has(.fci-modal),
+  .fc-pagina .modal-content:has(.fcx-excluir),
+  .fc-pagina .modal-content:has(.fcg-lista-corpo),
+  .fc-pagina .modal-content:has(.fco-abas) { position: relative; scroll-padding-bottom: 76px; }
+  /* Grupos (formulario): o textarea do motivo (60 px) recebe foco por Tab e o Chromium so revela o cursor (1a linha), deixando a base do campo sob a barra com 76; aqui a reserva fica em 120 (so este modal). */
+  .fc-pagina .modal-content:has(.fcg-form) { position: relative; scroll-padding-bottom: 120px; }
+}
+/* -- <<< FZ3 -- */
 @media screen and (max-width: 1099px) {
   .fc-pagina .fci-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -12789,7 +12830,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
     .fc-pagina .fci-slot__arquivo .ghost-button,
     .fc-pagina .fci-escolher { min-height: 44px; }
     /* alvos de toque de 44 nos campos e nas linhas de marcar dos modais de apoio */
-    .fc-pagina .fci-slot__topo .field-label { display: inline-flex; align-items: center; min-height: 44px; }
+    .fc-pagina .fci-slot__topo .field-label { display: inline-flex; align-items: center; min-width: 44px; min-height: 44px; }
     .fc-pagina .fci-prazo__input,
     .fc-pagina .fcg-busca > .input { min-height: 44px; }
     .fc-pagina .fcg-busca { height: auto; }
@@ -12799,6 +12840,8 @@ html:has(.manual-page) { scroll-behavior: smooth; }
     .fc-pagina .fco-form .checkbox-field,
     .fc-pagina .fcg-form .fcd-produto,
     .fc-pagina .fcg-selecionados .fcd-produto { min-height: 44px; }
+    /* FZ1: o rotulo e o alvo (o radio/checkbox de 24 px so desenha a marca); "1ª"/"2ª" mediam 42,4 de largura */
+    .fc-pagina .fci-quinzena .checkbox-field { min-width: 44px; }
     .fc-pagina .fci-quinzena input[type="radio"],
     .fc-pagina .fci-opcoes input[type="checkbox"],
     .fc-pagina .fci-entendi input[type="checkbox"],
@@ -12809,6 +12852,34 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   }
 }
 /* -- <<< F13-E -- */
+
+/* -- F13-Z4 >>> -- */
+/* FZ4: codigo do DBCorp que entrou na quinzena sem cadastro. Selo na grade (texto, nunca so cor; tons existentes: aviso = sem cadastro, neutro = produto inativo) e aviso por item na pagina do item
+   (.alert/.alert--warning/.alert--success existentes; aqui so o respiro e o botao). Nenhum token novo. */
+@media screen {
+  .fc-pagina .fcpc-selo {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: var(--rf-radius-pill);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .fc-pagina .fcpc-selo--sem_cadastro { background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); }
+  .fc-pagina .fcpc-selo--produto_inativo { background: var(--rf-tone-neutral-bg); color: var(--rf-tone-neutral-fg); }
+  .fc-pagina .fcpc-aviso { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .fc-pagina .fcpc-aviso__titulo { margin: 0; font-weight: 700; }
+  .fc-pagina .fcpc-aviso__texto { margin: 4px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+  .fc-pagina .fcpc-aviso__acao { margin-top: 10px; }
+  @media (pointer: coarse) {
+    .fc-pagina .fcpc-aviso__acao { min-height: 44px; }
+  }
+}
+/* -- <<< F13-Z4 -- */
 /* <<< tela F13 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
@@ -13084,6 +13155,8 @@ i.fc-status--preco { background: var(--info); }
 .fc-scroll { max-height: min(660px, 72vh); overflow: auto; border-top: 1px solid var(--border); }
 /* contem o .sr-only (absoluto) das celulas: sem isto escapa e a pagina rola na horizontal. So em tela: o papel fica como esta. */
 @media screen { .fc-scroll { position: relative; } }
+/* FZ4: o motivo "sem cadastro" das celulas da grade e texto so para leitor de tela (.sr-only, absoluto): no papel o scroller e clipado e o absoluto vaza e cria paginas em branco; sem ele na impressao. */
+@media print { .fc-grid .sr-only { display: none; } }
 .fc-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
 .fc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; font-size: 13px; font-variant-numeric: tabular-nums; }
 .fc-grid th,
@@ -13244,7 +13317,8 @@ i.fc-status--preco { background: var(--info); }
 .fci-modal input[type="radio"]:focus-visible,
 .fci-modal input[type="date"]:focus-visible,
 .fci-modal .tabs-trigger:focus-visible,
-.fci-modal .tabs-panel:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fci-modal .tabs-panel:focus-visible,
+.fco-abas .tabs-panel:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
 @media (max-width: 900px) {
   .fci-slots { grid-template-columns: 1fr; }
 }

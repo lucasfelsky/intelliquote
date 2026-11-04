@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ForecastSnapshotDetail } from '@/services/forecast';
 import ForecastMemoria from './ForecastMemoria';
 
@@ -14,8 +15,20 @@ interface Props {
 // filtros do painel: um item oculto por "sem venda ha 6 meses" abre normalmente pelo link.
 export default function ForecastItemPagina({ detail, linha, podeEditar }: Props) {
   const item = detail.linhas.find((l) => l.linha === linha);
+  const encontrado = item !== undefined;
+  // Ao entrar na pagina (vinda da grade, de um link ou do historico) o foco vai ao titulo do item (ou ao aviso de item inexistente):
+  // o foco nao fica no link da grade que ja saiu da tela.
+  const titulo = useRef<HTMLHeadingElement>(null);
+  const aviso = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    (titulo.current ?? aviso.current)?.focus();
+  }, [linha, encontrado]);
   if (!item) {
-    return <div className="empty-state fci-pagina__vazio">Item não encontrado nesta quinzena</div>;
+    return (
+      <div ref={aviso} tabIndex={-1} className="empty-state fci-pagina__vazio">
+        Item não encontrado nesta quinzena
+      </div>
+    );
   }
   return (
     <div className="fci-pagina">
@@ -26,6 +39,7 @@ export default function ForecastItemPagina({ detail, linha, podeEditar }: Props)
         baseDate={detail.baseDate}
         hoje={detail.hoje}
         podeEditar={podeEditar}
+        tituloRef={titulo}
       />
     </div>
   );

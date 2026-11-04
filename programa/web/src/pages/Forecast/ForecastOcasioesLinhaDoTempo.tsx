@@ -3,6 +3,7 @@ import Spinner from '@/components/Spinner';
 import type { ForecastOcasiaoEscopo, ForecastOcasiaoOcorrencia } from '@/services/forecastOcasioes';
 import { MESES_ABREV, colunasDosMeses, posicaoDeHoje, segmentoNoAno } from './forecastOcasioes';
 import { dataBr } from './forecastPainel';
+import TabelaRolavel from './ForecastTabelaRolavel';
 
 export interface LinhaDoTempo {
   /** Chave do grupo de eventos (uma linha por grupo). */
@@ -118,7 +119,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
               </div>
             </div>
           </div>
-          <div className="table-wrapper">
+          <TabelaRolavel rotulo={`Datas em ${ano}`}>
             <table className="table fco-tabela-ano">
               <caption className="fco-legenda">Datas em {ano} (mesma informação da linha do tempo)</caption>
               <thead>
@@ -140,7 +141,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
                 ))}
               </tbody>
             </table>
-          </div>
+          </TabelaRolavel>
         </>
       )}
     </section>

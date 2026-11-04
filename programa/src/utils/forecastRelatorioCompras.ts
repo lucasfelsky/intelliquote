@@ -95,6 +95,11 @@ export interface LinhaParaRelatorio {
   chegadas: number[];
   programacoes: number[];
   naoFraciona?: boolean;
+  /**
+   * FZ4: linha de codigo PENDENTE de cadastro do DBCorp (sem produto e sem fonte). Nunca vira sugestao de compra (nem com
+   * AN preenchido) e e contada a parte em `fora.semCadastro`; ausente = produto normal (ou quinzena antiga).
+   */
+  pendenteCadastro?: 'sem_cadastro' | 'produto_inativo';
   /** Observacao congelada da quinzena (AT da planilha / notas do produto); ausente = ''. */
   obs?: string;
   /** PR 6c: meses de venda atipica que ficaram fora da media da linha (ja na janela da quinzena); ausente = nenhum. */
@@ -317,6 +322,11 @@ export interface RelatorioCompras {
     porUrgencia: Record<UrgenciaId, number>;
   };
   fora: {
+    /**
+     * FZ4: linhas de codigo pendente de cadastro (sem produto/fonte). Entram no calculo (consumo, estoque, chegadas) mas
+     * NUNCA geram sugestao de compra; contadas a parte, nao somam em `semLeadTime`.
+     */
+    semCadastro: number;
     semLeadTime: number;
     semConsumoSemFalta: number;
     semConsumoSemMovimento: number;
@@ -640,6 +650,7 @@ export function montarRelatorioCompras(
     return grupo ? { grupo } : {};
   };
 
+  let semCadastro = 0;
   let semLeadTime = 0;
   let semConsumoSemFalta = 0;
   let semConsumoSemMovimento = 0;
@@ -677,6 +688,13 @@ export function montarRelatorioCompras(
   };
 
   for (const l of agrupado.linhas) {
+    // Codigo pendente de cadastro: sem fonte nao ha lead time, entao NUNCA vira sugestao de compra (mesmo que AN venha
+    // preenchido). Conta a parte (`semCadastro`) para nao se perder dentro de "sem lead time".
+    if (l.pendenteCadastro) {
+      registrarSemConsumo(l);
+      semCadastro += 1;
+      continue;
+    }
     if (l.AN === null) {
       registrarSemConsumo(l);
       semLeadTime += 1;
@@ -864,6 +882,7 @@ export function montarRelatorioCompras(
       porUrgencia: contarPorUrgencia(todos),
     },
     fora: {
+      semCadastro,
       semLeadTime,
       semConsumoSemFalta,
       semConsumoSemMovimento,

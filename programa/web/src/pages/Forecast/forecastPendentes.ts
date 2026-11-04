@@ -1,5 +1,6 @@
 // Funcoes PURAS dos pendentes de cadastro (PR 3B-2): textos, validacao do formulario "Novo produto" e busca de
 // produto existente. Nada aqui usa `Date`, rede ou React.
+import type { ForecastLinha, ForecastPendentesNaQuinzena } from '@/services/forecast';
 import type { ForecastFonte } from '@/services/forecastFontes';
 import type {
   ForecastPendente,
@@ -57,19 +58,75 @@ export function mensagemProdutoReativado(r: Pick<ForecastProdutoReativado, 'nome
     .join(' ');
 }
 
-/** Texto fixo do painel da quinzena: quando o codigo passa a entrar no calculo (singular com 1 pendente). */
-export function textoEntradaNoCalculo(label: string, totalItens: number): string {
+/** FZ4: o codigo pendente ENTRA na quinzena como linha, sem fonte, sem lead time e sem sugestao de compra. */
+export const TEXTO_SEM_SUGESTAO = 'sem fonte, sem lead time e sem sugestão de compra';
+
+/**
+ * Texto fixo do painel da quinzena (singular com 1 pendente). `comoLinha` = a quinzena TEM linha marcada (`pendenteCadastro`, backend FZ4): o codigo
+ * entrou como linha sem fonte/lead time/sugestao. Sem linha marcada (quinzena gravada antes da FZ4) o codigo segue FORA do calculo e nao ha linha dele
+ * na grade: o texto antigo e o unico verdadeiro.
+ */
+export function textoEntradaNoCalculo(label: string, totalItens: number, comoLinha = false): string {
+  if (!comoLinha) {
+    return totalItens === 1
+      ? `Este código ficou FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.`
+      : `Esses códigos ficaram FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.`;
+  }
   return totalItens === 1
-    ? `Este código ficou FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.`
-    : `Esses códigos ficaram FORA do cálculo da quinzena ${label}. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.`;
+    ? `Este código entrou na quinzena ${label} ${TEXTO_SEM_SUGESTAO}. Depois de completar o cadastro, ele entra completo a partir da próxima quinzena importada (os números desta quinzena não mudam).`
+    : `Esses códigos entraram na quinzena ${label} ${TEXTO_SEM_SUGESTAO}. Depois de completar o cadastro, eles entram completos a partir da próxima quinzena importada (os números desta quinzena não mudam).`;
 }
 
-/** Texto fixo do bloco da pre-visualizacao (singular com 1 pendente). */
-export function textoForaDoCalculoPrevia(totalItens: number): string {
-  return totalItens === 1
-    ? 'Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.'
-    : 'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.';
+/** Resumo curto ao lado do titulo do painel (mesma regra de `textoEntradaNoCalculo`). */
+export function resumoPendentesPainel(comoLinha: boolean): string {
+  return comoLinha ? 'entraram sem sugestão de compra' : 'ficam fora do cálculo';
 }
+
+/**
+ * Texto fixo do bloco da pre-visualizacao (singular com 1 pendente). `comoLinha` = o backend informou `pendentesNaQuinzena` (FZ4); backend antigo
+ * (web novo x backend antigo): o pendente continua FORA do calculo.
+ */
+export function textoEntraSemCadastroPrevia(totalItens: number, comoLinha = true): string {
+  if (!comoLinha) {
+    return totalItens === 1
+      ? 'Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.'
+      : 'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.';
+  }
+  return totalItens === 1
+    ? `Entra na quinzena ${TEXTO_SEM_SUGESTAO}. Complete o cadastro e pré-visualize de novo para que entre completo nesta quinzena.`
+    : `Entram na quinzena ${TEXTO_SEM_SUGESTAO}. Complete o cadastro e pré-visualize de novo para que entrem completos nesta quinzena.`;
+}
+
+/** `3 linhas na quinzena: 2 sem cadastro e 1 com produto inativo.` (zeros omitidos; null sem linha pendente). */
+export function textoPendentesNaQuinzena(p: ForecastPendentesNaQuinzena | undefined): string | null {
+  if (!p || p.total <= 0) return null;
+  const partes = [
+    p.semCadastro > 0 ? `${p.semCadastro} sem cadastro` : '',
+    p.produtoInativo > 0 ? `${p.produtoInativo} com produto inativo` : '',
+  ].filter(Boolean);
+  return `${contagemTexto(p.total, 'linha entra', 'linhas entram')} na quinzena: ${partes.join(' e ')}.`;
+}
+
+// ---------- linha pendente na grade e na pagina do item (FZ4) ----------
+
+/** Estado da linha pendente (derivado dos 3 campos do backend): o que a pagina do item mostra. */
+export type EstadoDaLinhaPendente =
+  | { tipo: 'cadastrado' }
+  | { tipo: 'reativar'; produto: { id: number; nome: string } }
+  | { tipo: 'completar' }
+  | { tipo: 'inativo-sem-produto' };
+
+export function estadoDaLinhaPendente(
+  linha: Pick<ForecastLinha, 'pendenteCadastro' | 'cadastradoDepois' | 'produtoInativoAtual'>,
+): EstadoDaLinhaPendente | null {
+  if (!linha.pendenteCadastro) return null;
+  // O que o cadastro diz HOJE manda: ativo (cadastrado depois) > produto inativo conhecido > o estado congelado na importacao.
+  if (linha.cadastradoDepois === true) return { tipo: 'cadastrado' };
+  if (linha.produtoInativoAtual) return { tipo: 'reativar', produto: linha.produtoInativoAtual };
+  return linha.pendenteCadastro === 'produto_inativo' ? { tipo: 'inativo-sem-produto' } : { tipo: 'completar' };
+}
+
+export const TEXTO_CADASTRADO_DEPOIS = 'Cadastrado — entra completo na próxima quinzena. Os números desta quinzena não mudam.';
 
 export const TEXTO_AVISO_PLANILHA =
   'Inclua o código também na planilha PO.COMP.01: o próximo import da planilha remove os códigos que não estão nela.';

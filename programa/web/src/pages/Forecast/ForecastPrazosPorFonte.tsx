@@ -11,6 +11,7 @@ import {
   type CampoPrazo,
   type RascunhoPrazos,
 } from './forecastPrazosChegada';
+import TabelaRolavel from './ForecastTabelaRolavel';
 
 interface Props {
   prazos: ForecastPrazosEstimativa;
@@ -119,7 +120,7 @@ export default function ForecastPrazosPorFonte({
         <p>Nenhuma chegada do FUP precisou de estimativa.</p>
       ) : (
         <fieldset className="fci-fieldset" disabled={ocupado}>
-          <div className="table-wrapper">
+          <TabelaRolavel rotulo="Prazo das chegadas estimadas do FUP, por fonte">
             <table className="table fci-prazo__tabela">
               <caption className="sr-only">Prazo das chegadas estimadas do FUP, por fonte</caption>
               <thead>
@@ -187,7 +188,7 @@ export default function ForecastPrazosPorFonte({
                 )}
               </tbody>
             </table>
-          </div>
+          </TabelaRolavel>
         </fieldset>
       )}
       <div className="fci-prazo__acoes">

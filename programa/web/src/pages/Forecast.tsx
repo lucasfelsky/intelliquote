@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
@@ -27,10 +27,12 @@ import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
 import ForecastItemPagina from './Forecast/ForecastItemPagina';
+import { linhaDaRota } from './Forecast/forecastLinhaDaRota';
 import ForecastMenuMais from './Forecast/ForecastMenuMais';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
 import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
+import { useTituloDaPagina } from './Forecast/useTituloDaPagina';
 import {
   casaBusca,
   colunasDoPainel,
@@ -50,6 +52,11 @@ import {
   ocultavelPorSemVenda,
   useMostrarSemVenda,
 } from './Forecast/forecastSemVenda';
+
+const TITULO_FORECAST = 'Forecast de compras · IntelliQuote';
+
+// De onde o comprador saiu ao abrir a pagina de um item: ao voltar para a grade da MESMA quinzena o foco retorna ao link desse item.
+type OrigemDoItem = { linha: number; quinzena: number } | null;
 
 const ORIGEM_ROTULO: Record<ForecastOrigin, string> = {
   planilha: 'planilha',
@@ -82,9 +89,11 @@ interface PainelProps {
   mostrarSemVenda: boolean;
   onMostrarSemVenda: (mostrar: boolean) => void;
   ocultaveis: number;
+  /** Item de onde o comprador voltou (consumido ao montar): recebe o foco; sem ele (ou fora da grade), a regiao da grade. */
+  origemDoItem: MutableRefObject<OrigemDoItem>;
 }
 
-function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: PainelProps) {
+function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origemDoItem }: PainelProps) {
   // Filtro, busca e colunas ocultas vivem na URL (`filtro`, `busca`, `ocultas`): abrir um item e voltar pela aba Painel
   // devolve a grade como estava. A busca digitada fica em estado local (digitacao fluida, sem uma navegacao por tecla)
   // e vai para a URL depois de uma pausa.
@@ -95,6 +104,17 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: Pain
   const buscaUrl = params.get('busca') ?? '';
   const [busca, setBusca] = useState(buscaUrl);
   const termo = useDeferredValue(busca);
+
+  // Voltar da pagina do item (aba Painel, Alt+seta esquerda, historico): o foco retorna ao link do item de origem; se o filtro o escondeu, a regiao da grade.
+  const secao = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const origem = origemDoItem.current;
+    origemDoItem.current = null;
+    if (!origem || origem.quinzena !== detail.id || !secao.current) return;
+    const links = Array.from(secao.current.querySelectorAll<HTMLAnchorElement>('a.fc-item'));
+    const alvo = links.find((a) => a.pathname === `/forecast/item/${origem.linha}`) ?? secao.current.querySelector<HTMLElement>('.fc-scroll');
+    alvo?.focus();
+  }, [origemDoItem, detail.id]);
 
   const atualizarUrl = useCallback(
     (mudar: (next: URLSearchParams) => void) =>
@@ -178,7 +198,7 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: Pain
   return (
     <>
       <Selo detail={detail} />
-      <section className="fc-card" aria-label="Produtos da quinzena">
+      <section ref={secao} className="fc-card" aria-label="Produtos da quinzena">
         <div className="fc-barra">
           <div className="fc-filtros" role="group" aria-label="Filtros">
             {FILTROS.map((f) => (
@@ -295,7 +315,7 @@ export default function Forecast() {
 
   // Pagina do item (/forecast/item/:linha): a linha vem da rota; nao numerica = item inexistente (NaN nunca casa).
   const rotaItem = useMatch('/forecast/item/:linha');
-  const linhaDoItem = rotaItem ? Number(rotaItem.params.linha) : null;
+  const linhaDoItem = rotaItem ? linhaDaRota(rotaItem.params.linha) : null;
   const visao = linhaDoItem === null && params.get('visao') === 'compras' ? 'compras' : 'painel';
   const pedida = Number(params.get('quinzena'));
   const escolhida = quinzenas.find((q) => q.id === pedida) ?? quinzenas[0];
@@ -309,6 +329,21 @@ export default function Forecast() {
   const detail = detalhe.data;
   const [mostrarSemVenda, setMostrarSemVenda] = useMostrarSemVenda(user?.id);
   const ocultaveis = useMemo(() => (detail ? contarOcultaveis(detail.linhas) : 0), [detail]);
+
+  // O titulo da aba identifica o item na pagina dele e volta ao do painel na grade. A origem (linha + quinzena) fica anotada enquanto a pagina do
+  // item esta aberta; sair para o relatorio de compras a esquece (a grade que montar depois consome o que sobrar).
+  const origemDoItem = useRef<OrigemDoItem>(null);
+  useEffect(() => {
+    if (linhaDoItem !== null && detail) origemDoItem.current = { linha: linhaDoItem, quinzena: detail.id };
+    else if (visao === 'compras') origemDoItem.current = null;
+  }, [linhaDoItem, detail, visao]);
+  let tituloDaPagina = TITULO_FORECAST;
+  if (linhaDoItem !== null && detail) {
+    tituloDaPagina = `${detail.linhas.find((l) => l.linha === linhaDoItem)?.item ?? 'Item não encontrado'} · ${TITULO_FORECAST}`;
+  } else if (visao === 'compras') {
+    tituloDaPagina = `Relatório de compras · ${TITULO_FORECAST}`;
+  }
+  useTituloDaPagina(tituloDaPagina);
   // PO.COMP.01: calculado no front (hoje em Sao Paulo, uma vez por montagem); null fora da tabela de feriados.
   const proxima = useMemo(() => proximaAnalise(hojeEmSaoPaulo(new Date())), []);
 
@@ -558,7 +593,13 @@ export default function Forecast() {
         </div>
       )}
       {detail && detail.origin === 'dbcorp' && linhaDoItem === null && (
-        <ForecastPendentesCadastro key={`pendentes-${detail.id}`} snapshotId={detail.id} label={detail.label} podeEditar={podeImportar} />
+        <ForecastPendentesCadastro
+          key={`pendentes-${detail.id}`}
+          snapshotId={detail.id}
+          label={detail.label}
+          podeEditar={podeImportar}
+          comoLinha={detail.linhas.some((l) => l.pendenteCadastro !== undefined)}
+        />
       )}
       {detail && linhaDoItem !== null && <ForecastItemPagina detail={detail} linha={linhaDoItem} podeEditar={podeImportar} />}
       {detail && linhaDoItem === null && visao === 'painel' && (
@@ -568,6 +609,7 @@ export default function Forecast() {
           mostrarSemVenda={mostrarSemVenda}
           onMostrarSemVenda={setMostrarSemVenda}
           ocultaveis={ocultaveis}
+          origemDoItem={origemDoItem}
         />
       )}
       {detail && visao === 'compras' && (

@@ -15,7 +15,8 @@ import { AvisosEErros, useFocoNoTitulo } from './ForecastResumoPlanilha';
 import { NOTA_COMPLETAR_MODO_TESTE, textoHistoricoModoTeste } from './forecastModoTeste';
 import { dataBr, inteiroBr } from './forecastPainel';
 import { TabelaPendentes } from './ForecastPendentesCadastro';
-import { textoForaDoCalculoPrevia } from './forecastPendentes';
+import { textoEntraSemCadastroPrevia, textoPendentesNaQuinzena } from './forecastPendentes';
+import TabelaRolavel from './ForecastTabelaRolavel';
 import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
 const SIM_NAO = (v: boolean) => (v ? 'Sim' : 'Não');
@@ -48,7 +49,7 @@ function BlocoSaldo({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
   const totais = totaisDeposito(depositos);
   return (
     <Bloco titulo="SALDO por depósito">
-      <div className="table-wrapper">
+      <TabelaRolavel rotulo="Saldo por depósito">
         <table className="table">
           <caption className="sr-only">Saldo por depósito</caption>
           <thead>
@@ -70,12 +71,12 @@ function BlocoSaldo({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TabelaRolavel>
       <p>
         Incluído: {inteiroBr(totais.incluido)} · Excluído: {inteiroBr(totais.excluido)}
       </p>
       {outras.length > 0 && (
-        <div className="table-wrapper">
+        <TabelaRolavel rotulo="Saldo de outras empresas (fora do estoque)">
           <table className="table">
             <caption className="sr-only">Saldo de outras empresas (fora do estoque)</caption>
             <thead>
@@ -95,7 +96,7 @@ function BlocoSaldo({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </TabelaRolavel>
       )}
     </Bloco>
   );
@@ -111,7 +112,7 @@ function TabelaStatus({
   linhas: NonNullable<ForecastRelatorioResumo['porStatus']>;
 }) {
   return (
-    <div className="table-wrapper">
+    <TabelaRolavel rotulo={legenda}>
       <table className="table">
         <caption className="sr-only">{legenda}</caption>
         <thead>
@@ -133,7 +134,7 @@ function TabelaStatus({
           ))}
         </tbody>
       </table>
-    </div>
+    </TabelaRolavel>
   );
 }
 
@@ -192,7 +193,7 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
               DATA PRONTIDÃO não reconhecida: {inteiroBr(naoReconhecida.linhas)} linhas · {inteiroBr(naoReconhecida.kg)} kg
               ficaram FORA das chegadas
             </strong>
-            <div className="table-wrapper">
+            <TabelaRolavel rotulo="Linhas do FUP com DATA PRONTIDÃO não reconhecida">
               <table className="table">
                 <caption className="sr-only">Linhas do FUP com DATA PRONTIDÃO não reconhecida</caption>
                 <thead>
@@ -216,7 +217,7 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TabelaRolavel>
             {naoReconhecida.omitidos > 0 && <p>… e mais {inteiroBr(naoReconhecida.omitidos)} linhas</p>}
           </div>
         </div>
@@ -272,16 +273,20 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
 
 function BlocoPendentes({
   pendentes,
+  naQuinzena,
   onCompletar,
   modoTeste,
 }: {
   pendentes: ForecastPendentesResumo;
+  /** FZ4: linhas pendentes que a quinzena ganha (lista completa; a tabela abaixo corta em 200). Ausente em backend antigo. */
+  naQuinzena?: ForecastDbcorpSummary['pendentesNaQuinzena'];
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
   modoTeste: boolean;
 }) {
   return (
-    <Bloco titulo={`Pendentes de cadastro (${inteiroBr(pendentes.totalItens)})`}>
-      <p>{textoForaDoCalculoPrevia(pendentes.totalItens)}</p>
+    <Bloco titulo={`Pendentes de cadastro (${inteiroBr(naQuinzena?.total ?? pendentes.totalItens)})`}>
+      <p>{textoEntraSemCadastroPrevia(naQuinzena?.total ?? pendentes.totalItens, (naQuinzena?.total ?? 0) > 0)}</p>
+      {textoPendentesNaQuinzena(naQuinzena) && <p>{textoPendentesNaQuinzena(naQuinzena)}</p>}
       {modoTeste && onCompletar !== undefined && <p className="fit-resumo-nota">{NOTA_COMPLETAR_MODO_TESTE}</p>}
       <TabelaPendentes
         itens={pendentes.itens}
@@ -308,7 +313,7 @@ function BlocoHistorico({
   return (
     <Bloco titulo="Histórico de vendas">
       {historico.meses.length > 0 && (
-        <div className="table-wrapper">
+        <TabelaRolavel rotulo="Linhas de histórico por mês, no banco">
           <table className="table">
             <caption className="sr-only">Linhas de histórico por mês, no banco</caption>
             <thead>
@@ -326,7 +331,7 @@ function BlocoHistorico({
               ))}
             </tbody>
           </table>
-        </div>
+        </TabelaRolavel>
       )}
       {historico.ausentes.length > 0 && <p>Meses sem histórico: {historico.ausentes.map(mesAno).join(', ')}</p>}
       {anterior && modoTeste && <p className="fit-resumo-nota">{textoHistoricoModoTeste(anterior.yearMonth)}</p>}
@@ -379,7 +384,7 @@ export default function ForecastResumoDbcorp({
         Chegadas: {resumo.meses.chegada.join(', ')} · Programação: {resumo.meses.programacao.join(', ')}
       </p>
       <AvisosEErros erros={resumo.erros} avisos={avisosSemRedundancia(resumo.avisos)} />
-      <div className="table-wrapper">
+      <TabelaRolavel rotulo="Resumo por relatório">
         <table className="table">
           <caption className="sr-only">Resumo por relatório</caption>
           <thead>
@@ -417,9 +422,9 @@ export default function ForecastResumoDbcorp({
             ))}
           </tbody>
         </table>
-      </div>
+      </TabelaRolavel>
       {resumo.pendentes && resumo.pendentes.totalItens > 0 && (
-        <BlocoPendentes pendentes={resumo.pendentes} onCompletar={onCompletar} modoTeste={modoTeste} />
+        <BlocoPendentes pendentes={resumo.pendentes} naQuinzena={resumo.pendentesNaQuinzena} onCompletar={onCompletar} modoTeste={modoTeste} />
       )}
       {saldo && <BlocoSaldo relatorio={saldo} />}
       {vendas.length > 0 && (

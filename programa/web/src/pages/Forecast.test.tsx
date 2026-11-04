@@ -737,9 +737,18 @@ describe('Forecast - pendentes de cadastro (PR 3B-2)', () => {
     renderPage('/forecast?quinzena=8');
     expect(await screen.findByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
     expect(pendentesChamados()).toEqual(['/v1/forecast/snapshots/8/pendentes']);
-    expect(
-      screen.getByText(/Esses códigos ficaram FORA do cálculo da quinzena 11-1\./),
-    ).toBeTruthy();
+    // DBCORP (quinzena gravada sem linha marcada): o pendente segue FORA do calculo; nada de "entraram"
+    expect(screen.getByText(/Esses códigos ficaram FORA do cálculo da quinzena 11-1\./)).toBeTruthy();
+    expect(screen.queryByText(/entraram/)).toBeNull();
+  });
+
+  it('quinzena DBCorp COM linha marcada (backend FZ4): o painel diz que o codigo entrou sem fonte, sem lead time e sem sugestao', async () => {
+    const marcada = linha({ linha: 9, item: 'TST0901', codigos: ['TST0901'], fonte: '', AN: null, AQ: null, AP: null, T: null, pendenteCadastro: 'sem_cadastro', cadastradoDepois: false, produtoInativoAtual: null });
+    mockApi({ 7: detalhe(), 8: { ...DBCORP, linhas: [...LINHAS, marcada] } });
+    renderPage('/forecast?quinzena=8');
+    expect(await screen.findByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
+    expect(screen.getByText(/Esses códigos entraram na quinzena 11-1 sem fonte, sem lead time e sem sugestão de compra\./)).toBeTruthy();
+    expect(screen.queryByText(/FORA do cálculo/)).toBeNull();
   });
 
   it.each(['admin', 'comprador'])('%s ve "Completar cadastro" so no codigo sem cadastro', async (role) => {
