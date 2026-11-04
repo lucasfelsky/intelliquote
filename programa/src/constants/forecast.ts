@@ -155,6 +155,10 @@ export const FORECAST_PRODUCT_ORIGIN_DBCORP = 'dbcorp';
 // Maximo de codigos pendentes devolvidos (a contagem total e o resto omitido vao sempre).
 export const FORECAST_PENDENTES_MAX_ITENS = 200;
 
+// Texto da observacao (coluna AT) do XLSX MACRO nas linhas de codigo pendente de cadastro. O leitor da planilha RECUSA a
+// linha que comeca com ele: o arquivo exportado nao vira import valido (criaria produto com nome = codigo e sem fonte).
+export const FORECAST_MARCA_SEM_CADASTRO = 'SEM CADASTRO';
+
 // --- Prazo real medio por fonte (3C) ---
 // Janela: so entram chegadas com ETA FINAL entre (base - 365 dias) e a base.
 export const FORECAST_PRAZO_REAL_JANELA_DIAS = 365;

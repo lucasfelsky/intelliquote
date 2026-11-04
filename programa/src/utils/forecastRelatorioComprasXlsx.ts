@@ -432,6 +432,9 @@ export function linhasDoResumo(r: RelatorioCompras): string[] {
     linhas.push(`${totais.comPallet} com pallet cadastrado`);
   }
   linhas.push(`Fora do relatório: ${fora.semLeadTime} sem lead time, ${fora.semConsumoSemFalta} sem consumo e sem falta`);
+  if (fora.semCadastro > 0) {
+    linhas.push(`${fora.semCadastro} sem cadastro (código do DBCorp ainda não cadastrado: sem fonte, sem lead time e sem sugestão de compra)`);
+  }
   linhas.push(resumoSemConsumo(r.semConsumo.itens.length, fora.semConsumoSemMovimento));
   if (fora.sobDemanda > 0) {
     linhas.push(resumoSobDemanda(fora.sobDemanda));
