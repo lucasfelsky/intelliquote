@@ -12760,6 +12760,29 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .fc-pagina .fit-resumo-nota { color: var(--rf-tone-warning-fg); }
   .fc-pagina .fci-prazo__input { min-height: 40px; border-radius: var(--rf-radius-control); font-family: var(--rf-font-mono); text-align: left; }
 }
+/* -- FZ3 >>> -- */
+/* FZ3 (pos-release): rodape (faixa) dos modais de apoio do Forecast: Importar, Excluir quinzena, Grupos (lista e formularios), Eventos e Fontes. A faixa compartilhada acima grudava a 20 px do fundo
+   (`bottom: 20px` com margem -20): o corpo aparecia numa faixa de 20 px ABAIXO da barra e a barra (16 + 44 + 16 + 1 = 77 px) tomava ate 97 px do <dialog>. `bottom: 0` fecha a faixa (a barra e o
+   fim do scroller) e o padding vertical cai para 12 (12 + 44 + 12 + 1 = 69 px; o botao de 44 fica). O scroll-padding-bottom do scroller reserva a altura REAL da barra (69) mais o anel de foco
+   (outline 2 + offset 2 = 4) = 76, em vez de 120: o foco/scrollIntoView para logo acima dela, com o anel inteiro a vista. O scroller vira o bloco de contencao dos filhos absolutos (`position: relative`):
+   os <caption class="sr-only"> das tabelas sem .table-wrapper (pendentes do Importar, Eventos) tinham o <dialog> como bloco de contencao e escapavam do scroller. Sem scroller novo (nenhum overflow aqui);
+   Embalagens (faixa propria da FZ1, 77 px) fica de fora. A confirmacao de Grupos (.fcg-confirmar) nao e faixa e segue de fora. */
+@media screen {
+  .fc-pagina .fci-modal > .modal-actions:last-child,
+  .fc-pagina .fcx-excluir > form > .modal-actions:last-child,
+  .fc-pagina div.fcg-form > .modal-actions:last-child,
+  .fc-pagina .fcg-form:not(.fcg-confirmar) > .modal-actions:last-child,
+  .fc-pagina .fcg-dialogo .modal-body > .modal-actions:last-child,
+  .fc-pagina .fco-abas > .modal-actions:last-child,
+  .fc-pagina .fco-form > .modal-actions:last-child { bottom: 0; padding: 12px 24px; }
+  .fc-pagina .modal-content:has(.fci-modal),
+  .fc-pagina .modal-content:has(.fcx-excluir),
+  .fc-pagina .modal-content:has(.fcg-lista-corpo),
+  .fc-pagina .modal-content:has(.fco-abas) { position: relative; scroll-padding-bottom: 76px; }
+  /* Grupos (formulario): o textarea do motivo (60 px) recebe foco por Tab e o Chromium so revela o cursor (1a linha), deixando a base do campo sob a barra com 76; aqui a reserva fica em 120 (so este modal). */
+  .fc-pagina .modal-content:has(.fcg-form) { position: relative; scroll-padding-bottom: 120px; }
+}
+/* -- <<< FZ3 -- */
 @media screen and (max-width: 1099px) {
   .fc-pagina .fci-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
