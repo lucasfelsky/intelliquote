@@ -12238,6 +12238,20 @@ html:has(.manual-page) { scroll-behavior: smooth; }
     .fc-pagina .fcp-tabela .ghost-button--sm { min-height: 44px; }
   }
 }
+
+/* FZ1 (pos-release): grade a 390/360. As colunas fixas N + Item somavam 368 px num scroller de 356: as colunas de dados nunca apareciam e o status do item cortava. Ate 480 px o N cai para 36 e o Item
+   para 164 (200 no total: sobram 156 px a 390 e 126 a 360 para os dados, que se alcancam rolando na horizontal); o rodape do item (fonte + status) quebra linha em vez de cortar e a linha cresce so
+   quando precisa. Os <col> inline (44/240 + largura de cada dado) mandariam na largura: somem ate 480 e cada celula manda na sua (so tela; acima de 480 e o desenho de sempre). */
+@media screen and (max-width: 480px) {
+  .fc-pagina .fc-grid col { display: none; }
+  .fc-pagina .fc-grid .fc-fixa--n { width: 36px; min-width: 36px; max-width: 36px; padding: 0 6px; }
+  .fc-pagina .fc-grid .fc-fixa--item { left: 36px; width: 164px; min-width: 164px; max-width: 164px; }
+  .fc-pagina .fc-grid thead th.fc-fixa--item { padding: 0 8px; }
+  .fc-pagina a.fc-item { height: auto; min-height: 48px; padding: 4px 8px 4px 12px; }
+  .fc-pagina .fc-item__nome,
+  .fc-pagina .fc-item__fonte { line-height: 1.25; }
+  .fc-pagina .fc-item__fonte { white-space: normal; }
+}
 /* -- <<< F13-C -- */
 
 /* -- F13-D >>> -- */
@@ -12382,6 +12396,10 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .fc-portal .fce-aviso, .fc-pagina .fce-aviso { color: var(--rf-tone-warning-fg); }
   /* Embalagens: o formulario nao e filho direto do corpo; a faixa do rodape entra aqui (as outras ja vem da F3c) */
   .fc-portal .fce-modal .modal-actions:last-child { margin: 6px -24px -20px; padding: 16px 24px; border-top: 1px solid var(--rf-divider); background: var(--rf-surface-alt); }
+  /* FZ1: em viewport baixo (notebook 1536x730 e menores; 390) o corpo rola dentro do .modal-content e Cancelar/Salvar ficavam fora da tela. A faixa gruda no fundo do proprio scroller que ja existe
+     (sem scroller novo; com o modal inteiro visivel nada muda) e o scroll-padding (16 + 44 + 16 + 1 de borda, folga ate 80) impede o foco de parar sob ela. */
+  .fc-portal .fce-modal .modal-actions:last-child { position: sticky; bottom: 0; }
+  .fc-portal .modal-content:has(.fce-modal) { scroll-padding-bottom: 80px; }
 
   /* Meses fora da media */
   .fc-pagina .fca-tabela tbody th { font-family: var(--rf-font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -12789,7 +12807,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
     .fc-pagina .fci-slot__arquivo .ghost-button,
     .fc-pagina .fci-escolher { min-height: 44px; }
     /* alvos de toque de 44 nos campos e nas linhas de marcar dos modais de apoio */
-    .fc-pagina .fci-slot__topo .field-label { display: inline-flex; align-items: center; min-height: 44px; }
+    .fc-pagina .fci-slot__topo .field-label { display: inline-flex; align-items: center; min-width: 44px; min-height: 44px; }
     .fc-pagina .fci-prazo__input,
     .fc-pagina .fcg-busca > .input { min-height: 44px; }
     .fc-pagina .fcg-busca { height: auto; }
@@ -12799,6 +12817,8 @@ html:has(.manual-page) { scroll-behavior: smooth; }
     .fc-pagina .fco-form .checkbox-field,
     .fc-pagina .fcg-form .fcd-produto,
     .fc-pagina .fcg-selecionados .fcd-produto { min-height: 44px; }
+    /* FZ1: o rotulo e o alvo (o radio/checkbox de 24 px so desenha a marca); "1ª"/"2ª" mediam 42,4 de largura */
+    .fc-pagina .fci-quinzena .checkbox-field { min-width: 44px; }
     .fc-pagina .fci-quinzena input[type="radio"],
     .fc-pagina .fci-opcoes input[type="checkbox"],
     .fc-pagina .fci-entendi input[type="checkbox"],
