@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type Ref } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ForecastLinha } from '@/services/forecast';
 import {
@@ -20,6 +20,8 @@ interface Props {
   hoje: string;
   /** admin/comprador editam as embalagens; os demais papeis COMEX abrem o modal em leitura. */
   podeEditar: boolean;
+  /** Titulo da pagina do item: recebe o foco ao entrar nela (tabIndex -1, fora da ordem de Tab). */
+  tituloRef?: Ref<HTMLHeadingElement>;
 }
 
 const CLASSE_DO_TOM: Record<Exclude<TomValor, null>, string> = {
@@ -146,7 +148,7 @@ function CompraSobDemanda({ productId, marcado: marcadoSalvo, motivo: motivoSalv
   );
 }
 
-export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEditar }: Props) {
+export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEditar, tituloRef }: Props) {
   const [embalagens, setEmbalagens] = useState(false);
   const [atipicos, setAtipicos] = useState(false);
   const botao = useRef<HTMLButtonElement>(null);
@@ -180,7 +182,9 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
       <div className="card fc-calculo">
         <div className="fc-calculo__titulo">
           <p className="eyebrow">MEMÓRIA DE CÁLCULO · LINHA {linha.linha} DA PLANILHA</p>
-          <h2>{linha.item}</h2>
+          <h2 ref={tituloRef} tabIndex={-1}>
+            {linha.item}
+          </h2>
         </div>
         <ol className="fc-passos">
           {passos.map((passo, i) => (

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import ComercialRouteGuard from '@/components/ComercialRouteGuard';
@@ -148,6 +148,10 @@ const NAO_ENCONTRADO = 'Item não encontrado nesta quinzena';
 const itensDaGrade = () =>
   screen.queryAllByRole('link', { name: /(PRODUTO|ITEM OITO) [A-C]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
@@ -180,7 +184,19 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     expect((screen.getByLabelText('Quinzena') as HTMLSelectElement).value).toBe('8');
   });
 
-  it.each(['/forecast/item/99?quinzena=7', '/forecast/item/abc?quinzena=7', '/forecast/item/3abc?quinzena=7', '/forecast/item/0?quinzena=7'])(
+  // FZ2: so digitos (inteiro positivo). Estas formas viram o numero de uma linha que EXISTE na quinzena 7 (3 ou 4) se lidas com Number().
+  it.each([
+    '/forecast/item/99?quinzena=7',
+    '/forecast/item/abc?quinzena=7',
+    '/forecast/item/3abc?quinzena=7',
+    '/forecast/item/0?quinzena=7',
+    '/forecast/item/0x3?quinzena=7',
+    '/forecast/item/4e0?quinzena=7',
+    '/forecast/item/%203?quinzena=7',
+    '/forecast/item/3.0?quinzena=7',
+    '/forecast/item/%2B3?quinzena=7',
+    '/forecast/item/-3?quinzena=7',
+  ])(
     'linha inexistente ou nao numerica (%s): "Item não encontrado nesta quinzena"',
     async (url) => {
       renderRota(url);
@@ -226,13 +242,23 @@ describe('Forecast - rota /forecast/item/:linha', () => {
   it('F13-H: digitar na busca atualiza o href do item na hora (antes de a URL ganhar `busca` pelo debounce de 300 ms)', async () => {
     renderRota('/forecast?quinzena=7');
     await screen.findByRole('link', { name: /PRODUTO A/ });
+    // FZ2: relogio falso so depois de a grade carregar (react-query usa timers reais); o debounce passa a ser exato, sem depender de tempo de parede.
+    vi.useFakeTimers();
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
-    await waitFor(() => expect(itensDaGrade()).toEqual(['PRODUTO B']));
+    expect(itensDaGrade()).toEqual(['PRODUTO B']);
     expect(query().get('busca')).toBeNull();
     const href = screen.getByRole('link', { name: /PRODUTO B/ }).getAttribute('href') ?? '';
     expect(Object.fromEntries(new URLSearchParams(href.split('?')[1]))).toEqual({ quinzena: '7', busca: 'FONTE 2' });
+    act(() => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(query().get('busca')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(query().get('busca')).toBe('FONTE 2');
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: '' } });
-    await waitFor(() => expect(itensDaGrade()).toHaveLength(3));
+    expect(itensDaGrade()).toHaveLength(3);
     expect(screen.getByRole('link', { name: /PRODUTO A/ }).getAttribute('href')).toBe('/forecast/item/3?quinzena=7');
   });
 
@@ -344,14 +370,45 @@ describe('Forecast - filtro, busca e colunas ocultas na URL do painel', () => {
     expect(local()).toBe('/forecast?quinzena=7');
   });
 
-  it('a busca digitada chega na URL depois de uma pausa e limpar remove o parametro', async () => {
+  it('a busca digitada chega na URL depois de uma pausa de 300 ms e limpar remove o parametro', async () => {
     renderRota('/forecast?quinzena=7');
     const campo = await screen.findByLabelText('Buscar produto, código ou fonte');
+    vi.useFakeTimers();
     fireEvent.change(campo, { target: { value: 'produto c' } });
     expect(itensDaGrade()).toEqual(['PRODUTO C']);
-    await waitFor(() => expect(query().get('busca')).toBe('produto c'));
+    expect(query().get('busca')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(query().get('busca')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(query().get('busca')).toBe('produto c');
     fireEvent.change(campo, { target: { value: '' } });
-    await waitFor(() => expect(query().get('busca')).toBeNull());
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(query().get('busca')).toBeNull();
+  });
+
+  it('digitar de novo antes dos 300 ms reinicia a pausa: so a ultima busca vai para a URL', async () => {
+    renderRota('/forecast?quinzena=7');
+    const campo = await screen.findByLabelText('Buscar produto, código ou fonte');
+    vi.useFakeTimers();
+    fireEvent.change(campo, { target: { value: 'pro' } });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    fireEvent.change(campo, { target: { value: 'produto c' } });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(query().get('busca')).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(query().get('busca')).toBe('produto c');
   });
 
   it('trocar de quinzena limpa filtro, busca e colunas ocultas', async () => {

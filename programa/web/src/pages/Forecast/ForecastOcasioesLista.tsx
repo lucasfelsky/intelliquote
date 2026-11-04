@@ -3,6 +3,7 @@ import type { ForecastOcasiao } from '@/services/forecastOcasioes';
 import { ROTULO_ETAPA, textoAlcance, textoEfeito, textoPeriodo } from './forecastOcasioes';
 import { situacaoDoGrupo, type GrupoEvento } from './forecastEventosAlvos';
 import ForecastEventoGrupoAlvos, { AcoesDoRegistro } from './ForecastEventoGrupoAlvos';
+import TabelaRolavel from './ForecastTabelaRolavel';
 
 interface Props {
   /** Ja filtrados e ordenados (1 por conteudo; os alvos ficam em `membros`). */
@@ -41,7 +42,7 @@ export default function ForecastOcasioesLista({
   const baseId = useId();
   const acoes = { pendente, registrarBotao, onEditar, onAlternar, onExcluir };
   return (
-    <div className="table-wrapper">
+    <TabelaRolavel rotulo="Eventos estrangeiros que afetam o lead time">
       <table className="table fco-tabela">
         <caption className="sr-only">Eventos estrangeiros que afetam o lead time</caption>
         <thead>
@@ -160,6 +161,6 @@ export default function ForecastOcasioesLista({
           })}
         </tbody>
       </table>
-    </div>
+    </TabelaRolavel>
   );
 }

@@ -3,6 +3,7 @@ import type { ForecastImportSummary } from '@/services/forecast';
 import { mesAno } from './forecastImport';
 import { NOTA_RESUMO_MODO_TESTE } from './forecastModoTeste';
 import { dataBr, inteiroBr, textoDoSelo } from './forecastPainel';
+import TabelaRolavel from './ForecastTabelaRolavel';
 
 /** Erros (bloqueiam o Confirmar) e avisos (texto do backend, como vem). */
 export function AvisosEErros({ erros, avisos }: { erros: string[]; avisos: string[] }) {
@@ -64,7 +65,7 @@ export default function ForecastResumoPlanilha({
       </p>
       {modoTeste && <p className="fit-resumo-nota">{NOTA_RESUMO_MODO_TESTE}</p>}
       <AvisosEErros erros={resumo.erros} avisos={resumo.avisos} />
-      <div className="table-wrapper">
+      <TabelaRolavel rotulo="O que a importação da planilha vai gravar">
         <table className="table">
           <caption className="sr-only">O que a importação da planilha vai gravar</caption>
           <thead>
@@ -108,7 +109,7 @@ export default function ForecastResumoPlanilha({
             </tr>
           </tbody>
         </table>
-      </div>
+      </TabelaRolavel>
       {selo && (
         <div className={`fc-selo-conferencia fc-selo-conferencia--${selo.tom}`}>
           <strong>{selo.titulo}</strong>

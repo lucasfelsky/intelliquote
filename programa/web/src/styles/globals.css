@@ -13244,7 +13244,8 @@ i.fc-status--preco { background: var(--info); }
 .fci-modal input[type="radio"]:focus-visible,
 .fci-modal input[type="date"]:focus-visible,
 .fci-modal .tabs-trigger:focus-visible,
-.fci-modal .tabs-panel:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fci-modal .tabs-panel:focus-visible,
+.fco-abas .tabs-panel:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
 @media (max-width: 900px) {
   .fci-slots { grid-template-columns: 1fr; }
 }

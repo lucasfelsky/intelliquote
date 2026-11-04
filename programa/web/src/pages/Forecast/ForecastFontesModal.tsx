@@ -18,6 +18,7 @@ import { contarSemPais, opcoesDePais, paisPorFonte, textoFontesSemPais } from '.
 import { LEAD_TIME_MAX_DIAS, lerLeadTime } from './forecastPendentes';
 import ForecastFontePais from './ForecastFontePais';
 import ForecastOcasioesPanel from './ForecastOcasioesPanel';
+import TabelaRolavel from './ForecastTabelaRolavel';
 
 /** Aba aberta primeiro: o botao "Fontes e lead time" abre `fontes`; o "Eventos estrangeiros" abre `ocasioes`. */
 export type AbaFontes = 'fontes' | 'ocasioes';
@@ -159,7 +160,7 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
           {forecastErrorMessage(salvar.error)}
         </div>
       )}
-      <div className="table-wrapper">
+      <TabelaRolavel rotulo="Lead time cadastrado e prazo real por fonte">
         <table className="table">
           <caption className="sr-only">Lead time cadastrado e prazo real por fonte</caption>
           <thead>
@@ -264,7 +265,7 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
             })}
           </tbody>
         </table>
-      </div>
+      </TabelaRolavel>
       {dados.semFonte.chegadas > 0 && (
         <p className="fcd-dica">Chegadas sem fonte no cadastro: {dados.semFonte.chegadas}</p>
       )}
@@ -279,7 +280,9 @@ const ABAS_BASE_ID = 'fcf-abas';
 
 /**
  * Painel de aba que continua MONTADO quando inativo (o TabPanel compartilhado desmonta e o rascunho do formulario de
- * evento se perderia ao trocar de aba). Mesmos ids/aria que o Tabs.tsx espera (aria-controls/aria-labelledby).
+ * evento se perderia ao trocar de aba). Mesmos ids/aria que o Tabs.tsx espera (aria-controls/aria-labelledby). Como o TabPanel compartilhado, o painel
+ * ativo e focavel (tabIndex 0): com o papel viewer ele nao tem campo nem botao, e sem isso o teclado nao rola nem alcanca o conteudo. O anel de foco vem do CSS
+ * (.fco-abas .tabs-panel:focus-visible), por isso sem `outline: none` inline.
  */
 function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean; children: ReactNode }) {
   return (
@@ -288,7 +291,7 @@ function PainelDaAba({ valor, ativo, children }: { valor: string; ativo: boolean
       id={`${ABAS_BASE_ID}-panel-${valor}`}
       aria-labelledby={`${ABAS_BASE_ID}-tab-${valor}`}
       className="tabs-panel"
-      style={{ outline: 'none' }}
+      tabIndex={ativo ? 0 : undefined}
       hidden={!ativo}
     >
       {children}
