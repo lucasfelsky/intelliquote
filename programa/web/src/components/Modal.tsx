@@ -1,14 +1,19 @@
 import React, { useEffect, useRef } from 'react';
+import { Icon } from './icons';
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
+  /** Linha de apoio abaixo do titulo (ex.: codigo da cotacao). Opcional; sem ela o cabecalho segue como antes. */
+  subtitle?: React.ReactNode;
   children: React.ReactNode;
   size?: 'default' | 'wide' | 'xl';
+  /** Classe EXTRA no <dialog> (ex.: raiz de portal do Forecast). Opcional; sem ela o className segue como antes. */
+  className?: string;
 }
 
-export function Modal({ isOpen, onClose, title, children, size }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, children, size, className: extra }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mousedownTargetRef = useRef<EventTarget | null>(null);
 
@@ -60,18 +65,26 @@ export function Modal({ isOpen, onClose, title, children, size }: ModalProps) {
     };
   }, [onClose]);
 
-  const className =
+  const base =
     size === 'xl' ? 'modal-dialog modal-dialog--xl'
     : size === 'wide' ? 'modal-dialog modal-dialog--wide'
     : 'modal-dialog';
+  const className = extra ? `${base} ${extra}` : base;
 
   return (
     <dialog ref={dialogRef} className={className}>
       <div className="modal-content">
         <header className="modal-header">
-          <h2>{title}</h2>
+          {subtitle ? (
+            <div className="modal-header__titles">
+              <h2>{title}</h2>
+              <p className="modal-subtitle">{subtitle}</p>
+            </div>
+          ) : (
+            <h2>{title}</h2>
+          )}
           <button type="button" onClick={onClose} className="btn-close" aria-label="Fechar">
-            &times;
+            <Icon name="x" size={16} strokeWidth={2} />
           </button>
         </header>
         <div className="modal-body">

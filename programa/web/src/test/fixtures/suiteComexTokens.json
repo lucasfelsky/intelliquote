@@ -1,0 +1,674 @@
+[
+  {
+    "token": "--rf-bg",
+    "claro": "#eef2f1",
+    "escuro": "#061a22",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-surface",
+    "claro": "#ffffff",
+    "escuro": "#0f2b35",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-surface-alt",
+    "claro": "#f5f8f7",
+    "escuro": "#163845",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-border",
+    "claro": "#d5e2de",
+    "escuro": "rgba(74, 222, 200, 0.14)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-divider",
+    "claro": "#e3ecea",
+    "escuro": "rgba(74, 222, 200, 0.10)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastModaisOperacao"
+  },
+  {
+    "token": "--rf-ink",
+    "claro": "#0b2430",
+    "escuro": "#e8f4f6",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-ink-soft",
+    "claro": "#4a6472",
+    "escuro": "#9fb6bf",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-input-bg",
+    "claro": "#ffffff",
+    "escuro": "#061a22",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastModaisOperacao"
+  },
+  {
+    "token": "--rf-input-border",
+    "claro": "#6b7f88",
+    "escuro": "#64848d",
+    "constante": false,
+    "fonte": "decisao",
+    "ref": "D3 (boards novos do v68)"
+  },
+  {
+    "token": "--rf-action",
+    "claro": "#004153",
+    "escuro": "#14dda7",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Cotacoes"
+  },
+  {
+    "token": "--rf-primary-700",
+    "claro": "#007864",
+    "escuro": "#14dda7",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-primary-700-hover",
+    "claro": "#00604f",
+    "escuro": "#7fe3cf",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main; escuro: portal --link-color-hover"
+  },
+  {
+    "token": "--rf-primary-50",
+    "claro": "#e2f6f0",
+    "escuro": "rgba(20, 221, 167, 0.14)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-disabled-bg",
+    "claro": "#e3ecea",
+    "escuro": "#163845",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-disabled-fg",
+    "claro": "#6b7f88",
+    "escuro": "#7d939b",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-count-chip",
+    "claro": "rgba(0, 120, 100, 0.12)",
+    "escuro": "rgba(20, 221, 167, 0.18)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-tone-success-bg",
+    "claro": "#e2f6f0",
+    "escuro": "rgba(20, 221, 167, 0.14)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-success-fg",
+    "claro": "#00604f",
+    "escuro": "#5ff0c8",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-warning-bg",
+    "claro": "#fdf3dc",
+    "escuro": "rgba(242, 193, 78, 0.14)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-warning-fg",
+    "claro": "#8a5a0a",
+    "escuro": "#f2c14e",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-danger-bg",
+    "claro": "#fdecea",
+    "escuro": "rgba(229, 72, 60, 0.18)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-danger-fg",
+    "claro": "#9a2a21",
+    "escuro": "#ff9b90",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-info-bg",
+    "claro": "#e6f0fa",
+    "escuro": "rgba(91, 159, 255, 0.16)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-info-fg",
+    "claro": "#155793",
+    "escuro": "#9cc3ff",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-neutral-bg",
+    "claro": "#eceff0",
+    "escuro": "rgba(159, 182, 191, 0.14)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-neutral-fg",
+    "claro": "#475861",
+    "escuro": "#c3d3d9",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-shadow-hover",
+    "claro": "0 6px 18px rgba(0, 65, 83, 0.10)",
+    "escuro": "0 14px 30px rgba(0, 0, 0, 0.50)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Main; escuro: portal --shadow-md"
+  },
+  {
+    "token": "--rf-shadow-modal",
+    "claro": "0 20px 48px rgba(0, 65, 83, 0.18)",
+    "escuro": "0 20px 48px rgba(0, 0, 0, 0.45)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastModaisOperacao"
+  },
+  {
+    "token": "--rf-fc-status-pendente",
+    "claro": "#9aa9b0",
+    "escuro": "#9fb6bf",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-fc-status-cotando",
+    "claro": "#8a5a0a",
+    "escuro": "#c98a12",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-fc-status-confirmado",
+    "claro": "#e0a31a",
+    "escuro": "#f2c14e",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-fc-status-po",
+    "claro": "#007864",
+    "escuro": "#14dda7",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-fc-status-preco",
+    "claro": "#1e6fb6",
+    "escuro": "#9cc3ff",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-fc-current-tint",
+    "claro": "rgba(253, 243, 220, 0.45)",
+    "escuro": "rgba(242, 193, 78, 0.06)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-control-hover-border",
+    "claro": "#b9cbc6",
+    "escuro": "rgba(74, 222, 200, 0.28)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Topbar"
+  },
+  {
+    "token": "--rf-avatar-ring",
+    "claro": "none",
+    "escuro": "0 0 0 1px rgba(20, 221, 167, 0.35)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Topbar"
+  },
+  {
+    "token": "--rf-primary",
+    "claro": "#14dda7",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-primary-hover",
+    "claro": "#2ee8b5",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-primary-pressed",
+    "claro": "#0fb98c",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-on-primary",
+    "claro": "#0b2430",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-primary-strong",
+    "claro": "#004153",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-primary-strong-hover",
+    "claro": "#003241",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-navy-soft",
+    "claro": "#0a5468",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-sidebar-bg",
+    "claro": "linear-gradient(180deg, #003241, #004153)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-brand-ink",
+    "claro": "#e8f4f6",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-ink",
+    "claro": "#ffffff",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-ink-soft",
+    "claro": "#b8ccd3",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-hover",
+    "claro": "rgba(255, 255, 255, 0.08)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-active-bg",
+    "claro": "rgba(20, 221, 167, 0.16)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-active-ring",
+    "claro": "rgba(20, 221, 167, 0.35)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-seg-bg",
+    "claro": "rgba(255, 255, 255, 0.06)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-seg-border",
+    "claro": "rgba(255, 255, 255, 0.10)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-tag-bg",
+    "claro": "rgba(255, 255, 255, 0.12)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-tag-fg",
+    "claro": "#d6e6eb",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-tag-active-bg",
+    "claro": "rgba(20, 221, 167, 0.22)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-sidebar-tag-active-fg",
+    "claro": "#5ff0c8",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sidebar"
+  },
+  {
+    "token": "--rf-brand-tile-on-navy",
+    "claro": "rgba(255, 255, 255, 0.10)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Marca"
+  },
+  {
+    "token": "--rf-tone-success-solid",
+    "claro": "#007864",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-warning-solid",
+    "claro": "#c98a12",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-danger-solid",
+    "claro": "#c2362b",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-info-solid",
+    "claro": "#1e6fb6",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-tone-neutral-solid",
+    "claro": "#9aa9b0",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-focus-halo",
+    "claro": "rgba(20, 221, 167, 0.28)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Componentes"
+  },
+  {
+    "token": "--rf-shadow-rest",
+    "claro": "0 1px 2px rgba(0, 65, 83, 0.08)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-shadow-sticky",
+    "claro": "6px 0 8px -6px rgba(0, 65, 83, 0.25)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "ForecastPainel"
+  },
+  {
+    "token": "--rf-overlay",
+    "claro": "rgba(11, 36, 48, 0.55)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Sobreposicoes"
+  },
+  {
+    "token": "--rf-font-sans",
+    "claro": "'Manrope', 'Segoe UI', system-ui, sans-serif",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-font-display",
+    "claro": "'Sora', 'Manrope', system-ui, sans-serif",
+    "escuro": null,
+    "constante": true,
+    "fonte": "decisao",
+    "ref": "Main (Sora nos titulos)"
+  },
+  {
+    "token": "--rf-font-mono",
+    "claro": "'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace",
+    "escuro": null,
+    "constante": true,
+    "fonte": "decisao",
+    "ref": "Main (JetBrains Mono em codigos)"
+  },
+  {
+    "token": "--rf-radius-xs",
+    "claro": "8px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-control",
+    "claro": "10px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-button",
+    "claro": "12px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-alert",
+    "claro": "14px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-card",
+    "claro": "16px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-card-lg",
+    "claro": "18px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-panel",
+    "claro": "22px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-radius-pill",
+    "claro": "99px",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Main"
+  },
+  {
+    "token": "--rf-dur-fast",
+    "claro": "120ms",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-dur-base",
+    "claro": "200ms",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-dur-slow",
+    "claro": "300ms",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-dur-page",
+    "claro": "500ms",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-dur-fill",
+    "claro": "320ms",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-ease-out",
+    "claro": "cubic-bezier(0.4, 0, 0.2, 1)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  },
+  {
+    "token": "--rf-ease-spring",
+    "claro": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "Movimento"
+  }
+]

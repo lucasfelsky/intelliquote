@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
+import { Icon } from '@/components/icons';
 import type { ForecastLinha } from '@/services/forecast';
 import {
   FORECAST_MESES_ATIPICOS_MOTIVO_MAX,
@@ -123,7 +124,7 @@ function Formulario({ productId, baseDate, linha, onFechar }: Props) {
                 <tr key={anoMes} className={estado.marcado ? 'fca-linha--marcada' : undefined}>
                   <th scope="row">
                     {rotulo}
-                    {i === 6 && <span className="fca-atual"> · mês atual, até o dia 15</span>}
+                    {i === 6 && <span className="fca-atual"> mês atual, até o dia 15</span>}
                   </th>
                   <td className="fce-num">{venda === null ? '—' : inteiroBr(venda)}</td>
                   <td>
@@ -169,8 +170,9 @@ function Formulario({ productId, baseDate, linha, onFechar }: Props) {
         </p>
       )}
       {mesAtualMarcado && (
-        <p className="fce-dica">
-          Mês atual marcado: o consumo do mês (AG) fica igual à média trimestral, sem a venda parcial.
+        <p className="fce-dica fca-aviso">
+          <Icon name="alert-triangle" size={18} />
+          <span>Mês atual marcado: o consumo do mês (AG) fica igual à média trimestral, sem a venda parcial.</span>
         </p>
       )}
       {gravar.isError && (

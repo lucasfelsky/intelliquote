@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import LoginGate from '@/pages/LoginGate';
+import LoadingShell from '@/components/LoadingShell';
 import AppShell from '@/components/AppShell';
 import ComercialRouteGuard from '@/components/ComercialRouteGuard';
 import NewVersionBanner from '@/components/NewVersionBanner';
@@ -17,7 +18,7 @@ import Itens from '@/pages/Itens';
 import Familias from '@/pages/Familias';
 
 import Relatorios from '@/pages/Relatorios';
-import Ajuda from '@/pages/Ajuda';
+import Manual from '@/pages/Manual';
 import Auditoria from '@/pages/Auditoria';
 import Templates from '@/pages/Templates';
 import MinhaConta from '@/pages/MinhaConta';
@@ -39,14 +40,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-function LoadingShell() {
-  return (
-    <div className="spinner spinner--fullscreen">
-      <div className="spinner" />
-    </div>
-  );
-}
 
 function RequireAuth() {
   const { status } = useAuth();
@@ -95,7 +88,9 @@ export default function App() {
                   <Route path="/comparacoes" element={<Navigate to="/cotacoes" replace />} />
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/forecast" element={<Forecast />} />
-                  <Route path="/ajuda" element={<Ajuda />} />
+                  <Route path="/forecast/item/:linha" element={<Forecast />} />
+                  <Route path="/manual" element={<Manual />} />
+                  <Route path="/ajuda" element={<Navigate to="/manual" replace />} />
                   <Route path="/auditoria" element={<Auditoria />} />
                   <Route path="/templates" element={<Templates />} />
                   <Route path="/minha-conta" element={<MinhaConta />} />

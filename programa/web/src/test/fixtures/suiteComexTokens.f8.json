@@ -1,0 +1,106 @@
+[
+  {
+    "token": "--rf-vencedora-borda",
+    "claro": "rgba(0, 120, 100, 0.35)",
+    "escuro": "#14dda7",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-vencedora-selo-anel",
+    "claro": "rgba(0, 120, 100, 0.35)",
+    "escuro": "rgba(20, 221, 167, 0.45)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-divergente-anel",
+    "claro": "rgba(201, 138, 18, 0.45)",
+    "escuro": "rgba(242, 193, 78, 0.4)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-popover-aviso-borda",
+    "claro": "#e9cf96",
+    "escuro": "rgba(242, 193, 78, 0.4)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-aviso-borda-suave",
+    "claro": "#f0d9a6",
+    "escuro": "rgba(242, 193, 78, 0.3)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ComparacaoEstados"
+  },
+  {
+    "token": "--rf-aviso-icone-bg",
+    "claro": "#f8e6bd",
+    "escuro": "rgba(242, 193, 78, 0.22)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ComparacaoEstados"
+  },
+  {
+    "token": "--rf-score-trilho",
+    "claro": "#e3ecea",
+    "escuro": "rgba(159, 182, 191, 0.18)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-score-outros",
+    "claro": "#9fb1b8",
+    "escuro": "#5d7a84",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-vencedora-brilho",
+    "claro": "rgba(20, 221, 167, 0.45)",
+    "escuro": "rgba(20, 221, 167, 0.45)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-vencedora-brilho-suave",
+    "claro": "rgba(20, 221, 167, 0.18)",
+    "escuro": "rgba(20, 221, 167, 0.18)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-pulso",
+    "claro": "rgba(20, 221, 167, 0.55)",
+    "escuro": "rgba(20, 221, 167, 0.55)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacao"
+  },
+  {
+    "token": "--rf-cmp-criterio-borda",
+    "claro": "#d5e2de",
+    "escuro": "#3d5a62",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacaoEscuro"
+  },
+  {
+    "token": "--rf-cmp-criterio-faixa",
+    "claro": "#f5f8f7",
+    "escuro": "#0a222b",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "CotacaoComparacaoEscuro"
+  }
+]

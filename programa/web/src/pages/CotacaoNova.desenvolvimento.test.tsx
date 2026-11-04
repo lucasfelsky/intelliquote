@@ -104,7 +104,7 @@ describe('CotacaoNova a partir de solicitacao de desenvolvimento', () => {
 
     fireEvent.click(getByRole('button', { name: 'Próximo' }));
     await waitFor(() => {
-      const add = getByRole('button', { name: '+ Adicionar item' }) as HTMLButtonElement;
+      const add = getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement;
       expect(add.disabled).toBe(false);
     });
     // Nada pre-preenchido: nem o item de catalogo da solicitacao.
@@ -135,7 +135,7 @@ describe('CotacaoNova a partir de solicitacao de desenvolvimento', () => {
     expect(await findByText('Vinculada à solicitação #9 do comercial')).toBeTruthy();
     fireEvent.click(getByRole('button', { name: 'Próximo' }));
     await waitFor(() => {
-      const add = getByRole('button', { name: '+ Adicionar item' }) as HTMLButtonElement;
+      const add = getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement;
       expect(add.disabled).toBe(false);
     });
     expect(getByText('Resina X')).toBeTruthy();

@@ -296,7 +296,7 @@ describe('CreditSupportPanel', () => {
     const { findByRole, getByTestId } = renderPanel();
     await findByRole('heading', { name: 'Credit Support — ACME Ltda' });
     const badge = within(getByTestId('credit-support-request-1')).getByText('PO enviada');
-    expect(badge.className).toContain('badge--success');
+    expect(badge.className).toContain('badge--info');
     expect(badge.getAttribute('title')).toContain('Ordem de Compra enviada ao parceiro em');
     expect(within(getByTestId('credit-support-request-2')).queryByText('PO enviada')).toBeNull();
     expect(within(getByTestId('credit-support-request-3')).queryByText('PO enviada')).toBeNull();

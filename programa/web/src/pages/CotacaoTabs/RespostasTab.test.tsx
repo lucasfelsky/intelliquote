@@ -138,7 +138,7 @@ describe('RespostasTab', () => {
   it('2. "+ Nova resposta" abre o modal A', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.open).toBe(true);
     const heading = dialogA.querySelector('.modal-header h2');
@@ -231,7 +231,7 @@ describe('RespostasTab', () => {
   it('4. modal A é wide', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.className).toContain('modal-dialog--wide');
   });
@@ -239,7 +239,7 @@ describe('RespostasTab', () => {
   it('5. modal A sem título duplicado', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.querySelectorAll('h2').length).toBe(1);
   });
@@ -247,7 +247,7 @@ describe('RespostasTab', () => {
   it('6. "Cancelar" do modal A fecha e não submete', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');
-    fireEvent.click(getByRole('button', { name: '+ Nova resposta' }));
+    fireEvent.click(getByRole('button', { name: 'Nova resposta' }));
     const [dialogA] = getDialogs(container);
     expect(dialogA.open).toBe(true);
     fireEvent.click(within(dialogA).getByRole('button', { name: 'Cancelar' }));
@@ -365,6 +365,126 @@ describe('RespostasTab', () => {
       })
     );
   });
+  describe('preco-alvo como campo de texto com virgula (ajuste pos-I-67)', () => {
+    async function abrirResponder(r: typeof response) {
+      vi.mocked(listQuoteResponses).mockResolvedValue([r]);
+      vi.mocked(replyToQuoteResponse).mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+      const { container, findByText, getByRole } = renderTab();
+      await findByText('ACME Ltda');
+      fireEvent.click(getByRole('button', { name: 'Responder' }));
+      const [, dialogB] = getDialogs(container);
+      await waitFor(() => expect((dialogB.querySelector('#replySubject') as HTMLInputElement).value).toBe('s'));
+      return dialogB;
+    }
+
+    it('campo unico e type=text com inputMode=decimal (sem step/min)', async () => {
+      const unico = await abrirResponder(response);
+      const campoUnico = unico.querySelector('#replyTargetPrice') as HTMLInputElement;
+      expect(campoUnico.type).toBe('text');
+      expect(campoUnico.getAttribute('inputmode')).toBe('decimal');
+      expect(campoUnico.hasAttribute('step')).toBe(false);
+      expect(campoUnico.hasAttribute('min')).toBe(false);
+    });
+
+    it('campo por item (multi-item) tambem e type=text com inputMode=decimal', async () => {
+      const dialogB = await abrirResponder(multiItemResponse);
+      for (const id of [501, 502]) {
+        const campo = dialogB.querySelector(`#replyItemTarget-${id}`) as HTMLInputElement;
+        expect(campo.type).toBe('text');
+        expect(campo.getAttribute('inputmode')).toBe('decimal');
+      }
+    });
+
+    it.each([
+      ['2,10', 2.1],
+      ['2.10', 2.1],
+      ['  3,5 ', 3.5],
+      ['', null],
+      ['   ', null],
+      ['abc', null],
+      ['1,2,3', null],
+    ])('campo unico: "%s" vai ao backend como %s', async (digitado, esperado) => {
+      const dialogB = await abrirResponder(response);
+      fireEvent.change(dialogB.querySelector('#replyTargetPrice') as HTMLInputElement, { target: { value: digitado } });
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(42, { subject: 's', message: '', targetPrice: esperado })
+      );
+    });
+
+    it('campo unico: "Atualizar preview" tambem normaliza a virgula', async () => {
+      const dialogB = await abrirResponder(response);
+      fireEvent.change(dialogB.querySelector('#replyTargetPrice') as HTMLInputElement, { target: { value: '2,10' } });
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Atualizar preview' }));
+      await waitFor(() => expect(previewQuoteResponseReply).toHaveBeenCalledTimes(2));
+      expect(previewQuoteResponseReply).toHaveBeenLastCalledWith(42, { subject: 's', message: '', targetPrice: 2.1 });
+    });
+
+    it('campo unico pre-preenchido mostra virgula decimal (90 -> 90,00) e o envio sem editar manda o mesmo numero', async () => {
+      const dialogB = await abrirResponder(response);
+      expect((dialogB.querySelector('#replyTargetPrice') as HTMLInputElement).value).toBe('90,00');
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(42, { subject: 's', message: '', targetPrice: 90 })
+      );
+    });
+
+    it('campo por item pre-preenchido mostra virgula decimal (1.78 -> 1,78; 2.1 -> 2,10; 1234.5 sem milhar) e o round-trip preserva o numero', async () => {
+      const comAlvos = {
+        ...multiItemResponse,
+        items: [
+          { ...multiItemResponse.items[0]!, targetPrice: 1.78 },
+          { ...multiItemResponse.items[1]!, targetPrice: 1234.5 },
+        ],
+      };
+      const dialogB = await abrirResponder(comAlvos);
+      expect((within(dialogB).getByLabelText('Resina Epóxi') as HTMLInputElement).value).toBe('1,78');
+      expect((within(dialogB).getByLabelText('Catalisador Y') as HTMLInputElement).value).toBe('1234,50');
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(43, {
+          subject: 's',
+          message: '',
+          itemTargets: [
+            { quoteResponseItemId: 501, targetPrice: 1.78 },
+            { quoteResponseItemId: 502, targetPrice: 1234.5 },
+          ],
+        })
+      );
+    });
+
+    it('por item: "2,10", "2.10", vazio e texto invalido (preview e envio)', async () => {
+      const dialogB = await abrirResponder(multiItemResponse);
+      fireEvent.change(within(dialogB).getByLabelText('Resina Epóxi'), { target: { value: '2.10' } });
+      fireEvent.change(within(dialogB).getByLabelText('Catalisador Y'), { target: { value: '' } });
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Atualizar preview' }));
+      await waitFor(() =>
+        expect(previewQuoteResponseReply).toHaveBeenLastCalledWith(43, {
+          subject: 's',
+          message: '',
+          itemTargets: [
+            { quoteResponseItemId: 501, targetPrice: 2.1 },
+            { quoteResponseItemId: 502, targetPrice: null },
+          ],
+        })
+      );
+
+      fireEvent.change(within(dialogB).getByLabelText('Resina Epóxi'), { target: { value: '2,10' } });
+      fireEvent.change(within(dialogB).getByLabelText('Catalisador Y'), { target: { value: 'abc' } });
+      fireEvent.click(within(dialogB).getByRole('button', { name: 'Enviar e-mail' }));
+      await waitFor(() =>
+        expect(replyToQuoteResponse).toHaveBeenCalledWith(43, {
+          subject: 's',
+          message: '',
+          itemTargets: [
+            { quoteResponseItemId: 501, targetPrice: 2.1 },
+            { quoteResponseItemId: 502, targetPrice: null },
+          ],
+        })
+      );
+    });
+  });
+
   describe('assunto padrao do envio inicial e rotulo do alvo (1 item)', () => {
     const DISPATCH_SUBJECT = 'Sourcing request QR-1 - Produto X';
 

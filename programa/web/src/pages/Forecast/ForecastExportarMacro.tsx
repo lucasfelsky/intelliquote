@@ -1,5 +1,10 @@
+import { Icon } from '@/components/icons';
 import { forecastErrorMessage } from '@/services/forecast';
 import { TEXTO_GERANDO_MACRO, textoMacroGerada, useBaixarPlanilhaMacro } from './useBaixarPlanilhaMacro';
+
+// Rotulo visivel curto (F13-H: o cabecalho em cartao cabe em 1 linha de 1280 a 1536); o nome acessivel continua o completo.
+const ROTULO_CURTO_MACRO = 'Exportar MACRO';
+const NOME_ACESSIVEL_MACRO = 'Exportar MACRO (planilha XLSX)';
 
 interface Props {
   snapshotId: number;
@@ -7,7 +12,7 @@ interface Props {
   hoje: string;
 }
 
-// Devolve um fragmento: o botao fica direto em `.page-header__actions` (herda o nowrap) e as mensagens ocupam a linha
+// Devolve um fragmento: o botao fica direto em `.fc-cabecalho__acoes` (o grupo de acoes do cabecalho) e as mensagens ocupam a linha
 // inteira. Montar com `key` da quinzena para limpar sucesso/erro ao trocar de quinzena.
 export default function ForecastExportarMacro({ snapshotId, hoje }: Props) {
   const macro = useBaixarPlanilhaMacro(snapshotId);
@@ -18,9 +23,11 @@ export default function ForecastExportarMacro({ snapshotId, hoje }: Props) {
         className="ghost-button"
         disabled={macro.isPending}
         aria-busy={macro.isPending}
+        aria-label={macro.isPending ? undefined : NOME_ACESSIVEL_MACRO}
         onClick={() => macro.mutate(hoje)}
       >
-        {macro.isPending ? TEXTO_GERANDO_MACRO : 'Exportar planilha MACRO (XLSX)'}
+        <Icon name="file-x" size={16} />
+        {macro.isPending ? TEXTO_GERANDO_MACRO : ROTULO_CURTO_MACRO}
       </button>
       {macro.isError && (
         <p role="alert" className="fcme-msg fcme-msg--erro">

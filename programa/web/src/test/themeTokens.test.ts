@@ -45,25 +45,76 @@ const SAME_IN_BOTH_THEMES = [
   '--selection-bg',
   '--radius',
   '--radius-sm',
+  '--rf-primary',
+  '--rf-primary-hover',
+  '--rf-primary-pressed',
+  '--rf-on-primary',
+  '--rf-primary-strong',
+  '--rf-primary-strong-hover',
+  '--rf-navy-soft',
+  '--rf-sidebar-bg',
+  '--rf-sidebar-brand-ink',
+  '--rf-sidebar-ink',
+  '--rf-sidebar-ink-soft',
+  '--rf-sidebar-hover',
+  '--rf-sidebar-active-bg',
+  '--rf-sidebar-active-ring',
+  '--rf-sidebar-seg-bg',
+  '--rf-sidebar-seg-border',
+  '--rf-sidebar-tag-bg',
+  '--rf-sidebar-tag-fg',
+  '--rf-sidebar-tag-active-bg',
+  '--rf-sidebar-tag-active-fg',
+  '--rf-brand-tile-on-navy',
+  '--rf-tone-success-solid',
+  '--rf-tone-warning-solid',
+  '--rf-tone-danger-solid',
+  '--rf-tone-info-solid',
+  '--rf-tone-neutral-solid',
+  '--rf-focus-halo',
+  '--rf-shadow-rest',
+  '--rf-shadow-sticky',
+  '--rf-overlay',
+  '--rf-font-sans',
+  '--rf-font-display',
+  '--rf-font-mono',
+  '--rf-radius-xs',
+  '--rf-radius-control',
+  '--rf-radius-button',
+  '--rf-radius-alert',
+  '--rf-radius-card',
+  '--rf-radius-card-lg',
+  '--rf-radius-panel',
+  '--rf-radius-pill',
+  '--rf-dur-fast',
+  '--rf-dur-base',
+  '--rf-dur-slow',
+  '--rf-dur-page',
+  '--rf-dur-fill',
+  '--rf-ease-out',
+  '--rf-ease-spring',
+  '--rf-shadow-primary-hover',
+  '--rf-toast-ink',
+  '--rf-toast-ink-soft',
 ];
 
-// Valores do :root claro em origin/main f74c579 (nao podem mudar).
+// Valores do :root claro depois da TROCA-2 (plano-mestre §2.2).
 const FROZEN_LIGHT: Record<string, string> = {
-  '--bg': '#f5f8f7',
+  '--bg': '#eef2f1',
   '--surface': '#ffffff',
-  '--surface-alt': '#eef4f1',
-  '--ink': '#1f1c18',
-  '--ink-soft': '#4a5560',
-  '--primary': '#00ae91',
-  '--primary-700': '#00735c',
-  '--primary-50': '#e3f5f0',
-  '--danger': '#a4370c',
-  '--warning': '#7a5a07',
-  '--info': '#16568c',
-  '--border': '#dce9e5',
-  '--border-strong': '#b7cdc5',
-  '--shadow': '0 8px 28px rgba(0, 40, 40, 0.08)',
-  '--shadow-sm': '0 2px 8px rgba(0, 40, 40, 0.06)',
+  '--surface-alt': '#f5f8f7',
+  '--ink': '#0b2430',
+  '--ink-soft': '#4a6472',
+  '--primary': '#14dda7',
+  '--primary-700': '#007864',
+  '--primary-50': '#e2f6f0',
+  '--danger': '#9a2a21',
+  '--warning': '#8a5a0a',
+  '--info': '#155793',
+  '--border': '#d5e2de',
+  '--border-strong': '#9fb1b8',
+  '--shadow': '0 8px 28px rgba(0, 65, 83, 0.08)',
+  '--shadow-sm': '0 2px 8px rgba(0, 65, 83, 0.06)',
 };
 
 // ---------- parser minimo ----------
@@ -162,7 +213,6 @@ const PAIRS: ReadonlyArray<readonly [string, string, number]> = [
   ['ink-soft', 'surface-muted', TEXT],
   ['ink-muted', 'surface', TEXT],
   ['ink-muted', 'input-bg', TEXT],
-  ['ink-muted', 'cmp-criteria-bg', TEXT],
   ['ink-faint', 'surface', TEXT],
   ['ink-faint', 'surface-alt', TEXT],
   ['primary-700', 'surface', TEXT],
@@ -193,12 +243,10 @@ const PAIRS: ReadonlyArray<readonly [string, string, number]> = [
   ['on-strong', 'warning-strong', TEXT],
   ['on-strong', 'toast-bg', TEXT],
   ['on-strong', 'toast-action-hover', TEXT],
-  ['ink', 'winner-bg', TEXT],
   ['ink', 'selection-bg', TEXT],
   ['input-border', 'input-bg', UI],
   ['input-border', 'surface', UI],
   ['scorebar-fill', 'surface-alt', UI],
-  ['primary', 'winner-track', UI],
   ['star-on', 'surface', UI],
   ['star-off', 'surface', UI],
   // "papel claro" (Jodit / previa da assinatura): constantes sobre o branco do papel
@@ -208,6 +256,21 @@ const PAIRS: ReadonlyArray<readonly [string, string, number]> = [
   ['paper-placeholder', 'paper', TEXT],
   // anel do toggle selecionado (--primary-700) contra o fundo do grupo (--surface-alt)
   ['primary-700', 'surface-alt', UI],
+  // Refino (mock v68): so pares opacos nos 2 temas (o opaque() daqui compoe alpha sobre o --surface antigo)
+  ['rf-ink', 'rf-bg', TEXT],
+  ['rf-ink', 'rf-surface', TEXT],
+  ['rf-ink', 'rf-surface-alt', TEXT],
+  ['rf-ink-soft', 'rf-surface', TEXT],
+  ['rf-ink-soft', 'rf-surface-alt', TEXT],
+  ['rf-primary-700', 'rf-surface', TEXT],
+  ['rf-primary-700-hover', 'rf-surface', TEXT],
+  ['rf-on-primary', 'rf-primary', TEXT],
+  ['rf-on-primary', 'rf-primary-hover', TEXT],
+  ['rf-sidebar-ink-soft', 'rf-primary-strong-hover', TEXT],
+  ['rf-input-border', 'rf-surface', UI],
+  ['rf-input-border', 'rf-surface-alt', UI],
+  ['rf-input-border', 'rf-input-bg', UI],
+  ['rf-action', 'rf-surface', UI],
 ];
 
 describe('tema escuro: guarda do CSS', () => {
@@ -286,11 +349,11 @@ describe('tema escuro: .tsx e index.html', () => {
     'pages/Forwarders.tsx': ['var(--border, #dde3ea)'],
     'pages/Solicitacoes/ComercialView.tsx': ['var(--border, #dde3ea)'],
     // previa da assinatura de e-mail: papel branco por definicao
-    'pages/MinhaConta.tsx': ["'#fff'", "'#1F2933'", "'#7A848C'"],
+    'pages/MinhaConta.tsx': ["'#fff'", "'#1F2933'", "'#4A5560'"],
     // srcDoc da previa de e-mail (iframe claro)
     'pages/Templates.tsx': ['color:#888'],
     // stops da <mask> do fundo do login: luminancia da mascara, nao cor visivel
-    'components/LoginBackdrop.tsx': ['stopColor="#000"', 'stopColor="#fff"'],
+    'components/LoginBackdrop.tsx': ['stopColor="#000"', 'stopColor="#fff"', 'stopColor="#444"'],
   };
 
   it('cores literais em .tsx (exceto testes) so nas linhas da allowlist', () => {
@@ -316,8 +379,8 @@ describe('tema escuro: .tsx e index.html', () => {
   it('index.html: script anti-flash antes do bundle e metas theme-color por esquema', () => {
     expect(indexHtml).toContain("'iq-theme'");
     expect(indexHtml).toContain('data-theme');
-    expect(indexHtml).toMatch(/<meta name="theme-color" content="#00ae91" media="\(prefers-color-scheme: light\)"/);
-    expect(indexHtml).toMatch(/<meta name="theme-color" content="#0b1518" media="\(prefers-color-scheme: dark\)"/);
+    expect(indexHtml).toMatch(/<meta name="theme-color" content="#004153" media="\(prefers-color-scheme: light\)"/);
+    expect(indexHtml).toMatch(/<meta name="theme-color" content="#061a22" media="\(prefers-color-scheme: dark\)"/);
     const script = indexHtml.indexOf('<script>');
     const bundle = indexHtml.indexOf('/src/main.tsx');
     expect(script).toBeGreaterThan(-1);

@@ -1,0 +1,10 @@
+[
+  {
+    "token": "--rf-fc-evento-inativo",
+    "claro": "#6b7f88",
+    "escuro": "#6b7f88",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastEventos"
+  }
+]

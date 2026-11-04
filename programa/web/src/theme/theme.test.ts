@@ -229,3 +229,47 @@ describe('initTheme / applyTheme', () => {
     }
   });
 });
+
+describe('impressao (F12-S): o papel e sempre claro', () => {
+  it('beforeprint aplica light com data-theme-switching e afterprint reaplica o tema resolvido (forcado ou automatico)', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => frames.push(cb));
+    const mq = mockMatchMedia(true);
+    teardown = initTheme();
+    expect(html().dataset.theme).toBe('dark');
+    frames.splice(0).forEach((cb) => cb(0));
+    frames.splice(0).forEach((cb) => cb(0));
+
+    window.dispatchEvent(new Event('beforeprint'));
+    expect(html().dataset.theme).toBe('light');
+    expect(html().hasAttribute('data-theme-switching')).toBe(true);
+    window.dispatchEvent(new Event('afterprint'));
+    expect(html().dataset.theme).toBe('dark');
+
+    // o sistema muda durante a impressao: o afterprint le a preferencia de novo (auto => segue o sistema)
+    window.dispatchEvent(new Event('beforeprint'));
+    mq.setSystemDark(false);
+    window.dispatchEvent(new Event('afterprint'));
+    expect(html().dataset.theme).toBe('light');
+
+    // preferencia forcada vence o sistema
+    setThemePreference('dark');
+    window.dispatchEvent(new Event('beforeprint'));
+    expect(html().dataset.theme).toBe('light');
+    window.dispatchEvent(new Event('afterprint'));
+    expect(html().dataset.theme).toBe('dark');
+  });
+
+  it('o teardown remove os 2 ouvintes: beforeprint e afterprint depois dele nao mexem no tema', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    mockMatchMedia(true);
+    const stop = initTheme();
+    expect(add.mock.calls.filter(([type]) => type === 'beforeprint' || type === 'afterprint')).toHaveLength(2);
+    expect(html().dataset.theme).toBe('dark');
+    stop();
+    expect(remove.mock.calls.filter(([type]) => type === 'beforeprint' || type === 'afterprint')).toHaveLength(2);
+    window.dispatchEvent(new Event('beforeprint'));
+    expect(html().dataset.theme).toBe('dark');
+  });
+});

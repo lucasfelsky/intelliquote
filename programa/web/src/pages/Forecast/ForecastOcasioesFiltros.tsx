@@ -63,7 +63,7 @@ export default function ForecastOcasioesFiltros({
     filtros.ano !== 'todos';
 
   return (
-    <div>
+    <div className="fco-filtros-barra">
       <div className="fco-filtros">
         <div className="fco-filtro">
           <label className="field-label" htmlFor={id('situacao')}>

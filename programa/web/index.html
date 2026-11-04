@@ -2,11 +2,11 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#00ae91" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0b1518" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#004153" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#061a22" media="(prefers-color-scheme: dark)" />
     <!-- Anti-flash do tema: resolve claro/escuro ANTES do bundle e grava <html data-theme>.
          Mesma logica de resolveTheme em src/theme/theme.ts (chave 'iq-theme'): ao mudar uma, mude a outra. -->
     <script>
@@ -18,7 +18,7 @@
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
         if (pref !== 'auto') {
           var m = document.querySelectorAll('meta[name="theme-color"]');
-          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', dark ? '#0b1518' : '#00ae91');
+          for (var i = 0; i < m.length; i++) m[i].setAttribute('content', dark ? '#061a22' : '#004153');
         }
       })();
     </script>
@@ -26,7 +26,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
   </head>

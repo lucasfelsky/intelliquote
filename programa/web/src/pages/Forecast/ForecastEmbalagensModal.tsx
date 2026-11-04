@@ -73,16 +73,16 @@ function Leitura({ dados }: { dados: ForecastEmbalagens }) {
           {dados.codigos.map((c) => (
             <tr key={c.id}>
               <th scope="row">EMB.{c.posicao}</th>
-              <td>
+              <td data-rotulo="Código">
                 <CodigoCelula c={c} usada={c.id === dados.usadaCodigoId} />
               </td>
-              <td className="fce-num">{c.quantidadeKg === null ? '—' : `${kgBr(c.quantidadeKg)} kg`}</td>
-              <td className="fce-num">
+              <td className="fce-num" data-rotulo="Quantidade (kg)">{c.quantidadeKg === null ? '—' : `${kgBr(c.quantidadeKg)} kg`}</td>
+              <td className="fce-num" data-rotulo="Pallet (kg)">
                 {palletsDoCodigo(c).length === 0 ? '—' : palletsDoCodigo(c).map((p) => `${kgBr(p)} kg`).join('; ')}
               </td>
-              <td>{c.rotulo ?? '—'}</td>
-              <td>{c.principal ? 'Sim' : '—'}</td>
-              <td className="fce-origem">{origemTexto(c)}</td>
+              <td data-rotulo="Rótulo">{c.rotulo ?? '—'}</td>
+              <td data-rotulo="Principal">{c.principal ? 'Sim' : '—'}</td>
+              <td className="fce-origem" data-rotulo="Origem">{origemTexto(c)}</td>
             </tr>
           ))}
         </tbody>
@@ -192,10 +192,10 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
               return (
                 <tr key={c.id}>
                   <th scope="row">EMB.{c.posicao}</th>
-                  <td>
+                  <td data-rotulo="Código">
                     <CodigoCelula c={c} usada={c.id === dados.usadaCodigoId} />
                   </td>
-                  <td className="fce-num">
+                  <td className="fce-num" data-rotulo="Quantidade (kg)">
                     <input
                       className="input fce-input-qtd"
                       inputMode="decimal"
@@ -213,7 +213,7 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                       </p>
                     )}
                   </td>
-                  <td className="fce-num">
+                  <td className="fce-num" data-rotulo="Pallet (kg)">
                     <input
                       className="input fce-input-qtd"
                       autoComplete="off"
@@ -239,7 +239,7 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                       )}
                     </div>
                   </td>
-                  <td>
+                  <td data-rotulo="Rótulo">
                     <input
                       className="input fce-input-rotulo"
                       maxLength={60}
@@ -250,7 +250,7 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                       disabled={pendente}
                     />
                   </td>
-                  <td>
+                  <td data-rotulo="Principal">
                     <input
                       type="radio"
                       name="fce-principal"
@@ -260,7 +260,7 @@ function Formulario({ dados, pendente, erro, salvo, onSalvar, onFechar }: FormPr
                       disabled={pendente || semQuantidade}
                     />
                   </td>
-                  <td className="fce-origem">{origemTexto(c)}</td>
+                  <td className="fce-origem" data-rotulo="Origem">{origemTexto(c)}</td>
                 </tr>
               );
             })}
@@ -392,7 +392,7 @@ function Corpo({ productId, podeEditar, onFechar }: Props) {
 
 export default function ForecastEmbalagensModal(props: Props) {
   return (
-    <Modal isOpen onClose={props.onFechar} title="Embalagens do item" size="wide">
+    <Modal isOpen onClose={props.onFechar} title="Embalagens do item" size="wide" className="fc-portal">
       <Corpo {...props} />
     </Modal>
   );

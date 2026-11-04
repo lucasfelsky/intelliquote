@@ -144,7 +144,7 @@ const descricao = () => (screen.getByLabelText('Descrição') as HTMLTextAreaEle
 async function irParaPasso2() {
   fireEvent.click(screen.getByRole('button', { name: 'Próximo' }));
   await waitFor(() => {
-    expect((screen.getByRole('button', { name: '+ Adicionar item' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement).disabled).toBe(false);
   });
 }
 

@@ -17,6 +17,8 @@ import {
 } from '@/services/dispatch';
 import { Tabs, TabList, Tab, TabPanel } from '@/components/Tabs';
 import { Modal } from '@/components/Modal';
+import { Icon } from '@/components/icons';
+import { Stepper } from '@/components/Stepper';
 import { CatalogItemPicker, type PickerCatalogItem } from '@/components/CatalogItemPicker';
 import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
 import { RespostasTab } from './CotacaoTabs/RespostasTab';
@@ -1066,9 +1068,9 @@ export default function CotacaoDetalhe() {
 
   if (!Number.isFinite(id)) {
     return (
-      <div className="page">
+      <div className="page cotacao-detalhe-page">
         <h1>Cotação</h1>
-        <div className="empty-state">
+        <div className="empty-state cotacao-detalhe__estado">
           <p>Identificador de cotação inválido.</p>
         </div>
       </div>
@@ -1077,23 +1079,32 @@ export default function CotacaoDetalhe() {
 
   if (detail.isLoading) {
     return (
-      <div className="page">
+      <div className="page cotacao-detalhe-page">
         <h1>Cotação</h1>
-        <p>Carregando…</p>
+        <div className="empty-state cotacao-detalhe__estado">
+          <p className="empty-state__text">Carregando…</p>
+        </div>
       </div>
     );
   }
 
   if (detail.isError || !detail.data) {
     return (
-      <div className="page">
+      <div className="page cotacao-detalhe-page">
         <h1>Cotação</h1>
-        <div className="empty-state">
-          <p>Não foi possível carregar a cotação.</p>
-          <p style={{ color: 'var(--ink-soft)', marginBottom: 12 }} className="text-xs">
-            Verifique sua conexão e tente novamente.
-          </p>
-          <button className="ghost-button" onClick={() => detail.refetch()}>Tentar novamente</button>
+        <div
+          className="empty-state empty-state--erro cotacao-detalhe__estado"
+          role="alert"
+        >
+          <span className="empty-state__icon">
+            <Icon name="alert-triangle" size={24} strokeWidth={1.7} />
+          </span>
+          <strong className="empty-state__title">Não foi possível carregar a cotação.</strong>
+          <p className="empty-state__text">Verifique sua conexão e tente novamente.</p>
+          <button className="ghost-button" onClick={() => detail.refetch()}>
+            <Icon name="refresh" size={14} strokeWidth={2} />
+            Tentar novamente
+          </button>
         </div>
         <button type="button" className="ghost-button" onClick={() => navigate('/cotacoes')}>
           Voltar para a lista
@@ -1106,15 +1117,15 @@ export default function CotacaoDetalhe() {
   const items = (qr.items ?? []).map(normalizeItem);
 
   return (
-    <div className="page">
+    <div className="page cotacao-detalhe-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">Cotação #{qr.id}</p>
           <h1>{qr.requestCode}</h1>
           <p>{qr.productName}</p>
         </div>
-        <div className="page-header__actions" style={{ alignItems: 'center' }}>
-          <span className={`badge${qr.status === 'closed' ? ' badge--muted' : ''}`}>
+        <div className="page-header__actions">
+          <span className={`badge badge--dot ${qr.status === 'closed' ? 'badge--muted' : 'badge--success'}`}>
             {qr.status === 'open' ? 'Aberta' : 'Fechada'}
           </span>
           {qr.isDevelopment && <span className="badge badge--info">Desenvolvimento</span>}
@@ -1124,7 +1135,8 @@ export default function CotacaoDetalhe() {
               className="primary-button"
               onClick={openDispatchModal}
             >
-              Enviar cotacao
+              <Icon name="templates" size={16} />
+              Enviar cotação
             </button>
           )}
           {canManagePortalLinks && (
@@ -1133,11 +1145,13 @@ export default function CotacaoDetalhe() {
               className="ghost-button"
               onClick={() => setShowTokensModal(true)}
             >
+              <Icon name="link" size={16} />
               Links do portal
             </button>
           )}
           {canEdit && qr.status === 'open' && (
             <button type="button" className="ghost-button" onClick={openEditQuote}>
+              <Icon name="edit" size={16} />
               Editar
             </button>
           )}
@@ -1166,13 +1180,14 @@ export default function CotacaoDetalhe() {
               }}
               disabled={reopenRequest.isPending}
             >
+              <Icon name="refresh" size={16} />
               Reabrir
             </button>
           )}
           {canDelete && (
             <button
               type="button"
-              className="ghost-button"
+              className="ghost-button danger-button"
               onClick={async () => {
                 if (await confirm(`Apagar a cotação ${qr.requestCode}?`)) {
                   deleteQuote.mutate();
@@ -1180,6 +1195,7 @@ export default function CotacaoDetalhe() {
               }}
               disabled={deleteQuote.isPending}
             >
+              <Icon name="trash" size={16} />
               Apagar
             </button>
           )}
@@ -1189,7 +1205,7 @@ export default function CotacaoDetalhe() {
       {qr.isDevelopment && <SolicitacaoDesenvolvimentoPanel quoteRequestId={qr.id} />}
 
       {actionError && (
-        <p style={{ color: 'var(--danger)', marginBottom: 12 }} className="text-sm">{actionError}</p>
+        <p className="alert alert--error" role="alert">{actionError}</p>
       )}
 
 
@@ -1202,57 +1218,61 @@ export default function CotacaoDetalhe() {
         </TabList>
 
         <TabPanel value="resumo">
-          <section className="card">
-            <div className="page-header" style={{ marginBottom: 8 }}>
+          <section className="card cotacao-detalhe__painel">
+            <div className="cotacao-resumo">
               <h2>Resumo</h2>
-            </div>
-            <div className="form-grid">
-              <div>
-                <p className="eyebrow">Código</p>
-                <p><strong>{qr.requestCode}</strong></p>
-              </div>
-              <div>
-                <p className="eyebrow">Incoterms aceitáveis</p>
-                <div className="chip-row">
-                  {qr.desiredIncoterm.map((t) => (
-                    <span key={t} className="chip chip--static">{t}</span>
-                  ))}
+              <dl className="cotacao-resumo__grade">
+                <div className="cotacao-resumo__item cotacao-resumo__item--inicio">
+                  <dt className="eyebrow">Código</dt>
+                  <dd className="cotacao-resumo__mono">{qr.requestCode}</dd>
                 </div>
-              </div>
-              <div>
-                <p className="eyebrow">Porto de embarque</p>
-                <p>{qr.originPort ?? '—'}</p>
-              </div>
-              <div>
-                <p className="eyebrow">Porto de destino</p>
-                <p>{qr.destinationPort ?? '—'}</p>
-              </div>
-              <div>
-                <p className="eyebrow">Moeda</p>
-                <p>{qr.currency}</p>
-              </div>
-              <div>
-                <p className="eyebrow">Prazo</p>
-                <p>{formatDate(qr.deadlineAt)}</p>
-              </div>
-              <div className="form-grid__full">
-                <p className="eyebrow">Descrição</p>
-                <p>{qr.description ?? '—'}</p>
-              </div>
-              <div>
-                <p className="eyebrow">Criada em</p>
-                <p>{formatDateTime(qr.createdAt)}</p>
-              </div>
-              <div>
-                <p className="eyebrow">Fechada em</p>
-                <p>{qr.closedAt ? formatDateTime(qr.closedAt) : '—'}</p>
-              </div>
+                <div className="cotacao-resumo__item">
+                  <dt className="eyebrow">Incoterms aceitáveis</dt>
+                  <dd>
+                    <div className="chip-row">
+                      {qr.desiredIncoterm.map((t) => (
+                        <span key={t} className="chip chip--static">{t}</span>
+                      ))}
+                    </div>
+                  </dd>
+                </div>
+                <div className="cotacao-resumo__item">
+                  <dt className="eyebrow">Porto de embarque</dt>
+                  <dd>{qr.originPort ?? '—'}</dd>
+                </div>
+                <div className="cotacao-resumo__item cotacao-resumo__item--inicio">
+                  <dt className="eyebrow">Porto de destino</dt>
+                  <dd>{qr.destinationPort ?? '—'}</dd>
+                </div>
+                <div className="cotacao-resumo__item">
+                  <dt className="eyebrow">Moeda</dt>
+                  <dd className="cotacao-resumo__mono">{qr.currency}</dd>
+                </div>
+                <div className="cotacao-resumo__item">
+                  <dt className="eyebrow">Prazo</dt>
+                  <dd className="cotacao-resumo__mono">{formatDate(qr.deadlineAt)}</dd>
+                </div>
+                <div className="cotacao-resumo__item cotacao-resumo__item--cheia">
+                  <dt className="eyebrow">Descrição</dt>
+                  <dd className="cotacao-resumo__texto">{qr.description ?? '—'}</dd>
+                </div>
+                <div className="cotacao-resumo__item cotacao-resumo__item--inicio cotacao-resumo__item--fim">
+                  <dt className="eyebrow">Criada em</dt>
+                  <dd className="cotacao-resumo__mono">{formatDateTime(qr.createdAt)}</dd>
+                </div>
+                <div className="cotacao-resumo__item cotacao-resumo__item--fim">
+                  <dt className="eyebrow">Fechada em</dt>
+                  <dd className={qr.closedAt ? 'cotacao-resumo__mono' : 'cotacao-resumo__suave'}>
+                    {qr.closedAt ? formatDateTime(qr.closedAt) : '—'}
+                  </dd>
+                </div>
+              </dl>
             </div>
           </section>
         </TabPanel>
 
         <TabPanel value="itens">
-          <section className="card">
+          <section className="card cotacao-detalhe__painel">
             <ItensTab
               quoteRequestId={qr.id}
               status={qr.status}
@@ -1276,7 +1296,7 @@ export default function CotacaoDetalhe() {
         </TabPanel>
 
         <TabPanel value="respostas">
-          <section className="card">
+          <section className="card cotacao-detalhe__painel">
             <RespostasTab
               quoteRequestId={qr.id}
               quoteRequestStatus={qr.status}
@@ -1288,7 +1308,7 @@ export default function CotacaoDetalhe() {
         </TabPanel>
 
         <TabPanel value="comparacao">
-          <section className="card">
+          <section className="card cotacao-detalhe__painel">
             <ComparacaoTab
               quoteRequestId={qr.id}
               quoteRequestStatus={qr.status}
@@ -1305,427 +1325,467 @@ export default function CotacaoDetalhe() {
         onClose={closeDispatchModal}
         size="wide"
         title="Enviar cotação para fornecedores"
+        subtitle={
+          <>
+            <span className="cotacao-envio__codigo">{qr.requestCode}</span> · {qr.productName}
+          </>
+        }
       >
         {showDispatchModal && (
           <>
-            <p style={{ color: 'var(--ink-soft)', marginTop: 0 }} className="text-sm">
-              {qr.requestCode} · {qr.productName}
-            </p>
+            <div className="cotacao-envio">
+              <Stepper
+                ariaLabel="Etapas do envio"
+                steps={['Fornecedores', 'Mensagem e preview', 'Resultado']}
+                current={dispatchStep === 'select' ? 0 : dispatchStep === 'preview' ? 1 : 2}
+              />
 
-            {dispatchStep === 'select' && (
-              <>
-                <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
-                  Escolha uma pasta (família) e selecione os fornecedores. O contato principal
-                  vai como &quot;Para&quot;; os demais do mesmo fornecedor entram em cópia.
-                </p>
-                {activeSuppliers.isLoading && <p>Carregando fornecedores…</p>}
-                {activeSuppliers.isError && (
-                  <div className="empty-state" role="alert">
-                    <strong>Não foi possível carregar os fornecedores.</strong>
-                    <p>
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => void activeSuppliers.refetch()}
-                      >
-                        Tentar de novo
-                      </button>
-                    </p>
-                  </div>
-                )}
-                {!activeSuppliers.isLoading && !activeSuppliers.isError && (activeSuppliers.data ?? []).length === 0 && (
-                  <div className="empty-state">
-                    <strong>Nenhum fornecedor ativo</strong>
-                    <p>Cadastre fornecedores ativos com contatos antes de enviar.</p>
-                  </div>
-                )}
-                {!activeSuppliers.isLoading && (activeSuppliers.data ?? []).length > 0 && (
-                  <div className="dispatcher-master-detail">
-                    <div className="dispatcher-folders">
-                      <span className="dispatcher-folders__label">Pastas</span>
-                      <button
-                        type="button"
-                        className={`folder${activeFolderId === 'all' ? ' folder--on' : ''}`}
-                        onClick={() => setActiveFolderId('all')}
-                      >
-                        Todos
-                        <span className="fcount">{folderCounts.get('all') ?? 0}</span>
-                      </button>
-
-                      {quoteFolders.length > 0 && (
-                        <>
-                          <span className="dispatcher-folders__group dispatcher-folders__group--quote">
-                            Famílias desta cotação
-                          </span>
-                          {quoteFolders.map((folder) => (
-                            <button
-                              key={folder.id}
-                              type="button"
-                              className={`folder${activeFolderId === folder.id ? ' folder--on' : ''}`}
-                              onClick={() => setActiveFolderId(folder.id)}
-                            >
-                              {folder.name}
-                              <span className="fcount">{folderCounts.get(folder.id) ?? 0}</span>
-                            </button>
-                          ))}
-                        </>
-                      )}
-
-                      {otherFolders.length > 0 && (
-                        <>
-                          <span className="dispatcher-folders__group">Outras famílias</span>
-                          {otherFolders.map((folder) => (
-                            <button
-                              key={folder.id}
-                              type="button"
-                              className={`folder${activeFolderId === folder.id ? ' folder--on' : ''}`}
-                              onClick={() => setActiveFolderId(folder.id)}
-                            >
-                              {folder.name}
-                              <span className="fcount">{folderCounts.get(folder.id) ?? 0}</span>
-                            </button>
-                          ))}
-                        </>
-                      )}
-
-                      {hasSupplierWithoutFamily && (
+              {dispatchStep === 'select' && (
+                <>
+                  <p className="cotacao-envio__ajuda">
+                    Escolha uma pasta (família) e selecione os fornecedores. O contato principal
+                    vai como &quot;Para&quot;; os demais do mesmo fornecedor entram em cópia.
+                  </p>
+                  {activeSuppliers.isLoading && <p className="cotacao-envio__ajuda">Carregando fornecedores…</p>}
+                  {activeSuppliers.isError && (
+                    <div className="empty-state" role="alert">
+                      <strong>Não foi possível carregar os fornecedores.</strong>
+                      <p>
                         <button
                           type="button"
-                          className={`folder${activeFolderId === 'none' ? ' folder--on' : ''}`}
-                          onClick={() => setActiveFolderId('none')}
+                          className="ghost-button"
+                          onClick={() => void activeSuppliers.refetch()}
                         >
-                          Sem família
-                          <span className="fcount">{folderCounts.get('none') ?? 0}</span>
+                          Tentar de novo
                         </button>
-                      )}
+                      </p>
                     </div>
-
-                    <div className="dispatcher-suppliers">
-                      <input
-                        className="input"
-                        placeholder="Buscar fornecedor por nome…"
-                        value={supplierSearch}
-                        onChange={(e) => setSupplierSearch(e.target.value)}
-                        aria-label="Buscar fornecedor por nome"
-                      />
-
-                      <div className="dispatcher-suppliers__header">
-                        <strong>Fornecedores · {activeFolderLabel}</strong>
-                        <button type="button" className="ghost-button" onClick={selectAllVisibleSuppliers}>
-                          Selecionar todos
+                  )}
+                  {!activeSuppliers.isLoading && !activeSuppliers.isError && (activeSuppliers.data ?? []).length === 0 && (
+                    <div className="empty-state">
+                      <strong>Nenhum fornecedor ativo</strong>
+                      <p>Cadastre fornecedores ativos com contatos antes de enviar.</p>
+                    </div>
+                  )}
+                  {!activeSuppliers.isLoading && (activeSuppliers.data ?? []).length > 0 && (
+                    <div className="dispatcher-master-detail">
+                      <div className="dispatcher-folders">
+                        <span className="dispatcher-folders__label">Pastas</span>
+                        <button
+                          type="button"
+                          className={`folder${activeFolderId === 'all' ? ' folder--on' : ''}`}
+                          onClick={() => setActiveFolderId('all')}
+                        >
+                          Todos
+                          <span className="fcount">{folderCounts.get('all') ?? 0}</span>
                         </button>
+
+                        {quoteFolders.length > 0 && (
+                          <>
+                            <span className="dispatcher-folders__group dispatcher-folders__group--quote">
+                              Famílias desta cotação
+                            </span>
+                            {quoteFolders.map((folder) => (
+                              <button
+                                key={folder.id}
+                                type="button"
+                                className={`folder${activeFolderId === folder.id ? ' folder--on' : ''}`}
+                                onClick={() => setActiveFolderId(folder.id)}
+                              >
+                                {folder.name}
+                                <span className="fcount">{folderCounts.get(folder.id) ?? 0}</span>
+                              </button>
+                            ))}
+                          </>
+                        )}
+
+                        {otherFolders.length > 0 && (
+                          <>
+                            <span className="dispatcher-folders__group">Outras famílias</span>
+                            {otherFolders.map((folder) => (
+                              <button
+                                key={folder.id}
+                                type="button"
+                                className={`folder${activeFolderId === folder.id ? ' folder--on' : ''}`}
+                                onClick={() => setActiveFolderId(folder.id)}
+                              >
+                                {folder.name}
+                                <span className="fcount">{folderCounts.get(folder.id) ?? 0}</span>
+                              </button>
+                            ))}
+                          </>
+                        )}
+
+                        {hasSupplierWithoutFamily && (
+                          <button
+                            type="button"
+                            className={`folder${activeFolderId === 'none' ? ' folder--on' : ''}`}
+                            onClick={() => setActiveFolderId('none')}
+                          >
+                            Sem família
+                            <span className="fcount">{folderCounts.get('none') ?? 0}</span>
+                          </button>
+                        )}
                       </div>
 
-                      {visibleSuppliers.length === 0 ? (
-                        <div className="empty-state">
-                          <strong>Nenhum fornecedor nesta pasta</strong>
-                          <p>Ajuste a busca ou escolha outra pasta.</p>
+                      <div className="dispatcher-suppliers">
+                        <div className="cotacao-envio__busca">
+                          <Icon name="search" size={16} strokeWidth={1.9} />
+                          <input
+                            className="cotacao-envio__campo"
+                            placeholder="Buscar fornecedor por nome…"
+                            value={supplierSearch}
+                            onChange={(e) => setSupplierSearch(e.target.value)}
+                            aria-label="Buscar fornecedor por nome"
+                          />
                         </div>
-                      ) : (
-                        <div className="dispatcher-list">
-                          {visibleSuppliers.map((supplier) => {
-                            const contacts = supplierContacts.data?.[supplier.id] ?? [];
-                            if (contacts.length === 0) {
+
+                        <div className="dispatcher-suppliers__header">
+                          <strong>Fornecedores · {activeFolderLabel}</strong>
+                          <button type="button" className="ghost-button ghost-button--sm" onClick={selectAllVisibleSuppliers}>
+                            Selecionar todos
+                          </button>
+                        </div>
+
+                        {visibleSuppliers.length === 0 ? (
+                          <div className="empty-state">
+                            <strong>Nenhum fornecedor nesta pasta</strong>
+                            <p>Ajuste a busca ou escolha outra pasta.</p>
+                          </div>
+                        ) : (
+                          <div className="dispatcher-list">
+                            {visibleSuppliers.map((supplier) => {
+                              const contacts = supplierContacts.data?.[supplier.id] ?? [];
+                              if (contacts.length === 0) {
+                                return (
+                                  <div key={supplier.id} className="dispatcher-row dispatcher-row--vazio">
+                                    <span />
+                                    <div>
+                                      <div className="dispatcher-row__title">{supplier.name}</div>
+                                      <div className="dispatcher-row__meta cotacao-envio__sem-contatos">Sem contatos cadastrados</div>
+                                    </div>
+                                    <span />
+                                  </div>
+                                );
+                              }
+                              const primary =
+                                contacts.find((c) => c.isPrimary) ?? contacts[0];
+                              const siblingCount = Math.max(0, contacts.length - 1);
+                              const checked = Boolean(primary && selectedContactIds.includes(primary.id));
+                              const contactNames = contacts
+                                .map((c) => (c.isPrimary ? `${c.name} (principal)` : c.name))
+                                .join(', ');
                               return (
-                                <div key={supplier.id} className="dispatcher-row">
-                                  <span />
+                                <label
+                                  key={supplier.id}
+                                  className={`dispatcher-row${checked ? ' dispatcher-row--selected' : ''}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => primary && toggleContactSelection(primary.id)}
+                                  />
                                   <div>
                                     <div className="dispatcher-row__title">{supplier.name}</div>
-                                    <div className="dispatcher-row__meta">Sem contatos cadastrados</div>
+                                    <div className="dispatcher-row__meta">Contatos: {contactNames}</div>
                                   </div>
-                                  <span />
-                                </div>
+                                  <span className="cotacao-envio__destino">
+                                    {siblingCount > 0 ? `Para + ${siblingCount} em CC` : 'Para'}
+                                  </span>
+                                </label>
                               );
-                            }
-                            const primary =
-                              contacts.find((c) => c.isPrimary) ?? contacts[0];
-                            const siblingCount = Math.max(0, contacts.length - 1);
-                            const checked = Boolean(primary && selectedContactIds.includes(primary.id));
-                            const contactNames = contacts
-                              .map((c) => (c.isPrimary ? `${c.name} (principal)` : c.name))
-                              .join(', ');
-                            return (
-                              <label
-                                key={supplier.id}
-                                className={`dispatcher-row${checked ? ' dispatcher-row--selected' : ''}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => primary && toggleContactSelection(primary.id)}
-                                />
-                                <div>
-                                  <div className="dispatcher-row__title">{supplier.name}</div>
-                                  <div className="dispatcher-row__meta">Contatos: {contactNames}</div>
-                                </div>
-                                <span style={{ color: 'var(--ink-soft)' }} className="text-xs">
-                                  {siblingCount > 0 ? `Para + ${siblingCount} em CC` : 'Para'}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </div>
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedContactIds.length > 0 && (
+                    <div className="recipient-summary">
+                      <span className="recipient-summary__pill recipient-summary__pill--total">
+                        {selectedContactIds.length} destinatario(s) selecionado(s)
+                      </span>
+                      {companyCcList.length > 0 && (
+                        <span
+                          className="recipient-summary__pill recipient-summary__pill--cc"
+                          title={`Copia automatica configurada pela empresa (${companyCcList.length}): ${companyCcList.join(', ')}`}
+                        >
+                          +{companyCcList.length} CC empresa
+                        </span>
+                      )}
+                      {siblingCcCount > 0 && (
+                        <span
+                          className="recipient-summary__pill recipient-summary__pill--cc"
+                          title="Contatos secundarios do mesmo fornecedor"
+                        >
+                          +{siblingCcCount} CC fornecedores
+                        </span>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {selectedContactIds.length > 0 && (
-                  <div className="recipient-summary">
-                    <span className="recipient-summary__pill">
-                      {selectedContactIds.length} destinatario(s) selecionado(s)
-                    </span>
+                  {dispatchError && (
+                    <p className="alert alert--error cotacao-envio__alerta" role="alert">
+                      {dispatchError}
+                    </p>
+                  )}
+                </>
+              )}
+
+              {dispatchStep === 'preview' && (
+                <>
+                  <div className="cotacao-envio__campos">
+                    <div>
+                      <label className="field-label" htmlFor="dispatchSubject">Assunto</label>
+                      <input
+                        id="dispatchSubject"
+                        className="input"
+                        value={dispatchSubject}
+                        onChange={(e) => setDispatchSubject(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label" htmlFor="dispatchExpires">Validade do link (dias)</label>
+                      <input
+                        id="dispatchExpires"
+                        className="input cotacao-envio__numero"
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={dispatchExpires}
+                        onChange={(e) => setDispatchExpires(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="field-label" htmlFor="dispatchMessage">
+                      Mensagem adicional para o fornecedor
+                    </label>
+                    <textarea
+                      id="dispatchMessage"
+                      className="textarea"
+                      rows={3}
+                      value={dispatchMessage}
+                      onChange={(e) => setDispatchMessage(e.target.value)}
+                      placeholder="Opcional. Esta mensagem sera exibida no topo do e-mail."
+                    />
+                  </div>
+
+                  <div className="cotacao-envio__copia">
+                    <label className="cotacao-envio__check">
+                      <input
+                        type="checkbox"
+                        checked={dispatchComexCcFirstOnly}
+                        onChange={(e) => setDispatchComexCcFirstOnly(e.target.checked)}
+                        aria-describedby="dispatchComexCcHelp"
+                      />
+                      Equipe COMEX em cópia só no primeiro e-mail
+                    </label>
+                    <p id="dispatchComexCcHelp" className="cotacao-envio__dica">
+                      Ligado: só o 1º e-mail enviado leva a equipe COMEX e o CC fixo da empresa. Os contatos do próprio fornecedor continuam em cópia em todos.
+                    </p>
+                  </div>
+
+                  <div className="cotacao-envio__resumos">
+                    <div className="recipient-summary">
+                      {dispatchPreview?.recipients.map((r) => (
+                        <span key={r.supplierContactId} className="recipient-summary__pill">
+                          {r.supplierName} · {r.contactName}
+                          {r.ccCount > 0 && (
+                            <span className="recipient-summary__pill__hint">
+                              +{r.ccCount} em CC
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+
                     {companyCcList.length > 0 && (
-                      <span
-                        className="recipient-summary__pill recipient-summary__pill--cc"
-                        title={`Copia automatica configurada pela empresa (${companyCcList.length}): ${companyCcList.join(', ')}`}
-                      >
-                        +{companyCcList.length} CC empresa
-                      </span>
-                    )}
-                    {siblingCcCount > 0 && (
-                      <span
-                        className="recipient-summary__pill recipient-summary__pill--cc"
-                        title="Contatos secundarios do mesmo fornecedor"
-                      >
-                        +{siblingCcCount} CC fornecedores
-                      </span>
+                      <div className="recipient-summary">
+                        <span
+                          className="recipient-summary__pill recipient-summary__pill--cc"
+                          title={companyCcList.join(', ')}
+                        >
+                          CC fixo da empresa: {companyCcList.join(', ')}
+                          {dispatchComexCcFirstOnly ? ' (só no 1º e-mail)' : ''}
+                        </span>
+                      </div>
                     )}
                   </div>
-                )}
 
-                {dispatchError && (
-                  <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
-                    {dispatchError}
-                  </p>
-                )}
+                  <div className="cotacao-envio__previa">
+                    <h3>
+                      Preview do e-mail
+                      {previewStale && (
+                        <span className="cotacao-envio__atualizando" role="status">
+                          <span className="cotacao-envio__giro" aria-hidden="true" />
+                          Atualizando preview…
+                        </span>
+                      )}
+                    </h3>
+                    {dispatchPreview?.preview ? (
+                      <iframe
+                        sandbox=""
+                        title="preview-email"
+                        className="preview-frame"
+                        srcDoc={dispatchPreview.preview.html}
+                      />
+                    ) : (
+                      <p className="cotacao-envio__ajuda">
+                        Nenhum preview disponivel (nenhum destinatario selecionado).
+                      </p>
+                    )}
+                    {dispatchPreviewQuery.isError && (
+                      <p className="alert alert--warning cotacao-envio__alerta">
+                        Não foi possível atualizar o preview ({messageOf(dispatchPreviewQuery.error)}). O envio usa os campos atuais.
+                      </p>
+                    )}
+                  </div>
 
-                <div className="modal-actions">
-                  <button type="button" className="ghost-button" onClick={closeDispatchModal}>
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={selectedContactIds.length === 0 || previewDispatchMutation.isPending}
-                    onClick={() => previewDispatchMutation.mutate()}
+                  {dispatchError && (
+                    <p className="alert alert--error cotacao-envio__alerta" role="alert">
+                      {dispatchError}
+                    </p>
+                  )}
+                </>
+              )}
+
+              {dispatchStep === 'sent' && dispatchResult && (
+                <>
+                  <div
+                    className={`dispatch-event cotacao-envio__resultado cotacao-envio__resultado--${dispatchResult.status}`}
+                    role="status"
                   >
-                    {previewDispatchMutation.isPending ? 'Gerando preview…' : 'Continuar'}
-                  </button>
-                </div>
-              </>
+                    <span className="cotacao-envio__resultado-icone">
+                      <Icon name={dispatchResult.status === 'completed' ? 'check' : 'alert-triangle'} size={20} />
+                    </span>
+                    <div className="cotacao-envio__resultado-corpo">
+                      <div className="dispatch-event__header">
+                        <span className="dispatch-event__subject">Resultado do envio</span>
+                        <span
+                          className={`badge badge--dot ${
+                            dispatchResult.status === 'completed'
+                              ? 'badge--success'
+                              : dispatchResult.status === 'partial'
+                                ? 'badge--warning'
+                                : 'badge--danger'
+                          }`}
+                        >
+                          {dispatchResult.status === 'completed'
+                            ? 'Enviado'
+                            : dispatchResult.status === 'partial'
+                              ? 'Parcial'
+                              : 'Falhou'}
+                        </span>
+                      </div>
+                      <div className="cotacao-envio__contagem">
+                        <span className="cotacao-envio__num">{dispatchResult.sentCount}</span> enviado(s) · <span className={dispatchResult.failedCount > 0 ? 'cotacao-envio__num cotacao-envio__num--falha' : 'cotacao-envio__num'}>{dispatchResult.failedCount}</span> falha(s)
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="table-wrapper cotacao-envio__tabela">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Contato</th>
+                          <th>Status</th>
+                          <th>Detalhe</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dispatchResult.results.map((r) => {
+                          const recipient = dispatchPreview?.recipients.find(
+                            (rc) => rc.supplierContactId === r.supplierContactId,
+                          );
+                          return (
+                            <tr key={r.supplierContactId} className={r.status === 'sent' ? undefined : 'cotacao-envio__linha-falha'}>
+                              <td className="cotacao-envio__contato">{recipient ? `${recipient.supplierName} · ${recipient.contactName}` : `#${r.supplierContactId}`}</td>
+                              <td>
+                                <span
+                                  className={`badge badge--dot ${r.status === 'sent' ? 'badge--success' : 'badge--danger'}`}
+                                >
+                                  {r.status === 'sent' ? 'Enviado' : 'Falhou'}
+                                </span>
+                              </td>
+                              <td className={r.status === 'sent' ? 'cotacao-envio__detalhe' : 'cotacao-envio__detalhe cotacao-envio__detalhe--falha'}>
+                                {r.error ??
+                                  (r.status === 'sent'
+                                    ? `Link magico gerado${r.ccCount ? ` · +${r.ccCount} CC` : ''}${dispatchComexCcFirstOnly && r.comexCc ? ' · cópia COMEX' : ''}`
+                                    : '')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {dispatchStep === 'select' && (
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={closeDispatchModal}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={selectedContactIds.length === 0 || previewDispatchMutation.isPending}
+                  onClick={() => previewDispatchMutation.mutate()}
+                >
+                  {previewDispatchMutation.isPending ? 'Gerando preview…' : 'Continuar'}
+                  <Icon name="arrow-right" size={16} strokeWidth={2} />
+                </button>
+              </div>
             )}
 
             {dispatchStep === 'preview' && (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label className="field-label" htmlFor="dispatchSubject">Assunto</label>
-                    <input
-                      id="dispatchSubject"
-                      className="input"
-                      value={dispatchSubject}
-                      onChange={(e) => setDispatchSubject(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="field-label" htmlFor="dispatchExpires">Validade do link (dias)</label>
-                    <input
-                      id="dispatchExpires"
-                      className="input"
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={dispatchExpires}
-                      onChange={(e) => setDispatchExpires(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <label className="field-label" htmlFor="dispatchMessage" style={{ marginTop: 12 }}>
-                  Mensagem adicional para o fornecedor
-                </label>
-                <textarea
-                  id="dispatchMessage"
-                  className="textarea"
-                  rows={3}
-                  value={dispatchMessage}
-                  onChange={(e) => setDispatchMessage(e.target.value)}
-                  placeholder="Opcional. Esta mensagem sera exibida no topo do e-mail."
-                />
-
-                <label
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}
-                  className="text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={dispatchComexCcFirstOnly}
-                    onChange={(e) => setDispatchComexCcFirstOnly(e.target.checked)}
-                    aria-describedby="dispatchComexCcHelp"
-                  />
-                  Equipe COMEX em cópia só no primeiro e-mail
-                </label>
-                <p id="dispatchComexCcHelp" className="text-xs" style={{ color: 'var(--ink-soft)' }}>
-                  Ligado: só o 1º e-mail enviado leva a equipe COMEX e o CC fixo da empresa. Os contatos do próprio fornecedor continuam em cópia em todos.
-                </p>
-
-                <div className="recipient-summary">
-                  {dispatchPreview?.recipients.map((r) => (
-                    <span key={r.supplierContactId} className="recipient-summary__pill">
-                      {r.supplierName} · {r.contactName}
-                                      {r.ccCount > 0 && (
-                                        <span className="recipient-summary__pill__hint">
-                                          +{r.ccCount} em CC
-                                        </span>
-                                      )}
-                                    </span>
-                                  ))}
-                                </div>
-
-                {companyCcList.length > 0 && (
-                  <div className="recipient-summary" style={{ marginTop: 8 }}>
-                    <span
-                      className="recipient-summary__pill recipient-summary__pill--cc"
-                      title={companyCcList.join(', ')}
-                    >
-                      CC fixo da empresa: {companyCcList.join(', ')}
-                      {dispatchComexCcFirstOnly ? ' (só no 1º e-mail)' : ''}
-                    </span>
-                  </div>
-                )}
-
-                <h3 style={{ marginTop: 16, marginBottom: 6 }}>
-                  Preview do e-mail
-                  {previewStale && (
-                    <span
-                      className="text-sm"
-                      style={{ color: 'var(--ink-soft)', marginLeft: 8, fontWeight: 400 }}
-                      role="status"
-                    >
-                      Atualizando preview…
-                    </span>
-                  )}
-                </h3>
-                {dispatchPreview?.preview ? (
-                  <iframe
-                                    sandbox=""
-                                    title="preview-email"
-                                    className="preview-frame"
-                                    srcDoc={dispatchPreview.preview.html}
-                                  />
-                ) : (
-                  <p style={{ color: 'var(--ink-soft)' }} className="text-sm">
-                    Nenhum preview disponivel (nenhum destinatario selecionado).
-                  </p>
-                )}
-                {dispatchPreviewQuery.isError && (
-                  <p style={{ color: 'var(--ink-soft)', marginTop: 8 }} className="text-sm">
-                    Não foi possível atualizar o preview ({messageOf(dispatchPreviewQuery.error)}). O envio usa os campos atuais.
-                  </p>
-                )}
-
-                {dispatchError && (
-                  <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
-                    {dispatchError}
-                  </p>
-                )}
-
-                <div className="modal-actions">
-                  <button type="button" className="ghost-button" onClick={() => setDispatchStep('select')}>
-                    Voltar
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={
-                      sendDispatchMutation.isPending || selectedContactIds.length === 0 || previewStale
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={() => setDispatchStep('select')}>
+                  <Icon name="arrow-left" size={16} strokeWidth={2} />
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={
+                    sendDispatchMutation.isPending || selectedContactIds.length === 0 || previewStale
+                  }
+                  onClick={async () => {
+                    if (await confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
+                      sendDispatchMutation.mutate();
                     }
-                    onClick={async () => {
-                      if (await confirm(`Enviar a cotacao para ${selectedContactIds.length} destinatario(s)?`)) {
-                        sendDispatchMutation.mutate();
-                      }
-                    }}
-                  >
-                    {sendDispatchMutation.isPending ? 'Enviando…' : 'Enviar agora'}
-                  </button>
-                </div>
-              </>
+                  }}
+                >
+                  <Icon name="templates" size={16} />
+                  {sendDispatchMutation.isPending ? 'Enviando…' : 'Enviar agora'}
+                </button>
+              </div>
             )}
 
             {dispatchStep === 'sent' && dispatchResult && (
-              <>
-                <div className="dispatch-event">
-                  <div className="dispatch-event__header">
-                    <span className="dispatch-event__subject">Resultado do envio</span>
-                    <span className={`dispatch-status dispatch-status--${dispatchResult.status}`}>
-                      {dispatchResult.status === 'completed'
-                        ? 'Enviado'
-                        : dispatchResult.status === 'partial'
-                          ? 'Parcial'
-                          : 'Falhou'}
-                    </span>
-                  </div>
-                  <div style={{ color: 'var(--ink-soft)' }} className="text-sm">
-                    {dispatchResult.sentCount} enviado(s) · {dispatchResult.failedCount} falha(s)
-                  </div>
-                </div>
-
-                <div className="table-wrapper">
-                  <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Contato</th>
-                      <th>Status</th>
-                      <th>Detalhe</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dispatchResult.results.map((r) => {
-                      const recipient = dispatchPreview?.recipients.find(
-                        (rc) => rc.supplierContactId === r.supplierContactId,
-                      );
-                      return (
-                        <tr key={r.supplierContactId}>
-                          <td>{recipient ? `${recipient.supplierName} · ${recipient.contactName}` : `#${r.supplierContactId}`}</td>
-                          <td>
-                            <span
-                              className={`dispatch-status dispatch-status--${r.status === 'sent' ? 'completed' : 'failed'}`}
-                            >
-                              {r.status === 'sent' ? 'Enviado' : 'Falhou'}
-                            </span>
-                          </td>
-                          <td style={{ color: 'var(--ink-soft)' }} className="text-xs">
-                                              {r.error ??
-                                                (r.status === 'sent'
-                                                  ? `Link magico gerado${r.ccCount ? ` · +${r.ccCount} CC` : ''}${dispatchComexCcFirstOnly && r.comexCc ? ' · cópia COMEX' : ''}`
-                                                  : '')}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                  </table>
-                </div>
-
-                <div className="modal-actions">
-                  <button type="button" className="ghost-button" onClick={closeDispatchModal}>
-                    Fechar
-                  </button>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => {
-                      setShowTokensModal(true);
-                    }}
-                  >
-                    Gerenciar links
-                  </button>
-                  <button type="button" className="ghost-button" onClick={closeDispatchModal}>
-                    Concluir
-                  </button>
-                </div>
-              </>
+              <div className="modal-actions">
+                <button type="button" className="ghost-button" onClick={closeDispatchModal}>
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setShowTokensModal(true);
+                  }}
+                >
+                  <Icon name="link" size={16} />
+                  Gerenciar links
+                </button>
+                <button type="button" className="ghost-button" onClick={closeDispatchModal}>
+                  Concluir
+                </button>
+              </div>
             )}
           </>
         )}
@@ -1734,162 +1794,160 @@ export default function CotacaoDetalhe() {
       <Modal isOpen={showTokensModal} onClose={closeTokensModal} size="wide" title="Links do portal">
         {showTokensModal && (
           <>
-            <p style={{ color: 'var(--ink-soft)', marginTop: 0 }} className="text-sm">
-              Gere links mágicos para que fornecedores respondam sem precisar de login.
-              Cada link é único e expira conforme a validade escolhida.
-            </p>
+            <div className="cotacao-links">
+              <p className="cotacao-links__intro">
+                Gere links mágicos para que fornecedores respondam sem precisar de login.
+                Cada link é único e expira conforme a validade escolhida.
+              </p>
 
-            {canDispatch && (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 12,
-                  alignItems: 'flex-end',
-                  marginTop: 16,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ flex: '1 1 220px' }}>
-                  <label className="field-label" htmlFor="tokensExpires">
-                    Validade (dias)
-                  </label>
-                  <input
-                    id="tokensExpires"
-                    className="input"
-                    type="number"
-                    min={1}
-                    max={90}
-                    value={dispatchExpires}
-                    onChange={(e) => setDispatchExpires(e.target.value)}
-                  />
+              {canDispatch && (
+                <div className="cotacao-links__form">
+                  <div className="cotacao-links__validade">
+                    <label className="field-label" htmlFor="tokensExpires">
+                      Validade (dias)
+                    </label>
+                    <input
+                      id="tokensExpires"
+                      className="input cotacao-links__numero"
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={dispatchExpires}
+                      onChange={(e) => setDispatchExpires(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={generateTokensMutation.isPending}
+                    onClick={() => {
+                      // Gera tokens para TODOS os fornecedores com pelo menos um
+                      // contato ativo. E mais simples para o admin e
+                      // aproveita a deduplicacao (contatos que ja tem token
+                      // ativo sao ignorados pelo backend).
+                      const ids = (activeSuppliers.data ?? []).flatMap(
+                        (s) => supplierContacts.data?.[s.id]?.map((c) => c.id) ?? [],
+                      );
+                      if (ids.length === 0) return;
+                      generateTokensMutation.mutate({
+                        contactIds: ids,
+                        expiresInDays: Number(dispatchExpires) || 14,
+                      });
+                    }}
+                  >
+                    <Icon name="link" size={16} />
+                    {generateTokensMutation.isPending ? 'Gerando…' : 'Gerar para todos os fornecedores'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="primary-button"
-                  disabled={generateTokensMutation.isPending}
-                  onClick={() => {
-                    // Gera tokens para TODOS os fornecedores com pelo menos um
-                    // contato ativo. E mais simples para o admin e
-                    // aproveita a deduplicacao (contatos que ja tem token
-                    // ativo sao ignorados pelo backend).
-                    const ids = (activeSuppliers.data ?? []).flatMap(
-                      (s) => supplierContacts.data?.[s.id]?.map((c) => c.id) ?? [],
-                    );
-                    if (ids.length === 0) return;
-                    generateTokensMutation.mutate({
-                      contactIds: ids,
-                      expiresInDays: Number(dispatchExpires) || 14,
-                    });
-                  }}
-                >
-                  {generateTokensMutation.isPending ? 'Gerando…' : 'Gerar para todos os fornecedores'}
-                </button>
-              </div>
-            )}
+              )}
 
-            {tokenActionError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">
-                {tokenActionError}
-              </p>
-            )}
-            {generateTokensMutation.data && (
-              <p
-                style={{
-                  color: 'var(--primary-700)',
-                  marginTop: 12,
-                }}
-                className="text-sm"
-              >
-                {generateTokensMutation.data.generatedCount} link(s) novo(s) gerado(s)
-                {generateTokensMutation.data.alreadyActiveCount > 0 &&
-                  ` · ${generateTokensMutation.data.alreadyActiveCount} ja estava(m) ativo(s)`}
-                .
-              </p>
-            )}
+              {tokenActionError && (
+                <p className="alert alert--error cotacao-links__alerta" role="alert">
+                  {tokenActionError}
+                </p>
+              )}
+              {generateTokensMutation.data && (
+                <p className="cotacao-links__ok" role="status">
+                  <Icon name="check" size={16} strokeWidth={2.2} />
+                  <span>
+                    {generateTokensMutation.data.generatedCount} link(s) novo(s) gerado(s)
+                    {generateTokensMutation.data.alreadyActiveCount > 0 &&
+                      ` · ${generateTokensMutation.data.alreadyActiveCount} ja estava(m) ativo(s)`}
+                    .
+                  </span>
+                </p>
+              )}
 
-            <div style={{ marginTop: 16, maxHeight: 360, overflowY: 'auto' }}>
-              {portalTokensQuery.isLoading && <p>Carregando links…</p>}
+              {portalTokensQuery.isLoading && (
+                <div className="cotacao-links__carregando" role="status">
+                  <span className="cotacao-links__giro" aria-hidden="true" />
+                  Carregando links…
+                </div>
+              )}
               {portalTokensQuery.data && activeTokens.length === 0 && (
                 <div className="empty-state">
-                  <strong>Nenhum link ativo</strong>
-                  <p>
+                  <span className="empty-state__icon">
+                    <Icon name="link" size={36} strokeWidth={1.5} />
+                  </span>
+                  <strong className="empty-state__title">Nenhum link ativo</strong>
+                  <p className="empty-state__text">
                     Gere links para que os fornecedores consigam responder esta cotação
                     pelo portal.
                   </p>
                 </div>
               )}
               {activeTokens.length > 0 && (
-                <div className="table-wrapper">
+                <div className="table-wrapper cotacao-links__tabela">
                   <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Fornecedor</th>
-                      <th>Contato</th>
-                      <th>Expira</th>
-                      <th>Status</th>
-                      <th>Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeTokens.map((token) => {
-                      const expired =
-                        new Date(token.expiresAt).getTime() < Date.now();
-                      return (
-                        <tr key={token.id}>
-                          <td><strong>{token.supplier.name}</strong></td>
-                          <td>
-                            {token.contact.name}
-                            <br />
-                            <span style={{ color: 'var(--ink-soft)' }} className="text-xs">
-                              {token.contact.email}
-                            </span>
-                          </td>
-                          <td style={{ color: 'var(--ink-soft)' }} className="text-xs">
-                            {formatDateTime(token.expiresAt)}
-                          </td>
-                          <td>
-                            {token.respondedAt ? (
-                              <span className="badge">Respondido</span>
-                            ) : expired ? (
-                              <span className="badge badge--muted">Expirado</span>
-                            ) : (
-                              <span className="badge badge--muted">Pendente</span>
-                            )}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              {canManagePortalLinks && !token.respondedAt && (
+                    <thead>
+                      <tr>
+                        <th>Fornecedor</th>
+                        <th>Contato</th>
+                        <th>Expira</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeTokens.map((token) => {
+                        const expired =
+                          new Date(token.expiresAt).getTime() < Date.now();
+                        return (
+                          <tr key={token.id}>
+                            <td><strong>{token.supplier.name}</strong></td>
+                            <td>
+                              <span className="cotacao-links__contato">
+                                <span className="cotacao-links__contato-nome">{token.contact.name}</span>
+                                <span className="cotacao-links__contato-email">{token.contact.email}</span>
+                              </span>
+                            </td>
+                            <td className="cotacao-links__expira">
+                              {formatDateTime(token.expiresAt)}
+                            </td>
+                            <td>
+                              {token.respondedAt ? (
+                                <span className="badge badge--success badge--dot">Respondido</span>
+                              ) : expired ? (
+                                <span className="badge badge--warning badge--dot">Expirado</span>
+                              ) : (
+                                <span className="badge badge--muted badge--dot">Pendente</span>
+                              )}
+                            </td>
+                            <td>
+                              <div className="cotacao-links__acoes">
+                                {canManagePortalLinks && !token.respondedAt && (
+                                  <button
+                                    type="button"
+                                    className={`ghost-button${copiedTokenId === token.id ? ' cotacao-links__copiado' : ''}`}
+                                    disabled={regenerateTokenMutation.isPending}
+                                    onClick={() => regenerateAndCopy(token)}
+                                  >
+                                    {copiedTokenId === token.id && <Icon name="check" size={14} strokeWidth={2.2} />}
+                                    {copiedTokenId === token.id ? 'Link novo copiado!' : 'Gerar novo link'}
+                                  </button>
+                                )}
                                 <button
                                   type="button"
-                                  className="ghost-button"
-                                  disabled={regenerateTokenMutation.isPending}
-                                  onClick={() => regenerateAndCopy(token)}
+                                  className="ghost-button danger-button"
+                                  disabled={revokePortalTokenMutation.isPending}
+                                  onClick={async () => {
+                                    if (
+                                      await confirm(
+                                        `Revogar o link de ${token.contact.name}? O fornecedor não conseguirá mais responder.`,
+                                      )
+                                    ) {
+                                      revokePortalTokenMutation.mutate(token.id);
+                                    }
+                                  }}
                                 >
-                                  {copiedTokenId === token.id ? 'Link novo copiado!' : 'Gerar novo link'}
+                                  Revogar
                                 </button>
-                              )}
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                disabled={revokePortalTokenMutation.isPending}
-                                onClick={async () => {
-                                  if (
-                                    await confirm(
-                                      `Revogar o link de ${token.contact.name}? O fornecedor não conseguirá mais responder.`,
-                                    )
-                                  ) {
-                                    revokePortalTokenMutation.mutate(token.id);
-                                  }
-                                }}
-                              >
-                                Revogar
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
                   </table>
                 </div>
               )}
@@ -1934,7 +1992,7 @@ export default function CotacaoDetalhe() {
                 <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
                 <input
                   id="itemQuantity"
-                  className="input"
+                  className="input cotacao-item-form__quantidade"
                   type="number"
                   min="0"
                   step="0.01"
@@ -1959,15 +2017,15 @@ export default function CotacaoDetalhe() {
               </div>
             </div>
 
-            <fieldset className="item-form__scope">
+            <fieldset className="cotacao-item-form__escopo">
               <legend>Incoterm e destino</legend>
-              <label className="item-form__check">
+              <label className="cotacao-item-form__opcao">
                 <input
                   type="checkbox"
                   checked={itemForm.inheritIncoterm}
                   onChange={(e) => setItemForm({ ...itemForm, inheritIncoterm: e.target.checked })}
                 />
-                {qr.desiredIncoterm.length > 1 ? 'Usar os INCOTERMS da cotação' : 'Usar o INCOTERM da cotação'} ({formatIncoterms(qr.desiredIncoterm)})
+                {qr.desiredIncoterm.length > 1 ? 'Usar os INCOTERMS da cotação' : 'Usar o INCOTERM da cotação'} (<span className="cotacao-item-form__incoterms">{formatIncoterms(qr.desiredIncoterm)}</span>)
               </label>
               {!itemForm.inheritIncoterm && (
                 <div>
@@ -1987,7 +2045,7 @@ export default function CotacaoDetalhe() {
                   </select>
                 </div>
               )}
-              <label className="item-form__check">
+              <label className="cotacao-item-form__opcao">
                 <input
                   type="checkbox"
                   checked={itemForm.inheritPort}
@@ -2045,7 +2103,7 @@ export default function CotacaoDetalhe() {
       <Modal isOpen={showEditModal} onClose={closeEditModal} title="Editar cotação">
         {editForm && (
           <form onSubmit={handleEditSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="cotacao-detalhe__edicao">
               <div className="form-grid__full">
                 <label className="field-label">Incoterms aceitáveis *</label>
                 <div className="chip-row">
@@ -2073,27 +2131,27 @@ export default function CotacaoDetalhe() {
                 />
               </div>
               <div>
-                              <label className="field-label" htmlFor="qrDestinationPort">Porto de destino</label>
+                <label className="field-label" htmlFor="qrDestinationPort">Porto de destino</label>
                 <input
-                                id="qrDestinationPort"
+                  id="qrDestinationPort"
                   className="input"
-                                value={editForm.destinationPort}
-                                onChange={(e) => setEditForm({ ...editForm, destinationPort: e.target.value })}
-                                placeholder="Ex.: Porto de Santos"
-                                maxLength={120}
+                  value={editForm.destinationPort}
+                  onChange={(e) => setEditForm({ ...editForm, destinationPort: e.target.value })}
+                  placeholder="Ex.: Porto de Santos"
+                  maxLength={120}
                 />
               </div>
-                            <div>
-                              <label className="field-label" htmlFor="qrCurrency">Moeda *</label>
-                              <input
-                                id="qrCurrency"
-                                className="input"
-                                value={editForm.currency}
-                                onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
-                                maxLength={3}
-                                required
-                              />
-                            </div>
+              <div>
+                <label className="field-label" htmlFor="qrCurrency">Moeda *</label>
+                <input
+                  id="qrCurrency"
+                  className="input cotacao-detalhe__moeda"
+                  value={editForm.currency}
+                  onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+                  maxLength={3}
+                  required
+                />
+              </div>
               <div>
                 <label className="field-label" htmlFor="qrDeadline">Prazo</label>
                 <input
@@ -2106,7 +2164,7 @@ export default function CotacaoDetalhe() {
               </div>
             </div>
 
-            <label className="field-label" htmlFor="qrDescription" style={{ marginTop: 12 }}>
+            <label className="field-label cotacao-detalhe__descricao" htmlFor="qrDescription">
               Descrição
             </label>
             <textarea
@@ -2118,7 +2176,7 @@ export default function CotacaoDetalhe() {
             />
 
             {editError && (
-              <p style={{ color: 'var(--danger)', marginTop: 12 }} className="text-sm">{editError}</p>
+              <p className="alert alert--error cotacao-detalhe__alerta" role="alert">{editError}</p>
             )}
 
             <div className="modal-actions">

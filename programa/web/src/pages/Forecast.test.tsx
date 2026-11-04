@@ -198,7 +198,7 @@ const pendentesChamados = () => get.mock.calls.map((c) => String(c[0])).filter((
 const relatoriosChamados = () =>
   get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith('/relatorio-compras'));
 
-const nomesDosItens = () => screen.queryAllByRole('button', { name: /PRODUTO [ABC]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
+const nomesDosItens = () => screen.queryAllByRole('link', { name: /PRODUTO [ABC]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -411,8 +411,8 @@ describe('Forecast', () => {
     expect((chave)?.getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('columnheader', { name: 'EMB.1–7' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'M1' })).toBeTruthy();
-    // uma vez na grade e outra na memoria de calculo (item selecionado)
-    expect(screen.getAllByText('C0001 · C0002')).toHaveLength(2);
+    // so na grade: a memoria de calculo mora na pagina do item
+    expect(screen.getAllByText('C0001 · C0002')).toHaveLength(1);
   });
 
   it('colunas de compras: selo Fixo, OBS com title e DEMANDA <= 0 em pilula', async () => {
@@ -426,28 +426,25 @@ describe('Forecast', () => {
     expect(document.querySelectorAll('.fc-cell--acima-media')).toHaveLength(2);
   });
 
-  it('clicar em outro item troca a memoria de calculo e o aria-pressed', async () => {
+  it('clicar no item abre a pagina do item (sem grade) e a aba Painel volta para a grade', async () => {
     mockApi({ 7: detalhe() });
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    const memoria = within(screen.getByRole('region', { name: 'Memória de cálculo' }));
-    expect(memoria.getByText('MEMÓRIA DE CÁLCULO · LINHA 3 DA PLANILHA')).toBeTruthy();
-    expect(memoria.getByRole('heading', { name: 'PRODUTO A' })).toBeTruthy();
-    const [itemA, itemB] = screen.getAllByRole('button', { name: /PRODUTO [AB]/ });
-    expect((itemA)?.getAttribute('aria-pressed')).toBe('true');
-    expect((itemB)?.getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(itemB as HTMLElement);
+    expect(screen.queryByRole('region', { name: 'Memória de cálculo' })).toBeNull();
+    fireEvent.click(screen.getByRole('link', { name: /PRODUTO B/ }));
+    const memoria = within(await screen.findByRole('region', { name: 'Memória de cálculo' }));
+    expect(screen.queryByRole('table')).toBeNull();
     expect(memoria.getByText('MEMÓRIA DE CÁLCULO · LINHA 4 DA PLANILHA')).toBeTruthy();
     expect(memoria.getByRole('heading', { name: 'PRODUTO B' })).toBeTruthy();
-    expect((itemA)?.getAttribute('aria-pressed')).toBe('false');
-    expect((itemB)?.getAttribute('aria-pressed')).toBe('true');
     expect(memoria.getByText('Falta em nov/2026. Uma PO feita hoje chega em 20/11/2026, a tempo.')).toBeTruthy();
     expect(memoria.getByText(/CHEG\. calculada com hoje = 20\/10\/2026/)).toBeTruthy();
     expect(memoria.getByText('LEAD TIME · FONTE 2')).toBeTruthy();
-    // nem margem nem clientes ativos aparecem no painel
+    // nem margem nem clientes ativos aparecem na pagina
     expect(memoria.queryByText(/Margem/)).toBeNull();
     expect(memoria.queryByText(/Clientes ativos/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Painel' }));
+    expect(await screen.findByRole('table')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Memória de cálculo' })).toBeNull();
   });
 
   it('erro 403 no detalhe mostra a mensagem de acesso', async () => {
@@ -683,8 +680,8 @@ describe('Forecast - embalagens do item na memoria de calculo', () => {
   it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s ve o botao "Embalagens do item" na memoria', async (role) => {
     mockRole = role;
     mockComProduto();
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     const memoria = within(screen.getByRole('region', { name: 'Memória de cálculo' }));
     const botao = memoria.getByRole('button', { name: 'Embalagens do item' });
     expect(botao.getAttribute('aria-haspopup')).toBe('dialog');
@@ -692,8 +689,8 @@ describe('Forecast - embalagens do item na memoria de calculo', () => {
 
   it('linha sem productId mostra "Produto fora do cadastro" e nenhum botao', async () => {
     mockApi({ 7: detalhe() });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     const memoria = within(screen.getByRole('region', { name: 'Memória de cálculo' }));
     expect(memoria.getByText('Produto fora do cadastro')).toBeTruthy();
     expect(memoria.queryByRole('button', { name: 'Embalagens do item' })).toBeNull();
@@ -702,8 +699,8 @@ describe('Forecast - embalagens do item na memoria de calculo', () => {
   it('o modal do viewer abre em leitura (sem campos de texto)', async () => {
     mockRole = 'viewer';
     mockComProduto();
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     fireEvent.click(within(screen.getByRole('region', { name: 'Memória de cálculo' })).getByRole('button', { name: 'Embalagens do item' }));
     expect(await screen.findByText('Somente admin e comprador editam embalagens.')).toBeTruthy();
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
@@ -713,8 +710,8 @@ describe('Forecast - embalagens do item na memoria de calculo', () => {
   it('o modal do admin abre em edicao e fechar devolve o foco ao botao', async () => {
     mockRole = 'admin';
     mockComProduto();
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     const botao = within(screen.getByRole('region', { name: 'Memória de cálculo' })).getByRole('button', { name: 'Embalagens do item' });
     fireEvent.click(botao);
     expect(await screen.findByLabelText('Quantidade em kg do código C0001')).toBeTruthy();
@@ -772,8 +769,8 @@ describe('Forecast - compra sob demanda na memoria de calculo (PR 6a)', () => {
 
   async function abrir(over: Record<string, unknown> = {}) {
     mockApi({ 7: detalhe({ linhas: [linha({ productId: 42, sobDemanda: false, sobDemandaMotivo: null, ...over }), ...LINHAS.slice(1)] }) });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
   }
 
   it.each(['admin', 'comprador'])('%s ve o controle (caixa, motivo e Salvar) na memoria', async (role) => {
@@ -801,14 +798,14 @@ describe('Forecast - compra sob demanda na memoria de calculo (PR 6a)', () => {
   it('produto fora do cadastro e backend antigo (sem a marca no dado): "—" e nenhum controle', async () => {
     mockRole = 'admin';
     mockApi({ 7: detalhe() });
-    const { unmount } = renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    const { unmount } = renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     expect(memoria().queryByRole('checkbox')).toBeNull();
     unmount();
 
     mockApi({ 7: detalhe({ linhas: [linha({ productId: 42 }), ...LINHAS.slice(1)] }) });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     expect(memoria().queryByRole('checkbox')).toBeNull();
   });
 
@@ -905,10 +902,11 @@ describe('Forecast - meses atipicos na memoria de calculo (PR 6c)', () => {
     mediaAjustada: { meses: [4], Q: 900, R: 600, AG: 900, semMesValido: false },
   };
 
-  async function abrir(over: Record<string, unknown> = {}, detalheOver: Record<string, unknown> = {}) {
+  // Pagina do item por padrao; os 2 testes da grade passam '/forecast'. A aba "Painel" so aparece com a quinzena carregada.
+  async function abrir(over: Record<string, unknown> = {}, detalheOver: Record<string, unknown> = {}, url = '/forecast/item/3') {
     mockApi({ 7: detalhe({ linhas: [linha({ productId: 42, mesesForaDaMedia: [], ...over }), ...LINHAS.slice(1)], ...detalheOver }) });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage(url);
+    await screen.findByRole('button', { name: 'Painel' });
   }
 
   it('mostra a conta com os meses restantes, o mes excluido e quanto seria pela planilha', async () => {
@@ -943,14 +941,14 @@ describe('Forecast - meses atipicos na memoria de calculo (PR 6c)', () => {
   it('backend antigo (sem mesesForaDaMedia no dado) e produto fora do cadastro: nenhum controle', async () => {
     mockRole = 'admin';
     mockApi({ 7: detalhe({ linhas: [linha({ productId: 42 }), ...LINHAS.slice(1)] }) });
-    const { unmount } = renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    const { unmount } = renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     expect(memoria().queryByRole('button', { name: 'Meses fora da média' })).toBeNull();
     unmount();
 
     mockApi({ 7: detalhe({ linhas: [linha({ productId: null, mesesForaDaMedia: [] }), ...LINHAS.slice(1)] }) });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     expect(memoria().queryByRole('button', { name: 'Meses fora da média' })).toBeNull();
   });
 
@@ -1047,7 +1045,7 @@ describe('Forecast - meses atipicos na memoria de calculo (PR 6c)', () => {
 
   it('grade: celula do mes marcado riscada com o motivo, Q com asterisco e title; selo avisa', async () => {
     mockRole = 'viewer';
-    await abrir(ATIPICA);
+    await abrir(ATIPICA, {}, '/forecast');
     // Os meses mais antigos ficam ocultos por padrao; ago/2026 (N) e a 5a coluna de consumo e e visivel.
     const celulas = Array.from(document.querySelectorAll('td.fc-cell--fora-media'));
     expect(celulas).toHaveLength(1);
@@ -1065,7 +1063,7 @@ describe('Forecast - meses atipicos na memoria de calculo (PR 6c)', () => {
 
   it('sem meses marcados: nenhuma celula riscada, sem asterisco e sem nota no selo', async () => {
     mockRole = 'viewer';
-    await abrir();
+    await abrir({}, {}, '/forecast');
     expect(document.querySelectorAll('.fc-cell--fora-media')).toHaveLength(0);
     expect(screen.queryByText(/meses fora da média: o painel/)).toBeNull();
     expect(document.querySelectorAll('td[title^="Média sem meses atípicos"]')).toHaveLength(0);
@@ -1096,19 +1094,19 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     mockComGrupos();
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    fireEvent.click(screen.getByRole('button', { name: 'Grupos de equivalência' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' })); fireEvent.click(screen.getByRole('menuitem', { name: 'Grupos de equivalência' }));
     expect(await screen.findByRole('heading', { name: 'GRUPO SINTETICO' })).toBeTruthy();
     const podeEditar = role === 'admin' || role === 'comprador';
     expect(screen.queryByRole('button', { name: 'Novo grupo' }) !== null).toBe(podeEditar);
   });
 
-  it('ao fechar o modal o foco volta ao botao "Grupos de equivalência"', async () => {
+  it('ao fechar o modal o foco volta ao botao "Mais"', async () => {
     mockRole = 'comprador';
     mockComGrupos();
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    const abrir = screen.getByRole('button', { name: 'Grupos de equivalência' });
-    fireEvent.click(abrir);
+    const abrir = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(abrir); fireEvent.click(screen.getByRole('menuitem', { name: 'Grupos de equivalência' }));
     await screen.findByRole('heading', { name: 'GRUPO SINTETICO' });
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'GRUPO SINTETICO' })).toBeNull());
@@ -1120,14 +1118,14 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     mockApi({}, []);
     renderPage();
     await screen.findByText('Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.');
-    expect(screen.getByRole('button', { name: 'Grupos de equivalência' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' })); expect(screen.getByRole('menuitem', { name: 'Grupos de equivalência' })).toBeTruthy();
   });
 
   it('memoria de calculo: selo "Grupo: nome" no produto que esta num grupo; produto avulso e backend antigo sem selo', async () => {
     mockRole = 'viewer';
     mockComGrupos({ grupo: { id: 7, nome: 'GRUPO SINTETICO', principalProductId: 42 } });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     expect(memoria().getByText('Grupo: GRUPO SINTETICO')).toBeTruthy();
     expect(memoria().getByText(/Os números acima são só deste produto/)).toBeTruthy();
   });
@@ -1135,13 +1133,13 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
   it('memoria de calculo sem grupo (avulso ou backend antigo): nenhum selo', async () => {
     mockRole = 'viewer';
     mockComGrupos({ grupo: null });
-    renderPage();
-    await screen.findByText('Cálculo idêntico ao da planilha');
+    renderPage('/forecast/item/3');
+    await screen.findByRole('region', { name: 'Memória de cálculo' });
     expect(memoria().queryByText(/^Grupo:/)).toBeNull();
     expect(memoria().queryByText('Grupo')).toBeNull();
   });
 
-  it('viewer abre "Fontes e lead time" e fechar devolve o foco ao botao', async () => {
+  it('viewer abre "Fontes e lead time" e fechar devolve o foco ao botao "Mais"', async () => {
     mockRole = 'viewer';
     mockApi({ 7: detalhe() });
     // O ramo generico de mockApi faz Number(path.split('/').pop()): a rota do prazo real responde ANTES dele.
@@ -1164,8 +1162,8 @@ describe('Forecast - grupos de equivalencia (PR 6b)', () => {
     );
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    const abrir = screen.getByRole('button', { name: 'Fontes e lead time' });
-    fireEvent.click(abrir);
+    const abrir = screen.getByRole('button', { name: 'Mais' });
+    fireEvent.click(abrir); fireEvent.click(screen.getByRole('menuitem', { name: 'Fontes e lead time' }));
     expect(await screen.findByRole('table', { name: 'Lead time cadastrado e prazo real por fonte' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Editar lead time/ })).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Fechar' })[0] as HTMLElement);

@@ -15,6 +15,7 @@ import {
   type ReportSupplierEngagementItem,
 } from '@/services/reports';
 import StarRating from '@/components/StarRating';
+import { Icon } from '@/components/icons';
 
 function todayIso(): string {
   const d = new Date();
@@ -122,15 +123,15 @@ export default function Relatorios() {
   const savingsCurrency = savingsData?.items?.[0]?.currency ?? 'BRL';
 
   return (
-    <div className="page">
+    <div className="page relatorios-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">Operação</p>
           <h1>Relatórios</h1>
           <p>Acompanhe os indicadores operacionais do IntelliQuote.</p>
         </div>
-        <div className="page-header__actions" style={{ alignItems: 'flex-end', gap: 8 }}>
-          <div>
+        <div className="page-header__actions">
+          <div className="relatorios-campo">
             <label className="field-label" htmlFor="reports-from">De</label>
             <input
               id="reports-from"
@@ -138,10 +139,9 @@ export default function Relatorios() {
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              style={{ minWidth: 150 }}
             />
           </div>
-          <div>
+          <div className="relatorios-campo">
             <label className="field-label" htmlFor="reports-to">Até</label>
             <input
               id="reports-to"
@@ -149,7 +149,6 @@ export default function Relatorios() {
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              style={{ minWidth: 150 }}
             />
           </div>
           <button
@@ -164,123 +163,135 @@ export default function Relatorios() {
               awardRate.isFetching
             }
           >
+            <Icon name="refresh" size={16} />
             Atualizar
           </button>
         </div>
       </div>
 
       {feedback && (
-        <p style={{
-          color: feedback.kind === 'err' ? 'var(--danger)' : 'var(--primary-700)',
-          fontSize: 13,
-          marginBottom: 8,
-        }}>
+        <p
+          className={`relatorios-feedback ${feedback.kind === 'err' ? 'relatorios-feedback--erro' : ''}`}
+          role={feedback.kind === 'err' ? 'alert' : 'status'}
+        >
+          <Icon name={feedback.kind === 'err' ? 'alert-circle' : 'check'} size={14} strokeWidth={2.2} />
           {feedback.text}
         </p>
       )}
 
       {/* Card: Resumo */}
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Resumo</h2>
+      <section className="card relatorios-cartao" aria-labelledby="r-resumo">
+        <div className="relatorios-cartao__cabecalho">
+          <h2 id="r-resumo" className="relatorios-cartao__titulo">Resumo</h2>
           {(summaryData?.range?.from || summaryData?.range?.to) && (
-            <span className="chip chip--static">
+            <span className="chip chip--static relatorios-chip relatorios-chip--mono">
               {formatDate(summaryData?.range?.from)} – {formatDate(summaryData?.range?.to)}
             </span>
           )}
         </div>
-        {summary.isLoading && <p>Carregando resumo…</p>}
-        {summary.isError && (
-          <div className="empty-state">
-            <p>{messageOf(summary.error)}</p>
-          </div>
+        {summary.isLoading && (
+          <p className="relatorios-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando resumo…
+          </p>
         )}
+        {summary.isError && <p className="alert alert--error" role="alert">{messageOf(summary.error)}</p>}
         {summaryData && (
-          <div className="kpi-grid">
+          <div className="kpi-grid kpi-grid--resumo">
             <div className="kpi">
-              <span className="field-label">Cotações</span>
+              <span className="kpi__rotulo">Cotações</span>
               <span className="kpi__value">{formatInt(summaryData.totals.quoteRequests)}</span>
             </div>
             <div className="kpi">
-              <span className="field-label">Propostas</span>
+              <span className="kpi__rotulo">Propostas</span>
               <span className="kpi__value">{formatInt(summaryData.totals.responses)}</span>
             </div>
             <div className="kpi">
-              <span className="field-label">Comparações</span>
+              <span className="kpi__rotulo">Comparações</span>
               <span className="kpi__value">{formatInt(summaryData.totals.comparisons)}</span>
             </div>
             <div className="kpi">
-              <span className="field-label">Fornecedores</span>
+              <span className="kpi__rotulo">Fornecedores</span>
               <span className="kpi__value">{formatInt(summaryData.totals.suppliers)}</span>
             </div>
-            <div className="kpi">
-              <span className="field-label">Taxa de adjudicação</span>
+            <div className="kpi kpi--destaque">
+              <span className="kpi__rotulo">Taxa de adjudicação</span>
               <span className="kpi__value">{formatPercent(summaryData.awardRate.rate)}</span>
-              <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                {formatInt(summaryData.awardRate.winners)} vencedoras em {formatInt(summaryData.awardRate.comparisons)} comparações
+              <span className="kpi__legenda">
+                <span className="relatorios-mono">{formatInt(summaryData.awardRate.winners)}</span> vencedoras em{' '}
+                <span className="relatorios-mono">{formatInt(summaryData.awardRate.comparisons)}</span> comparações
               </span>
             </div>
           </div>
         )}
         {summaryData && summaryData.totals.quoteRequests === 0 && summaryData.totals.responses === 0 && (
-          <p className="empty-state" style={{ marginTop: 12 }}>Sem dados no período.</p>
+          <p className="relatorios-vazio">Sem dados no período.</p>
         )}
       </section>
 
       {/* Card: Economia estimada */}
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Economia estimada</h2>
+      <section className="card relatorios-cartao" aria-labelledby="r-economia">
+        <div className="relatorios-cartao__cabecalho">
+          <h2 id="r-economia" className="relatorios-cartao__titulo">Economia estimada</h2>
           {savingsData && (
-            <span className="chip chip--static">{formatInt(savingsData.comparisons)} comparações</span>
+            <span className="chip chip--static relatorios-chip">
+              <span className="relatorios-mono">{formatInt(savingsData.comparisons)}</span> comparações
+            </span>
           )}
         </div>
-        {savings.isLoading && <p>Carregando economia…</p>}
-        {savings.isError && (
-          <div className="empty-state">
-            <p>{messageOf(savings.error)}</p>
-          </div>
+        {savings.isLoading && (
+          <p className="relatorios-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando economia…
+          </p>
         )}
+        {savings.isError && <p className="alert alert--error" role="alert">{messageOf(savings.error)}</p>}
         {savingsData && (
-          <div className="kpi-grid">
-            <div className="kpi">
-              <span className="field-label">Economia absoluta</span>
+          <div className="kpi-grid kpi-grid--economia">
+            <div className="kpi kpi--destaque">
+              <span className="kpi__rotulo">Economia absoluta</span>
               <span className="kpi__value">
                 {formatCurrency(savingsData.absoluteSaving, savingsCurrency)}
               </span>
             </div>
             <div className="kpi">
-              <span className="field-label">% médio de economia</span>
+              <span className="kpi__rotulo">% médio de economia</span>
               <span className="kpi__value">{formatPercent(savingsData.averagePercentSaving)}</span>
             </div>
             <div className="kpi">
-              <span className="field-label">Comparações analisadas</span>
+              <span className="kpi__rotulo">Comparações analisadas</span>
               <span className="kpi__value">{formatInt(savingsData.comparisons)}</span>
             </div>
           </div>
         )}
         {savingsData && savingsData.items.length > 0 ? (
-          <div className="table-wrapper" style={{ marginTop: 16 }}>
-            <table className="table">
+          <div className="table-wrapper relatorios-tabela">
+            <table className="table relatorios-tabela__tabela relatorios-tabela__tabela--economia">
               <thead>
                 <tr>
                   <th>Cotação</th>
                   <th>Produto</th>
                   <th>Fornecedor vencedor</th>
-                  <th>Landed vencedor</th>
-                  <th>Economia absoluta</th>
-                  <th>% economia</th>
+                  <th className="relatorios-num">Landed vencedor</th>
+                  <th className="relatorios-num">Economia absoluta</th>
+                  <th className="relatorios-num">% economia</th>
                 </tr>
               </thead>
               <tbody>
                 {savingsData.items.map((item: ReportSavingsItem) => (
                   <tr key={item.comparisonId}>
-                    <td><strong>{item.requestCode}</strong></td>
+                    <td className="relatorios-codigo">{item.requestCode}</td>
                     <td>{item.productName}</td>
-                    <td>Fornecedor #{item.winner.supplierId}</td>
-                    <td>{formatCurrency(item.winner.landedCost, item.currency)}</td>
-                    <td>{formatCurrency(item.absoluteSaving, item.currency)}</td>
-                    <td>{formatPercent(item.percentSaving)}</td>
+                    <td className="relatorios-suave">
+                      Fornecedor <span className="relatorios-mono">#{item.winner.supplierId}</span>
+                    </td>
+                    <td className="relatorios-num relatorios-mono relatorios-valor">
+                      {formatCurrency(item.winner.landedCost, item.currency)}
+                    </td>
+                    <td className="relatorios-num relatorios-mono relatorios-valor relatorios-ganho">
+                      {formatCurrency(item.absoluteSaving, item.currency)}
+                    </td>
+                    <td className="relatorios-num relatorios-mono relatorios-ganho">{formatPercent(item.percentSaving)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -288,213 +299,223 @@ export default function Relatorios() {
           </div>
         ) : (
           !savings.isLoading && !savings.isError && (
-            <p className="empty-state">Sem dados no período.</p>
+            <p className="relatorios-vazio">Sem dados no período.</p>
           )
         )}
       </section>
 
-      {/* Card: Lead-time médio */}
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Lead-time médio</h2>
-          {leadTimeData && (
-            <span className="chip chip--static">{formatInt(leadTimeData.responses)} propostas</span>
-          )}
-        </div>
-        {leadTime.isLoading && <p>Carregando lead-time…</p>}
-        {leadTime.isError && (
-          <div className="empty-state">
-            <p>{messageOf(leadTime.error)}</p>
-          </div>
-        )}
-        {leadTimeData && (
-          <div className="kpi-grid">
-            <div className="kpi">
-              <span className="field-label">Lead-time médio geral</span>
-              <span className="kpi__value">
-                {formatNumberDays(leadTimeData.averageLeadTimeDays)}
+      <div className="relatorios-linha">
+        {/* Card: Lead-time médio */}
+        <section className="card relatorios-cartao" aria-labelledby="r-lead">
+          <div className="relatorios-cartao__cabecalho">
+            <h2 id="r-lead" className="relatorios-cartao__titulo">Lead-time médio</h2>
+            {leadTimeData && (
+              <span className="chip chip--static relatorios-chip">
+                <span className="relatorios-mono">{formatInt(leadTimeData.responses)}</span> propostas
               </span>
-              <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>em dias</span>
-            </div>
+            )}
           </div>
-        )}
-        {leadTimeData && leadTimeData.bySupplier.length > 0 ? (
-          <div className="table-wrapper" style={{ marginTop: 16 }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fornecedor</th>
-                  <th>Lead-time médio</th>
-                  <th>Propostas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leadTimeData.bySupplier.map((row: ReportLeadTimeSupplier) => (
-                  <tr key={row.supplierId}>
-                    <td><strong>{row.supplierName}</strong></td>
-                    <td>{formatNumberDays(row.averageLeadTimeDays)} dias</td>
-                    <td>{formatInt(row.responses)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !leadTime.isLoading && !leadTime.isError && (
-            <p className="empty-state">Sem dados no período.</p>
-          )
-        )}
-      </section>
-
-      {/* Card: Top fornecedores */}
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Top fornecedores</h2>
-          {topSuppliersData && (
-            <span className="chip chip--static">{formatInt(topSuppliersData.items.length)} ranqueados</span>
+          {leadTime.isLoading && (
+            <p className="relatorios-carregando" role="status">
+              <span className="btn-spinner" aria-hidden="true" />
+              Carregando lead-time…
+            </p>
           )}
-        </div>
-        {topSuppliers.isLoading && <p>Carregando top fornecedores…</p>}
-        {topSuppliers.isError && (
-          <div className="empty-state">
-            <p>{messageOf(topSuppliers.error)}</p>
+          {leadTime.isError && <p className="alert alert--error" role="alert">{messageOf(leadTime.error)}</p>}
+          {leadTimeData && (
+            <div className="kpi-grid kpi-grid--lead">
+              <div className="kpi">
+                <span className="kpi__rotulo">Lead-time médio geral</span>
+                <span className="kpi__value">
+                  {formatNumberDays(leadTimeData.averageLeadTimeDays)}
+                </span>
+                <span className="kpi__legenda">em dias</span>
+              </div>
+            </div>
+          )}
+          {leadTimeData && leadTimeData.bySupplier.length > 0 ? (
+            <div className="table-wrapper relatorios-tabela">
+              <table className="table relatorios-tabela__tabela relatorios-tabela__tabela--lead">
+                <thead>
+                  <tr>
+                    <th>Fornecedor</th>
+                    <th className="relatorios-num">Lead-time médio</th>
+                    <th className="relatorios-num">Propostas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leadTimeData.bySupplier.map((row: ReportLeadTimeSupplier) => (
+                    <tr key={row.supplierId}>
+                      <td className="relatorios-nome">{row.supplierName}</td>
+                      <td className="relatorios-num relatorios-nowrap">
+                        <span className="relatorios-mono">{formatNumberDays(row.averageLeadTimeDays)}</span> dias
+                      </td>
+                      <td className="relatorios-num relatorios-mono">{formatInt(row.responses)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            !leadTime.isLoading && !leadTime.isError && (
+              <p className="relatorios-vazio">Sem dados no período.</p>
+            )
+          )}
+        </section>
+
+        {/* Card: Top fornecedores */}
+        <section className="card relatorios-cartao" aria-labelledby="r-top">
+          <div className="relatorios-cartao__cabecalho">
+            <h2 id="r-top" className="relatorios-cartao__titulo">Top fornecedores</h2>
+            {topSuppliersData && (
+              <span className="chip chip--static relatorios-chip">
+                <span className="relatorios-mono">{formatInt(topSuppliersData.items.length)}</span> ranqueados
+              </span>
+            )}
           </div>
-        )}
-        {topSuppliersData && topSuppliersData.items.length > 0 ? (
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fornecedor</th>
-                  <th>Vitórias</th>
-                  <th>Taxa de vitória</th>
-                  <th>Score médio</th>
-                  <th>Avaliação</th>
-                  <th>Propostas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topSuppliersData.items.map((row: ReportTopSupplier) => (
-                  <tr key={row.supplierId}>
-                    <td>
-                      <strong>{row.supplierName}</strong>
-                      {row.country && (
-                        <span style={{ marginLeft: 6, fontSize: 12, color: 'var(--ink-soft)' }}>
-                          {row.country}
-                        </span>
-                      )}
-                    </td>
-                    <td>{formatInt(row.wins)}</td>
-                    <td>{formatPercent(row.winRate)}</td>
-                    <td>{formatNumberScore(row.averageScore)}</td>
-                    <td>
-                      {row.avgRating !== null && row.reviewCount > 0 ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <StarRating value={row.avgRating} readOnly showValue />
-                          <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                            ({row.reviewCount})
+          {topSuppliers.isLoading && (
+            <p className="relatorios-carregando" role="status">
+              <span className="btn-spinner" aria-hidden="true" />
+              Carregando top fornecedores…
+            </p>
+          )}
+          {topSuppliers.isError && <p className="alert alert--error" role="alert">{messageOf(topSuppliers.error)}</p>}
+          {topSuppliersData && topSuppliersData.items.length > 0 ? (
+            <div className="table-wrapper relatorios-tabela">
+              <table className="table relatorios-tabela__tabela relatorios-tabela__tabela--compacta">
+                <thead>
+                  <tr>
+                    <th>Fornecedor</th>
+                    <th className="relatorios-num">Vitórias</th>
+                    <th className="relatorios-num">Taxa de vitória</th>
+                    <th className="relatorios-num">Score médio</th>
+                    <th>Avaliação</th>
+                    <th className="relatorios-num">Propostas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topSuppliersData.items.map((row: ReportTopSupplier) => (
+                    <tr key={row.supplierId}>
+                      <td>
+                        <strong>{row.supplierName}</strong>
+                        {row.country && <span className="relatorios-pais">{row.country}</span>}
+                      </td>
+                      <td className="relatorios-num relatorios-mono">{formatInt(row.wins)}</td>
+                      <td className="relatorios-num relatorios-mono">{formatPercent(row.winRate)}</td>
+                      <td className="relatorios-num relatorios-mono">{formatNumberScore(row.averageScore)}</td>
+                      <td className="relatorios-nowrap">
+                        {row.avgRating !== null && row.reviewCount > 0 ? (
+                          <span className="relatorios-avaliacao">
+                            <StarRating value={row.avgRating} readOnly showValue />
+                            <span className="relatorios-avaliacao__n">
+                              (<span className="relatorios-mono">{row.reviewCount}</span>)
+                            </span>
                           </span>
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>{formatInt(row.responses)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !topSuppliers.isLoading && !topSuppliers.isError && (
-            <p className="empty-state">Sem dados no período.</p>
-          )
-        )}
-      </section>
-
-      {/* Card: Taxa de adjudicação */}
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Taxa de adjudicação</h2>
-          {awardRateData && (
-            <span className="chip chip--static">
-              {formatInt(awardRateData.winners)} / {formatInt(awardRateData.comparisons)}
-            </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className="relatorios-num relatorios-mono">{formatInt(row.responses)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            !topSuppliers.isLoading && !topSuppliers.isError && (
+              <p className="relatorios-vazio">Sem dados no período.</p>
+            )
           )}
-        </div>
-        {awardRate.isLoading && <p>Carregando taxa de adjudicação…</p>}
-        {awardRate.isError && (
-          <div className="empty-state">
-            <p>{messageOf(awardRate.error)}</p>
-          </div>
-        )}
-        {awardRateData && (
-          <div className="kpi-grid">
-            <div className="kpi">
-              <span className="field-label">Taxa de adjudicação</span>
-              <span className="kpi__value">{formatPercent(awardRateData.rate)}</span>
-            </div>
-            <div className="kpi">
-              <span className="field-label">Comparações</span>
-              <span className="kpi__value">{formatInt(awardRateData.comparisons)}</span>
-            </div>
-            <div className="kpi">
-              <span className="field-label">Vencedoras</span>
-              <span className="kpi__value">{formatInt(awardRateData.winners)}</span>
-            </div>
-          </div>
-        )}
-      </section>
+        </section>
+      </div>
 
-      {/* F7: Card: Engajamento de fornecedores (taxa e tempo de resposta) */}
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Engajamento de fornecedores</h2>
-          <span className="chip chip--static">taxa e tempo de resposta ao portal</span>
-        </div>
-        {engagement.isLoading && <p>Carregando engajamento…</p>}
-        {engagement.isError && (
-          <div className="empty-state">
-            <p>{messageOf(engagement.error)}</p>
+      <div className="relatorios-linha relatorios-linha--topo">
+        {/* Card: Taxa de adjudicação */}
+        <section className="card relatorios-cartao" aria-labelledby="r-adj">
+          <div className="relatorios-cartao__cabecalho">
+            <h2 id="r-adj" className="relatorios-cartao__titulo">Taxa de adjudicação</h2>
+            {awardRateData && (
+              <span className="chip chip--static relatorios-chip relatorios-chip--mono">
+                {formatInt(awardRateData.winners)} / {formatInt(awardRateData.comparisons)}
+              </span>
+            )}
           </div>
-        )}
-        {engagement.data && engagement.data.items.length > 0 ? (
-          <div className="table-wrapper" style={{ marginTop: 8 }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Fornecedor</th>
-                  <th>Enviados</th>
-                  <th>Respondidos</th>
-                  <th>Taxa de resposta</th>
-                  <th>Tempo médio</th>
-                </tr>
-              </thead>
-              <tbody>
-                {engagement.data.items.map((row: ReportSupplierEngagementItem) => (
-                  <tr key={row.supplierId}>
-                    <td><strong>{row.supplierName}</strong></td>
-                    <td>{formatInt(row.tokensSent)}</td>
-                    <td>{formatInt(row.tokensResponded)}</td>
-                    <td>{formatPercent(row.responseRate)}</td>
-                    <td>
-                      {row.avgResponseHours === null
-                        ? '—'
-                        : row.avgResponseHours < 48
-                          ? `${Math.round(row.avgResponseHours)} h`
-                          : `${(row.avgResponseHours / 24).toFixed(1)} d`}
-                    </td>
+          {awardRate.isLoading && (
+            <p className="relatorios-carregando" role="status">
+              <span className="btn-spinner" aria-hidden="true" />
+              Carregando taxa de adjudicação…
+            </p>
+          )}
+          {awardRate.isError && <p className="alert alert--error" role="alert">{messageOf(awardRate.error)}</p>}
+          {awardRateData && (
+            <div className="kpi-grid kpi-grid--adjudicacao">
+              <div className="kpi kpi--destaque">
+                <span className="kpi__rotulo">Taxa de adjudicação</span>
+                <span className="kpi__value">{formatPercent(awardRateData.rate)}</span>
+              </div>
+              <div className="kpi">
+                <span className="kpi__rotulo">Comparações</span>
+                <span className="kpi__value">{formatInt(awardRateData.comparisons)}</span>
+              </div>
+              <div className="kpi">
+                <span className="kpi__rotulo">Vencedoras</span>
+                <span className="kpi__value">{formatInt(awardRateData.winners)}</span>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* F7: Card: Engajamento de fornecedores (taxa e tempo de resposta) */}
+        <section className="card relatorios-cartao" aria-labelledby="r-eng">
+          <div className="relatorios-cartao__cabecalho">
+            <h2 id="r-eng" className="relatorios-cartao__titulo">Engajamento de fornecedores</h2>
+            <span className="chip chip--static relatorios-chip">taxa e tempo de resposta ao portal</span>
+          </div>
+          {engagement.isLoading && (
+            <p className="relatorios-carregando" role="status">
+              <span className="btn-spinner" aria-hidden="true" />
+              Carregando engajamento…
+            </p>
+          )}
+          {engagement.isError && <p className="alert alert--error" role="alert">{messageOf(engagement.error)}</p>}
+          {engagement.data && engagement.data.items.length > 0 ? (
+            <div className="table-wrapper relatorios-tabela">
+              <table className="table relatorios-tabela__tabela relatorios-tabela__tabela--compacta">
+                <thead>
+                  <tr>
+                    <th>Fornecedor</th>
+                    <th className="relatorios-num">Enviados</th>
+                    <th className="relatorios-num">Respondidos</th>
+                    <th className="relatorios-num">Taxa de resposta</th>
+                    <th className="relatorios-num">Tempo médio</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          !engagement.isLoading && !engagement.isError && (
-            <p className="empty-state">Sem envios de portal no período.</p>
-          )
-        )}
-      </section>
+                </thead>
+                <tbody>
+                  {engagement.data.items.map((row: ReportSupplierEngagementItem) => (
+                    <tr key={row.supplierId}>
+                      <td className="relatorios-nome">{row.supplierName}</td>
+                      <td className="relatorios-num relatorios-mono">{formatInt(row.tokensSent)}</td>
+                      <td className="relatorios-num relatorios-mono">{formatInt(row.tokensResponded)}</td>
+                      <td className="relatorios-num relatorios-mono">{formatPercent(row.responseRate)}</td>
+                      <td className="relatorios-num relatorios-mono">
+                        {row.avgResponseHours === null
+                          ? '—'
+                          : row.avgResponseHours < 48
+                            ? `${Math.round(row.avgResponseHours)} h`
+                            : `${formatNumberDays(row.avgResponseHours / 24)} d`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            !engagement.isLoading && !engagement.isError && (
+              <p className="relatorios-vazio">Sem envios de portal no período.</p>
+            )
+          )}
+        </section>
+      </div>
     </div>
   );
 }

@@ -307,28 +307,32 @@ describe('Forecast - excluir quinzena', () => {
     mockApi([Q7]);
     renderPage();
     await screen.findByText(/Quinzena 10-2 · base 15\/10\/2026/);
-    expect(screen.queryByRole('button', { name: 'Excluir quinzena' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    expect(screen.queryByRole('menuitem', { name: 'Excluir quinzena' })).toBeNull();
   });
 
   it.each(['comprador', 'admin'])('%s ve o botao', async (role) => {
     mockRole = role;
     mockApi([Q7]);
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Excluir quinzena' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mais' }));
+    expect(await screen.findByRole('menuitem', { name: 'Excluir quinzena' })).toBeTruthy();
   });
 
   it('sem quinzena o botao nao existe', async () => {
     mockApi([]);
     renderPage();
     await screen.findByText(/Nenhuma quinzena importada ainda/);
-    expect(screen.queryByRole('button', { name: 'Excluir quinzena' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    expect(screen.queryByRole('menuitem', { name: 'Excluir quinzena' })).toBeNull();
   });
 
   it('o modal da pagina mostra o nº de produtos do detalhe carregado', async () => {
     mockApi([Q7, Q8]);
     renderPage();
     await screen.findByText('Quinzena 10-2 · base 15/10/2026 · 3 produtos · origem planilha');
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir quinzena' }));
     expect(dialogo().querySelector('.fcx-dados')!.textContent).toContain('Produtos3');
   });
 
@@ -336,10 +340,11 @@ describe('Forecast - excluir quinzena', () => {
     mockApi([Q7, Q8]);
     renderPage();
     await screen.findByText(/Quinzena 10-2 · base 15\/10\/2026/);
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir quinzena' }));
     fireEvent.click(botaoCancelar());
     await waitFor(() => expect(document.querySelector('dialog[open]')).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mais' }));
     expect(del).not.toHaveBeenCalled();
   });
 
@@ -349,7 +354,8 @@ describe('Forecast - excluir quinzena', () => {
     await screen.findByText('Quinzena 10-2 · base 15/10/2026 · 3 produtos · origem planilha');
     const listasAntes = get.mock.calls.filter((c) => c[0] === '/v1/forecast/snapshots').length;
 
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir quinzena' }));
     digitar('10-2');
     fireEvent.click(botaoConfirmar());
 
@@ -377,7 +383,8 @@ describe('Forecast - excluir quinzena', () => {
     mockApi([Q7]);
     renderPage();
     await screen.findByText(/Quinzena 10-2 · base 15\/10\/2026/);
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir quinzena' }));
     digitar('10-2');
     fireEvent.click(botaoConfirmar());
 
@@ -397,7 +404,8 @@ describe('Forecast - excluir quinzena', () => {
     mockApi([Q7, Q8, { ...Q8, id: 9, label: '11-2', half: 2 }]);
     renderPage();
     await screen.findByText(/Quinzena 10-2 · base 15\/10\/2026/);
-    fireEvent.click(screen.getByRole('button', { name: 'Excluir quinzena' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mais' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Excluir quinzena' }));
     digitar('10-2');
     fireEvent.click(botaoConfirmar());
     await screen.findByText('Quinzena 10-2 excluída.');

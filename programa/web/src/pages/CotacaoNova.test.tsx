@@ -98,7 +98,7 @@ function getDialog(container: HTMLElement): HTMLDialogElement {
 async function goToStep2(getByRole: any) {
   fireEvent.click(getByRole('button', { name: 'Próximo' }));
   await waitFor(() => {
-    const button = getByRole('button', { name: '+ Adicionar item' }) as HTMLButtonElement;
+    const button = getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
   });
 }
@@ -120,10 +120,10 @@ describe('CotacaoNova', () => {
     expect(dialog.open).toBe(false);
   });
 
-  it('2. step 2 + clique em "+ Adicionar item": abre com título "Adicionar item do catálogo"', async () => {
+  it('2. step 2 + clique em "Adicionar item": abre com título "Adicionar item do catálogo"', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = getDialog(container);
     expect(dialog.open).toBe(true);
     expect(dialog.querySelector('.modal-header h2')?.textContent).toBe('Adicionar item do catálogo');
@@ -132,7 +132,7 @@ describe('CotacaoNova', () => {
   it('3. título dinâmico de edição: selecionar via família expandida e depois clicar em Editar mostra "Editar item"', async () => {
     const { container, getByRole, getByLabelText } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const dialog = getDialog(container);
     // Famílias carregam lazy (só quando o modal abre): esperar aparecerem.
@@ -159,7 +159,7 @@ describe('CotacaoNova', () => {
   it('3b. edição do rascunho: largura padrão e ações como filhas diretas do form', async () => {
     const { container, getByRole, getByLabelText } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const dialog = getDialog(container);
     await waitFor(() => {
@@ -183,7 +183,7 @@ describe('CotacaoNova', () => {
   it('4. tamanho wide: className contém modal-dialog--wide', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = getDialog(container);
     expect(dialog.className).toContain('modal-dialog');
     expect(dialog.className).toContain('modal-dialog--wide');
@@ -192,7 +192,7 @@ describe('CotacaoNova', () => {
   it('5. sem título duplicado: escopado ao dialog (a página já tem <h2>Itens do catálogo</h2>)', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = getDialog(container);
     expect(dialog.querySelectorAll('h2').length).toBe(1);
     expect(dialog.querySelector('.modal-body h2')).toBeNull();
@@ -201,7 +201,7 @@ describe('CotacaoNova', () => {
   it('6. reabrir zera: busca vazia e pastas fechadas de novo após Cancelar', async () => {
     const { container, getByRole, getByPlaceholderText } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const dialog = getDialog(container);
     await waitFor(() => {
@@ -217,7 +217,7 @@ describe('CotacaoNova', () => {
     expect(searchInput.value).toBe('soda');
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const reopenedSearchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
     expect(reopenedSearchInput.value).toBe('');
@@ -233,7 +233,7 @@ describe('CotacaoNova', () => {
   it('A. busca por família: digitar "químicos" dispara a query global com search e mostra resultados agrupados', async () => {
     const { container, getByRole, getByPlaceholderText } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const dialog = getDialog(container);
     const searchInput = getByPlaceholderText('Buscar item do catálogo...') as HTMLInputElement;
@@ -254,7 +254,7 @@ describe('CotacaoNova', () => {
   it('B. resultados exibem só o nome comercial: "NaOH" (marketName) não aparece no dialog', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const dialog = getDialog(container);
     await waitFor(() => {
@@ -270,7 +270,7 @@ describe('CotacaoNova', () => {
   it('C. modo navegar: todas as famílias aparecem como pastas fechadas; expandir dispara a query 1x (recolher/reexpandir usa cache)', async () => {
     const { container, getByRole } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
 
     const dialog = getDialog(container);
     // As duas famílias aparecem como pastas mesmo sem busca (endpoint sem paginação).
@@ -309,7 +309,7 @@ describe('CotacaoNova', () => {
   it('7. botão × fecha o modal', async () => {
     const { container, getByRole, getByLabelText } = renderPage();
     await goToStep2(getByRole);
-    fireEvent.click(getByRole('button', { name: '+ Adicionar item' }));
+    fireEvent.click(getByRole('button', { name: 'Adicionar item' }));
     const dialog = getDialog(container);
     expect(dialog.open).toBe(true);
     fireEvent.click(getByLabelText('Fechar'));

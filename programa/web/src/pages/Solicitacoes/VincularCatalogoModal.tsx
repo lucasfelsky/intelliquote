@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '@/api/client';
 import { CatalogItemPicker, PickerCatalogItem } from '@/components/CatalogItemPicker';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
 import {
@@ -13,7 +14,6 @@ import {
 type Tab = 'select' | 'create';
 
 const NCM_PATTERN = /^\d{8}$/;
-const MODAL_TEXT_ALIGN = { textAlign: 'left' } as const;
 
 function messageOf(err: unknown): string {
   if (err instanceof ApiError) {
@@ -110,16 +110,18 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
   }
 
   return (
-    <Modal isOpen onClose={onClose} title={`Vincular "${proposedName}" ao catálogo`} size="wide">
-      <div style={MODAL_TEXT_ALIGN}>
-        <p className="text-sm" style={{ marginTop: 0, color: 'var(--ink-soft)' }}>
-          Solicitação #{request.id}. O item precisa estar no catálogo antes de entrar em uma cotação.
-        </p>
-
-        <div className="row-actions" style={{ marginBottom: 12 }}>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Vincular "${proposedName}" ao catálogo`}
+      subtitle={`Solicitação #${request.id}. O item precisa estar no catálogo antes de entrar em uma cotação.`}
+      size="wide"
+    >
+      <div className="vincular-catalogo">
+        <div className="vincular-catalogo__modo" role="group" aria-label="Modo">
           <button
             type="button"
-            className="ghost-button ghost-button--sm"
+            className="vincular-catalogo__aba"
             aria-pressed={tab === 'select'}
             onClick={() => setTab('select')}
           >
@@ -127,7 +129,7 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
           </button>
           <button
             type="button"
-            className="ghost-button ghost-button--sm"
+            className="vincular-catalogo__aba"
             aria-pressed={tab === 'create'}
             onClick={() => setTab('create')}
           >
@@ -136,7 +138,7 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
         </div>
 
         {tab === 'select' ? (
-          <div>
+          <div className="vincular-catalogo__painel">
             <CatalogItemPicker
               families={picker.families}
               familyItems={picker.familyItems}
@@ -154,11 +156,12 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
               selectedItem={selected}
             />
             {error && (
-              <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+              <p role="alert" className="solicitacoes-alerta alert--error">
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
                 {error}
               </p>
             )}
-            <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={onClose}>
                 Cancelar
               </button>
@@ -177,9 +180,9 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleCreate}>
-            <div className="form-grid">
-              <div className="form-grid__full">
+          <form className="vincular-catalogo__painel" onSubmit={handleCreate}>
+            <div className="vincular-catalogo__campos">
+              <div>
                 <label className="field-label" htmlFor="cr-vinc-commercial">Nome comercial *</label>
                 <input
                   id="cr-vinc-commercial"
@@ -189,7 +192,7 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
                   onChange={(e) => setCommercialName(e.target.value)}
                 />
               </div>
-              <div className="form-grid__full">
+              <div>
                 <label className="field-label" htmlFor="cr-vinc-market">Nome de mercado *</label>
                 <input
                   id="cr-vinc-market"
@@ -207,22 +210,24 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
                   inputMode="numeric"
                   maxLength={8}
                   placeholder="8 dígitos"
+                  aria-invalid={ncmInvalid || undefined}
                   value={ncm}
                   onChange={(e) => setNcm(e.target.value)}
                 />
                 {ncmInvalid && (
-                  <p className="text-sm" style={{ color: 'var(--danger)', margin: '4px 0 0' }}>
+                  <p role="alert" className="field-error vincular-catalogo__ncm">
                     NCM inválido. Use 8 dígitos.
                   </p>
                 )}
               </div>
             </div>
             {error && (
-              <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+              <p role="alert" className="solicitacoes-alerta alert--error">
+                <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
                 {error}
               </p>
             )}
-            <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+            <div className="modal-actions">
               <button type="button" className="ghost-button" onClick={onClose}>
                 Cancelar
               </button>

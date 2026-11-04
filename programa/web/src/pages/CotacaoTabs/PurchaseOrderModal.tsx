@@ -12,6 +12,7 @@ import {
 } from '@/services/dispatch';
 import { formatForwarderInfo, listForwarders } from '@/services/forwarders';
 import { Modal } from '@/components/Modal';
+import { Icon } from '@/components/icons';
 import { useConfirm } from '@/components/useConfirm';
 
 // Espelha o limite do backend (app.ts / QuoteResponseController) -- valida
@@ -23,6 +24,11 @@ const MAX_FORWARDER_INFO_LENGTH = 2000;
 
 function formatRecipient(contact: { name: string; email: string }): string {
   return contact.name.trim() ? `${contact.name} <${contact.email}>` : contact.email;
+}
+
+// Tamanho do PDF em MB, com virgula decimal (pt-BR), como o resto da tela.
+function formatMb(bytes: number): string {
+  return (bytes / 1024 / 1024).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Campos do candidato que o modal realmente le (linha do ranking OU entrada de "Fora do ranking").
@@ -192,157 +198,198 @@ export function PurchaseOrderModal({
           ? `Enviar Ordem de Compra ao parceiro ${target.creditPartner?.name ?? 'de crédito'} — fornecedor ${supplierName}`
           : `Enviar Ordem de Compra — ${supplierName}`
       }
+      subtitle={
+        <>
+          <span className="cmp-codigo">{requestCode}</span> · {productName}
+        </>
+      }
     >
-      <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 0 }}>
-        {requestCode} · {productName}
-      </p>
-      {nonWinner && (
-        <p className="cmp-po-nonwinner-notice" data-testid="po-nonwinner-notice">
-          Esta proposta não é a vencedora da cotação. A vencedora continua a mesma.
-        </p>
-      )}
-      {viaPartner && (
-        <p
-          data-testid="po-partner-notice"
-          style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 4 }}
-        >
-          O fornecedor de origem não é copiado.
-        </p>
-      )}
-      <div
-        data-testid="po-recipients"
-        style={{ color: 'var(--ink-soft)', fontSize: 13, marginTop: 8, overflowWrap: 'anywhere' }}
-      >
-        {recipientsQuery.isLoading && <p style={{ margin: 0 }}>Carregando destinatários…</p>}
-        {recipientsQuery.isError && (
-          <p style={{ margin: 0 }}>
-            Não foi possível carregar os destinatários: {messageOf(recipientsQuery.error)}
+      <div className="cmp-po">
+        {nonWinner && (
+          <p className="cmp-po-aviso cmp-po-aviso--atencao cmp-po-nonwinner-notice" data-testid="po-nonwinner-notice">
+            <Icon name="alert-triangle" size={16} strokeWidth={1.9} />
+            <span>Esta proposta não é a vencedora da cotação. A vencedora continua a mesma.</span>
           </p>
         )}
-        {recipients && (
-          <>
-            <p style={{ margin: 0 }}>
-              <strong style={{ color: 'var(--ink)' }}>Para:</strong> {formatRecipient(recipients.to)}
+        {viaPartner && (
+          <p className="cmp-po-aviso cmp-po-aviso--info" data-testid="po-partner-notice" role="status">
+            <Icon name="info" size={16} strokeWidth={1.9} />
+            <span>O fornecedor de origem não é copiado.</span>
+          </p>
+        )}
+        <div data-testid="po-recipients" className="cmp-po__destinatarios">
+          {recipientsQuery.isLoading && <p className="cmp-po__destinatarios-estado">Carregando destinatários…</p>}
+          {recipientsQuery.isError && (
+            <p
+              role="alert"
+              className="cmp-po__destinatarios-erro"
+            >
+              <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
+              <span>Não foi possível carregar os destinatários: {messageOf(recipientsQuery.error)}</span>
             </p>
-            {recipients.contactCc.length > 0 && (
-              <p style={{ margin: '2px 0 0' }}>
-                <strong style={{ color: 'var(--ink)' }}>Cc:</strong>{' '}
-                {recipients.contactCc.map(formatRecipient).join(', ')}
+          )}
+          {recipients && (
+            <div className="cmp-po__destinatarios-caixa">
+              <p className="cmp-po__linha">
+                <strong>Para:</strong> {formatRecipient(recipients.to)}
               </p>
+              {recipients.contactCc.length > 0 && (
+                <p className="cmp-po__linha">
+                  <strong>Cc:</strong>{' '}
+                  {recipients.contactCc.map(formatRecipient).join(', ')}
+                </p>
+              )}
+              {recipients.comexCc.length > 0 && (
+                <p className="cmp-po__linha cmp-po__linha--suave">
+                  Equipe COMEX em cópia ({recipients.comexCc.length}).
+                </p>
+              )}
+              {!recipients.to.name.trim() && (
+                <p className="cmp-po__linha cmp-po__linha--suave">Contato sem nome: aparece só o e-mail.</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="cmp-campo">
+          <label className="field-label" htmlFor="poSubject">
+            Assunto
+          </label>
+          <input
+            id="poSubject"
+            className="input"
+            value={poSubject}
+            onChange={(e) => setPoSubject(e.target.value)}
+          />
+        </div>
+
+        <div className="cmp-campo cmp-po__arquivo-campo">
+          <label className="field-label" htmlFor="poFile">
+            PDF da Ordem de Compra
+          </label>
+          <input
+            id="poFile"
+            type="file"
+            className="cmp-po__arquivo-input"
+            accept="application/pdf"
+            onChange={(e) => handlePoFileChange(e.target.files?.[0] ?? null)}
+          />
+          <label
+            htmlFor="poFile"
+            className={poFileName ? 'cmp-po__arquivo cmp-po__arquivo--ok' : 'cmp-po__arquivo'}
+          >
+            <span className="cmp-po__arquivo-icone" aria-hidden="true">
+              <Icon name={poFileName ? 'file-text' : 'upload'} size={poFileName ? 20 : 18} strokeWidth={1.9} />
+            </span>
+            <span className="cmp-po__arquivo-texto">
+              <strong className={poFileName ? 'cmp-po__arquivo-nome cmp-mono' : 'cmp-po__arquivo-nome'}>
+                {poFileName || 'Nenhum arquivo selecionado'}
+              </strong>
+              <span>Somente PDF, até 10 MB</span>
+            </span>
+            {poFileName && (
+              <span className="cmp-po__arquivo-botao">
+                <Icon name="upload" size={14} strokeWidth={2} />
+                Escolher arquivo
+              </span>
             )}
-            {recipients.comexCc.length > 0 && (
-              <p style={{ margin: '2px 0 0' }}>
-                Equipe COMEX em cópia ({recipients.comexCc.length}).
-              </p>
-            )}
-          </>
+          </label>
+          {poFileName && (
+            <p className="cmp-po__selecionado">
+              <span>Selecionado: {poFileName}</span>{' '}
+              <span>
+                (<span className="cmp-mono">{formatMb(poFileSize)}</span> MB)
+              </span>
+            </p>
+          )}
+        </div>
+
+        <div className="cmp-campo">
+          <label className="field-label" htmlFor="poForwarderSelect">
+            Forwarder
+          </label>
+          <select
+            id="poForwarderSelect"
+            className="input"
+            value={forwarderId === null ? '' : String(forwarderId)}
+            disabled={forwardersQuery.isError}
+            onChange={(e) => void handleForwarderSelect(e.target.value)}
+          >
+            <option value="">Digitar manualmente</option>
+            {forwarders.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.isDefault ? `${item.companyName} (padrão)` : item.companyName}
+              </option>
+            ))}
+          </select>
+          {forwardersQuery.isError && (
+            <p className="cmp-po__dica">
+              Não foi possível carregar os forwarders; digite o contato abaixo.
+            </p>
+          )}
+          {forwardersQuery.isSuccess && forwarders.length === 0 && (
+            <p className="cmp-po__dica">
+              Nenhum forwarder cadastrado. Cadastre em{' '}
+              <a href="/forwarders" target="_blank" rel="noreferrer">
+                Forwarders
+              </a>
+              .
+            </p>
+          )}
+        </div>
+
+        <div className="cmp-campo">
+          <label className="field-label" htmlFor="poForwarderInfo">
+            Contato do despachante (forwarder)
+          </label>
+          <textarea
+            id="poForwarderInfo"
+            className="textarea"
+            // Empresa + endereço + 1–2 contatos ocupam ~6 linhas; com 3 o texto preenchido ficava cortado.
+            rows={Math.min(10, Math.max(4, poForwarderInfo.split('\n').length + 1))}
+            value={poForwarderInfo}
+            onChange={(e) => {
+              userTouchedRef.current = true;
+              setPoForwarderInfo(e.target.value);
+            }}
+            placeholder="Nome, e-mail e telefone do despachante responsável pelo embarque."
+          />
+          <p className={forwarderInfoTooLong ? 'cmp-po__contador cmp-po__contador--excedido' : 'cmp-po__contador'}>
+            {forwarderInfoLength}/{MAX_FORWARDER_INFO_LENGTH}
+          </p>
+        </div>
+
+        <div className="cmp-campo">
+          <label className="field-label" htmlFor="poMessage">
+            Mensagem
+          </label>
+          <textarea
+            id="poMessage"
+            className="textarea"
+            rows={3}
+            value={poMessage}
+            onChange={(e) => setPoMessage(e.target.value)}
+            placeholder="Opcional. Aparece logo após a saudação, no topo do e-mail."
+          />
+          <p className="cmp-po__dica">
+            Assinatura: definida em{' '}
+            <a href="/minha-conta" target="_blank" rel="noreferrer">
+              Minha conta
+            </a>
+            .
+          </p>
+        </div>
+
+        {poModalError && (
+          <p
+            role="alert"
+            className="cmp-po-aviso cmp-po-aviso--erro cmp-po__erro"
+          >
+            <Icon name="alert-circle" size={16} strokeWidth={1.9} />
+            <span>{poModalError}</span>
+          </p>
         )}
       </div>
-
-      <label className="field-label" htmlFor="poSubject" style={{ marginTop: 12 }}>
-        Assunto
-      </label>
-      <input
-        id="poSubject"
-        className="input"
-        value={poSubject}
-        onChange={(e) => setPoSubject(e.target.value)}
-      />
-
-      <label className="field-label" htmlFor="poFile" style={{ marginTop: 12 }}>
-        PDF da Ordem de Compra
-      </label>
-      <input
-        id="poFile"
-        type="file"
-        accept="application/pdf"
-        onChange={(e) => handlePoFileChange(e.target.files?.[0] ?? null)}
-      />
-      {poFileName && (
-        <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
-          Selecionado: {poFileName} ({(poFileSize / 1024 / 1024).toFixed(2)} MB)
-        </p>
-      )}
-
-      <label className="field-label" htmlFor="poForwarderSelect" style={{ marginTop: 12 }}>
-        Forwarder
-      </label>
-      <select
-        id="poForwarderSelect"
-        className="input"
-        value={forwarderId === null ? '' : String(forwarderId)}
-        disabled={forwardersQuery.isError}
-        onChange={(e) => void handleForwarderSelect(e.target.value)}
-      >
-        <option value="">Digitar manualmente</option>
-        {forwarders.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.isDefault ? `${item.companyName} (padrão)` : item.companyName}
-          </option>
-        ))}
-      </select>
-      {forwardersQuery.isError && (
-        <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
-          Não foi possível carregar os forwarders; digite o contato abaixo.
-        </p>
-      )}
-      {forwardersQuery.isSuccess && forwarders.length === 0 && (
-        <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
-          Nenhum forwarder cadastrado. Cadastre em{' '}
-          <a href="/forwarders" target="_blank" rel="noreferrer">
-            Forwarders
-          </a>
-          .
-        </p>
-      )}
-
-      <label className="field-label" htmlFor="poForwarderInfo" style={{ marginTop: 12 }}>
-        Contato do despachante (forwarder)
-      </label>
-      <textarea
-        id="poForwarderInfo"
-        className="textarea"
-        // Empresa + endereço + 1–2 contatos ocupam ~6 linhas; com 3 o texto preenchido ficava cortado.
-        rows={Math.min(10, Math.max(4, poForwarderInfo.split('\n').length + 1))}
-        value={poForwarderInfo}
-        onChange={(e) => {
-          userTouchedRef.current = true;
-          setPoForwarderInfo(e.target.value);
-        }}
-        placeholder="Nome, e-mail e telefone do despachante responsável pelo embarque."
-      />
-      <p
-        style={{
-          fontSize: 12,
-          marginTop: 4,
-          color: forwarderInfoTooLong ? 'var(--danger)' : 'var(--ink-soft)',
-        }}
-      >
-        {forwarderInfoLength}/{MAX_FORWARDER_INFO_LENGTH}
-      </p>
-
-      <label className="field-label" htmlFor="poMessage" style={{ marginTop: 12 }}>
-        Mensagem
-      </label>
-      <textarea
-        id="poMessage"
-        className="textarea"
-        rows={3}
-        value={poMessage}
-        onChange={(e) => setPoMessage(e.target.value)}
-        placeholder="Opcional. Aparece logo após a saudação, no topo do e-mail."
-      />
-      <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
-        Assinatura: definida em{' '}
-        <a href="/minha-conta" target="_blank" rel="noreferrer">
-          Minha conta
-        </a>
-        .
-      </p>
-
-      {poModalError && (
-        <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{poModalError}</p>
-      )}
 
       <div className="modal-actions">
         <button type="button" className="ghost-button" onClick={onClose}>
@@ -360,6 +407,7 @@ export function PurchaseOrderModal({
           }
           onClick={() => poSendMutation.mutate()}
         >
+          <Icon name="file-text" size={16} strokeWidth={1.9} />
           {poSendMutation.isPending ? 'Enviando…' : 'Enviar Ordem de Compra'}
         </button>
       </div>

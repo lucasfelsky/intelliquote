@@ -1,6 +1,6 @@
 import { useId, useMemo } from 'react';
 import Spinner from '@/components/Spinner';
-import type { ForecastOcasiaoOcorrencia } from '@/services/forecastOcasioes';
+import type { ForecastOcasiaoEscopo, ForecastOcasiaoOcorrencia } from '@/services/forecastOcasioes';
 import { MESES_ABREV, colunasDosMeses, posicaoDeHoje, segmentoNoAno } from './forecastOcasioes';
 import { dataBr } from './forecastPainel';
 
@@ -11,6 +11,8 @@ export interface LinhaDoTempo {
   /** Alvos do grupo (`textoAlcance`, separados por virgula). */
   alcance: string;
   ativa: boolean;
+  /** Alcance do evento (global, pais ou fonte): a cor da barra segue o board v68. */
+  escopo?: ForecastOcasiaoEscopo;
   ocorrencias: ForecastOcasiaoOcorrencia[];
 }
 
@@ -85,9 +87,13 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
                       </span>
                     ))}
                     {pctHoje !== null && (
-                      <span className="fco-linha__hoje" style={{ left: `${pctHoje}%` }}>
-                        <span className="fco-linha__hoje-rotulo">Hoje</span>
-                      </span>
+                      <>
+                        <span className="fco-linha__hoje" style={{ left: `${pctHoje}%` }} />
+                        {/* Irmao da linha (nao filho): o texto nao herda a cor de fundo da linha de 2 px (contraste 1:1 na varredura). */}
+                        <span className="fco-linha__hoje-rotulo" style={{ left: `${pctHoje}%` }}>
+                          Hoje
+                        </span>
+                      </>
                     )}
                   </div>
                 </div>
@@ -100,7 +106,7 @@ export default function ForecastOcasioesLinhaDoTempo({ ano, hoje, linhas, carreg
                         return seg ? (
                           <span
                             key={o.inicio}
-                            className={l.ativa ? 'fco-linha__barra' : 'fco-linha__barra fco-linha__barra--inativa'}
+                            className={`fco-linha__barra fco-linha__barra--${l.escopo ?? 'global'}${l.ativa ? '' : ' fco-linha__barra--inativa'}`}
                             style={{ left: `${seg.esquerdaPct}%`, width: `${seg.larguraPct}%` }}
                           />
                         ) : null;

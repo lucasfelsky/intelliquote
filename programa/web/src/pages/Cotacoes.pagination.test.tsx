@@ -90,8 +90,8 @@ describe('Cotacoes - paginacao com filtros', () => {
       '/v1/quote-requests',
       expect.objectContaining({ page: '1', pageSize: '50' }),
     );
-    expect(screen.getByText(/Página 1 de 2/)).toBeTruthy();
-    expect(screen.getByText(/60 cotações no total/)).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 2/);
+    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/60 cotações no total/);
   });
 
   it('Próxima página pede page 2 e mostra as linhas da segunda página', async () => {
@@ -113,12 +113,12 @@ describe('Cotacoes - paginacao com filtros', () => {
 
     fireEvent.change(screen.getByDisplayValue('Todas'), { target: { value: 'abertas' } });
 
-    await waitFor(() => expect(screen.getByText(/70 cotações no total/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/70 cotações no total/));
     expect(api.get).toHaveBeenCalledWith(
       '/v1/quote-requests',
       expect.objectContaining({ status: 'open', page: '1', pageSize: '50' }),
     );
-    expect(screen.getByText(/Página 1 de 2/)).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 2/);
     expect(screen.getByText('QR-50')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
@@ -126,7 +126,7 @@ describe('Cotacoes - paginacao com filtros', () => {
     await waitFor(() => expect(screen.getByText('QR-70')).toBeTruthy());
     expect(lastGetParams()).toEqual(expect.objectContaining({ status: 'open', page: '2' }));
     expect(screen.getByText('QR-51')).toBeTruthy();
-    expect(screen.getByText(/Página 2 de 2/)).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 2 de 2/);
   });
 
   it('busca envia search com page 1', async () => {
@@ -152,7 +152,7 @@ describe('Cotacoes - paginacao com filtros', () => {
     await waitFor(() => expect(screen.getByText('QR-3')).toBeTruthy());
     expect(screen.getByText('QR-1')).toBeTruthy();
     expect(screen.getByText('QR-2')).toBeTruthy();
-    expect(screen.getByText(/Página 1 de 1 · 3 cotações no total/)).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 1 · 3 cotações no total/);
     expect((screen.getByRole('button', { name: 'Página anterior' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Próxima página' }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -176,6 +176,6 @@ describe('Cotacoes - paginacao com filtros', () => {
       expect(calls.length).toBeGreaterThanOrEqual(3);
       expect((calls[calls.length - 1]?.[1] as Record<string, string>).page).toBe('1');
     });
-    await waitFor(() => expect(screen.getByText(/Página 1 de 1/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 1/));
   });
 });

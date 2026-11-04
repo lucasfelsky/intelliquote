@@ -158,4 +158,92 @@ describe('Modal', () => {
     expect(onCloseFirst).not.toHaveBeenCalled();
     expect(onCloseSecond).toHaveBeenCalledTimes(1);
   });
+
+  it('12. size="xl", className contém modal-dialog--xl e não contém modal-dialog--wide', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Título" size="xl">
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    const dialog = getDialog(container);
+    expect(dialog.className).toContain('modal-dialog--xl');
+    expect(dialog.className).not.toContain('modal-dialog--wide');
+  });
+
+  it('13. F3c: o botão "Fechar" traz um svg aria-hidden (sem o texto ×) e continua sendo um único elemento rotulado', () => {
+    const { container, getAllByLabelText } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Título">
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    const botoes = getAllByLabelText('Fechar');
+    expect(botoes).toHaveLength(1);
+    const fechar = botoes[0] as HTMLElement;
+    expect(fechar.className).toBe('btn-close');
+    expect(fechar.getAttribute('type')).toBe('button');
+    expect(fechar.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(fechar.textContent).toBe('');
+    expect(container.querySelector('.modal-header')?.textContent).not.toContain('×');
+  });
+
+  it('14. F3c: com subtitle, o h2 segue como descendente de .modal-header com o título exato e o subtítulo é um <p> irmão do h2', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Editar cotação" subtitle="QR-2026-0418 · Ácido cítrico anidro">
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    const h2 = container.querySelector('.modal-header h2');
+    expect(h2?.textContent).toBe('Editar cotação');
+    const subtitulo = container.querySelector('.modal-subtitle');
+    expect(subtitulo?.tagName).toBe('P');
+    expect(subtitulo?.textContent).toBe('QR-2026-0418 · Ácido cítrico anidro');
+    expect(subtitulo?.previousElementSibling).toBe(h2);
+    expect(h2?.parentElement?.className).toBe('modal-header__titles');
+    expect(container.querySelector('.modal-body h2')).toBeNull();
+    expect(container.querySelector('.modal-body .modal-subtitle')).toBeNull();
+  });
+
+  it('15. F3c: sem subtitle não há .modal-subtitle nem .modal-header__titles e o h2 é filho direto de .modal-header', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Título">
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    expect(container.querySelector('.modal-subtitle')).toBeNull();
+    expect(container.querySelector('.modal-header__titles')).toBeNull();
+    expect(container.querySelector('.modal-header > h2')?.textContent).toBe('Título');
+  });
+
+  it('16. F3c: subtitle aceita ReactNode (código em destaque) e não muda o nome acessível do botão Fechar', () => {
+    const { container, getByLabelText } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Título" subtitle={<><b>QR-1</b> · Produto</>}>
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    expect(container.querySelector('.modal-subtitle b')?.textContent).toBe('QR-1');
+    expect(getByLabelText('Fechar').getAttribute('aria-label')).toBe('Fechar');
+  });
+
+  it('17. F3c: estrutura <dialog> > .modal-content > (header + .modal-body); abre com showModal (foco preso e Esc são do <dialog> nativo)', () => {
+    const showModal = vi.spyOn(HTMLDialogElement.prototype, 'showModal');
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Título">
+        <p>Conteúdo</p>
+      </Modal>
+    );
+    const dialog = getDialog(container);
+    expect(showModal).toHaveBeenCalledTimes(1);
+    expect(dialog.getAttribute('aria-modal')).toBeNull();
+    expect(Array.from(dialog.children).map((c) => c.className)).toEqual(['modal-content']);
+    expect(Array.from(dialog.querySelector('.modal-content')?.children ?? []).map((c) => c.className)).toEqual(['modal-header', 'modal-body']);
+    showModal.mockRestore();
+  });
+
+  it('18. className extra (opcional) entra depois das classes do tamanho; sem ele o className e o mesmo de antes', () => {
+    const sem = render(<Modal isOpen={true} onClose={vi.fn()} title="Título" size="wide"><p>Conteúdo</p></Modal>);
+    expect(getDialog(sem.container).className).toBe('modal-dialog modal-dialog--wide');
+    sem.unmount();
+    const com = render(<Modal isOpen={true} onClose={vi.fn()} title="Título" size="wide" className="fc-portal"><p>Conteúdo</p></Modal>);
+    expect(getDialog(com.container).className).toBe('modal-dialog modal-dialog--wide fc-portal');
+  });
 });

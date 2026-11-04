@@ -6,6 +6,7 @@ import {
   type AuditLog,
   type AuditLogFilters,
 } from '@/services/audit';
+import { Icon } from '@/components/icons';
 
 interface FiltersState {
   entityType: string;
@@ -99,101 +100,115 @@ export default function Auditoria() {
   }
 
   return (
-    <div className="page">
+    <div className="page auditoria-page">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Administração</p>
           <h1>Auditoria</h1>
           <p>Histórico de eventos do sistema.</p>
         </div>
       </div>
 
-      <section className="card">
-        <form onSubmit={handleSubmit} className="form-grid">
-          <div>
-            <label className="field-label" htmlFor="audit-entityType">Tipo de entidade</label>
-            <input
-              id="audit-entityType"
-              className="input"
-              type="text"
-              value={filters.entityType}
-              onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
-              placeholder="ex.: quoteRequest, supplier"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="audit-entityId">Identificador</label>
-            <input
-              id="audit-entityId"
-              className="input"
-              type="text"
-              value={filters.entityId}
-              onChange={(e) => setFilters({ ...filters, entityId: e.target.value })}
-              placeholder="ex.: 42"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="audit-action">Ação</label>
-            <input
-              id="audit-action"
-              className="input"
-              type="text"
-              value={filters.action}
-              onChange={(e) => setFilters({ ...filters, action: e.target.value })}
-              placeholder="ex.: create, update"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="audit-performedById">ID do ator</label>
-            <input
-              id="audit-performedById"
-              className="input"
-              type="number"
-              min={0}
-              value={filters.performedById}
-              onChange={(e) => setFilters({ ...filters, performedById: e.target.value })}
-              placeholder="0 = ignorar"
-            />
-          </div>
-          <div>
-            <label className="field-label" htmlFor="audit-limit">Limite</label>
-            <input
-              id="audit-limit"
-              className="input"
-              type="number"
-              min={1}
-              max={200}
-              value={filters.limit}
-              onChange={(e) => setFilters({ ...filters, limit: e.target.value })}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            <button type="submit" className="primary-button">Filtrar</button>
-            <button type="button" className="ghost-button" onClick={handleReset}>Limpar</button>
-          </div>
-        </form>
-      </section>
-
-      <section className="card">
-        <div className="page-header" style={{ marginBottom: 8 }}>
-          <h2>Eventos</h2>
-          {list.length > 0 && <span className="chip chip--static">{list.length} resultados</span>}
+      <form onSubmit={handleSubmit} className="auditoria-filtros" aria-label="Filtros de auditoria">
+        <div className="auditoria-campo">
+          <label className="field-label" htmlFor="audit-entityType">Tipo de entidade</label>
+          <input
+            id="audit-entityType"
+            className="input"
+            type="text"
+            value={filters.entityType}
+            onChange={(e) => setFilters({ ...filters, entityType: e.target.value })}
+            placeholder="ex.: quoteRequest, supplier"
+          />
         </div>
-        {logs.isLoading && <p>Carregando eventos…</p>}
+        <div className="auditoria-campo">
+          <label className="field-label" htmlFor="audit-entityId">Identificador</label>
+          <input
+            id="audit-entityId"
+            className="input auditoria-campo__mono"
+            type="text"
+            value={filters.entityId}
+            onChange={(e) => setFilters({ ...filters, entityId: e.target.value })}
+            placeholder="ex.: 42"
+          />
+        </div>
+        <div className="auditoria-campo">
+          <label className="field-label" htmlFor="audit-action">Ação</label>
+          <input
+            id="audit-action"
+            className="input"
+            type="text"
+            value={filters.action}
+            onChange={(e) => setFilters({ ...filters, action: e.target.value })}
+            placeholder="ex.: create, update"
+          />
+        </div>
+        <div className="auditoria-campo">
+          <label className="field-label" htmlFor="audit-performedById">ID do ator</label>
+          <input
+            id="audit-performedById"
+            className="input auditoria-campo__mono"
+            type="number"
+            min={0}
+            value={filters.performedById}
+            onChange={(e) => setFilters({ ...filters, performedById: e.target.value })}
+            placeholder="0 = ignorar"
+          />
+        </div>
+        <div className="auditoria-campo">
+          <label className="field-label" htmlFor="audit-limit">Limite</label>
+          <input
+            id="audit-limit"
+            className="input auditoria-campo__mono"
+            type="number"
+            min={1}
+            max={200}
+            value={filters.limit}
+            onChange={(e) => setFilters({ ...filters, limit: e.target.value })}
+          />
+        </div>
+        <div className="auditoria-acoes">
+          <button type="submit" className="primary-button">
+            <Icon name="filter" size={16} />
+            Filtrar
+          </button>
+          <button type="button" className="ghost-button" onClick={handleReset}>Limpar</button>
+        </div>
+      </form>
+
+      <section className="card auditoria-eventos" aria-labelledby="au-title">
+        <div className="auditoria-eventos__cabecalho">
+          <h2 id="au-title" className="auditoria-eventos__titulo">Eventos</h2>
+          {list.length > 0 && (
+            <span className="chip chip--static auditoria-chip">
+              <span className="auditoria-mono">{list.length}</span> resultados
+            </span>
+          )}
+        </div>
+        {logs.isLoading && (
+          <p className="auditoria-carregando" role="status">
+            <span className="btn-spinner" aria-hidden="true" />
+            Carregando eventos…
+          </p>
+        )}
         {logs.isError && (
-          <div className="empty-state">
-            <p>{messageOf(logs.error)}</p>
+          <div className="auditoria-estado">
+            <p className="alert alert--error" role="alert">{messageOf(logs.error)}</p>
           </div>
         )}
         {logs.data && list.length === 0 && !logs.isLoading && (
-          <div className="empty-state">
-            <strong>Sem eventos</strong>
-            <p>Nenhum registro de auditoria corresponde aos filtros aplicados.</p>
+          <div className="auditoria-estado">
+            <div className="empty-state">
+              <span className="empty-state__icon">
+                <Icon name="file-text" size={36} strokeWidth={1.5} />
+              </span>
+              <strong className="empty-state__title">Sem eventos</strong>
+              <p className="empty-state__text">Nenhum registro de auditoria corresponde aos filtros aplicados.</p>
+            </div>
           </div>
         )}
         {list.length > 0 && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table">
+          <div className="table-wrapper">
+            <table className="table auditoria-tabela">
               <thead>
                 <tr>
                   <th>Data/hora</th>
@@ -217,80 +232,72 @@ export default function Auditoria() {
 }
 
 function LogRow({ log }: { log: AuditLog }) {
+  const [aberto, setAberto] = useState(false);
   const actorName = log.performedBy?.name ?? 'Sistema';
   const actorEmail = log.performedBy?.email ?? '—';
   const actorRole = log.performedBy?.role?.name ?? '—';
   const showBefore = hasSnapshot(log.before);
   const showAfter = hasSnapshot(log.after);
+  const hasDiff = showBefore || showAfter;
 
+  // O <details> "Ver diff" fica na celula do Identificador; o painel Antes/Depois ocupa a largura da linha (linha irma com colspan, como o board).
   return (
-    <tr>
-      <td>{formatDateTime(log.createdAt)}</td>
-      <td>
-        <strong>{actorName}</strong>
-        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{actorEmail}</div>
-        <div>
-          <span className="badge badge--muted">{actorRole}</span>
-        </div>
-      </td>
-      <td><span className="badge">{log.entityType}</span></td>
-      <td><span className="badge badge--info">{log.action}</span></td>
-      <td>
-        <div>{log.entityId}</div>
-        {(showBefore || showAfter) && (
-          <details style={{ marginTop: 6 }}>
-            <summary
-              style={{
-                cursor: 'pointer',
-                fontSize: 12,
-                color: 'var(--primary-700)',
-              }}
-            >
-              Ver diff
-            </summary>
-            <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {showBefore && (
-                <div>
-                  <strong style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Antes</strong>
-                  <pre
-                    style={{
-                      background: 'var(--surface-alt)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: 8,
-                      fontSize: 11,
-                      maxHeight: 240,
-                      overflow: 'auto',
-                      margin: '4px 0 0',
-                    }}
-                  >
-                    {snapshotJson(log.before)}
-                  </pre>
-                </div>
-              )}
-              {showAfter && (
-                <div>
-                  <strong style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Depois</strong>
-                  <pre
-                    style={{
-                      background: 'var(--surface-alt)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: 8,
-                      fontSize: 11,
-                      maxHeight: 240,
-                      overflow: 'auto',
-                      margin: '4px 0 0',
-                    }}
-                  >
-                    {snapshotJson(log.after)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </details>
-        )}
-      </td>
-    </tr>
+    <>
+      <tr className={`auditoria-linha${aberto ? ' auditoria-linha--aberta' : ''}`}>
+        <td className="auditoria-data">{formatDateTime(log.createdAt)}</td>
+        <td>
+          <span className="auditoria-ator">
+            <strong>{actorName}</strong>
+            <span className="badge badge--muted auditoria-papel">{actorRole}</span>
+          </span>
+          <span className="auditoria-email">{actorEmail}</span>
+        </td>
+        <td><span className="badge badge--muted auditoria-entidade">{log.entityType}</span></td>
+        <td><span className="badge badge--info auditoria-acao">{log.action}</span></td>
+        <td>
+          <span className="auditoria-identificador">
+            <span className="auditoria-id">{log.entityId}</span>
+            {hasDiff && (
+              <details className="auditoria-diff" open={aberto}>
+                <summary
+                  className="auditoria-diff__resumo"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setAberto((atual) => !atual);
+                  }}
+                >
+                  Ver diff
+                  <Icon name="chevron-down" size={14} strokeWidth={2} className="auditoria-diff__fechado" />
+                  <Icon name="chevron-up" size={14} strokeWidth={2} className="auditoria-diff__aberto" />
+                </summary>
+              </details>
+            )}
+          </span>
+        </td>
+      </tr>
+      {hasDiff && aberto && (
+        <tr className="auditoria-diff-linha">
+          <td colSpan={5}>
+            <details className="auditoria-diff__painel" open>
+              <summary className="sr-only" tabIndex={-1}>Diff do evento {log.id}</summary>
+              <div className="auditoria-diff__grade">
+                {showBefore && (
+                  <div className="auditoria-diff__lado">
+                    <strong>Antes</strong>
+                    <pre className="auditoria-diff__json">{snapshotJson(log.before)}</pre>
+                  </div>
+                )}
+                {showAfter && (
+                  <div className="auditoria-diff__lado">
+                    <strong>Depois</strong>
+                    <pre className="auditoria-diff__json">{snapshotJson(log.after)}</pre>
+                  </div>
+                )}
+              </div>
+            </details>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

@@ -73,8 +73,8 @@ describe('Itens (catálogo) — paginação', () => {
     const { findByText } = renderPage();
     await findByText('Item A');
     await findByText('Item B');
-    await findByText((content) => content.includes('Página 1 de 2'));
-    await findByText((content) => content.includes('75 itens no total'));
+    await findByText((_content, element) => element?.matches('nav[aria-label="Paginação"]') === true && (element.textContent ?? '').includes('Página 1 de 2'));
+    await findByText((_content, element) => element?.matches('nav[aria-label="Paginação"]') === true && (element.textContent ?? '').includes('75 itens no total'));
   });
 
   it('2. botão "Anterior" desabilitado na 1ª página; "Próxima" habilitado', async () => {
@@ -96,7 +96,7 @@ describe('Itens (catálogo) — paginação', () => {
       const lastCall = calls[calls.length - 1];
       expect(lastCall?.[1]).toMatchObject({ page: 2 });
     });
-    await findByText((content) => content.includes('Página 2 de 2'));
+    await waitFor(() => expect(getByRole('navigation', { name: 'Paginação' }).textContent).toContain('Página 2 de 2'));
   });
 
   it('4. na última página, "Próxima" fica desabilitado e "Anterior" habilitado; clicar "Anterior" volta pra 1ª página', async () => {
@@ -159,7 +159,7 @@ describe('Itens (catálogo) — DG saiu do cadastro', () => {
   it('7. formulario de novo item e de edicao nao tem o campo DG', async () => {
     const { findByText, getByRole, queryByText, queryByRole } = renderPage();
     await findByText('Item DG Legado');
-    fireEvent.click(getByRole('button', { name: '+ Novo item' }));
+    fireEvent.click(getByRole('button', { name: 'Novo item' }));
     await findByText('Código DBCorp');
     expect(queryByText(/perigosa/i)).toBeNull();
     expect(queryByRole('checkbox', { name: /DG|perigosa/i })).toBeNull();

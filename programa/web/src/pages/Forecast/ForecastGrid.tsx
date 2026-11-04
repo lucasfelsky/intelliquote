@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import type { ForecastDivergencia, ForecastLinha } from '@/services/forecast';
 import { descreverDivergencia, GRUPOS, STATUS_ROTULO, type ColunaPainel, type GrupoId } from './forecastPainel';
 import { semVendaHa6Meses } from './forecastSemVenda';
@@ -13,24 +14,22 @@ interface RowProps {
   linha: ForecastLinha;
   colunas: ColunaPainel[];
   inicios: boolean[];
-  selecionada: boolean;
   divergencias: DivergenciasPorCelula;
-  onSelect: (linha: number) => void;
+  /** Query string (com `?`) do destino do item: quinzena, filtro, busca e colunas ocultas. */
+  buscaDoItem: string;
 }
 
-const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergencias, onSelect }: RowProps) {
+const Row = memo(function Row({ linha, colunas, inicios, divergencias, buscaDoItem }: RowProps) {
   const fonteEStatus = [linha.fonte, STATUS_ROTULO[linha.status]].filter(Boolean).join(' · ');
   const semVenda = semVendaHa6Meses(linha);
   return (
-    <tr className={selecionada ? 'fc-row fc-row--selecionada' : 'fc-row'}>
+    <tr className="fc-row">
       <td className="fc-cell fc-fixa fc-fixa--n">{linha.n ?? ''}</td>
       <td className={`fc-cell fc-fixa fc-fixa--item fc-status--${linha.status}`}>
-        <button
-          type="button"
+        <Link
           className="fc-item"
-          aria-pressed={selecionada}
+          to={{ pathname: `/forecast/item/${linha.linha}`, search: buscaDoItem }}
           title="Ver memória de cálculo"
-          onClick={() => onSelect(linha.linha)}
         >
           <span className="fc-item__nome">{linha.item}</span>{' '}
           <span className="fc-item__fonte">
@@ -38,7 +37,7 @@ const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergenci
             {semVenda && ' '}
             {fonteEStatus}
           </span>
-        </button>
+        </Link>
       </td>
       {colunas.map((c, i) => {
         const divergencia = c.colunaPlanilha
@@ -77,9 +76,8 @@ const Row = memo(function Row({ linha, colunas, inicios, selecionada, divergenci
 interface Props {
   colunas: ColunaPainel[];
   linhas: ForecastLinha[];
-  selecionada: number | null;
   divergencias: DivergenciasPorCelula;
-  onSelect: (linha: number) => void;
+  buscaDoItem: string;
   legenda: string;
   mensagemVazia?: string;
 }
@@ -87,9 +85,8 @@ interface Props {
 export default function ForecastGrid({
   colunas,
   linhas,
-  selecionada,
   divergencias,
-  onSelect,
+  buscaDoItem,
   legenda,
   mensagemVazia = 'Nenhum produto com esses filtros.',
 }: Props) {
@@ -135,7 +132,13 @@ export default function ForecastGrid({
               <th
                 key={c.id}
                 scope="col"
-                className={['fc-rotulo', inicios[i] ? 'fc-cell--divisa' : '', c.esquerda ? 'fc-cell--esq' : '']
+                className={[
+                  'fc-rotulo',
+                  // Rotulos em tom de atencao (mock v68): grupo ESTOQUE e a coluna do mes atual.
+                  c.grupo === 'est' || c.rotulo.includes('(ATUAL)') ? 'fc-rotulo--atencao' : '',
+                  inicios[i] ? 'fc-cell--divisa' : '',
+                  c.esquerda ? 'fc-cell--esq' : '',
+                ]
                   .filter(Boolean)
                   .join(' ')}
               >
@@ -158,9 +161,8 @@ export default function ForecastGrid({
                 linha={linha}
                 colunas={colunas}
                 inicios={inicios}
-                selecionada={linha.linha === selecionada}
                 divergencias={divergencias}
-                onSelect={onSelect}
+                buscaDoItem={buscaDoItem}
               />
             ))
           )}

@@ -1,7 +1,8 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
+import { Icon } from '@/components/icons';
 import Spinner from '@/components/Spinner';
 import {
   forecastErrorMessage,
@@ -25,7 +26,8 @@ import { useDialogoFontes } from './Forecast/useDialogoFontes';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
 import ForecastGruposModal from './Forecast/ForecastGruposModal';
 import ForecastImportModal from './Forecast/ForecastImportModal';
-import ForecastMemoria from './Forecast/ForecastMemoria';
+import ForecastItemPagina from './Forecast/ForecastItemPagina';
+import ForecastMenuMais from './Forecast/ForecastMenuMais';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
 import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
@@ -77,18 +79,59 @@ function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
 
 interface PainelProps {
   detail: ForecastSnapshotDetail;
-  podeEditar: boolean;
   mostrarSemVenda: boolean;
   onMostrarSemVenda: (mostrar: boolean) => void;
   ocultaveis: number;
 }
 
-function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: PainelProps) {
-  const [filtro, setFiltro] = useState<FiltroId>('todos');
-  const [busca, setBusca] = useState('');
-  const [ocultas, setOcultas] = useState(false);
-  const [sel, setSel] = useState<number | null>(null);
+function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: PainelProps) {
+  // Filtro, busca e colunas ocultas vivem na URL (`filtro`, `busca`, `ocultas`): abrir um item e voltar pela aba Painel
+  // devolve a grade como estava. A busca digitada fica em estado local (digitacao fluida, sem uma navegacao por tecla)
+  // e vai para a URL depois de uma pausa.
+  const [params, setParams] = useSearchParams();
+  const filtroUrl = params.get('filtro');
+  const filtro: FiltroId = FILTROS.find((f) => f.id === filtroUrl)?.id ?? 'todos';
+  const ocultas = params.get('ocultas') === '1';
+  const buscaUrl = params.get('busca') ?? '';
+  const [busca, setBusca] = useState(buscaUrl);
   const termo = useDeferredValue(busca);
+
+  const atualizarUrl = useCallback(
+    (mudar: (next: URLSearchParams) => void) =>
+      setParams(
+        (atual) => {
+          const next = new URLSearchParams(atual);
+          mudar(next);
+          return next;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
+  useEffect(() => {
+    if (busca === buscaUrl) return undefined;
+    const t = window.setTimeout(() => atualizarUrl((n) => (busca ? n.set('busca', busca) : n.delete('busca'))), 300);
+    return () => window.clearTimeout(t);
+  }, [busca, buscaUrl, atualizarUrl]);
+  const setFiltro = (id: FiltroId) => atualizarUrl((n) => (id === 'todos' ? n.delete('filtro') : n.set('filtro', id)));
+  const alternarOcultas = () => atualizarUrl((n) => (ocultas ? n.delete('ocultas') : n.set('ocultas', '1')));
+
+  // Cada item da grade e um <Link> para a pagina do item (/forecast/item/:linha) levando quinzena, filtro, busca e colunas
+  // ocultas (Ctrl+clique e nova aba funcionam). A busca e a deferida (a que filtra a grade): a query string e uma string
+  // estavel, entao as linhas memoizadas so renderizam de novo quando o destino muda de fato.
+  const idDaQuinzena = detail.id;
+  const buscaDoItem = useMemo(() => {
+    const next = new URLSearchParams(params);
+    next.set('quinzena', String(idDaQuinzena));
+    next.delete('visao');
+    if (filtro === 'todos') next.delete('filtro');
+    else next.set('filtro', filtro);
+    if (termo) next.set('busca', termo);
+    else next.delete('busca');
+    if (ocultas) next.set('ocultas', '1');
+    else next.delete('ocultas');
+    return `?${next.toString()}`;
+  }, [params, idDaQuinzena, filtro, termo, ocultas]);
 
   // Quantidades decididas pelo comprador: mesma chave do relatorio de compras (salvar la atualiza a grade). A grade
   // nunca some: sem dados (carregando ou erro sem cache) a coluna ANALISE FORECAST mostra o valor congelado.
@@ -132,9 +175,6 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
     mensagemVazia = `Nenhum produto visível com esses filtros: ${ocultosQueCasariam} sem venda há 6 meses ou mais ${ocultosQueCasariam === 1 ? 'está oculto' : 'estão ocultos'}.`;
   }
 
-  const selecionada = base.find((l) => l.linha === sel) ?? base[0];
-  const onSelect = useCallback((linha: number) => setSel(linha), []);
-
   return (
     <>
       <Selo detail={detail} />
@@ -158,6 +198,7 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
               <label className="sr-only" htmlFor="fc-busca">
                 Buscar produto, código ou fonte
               </label>
+              <Icon name="search" size={16} />
               <input
                 id="fc-busca"
                 className="input"
@@ -172,7 +213,7 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
               role="switch"
               aria-checked={ocultas}
               className="fc-chave"
-              onClick={() => setOcultas((v) => !v)}
+              onClick={alternarOcultas}
             >
               <span className={ocultas ? 'fc-trilho fc-trilho--on' : 'fc-trilho'} aria-hidden="true">
                 <span />
@@ -215,28 +256,19 @@ function Painel({ detail, podeEditar, mostrarSemVenda, onMostrarSemVenda, oculta
         <ForecastGrid
           colunas={colunas}
           linhas={visiveis}
-          selecionada={selecionada?.linha ?? null}
           divergencias={divergencias}
-          onSelect={onSelect}
+          buscaDoItem={buscaDoItem}
           legenda={`Forecast da quinzena ${detail.label}: ${visiveis.length} de ${detail.linhas.length} produtos`}
           mensagemVazia={mensagemVazia}
         />
       </section>
-      {selecionada && (
-        <ForecastMemoria
-          linha={selecionada}
-          half={detail.half}
-          baseDate={detail.baseDate}
-          hoje={detail.hoje}
-          podeEditar={podeEditar}
-        />
-      )}
     </>
   );
 }
 
 export default function Forecast() {
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const podeImportar = user?.role === 'admin' || user?.role === 'comprador';
@@ -247,21 +279,24 @@ export default function Forecast() {
   // Excluir quinzena: o alvo e capturado ao abrir (a lista pode mudar por baixo do dialogo).
   const [excluirAlvo, setExcluirAlvo] = useState<ForecastSnapshotSummary | null>(null);
   const [excluida, setExcluida] = useState<string | null>(null);
-  const botaoExcluir = useRef<HTMLButtonElement>(null);
+  const botaoMais = useRef<HTMLButtonElement>(null);
   const seletor = useRef<HTMLSelectElement>(null);
   const excluirAbriuAntes = useRef(false);
   const focoAposExcluir = useRef<'seletor' | 'importar' | null>(null);
   const excluirAberto = excluirAlvo !== null;
   // Grupos de equivalencia (PR 6b): todos os papeis COMEX veem; admin/comprador editam.
   const [gruposAberto, setGruposAberto] = useState(false);
-  const botaoGrupos = useRef<HTMLButtonElement>(null);
   const gruposAbriuAntes = useRef(false);
+  const fontesAbriuAntes = useRef(false);
   // Fontes e lead time (3C) / Eventos estrangeiros (PR 2): todos os papeis COMEX veem; admin/comprador editam.
   const dialogoFontes = useDialogoFontes();
   const lista = useQuery({ queryKey: forecastKeys.snapshots, queryFn: listForecastSnapshots });
   const quinzenas = lista.data ?? [];
 
-  const visao = params.get('visao') === 'compras' ? 'compras' : 'painel';
+  // Pagina do item (/forecast/item/:linha): a linha vem da rota; nao numerica = item inexistente (NaN nunca casa).
+  const rotaItem = useMatch('/forecast/item/:linha');
+  const linhaDoItem = rotaItem ? Number(rotaItem.params.linha) : null;
+  const visao = linhaDoItem === null && params.get('visao') === 'compras' ? 'compras' : 'painel';
   const pedida = Number(params.get('quinzena'));
   const escolhida = quinzenas.find((q) => q.id === pedida) ?? quinzenas[0];
   const escolhidaId = escolhida?.id;
@@ -296,7 +331,7 @@ export default function Forecast() {
       focoAposExcluir.current = null;
       if (alvo === 'seletor') seletor.current?.focus();
       else if (alvo === 'importar') botaoImportar.current?.focus();
-      else botaoExcluir.current?.focus();
+      else botaoMais.current?.focus();
     }
   }, [excluirAberto]);
 
@@ -305,27 +340,48 @@ export default function Forecast() {
       gruposAbriuAntes.current = true;
     } else if (gruposAbriuAntes.current) {
       gruposAbriuAntes.current = false;
-      botaoGrupos.current?.focus();
+      botaoMais.current?.focus();
     }
   }, [gruposAberto]);
 
-  // Trocar de visao preserva a quinzena da URL.
+  // Fontes e lead time / Eventos estrangeiros tambem abrem pelo menu "Mais" (que fecha ao escolher): ao fechar o dialogo o foco
+  // volta ao botao "Mais".
+  const abaFontesAberta = dialogoFontes.aba !== null;
+  useEffect(() => {
+    if (abaFontesAberta) {
+      fontesAbriuAntes.current = true;
+    } else if (fontesAbriuAntes.current) {
+      fontesAbriuAntes.current = false;
+      botaoMais.current?.focus();
+    }
+  }, [abaFontesAberta]);
+
+  // Sempre volta para o painel/relatorio (/forecast), nunca fica na pagina de um item de outra quinzena.
+  const irPara = useCallback(
+    (next: URLSearchParams | Record<string, string>) => {
+      const busca = new URLSearchParams(next).toString();
+      navigate({ pathname: '/forecast', search: busca ? `?${busca}` : '' });
+    },
+    [navigate],
+  );
+
+  // Trocar de visao (ou voltar do item pela aba Painel) preserva quinzena, filtro, busca e colunas ocultas da URL.
   const mudarVisao = (proxima: 'painel' | 'compras') => {
     const next = new URLSearchParams(params);
     if (proxima === 'compras') next.set('visao', 'compras');
     else next.delete('visao');
-    setParams(next);
+    irPara(next);
   };
 
   const aoImportar = useCallback(
     async (snapshotId: number, label: string) => {
       setImportando(false);
       await queryClient.invalidateQueries({ queryKey: ['forecast'] });
-      setParams({ quinzena: String(snapshotId) });
+      irPara({ quinzena: String(snapshotId) });
       setExcluida(null);
       setImportada(label);
     },
-    [queryClient, setParams],
+    [queryClient, irPara],
   );
 
   // Exclusao confirmada: a quinzena some da lista na hora, as consultas dela saem do cache (um GET so daria 404),
@@ -348,10 +404,10 @@ export default function Forecast() {
       const proximos: Record<string, string> = {};
       if (proxima) proximos.quinzena = String(proxima.id);
       if (visao === 'compras') proximos.visao = visao;
-      setParams(proximos);
+      irPara(proximos);
       await queryClient.invalidateQueries({ queryKey: ['forecast'] });
     },
-    [queryClient, setParams, visao],
+    [queryClient, irPara, visao],
   );
 
   const subtitulo = escolhida
@@ -365,89 +421,74 @@ export default function Forecast() {
     : 'Projeção de estoque e demanda por quinzena, no layout da planilha FORECAST (MACRO).';
 
   return (
-    <div className="page">
+    <div className="page fc-pagina">
       <div className="page-header">
         <div>
-          <p className="eyebrow">Planejamento · PO.COMP.01</p>
+          <p className="eyebrow">
+            Planejamento<span className="fc-so-papel"> · PO.COMP.01</span>
+          </p>
           <h1>
             Forecast de compras <span className="badge badge--warning fc-beta">Beta</span>
           </h1>
-          <p>
+          {/* Subtitulo e aviso: so no papel (o mock tira da tela; o relatorio impresso segue identificando a quinzena e a origem). */}
+          <p className="fc-so-papel">
             {subtitulo}
             {escolhida && proxima && <span className="fcpa-proxima"> · próxima análise {dataBr(proxima)}</span>}
           </p>
-          <p className="fc-beta-aviso">Em validação: confira os números com a planilha do Forecast.</p>
+          <p className="fc-beta-aviso fc-so-papel">Em validação: confira os números com a planilha do Forecast.</p>
         </div>
         {(quinzenas.length > 0 || podeImportar || lista.isSuccess) && (
-          <div className="page-header__actions">
+          <div className="page-header__actions fc-cabecalho">
             {quinzenas.length > 0 && (
-              <div className="fc-quinzena">
-                <label className="field-label" htmlFor="fc-quinzena">
-                  Quinzena
-                </label>
-                <select
-                  ref={seletor}
-                  id="fc-quinzena"
-                  className="select"
-                  value={escolhidaId}
-                  onChange={(e) => {
-                    setImportada(null);
-                    setExcluida(null);
-                    setParams(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
-                  }}
-                >
-                  {quinzenas.map((q) => (
-                    <option key={q.id} value={q.id}>
-                      {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
-                    </option>
-                  ))}
-                </select>
+              <div className="fc-cabecalho__quinzena">
+                <div className="fc-quinzena">
+                  <label className="field-label" htmlFor="fc-quinzena">
+                    Quinzena
+                  </label>
+                  <select
+                    ref={seletor}
+                    id="fc-quinzena"
+                    className="select"
+                    value={escolhidaId}
+                    onChange={(e) => {
+                      setImportada(null);
+                      setExcluida(null);
+                      irPara(visao === 'compras' ? { quinzena: e.target.value, visao } : { quinzena: e.target.value });
+                    }}
+                  >
+                    {quinzenas.map((q) => (
+                      <option key={q.id} value={q.id}>
+                        {q.label} · {dataBr(q.baseDate)} · {ORIGEM_ROTULO[q.origin]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {escolhida && proxima && (
+                  <span className="fc-proxima">
+                    Próxima análise
+                    <br />
+                    <strong>{dataBr(proxima)}</strong>
+                  </span>
+                )}
               </div>
             )}
-            <button
-              ref={dialogoFontes.botaoFontes}
-              type="button"
-              className="ghost-button"
-              aria-haspopup="dialog"
-              onClick={() => dialogoFontes.abrir('fontes')}
-            >
-              Fontes e lead time
-            </button>
-            <button
-              ref={dialogoFontes.botaoEventos}
-              type="button"
-              className="ghost-button"
-              aria-haspopup="dialog"
-              onClick={() => dialogoFontes.abrir('ocasioes')}
-            >
-              Eventos estrangeiros
-            </button>
-            <button
-              ref={botaoGrupos}
-              type="button"
-              className="ghost-button"
-              aria-haspopup="dialog"
-              onClick={() => setGruposAberto(true)}
-            >
-              Grupos de equivalência
-            </button>
-            {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
-            {podeImportar && (
-              <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
-                Importar quinzena
-              </button>
-            )}
-            {podeImportar && escolhida && (
-              <button
-                ref={botaoExcluir}
-                type="button"
-                className="ghost-button danger-button fcx-gatilho"
-                aria-haspopup="dialog"
-                onClick={() => setExcluirAlvo(escolhida)}
-              >
-                Excluir quinzena
-              </button>
-            )}
+            <div className="fc-cabecalho__acoes">
+              {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
+              {podeImportar && (
+                <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
+                  <Icon name="upload" size={16} />
+                  Importar quinzena
+                </button>
+              )}
+              <ForecastMenuMais
+                ref={botaoMais}
+                podeExcluir={podeImportar && escolhida !== undefined}
+                onFontes={() => dialogoFontes.abrir('fontes')}
+                onEventos={() => dialogoFontes.abrir('ocasioes')}
+                onGrupos={() => setGruposAberto(true)}
+                onExcluir={() => escolhida && setExcluirAlvo(escolhida)}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -462,23 +503,48 @@ export default function Forecast() {
           Quinzena {excluida} excluída.
         </div>
       )}
-      {lista.isLoading && <Spinner />}
+      {lista.isLoading && (
+        <div className="fc-carregando">
+          <Spinner size="sm" />
+          <span>Carregando a lista de quinzenas…</span>
+        </div>
+      )}
       {lista.isError && (
-        <div className="alert alert--error" role="alert">
-          {forecastErrorMessage(lista.error)}
+        <div className="fc-estado-erro">
+          <div className="alert alert--error" role="alert">
+            {forecastErrorMessage(lista.error)}
+          </div>
+          <button type="button" className="ghost-button" onClick={() => void lista.refetch()}>
+            Tentar de novo
+          </button>
         </div>
       )}
       {lista.isSuccess && quinzenas.length === 0 && (
-        <div className="empty-state">
+        <div className="empty-state fc-vazio-quinzena">
+          <span className="empty-state__icon">
+            <Icon name="layers" size={36} strokeWidth={1.5} />
+          </span>
+          {'Nenhuma quinzena importada ainda.'}{' '}
+          <br />
           {podeImportar
-            ? 'Nenhuma quinzena importada ainda. Use “Importar quinzena” para enviar os relatórios do DBCorp.'
-            : 'Nenhuma quinzena importada ainda. Peça a um comprador ou administrador para importar.'}
+            ? 'Use “Importar quinzena” para enviar os relatórios do DBCorp.'
+            : 'Peça a um comprador ou administrador para importar.'}
         </div>
       )}
-      {escolhida && detalhe.isLoading && <Spinner />}
+      {escolhida && detalhe.isLoading && (
+        <div className="fc-carregando">
+          <Spinner size="sm" />
+          <span>Carregando a quinzena…</span>
+        </div>
+      )}
       {escolhida && detalhe.isError && (
-        <div className="alert alert--error" role="alert">
-          {forecastErrorMessage(detalhe.error)}
+        <div className="fc-estado-erro">
+          <div className="alert alert--error" role="alert">
+            {forecastErrorMessage(detalhe.error)}
+          </div>
+          <button type="button" className="ghost-button" onClick={() => void detalhe.refetch()}>
+            Tentar de novo
+          </button>
         </div>
       )}
       {detail && (
@@ -491,14 +557,14 @@ export default function Forecast() {
           </button>
         </div>
       )}
-      {detail && detail.origin === 'dbcorp' && (
+      {detail && detail.origin === 'dbcorp' && linhaDoItem === null && (
         <ForecastPendentesCadastro key={`pendentes-${detail.id}`} snapshotId={detail.id} label={detail.label} podeEditar={podeImportar} />
       )}
-      {detail && visao === 'painel' && (
+      {detail && linhaDoItem !== null && <ForecastItemPagina detail={detail} linha={linhaDoItem} podeEditar={podeImportar} />}
+      {detail && linhaDoItem === null && visao === 'painel' && (
         <Painel
           key={detail.id}
           detail={detail}
-          podeEditar={podeImportar}
           mostrarSemVenda={mostrarSemVenda}
           onMostrarSemVenda={setMostrarSemVenda}
           ocultaveis={ocultaveis}

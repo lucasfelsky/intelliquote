@@ -1,0 +1,98 @@
+[
+  {
+    "token": "--rf-login-panel-bg",
+    "claro": "linear-gradient(180deg, #003241, #004153)",
+    "escuro": "linear-gradient(180deg, #0a2a35, #0f3341)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-panel-dot",
+    "claro": "rgba(232, 244, 246, 0.10)",
+    "escuro": "rgba(232, 244, 246, 0.08)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-dot",
+    "claro": "rgba(0, 65, 83, 0.12)",
+    "escuro": "rgba(232, 244, 246, 0.07)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-grid",
+    "claro": "rgba(0, 65, 83, 0.10)",
+    "escuro": "rgba(232, 244, 246, 0.08)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-curve",
+    "claro": "#004153",
+    "escuro": "#b8ccd3",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-curve-main",
+    "claro": "rgba(0, 163, 123, 0.85)",
+    "escuro": "rgba(20, 221, 167, 0.90)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-node-ring",
+    "claro": "#00a37b",
+    "escuro": "#14dda7",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-area",
+    "claro": "rgba(20, 221, 167, 0.08)",
+    "escuro": "rgba(20, 221, 167, 0.10)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-accent",
+    "claro": "#007864",
+    "escuro": "#5ff0c8",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-axis",
+    "claro": "rgba(0, 120, 100, 0.50)",
+    "escuro": "rgba(159, 182, 191, 0.70)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-card-shadow",
+    "claro": "0 20px 48px rgba(0, 65, 83, 0.14)",
+    "escuro": "0 24px 56px rgba(0, 0, 0, 0.45)",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  },
+  {
+    "token": "--rf-login-ghost-border",
+    "claro": "#004153",
+    "escuro": "#5a7880",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "Login"
+  }
+]

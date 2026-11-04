@@ -7,6 +7,7 @@ import {
   isComercialRole,
   type NavItem,
 } from './navConfig';
+import { ICONS } from './icons';
 
 function visiblePaths(role: string | null | undefined): string[] {
   return [...filterNavByRole(PRIMARY_NAV, role), ...filterNavByRole(ADMIN_NAV, role)].map(
@@ -15,8 +16,18 @@ function visiblePaths(role: string | null | undefined): string[] {
 }
 
 describe('navConfig', () => {
-  it('comercial ve somente /solicitacoes (principal + admin)', () => {
-    expect(visiblePaths('comercial')).toEqual(['/solicitacoes']);
+  it('comercial ve somente /solicitacoes e /manual (principal + admin)', () => {
+    expect(visiblePaths('comercial')).toEqual(['/solicitacoes', '/manual']);
+  });
+
+  it('Manual: rota /manual, rotulo Manual, icone ajuda, visivel para os 5 perfis, sem selo, logo depois de Relatorios', () => {
+    const manual = PRIMARY_NAV.find((item) => item.to === '/manual');
+    expect(manual).toMatchObject({ label: 'Manual', icon: 'ajuda', group: 'main' });
+    expect(manual?.tag).toBeUndefined();
+    for (const role of [...COMEX_ROLES, 'comercial']) expect(visiblePaths(role), role).toContain('/manual');
+    expect(PRIMARY_NAV.some((item) => item.to === '/ajuda')).toBe(false);
+    const paths = PRIMARY_NAV.map((item) => item.to);
+    expect(paths.indexOf('/manual')).toBe(paths.indexOf('/relatorios') + 1);
   });
 
   it('isComercialRole so e verdadeiro para comercial', () => {
@@ -89,11 +100,24 @@ describe('navConfig', () => {
       ].map((item) => item.to);
       expect(visiblePaths(role), role).toEqual(esperado);
     }
-    expect(visiblePaths('comercial')).toEqual(['/solicitacoes']);
+    expect(visiblePaths('comercial')).toEqual(['/solicitacoes', '/manual']);
   });
 
   it('papel ausente: so itens sem roles (nenhum no menu principal)', () => {
     expect(visiblePaths(undefined)).toEqual([]);
     expect(visiblePaths(null)).toEqual([]);
+  });
+
+  it('todo icon e chave de ICONS (icons.tsx) e nao tem caractere fora de [a-z-]', () => {
+    for (const item of [...PRIMARY_NAV, ...ADMIN_NAV]) {
+      expect(Object.keys(ICONS), item.to).toContain(item.icon);
+      expect(item.icon, item.to).toMatch(/^[a-z-]+$/);
+    }
+  });
+
+  it('os 14 icones de navegacao continuam unicos', () => {
+    const all = [...PRIMARY_NAV, ...ADMIN_NAV];
+    expect(all).toHaveLength(14);
+    expect(new Set(all.map((item) => item.icon)).size).toBe(14);
   });
 });

@@ -1,0 +1,10 @@
+[
+  {
+    "token": "--rf-fc-mes-falta-borda",
+    "claro": "#c2362b",
+    "escuro": "#ff9b90",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ForecastMemoria"
+  }
+]

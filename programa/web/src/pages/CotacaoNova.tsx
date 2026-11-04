@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { CatalogItemPicker, type PickerCatalogItem } from '@/components/CatalogItemPicker';
+import { Stepper } from '@/components/Stepper';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
 import {
@@ -353,20 +355,26 @@ export default function CotacaoNova() {
 
   if (!canCreate) {
     return (
-      <div className="page">
+      <div className="page cotacao-nova-page">
         <h1>Nova cotação</h1>
-        <div className="empty-state">
-          <p>Seu perfil não tem permissão para criar cotações.</p>
+        <div className="empty-state cotacao-nova__sem-permissao">
+          <span className="empty-state__icon">
+            <Icon name="lock" size={36} strokeWidth={1.5} />
+          </span>
+          <p className="empty-state__title">Seu perfil não tem permissão para criar cotações.</p>
         </div>
-        <button type="button" className="ghost-button" onClick={() => navigate('/cotacoes')}>
-          Voltar
-        </button>
+        <div>
+          <button type="button" className="ghost-button" onClick={() => navigate('/cotacoes')}>
+            <Icon name="arrow-left" size={16} strokeWidth={1.9} />
+            Voltar
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="page">
+    <div className="page cotacao-nova-page">
       <div className="page-header">
         <div>
           <p className="eyebrow">Compras</p>
@@ -381,76 +389,59 @@ export default function CotacaoNova() {
       </div>
 
       {linkedRequestId !== null && (
-        <p className="banner banner--ok" style={{ marginBottom: 16 }}>
-          Vinculada à solicitação #{linkedRequestId} do comercial
+        <p className="alert alert--success cotacao-nova__vinculo" role="status">
+          <Icon name="link" size={18} />
+          {`Vinculada à solicitação #${linkedRequestId} do comercial`}
         </p>
       )}
       {linkWarning && (
-        <p className="banner banner--warning" role="alert" style={{ marginBottom: 16 }}>
+        <p className="alert alert--warning" role="alert">
           {linkWarning}
         </p>
       )}
       <AvisosDoForecast estado={prefillForecast} />
 
-      <section className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span
-            className={`badge${step === 1 ? '' : ' badge--muted'}`}
-            style={{ minWidth: 32, textAlign: 'center' }}
-          >
-            1
-          </span>
-          <strong style={{ color: step === 1 ? 'var(--ink)' : 'var(--ink-soft)' }}>Cotação</strong>
-          <span style={{ color: 'var(--ink-soft)' }}>→</span>
-          <span
-            className={`badge${step === 2 ? '' : ' badge--muted'}`}
-            style={{ minWidth: 32, textAlign: 'center' }}
-          >
-            2
-          </span>
-          <strong style={{ color: step === 2 ? 'var(--ink)' : 'var(--ink-soft)' }}>
-            Itens do catálogo
-          </strong>
-        </div>
-      </section>
+      <Stepper ariaLabel="Etapas da nova cotação" steps={['Cotação', 'Itens do catálogo']} current={step - 1} />
 
       {step === 1 && (
         <form
-          className="card"
+          className="card cotacao-nova__form"
           onSubmit={(e) => {
             e.preventDefault();
             handleNextStep();
           }}
         >
           <div className="form-grid">
-            <div>
+            <div className="cotacao-nova__campo">
               <label className="field-label" htmlFor="requestCode">Código</label>
               <input
                 id="requestCode"
-                className="input"
+                className="input cotacao-nova__codigo"
                 value={requestCode}
                 onChange={(e) => setRequestCode(e.target.value)}
                 placeholder="Será gerado automaticamente"
+                aria-describedby="requestCodeHint"
               />
-              <p style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
+              <p className="field-hint" id="requestCodeHint">
                 Será gerado automaticamente se ficar em branco.
               </p>
             </div>
-            <div className="form-grid__full">
-              <label className="field-label">Incoterms aceitáveis *</label>
+            <fieldset className="form-grid__full cotacao-nova__incoterms">
+              <legend className="cotacao-nova__legenda">Incoterms aceitáveis *</legend>
               <div className="chip-row">
                 {INCOTERMS.map((t) => (
                   <button
                     key={t}
                     type="button"
                     className={`chip${desiredIncoterm.includes(t) ? ' chip--active' : ''}`}
+                    aria-pressed={desiredIncoterm.includes(t)}
                     onClick={() => toggleDesiredIncoterm(t)}
                   >
                     {t}
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
             <div>
               <label className="field-label" htmlFor="originPort">Porto de embarque</label>
               <input
@@ -463,27 +454,27 @@ export default function CotacaoNova() {
               />
             </div>
             <div>
-                          <label className="field-label" htmlFor="destinationPort">Porto de destino</label>
+              <label className="field-label" htmlFor="destinationPort">Porto de destino</label>
               <input
-                            id="destinationPort"
+                id="destinationPort"
                 className="input"
-                            value={destinationPort}
-                            onChange={(e) => setDestinationPort(e.target.value)}
-                            placeholder="Ex.: Porto de Santos"
-                            maxLength={120}
+                value={destinationPort}
+                onChange={(e) => setDestinationPort(e.target.value)}
+                placeholder="Ex.: Porto de Santos"
+                maxLength={120}
               />
             </div>
-                        <div>
-                          <label className="field-label" htmlFor="currency">Moeda *</label>
-                          <input
-                            id="currency"
-                            className="input"
-                            value={currency}
-                            onChange={(e) => setCurrency(e.target.value)}
-                            maxLength={3}
-                            required
-                          />
-                        </div>
+            <div>
+              <label className="field-label" htmlFor="currency">Moeda *</label>
+              <input
+                id="currency"
+                className="input cotacao-nova__moeda"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                maxLength={3}
+                required
+              />
+            </div>
             <div>
               <label className="field-label" htmlFor="deadline">Prazo</label>
               <input
@@ -507,102 +498,115 @@ export default function CotacaoNova() {
           </div>
 
           {stepError && (
-            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{stepError}</p>
+            <p className="alert alert--error" role="alert">{stepError}</p>
           )}
 
-          <div className="page-header__actions" style={{ marginTop: 18, justifyContent: 'flex-end' }}>
-            <button type="submit" className="primary-button">Próximo</button>
+          <div className="cotacao-nova__acoes">
+            <button type="submit" className="primary-button">
+              Próximo
+              <Icon name="arrow-right" size={16} strokeWidth={2} />
+            </button>
           </div>
         </form>
       )}
 
       {step === 2 && (
-        <div className="card">
-          <div className="page-header" style={{ marginBottom: 8 }}>
-            <h2>Itens do catálogo</h2>
+        <section className="card cotacao-nova__itens">
+          <div className="cotacao-nova__itens-cabecalho">
+            <h2 className="cotacao-nova__titulo">Itens do catálogo</h2>
             <button
               type="button"
               className="primary-button"
               onClick={openNewItem}
             >
-              + Adicionar item
+              <Icon name="plus" size={16} strokeWidth={2.2} />
+              Adicionar item
             </button>
           </div>
 
           {items.length === 0 ? (
             <div className="empty-state">
-              <strong>Nenhum item adicionado</strong>
-              <p>
+              <strong className="empty-state__title">Nenhum item adicionado</strong>
+              <p className="empty-state__text">
                 Você pode criar a cotação sem itens e adicioná-los depois na aba de detalhes.
               </p>
             </div>
           ) : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nome comercial</th>
-                  <th>Nome de mercado</th>
-                  <th>Qtd</th>
-                  <th>Unidade</th>
-                  {linkedRequestId !== null && <th>Preço-alvo</th>}
-                  <th>Notas</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it) => (
-                  <tr key={it.tempId}>
-                    <td><strong>{it.commercialName}</strong></td>
-                    <td>{it.marketName}</td>
-                    <td>{formatNumber(it.quantity)}</td>
-                    <td>{it.unit}</td>
-                    {linkedRequestId !== null && (
-                      <td>
-                        {it.targetPrice != null
-                          ? formatCommercialPrice(String(it.targetPrice), it.targetCurrency ?? null)
-                          : '—'}
-                      </td>
-                    )}
-                    <td>{it.notes || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={() => openEditItem(it)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-button"
-                          onClick={async () => {
-                            if (await confirm(`Remover o item ${it.commercialName}?`)) {
-                              setItems((current) => current.filter((x) => x.tempId !== it.tempId));
-                            }
-                          }}
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    </td>
+            <div className="table-wrapper cotacao-nova__tabela">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nome comercial</th>
+                    <th>Nome de mercado</th>
+                    <th className="cotacao-nova__dir">Qtd</th>
+                    <th>Unidade</th>
+                    {linkedRequestId !== null && <th className="cotacao-nova__dir">Preço-alvo</th>}
+                    <th>Notas</th>
+                    <th className="cotacao-nova__dir">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {items.map((it) => (
+                    <tr key={it.tempId}>
+                      <td><strong>{it.commercialName}</strong></td>
+                      <td className="cotacao-nova__suave">{it.marketName}</td>
+                      <td className="cotacao-nova__dir cotacao-nova__num">{formatNumber(it.quantity)}</td>
+                      <td className="cotacao-nova__unidade">{it.unit}</td>
+                      {linkedRequestId !== null && (
+                        <td
+                          className={
+                            it.targetPrice != null
+                              ? 'cotacao-nova__dir cotacao-nova__num cotacao-nova__alvo'
+                              : 'cotacao-nova__dir cotacao-nova__suave'
+                          }
+                        >
+                          {it.targetPrice != null
+                            ? formatCommercialPrice(String(it.targetPrice), it.targetCurrency ?? null)
+                            : '—'}
+                        </td>
+                      )}
+                      <td className={it.notes ? undefined : 'cotacao-nova__suave'}>{it.notes || '—'}</td>
+                      <td>
+                        <div className="row-actions row-actions--nowrap">
+                          <button
+                            type="button"
+                            className="ghost-button"
+                            onClick={() => openEditItem(it)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost-button danger-button"
+                            onClick={async () => {
+                              if (await confirm(`Remover o item ${it.commercialName}?`)) {
+                                setItems((current) => current.filter((x) => x.tempId !== it.tempId));
+                              }
+                            }}
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {submitError && (
-            <p style={{ color: 'var(--danger)', marginTop: 12, fontSize: 13 }}>{submitError}</p>
+            <p className="alert alert--error" role="alert">{submitError}</p>
           )}
 
-          <div className="page-header__actions" style={{ marginTop: 18, justifyContent: 'space-between' }}>
+          <div className="cotacao-nova__acoes cotacao-nova__acoes--entre">
             <button
               type="button"
               className="ghost-button"
               onClick={() => setStep(1)}
               disabled={createQuote.isPending}
             >
+              <Icon name="arrow-left" size={16} strokeWidth={2} />
               Voltar
             </button>
             <button
@@ -614,7 +618,7 @@ export default function CotacaoNova() {
               {createQuote.isPending ? 'Criando…' : 'Criar cotação'}
             </button>
           </div>
-        </div>
+        </section>
       )}
 
       <Modal
@@ -651,7 +655,7 @@ export default function CotacaoNova() {
                   <label className="field-label" htmlFor="itemQuantity">Quantidade *</label>
                   <input
                     id="itemQuantity"
-                    className="input"
+                    className="input cotacao-nova__quantidade"
                     type="number"
                     min="0"
                     step="0.01"

@@ -18,7 +18,7 @@ describe('SupplierNotes', () => {
     const { getByTestId } = render(<SupplierNotes notes={'linha 1\nlinha 2'} />);
     const span = getByTestId('supplier-notes').querySelector('span') as HTMLElement;
     expect(span.textContent).toBe('linha 1\nlinha 2');
-    expect(span.style.whiteSpace).toBe('pre-wrap');
+    expect(span.classList.contains('supplier-notes__texto')).toBe(true);
   });
 
   it('HTML aparece literal, sem criar elementos', () => {

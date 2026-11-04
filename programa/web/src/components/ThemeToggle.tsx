@@ -1,113 +1,43 @@
-import { useRef, type KeyboardEvent, type ReactNode } from 'react';
+import { useState } from 'react';
 import { setThemePreference, useThemePreference, type ThemePreference } from '@/theme/theme';
+import { Icon, type IconName } from './icons';
 
-// Segmented control de 3 estados (Claro / Escuro / Automatico), so com icones. Padrao WAI-ARIA
-// radiogroup: tabindex "roving" e setas movem a selecao. CSS: .theme-toggle*.
+// Botao de tema UNICO (canvas v72): cada clique avanca automatico -> noturno -> claro -> automatico. A logica de tema e a de
+// theme.ts (grava 'iq-theme', remove a chave em automatico, aplica data-theme e segue o sistema); aqui so a apresentacao.
+// Texto visivel "Tema: <estado>", icone do estado atual (16px, traco 1,9) e anuncio por role="status" depois do clique.
+// CSS: .sidebar__theme (shell, sobre o navy da sidebar).
 
-function Svg({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      aria-hidden="true"
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function SunIcon() {
-  return (
-    <Svg>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </Svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <Svg>
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </Svg>
-  );
-}
-
-function MonitorIcon() {
-  return (
-    <Svg>
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8" />
-      <path d="M12 17v4" />
-    </Svg>
-  );
-}
-
-const OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string; icon: ReactNode }> = [
-  { value: 'light', label: 'Claro', icon: <SunIcon /> },
-  { value: 'dark', label: 'Escuro', icon: <MoonIcon /> },
-  { value: 'auto', label: 'Automático (segue o sistema)', icon: <MonitorIcon /> },
-];
+const CYCLE: readonly ThemePreference[] = ['auto', 'dark', 'light'];
+const LABEL: Record<ThemePreference, string> = { auto: 'automático', dark: 'noturno', light: 'claro' };
+const ICON: Record<ThemePreference, IconName> = { auto: 'theme-half', dark: 'moon', light: 'sun' };
 
 export default function ThemeToggle() {
   const preference = useThemePreference();
-  const buttons = useRef<Array<HTMLButtonElement | null>>([]);
+  // Vazio ate o primeiro clique: o leitor de tela anuncia o novo tema so quando o usuario o troca.
+  const [announcement, setAnnouncement] = useState('');
+  const label = LABEL[preference];
 
-  function select(index: number) {
-    const target = (index + OPTIONS.length) % OPTIONS.length;
-    const next = OPTIONS[target];
-    if (!next) return;
-    setThemePreference(next.value);
-    buttons.current[target]?.focus();
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      select(index + 1);
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      select(index - 1);
-    }
+  function cycle() {
+    const next = CYCLE[(CYCLE.indexOf(preference) + 1) % CYCLE.length] ?? 'auto';
+    setThemePreference(next);
+    setAnnouncement(`Tema: ${LABEL[next]}`);
   }
 
   return (
-    <div role="radiogroup" aria-label="Tema da interface" className="theme-toggle">
-      {OPTIONS.map((option, index) => {
-        const checked = option.value === preference;
-        return (
-          <button
-            key={option.value}
-            ref={(el) => {
-              buttons.current[index] = el;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={checked}
-            aria-label={option.label}
-            title={option.label}
-            tabIndex={checked ? 0 : -1}
-            className="theme-toggle__option"
-            onClick={() => setThemePreference(option.value)}
-            onKeyDown={(event) => onKeyDown(event, index)}
-          >
-            {option.icon}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <button
+        type="button"
+        className="sidebar__theme"
+        onClick={cycle}
+        aria-label={`Tema: ${label} — alternar tema`}
+        title="Alternar tema (automático / noturno / claro)"
+      >
+        <Icon name={ICON[preference]} size={16} strokeWidth={1.9} />
+        <span>{`Tema: ${label}`}</span>
+      </button>
+      <span className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </span>
+    </>
   );
 }

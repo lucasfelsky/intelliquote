@@ -44,7 +44,7 @@ describe('Usuarios', () => {
   it('2. abre com o título certo ao clicar em "+ Novo usuário"', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('Nenhum usuário encontrado');
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
     const dialog = getDialog(container);
     expect(dialog.open).toBe(true);
     const heading = dialog.querySelector('.modal-header h2');
@@ -54,14 +54,14 @@ describe('Usuarios', () => {
   it('3. sem título duplicado: só 1 h2 no container com o modal aberto', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('Nenhum usuário encontrado');
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
     expect(container.querySelectorAll('h2').length).toBe(1);
   });
 
   it('4. tamanho default: className contém modal-dialog e não modal-dialog--wide', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('Nenhum usuário encontrado');
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
     const dialog = getDialog(container);
     expect(dialog.className).toContain('modal-dialog');
     expect(dialog.className).not.toContain('modal-dialog--wide');
@@ -70,7 +70,7 @@ describe('Usuarios', () => {
   it('5. cancelar fecha o modal e não chama api.post', async () => {
     const { container, findByText, getByRole } = renderPage();
     await findByText('Nenhum usuário encontrado');
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
     const dialog = getDialog(container);
     expect(dialog.open).toBe(true);
     fireEvent.click(getByRole('button', { name: 'Cancelar' }));
@@ -81,7 +81,7 @@ describe('Usuarios', () => {
   it('6. botão × do componente compartilhado fecha o modal', async () => {
     const { container, findByText, getByRole, getByLabelText } = renderPage();
     await findByText('Nenhum usuário encontrado');
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
     const dialog = getDialog(container);
     expect(dialog.open).toBe(true);
     fireEvent.click(getByLabelText('Fechar'));
@@ -168,7 +168,7 @@ describe('Usuarios', () => {
     const { container, findByRole, getByLabelText, getByRole } = renderPage();
     fireEvent.click(await findByRole('button', { name: 'Editar Ana Vendas' }));
     fireEvent.click(getByRole('button', { name: 'Cancelar' }));
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
 
     expect(getDialog(container).querySelector('.modal-header h2')?.textContent).toBe('Novo usuário');
     expect((getByLabelText('Nome') as HTMLInputElement).value).toBe('');
@@ -179,7 +179,7 @@ describe('Usuarios', () => {
   it('7. perfil Comercial disponível no formulário e no filtro', async () => {
     const { container, findByText, getByRole, getByLabelText } = renderPage();
     await findByText('Nenhum usuário encontrado');
-    fireEvent.click(getByRole('button', { name: '+ Novo usuário' }));
+    fireEvent.click(getByRole('button', { name: 'Novo usuário' }));
     const formSelect = getByLabelText('Perfil') as HTMLSelectElement;
     expect(Array.from(formSelect.options).map((o) => o.value)).toContain('comercial');
     const filterSelect = container.querySelector('.page-header__actions select') as HTMLSelectElement;

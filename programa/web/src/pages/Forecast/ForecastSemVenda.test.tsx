@@ -166,7 +166,7 @@ function renderPage(url = '/forecast') {
 }
 
 const nomesDosItens = () =>
-  screen.queryAllByRole('button', { name: /PRODUTO [A-E]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
+  screen.queryAllByRole('link', { name: /PRODUTO [A-E]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
 const NOME_CHAVE = /^Mostrar produtos sem venda há 6 meses ou mais/;
 const chave = () => screen.getByRole('switch', { name: NOME_CHAVE });
@@ -249,7 +249,7 @@ describe('Forecast - filtro sem venda ha 6 meses ou mais', () => {
     expect(document.querySelector('.fcsv-selo')?.textContent).toBe('sem venda ≥6 meses');
   });
 
-  it('todos ocultos: estado vazio especifico e memoria de calculo nao renderiza', async () => {
+  it('todos ocultos: estado vazio especifico e nenhuma linha na grade', async () => {
     const soSemVenda = [
       linha({ linha: 4, item: 'PRODUTO B', codigos: ['C0002'], ...SEM_VENDA, AN: 50 }),
       linha({ linha: 5, item: 'PRODUTO E', codigos: ['C0005'], ...SEM_VENDA, AN: 10 }),
@@ -257,13 +257,12 @@ describe('Forecast - filtro sem venda ha 6 meses ou mais', () => {
     mockApi({ 7: detalhe({ linhas: soSemVenda }) });
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
-    expect(screen.getByRole('region', { name: 'Memória de cálculo' })).toBeTruthy();
+    expect(nomesDosItens()).toEqual(['PRODUTO B', 'PRODUTO E']);
 
     fireEvent.click(chave());
     expect(
       screen.getByText('Todos os produtos desta quinzena estão ocultos pelo filtro “sem venda há 6 meses ou mais”.'),
     ).toBeTruthy();
-    expect(screen.queryByRole('region', { name: 'Memória de cálculo' })).toBeNull();
     expect(screen.getByText('0 de 2 produtos')).toBeTruthy();
     expect(avisoOcultos()).toBe('2 produtos ocultos pelo filtro de sem venda');
   });
@@ -281,15 +280,12 @@ describe('Forecast - filtro sem venda ha 6 meses ou mais', () => {
     expect(await screen.findByText('Nenhum produto com esses filtros.')).toBeTruthy();
   });
 
-  it('linha selecionada que fica oculta: memoria passa para a primeira visivel', async () => {
-    await abrirPainel();
-    const memoria = within(screen.getByRole('region', { name: 'Memória de cálculo' }));
-    fireEvent.click(screen.getByRole('button', { name: /PRODUTO B/ }));
+  it('item oculto pelo filtro abre normalmente pela pagina do item (a rota nao depende do filtro)', async () => {
+    mockApi({ 7: detalhe() });
+    renderPage('/forecast/item/4');
+    const memoria = within(await screen.findByRole('region', { name: 'Memória de cálculo' }));
     expect(memoria.getByRole('heading', { name: 'PRODUTO B' })).toBeTruthy();
-
-    fireEvent.click(chave());
-    expect(memoria.getByRole('heading', { name: 'PRODUTO A' })).toBeTruthy();
-    expect(memoria.queryByRole('heading', { name: 'PRODUTO B' })).toBeNull();
+    expect(nomesDosItens()).toEqual([]);
   });
 
   it('teclado: foco no switch, click/Enter/Espaco alternam, foco permanece no switch, aria-checked atualiza', async () => {

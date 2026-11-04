@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import Spinner from '@/components/Spinner';
 import { Tab, TabList, TabPanel, Tabs } from '@/components/Tabs';
@@ -261,10 +262,11 @@ function NovoProduto({ codigo, inativos, onFechar, onConcluido, onGravando }: Pr
         <div>
           <button
             type="button"
-            className="ghost-button ghost-button--sm"
+            className="ghost-button ghost-button--sm fcc-adicionar"
             onClick={() => setCodigos((atual) => [...atual, ''])}
             disabled={codigos.length >= MAX_CODIGOS_POR_PRODUTO}
           >
+            <Icon name="plus" size={16} />
             Adicionar outro código
           </button>
         </div>

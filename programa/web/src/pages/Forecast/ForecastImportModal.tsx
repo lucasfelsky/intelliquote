@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { Tab, TabList, TabPanel, Tabs } from '@/components/Tabs';
 import {
@@ -89,11 +90,23 @@ function tamanhoLegivel(bytes: number): string {
 function ArquivoEscolhido({ file, onRemover }: { file: File; onRemover: () => void }) {
   return (
     <p className="fci-slot__arquivo">
-      Selecionado: {file.name} ({tamanhoLegivel(file.size)}){' '}
+      <Icon name="file" size={14} />
+      <span className="sr-only">Selecionado: </span>
+      <span className="fci-slot__nome">{file.name}</span>
+      <span className="fci-slot__tamanho">{tamanhoLegivel(file.size)}</span>
       <button type="button" className="ghost-button ghost-button--sm" onClick={onRemover} aria-label={`Remover ${file.name}`}>
         Remover
       </button>
     </p>
+  );
+}
+
+/** Botao do board v68 ("Escolher .xlsx"): rotulo extra do <input type=file> (que fica no DOM, invisivel por cima do botao), nunca um segundo campo. */
+function EscolherXlsx({ htmlFor }: { htmlFor: string }) {
+  return (
+    <label htmlFor={htmlFor} className="fci-escolher">
+      Escolher .xlsx
+    </label>
   );
 }
 
@@ -429,22 +442,68 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
                 {[slot.origem ? `DBCORP · ${slot.origem}` : '', slot.ajuda ?? ''].filter(Boolean).join(' — ')}
               </p>
             )}
-            <input
-              key={`${slot.id}-${versoesInput[slot.id] ?? 0}`}
-              id={`fci-slot-${slot.id}`}
-              className="file-input"
-              type="file"
-              accept={ACCEPT}
-              onChange={(e) => escolherSlot(slot.id, e.target.files?.[0] ?? null)}
-            />
-            {file && <ArquivoEscolhido file={file} onRemover={() => {
-              limparInput(slot.id);
-              escolherSlot(slot.id, null);
-            }} />}
+            <div className="fci-arquivo">
+              <input
+                key={`${slot.id}-${versoesInput[slot.id] ?? 0}`}
+                id={`fci-slot-${slot.id}`}
+                className="file-input"
+                type="file"
+                accept={ACCEPT}
+                onChange={(e) => escolherSlot(slot.id, e.target.files?.[0] ?? null)}
+              />
+              {file ? (
+                <ArquivoEscolhido file={file} onRemover={() => {
+                  limparInput(slot.id);
+                  escolherSlot(slot.id, null);
+                }} />
+              ) : (
+                <EscolherXlsx htmlFor={`fci-slot-${slot.id}`} />
+              )}
+            </div>
           </div>
         );
       })}
     </div>
+  );
+
+  const comuns = (
+    <>
+      <div className="fci-comuns">
+        <div>
+          <label className="field-label" htmlFor="fci-data-base">
+            Data-base
+          </label>
+          <input
+            id="fci-data-base"
+            className="input"
+            type="date"
+            value={baseDate}
+            onChange={(e) => alterar(() => setBaseDate(e.target.value))}
+          />
+        </div>
+        <fieldset className="fci-quinzena">
+          <legend className="field-label">Quinzena</legend>
+          <div className="fci-quinzena__opcoes">
+            {([1, 2] as const).map((q) => (
+              <label key={q} className="checkbox-field">
+                <input
+                  type="radio"
+                  name="fci-quinzena"
+                  value={q}
+                  checked={quinzena === q}
+                  onChange={() => alterar(() => setQuinzena(q))}
+                />
+                {q}ª
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <p className="fci-rotulo">Rótulo: {rotulo || '—'}</p>
+      </div>
+      {rotuloExiste && aba === 'dbcorp' && (
+        <div className="alert alert--error" role="alert">Já existe a quinzena {rotulo}. A confirmação será recusada.</div>
+      )}
+    </>
   );
 
   return (
@@ -468,47 +527,12 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
           </>
         ) : (
           <>
-            <fieldset className="fci-fieldset" disabled={ocupado}>
-              <div className="fci-comuns">
-                <div>
-                  <label className="field-label" htmlFor="fci-data-base">
-                    Data-base
-                  </label>
-                  <input
-                    id="fci-data-base"
-                    className="input"
-                    type="date"
-                    value={baseDate}
-                    onChange={(e) => alterar(() => setBaseDate(e.target.value))}
-                  />
-                </div>
-                <fieldset className="fci-quinzena">
-                  <legend className="field-label">Quinzena</legend>
-                  <div className="fci-quinzena__opcoes">
-                    {([1, 2] as const).map((q) => (
-                      <label key={q} className="checkbox-field">
-                        <input
-                          type="radio"
-                          name="fci-quinzena"
-                          value={q}
-                          checked={quinzena === q}
-                          onChange={() => alterar(() => setQuinzena(q))}
-                        />
-                        {q}ª
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <p className="fci-rotulo">Rótulo: {rotulo || '—'}</p>
-              </div>
-              {rotuloExiste && aba === 'dbcorp' && (
-                <div className="alert alert--error" role="alert">Já existe a quinzena {rotulo}. A confirmação será recusada.</div>
-              )}
-
+            <fieldset className={previa ? 'fci-fieldset fci-fieldset--recolhido' : 'fci-fieldset'} disabled={ocupado}>
               {somenteDbcorp ? (
                 <section className="fci-origem" aria-labelledby="fci-origem-dbcorp">
                   <h3 id="fci-origem-dbcorp">Relatórios DBCorp</h3>
                   <p className="fit-nota-dbcorp">{NOTA_DBCORP_CONFIRMACAO}</p>
+                  {comuns}
                   {slotsDbcorp}
                 </section>
               ) : (
@@ -519,29 +543,45 @@ function ImportModal({ onFechar, quinzenasExistentes, onImportada, somenteDbcorp
                   </TabList>
                   <TabPanel value="planilha">
                     <p className="fci-nota-origem">{NOTA_PLANILHA_ADMIN}</p>
+                    {comuns}
                     <label className="field-label" htmlFor="fci-planilha">
                       Arquivo da planilha
                     </label>
-                    <input
-                      key={`planilha-${versoesInput.planilha ?? 0}`}
-                      id="fci-planilha"
-                      className="file-input"
-                      type="file"
-                      accept={ACCEPT}
-                      onChange={(e) => alterar(() => setPlanilha(e.target.files?.[0] ?? null))}
-                    />
-                    {planilha && <ArquivoEscolhido file={planilha} onRemover={() => {
-                      limparInput('planilha');
-                      alterar(() => setPlanilha(null));
-                    }} />}
+                    <div className="fci-arquivo">
+                      <input
+                        key={`planilha-${versoesInput.planilha ?? 0}`}
+                        id="fci-planilha"
+                        className="file-input"
+                        type="file"
+                        accept={ACCEPT}
+                        onChange={(e) => alterar(() => setPlanilha(e.target.files?.[0] ?? null))}
+                      />
+                      {planilha ? (
+                        <ArquivoEscolhido file={planilha} onRemover={() => {
+                          limparInput('planilha');
+                          alterar(() => setPlanilha(null));
+                        }} />
+                      ) : (
+                        <EscolherXlsx htmlFor="fci-planilha" />
+                      )}
+                    </div>
                   </TabPanel>
                   <TabPanel value="dbcorp">
                     <p className="fit-nota-dbcorp">{NOTA_DBCORP_SEM_TESTE}</p>
+                    {comuns}
                     {slotsDbcorp}
                   </TabPanel>
                 </Tabs>
               )}
             </fieldset>
+
+            {previa && (
+              <div className="fci-alterar">
+                <button type="button" className="ghost-button ghost-button--sm" onClick={descartar} disabled={ocupado}>
+                  Editar entrada
+                </button>
+              </div>
+            )}
 
             {faltas.length > 0 && <p className="fci-faltam">Faltam: {faltas.join(', ')}</p>}
 

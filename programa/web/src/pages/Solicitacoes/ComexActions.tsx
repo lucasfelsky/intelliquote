@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ApiError } from '@/api/client';
+import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import {
   CommercialRequestForComex,
@@ -19,8 +20,6 @@ const MAX_REASON_LENGTH = 500;
 const REQUESTS_KEY = ['commercial-requests'] as const;
 
 type ModalKind = 'link' | 'reject' | 'fulfill';
-
-const MODAL_TEXT_ALIGN = { textAlign: 'left' } as const;
 
 function messageOf(err: unknown): string {
   if (err instanceof ApiError) {
@@ -67,54 +66,58 @@ function LinkQuoteModal({ request, onClose }: ModalProps) {
 
   return (
     <Modal isOpen onClose={onClose} title={`Vincular solicitação #${request.id} a uma cotação`}>
-      <div style={MODAL_TEXT_ALIGN}>
-        <label className="field-label" htmlFor="cr-link-search">Buscar cotação aberta</label>
-        <input
-          id="cr-link-search"
-          className="input"
-          placeholder="Código ou descrição (ao menos 2 letras)"
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          autoComplete="off"
-        />
+      <div className="solicitacao-modal solicitacao-modal--vincular">
+        <div className="solicitacao-modal__campo">
+          <label className="field-label" htmlFor="cr-link-search">Buscar cotação aberta</label>
+          <div className="solicitacao-busca__campo">
+            <Icon name="search" size={16} strokeWidth={1.9} />
+            <input
+              id="cr-link-search"
+              className="solicitacao-busca__input solicitacao-busca__input--codigo"
+              placeholder="Código ou descrição (ao menos 2 letras)"
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+        </div>
         {search.isError && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+          <p role="alert" className="solicitacao-modal__erro">
             {messageOf(search.error)}
           </p>
         )}
         {debounced.length >= MIN_SEARCH_LENGTH && search.isSuccess && results.length === 0 && (
-          <p className="text-sm" style={{ color: 'var(--ink-soft)', margin: '4px 0 0' }}>
-            Nenhuma cotação aberta encontrada.
-          </p>
+          <p className="solicitacao-modal__vazio">Nenhuma cotação aberta encontrada.</p>
         )}
         {results.length > 0 && (
-          <ul aria-label="Cotações abertas" style={{ listStyle: 'none', margin: '8px 0 0', padding: 0 }}>
+          <ul aria-label="Cotações abertas" className="solicitacao-modal__lista">
             {results.map((quote) => (
               <li key={quote.id}>
                 <button
                   type="button"
-                  className="ghost-button"
-                  style={MODAL_TEXT_ALIGN}
+                  className="solicitacao-cotacao"
                   aria-pressed={selected?.id === quote.id}
                   onClick={() => setSelected(quote)}
                 >
-                  {quote.requestCode}
+                  <span className="solicitacao-cotacao__codigo">{quote.requestCode}</span>
                   {quote.description ? ` — ${quote.description}` : ''}
-                  {selected?.id === quote.id ? ' ✓' : ''}
+                  {selected?.id === quote.id && <Icon name="check" size={16} strokeWidth={2.4} />}
                 </button>
               </li>
             ))}
           </ul>
         )}
-        <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 12 }}>
+        <p className="solicitacao-modal__dica">
+          <Icon name="info" size={16} strokeWidth={1.9} />
           Itens novos não entram nos links já enviados aos fornecedores.
         </p>
         {error && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+          <p role="alert" className="solicitacoes-alerta alert--error">
+            <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
             {error}
           </p>
         )}
-        <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={onClose}>
             Cancelar
           </button>
@@ -128,6 +131,7 @@ function LinkQuoteModal({ request, onClose }: ModalProps) {
               link.mutate(selected.id);
             }}
           >
+            <Icon name="link" size={16} strokeWidth={1.9} />
             {link.isPending ? 'Vinculando…' : 'Vincular'}
           </button>
         </div>
@@ -155,31 +159,32 @@ function RejectModal({ request, onClose }: ModalProps) {
 
   return (
     <Modal isOpen onClose={onClose} title={`Recusar solicitação #${request.id}`}>
-      <div style={MODAL_TEXT_ALIGN}>
-        <label className="field-label" htmlFor="cr-reject-reason">Motivo da recusa *</label>
-        <textarea
-          id="cr-reject-reason"
-          className="textarea"
-          rows={3}
-          maxLength={MAX_REASON_LENGTH}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <p className="text-sm" style={{ color: 'var(--ink-soft)', marginTop: 4 }}>
-          O solicitante verá este motivo.
-        </p>
+      <div className="solicitacao-modal">
+        <div className="solicitacao-modal__campo">
+          <label className="field-label" htmlFor="cr-reject-reason">Motivo da recusa *</label>
+          <textarea
+            id="cr-reject-reason"
+            className="textarea"
+            rows={3}
+            maxLength={MAX_REASON_LENGTH}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <p className="solicitacao-modal__nota">O solicitante verá este motivo.</p>
+        </div>
         {error && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+          <p role="alert" className="solicitacoes-alerta alert--error">
+            <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
             {error}
           </p>
         )}
-        <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={onClose}>
             Cancelar
           </button>
           <button
             type="button"
-            className="primary-button"
+            className="danger-button"
             disabled={!canSubmit}
             onClick={() => {
               setError(null);
@@ -215,13 +220,13 @@ function FulfillModal({ request, onClose, isAdmin }: ModalProps & { isAdmin: boo
 
   return (
     <Modal isOpen onClose={onClose} title={`Marcar solicitação #${request.id} como atendida`}>
-      <div style={MODAL_TEXT_ALIGN}>
-        <p className="text-sm" style={{ marginTop: 0 }}>
+      <div className="solicitacao-modal">
+        <p className="solicitacao-modal__texto">
           O solicitante será avisado e verá o preço final do fornecedor vencedor.
         </p>
         {isAdmin && (
-          <div>
-            <label className="field-label" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="solicitacao-modal__sem-preco">
+            <label className="checkbox-field solicitacao-modal__atender-sem-preco">
               <input
                 type="checkbox"
                 checked={withoutPrice}
@@ -233,7 +238,7 @@ function FulfillModal({ request, onClose, isAdmin }: ModalProps & { isAdmin: boo
               Atender sem preço
             </label>
             {withoutPrice && (
-              <div style={{ marginTop: 8 }}>
+              <div className="solicitacao-modal__motivo">
                 <label className="field-label" htmlFor="cr-fulfill-note">Motivo *</label>
                 <textarea
                   id="cr-fulfill-note"
@@ -251,11 +256,12 @@ function FulfillModal({ request, onClose, isAdmin }: ModalProps & { isAdmin: boo
           </div>
         )}
         {error && (
-          <p role="alert" style={{ color: 'var(--danger)' }} className="text-sm">
+          <p role="alert" className="solicitacoes-alerta alert--error">
+            <Icon name="alert-triangle" size={18} strokeWidth={1.9} />
             {error}
           </p>
         )}
-        <div className="row-actions" style={{ marginTop: 16, justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={onClose}>
             Cancelar
           </button>
@@ -319,9 +325,7 @@ export function CommercialRequestActions({ request, role }: ActionsProps) {
               Vincular a cotação
             </button>
             {pendingNewItems && (
-              <span className="text-sm" style={{ color: 'var(--ink-soft)' }}>
-                {newItemHint}
-              </span>
+              <span className="solicitacoes-dica">{newItemHint}</span>
             )}
           </>
         )}
@@ -343,8 +347,8 @@ export function CommercialRequestActions({ request, role }: ActionsProps) {
         </button>
       </span>
       {modal !== null && (
-        // O <dialog> herda text-align do td do card mobile (direita): fixa a esquerda.
-        <div style={MODAL_TEXT_ALIGN}>
+        // O <dialog> herda text-align do td do card mobile (direita): a classe fixa a esquerda.
+        <div className="solicitacao-modal">
           {modal === 'link' && <LinkQuoteModal request={request} onClose={close} />}
           {modal === 'reject' && <RejectModal request={request} onClose={close} />}
           {modal === 'fulfill' && (

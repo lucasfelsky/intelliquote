@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Icon } from './icons';
 
 export interface PickerCatalogItem {
   id: number;
@@ -34,22 +35,6 @@ interface CatalogItemPickerProps {
   children?: React.ReactNode;
 }
 
-const headerButtonStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  width: '100%',
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: 0.5,
-  textTransform: 'uppercase',
-  color: 'var(--primary)',
-  padding: '6px 8px',
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-};
-
 function ItemButton({
   item,
   isSelected,
@@ -64,24 +49,12 @@ function ItemButton({
   return (
     <button
       type="button"
+      className="item-picker__item"
+      aria-pressed={isSelected}
       disabled={disabled}
       onClick={() => onSelect(item)}
-      style={{
-        display: 'block',
-        width: '100%',
-        textAlign: 'left',
-        padding: '10px 8px',
-        border: 'none',
-        borderRadius: 6,
-        background: isSelected ? 'var(--primary-50)' : 'var(--surface)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        color: isSelected ? 'var(--primary-700)' : 'var(--ink)',
-        fontSize: 13,
-      }}
     >
-      <span style={{ fontWeight: isSelected ? 600 : 400 }}>
-        {item.commercialName}
-      </span>
+      {item.commercialName}
     </button>
   );
 }
@@ -144,32 +117,29 @@ export function CatalogItemPicker({
           <>
             <div>
               <label className="field-label" htmlFor="catalogItemSearch">Item *</label>
-              <input
-                id="catalogItemSearch"
-                type="text"
-                className="input"
-                style={{ width: '100%' }}
-                placeholder="Buscar item do catálogo..."
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-              />
+              <div className="item-picker__busca">
+                <Icon name="search" size={16} />
+                <input
+                  id="catalogItemSearch"
+                  type="text"
+                  className="item-picker__campo"
+                  placeholder="Buscar item do catálogo..."
+                  value={search}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                />
+              </div>
             </div>
 
             {selectedItem && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                padding: '10px 12px',
-                background: 'var(--primary-50)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-              }}>
-                <strong style={{ fontSize: 14 }}>
-                  {selectedItem.commercialName}
-                </strong>
-                <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-                  Família: {selectedItem.family?.name ?? 'Sem família'}
+              <div className="item-picker__selecionado">
+                <span className="item-picker__selecionado-icone">
+                  <Icon name="check" size={16} strokeWidth={2.4} />
+                </span>
+                <span className="item-picker__selecionado-texto">
+                  <strong>{selectedItem.commercialName}</strong>
+                  <span className="item-picker__selecionado-familia">
+                    Família: {selectedItem.family?.name ?? 'Sem família'}
+                  </span>
                 </span>
               </div>
             )}
@@ -181,23 +151,23 @@ export function CatalogItemPicker({
 
       {/* DIREITA: modo busca (resultados agrupados, auto-expandidos) ou modo navegar (pastas lazy) */}
       {!disabled && (
-        <div className="item-picker__browser">
+        <div className={isSearching ? 'item-picker__browser item-picker__browser--busca' : 'item-picker__browser'}>
           {isSearching ? (
             searchGroups.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>
+              <div className="item-picker__estado item-picker__estado--vazio">
                 Nenhum item encontrado.
               </div>
             ) : (
               searchGroups.map((group) => (
-                <div key={group.family} style={{ marginBottom: 8 }}>
-                  <button type="button" aria-expanded="true" style={headerButtonStyle}>
-                    <span>
-                      <span aria-hidden="true" style={{ display: 'inline-block', width: 12 }}>▾</span>
+                <div key={group.family}>
+                  <button type="button" className="item-picker__familia" aria-expanded="true">
+                    <span className="item-picker__familia-nome">
+                      <Icon name="chevron-down" size={12} strokeWidth={2.4} />
                       {group.family}
                     </span>
-                    <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>{group.items.length}</span>
+                    <span className="item-picker__contagem">{group.items.length}</span>
                   </button>
-                  <div>
+                  <div className="item-picker__itens">
                     {group.items.map((item) => (
                       <ItemButton
                         key={item.id}
@@ -212,7 +182,7 @@ export function CatalogItemPicker({
               ))
             )
           ) : families.length === 0 ? (
-            <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 13 }}>
+            <div className="item-picker__estado item-picker__estado--vazio">
               Nenhuma família cadastrada.
             </div>
           ) : (
@@ -220,31 +190,30 @@ export function CatalogItemPicker({
               const isOpen = expanded.has(family.id);
               const entry = familyItems.get(family.id);
               return (
-                <div key={family.id} style={{ marginBottom: 8 }}>
+                <div key={family.id}>
                   <button
                     type="button"
+                    className="item-picker__familia"
                     aria-expanded={isOpen}
                     onClick={() => onToggleFamily(family.id)}
-                    style={headerButtonStyle}
                   >
-                    <span>
-                      <span aria-hidden="true" style={{ display: 'inline-block', width: 12 }}>
-                        {isOpen ? '▾' : '▸'}
-                      </span>
+                    <span className="item-picker__familia-nome">
+                      <Icon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} strokeWidth={2.4} />
                       {family.name}
                     </span>
-                    <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}>
+                    <span className="item-picker__contagem">
                       {entry && !entry.isLoading ? entry.total : ''}
                     </span>
                   </button>
                   {isOpen && (
-                    <div>
+                    <div className="item-picker__itens">
                       {!entry || entry.isLoading ? (
-                        <div style={{ padding: '8px 8px', color: 'var(--ink-soft)', fontSize: 13 }}>
+                        <div className="item-picker__estado" role="status">
+                          <span className="btn-spinner item-picker__spinner" aria-hidden="true" />
                           Carregando…
                         </div>
                       ) : entry.items.length === 0 ? (
-                        <div style={{ padding: '8px 8px', color: 'var(--ink-soft)', fontSize: 13 }}>
+                        <div className="item-picker__estado">
                           Nenhum item nesta família.
                         </div>
                       ) : (
@@ -259,8 +228,8 @@ export function CatalogItemPicker({
                             />
                           ))}
                           {entry.total > entry.items.length && (
-                            <div style={{ padding: '6px 8px', color: 'var(--ink-soft)', fontSize: 12 }}>
-                              +{entry.total - entry.items.length} — refine pela busca
+                            <div className="item-picker__mais">
+                              <span className="item-picker__mais-num">+{entry.total - entry.items.length}</span> — refine pela busca
                             </div>
                           )}
                         </>

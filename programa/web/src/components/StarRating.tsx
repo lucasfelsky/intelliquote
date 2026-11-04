@@ -1,17 +1,34 @@
 // F12 (backlog 2026-07-12): rating por estrelas (1..5). Editavel (captura no
 // concluir cotacao) ou somente-leitura (media na lista de fornecedores).
 // `value` 0 = sem nota. Acessivel: radiogroup + botoes com aria-label.
+// F3d: estrelas em SVG (path do icone `star`), estilizadas so por classe (star-rating__*); o valor sai com virgula decimal (pt-BR).
+import { ICONS } from './icons';
 
 interface StarRatingProps {
   value: number;
   onChange?: (value: number) => void;
   label?: string;
   readOnly?: boolean;
-  /** Mostra o valor numerico ao lado (ex.: media 4.2). */
+  /** Mostra o valor numerico ao lado (ex.: media 4,2). */
   showValue?: boolean;
 }
 
 const STARS = [1, 2, 3, 4, 5];
+
+const formatValue = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function Star({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      className={`star-rating__star ${filled ? 'star-rating__star--on' : 'star-rating__star--off'}`}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={ICONS.star} />
+    </svg>
+  );
+}
 
 export default function StarRating({
   value,
@@ -21,24 +38,25 @@ export default function StarRating({
   showValue = false,
 }: StarRatingProps) {
   const rounded = Math.round(value);
+  const ariaLabel = label
+    ? `${label}: ${value || 'sem nota'}`
+    : readOnly
+      ? value > 0
+        ? `Avaliação média ${formatValue(value)} de 5`
+        : 'Avaliação média: sem nota'
+      : undefined;
 
   return (
     <span
       className="star-rating"
       role={readOnly ? 'img' : 'radiogroup'}
-      aria-label={label ? `${label}: ${value || 'sem nota'}` : undefined}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}
+      aria-label={ariaLabel}
     >
       {STARS.map((star) => {
         const filled = readOnly ? star <= rounded : star <= value;
-        const starChar = filled ? '★' : '☆';
 
         if (readOnly) {
-          return (
-            <span key={star} aria-hidden="true" style={{ color: filled ? 'var(--star-on)' : 'var(--star-off)' }}>
-              {starChar}
-            </span>
-          );
+          return <Star key={star} filled={filled} />;
         }
 
         return (
@@ -48,26 +66,14 @@ export default function StarRating({
             role="radio"
             aria-checked={value === star}
             aria-label={`${star} de 5`}
+            className="star-rating__button"
             onClick={() => onChange?.(value === star ? 0 : star)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              fontSize: '1.15rem',
-              lineHeight: 1,
-              color: filled ? 'var(--star-on)' : 'var(--star-off)',
-            }}
           >
-            {starChar}
+            <Star filled={filled} />
           </button>
         );
       })}
-      {showValue && value > 0 ? (
-        <span style={{ marginLeft: 4, fontSize: 13, color: 'var(--ink-soft)' }}>
-          {value.toFixed(1)}
-        </span>
-      ) : null}
+      {showValue && value > 0 ? <span className="star-rating__value">{formatValue(value)}</span> : null}
     </span>
   );
 }

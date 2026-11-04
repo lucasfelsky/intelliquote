@@ -146,7 +146,7 @@ describe('Solicitacoes - comercial: "Solicitar uma cotacao" e cliente opcional',
     await screen.findByText('Pendente');
     fireEvent.click(screen.getByRole('button', { name: 'Solicitar uma cotação' }));
     fireEvent.change(screen.getByLabelText('Buscar item'), { target: { value: 're' } });
-    fireEvent.click(await screen.findByRole('button', { name: '+ Resina X · Resinas' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resina X · Resinas' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));

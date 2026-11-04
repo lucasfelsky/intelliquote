@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
+import { Icon } from '@/components/icons';
 import {
   baixarForecastRelatorioXlsx,
   forecastErrorMessage,
@@ -268,7 +269,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <ForecastDecisaoCompra item={item} />
           <ForecastGerarCotacao item={item} />
         </td>
-        <td>{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
+        <td className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
         <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
         <td>
           <span className="fcr-limite">
@@ -573,6 +574,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             disabled={xlsx.isPending}
             aria-busy={xlsx.isPending}
           >
+            <Icon name="download" size={16} />
             {xlsx.isPending ? 'Gerando XLSX…' : 'Baixar XLSX'}
           </button>
           <button
@@ -582,6 +584,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             disabled={macro.isPending}
             aria-busy={macro.isPending}
           >
+            <Icon name="file" size={16} />
             {macro.isPending ? 'Gerando planilha MACRO…' : 'Baixar planilha MACRO (XLSX)'}
           </button>
           <button
@@ -603,6 +606,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
                 setLancando(true);
               }}
             >
+              <Icon name="plus" size={16} />
               Lançar demanda do comercial
             </button>
           )}
