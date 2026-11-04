@@ -89,7 +89,6 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: Pain
   // devolve a grade como estava. A busca digitada fica em estado local (digitacao fluida, sem uma navegacao por tecla)
   // e vai para a URL depois de uma pausa.
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const filtroUrl = params.get('filtro');
   const filtro: FiltroId = FILTROS.find((f) => f.id === filtroUrl)?.id ?? 'todos';
   const ocultas = params.get('ocultas') === '1';
@@ -117,27 +116,22 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: Pain
   const setFiltro = (id: FiltroId) => atualizarUrl((n) => (id === 'todos' ? n.delete('filtro') : n.set('filtro', id)));
   const alternarOcultas = () => atualizarUrl((n) => (ocultas ? n.delete('ocultas') : n.set('ocultas', '1')));
 
-  // A grade abre a pagina do item (/forecast/item/:linha) levando quinzena, filtro, busca e colunas ocultas. O estado
-  // atual vem de uma ref para o callback ficar estavel (as linhas da grade sao memoizadas).
-  const estado = useRef({ params, filtro, busca, ocultas });
-  estado.current = { params, filtro, busca, ocultas };
+  // Cada item da grade e um <Link> para a pagina do item (/forecast/item/:linha) levando quinzena, filtro, busca e colunas
+  // ocultas (Ctrl+clique e nova aba funcionam). A busca e a deferida (a que filtra a grade): a query string e uma string
+  // estavel, entao as linhas memoizadas so renderizam de novo quando o destino muda de fato.
   const idDaQuinzena = detail.id;
-  const onSelect = useCallback(
-    (linha: number) => {
-      const e = estado.current;
-      const next = new URLSearchParams(e.params);
-      next.set('quinzena', String(idDaQuinzena));
-      next.delete('visao');
-      if (e.filtro === 'todos') next.delete('filtro');
-      else next.set('filtro', e.filtro);
-      if (e.busca) next.set('busca', e.busca);
-      else next.delete('busca');
-      if (e.ocultas) next.set('ocultas', '1');
-      else next.delete('ocultas');
-      navigate({ pathname: `/forecast/item/${linha}`, search: `?${next.toString()}` });
-    },
-    [navigate, idDaQuinzena],
-  );
+  const buscaDoItem = useMemo(() => {
+    const next = new URLSearchParams(params);
+    next.set('quinzena', String(idDaQuinzena));
+    next.delete('visao');
+    if (filtro === 'todos') next.delete('filtro');
+    else next.set('filtro', filtro);
+    if (termo) next.set('busca', termo);
+    else next.delete('busca');
+    if (ocultas) next.set('ocultas', '1');
+    else next.delete('ocultas');
+    return `?${next.toString()}`;
+  }, [params, idDaQuinzena, filtro, termo, ocultas]);
 
   // Quantidades decididas pelo comprador: mesma chave do relatorio de compras (salvar la atualiza a grade). A grade
   // nunca some: sem dados (carregando ou erro sem cache) a coluna ANALISE FORECAST mostra o valor congelado.
@@ -262,9 +256,8 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis }: Pain
         <ForecastGrid
           colunas={colunas}
           linhas={visiveis}
-          selecionada={null}
           divergencias={divergencias}
-          onSelect={onSelect}
+          buscaDoItem={buscaDoItem}
           legenda={`Forecast da quinzena ${detail.label}: ${visiveis.length} de ${detail.linhas.length} produtos`}
           mensagemVazia={mensagemVazia}
         />

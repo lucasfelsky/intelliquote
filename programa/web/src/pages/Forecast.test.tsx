@@ -198,7 +198,7 @@ const pendentesChamados = () => get.mock.calls.map((c) => String(c[0])).filter((
 const relatoriosChamados = () =>
   get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith('/relatorio-compras'));
 
-const nomesDosItens = () => screen.queryAllByRole('button', { name: /PRODUTO [ABC]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
+const nomesDosItens = () => screen.queryAllByRole('link', { name: /PRODUTO [ABC]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -431,7 +431,7 @@ describe('Forecast', () => {
     renderPage();
     await screen.findByText('Cálculo idêntico ao da planilha');
     expect(screen.queryByRole('region', { name: 'Memória de cálculo' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /PRODUTO B/ }));
+    fireEvent.click(screen.getByRole('link', { name: /PRODUTO B/ }));
     const memoria = within(await screen.findByRole('region', { name: 'Memória de cálculo' }));
     expect(screen.queryByRole('table')).toBeNull();
     expect(memoria.getByText('MEMÓRIA DE CÁLCULO · LINHA 4 DA PLANILHA')).toBeTruthy();

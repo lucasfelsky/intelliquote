@@ -4,7 +4,7 @@ import { parseColor, over, parseRules, ratioOf, readSource, stripComments, token
 
 // F13-A (plano F13, 6.1): contraste AA do Forecast no claro e no escuro, status PO legivel e linhas criticas visiveis no escuro.
 // So CSS, dentro do bloco do Forecast (do marcador `/* ---- Forecast (PR 1D-1) ---- */` ao fim do arquivo):
-//  a1  escuro, celulas fixas da linha selecionada: tom --primary-50 (translucido) UMA vez, opaco (antes: 2x por `background: inherit`);
+//  a1  (aposentada na F13-H) a linha selecionada da grade: o item virou <Link> e `.fc-row--selecionada` saiu do CSS; as celulas fixas seguem em `inherit`;
 //  a2  `--ink-muted` (4,19:1) deixa de ser cor de texto no bloco: `.fc-cell--vazio`, `.fcr-fraco`, `.fcx-dica` -> `--ink-soft`;
 //  a4  status PO em `--primary-700` (o `--primary` claro dava 1,76:1): `i.fc-status--po`, `td.fc-status--po`, `.fcad-decidida--po::before`;
 //  a5  escuro: linhas criticas/vencidas (th) e Seguranca com o tom cheio, nao o soft que as apagava.
@@ -60,12 +60,10 @@ describe('F13-A: regras do bloco do Forecast', () => {
     expect(regras.length).toBeGreaterThan(100);
   });
 
-  it('a1: escuro, celula fixa da linha selecionada com o tom UMA vez e opaco; as demais seguem em `inherit`', () => {
-    expect(valor(':root[data-theme="dark"] .fc-grid .fc-row--selecionada .fc-fixa', 'background')).toEqual([
-      'linear-gradient(var(--primary-50), var(--primary-50)), var(--surface)',
-    ]);
+  it('a1: a linha selecionada da grade foi aposentada (F13-H: o item e um <Link>); as celulas fixas seguem em `inherit` e nenhuma regra cita `fc-row--selecionada`', () => {
     expect(valor('.fc-grid .fc-fixa', 'background')).toEqual(['inherit']);
-    expect(valor('.fc-grid .fc-row.fc-row--selecionada', 'background')).toEqual(['var(--primary-50)']);
+    expect(css).not.toContain('fc-row--selecionada');
+    expect(css).not.toMatch(/\.fc-item\[aria-pressed/);
   });
 
   it('a2: `.fc-cell--vazio`, `.fcr-fraco` e `.fcx-dica` em --ink-soft; --ink-muted nao e cor de texto em nenhuma regra do bloco', () => {
