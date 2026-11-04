@@ -5,11 +5,13 @@
 import exceljs from 'exceljs';
 import {
   FORECAST_MARGEM_LAST_ROW,
+  FORECAST_MARCA_SEM_CADASTRO,
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_ORIGIN_DBCORP,
   FORECAST_SHEETS,
 } from '../constants/forecast';
 import { PROJECAO_5O_MES_SOMA_CHEGADA, calcular, valorDaColuna } from './forecastEngine';
+import { situacaoPendenteValida } from './forecastPendentes';
 import {
   CABECALHOS_FIXOS,
   COLUNAS_COM_FORMULA,
@@ -223,6 +225,12 @@ function escreverCabecalhos(ws: exceljs.Worksheet, q: Quinzena): void {
   }
 }
 
+// Marca no INICIO da observacao (o leitor da planilha confere o prefixo); mantem a observacao existente, se houver.
+function marcaSemCadastro(obs: string): string {
+  const texto = obs.trim();
+  return texto === '' ? FORECAST_MARCA_SEM_CADASTRO : `${FORECAST_MARCA_SEM_CADASTRO} - ${texto}`;
+}
+
 function escreverProduto(
   ws: exceljs.Worksheet,
   p: Produto,
@@ -241,7 +249,10 @@ function escreverProduto(
     valor(col, { formula: formulaDaColuna(col, r, ctx), result: resultadoDaColuna(l, col) });
   }
   valor('AO', p.analiseForecast ?? null);
-  valor('AT', textoOuNulo(p.obs));
+  // Codigo pendente de cadastro (FZ4): a observacao leva a marca e o leitor da planilha recusa a linha (o arquivo
+  // exportado nao vira import valido: criaria produto com nome = codigo e sem fonte).
+  const semCadastro = situacaoPendenteValida((p as Produto & { pendenteCadastro?: unknown }).pendenteCadastro) !== null;
+  valor('AT', semCadastro ? marcaSemCadastro(p.obs) : textoOuNulo(p.obs));
   valor('AU', textoOuNulo(p.fonte));
   valor('AV', textoSeX(p.precoFechado));
   valor('AW', textoOuNulo(p.embalagem));

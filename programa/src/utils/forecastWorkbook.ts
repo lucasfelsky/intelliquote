@@ -4,6 +4,7 @@
 import exceljs from 'exceljs';
 import {
   FORECAST_LABEL_PATTERN,
+  FORECAST_MARCA_SEM_CADASTRO,
   FORECAST_MARGEM_LAST_ROW,
   FORECAST_MAX_PRODUCTS,
   FORECAST_MAX_SHEET_ROWS,
@@ -280,6 +281,13 @@ export async function parseForecastWorkbook(
   for (const p of produtos) {
     if (p.obs.length > FORECAST_OBS_MAX_CHARS) {
       erros.push(`Observacao (coluna AT) da linha ${p.linha} tem ${p.obs.length} caracteres (limite de ${FORECAST_OBS_MAX_CHARS}).`);
+    }
+    // Linha exportada pelo MACRO para codigo pendente de cadastro do DBCorp: nao e produto de verdade (nome = codigo, sem
+    // fonte). Recusa a planilha inteira em vez de criar produto com "Atualizar cadastro".
+    if (p.obs === FORECAST_MARCA_SEM_CADASTRO || p.obs.startsWith(`${FORECAST_MARCA_SEM_CADASTRO} - `)) {
+      erros.push(
+        `A linha ${p.linha} (${p.item}) esta marcada "${FORECAST_MARCA_SEM_CADASTRO}": e um codigo do DBCorp ainda nao cadastrado, exportado so para conferencia. Cadastre o produto ou apague a linha antes de importar a planilha.`,
+      );
     }
     const nome = normalizeProductName(p.item);
     const nomeAnterior = nomes.get(nome);

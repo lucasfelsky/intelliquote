@@ -34,7 +34,12 @@ import {
   type ResumoPrazosEstimativa,
 } from '../utils/forecastDbcorpRegras';
 import { mesesHistorico, rotulosDaQuinzena, type RotulosDaQuinzena } from '../utils/forecastMonths';
-import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
+import {
+  codigosPendentesCompletos,
+  limitarPendentes,
+  linhaDePendente,
+  type PendentesResultado,
+} from '../utils/forecastPendentes';
 import { amostrasDePrazo } from '../utils/forecastPrazoReal';
 import type { Entradas, Quinzena } from '../utils/forecastTypes';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
@@ -82,6 +87,15 @@ interface Casamento {
   codigosSemProduto: number;
 }
 
+// Contagem das linhas pendentes da quinzena (so numeros; vai ao resumo e, o total, ao AuditLog).
+export interface PendentesNaQuinzena {
+  total: number;
+  semCadastro: number;
+  produtoInativo: number;
+}
+
+const SEM_PENDENTES: PendentesNaQuinzena = { total: 0, semCadastro: 0, produtoInativo: 0 };
+
 interface BuiltQuinzena {
   quinzena: Quinzena | null;
   produtosTotal: number;
@@ -91,8 +105,11 @@ interface BuiltQuinzena {
     mesAnterior: MonthlySalesResumo | null;
   };
   casamento: Partial<Record<ForecastDbcorpSlot, Casamento>>;
-  // Codigos do DBCorp fora do cadastro ativo (ficam FORA do calculo ate completar o cadastro).
+  // Codigos do DBCorp fora do cadastro ativo: a lista (cortada para a tela) mostra o que entra na quinzena como linha
+  // sem produto e sem fonte ate completar o cadastro.
   pendentes: PendentesResultado | null;
+  // Quantas linhas pendentes a quinzena ganhou (lista COMPLETA, sem o corte da tela), por situacao.
+  pendentesNaQuinzena: PendentesNaQuinzena;
   // FUP calculado com o prazo de cada fonte (o de `parsed.fup` usa so o padrao). null = cadastro vazio.
   fup: ResultadoRegrasFup | null;
   prazosEstimativa: ResumoPrazosEstimativa | null;
@@ -111,6 +128,8 @@ export interface ForecastDbcorpSummary {
   historico: BuiltQuinzena['historico'];
   relatorios: Partial<Record<ForecastDbcorpSlot, Record<string, unknown>>>;
   pendentes: PendentesResultado | null;
+  // Linhas pendentes que a quinzena ganhou (por situacao); zeros quando nao ha.
+  pendentesNaQuinzena: PendentesNaQuinzena;
   // Prazo das chegadas estimadas por fonte (PR 5A); null quando ha erro de leitura ou cadastro vazio.
   prazosEstimativa: ResumoPrazosEstimativa | null;
   avisos: string[];
@@ -246,6 +265,7 @@ export class ForecastDbcorpService {
       historico: { meses: [], ausentes: [], mesAnterior: null },
       casamento: {},
       pendentes: null,
+      pendentesNaQuinzena: SEM_PENDENTES,
       fup: null,
       prazosEstimativa: null,
       mudancasDePrazo: [],
@@ -285,41 +305,6 @@ export class ForecastDbcorpService {
         );
       }
     }
-    const sales = await db.forecastMonthlySale.findMany({
-      where: { yearMonth: { in: meses.historico }, code: { in: allCodes } },
-      select: { code: true, yearMonth: true, quantity: true },
-    });
-    const vendidoPorCodigoMes = new Map(sales.map((s) => [`${s.code}|${s.yearMonth}`, Number(s.quantity)]));
-
-    const produtos = products.map((p, index): FrozenProduct => {
-      const codigos = Array<string>(FORECAST_MAX_CODES_PER_PRODUCT).fill('');
-      for (const c of p.codes) {
-        if (c.position >= 1 && c.position <= FORECAST_MAX_CODES_PER_PRODUCT) codigos[c.position - 1] = c.code;
-      }
-      const historico = meses.historico.map((yearMonth) =>
-        round6(
-          p.codes.reduce((total, c) => total + (vendidoPorCodigoMes.get(`${c.code}|${yearMonth}`) ?? 0), 0),
-        ),
-      );
-      return {
-        linha: index + 3,
-        n: p.sheetOrder,
-        item: p.name,
-        codigos,
-        historico,
-        analiseForecast: null, // edicao por quinzena e da Fase 2
-        obs: p.notes ?? '',
-        fonte: p.source?.name ?? '',
-        precoFechado: p.fixedPriceFlag ? 'X' : '',
-        embalagem: p.packaging ?? '',
-        naoFraciona: p.noFractioning ? 'X' : '',
-        qtdAmostra: p.sampleQty ?? '',
-        solicitarAmostra: p.sampleRequestNote ?? '',
-        status: 'nao',
-        productId: p.id,
-      };
-    });
-
     const sources = await db.forecastSource.findMany({
       orderBy: { id: 'asc' },
       select: {
@@ -397,6 +382,65 @@ export class ForecastDbcorpService {
       prazosFup: amostrasDePrazo(parsed.fup.fupLinhas, baseDate),
       ...(parsed.saldo.saldoPedVenda !== undefined ? { saldoPedVenda: parsed.saldo.saldoPedVenda } : {}),
     };
+
+    // Pendentes de cadastro: codigo fora dos produtos ativos com venda nos ultimos 3 meses, programacao ou compra
+    // em aberto no FUP (regra do COMEX). A lista COMPLETA vira linhas da quinzena (FZ4); a resposta leva a versao
+    // cortada para a tela.
+    const pendentesCompletos = codigosPendentesCompletos(
+      entradas,
+      await ForecastProductService.cadastroDeCodigos(db),
+      await ForecastProductService.vendasRecentes(db, baseDate),
+    );
+    built.pendentes = limitarPendentes(pendentesCompletos);
+    built.pendentesNaQuinzena = {
+      total: pendentesCompletos.totalItens,
+      semCadastro: pendentesCompletos.itens.filter((i) => i.situacao === 'sem_cadastro').length,
+      produtoInativo: pendentesCompletos.itens.filter((i) => i.situacao === 'produto_inativo').length,
+    };
+
+    const codigosPendentesLinha = pendentesCompletos.itens.map((i) => i.codigo);
+    const sales = await db.forecastMonthlySale.findMany({
+      where: { yearMonth: { in: meses.historico }, code: { in: [...allCodes, ...codigosPendentesLinha] } },
+      select: { code: true, yearMonth: true, quantity: true },
+    });
+    const vendidoPorCodigoMes = new Map(sales.map((s) => [`${s.code}|${s.yearMonth}`, Number(s.quantity)]));
+
+    const produtos = products.map((p, index): FrozenProduct => {
+      const codigos = Array<string>(FORECAST_MAX_CODES_PER_PRODUCT).fill('');
+      for (const c of p.codes) {
+        if (c.position >= 1 && c.position <= FORECAST_MAX_CODES_PER_PRODUCT) codigos[c.position - 1] = c.code;
+      }
+      const historico = meses.historico.map((yearMonth) =>
+        round6(
+          p.codes.reduce((total, c) => total + (vendidoPorCodigoMes.get(`${c.code}|${yearMonth}`) ?? 0), 0),
+        ),
+      );
+      return {
+        linha: index + 3,
+        n: p.sheetOrder,
+        item: p.name,
+        codigos,
+        historico,
+        analiseForecast: null, // edicao por quinzena e da Fase 2
+        obs: p.notes ?? '',
+        fonte: p.source?.name ?? '',
+        precoFechado: p.fixedPriceFlag ? 'X' : '',
+        embalagem: p.packaging ?? '',
+        naoFraciona: p.noFractioning ? 'X' : '',
+        qtdAmostra: p.sampleQty ?? '',
+        solicitarAmostra: p.sampleRequestNote ?? '',
+        status: 'nao',
+        productId: p.id,
+      };
+    });
+    // Depois dos produtos ativos (linha = indice + 3): 1 linha por pendente, sem produto e sem fonte.
+    for (const item of pendentesCompletos.itens) {
+      const historico = meses.historico.map((yearMonth) =>
+        round6(vendidoPorCodigoMes.get(`${item.codigo}|${yearMonth}`) ?? 0),
+      );
+      produtos.push(linhaDePendente(item, produtos.length + 3, historico, FORECAST_MAX_CODES_PER_PRODUCT));
+    }
+
     const rotulos = rotulosDaQuinzena(baseDate);
     built.quinzena = {
       id: label,
@@ -432,19 +476,12 @@ export class ForecastDbcorpService {
       );
     }
 
-    // Pendentes de cadastro: codigo fora dos produtos ativos com venda nos ultimos 3 meses, programacao ou compra
-    // em aberto no FUP (regra do COMEX).
-    built.pendentes = codigosPendentes(
-      entradas,
-      await ForecastProductService.cadastroDeCodigos(db),
-      await ForecastProductService.vendasRecentes(db, baseDate),
-    );
-    const totalPendentes = built.pendentes.totalItens;
+    const totalPendentes = pendentesCompletos.totalItens;
     if (totalPendentes > 0) {
       built.avisos.push(
         totalPendentes === 1
-          ? '1 código com venda nos últimos 3 meses, programação ou compra em aberto no FUP não está no cadastro e fica FORA do cálculo até completar o cadastro.'
-          : `${totalPendentes} códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro e ficam FORA do cálculo até completar o cadastro.`,
+          ? '1 código com venda nos últimos 3 meses, programação ou compra em aberto no FUP não está no cadastro: entra na quinzena sem fonte, sem lead time e sem sugestão de compra até completar o cadastro (que vale a partir da próxima quinzena).'
+          : `${totalPendentes} códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro: entram na quinzena sem fonte, sem lead time e sem sugestão de compra até completar o cadastro (que vale a partir da próxima quinzena).`,
       );
     }
 
@@ -490,6 +527,7 @@ export class ForecastDbcorpService {
       historico: built?.historico ?? { meses: [], ausentes: [], mesAnterior: null },
       relatorios,
       pendentes: built?.pendentes ?? null,
+      pendentesNaQuinzena: built?.pendentesNaQuinzena ?? SEM_PENDENTES,
       prazosEstimativa: built?.prazosEstimativa ?? null,
       avisos: [...juntarAvisos(parsed, fupFinal), ...(built?.avisos ?? [])],
       erros: [...parsed.erros, ...(built?.erros ?? [])],
@@ -569,6 +607,10 @@ export class ForecastDbcorpService {
               label: input.label,
               origin: FORECAST_ORIGIN_DBCORP,
               produtos: built.produtosTotal,
+              // So a contagem (nunca codigo); sem a chave quando nenhuma linha pendente entrou na quinzena.
+              ...(built.pendentesNaQuinzena.total > 0
+                ? { pendentesNaQuinzena: built.pendentesNaQuinzena.total }
+                : {}),
               arquivos: SLOT_ORDER.flatMap((slot) => {
                 const resumo = slot === 'fup' ? fup : parsed[slot];
                 if (!resumo || !input.files[slot]) return [];

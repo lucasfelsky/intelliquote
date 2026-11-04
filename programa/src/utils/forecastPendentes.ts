@@ -2,15 +2,15 @@
 // `Entradas` da quinzena (mesmo formato do snapshot) e sobre as vendas mensais ja somadas, sem leitura de planilha e
 // sem banco. O gateway DBCorp futuro monta as mesmas entradas e chama igual.
 //
-// Regra (alinhada ao COMEX, 5C): o codigo entra no calculo so como codigo de um produto ATIVO do cadastro. Enquanto
-// nao estiver la, ele e PENDENTE (e fica FORA do calculo) somente se tiver
+// Regra (alinhada ao COMEX, 5C): o codigo e de um produto ATIVO do cadastro ou e PENDENTE. O pendente entra na quinzena
+// como linha SEM produto e SEM fonte (sem lead time, sem sugestao de compra; FZ4) somente se tiver
 //   - venda nos ULTIMOS 3 MESES (base-3 + base-2 do historico mensal + o mes anterior das `Entradas`: a mesma base da
 //     media trimestral Q do motor), OU
 //   - PROGRAMACAO pendente, OU
 //   - COMPRA em aberto no FUP (qualquer linha nao CONCLUIDA, congelada em `Entradas.comprasEmAberto`).
 // Venda so no acumulado anual (ou so no mes atual) e codigo so com saldo ficam FORA da lista; os dois sao apenas contados.
 import { FORECAST_PENDENTES_MAX_ITENS } from '../constants/forecast';
-import type { Entradas } from './forecastTypes';
+import type { Entradas, Produto } from './forecastTypes';
 
 export type PendentesEntradas = Pick<
   Entradas,
@@ -92,10 +92,38 @@ const vazio = (codigo: string): PendenteCadastro => ({
   saldo: 0,
 });
 
+// Lista COMPLETA (sem o corte de `FORECAST_PENDENTES_MAX_ITENS`): o import DBCorp monta uma linha da quinzena por
+// pendente, entao nenhum pode ficar de fora. Mesma regra e mesma ordem de `codigosPendentes`.
+export function codigosPendentesCompletos(
+  entradas: PendentesEntradas,
+  cadastro: CadastroDeCodigos,
+  vendas: VendasRecentes,
+): PendentesResultado {
+  return calcularPendentes(entradas, cadastro, vendas, Number.POSITIVE_INFINITY);
+}
+
+// Resultado cortado para a tela: `itens` limitado a `FORECAST_PENDENTES_MAX_ITENS` (totalItens e omitidos seguem exatos).
+export function limitarPendentes(
+  r: PendentesResultado,
+  max: number = FORECAST_PENDENTES_MAX_ITENS,
+): PendentesResultado {
+  const itens = r.itens.slice(0, max);
+  return { ...r, itens, omitidos: r.totalItens - itens.length };
+}
+
 export function codigosPendentes(
   entradas: PendentesEntradas,
   cadastro: CadastroDeCodigos,
   vendas: VendasRecentes,
+): PendentesResultado {
+  return calcularPendentes(entradas, cadastro, vendas, FORECAST_PENDENTES_MAX_ITENS);
+}
+
+function calcularPendentes(
+  entradas: PendentesEntradas,
+  cadastro: CadastroDeCodigos,
+  vendas: VendasRecentes,
+  limite: number,
 ): PendentesResultado {
   const porCodigo = new Map<string, PendenteCadastro>();
   const obter = (chave: string): PendenteCadastro => {
@@ -164,7 +192,7 @@ export function codigosPendentes(
       b.comprasEmAberto - a.comprasEmAberto ||
       (a.codigo < b.codigo ? -1 : a.codigo > b.codigo ? 1 : 0),
   );
-  const itens = listados.slice(0, FORECAST_PENDENTES_MAX_ITENS);
+  const itens = listados.slice(0, limite);
   return {
     itens,
     totalItens: listados.length,
@@ -177,4 +205,86 @@ export function codigosPendentes(
       compras: comprasDoFup ? 'fup_em_aberto' : 'chegadas',
     },
   };
+}
+
+// ---- Pendente como LINHA da quinzena (FZ4) -------------------------------------------------------------------------
+// O pendente DBCorp entra na quinzena como uma linha sem produto e sem fonte: consumo, estoque, chegadas e projecao vem
+// so do codigo (motor), mas sem fonte nao ha lead time, logo AN/AP ficam null e NAO ha sugestao de compra. O prazo
+// nunca e inventado. A marca `pendenteCadastro` e congelada no JSON `products` da quinzena (sem migration).
+export type SituacaoPendente = PendenteCadastro['situacao'];
+
+const SITUACOES: ReadonlySet<string> = new Set<SituacaoPendente>(['sem_cadastro', 'produto_inativo']);
+
+// Valida a marca lida do JSON congelado: so os dois valores conhecidos; qualquer outra coisa = sem marca.
+export function situacaoPendenteValida(valor: unknown): SituacaoPendente | null {
+  return typeof valor === 'string' && SITUACOES.has(valor) ? (valor as SituacaoPendente) : null;
+}
+
+export interface LinhaPendente extends Produto {
+  productId: null;
+  pendenteCadastro: SituacaoPendente;
+}
+
+// 1 linha por pendente: nome = codigo, codigo na 1a posicao (as outras vazias: o MACRO exige `maxCodigos` posicoes),
+// sem fonte, sem produto. `historico` (J..N) vem do historico de vendas por codigo, como nas demais linhas.
+export function linhaDePendente(
+  item: Pick<PendenteCadastro, 'codigo' | 'situacao'>,
+  linha: number,
+  historico: number[],
+  maxCodigos: number,
+): LinhaPendente {
+  const codigos = Array<string>(maxCodigos).fill('');
+  codigos[0] = item.codigo;
+  return {
+    linha,
+    n: null,
+    item: item.codigo,
+    codigos,
+    historico,
+    analiseForecast: null,
+    obs: '',
+    fonte: '',
+    precoFechado: '',
+    embalagem: '',
+    naoFraciona: '',
+    qtdAmostra: '',
+    solicitarAmostra: '',
+    status: 'nao',
+    productId: null,
+    pendenteCadastro: item.situacao,
+  };
+}
+
+// Estado ATUAL de uma linha pendente contra o cadastro de hoje (derivado na leitura, nunca gravado; a linha e os numeros
+// da quinzena NAO mudam). Linha sem marca (quinzena antiga ou produto normal) = sem estado.
+//  - pendenteCadastro: o que era na importacao (congelado);
+//  - cadastradoDepois: algum codigo ja e de produto ATIVO -> "entra completo na proxima quinzena";
+//  - produtoInativoAtual: o codigo pertence a produto INATIVO agora (o front oferece "Reativar produto").
+export interface EstadoDoPendente {
+  pendenteCadastro: SituacaoPendente | null;
+  cadastradoDepois: boolean;
+  produtoInativoAtual: { id: number; nome: string } | null;
+}
+
+export function estadoDoPendente(
+  linha: { codigos: string[]; pendenteCadastro?: unknown },
+  cadastro: CadastroDeCodigos,
+): EstadoDoPendente {
+  const pendenteCadastro = situacaoPendenteValida(linha.pendenteCadastro);
+  if (pendenteCadastro === null) {
+    return { pendenteCadastro: null, cadastradoDepois: false, produtoInativoAtual: null };
+  }
+  const codigos = linha.codigos.map(normalizar).filter((c) => c !== '');
+  const cadastradoDepois = codigos.some((c) => cadastro.ativos.has(c));
+  let produtoInativoAtual: EstadoDoPendente['produtoInativoAtual'] = null;
+  if (!cadastradoDepois) {
+    for (const c of codigos) {
+      const dono = cadastro.inativos.get(c);
+      if (dono) {
+        produtoInativoAtual = { id: dono.productId, nome: dono.nome };
+        break;
+      }
+    }
+  }
+  return { pendenteCadastro, cadastradoDepois, produtoInativoAtual };
 }

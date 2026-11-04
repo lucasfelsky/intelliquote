@@ -11,7 +11,14 @@ import {
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
 import { gruposDasLinhas } from '../utils/forecastGruposEquivalencia';
 import { mapaForaDaMedia, marcasNaJanela } from '../utils/forecastMesesAtipicos';
-import { codigosPendentes, type PendentesResultado } from '../utils/forecastPendentes';
+import {
+  codigosPendentes,
+  estadoDoPendente,
+  situacaoPendenteValida,
+  type CadastroDeCodigos,
+  type PendentesResultado,
+  type SituacaoPendente,
+} from '../utils/forecastPendentes';
 import type { Entradas, Produto, Quinzena } from '../utils/forecastTypes';
 import {
   montarRelatorioCompras,
@@ -44,8 +51,9 @@ export interface ForecastPendentesData extends PendentesResultado {
 
 type Db = Prisma.TransactionClient;
 
-// Produto congelado na quinzena: o do motor + o id do cadastro quando existia na importacao.
-export type FrozenProduct = Produto & { productId?: number | null };
+// Produto congelado na quinzena: o do motor + o id do cadastro quando existia na importacao. `pendenteCadastro` (FZ4) so
+// existe na linha de codigo pendente do DBCorp (sem produto e sem fonte); quinzena antiga nao tem a chave.
+export type FrozenProduct = Produto & { productId?: number | null; pendenteCadastro?: SituacaoPendente };
 
 export type SnapshotOrigin = 'planilha' | 'dbcorp';
 
@@ -288,6 +296,11 @@ export class ForecastSnapshotService {
     const gruposDosProdutos = await ForecastGrupoEquivalenciaService.gruposDosProdutos(productIds);
     const { marcas, mesesForaDaMedia } = await ForecastSnapshotService.marcasDaQuinzena(produtos, quinzena.dataBase);
     const calculadas = calcular(quinzena, { hoje: hojeKey, quinzena: half, mesesForaDaMedia });
+    // Linhas pendentes de cadastro (FZ4): estado derivado do cadastro ATUAL, 1 consulta e so quando ha linha marcada
+    // (quinzena antiga/da planilha nao consulta nada e sai igual). Nada disso altera a linha congelada nem o calculo.
+    const cadastroAtual: CadastroDeCodigos | null = produtos.some((p) => situacaoPendenteValida(p.pendenteCadastro))
+      ? await ForecastProductService.cadastroDeCodigos()
+      : null;
     // Cadastro ATUAL lido UMA vez por requisicao; null = nenhuma ocasiao ativa (saida igual a de antes).
     const ocasioes = await ForecastSnapshotService.comFallbackDeOcasioes<OcasioesDoCalculo | null>(
       id,
@@ -320,6 +333,7 @@ export class ForecastSnapshotService {
         const produto = produtoPorLinha.get(linha.linha);
         // Memoria de calculo: ocasioes da PO que sai hoje (so informa); sem bloco o objeto e o de antes.
         const ocasioesHoje = memoria.get(linha.linha);
+        const estadoPendente = produto && cadastroAtual ? estadoDoPendente(produto, cadastroAtual) : null;
         return {
           ...linha,
           n: produto?.n ?? null,
@@ -345,6 +359,14 @@ export class ForecastSnapshotService {
           mesesForaDaMedia:
             produto?.productId != null ? marcasNaJanela(quinzena.dataBase, marcas.get(produto.productId) ?? []) : [],
           ...(ocasioesHoje ? { ocasioesHoje } : {}),
+          // So a linha pendente de cadastro ganha estas chaves; as demais saem como antes.
+          ...(estadoPendente && estadoPendente.pendenteCadastro !== null
+            ? {
+                pendenteCadastro: estadoPendente.pendenteCadastro,
+                cadastradoDepois: estadoPendente.cadastradoDepois,
+                produtoInativoAtual: estadoPendente.produtoInativoAtual,
+              }
+            : {}),
         };
       }),
       conferencia: snapshot.expected ? conferenciaDaQuinzena(quinzena, hojeKey) : null,

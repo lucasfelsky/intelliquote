@@ -108,6 +108,8 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
   let inativoProductId: number;
   let novoProductId: number;
   let snapshotId: number;
+  // FZ4: a linha do pendente CODE_NOVO_2 lida logo apos a importacao (para provar que cadastrar depois nao a muda).
+  let linhaPendenteAntes: Record<string, unknown> | undefined;
 
   const post = (path: string, body: unknown) =>
     request(app).post(path).set('Cookie', cookies).send(body as object);
@@ -224,8 +226,10 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
       compras: 'fup_em_aberto',
     });
     expect(data.avisos).toContain(
-      '3 códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro e ficam FORA do cálculo até completar o cadastro.',
+      '3 códigos com venda nos últimos 3 meses, programação ou compra em aberto no FUP não estão no cadastro: entram na quinzena sem fonte, sem lead time e sem sugestão de compra até completar o cadastro (que vale a partir da próxima quinzena).',
     );
+    // FZ4: cada pendente vira uma linha da quinzena (2 sem cadastro + 1 de produto inativo).
+    expect(data.pendentesNaQuinzena).toEqual({ total: 3, semCadastro: 2, produtoInativo: 1 });
     // O resumo do FUP nao leva a compra em aberto (so as Entradas congeladas).
     expect(data.relatorios.fup).not.toHaveProperty('comprasEmAberto');
     expect(data.relatorios.fup).not.toHaveProperty('linhas');
@@ -301,6 +305,41 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     expect(linha).toBeDefined();
     expect(linha).toMatchObject({ U: 12, O: 40, P: 8, fonte: SOURCE_NAME });
     expect(linha.chegadas).toEqual([500, 0, 0, 0, 0]);
+
+    // FZ4: os 2 pendentes restantes viram linhas SEM produto e SEM fonte, com os numeros do proprio codigo e sem lead time.
+    expect(confirm.body.data.pendentesNaQuinzena).toEqual({ total: 2, semCadastro: 1, produtoInativo: 1 });
+    type LinhaCalc = Record<string, unknown> & { item: string; productId: number | null };
+    const linhasCalc = calc.body.data.linhas as LinhaCalc[];
+    const pendenteLinha = linhasCalc.find((l) => l.item === CODE_NOVO_2)!;
+    const inativoLinha = linhasCalc.find((l) => l.item === CODE_INATIVO)!;
+    expect(pendenteLinha).toMatchObject({
+      productId: null,
+      fonte: '',
+      O: 5, // vendas do mes anterior do codigo
+      AN: null,
+      AQ: null,
+      AP: null,
+      pendenteCadastro: 'sem_cadastro',
+      cadastradoDepois: false,
+      produtoInativoAtual: null,
+    });
+    expect(inativoLinha).toMatchObject({
+      productId: null,
+      fonte: '',
+      AN: null,
+      pendenteCadastro: 'produto_inativo',
+      cadastradoDepois: false,
+      produtoInativoAtual: { id: inativoProductId, nome: NAME_INATIVO },
+    });
+    // Sem sugestao de compra para elas; contadas a parte no relatorio.
+    const relatorio = await request(app)
+      .get(`/api/v1/forecast/snapshots/${snapshotId}/relatorio-compras?hoje=${HOJE}`)
+      .set('Cookie', cookies);
+    expect(relatorio.status).toBe(200);
+    expect(relatorio.body.data.fora.semCadastro).toBe(2);
+    const itensRelatorio = (relatorio.body.data.grupos as Array<{ itens: Array<{ item: string }> }>).flatMap((g) => g.itens);
+    expect(itensRelatorio.some((i) => i.item === CODE_NOVO_2 || i.item === CODE_INATIVO)).toBe(false);
+    linhaPendenteAntes = pendenteLinha;
 
     const pend = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}/pendentes`).set('Cookie', cookies);
     expect(pend.status).toBe(200);
@@ -404,6 +443,26 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     // O pendente da quinzena ja gravada sai da lista (cadastro ATUAL); a quinzena em si nao muda.
     const pend = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}/pendentes`).set('Cookie', cookies);
     expect(pend.body.data.itens.map((i: { codigo: string }) => i.codigo)).toEqual([CODE_INATIVO]);
+
+    // FZ4: a quinzena NAO muda. A linha do codigo continua sem produto e sem fonte, com os mesmos numeros e sem sugestao de
+    // compra; so o estado derivado vira "cadastrado, entra completo na proxima quinzena".
+    const calc = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}?hoje=${HOJE}`).set('Cookie', cookies);
+    expect(calc.status).toBe(200);
+    const depois = (calc.body.data.linhas as Array<Record<string, unknown> & { item: string }>).find((l) => l.item === CODE_NOVO_2)!;
+    expect(linhaPendenteAntes).toBeDefined();
+    expect({ ...depois, cadastradoDepois: undefined }).toEqual({ ...linhaPendenteAntes, cadastradoDepois: undefined });
+    expect(depois).toMatchObject({
+      productId: null,
+      fonte: '',
+      AN: null,
+      pendenteCadastro: 'sem_cadastro',
+      cadastradoDepois: true,
+    });
+    const gravada = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: snapshotId } });
+    const congelada = (gravada.products as unknown as Array<{ item: string; productId: number | null; pendenteCadastro?: string }>).find(
+      (p) => p.item === CODE_NOVO_2,
+    )!;
+    expect(congelada).toMatchObject({ productId: null, pendenteCadastro: 'sem_cadastro' });
   });
 
   testDbSkip('import da PLANILHA nao inativa o produto da tela (com aviso) e o adota quando o nome vem na planilha', async () => {

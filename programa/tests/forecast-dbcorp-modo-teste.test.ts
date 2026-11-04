@@ -121,6 +121,7 @@ function syntheticBuilt() {
     erros: [] as string[],
     quinzena: { id: '10-2', dataBase: '2026-10-15' },
     produtosTotal: 2,
+    pendentesNaQuinzena: { total: 0, semCadastro: 0, produtoInativo: 0 },
     historico: {
       meses: [],
       ausentes: [],
