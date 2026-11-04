@@ -22,7 +22,9 @@ import {
   situacaoTexto,
   soSaldoTexto,
   textoEntradaNoCalculo,
-  textoForaDoCalculoPrevia,
+  estadoDaLinhaPendente,
+  textoEntraSemCadastroPrevia,
+  textoPendentesNaQuinzena,
   TEXTO_REATIVACAO_INDISPONIVEL,
   TEXTO_REATIVACAO_NO_PAINEL,
   textoProdutoInativo,
@@ -80,20 +82,23 @@ describe('textos', () => {
 
   it('textoEntradaNoCalculo cita a quinzena e quando o codigo entra', () => {
     expect(textoEntradaNoCalculo('10-2', 3)).toBe(
-      'Esses códigos ficaram FORA do cálculo da quinzena 10-2. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.',
+      'Esses códigos entraram na quinzena 10-2 sem fonte, sem lead time e sem sugestão de compra. Depois de completar o cadastro, eles entram completos a partir da próxima quinzena importada (os números desta quinzena não mudam).',
     );
   });
 
-  it('textos fixos de "FORA do calculo": singular com 1 pendente, plural nos demais', () => {
+  it('textos fixos (FZ4: o item ENTRA sem fonte/lead time/sugestao, nada de "FORA do calculo"): singular com 1 pendente, plural nos demais', () => {
     expect(textoEntradaNoCalculo('10-2', 1)).toBe(
-      'Este código ficou FORA do cálculo da quinzena 10-2. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.',
+      'Este código entrou na quinzena 10-2 sem fonte, sem lead time e sem sugestão de compra. Depois de completar o cadastro, ele entra completo a partir da próxima quinzena importada (os números desta quinzena não mudam).',
     );
-    expect(textoForaDoCalculoPrevia(1)).toBe(
-      'Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.',
+    expect(textoEntraSemCadastroPrevia(1)).toBe(
+      'Entra na quinzena sem fonte, sem lead time e sem sugestão de compra. Complete o cadastro e pré-visualize de novo para que entre completo nesta quinzena.',
     );
-    expect(textoForaDoCalculoPrevia(2)).toBe(
-      'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.',
+    expect(textoEntraSemCadastroPrevia(2)).toBe(
+      'Entram na quinzena sem fonte, sem lead time e sem sugestão de compra. Complete o cadastro e pré-visualize de novo para que entrem completos nesta quinzena.',
     );
+    for (const t of [textoEntradaNoCalculo('10-2', 1), textoEntradaNoCalculo('10-2', 3), textoEntraSemCadastroPrevia(1), textoEntraSemCadastroPrevia(2)]) {
+      expect(t).not.toMatch(/FORA do cálculo/i);
+    }
   });
 
   it('soSaldoTexto: so quando ha codigos; singular', () => {
@@ -314,5 +319,31 @@ describe('produto existente', () => {
     const cheio = produto(3, 'PRODUTO 003', ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
     expect(vagasTexto(cheio)).toBe('7/7 códigos');
     expect(produtoCheio(cheio)).toBe(true);
+  });
+});
+
+describe('FZ4-F: estado da linha pendente e resumo do import', () => {
+  it('estadoDaLinhaPendente: linha normal = null; cadastradoDepois > produto inativo conhecido > estado congelado', () => {
+    expect(estadoDaLinhaPendente({})).toBeNull();
+    expect(estadoDaLinhaPendente({ pendenteCadastro: 'sem_cadastro', cadastradoDepois: false, produtoInativoAtual: null })).toEqual({ tipo: 'completar' });
+    expect(estadoDaLinhaPendente({ pendenteCadastro: 'sem_cadastro' })).toEqual({ tipo: 'completar' });
+    expect(estadoDaLinhaPendente({ pendenteCadastro: 'produto_inativo', produtoInativoAtual: { id: 9, nome: 'P 9' } })).toEqual({
+      tipo: 'reativar',
+      produto: { id: 9, nome: 'P 9' },
+    });
+    expect(estadoDaLinhaPendente({ pendenteCadastro: 'produto_inativo', produtoInativoAtual: null })).toEqual({ tipo: 'inativo-sem-produto' });
+    expect(estadoDaLinhaPendente({ pendenteCadastro: 'produto_inativo', cadastradoDepois: true, produtoInativoAtual: { id: 9, nome: 'P 9' } })).toEqual({
+      tipo: 'cadastrado',
+    });
+  });
+
+  it('textoPendentesNaQuinzena: singular/plural, zeros omitidos, null sem pendente ou com backend antigo', () => {
+    expect(textoPendentesNaQuinzena(undefined)).toBeNull();
+    expect(textoPendentesNaQuinzena({ total: 0, semCadastro: 0, produtoInativo: 0 })).toBeNull();
+    expect(textoPendentesNaQuinzena({ total: 1, semCadastro: 1, produtoInativo: 0 })).toBe('1 linha entra na quinzena: 1 sem cadastro.');
+    expect(textoPendentesNaQuinzena({ total: 3, semCadastro: 2, produtoInativo: 1 })).toBe(
+      '3 linhas entram na quinzena: 2 sem cadastro e 1 com produto inativo.',
+    );
+    expect(textoPendentesNaQuinzena({ total: 2, semCadastro: 0, produtoInativo: 2 })).toBe('2 linhas entram na quinzena: 2 com produto inativo.');
   });
 });

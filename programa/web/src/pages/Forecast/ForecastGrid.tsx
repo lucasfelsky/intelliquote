@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { ForecastDivergencia, ForecastLinha } from '@/services/forecast';
-import { descreverDivergencia, GRUPOS, STATUS_ROTULO, type ColunaPainel, type GrupoId } from './forecastPainel';
+import { descreverDivergencia, GRUPOS, motivoSemSugestao, seloPendenteTexto, STATUS_ROTULO, type ColunaPainel, type GrupoId } from './forecastPainel';
 import { semVendaHa6Meses } from './forecastSemVenda';
 
 export type DivergenciasPorCelula = ReadonlyMap<string, ForecastDivergencia>;
@@ -20,7 +20,8 @@ interface RowProps {
 }
 
 const Row = memo(function Row({ linha, colunas, inicios, divergencias, buscaDoItem }: RowProps) {
-  const fonteEStatus = [linha.fonte, STATUS_ROTULO[linha.status]].filter(Boolean).join(' · ');
+  // FZ4: linha sem cadastro nao tem produto/fonte: "Cotacao nao enviada" sugeriria uma acao impossivel, entao o status some (o selo explica).
+  const fonteEStatus = [linha.fonte, linha.pendenteCadastro ? '' : STATUS_ROTULO[linha.status]].filter(Boolean).join(' · ');
   const semVenda = semVendaHa6Meses(linha);
   return (
     <tr className="fc-row">
@@ -33,6 +34,13 @@ const Row = memo(function Row({ linha, colunas, inicios, divergencias, buscaDoIt
         >
           <span className="fc-item__nome">{linha.item}</span>{' '}
           <span className="fc-item__fonte">
+            {linha.pendenteCadastro && (
+              <>
+                <span className={`fcpc-selo fcpc-selo--${linha.pendenteCadastro}`} title={motivoSemSugestao(linha.pendenteCadastro)}>
+                  {seloPendenteTexto(linha.pendenteCadastro)}
+                </span>{' '}
+              </>
+            )}
             {semVenda && <span className="fcsv-selo">sem venda ≥6 meses</span>}
             {semVenda && ' '}
             {fonteEStatus}

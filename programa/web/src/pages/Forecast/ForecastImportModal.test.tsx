@@ -953,20 +953,34 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     });
   });
 
-  it('1 pendente: o texto "FORA do calculo" do bloco vai para o singular', async () => {
+  it('1 pendente: o texto do bloco (entra sem fonte/lead time/sugestao) vai para o singular, sem "FORA do calculo"', async () => {
     renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes([pend({})]) }));
     expect(
-      regiao().getByText('Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.'),
+      regiao().getByText(
+        'Entra na quinzena sem fonte, sem lead time e sem sugestão de compra. Complete o cadastro e pré-visualize de novo para que entre completo nesta quinzena.',
+      ),
     ).toBeTruthy();
+    expect(regiao().queryByText(/FORA do cálculo/i)).toBeNull();
   });
 
-  it('mostra o bloco com a tabela, o texto "FORA do calculo" e um botao por codigo SEM cadastro', async () => {
+  it('FZ4: o resumo usa `pendentesNaQuinzena` (lista completa, sem o corte de 200) no titulo e conta sem cadastro e produto inativo', async () => {
+    renderModal();
+    await previsualizarDbcorp(
+      resumoDbcorp({ pendentes: pendentes(), pendentesNaQuinzena: { total: 250, semCadastro: 200, produtoInativo: 50 } }),
+    );
+    expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (250)' })).toBeTruthy();
+    expect(regiao().getByText('250 linhas entram na quinzena: 200 sem cadastro e 50 com produto inativo.')).toBeTruthy();
+  });
+
+  it('mostra o bloco com a tabela, o texto "entram sem fonte/sugestao" e um botao por codigo SEM cadastro', async () => {
     renderModal();
     await previsualizarDbcorp(resumoDbcorp({ pendentes: pendentes() }));
     expect(regiao().getByRole('heading', { name: 'Pendentes de cadastro (2)' })).toBeTruthy();
     expect(
-      regiao().getByText('Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.'),
+      regiao().getByText(
+        'Entram na quinzena sem fonte, sem lead time e sem sugestão de compra. Complete o cadastro e pré-visualize de novo para que entrem completos nesta quinzena.',
+      ),
     ).toBeTruthy();
     const tabela = regiao().getByRole('table', { name: /Códigos do DBCorp pendentes de cadastro/ });
     expect(within(tabela).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([

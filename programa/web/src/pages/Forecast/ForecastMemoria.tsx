@@ -10,6 +10,7 @@ import ForecastDetalheItem, { ForecastUltimoPrecoCartao, useUltimoPreco } from '
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastMesesAtipicosModal from './ForecastMesesAtipicosModal';
 import { OcasioesNaMemoria } from './ForecastOcasiaoSelo';
+import { AvisoLinhaPendente } from './ForecastPendentesCadastro';
 import { dataBr, mesAbrevDoAnoMes, passosDaMemoria, risco, type TomValor } from './forecastPainel';
 import { textoMotivoSobDemanda, textoSeloDoGrupo } from './forecastRelatorioTextos';
 
@@ -186,6 +187,8 @@ export default function ForecastMemoria({ linha, half, baseDate, hoje, podeEdita
             {linha.item}
           </h2>
         </div>
+        {/* FZ4: linha de codigo do DBCorp que entrou sem cadastro (sem fonte/lead time/sugestao); completar ou reativar daqui. */}
+        {linha.pendenteCadastro && <AvisoLinhaPendente linha={linha} podeEditar={podeEditar} />}
         <ol className="fc-passos">
           {passos.map((passo, i) => (
             <li key={passo.titulo} className="fc-passo">

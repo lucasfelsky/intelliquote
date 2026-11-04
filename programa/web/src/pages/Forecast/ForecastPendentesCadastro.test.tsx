@@ -131,7 +131,7 @@ describe('ForecastPendentesCadastro - estados', () => {
     renderPainel();
     expect(
       await screen.findByText(
-        'Este código ficou FORA do cálculo da quinzena 11-1. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.',
+        'Este código entrou na quinzena 11-1 sem fonte, sem lead time e sem sugestão de compra. Depois de completar o cadastro, ele entra completo a partir da próxima quinzena importada (os números desta quinzena não mudam).',
       ),
     ).toBeTruthy();
   });
@@ -159,10 +159,11 @@ describe('ForecastPendentesCadastro - lista', () => {
   it('resumo, texto de quando entra no calculo e tabela com quantidades; zero vira traco; sem coluna Saldo zerada', async () => {
     renderPainel();
     await screen.findByText(/Pendentes de cadastro \(2\)/);
-    expect(screen.getByText(/ficam fora do cálculo/)).toBeTruthy();
+    expect(screen.getByText(/entraram sem sugestão de compra/)).toBeTruthy();
+    expect(screen.queryByText(/fora do cálculo/i)).toBeNull();
     expect(
       screen.getByText(
-        'Esses códigos ficaram FORA do cálculo da quinzena 11-1. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.',
+        'Esses códigos entraram na quinzena 11-1 sem fonte, sem lead time e sem sugestão de compra. Depois de completar o cadastro, eles entram completos a partir da próxima quinzena importada (os números desta quinzena não mudam).',
       ),
     ).toBeTruthy();
     const tabela = screen.getByRole('table');

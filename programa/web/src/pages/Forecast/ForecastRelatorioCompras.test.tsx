@@ -118,6 +118,24 @@ describe('ForecastRelatorioCompras', () => {
     expect(screen.getByText('Como as datas são calculadas')).toBeTruthy();
   });
 
+  it('FZ4: "N sem cadastro" junto das contagens "fora" (so quando > 0), separado de "sem lead time"', async () => {
+    get.mockResolvedValue({ data: relatorio({ fora: { semLeadTime: 4, semConsumoSemFalta: 5, semCadastro: 2 } }) });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.getByText('Fora do relatório: 4 sem lead time, 5 sem consumo e sem falta, 2 sem cadastro')).toBeTruthy();
+    expect(
+      screen.getByText('2 sem cadastro: código do DBCorp ainda não cadastrado, sem fonte, sem lead time e sem sugestão de compra.'),
+    ).toBeTruthy();
+  });
+
+  it('FZ4: sem linha sem cadastro (0 ou backend antigo) a linha "fora" nao cita cadastro', async () => {
+    get.mockResolvedValue({ data: relatorio({ fora: { semLeadTime: 4, semConsumoSemFalta: 5, semCadastro: 0 } }) });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    expect(screen.getByText('Fora do relatório: 4 sem lead time, 5 sem consumo e sem falta')).toBeTruthy();
+    expect(screen.queryByText(/sem cadastro/)).toBeNull();
+  });
+
   it('um bloco por fonte, na ordem recebida, com lead time e data mais urgente na legenda', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();

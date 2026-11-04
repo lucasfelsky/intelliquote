@@ -12809,6 +12809,34 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   }
 }
 /* -- <<< F13-E -- */
+
+/* -- F13-Z4 >>> -- */
+/* FZ4: codigo do DBCorp que entrou na quinzena sem cadastro. Selo na grade (texto, nunca so cor; tons existentes: aviso = sem cadastro, neutro = produto inativo) e aviso por item na pagina do item
+   (.alert/.alert--warning/.alert--success existentes; aqui so o respiro e o botao). Nenhum token novo. */
+@media screen {
+  .fc-pagina .fcpc-selo {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: var(--rf-radius-pill);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+  .fc-pagina .fcpc-selo--sem_cadastro { background: var(--rf-tone-warning-bg); color: var(--rf-tone-warning-fg); }
+  .fc-pagina .fcpc-selo--produto_inativo { background: var(--rf-tone-neutral-bg); color: var(--rf-tone-neutral-fg); }
+  .fc-pagina .fcpc-aviso { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .fc-pagina .fcpc-aviso__titulo { margin: 0; font-weight: 700; }
+  .fc-pagina .fcpc-aviso__texto { margin: 4px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+  .fc-pagina .fcpc-aviso__acao { margin-top: 10px; }
+  @media (pointer: coarse) {
+    .fc-pagina .fcpc-aviso__acao { min-height: 44px; }
+  }
+}
+/* -- <<< F13-Z4 -- */
 /* <<< tela F13 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
@@ -13084,6 +13112,8 @@ i.fc-status--preco { background: var(--info); }
 .fc-scroll { max-height: min(660px, 72vh); overflow: auto; border-top: 1px solid var(--border); }
 /* contem o .sr-only (absoluto) das celulas: sem isto escapa e a pagina rola na horizontal. So em tela: o papel fica como esta. */
 @media screen { .fc-scroll { position: relative; } }
+/* FZ4: o motivo "sem cadastro" das celulas da grade e texto so para leitor de tela (.sr-only, absoluto): no papel o scroller e clipado e o absoluto vaza e cria paginas em branco; sem ele na impressao. */
+@media print { .fc-grid .sr-only { display: none; } }
 .fc-scroll:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; box-shadow: inset 0 0 0 4px var(--focus-ring-strong); }
 .fc-grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; font-size: 13px; font-variant-numeric: tabular-nums; }
 .fc-grid th,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ForecastLinha } from '@/services/forecast';
 import {
   forecastPendentesErrorMessage,
   forecastPendentesKeys,
@@ -13,6 +14,7 @@ import { inteiroBr } from './forecastPainel';
 import {
   contagemTexto,
   criterioTexto,
+  estadoDaLinhaPendente,
   historicoAusenteTexto,
   mensagemCadastroGravado,
   mensagemProdutoReativado,
@@ -20,8 +22,10 @@ import {
   semVendaRecenteTexto,
   situacaoTexto,
   soSaldoTexto,
+  TEXTO_CADASTRADO_DEPOIS,
   TEXTO_REATIVACAO_INDISPONIVEL,
   TEXTO_REATIVACAO_NO_PAINEL,
+  TEXTO_SEM_SUGESTAO,
   textoEntradaNoCalculo,
   textoProdutoInativo,
 } from './forecastPendentes';
@@ -214,6 +218,111 @@ export function useDialogoCompletar(aoConcluir: (resultado: ResultadoCadastro) =
   };
 }
 
+interface AvisoLinhaProps {
+  linha: ForecastLinha;
+  /** admin/comprador completam/reativam; os demais papeis COMEX so leem o aviso. */
+  podeEditar: boolean;
+}
+
+/**
+ * Aviso por item na pagina do item (FZ4): a linha entrou na quinzena sem cadastro (`pendenteCadastro`). Reaproveita o MESMO
+ * dialogo "Completar cadastro" do painel e a mesma reativacao; depois de gravar a quinzena NAO muda, entao o aviso vira
+ * "Cadastrado, entra completo na proxima quinzena" (`cadastradoDepois`, que o backend deriva do cadastro de hoje).
+ */
+export function AvisoLinhaPendente({ linha, podeEditar }: AvisoLinhaProps) {
+  const queryClient = useQueryClient();
+  const [mensagem, setMensagem] = useState('');
+  const [erro, setErro] = useState('');
+  const statusRef = useRef<HTMLDivElement>(null);
+  const dialogo = useDialogoCompletar((resultado) => setMensagem(mensagemCadastroGravado(resultado)));
+  const reativar = useMutation({
+    gcTime: 0,
+    mutationFn: (productId: number) => postForecastReativarProduto(productId),
+    onSuccess: (resultado) => {
+      setErro('');
+      setMensagem(mensagemProdutoReativado(resultado));
+      // A linha e recalculada na leitura com o cadastro atual: o aviso passa a "cadastrado".
+      void queryClient.invalidateQueries({ queryKey: ['forecast'] });
+    },
+    onError: (err) => {
+      setMensagem('');
+      setErro(forecastPendentesErrorMessage(err, 'Não foi possível reativar o produto'));
+    },
+  });
+  // O botao some quando o aviso vira "cadastrado": o foco vai para a mensagem de retorno.
+  useEffect(() => {
+    if (mensagem) statusRef.current?.focus();
+  }, [mensagem]);
+
+  const estado = estadoDaLinhaPendente(linha);
+  if (!estado) return null;
+  const codigo = linha.codigos.find((c) => c !== '') ?? linha.item;
+  const sobre = estado.tipo === 'reativar' ? `O produto “${estado.produto.nome}” está inativo no cadastro` : 'Este código não está no cadastro';
+
+  return (
+    <div className="fcpc-aviso">
+      <div className={`alert ${estado.tipo === 'cadastrado' ? 'alert--success' : 'alert--warning'}`} data-estado={estado.tipo}>
+        <p className="fcpc-aviso__titulo">
+          {estado.tipo === 'cadastrado'
+            ? 'Cadastrado'
+            : estado.tipo === 'completar'
+              ? 'Item não cadastrado'
+              : 'Produto inativo'}
+        </p>
+        {estado.tipo === 'cadastrado' ? (
+          <p className="fcpc-aviso__texto">{TEXTO_CADASTRADO_DEPOIS}</p>
+        ) : (
+          <p className="fcpc-aviso__texto">
+            {sobre}: o código {codigo} entrou na quinzena {TEXTO_SEM_SUGESTAO}.{' '}
+            {estado.tipo === 'completar'
+              ? 'Complete o cadastro para ele entrar completo a partir da próxima quinzena (os números desta quinzena não mudam).'
+              : 'Reative o produto para o código entrar completo a partir da próxima quinzena (os números desta quinzena não mudam).'}
+          </p>
+        )}
+        {podeEditar && estado.tipo === 'completar' && (
+          <button
+            type="button"
+            className="ghost-button ghost-button--sm fcpc-aviso__acao"
+            aria-label={`Completar cadastro do código ${codigo}`}
+            aria-haspopup="dialog"
+            onClick={(e) => dialogo.abrir(codigo, e.currentTarget)}
+          >
+            Completar cadastro
+          </button>
+        )}
+        {podeEditar && estado.tipo === 'reativar' && (
+          <button
+            type="button"
+            className="ghost-button ghost-button--sm fcpc-aviso__acao"
+            aria-label={`Reativar produto ${estado.produto.nome} (código ${codigo})`}
+            aria-disabled={reativar.isPending ? true : undefined}
+            aria-busy={reativar.isPending ? true : undefined}
+            onClick={() => {
+              if (reativar.isPending) return;
+              setErro('');
+              setMensagem('');
+              reativar.mutate(estado.produto.id);
+            }}
+          >
+            Reativar produto
+          </button>
+        )}
+      </div>
+      {mensagem && (
+        <div ref={statusRef} className="alert alert--success" role="status" tabIndex={-1}>
+          {mensagem}
+        </div>
+      )}
+      {erro && (
+        <div className="alert alert--error" role="alert">
+          {erro}
+        </div>
+      )}
+      {dialogo.renderizar()}
+    </div>
+  );
+}
+
 interface Props {
   snapshotId: number;
   label: string;
@@ -221,7 +330,7 @@ interface Props {
   podeEditar: boolean;
 }
 
-/** Pendentes de cadastro da quinzena DBCorp (codigos do DBCorp fora do cadastro, hoje FORA do calculo). */
+/** Pendentes de cadastro da quinzena DBCorp (codigos do DBCorp fora do cadastro, entram na quinzena sem fonte, sem lead time e sem sugestao de compra). */
 export default function ForecastPendentesCadastro({ snapshotId, label, podeEditar }: Props) {
   const consulta = useQuery({
     queryKey: forecastPendentesKeys.snapshot(snapshotId),
@@ -304,7 +413,7 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
       <details className="fc-card fcp__detalhes">
         <summary>
           Pendentes de cadastro ({inteiroBr(dados.totalItens)})
-          <span className="fcp__resumo"> · ficam fora do cálculo</span>
+          <span className="fcp__resumo"> · entraram sem sugestão de compra</span>
         </summary>
         <div className="fcp__corpo">
           <p className="fcp-nota">{textoEntradaNoCalculo(label, dados.totalItens)}</p>

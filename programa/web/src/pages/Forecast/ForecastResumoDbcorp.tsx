@@ -15,7 +15,7 @@ import { AvisosEErros, useFocoNoTitulo } from './ForecastResumoPlanilha';
 import { NOTA_COMPLETAR_MODO_TESTE, textoHistoricoModoTeste } from './forecastModoTeste';
 import { dataBr, inteiroBr } from './forecastPainel';
 import { TabelaPendentes } from './ForecastPendentesCadastro';
-import { textoForaDoCalculoPrevia } from './forecastPendentes';
+import { textoEntraSemCadastroPrevia, textoPendentesNaQuinzena } from './forecastPendentes';
 import TabelaRolavel from './ForecastTabelaRolavel';
 import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
@@ -273,16 +273,20 @@ function BlocoFup({ relatorio }: { relatorio: ForecastRelatorioResumo }) {
 
 function BlocoPendentes({
   pendentes,
+  naQuinzena,
   onCompletar,
   modoTeste,
 }: {
   pendentes: ForecastPendentesResumo;
+  /** FZ4: linhas pendentes que a quinzena ganha (lista completa; a tabela abaixo corta em 200). Ausente em backend antigo. */
+  naQuinzena?: ForecastDbcorpSummary['pendentesNaQuinzena'];
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
   modoTeste: boolean;
 }) {
   return (
-    <Bloco titulo={`Pendentes de cadastro (${inteiroBr(pendentes.totalItens)})`}>
-      <p>{textoForaDoCalculoPrevia(pendentes.totalItens)}</p>
+    <Bloco titulo={`Pendentes de cadastro (${inteiroBr(naQuinzena?.total ?? pendentes.totalItens)})`}>
+      <p>{textoEntraSemCadastroPrevia(naQuinzena?.total ?? pendentes.totalItens)}</p>
+      {textoPendentesNaQuinzena(naQuinzena) && <p>{textoPendentesNaQuinzena(naQuinzena)}</p>}
       {modoTeste && onCompletar !== undefined && <p className="fit-resumo-nota">{NOTA_COMPLETAR_MODO_TESTE}</p>}
       <TabelaPendentes
         itens={pendentes.itens}
@@ -420,7 +424,7 @@ export default function ForecastResumoDbcorp({
         </table>
       </TabelaRolavel>
       {resumo.pendentes && resumo.pendentes.totalItens > 0 && (
-        <BlocoPendentes pendentes={resumo.pendentes} onCompletar={onCompletar} modoTeste={modoTeste} />
+        <BlocoPendentes pendentes={resumo.pendentes} naQuinzena={resumo.pendentesNaQuinzena} onCompletar={onCompletar} modoTeste={modoTeste} />
       )}
       {saldo && <BlocoSaldo relatorio={saldo} />}
       {vendas.length > 0 && (

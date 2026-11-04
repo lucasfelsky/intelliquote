@@ -87,6 +87,8 @@ const regrasPlanas = planas(topo);
 const seletores = regrasPlanas.flatMap((r) => listaDeSeletores(r.prelude));
 
 const SENTINELAS = ['B', 'C', 'D', 'E'] as const;
+// FZ4: a regiao `tela F13` ganha o par `F13-Z4` depois do E (so CSS de tela; sem token novo, entao a faixa de tokens segue com B..E).
+const SENTINELAS_TELA = [...SENTINELAS, 'Z4'] as const;
 const abre = (s: string) => `/* -- F13-${s} >>> -- */`;
 const fecha = (s: string) => `/* -- <<< F13-${s} -- */`;
 
@@ -117,18 +119,18 @@ describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
     expect(rawLf.split(`/* <<< ${NOME} <<< */`)).toHaveLength(2);
   });
 
-  it('tem os 4 sub-blocos sentinela B, C, D, E na ordem, cada marcador 1 vez, separados por 1 linha em branco', () => {
+  it('tem os 5 sub-blocos sentinela B, C, D, E, Z4 na ordem, cada marcador 1 vez, separados por 1 linha em branco', () => {
     const bruto = regiao?.bruto ?? '';
-    for (const s of SENTINELAS) {
+    for (const s of SENTINELAS_TELA) {
       expect(bruto.split(abre(s)), abre(s)).toHaveLength(2);
       expect(bruto.split(fecha(s)), fecha(s)).toHaveLength(2);
       expect(bruto.indexOf(abre(s)), s).toBeLessThan(bruto.indexOf(fecha(s)));
     }
-    const posicoes = SENTINELAS.flatMap((s) => [bruto.indexOf(abre(s)), bruto.indexOf(fecha(s))]);
+    const posicoes = SENTINELAS_TELA.flatMap((s) => [bruto.indexOf(abre(s)), bruto.indexOf(fecha(s))]);
     expect([...posicoes].sort((a, b) => a - b)).toEqual(posicoes);
     // entre o fim de um par e o inicio do proximo: exatamente 1 linha em branco (>= 3 linhas intactas entre os pares = merge sem conflito)
-    SENTINELAS.slice(1).forEach((s, i) => {
-      const anterior = SENTINELAS[i] ?? 'B';
+    SENTINELAS_TELA.slice(1).forEach((s, i) => {
+      const anterior = SENTINELAS_TELA[i] ?? 'B';
       const entre = bruto.slice(bruto.indexOf(fecha(anterior)) + fecha(anterior).length, bruto.indexOf(abre(s)));
       expect(entre, `${anterior} -> ${s}`).toBe('\n\n');
     });
@@ -148,7 +150,7 @@ describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
   it('toda regra da regiao esta DENTRO de um par de sentinelas (fora deles so o comentario de abertura)', () => {
     const bruto = regiao?.bruto ?? '';
     let resto = bruto;
-    for (const s of SENTINELAS) {
+    for (const s of SENTINELAS_TELA) {
       const i = resto.indexOf(abre(s));
       const j = resto.indexOf(fecha(s));
       resto = resto.slice(0, i) + resto.slice(j + fecha(s).length);

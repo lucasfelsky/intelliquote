@@ -170,6 +170,18 @@ type ColunaDefinida = ColunaPainel & { oculta?: boolean };
 const LETRAS_CHEGADA = ['V', 'W', 'X', 'Y', 'Z'] as const;
 const LETRAS_PROGRAMACAO = ['AC', 'AD', 'AE', 'AF'] as const;
 
+/** Texto do selo da grade (nunca so cor). */
+export function seloPendenteTexto(pendente: NonNullable<ForecastLinha['pendenteCadastro']>): string {
+  return pendente === 'produto_inativo' ? 'Produto inativo' : 'Sem cadastro';
+}
+
+/** Dica (title) do selo e motivo acessivel das celulas sem sugestao. */
+export function motivoSemSugestao(pendente: NonNullable<ForecastLinha['pendenteCadastro']>): string {
+  return pendente === 'produto_inativo'
+    ? 'Produto inativo no cadastro: sem fonte, sem lead time e sem sugestão de compra.'
+    : 'Código sem cadastro: sem fonte, sem lead time e sem sugestão de compra.';
+}
+
 /** P (venda do mes atual) acima da media trimestral Q: mesmo destaque da planilha (P > Q). */
 export function vendaAcimaDaMedia(linha: Pick<ForecastLinha, 'P' | 'Q'>): boolean {
   return linha.P > linha.Q;
@@ -306,8 +318,11 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       rotulo: 'SEGURANÇA',
       colunaPlanilha: 'T',
       largura: 92,
-      texto: (l) => d1(l.T),
-      classe: () => 'fc-cell--seg',
+      // FZ4: sem lead time nao ha estoque de seguranca: "—" com o motivo (como a demanda).
+      texto: (l) => (l.pendenteCadastro ? '—' : d1(l.T)),
+      classe: (l) => (l.pendenteCadastro ? 'fc-cell--seg fc-cell--vazio' : 'fc-cell--seg'),
+      titulo: (l) => (l.pendenteCadastro ? motivoSemSugestao(l.pendenteCadastro) : undefined),
+      textoAcessivel: (l) => (l.pendenteCadastro ? motivoSemSugestao(l.pendenteCadastro) : undefined),
     },
     { id: 'U', grupo: 'est', rotulo: 'TOTAL', colunaPlanilha: 'U', largura: 84, texto: (l) => contabil(l.U) },
     ...LETRAS_CHEGADA.map(
@@ -337,8 +352,12 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       rotulo: 'DEMANDA',
       colunaPlanilha: 'AN',
       largura: 100,
-      texto: (l) => (l.AN === null ? '#N/D' : contabil1(l.AN)),
+      // FZ4: linha de codigo sem cadastro nao tem sugestao de compra: "—" com o motivo no title e para leitor de tela.
+      texto: (l) => (l.pendenteCadastro ? '—' : l.AN === null ? '#N/D' : contabil1(l.AN)),
+      classe: (l) => (l.pendenteCadastro ? 'fc-cell--vazio' : ''),
       destaque: (l) => (l.AN !== null && l.AN <= 0 ? 'fc-pill--falta' : ''),
+      titulo: (l) => (l.pendenteCadastro ? motivoSemSugestao(l.pendenteCadastro) : undefined),
+      textoAcessivel: (l) => (l.pendenteCadastro ? motivoSemSugestao(l.pendenteCadastro) : undefined),
     },
     {
       id: 'analiseForecast',
@@ -348,7 +367,16 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       texto: (l) => contabil1(l.analiseForecast),
       classe: (l) => (l.analiseForecast ? 'fc-cell--forte' : ''),
     },
-    { id: 'AP', grupo: 'comp', rotulo: 'CHEG.', largura: 72, texto: (l) => dMmm(l.AP) },
+    {
+      id: 'AP',
+      grupo: 'comp',
+      rotulo: 'CHEG.',
+      largura: 72,
+      texto: (l) => (l.pendenteCadastro ? '—' : dMmm(l.AP)),
+      classe: (l) => (l.pendenteCadastro ? 'fc-cell--vazio' : ''),
+      titulo: (l) => (l.pendenteCadastro ? motivoSemSugestao(l.pendenteCadastro) : undefined),
+      textoAcessivel: (l) => (l.pendenteCadastro ? motivoSemSugestao(l.pendenteCadastro) : undefined),
+    },
     {
       id: 'precoFixo',
       grupo: 'comp',

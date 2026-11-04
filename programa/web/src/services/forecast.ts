@@ -72,7 +72,19 @@ export interface ForecastLinha {
   solicitarAmostra?: string | null;
   /** Ocasioes (PR 3; opcional: backend antigo ou sem ocasiao cruzando nao manda): a PO que sai hoje. So informa. */
   ocasioesHoje?: ForecastOcasioesHoje;
+  /**
+   * FZ4 (opcionais: so a linha pendente de cadastro do DBCorp traz; backend antigo e linha normal nao mandam):
+   * o codigo entrou na quinzena sem produto, sem fonte e sem lead time (sem sugestao de compra).
+   */
+  pendenteCadastro?: ForecastPendenteCadastro;
+  /** O codigo ja e de produto ATIVO hoje: "cadastrado, entra completo na proxima quinzena" (a quinzena nao muda). */
+  cadastradoDepois?: boolean;
+  /** O codigo pertence agora a um produto INATIVO: habilita "Reativar produto". */
+  produtoInativoAtual?: { id: number; nome: string } | null;
 }
+
+/** Por que a linha entrou sem cadastro (congelado na importacao). */
+export type ForecastPendenteCadastro = 'sem_cadastro' | 'produto_inativo';
 
 /** Ocasioes no lead time (PR 3 das ocasioes; tudo opcional: backend antigo nao manda; so informa, estimativa). */
 export type ForecastEtapaOcasiao = 'total' | 'prontidao' | 'embarque' | 'transito' | 'liberacao';
@@ -438,6 +450,8 @@ export interface ForecastRelatorioCompras {
     semLeadTime: number;
     semConsumoSemFalta: number;
     semConsumoSemMovimento?: number;
+    /** FZ4 (opcional: backend antigo nao manda): linhas de codigo do DBCorp sem cadastro; contadas a parte, nunca dentro de `semLeadTime`. */
+    semCadastro?: number;
     /** PR 6a (opcional: backend antigo nao manda): itens que entrariam na lista mas sao compra sob demanda. */
     sobDemanda?: number;
     /** PR 6b (opcional: backend antigo nao manda): membros fora da lista porque o estoque somado do grupo os cobre. */
@@ -689,6 +703,12 @@ export interface ForecastPrazosEstimativa {
   padroesAlterados: number;
 }
 
+export interface ForecastPendentesNaQuinzena {
+  total: number;
+  semCadastro: number;
+  produtoInativo: number;
+}
+
 /** Resumo do preview dos relatorios DBCorp (`ForecastDbcorpSummary` do backend). */
 export interface ForecastDbcorpSummary {
   label: string;
@@ -704,6 +724,8 @@ export interface ForecastDbcorpSummary {
   relatorios: Partial<Record<ForecastDbcorpSlot, ForecastRelatorioResumo>>;
   /** Codigos do DBCorp fora do cadastro (PR 3B); ausente/null em backend antigo ou sem quinzena montada. */
   pendentes?: ForecastPendentesResumo | null;
+  /** FZ4 (opcional: backend antigo nao manda): quantas linhas pendentes a quinzena ganha (lista completa, sem o corte da tela). */
+  pendentesNaQuinzena?: ForecastPendentesNaQuinzena;
   /** Prazo por fonte (PR 5A); ausente/null em backend antigo ou com erro de leitura: a tabela nao aparece. */
   prazosEstimativa?: ForecastPrazosEstimativa | null;
   avisos: string[];

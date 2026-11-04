@@ -738,7 +738,7 @@ describe('Forecast - pendentes de cadastro (PR 3B-2)', () => {
     expect(await screen.findByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
     expect(pendentesChamados()).toEqual(['/v1/forecast/snapshots/8/pendentes']);
     expect(
-      screen.getByText(/Esses códigos ficaram FORA do cálculo da quinzena 11-1\./),
+      screen.getByText(/Esses códigos entraram na quinzena 11-1 sem fonte, sem lead time e sem sugestão de compra\./),
     ).toBeTruthy();
   });
 
