@@ -593,7 +593,13 @@ export default function Forecast() {
         </div>
       )}
       {detail && detail.origin === 'dbcorp' && linhaDoItem === null && (
-        <ForecastPendentesCadastro key={`pendentes-${detail.id}`} snapshotId={detail.id} label={detail.label} podeEditar={podeImportar} />
+        <ForecastPendentesCadastro
+          key={`pendentes-${detail.id}`}
+          snapshotId={detail.id}
+          label={detail.label}
+          podeEditar={podeImportar}
+          comoLinha={detail.linhas.some((l) => l.pendenteCadastro !== undefined)}
+        />
       )}
       {detail && linhaDoItem !== null && <ForecastItemPagina detail={detail} linha={linhaDoItem} podeEditar={podeImportar} />}
       {detail && linhaDoItem === null && visao === 'painel' && (

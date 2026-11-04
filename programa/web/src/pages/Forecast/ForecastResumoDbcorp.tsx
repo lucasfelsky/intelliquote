@@ -285,7 +285,7 @@ function BlocoPendentes({
 }) {
   return (
     <Bloco titulo={`Pendentes de cadastro (${inteiroBr(naQuinzena?.total ?? pendentes.totalItens)})`}>
-      <p>{textoEntraSemCadastroPrevia(naQuinzena?.total ?? pendentes.totalItens)}</p>
+      <p>{textoEntraSemCadastroPrevia(naQuinzena?.total ?? pendentes.totalItens, (naQuinzena?.total ?? 0) > 0)}</p>
       {textoPendentesNaQuinzena(naQuinzena) && <p>{textoPendentesNaQuinzena(naQuinzena)}</p>}
       {modoTeste && onCompletar !== undefined && <p className="fit-resumo-nota">{NOTA_COMPLETAR_MODO_TESTE}</p>}
       <TabelaPendentes

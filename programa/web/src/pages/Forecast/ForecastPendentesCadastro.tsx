@@ -19,6 +19,7 @@ import {
   mensagemCadastroGravado,
   mensagemProdutoReativado,
   nenhumPendenteTexto,
+  resumoPendentesPainel,
   semVendaRecenteTexto,
   situacaoTexto,
   soSaldoTexto,
@@ -326,12 +327,14 @@ export function AvisoLinhaPendente({ linha, podeEditar }: AvisoLinhaProps) {
 interface Props {
   snapshotId: number;
   label: string;
+  /** A quinzena tem linha marcada (`pendenteCadastro`): o codigo entrou como linha sem sugestao. Sem isso (quinzena gravada antes da FZ4) ele segue FORA do calculo. */
+  comoLinha?: boolean;
   /** admin/comprador completam; os demais papeis COMEX so veem a lista. */
   podeEditar: boolean;
 }
 
 /** Pendentes de cadastro da quinzena DBCorp (codigos do DBCorp fora do cadastro, entram na quinzena sem fonte, sem lead time e sem sugestao de compra). */
-export default function ForecastPendentesCadastro({ snapshotId, label, podeEditar }: Props) {
+export default function ForecastPendentesCadastro({ snapshotId, label, podeEditar, comoLinha = false }: Props) {
   const consulta = useQuery({
     queryKey: forecastPendentesKeys.snapshot(snapshotId),
     queryFn: () => getForecastPendentes(snapshotId),
@@ -413,10 +416,10 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
       <details className="fc-card fcp__detalhes">
         <summary>
           Pendentes de cadastro ({inteiroBr(dados.totalItens)})
-          <span className="fcp__resumo"> · entraram sem sugestão de compra</span>
+          <span className="fcp__resumo"> · {resumoPendentesPainel(comoLinha)}</span>
         </summary>
         <div className="fcp__corpo">
-          <p className="fcp-nota">{textoEntradaNoCalculo(label, dados.totalItens)}</p>
+          <p className="fcp-nota">{textoEntradaNoCalculo(label, dados.totalItens, comoLinha)}</p>
           <TabelaPendentes
             itens={dados.itens}
             omitidos={dados.omitidos}

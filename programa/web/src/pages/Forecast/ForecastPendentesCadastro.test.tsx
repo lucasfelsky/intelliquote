@@ -67,11 +67,11 @@ function dados(over: Record<string, unknown> = {}) {
   };
 }
 
-function renderPainel(podeEditar = true) {
+function renderPainel(podeEditar = true, comoLinha = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ForecastPendentesCadastro snapshotId={8} label="11-1" podeEditar={podeEditar} />
+      <ForecastPendentesCadastro snapshotId={8} label="11-1" podeEditar={podeEditar} comoLinha={comoLinha} />
     </QueryClientProvider>,
   );
 }
@@ -152,6 +152,20 @@ describe('ForecastPendentesCadastro - estados', () => {
     await waitFor(() => expect(get).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByText('Carregando pendentes de cadastro…')).toBeNull());
     expect(container.textContent).toBe('');
+  });
+});
+
+describe('ForecastPendentesCadastro - quinzena sem linha marcada (gravada antes da FZ4)', () => {
+  it('sem `comoLinha` o pendente segue FORA do calculo: resumo e nota antigos, nunca "entraram"', async () => {
+    renderPainel(true, false);
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    expect(screen.getByText(/ficam fora do cálculo/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Esses códigos ficaram FORA do cálculo da quinzena 11-1. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/entraram/)).toBeNull();
   });
 });
 

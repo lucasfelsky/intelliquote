@@ -23,6 +23,7 @@ import {
   soSaldoTexto,
   textoEntradaNoCalculo,
   estadoDaLinhaPendente,
+  resumoPendentesPainel,
   textoEntraSemCadastroPrevia,
   textoPendentesNaQuinzena,
   TEXTO_REATIVACAO_INDISPONIVEL,
@@ -81,13 +82,30 @@ describe('textos', () => {
   });
 
   it('textoEntradaNoCalculo cita a quinzena e quando o codigo entra', () => {
-    expect(textoEntradaNoCalculo('10-2', 3)).toBe(
+    expect(textoEntradaNoCalculo('10-2', 3, true)).toBe(
       'Esses códigos entraram na quinzena 10-2 sem fonte, sem lead time e sem sugestão de compra. Depois de completar o cadastro, eles entram completos a partir da próxima quinzena importada (os números desta quinzena não mudam).',
     );
   });
 
-  it('textos fixos (FZ4: o item ENTRA sem fonte/lead time/sugestao, nada de "FORA do calculo"): singular com 1 pendente, plural nos demais', () => {
+  it('quinzena SEM linha marcada (gravada antes da FZ4) ou backend antigo: o pendente segue FORA do calculo, texto antigo (nunca "entrou/entra na quinzena")', () => {
     expect(textoEntradaNoCalculo('10-2', 1)).toBe(
+      'Este código ficou FORA do cálculo da quinzena 10-2. Depois de completar o cadastro, ele entra a partir da próxima quinzena importada.',
+    );
+    expect(textoEntradaNoCalculo('10-2', 3, false)).toBe(
+      'Esses códigos ficaram FORA do cálculo da quinzena 10-2. Depois de completar o cadastro, eles entram a partir da próxima quinzena importada.',
+    );
+    expect(textoEntraSemCadastroPrevia(1, false)).toBe(
+      'Fica FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entre nesta quinzena.',
+    );
+    expect(textoEntraSemCadastroPrevia(2, false)).toBe(
+      'Ficam FORA do cálculo. Complete o cadastro e pré-visualize de novo para que entrem nesta quinzena.',
+    );
+    expect(resumoPendentesPainel(false)).toBe('ficam fora do cálculo');
+    expect(resumoPendentesPainel(true)).toBe('entraram sem sugestão de compra');
+  });
+
+  it('textos fixos (FZ4: o item ENTRA sem fonte/lead time/sugestao, nada de "FORA do calculo"): singular com 1 pendente, plural nos demais', () => {
+    expect(textoEntradaNoCalculo('10-2', 1, true)).toBe(
       'Este código entrou na quinzena 10-2 sem fonte, sem lead time e sem sugestão de compra. Depois de completar o cadastro, ele entra completo a partir da próxima quinzena importada (os números desta quinzena não mudam).',
     );
     expect(textoEntraSemCadastroPrevia(1)).toBe(
@@ -96,7 +114,7 @@ describe('textos', () => {
     expect(textoEntraSemCadastroPrevia(2)).toBe(
       'Entram na quinzena sem fonte, sem lead time e sem sugestão de compra. Complete o cadastro e pré-visualize de novo para que entrem completos nesta quinzena.',
     );
-    for (const t of [textoEntradaNoCalculo('10-2', 1), textoEntradaNoCalculo('10-2', 3), textoEntraSemCadastroPrevia(1), textoEntraSemCadastroPrevia(2)]) {
+    for (const t of [textoEntradaNoCalculo('10-2', 1, true), textoEntradaNoCalculo('10-2', 3, true), textoEntraSemCadastroPrevia(1, true), textoEntraSemCadastroPrevia(2, true)]) {
       expect(t).not.toMatch(/FORA do cálculo/i);
     }
   });
