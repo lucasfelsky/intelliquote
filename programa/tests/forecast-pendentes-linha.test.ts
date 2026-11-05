@@ -40,6 +40,7 @@ const ATIVO = 'TST0001';
 const PEND_VENDA = 'TST0002'; // fora do cadastro, com venda
 const PEND_INATIVO = 'TST0003'; // codigo de produto INATIVO, com programacao
 const SO_SALDO = 'TST0004'; // so saldo: nao qualifica
+const AMOSTRA = 'AM0001'; // codigo de amostra (prefixo AM + digito) sem cadastro: nao vira pendente nem linha
 
 const cadastroAtual = (ativos: string[], inativos: Array<[string, number, string]> = []): CadastroDeCodigos => ({
   ativos: new Set(ativos),
@@ -77,6 +78,23 @@ describe('codigosPendentesCompletos / limitarPendentes', () => {
     expect(tela.totalItens).toBe(total);
     expect(tela.itens).toEqual(completo.itens.slice(0, FORECAST_PENDENTES_MAX_ITENS));
     expect(limitarPendentes(completo)).toEqual(tela);
+  });
+
+  it('limitarPendentes preserva amostrasIgnoradas; a lista completa e a da tela contam o mesmo numero', () => {
+    const entradas: PendentesEntradas = {
+      ...muitos(3),
+      programacoes: [{ codigo: AMOSTRA, qtd: 400, mes: '07' }],
+    };
+    const completo = codigosPendentesCompletos(entradas, cadastroAtual([]), vendasVazias());
+    const tela = codigosPendentes(entradas, cadastroAtual([]), vendasVazias());
+    const cortado = limitarPendentes(completo, 2);
+
+    expect(completo.amostrasIgnoradas).toEqual({ codigos: 1, prefixos: ['AM'] });
+    expect(tela.amostrasIgnoradas).toEqual(completo.amostrasIgnoradas);
+    expect(cortado.itens).toHaveLength(2);
+    expect(cortado.omitidos).toBe(1);
+    expect(cortado.totalItens).toBe(3);
+    expect(cortado.amostrasIgnoradas).toEqual({ codigos: 1, prefixos: ['AM'] });
   });
 });
 
@@ -147,11 +165,22 @@ describe('estadoDoPendente (derivado do cadastro ATUAL, na leitura)', () => {
 });
 
 // ---- Builder do import DBCorp (db falso em memoria) ---------------------------------------------------------------
-function dbFalso() {
+// Variacao opcional do cenario: `amostra` = codigo de amostra (so programacao) a mais; `soAmostra` = tira PEND_VENDA e
+// PEND_INATIVO (venda, historico e programacao), restando a amostra como unico candidato a pendente.
+interface Variacao {
+  amostra?: string;
+  soAmostra?: boolean;
+}
+
+function dbFalso(variacao: Variacao = {}) {
   const vendasRows = [
     ...HIST.map((yearMonth) => ({ code: ATIVO, yearMonth, quantity: 10 })),
-    { code: PEND_VENDA, yearMonth: '2034-03', quantity: 30 },
-    { code: PEND_VENDA, yearMonth: '2034-04', quantity: 40 },
+    ...(variacao.soAmostra
+      ? []
+      : [
+          { code: PEND_VENDA, yearMonth: '2034-03', quantity: 30 },
+          { code: PEND_VENDA, yearMonth: '2034-04', quantity: 40 },
+        ]),
   ];
   return {
     forecastProduct: {
@@ -200,8 +229,12 @@ function dbFalso() {
   };
 }
 
-function parsedSintetico() {
+function parsedSintetico(variacao: Variacao = {}) {
   const resumo = (linhas: unknown[]) => ({ usadas: 0, ignoradas: {}, linhas });
+  const programacoes = [
+    ...(variacao.soAmostra ? [] : [{ codigo: PEND_INATIVO, qtd: 50, mes: '07' }]),
+    ...(variacao.amostra ? [{ codigo: variacao.amostra, qtd: 400, mes: '07' }] : []),
+  ];
   return {
     erros: [] as string[],
     saldo: {
@@ -213,11 +246,11 @@ function parsedSintetico() {
     },
     vendasMes: resumo([
       { codigo: ATIVO, qtd: 100 },
-      { codigo: PEND_VENDA, qtd: 100 },
+      ...(variacao.soAmostra ? [] : [{ codigo: PEND_VENDA, qtd: 100 }]),
     ]),
     vendasAtual: null,
     vendasAnual: resumo([]),
-    programacao: resumo([{ codigo: PEND_INATIVO, qtd: 50, mes: '07' }]),
+    programacao: resumo(programacoes),
     fup: { ...resumo([]), fupLinhas: [], comprasEmAberto: [], avisosColuna: [], avisos: [] },
     clientesAtivos: null,
     margem: null,
@@ -227,17 +260,17 @@ function parsedSintetico() {
   };
 }
 
-async function montarQuinzena() {
+async function montarQuinzena(variacao: Variacao = {}) {
   const statics = ForecastDbcorpService as unknown as {
     buildQuinzena: (db: unknown, parsed: unknown, input: unknown) => Promise<{
       quinzena: Quinzena | null;
       erros: string[];
       avisos: string[];
-      pendentes: { totalItens: number } | null;
+      pendentes: { totalItens: number; amostrasIgnoradas: { codigos: number; prefixos: string[] } } | null;
       pendentesNaQuinzena: { total: number; semCadastro: number; produtoInativo: number };
     }>;
   };
-  const built = await statics.buildQuinzena(dbFalso(), parsedSintetico(), {
+  const built = await statics.buildQuinzena(dbFalso(variacao), parsedSintetico(variacao), {
     label: '06-2',
     baseDate: BASE_DATE,
     files: { saldo: { fileName: 'saldo.xlsx', contentBase64: '' } },
@@ -267,6 +300,31 @@ describe('ForecastDbcorpService.buildQuinzena - pendentes viram linhas', () => {
     expect(pend.codigos[0]).toBe(PEND_VENDA);
     expect(pend.historico).toEqual([0, 0, 0, 30, 40]);
     expect(built.avisos.join(' ')).toContain('sem lead time e sem sugestão de compra');
+  });
+
+  it('codigo de amostra nao ganha linha FZ4, nao entra em pendentesNaQuinzena nem no aviso; so e contado', async () => {
+    const built = await montarQuinzena({ amostra: AMOSTRA });
+    const produtos = built.quinzena!.produtos;
+
+    expect(produtos.some((p) => p.item === AMOSTRA)).toBe(false);
+    expect(produtos.map((p) => p.item)).toEqual(['PRODUTO TESTE 1', PEND_VENDA, PEND_INATIVO]);
+    expect(built.pendentesNaQuinzena).toEqual({ total: 2, semCadastro: 1, produtoInativo: 1 });
+    expect(built.pendentes?.totalItens).toBe(2);
+    expect(built.pendentes?.amostrasIgnoradas).toEqual({ codigos: 1, prefixos: ['AM'] });
+    const avisos = built.avisos.join(' ');
+    expect(avisos).toContain('2 códigos');
+    expect(avisos).not.toContain('3 códigos');
+  });
+
+  it('so amostra: sem linha, sem aviso de pendentes e pendentesNaQuinzena zerado', async () => {
+    const built = await montarQuinzena({ amostra: AMOSTRA, soAmostra: true });
+
+    expect(built.erros).toEqual([]);
+    expect(built.quinzena!.produtos.map((p) => p.item)).toEqual(['PRODUTO TESTE 1']);
+    expect(built.pendentesNaQuinzena).toEqual({ total: 0, semCadastro: 0, produtoInativo: 0 });
+    expect(built.pendentes?.totalItens).toBe(0);
+    expect(built.pendentes?.amostrasIgnoradas.codigos).toBe(1);
+    expect(built.avisos.join(' ')).not.toContain('sem lead time e sem sugestão de compra');
   });
 
   it('(a) a linha pendente tem consumo/estoque do codigo, mas SEM lead time: AN, AP e AQ nulos', async () => {

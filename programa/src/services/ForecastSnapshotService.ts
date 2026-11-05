@@ -1,7 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
-import { FORECAST_MAX_DIVERGENCES, FORECAST_ORIGIN_DBCORP } from '../constants/forecast';
+import {
+  FORECAST_MAX_DIVERGENCES,
+  FORECAST_ORIGIN_DBCORP,
+  FORECAST_PENDENTES_PREFIXOS_AMOSTRA,
+} from '../constants/forecast';
 import {
   anexarDecisoesAoRelatorio,
   paraDecisaoCompraData,
@@ -394,6 +398,7 @@ export class ForecastSnapshotService {
         omitidos: 0,
         soSaldo: { codigos: 0, kg: 0 },
         semVendaRecente: { codigos: 0, vendasAnual: 0 },
+        amostrasIgnoradas: { codigos: 0, prefixos: [...FORECAST_PENDENTES_PREFIXOS_AMOSTRA] },
         regra: { mesesVenda: [], historicoAusente: [], compras: 'chegadas' },
       };
     }

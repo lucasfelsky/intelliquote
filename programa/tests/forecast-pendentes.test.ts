@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FORECAST_PENDENTES_MAX_ITENS } from '../src/constants/forecast';
 import {
   codigosPendentes,
+  ehCodigoDeAmostra,
   type CadastroDeCodigos,
   type PendentesEntradas,
   type VendasRecentes,
@@ -309,5 +310,97 @@ describe('codigosPendentes - compra em aberto (FUP) e quinzena gravada antes do 
     });
     expect(r.regra.mesesVenda).not.toBe(v.meses);
     expect(r.regra.historicoAusente).not.toBe(v.ausentes);
+  });
+});
+
+describe('codigosPendentes - amostras (prefixo AM + digito)', () => {
+  it.each(['AM0001', 'am0002', '  Am0003  '])('ehCodigoDeAmostra: %j e amostra', (codigo) => {
+    expect(ehCodigoDeAmostra(codigo)).toBe(true);
+  });
+
+  it.each(['AM', 'AMX01', 'AM-0004', 'XAM0005', 'TST0AM01', ''])('ehCodigoDeAmostra: %j nao e amostra', (codigo) => {
+    expect(ehCodigoDeAmostra(codigo)).toBe(false);
+  });
+
+  it('amostra sem cadastro (venda, programacao ou compra em aberto) sai da lista e e so contada', () => {
+    const r = codigosPendentes(
+      entradas({
+        vendasMes: [
+          { codigo: 'AM0001', qtd: 30 },
+          { codigo: 'TST0901', qtd: 50 },
+        ],
+        programacoes: [{ codigo: 'AM0002', qtd: 400, mes: '07' }],
+        comprasEmAberto: [{ codigo: '  am0003 ', qtd: 2 }],
+      }),
+      cadastro(),
+      vendas([['AM0001', 10]]),
+    );
+    expect(r.itens.map((i) => i.codigo)).toEqual(['TST0901']);
+    expect(r.totalItens).toBe(1);
+    expect(r.omitidos).toBe(0);
+    expect(r.amostrasIgnoradas).toEqual({ codigos: 3, prefixos: ['AM'] });
+  });
+
+  it('AM so no meio do codigo ou sem digito logo apos o prefixo continua listado', () => {
+    const r = codigosPendentes(
+      entradas({
+        vendasMes: [
+          { codigo: 'TSTAM01', qtd: 5 },
+          { codigo: 'XAM0005', qtd: 4 },
+          { codigo: 'AMX01', qtd: 3 },
+        ],
+      }),
+      cadastro(),
+      SEM_VENDAS,
+    );
+    expect(r.itens.map((i) => i.codigo).sort()).toEqual(['AMX01', 'TSTAM01', 'XAM0005']);
+    expect(r.totalItens).toBe(3);
+    expect(r.amostrasIgnoradas.codigos).toBe(0);
+  });
+
+  it('amostra de produto ATIVO nao e pendente e nao conta como ignorada', () => {
+    const r = codigosPendentes(
+      entradas({ vendasMes: [{ codigo: 'AM0006', qtd: 20 }] }),
+      cadastro(['AM0006']),
+      vendas([['AM0006', 5]]),
+    );
+    expect(r.itens).toEqual([]);
+    expect(r.totalItens).toBe(0);
+    expect(r.amostrasIgnoradas.codigos).toBe(0);
+  });
+
+  it('amostra de produto INATIVO continua listada como produto_inativo (o cadastro manda)', () => {
+    const r = codigosPendentes(
+      entradas({ programacoes: [{ codigo: 'AM0007', qtd: 100, mes: '07' }] }),
+      cadastro([], [['AM0007', 77, 'Produto sintetico inativo']]),
+      SEM_VENDAS,
+    );
+    expect(r.totalItens).toBe(1);
+    expect(r.itens[0]).toMatchObject({
+      codigo: 'AM0007',
+      situacao: 'produto_inativo',
+      produtoInativo: { id: 77, nome: 'Produto sintetico inativo' },
+    });
+    expect(r.amostrasIgnoradas.codigos).toBe(0);
+  });
+
+  it('amostra so com saldo ou so com venda anual segue em soSaldo/semVendaRecente (nao conta como ignorada)', () => {
+    const r = codigosPendentes(
+      entradas({
+        estoque: [{ codigo: 'AM0008', qtd: 12 }],
+        vendasAnual: [{ codigo: 'AM0009', qtd: 900 }],
+      }),
+      cadastro(),
+      SEM_VENDAS,
+    );
+    expect(r.itens).toEqual([]);
+    expect(r.soSaldo).toEqual({ codigos: 1, kg: 12 });
+    expect(r.semVendaRecente).toEqual({ codigos: 1, vendasAnual: 900 });
+    expect(r.amostrasIgnoradas).toEqual({ codigos: 0, prefixos: ['AM'] });
+  });
+
+  it('sem nenhuma amostra o campo mantem o mesmo formato', () => {
+    const r = codigosPendentes(entradas({ vendasMes: [{ codigo: 'TST0901', qtd: 1 }] }), cadastro(), SEM_VENDAS);
+    expect(r.amostrasIgnoradas).toEqual({ codigos: 0, prefixos: ['AM'] });
   });
 });
