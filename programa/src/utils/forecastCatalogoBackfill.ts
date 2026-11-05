@@ -261,7 +261,7 @@ const COLUNAS = [
   'aprovado',
 ] as const;
 
-function celula(valor: string): string {
+export function celula(valor: string): string {
   return /[;"\r\n]/.test(valor) ? `"${valor.replace(/"/g, '""')}"` : valor;
 }
 
@@ -289,7 +289,7 @@ export function paraJson(linhas: readonly LinhaProposta[]): string {
 }
 
 /** Quebra o texto CSV (separador `;`, aspas duplas) em registros de celulas. Aceita BOM e CRLF/LF. */
-function lerRegistros(texto: string): string[][] {
+export function lerRegistros(texto: string): string[][] {
   const t = texto.replace(/^﻿/, '');
   const registros: string[][] = [];
   let atual: string[] = [];
@@ -333,7 +333,7 @@ export interface LinhaAprovada {
 
 export type LeituraAprovados = { ok: true; linhas: LinhaAprovada[] } | { ok: false; erros: string[] };
 
-const inteiroPositivo = (texto: string | undefined): number | null => {
+export const inteiroPositivo = (texto: string | undefined): number | null => {
   const limpo = (texto ?? '').trim();
   return /^\d+$/.test(limpo) && Number(limpo) > 0 ? Number(limpo) : null;
 };
@@ -379,7 +379,7 @@ export type ConfigBackfill =
 
 export type ErroArgumentos = { ok: false; erro: string; codigo: 2 };
 
-function dentroDoRepo(alvo: string, raizRepo: string): boolean {
+export function dentroDoRepo(alvo: string, raizRepo: string): boolean {
   const relativo = path.relative(path.resolve(raizRepo), path.resolve(alvo));
   return relativo === '' || (!relativo.startsWith('..') && !path.isAbsolute(relativo));
 }

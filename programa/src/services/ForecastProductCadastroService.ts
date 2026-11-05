@@ -116,8 +116,9 @@ export async function travarImportForecast(tx: Db): Promise<void> {
 }
 
 // Quem pediu o cadastro: vai para o AuditLog (metadata.source). O catalogo grava 'catalogo' (tela do item) ou
-// 'backfill_catalogo' (script); a tela de pendentes grava 'dbcorp_pendente'.
-export type OrigemCadastro = 'dbcorp_pendente' | 'catalogo' | 'backfill_catalogo';
+// 'backfill_catalogo' (script); o script de produtos novos grava 'lote_produtos_novos'; a tela de pendentes grava
+// 'dbcorp_pendente'.
+export type OrigemCadastro = 'dbcorp_pendente' | 'catalogo' | 'backfill_catalogo' | 'lote_produtos_novos';
 
 // Corpo de create() SEM a lock (o chamador abre a transacao e chama travarImportForecast antes).
 // catalogItemIdPorCodigo (id explicito do item) tem prioridade sobre catalogoPorCodigo (so vale com 1 item ativo).
