@@ -77,3 +77,7 @@ Thumbs.db
 /programa/test-results/
 /programa/playwright-report/
 *.tmp
+
+# URLs de banco temporarias (contem credencial): nunca versionar
+tmp_db_url*
+**/tmp_db_url*
