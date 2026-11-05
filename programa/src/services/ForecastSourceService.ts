@@ -6,7 +6,7 @@ import {
   FORECAST_PRAZO_REAL_JANELA_DIAS,
   FORECAST_PRAZO_REAL_MIN_CHEGADAS,
 } from '../constants/forecast';
-import type { ForecastSourcePatchInput } from '../validators/forecast';
+import { forecastSourcePatchSchema, type ForecastSourcePatchInput } from '../validators/forecast';
 import { HttpError } from '../utils/http';
 import type { MudancaDePrazo } from '../utils/forecastDbcorpRegras';
 import { prazoRealPorFonte, type PrazoRealDaFonte } from '../utils/forecastPrazoReal';
@@ -366,4 +366,34 @@ export class ForecastSourceService {
       return updated;
     });
   }
+}
+
+// Preenche o lead time SO se a fonte ainda nao tem (WHERE leadTimeDays IS NULL): nunca sobrescreve. Dentro da
+// transacao do chamador. true = gravou (e auditou); false = a fonte ja tinha lead time (nada gravado).
+export async function preencherLeadTimeSeVazio(
+  tx: Prisma.TransactionClient,
+  sourceId: number,
+  leadTimeDays: number,
+  userId: number | null,
+  origem: string,
+): Promise<boolean> {
+  forecastSourcePatchSchema.parse({ leadTimeDays });
+  const { count } = await tx.forecastSource.updateMany({
+    where: { id: sourceId, leadTimeDays: null },
+    data: { leadTimeDays },
+  });
+  if (count === 0) return false;
+  await AuditLogService.log(
+    {
+      entityType: ENTITY_TYPE,
+      entityId: sourceId,
+      action: 'update',
+      performedById: userId,
+      beforeData: { leadTimeDays: null },
+      afterData: { leadTimeDays },
+      metadata: { source: origem },
+    },
+    tx,
+  );
+  return true;
 }

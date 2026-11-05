@@ -4,16 +4,22 @@ import type { LinhaProposta } from '../src/utils/forecastCatalogoBackfill';
 import {
   agruparProdutosNovos,
   chaveDeNome,
+  codigoDeSaida,
+  contarResultados,
   fontesParaCsv,
   lerArgumentosProdutosNovos,
   lerLeadTimeDias,
   lerListaDaCelula,
   lerPlanilhaProdutosNovos,
   modeloParaCsv,
+  relatorioParaCsv,
   resolverPorNome,
   resumoDeLeituraSomente,
+  resumoDoRelatorio,
   type LinhaLida,
   type LinhaProdutoNovo,
+  type RelatorioProdutosNovos,
+  type ResultadoProdutoNovo,
 } from '../src/utils/forecastProdutosNovos';
 
 // Dados SINTETICOS (repo publico): nada aqui vem de planilha, banco ou catalogo reais.
@@ -627,5 +633,81 @@ describe('lerArgumentosProdutosNovos', () => {
     expect(erro([...base, '--relatorio', fora('r.csv')], { existe: () => true }).erro).toMatch(/ja existe/);
     expect(erro([...base, '--relatorio', fora('e.csv')]).erro).toMatch(/diferente de --entrada/);
     expect(erro([...base, '--relatorio', fora('r.txt')]).erro).toMatch(/\.csv/);
+  });
+});
+
+describe('relatorio da criacao em lote', () => {
+  const resultados: ResultadoProdutoNovo[] = [
+    { linha: 2, status: 'aplicado', motivo: null, produtoId: 701 },
+    { linha: 3, status: 'ja_aplicado', motivo: null, produtoId: 50 },
+    { linha: 4, status: 'conflito', motivo: 'lead_time_divergente', produtoId: null },
+    { linha: 5, status: 'item_mudou', motivo: 'codigo_do_item_mudou', produtoId: null },
+    { linha: 6, status: 'erro', motivo: 'fonte_inexistente', produtoId: null },
+    { linha: 7, status: 'ignorado', motivo: 'nao_aprovado', produtoId: null },
+    { linha: 8, status: 'erro', motivo: 'cadastro_ocupado', produtoId: null },
+  ];
+  const relatorio = (gravar: boolean, lista = resultados): RelatorioProdutosNovos => ({
+    gravar,
+    resultados: lista,
+    contagem: contarResultados(lista),
+  });
+
+  it('contarResultados traz os 6 status, zeros inclusive', () => {
+    expect(contarResultados([])).toEqual({ aplicado: 0, ja_aplicado: 0, conflito: 0, item_mudou: 0, erro: 0, ignorado: 0 });
+    expect(contarResultados(resultados)).toEqual({ aplicado: 1, ja_aplicado: 1, conflito: 1, item_mudou: 1, erro: 2, ignorado: 1 });
+  });
+
+  it('resumo: dry-run x gravado, contagens e so as linhas com problema (sem motivo, nome, codigo ou fonte)', () => {
+    expect(resumoDoRelatorio(relatorio(false))).toEqual([
+      'DRY-RUN: nada foi gravado.',
+      'Linhas lidas: 7',
+      '  aplicado: 1',
+      '  ja_aplicado: 1',
+      '  conflito: 1',
+      '  item_mudou: 1',
+      '  erro: 2',
+      '  ignorado: 1',
+      '  linha 4: conflito',
+      '  linha 5: item_mudou',
+      '  linha 6: erro',
+      '  linha 8: erro',
+    ]);
+    expect(resumoDoRelatorio(relatorio(true))[0]).toBe('GRAVADO.');
+  });
+
+  it('cada linha do resumo casa com o formato fechado e nao vaza motivo, nome nem codigo', () => {
+    const linhas = resumoDoRelatorio(relatorio(true));
+    const formato = /^(DRY-RUN: nada foi gravado\.|GRAVADO\.|Linhas lidas: \d+|  [a-z_]+: \d+|  linha \d+: [a-z_]+)$/;
+    for (const l of linhas) expect(l).toMatch(formato);
+    const texto = linhas.join('\n');
+    for (const proibido of ['lead_time_divergente', 'fonte_inexistente', 'codigo_do_item_mudou', 'FIC', 'nao_aprovado']) {
+      expect(texto).not.toContain(proibido);
+    }
+  });
+
+  it('resumo de lista vazia: so os zeros', () => {
+    const linhas = resumoDoRelatorio(relatorio(false, []));
+    expect(linhas).toHaveLength(8);
+    expect(linhas.slice(1)).toEqual([
+      'Linhas lidas: 0',
+      '  aplicado: 0',
+      '  ja_aplicado: 0',
+      '  conflito: 0',
+      '  item_mudou: 0',
+      '  erro: 0',
+      '  ignorado: 0',
+    ]);
+  });
+
+  it('exit code: 0 so sem conflito/item_mudou/erro', () => {
+    expect(codigoDeSaida(relatorio(false, resultados.slice(0, 2)))).toBe(0);
+    expect(codigoDeSaida(relatorio(false, [resultados[0], resultados[5]]))).toBe(0);
+    for (const i of [2, 3, 4]) expect(codigoDeSaida(relatorio(false, [resultados[i]]))).toBe(1);
+  });
+
+  it('CSV do relatorio: linha;status;motivo;produtoId (motivo e codigo fixo)', () => {
+    expect(relatorioParaCsv(resultados.slice(0, 3))).toBe(
+      `${BOM}linha;status;motivo;produtoId\r\n2;aplicado;;701\r\n3;ja_aplicado;;50\r\n4;conflito;lead_time_divergente;\r\n`,
+    );
   });
 });

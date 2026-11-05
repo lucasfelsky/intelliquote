@@ -375,6 +375,67 @@ export function fontesParaCsv(fontes: readonly FontePlanilha[]): string {
   );
 }
 
+// ---------- relatorio da criacao em lote ----------
+
+export const STATUS_PRODUTO_NOVO = ['aplicado', 'ja_aplicado', 'conflito', 'item_mudou', 'erro', 'ignorado'] as const;
+
+export interface ResultadoProdutoNovo {
+  linha: number;
+  status: StatusProdutoNovo;
+  motivo: MotivoProdutoNovo | null;
+  produtoId: number | null;
+}
+
+export interface RelatorioProdutosNovos {
+  gravar: boolean;
+  resultados: ResultadoProdutoNovo[];
+  contagem: Record<StatusProdutoNovo, number>;
+}
+
+/** Contagem com os 6 status (zeros inclusive). */
+export function contarResultados(resultados: readonly ResultadoProdutoNovo[]): Record<StatusProdutoNovo, number> {
+  const contagem: Record<StatusProdutoNovo, number> = {
+    aplicado: 0,
+    ja_aplicado: 0,
+    conflito: 0,
+    item_mudou: 0,
+    erro: 0,
+    ignorado: 0,
+  };
+  for (const r of resultados) contagem[r.status] += 1;
+  return contagem;
+}
+
+/** CSV do relatorio (fora do repo): `linha;status;motivo;produtoId`. O motivo e um codigo fixo, nunca texto livre. */
+export function relatorioParaCsv(resultados: readonly ResultadoProdutoNovo[]): string {
+  return paraCsvDe(
+    ['linha', 'status', 'motivo', 'produtoId'],
+    resultados.map((r) => [String(r.linha), r.status, r.motivo ?? '', r.produtoId === null ? '' : String(r.produtoId)]),
+  );
+}
+
+/**
+ * Linhas do stdout: SO contagens e `linha N: <status>` das linhas com problema. Nunca nome, codigo, fonte, familia,
+ * motivo, mensagem do servidor nem DATABASE_URL (o motivo vai so para o arquivo `--relatorio`).
+ */
+export function resumoDoRelatorio(relatorio: RelatorioProdutosNovos): string[] {
+  const saida = [
+    relatorio.gravar ? 'GRAVADO.' : 'DRY-RUN: nada foi gravado.',
+    `Linhas lidas: ${relatorio.resultados.length}`,
+    ...STATUS_PRODUTO_NOVO.map((status) => `  ${status}: ${relatorio.contagem[status]}`),
+  ];
+  for (const r of relatorio.resultados) {
+    if (r.status === 'conflito' || r.status === 'item_mudou' || r.status === 'erro') saida.push(`  linha ${r.linha}: ${r.status}`);
+  }
+  return saida;
+}
+
+/** Exit code (D15): 0 = nada de `conflito`/`item_mudou`/`erro`; 1 = algum deles. */
+export function codigoDeSaida(relatorio: RelatorioProdutosNovos): 0 | 1 {
+  const { conflito, item_mudou: itemMudou, erro } = relatorio.contagem;
+  return conflito + itemMudou + erro > 0 ? 1 : 0;
+}
+
 export function resumoDeLeituraSomente(modo: 'fontes', total: number): string;
 export function resumoDeLeituraSomente(modo: 'modelo', total: number, itens: number): string;
 export function resumoDeLeituraSomente(modo: 'fontes' | 'modelo', total: number, itens = 0): string {

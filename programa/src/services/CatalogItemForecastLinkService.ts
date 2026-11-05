@@ -4,8 +4,18 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { sugerirVinculos, type LinhaAprovada, type LinhaProposta } from '../utils/forecastCatalogoBackfill';
-import { agruparProdutosNovos, type FontePlanilha, type LinhaModelo } from '../utils/forecastProdutosNovos';
-import { normalizeProductCode } from '../utils/forecastWorkbook';
+import {
+  agruparProdutosNovos,
+  contarResultados,
+  resolverPorNome,
+  type FontePlanilha,
+  type LinhaLida,
+  type LinhaModelo,
+  type LinhaProdutoNovo,
+  type RelatorioProdutosNovos,
+  type ResultadoProdutoNovo,
+} from '../utils/forecastProdutosNovos';
+import { normalizeProductCode, normalizeProductName } from '../utils/forecastWorkbook';
 import { HttpError } from '../utils/http';
 import type { CatalogItemForecastLink } from '../validators/domain';
 import { AuditLogService } from './AuditLogService';
@@ -18,6 +28,7 @@ import {
   travarImportForecast,
   type OrigemCadastro,
 } from './ForecastProductCadastroService';
+import { preencherLeadTimeSeVazio } from './ForecastSourceService';
 
 type Db = Prisma.TransactionClient;
 
@@ -387,4 +398,178 @@ export async function listarFontesParaPlanilha(): Promise<FontePlanilha[]> {
 // Reusa a proposta inteira (nenhuma query nova). SOMENTE LEITURA.
 export async function gerarModeloProdutosNovos(): Promise<LinhaModelo[]> {
   return agruparProdutosNovos(await gerarPropostaBackfill());
+}
+
+// ---------- criacao em lote de produtos novos ----------
+
+const ORIGEM_LOTE: OrigemCadastro = 'lote_produtos_novos';
+
+// Sentinela do dry-run: forca o rollback da transacao da linha e carrega o resultado simulado.
+class LinhaDryRun extends Error {
+  constructor(readonly resultado: ResultadoProdutoNovo) {
+    super('dry-run');
+  }
+}
+
+// Todas as verificacoes rodam ANTES da primeira escrita; depois dela so `throw` (rollback da linha), nunca `return`
+// de status. A lock forecast:import ja foi adquirida por executarComVinculo (1a instrucao da transacao).
+async function processarLinhaNova(tx: Db, dados: LinhaProdutoNovo): Promise<ResultadoProdutoNovo> {
+  const { linha, codigos, catalogItemIds } = dados;
+  const resultado = (
+    status: ResultadoProdutoNovo['status'],
+    motivo: ResultadoProdutoNovo['motivo'] = null,
+    produtoId: number | null = null,
+  ): ResultadoProdutoNovo => ({ linha, status, motivo, produtoId });
+
+  // a. Os itens do catalogo continuam como na planilha (existem, ativos, com o MESMO codigo da posicao).
+  const itens = await tx.catalogItem.findMany({
+    where: { id: { in: catalogItemIds } },
+    select: { id: true, isActive: true, dbcorpCode: true, familyId: true },
+  });
+  const itemPorId = new Map(itens.map((item) => [item.id, item]));
+  for (const [i, codigo] of codigos.entries()) {
+    const item = itemPorId.get(catalogItemIds[i]);
+    if (!item) return resultado('item_mudou', 'item_inexistente');
+    if (!item.isActive) return resultado('item_mudou', 'item_inativo');
+    if (normalizeProductCode(item.dbcorpCode ?? '') !== codigo) return resultado('item_mudou', 'codigo_do_item_mudou');
+  }
+
+  // b. Codigo em mais de 1 item ATIVO do catalogo: o vinculo por posicao seria ambiguo para o humano.
+  const ativos = await tx.catalogItem.findMany({
+    where: { isActive: true, dbcorpCode: { not: null } },
+    select: { id: true, dbcorpCode: true },
+  });
+  const itensPorCodigo = new Map<string, number>();
+  for (const ativo of ativos) {
+    const chave = normalizeProductCode(ativo.dbcorpCode ?? '');
+    itensPorCodigo.set(chave, (itensPorCodigo.get(chave) ?? 0) + 1);
+  }
+  if (codigos.some((codigo) => (itensPorCodigo.get(codigo) ?? 0) > 1)) {
+    return resultado('conflito', 'codigo_em_mais_de_um_item');
+  }
+
+  // c. Idempotencia e conflitos com o que ja existe no Forecast.
+  const produto = await tx.forecastProduct.findUnique({
+    where: { normalizedName: normalizeProductName(dados.nome) },
+    select: { id: true },
+  });
+  const situacoes: SituacaoCodigo[] = [];
+  for (const codigo of codigos) situacoes.push(await situacaoDoCodigo(tx, codigo));
+  if (produto) {
+    const doProduto = situacoes.map((s) => s.tipo !== 'livre' && s.produto.id === produto.id);
+    const ligadoAOutro = situacoes.some(
+      (s, i) => s.tipo !== 'livre' && s.produto.id === produto.id && s.catalogItemId !== null && s.catalogItemId !== catalogItemIds[i],
+    );
+    if (ligadoAOutro) return resultado('conflito', 'codigo_ligado_a_outro_item');
+    if (!doProduto.every(Boolean)) return resultado('conflito', 'produto_ja_existe');
+    // Todos os codigos ja estao no produto: so preenche o catalogItemId que estiver nulo (nunca sobrescreve).
+    for (const [i, codigo] of codigos.entries()) {
+      const situacao = situacoes[i];
+      if (situacao.tipo === 'livre' || situacao.catalogItemId !== null) continue;
+      await vincularNaTransacao(tx, {
+        catalogItemId: catalogItemIds[i],
+        code: codigo,
+        vinculo: { modo: 'existente', productId: produto.id },
+        exigido: true,
+        userId: null,
+        origem: ORIGEM_LOTE,
+      });
+    }
+    return resultado('ja_aplicado', null, produto.id);
+  }
+  if (situacoes.some((s) => s.tipo !== 'livre')) return resultado('conflito', 'codigo_em_outro_produto');
+
+  // d. Fonte pelo NOME (uma so; ambigua ou inativa = erro).
+  const fontes = (
+    await tx.forecastSource.findMany({ select: { id: true, name: true, isActive: true, leadTimeDays: true } })
+  ).map((f) => ({ id: f.id, nome: f.name, ativa: f.isActive, leadTimeDays: f.leadTimeDays }));
+  const fonteAchada = resolverPorNome(fontes, dados.fonte);
+  if (fonteAchada.tipo === 'nenhum') return resultado('erro', 'fonte_inexistente');
+  if (fonteAchada.tipo === 'ambiguo') return resultado('erro', 'fonte_ambigua');
+  const fonte = fonteAchada.item;
+  if (!fonte.ativa) return resultado('erro', 'fonte_inativa');
+
+  // e. Familia: pelo nome da planilha, ou herdada dos itens quando todos tem a mesma familia ativa.
+  const familias = (await tx.itemFamily.findMany({ select: { id: true, name: true, isActive: true } })).map((f) => ({
+    id: f.id,
+    nome: f.name,
+    ativa: f.isActive,
+  }));
+  let familyId: number;
+  if (dados.familia !== '') {
+    const familiaAchada = resolverPorNome(familias, dados.familia);
+    if (familiaAchada.tipo === 'nenhum') return resultado('erro', 'familia_inexistente');
+    if (familiaAchada.tipo === 'ambiguo') return resultado('erro', 'familia_ambigua');
+    if (!familiaAchada.item.ativa) return resultado('erro', 'familia_inativa');
+    familyId = familiaAchada.item.id;
+  } else {
+    const doCatalogo = new Set(catalogItemIds.map((id) => itemPorId.get(id)?.familyId ?? null));
+    const [unica] = [...doCatalogo];
+    const herdada = doCatalogo.size === 1 && unica !== null ? familias.find((f) => f.id === unica) : undefined;
+    if (!herdada || !herdada.ativa) return resultado('erro', 'familia_ausente');
+    familyId = herdada.id;
+  }
+
+  // f. Lead time e da FONTE: nunca sobrescreve um que ja existe.
+  if (fonte.leadTimeDays !== null && dados.leadTimeDias !== null && fonte.leadTimeDays !== dados.leadTimeDias) {
+    return resultado('conflito', 'lead_time_divergente');
+  }
+  if (fonte.leadTimeDays === null && dados.leadTimeDaFonteNoArquivo === null) return resultado('erro', 'lead_time_ausente');
+
+  // g. ESCRITAS: daqui em diante so `throw`.
+  if (fonte.leadTimeDays === null && dados.leadTimeDaFonteNoArquivo !== null) {
+    await preencherLeadTimeSeVazio(tx, fonte.id, dados.leadTimeDaFonteNoArquivo, null, ORIGEM_LOTE);
+  }
+  const criado = await criarProdutoNaTransacao(tx, { nome: dados.nome, codigos, sourceId: fonte.id, familyId }, null, {
+    origem: ORIGEM_LOTE,
+    catalogItemIdPorCodigo: new Map(codigos.map((codigo, i) => [codigo, catalogItemIds[i]] as const)),
+  });
+  return resultado('aplicado', null, criado.id);
+}
+
+// Cria os produtos novos aprovados na planilha, UMA transacao por linha (lock forecast:import + CADASTRO_TX_OPTIONS):
+// a falha de uma linha desfaz so ela (lead time da fonte incluso). `ignorado` e `erro` da leitura entram no relatorio
+// sem abrir transacao. HttpError (inclusive 503 cadastro ocupado e 409 de unicidade) vira `erro` da linha; qualquer
+// outro erro aborta o lote (as linhas ja gravadas ficam; rodar de novo e idempotente).
+// `gravar: false` = DRY-RUN: a transacao de cada linha roda de verdade e termina em rollback forcado (sentinela).
+export async function criarProdutosNovos(
+  linhas: readonly LinhaLida[],
+  { gravar }: { gravar: boolean },
+): Promise<RelatorioProdutosNovos> {
+  const resultados: ResultadoProdutoNovo[] = [];
+  for (const lida of linhas) {
+    if (lida.status === 'ignorado') {
+      resultados.push({ linha: lida.linha, status: 'ignorado', motivo: lida.motivo, produtoId: null });
+      continue;
+    }
+    if (lida.status === 'erro') {
+      resultados.push({ linha: lida.linha, status: 'erro', motivo: lida.motivo, produtoId: null });
+      continue;
+    }
+    try {
+      resultados.push(
+        await executarComVinculo(async (tx) => {
+          const resultado = await processarLinhaNova(tx, lida.dados);
+          if (!gravar) throw new LinhaDryRun(resultado);
+          return resultado;
+        }),
+      );
+    } catch (error) {
+      if (error instanceof LinhaDryRun) {
+        // O produto simulado nao existe de verdade: nao devolve o id dele.
+        const { resultado } = error;
+        resultados.push(resultado.status === 'aplicado' ? { ...resultado, produtoId: null } : resultado);
+      } else if (error instanceof HttpError) {
+        resultados.push({
+          linha: lida.linha,
+          status: 'erro',
+          motivo: error.status === 503 ? 'cadastro_ocupado' : 'rejeitado_pelo_cadastro',
+          produtoId: null,
+        });
+      } else {
+        throw error;
+      }
+    }
+  }
+  return { gravar, resultados, contagem: contarResultados(resultados) };
 }

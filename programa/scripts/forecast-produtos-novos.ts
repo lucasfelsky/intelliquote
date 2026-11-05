@@ -6,17 +6,31 @@
 //      node node_modules/ts-node/dist/bin.js --transpile-only scripts/forecast-produtos-novos.ts --fontes --saida C:\fora-do-repo\fontes.csv
 //   2) modelo da planilha de produtos novos (SOMENTE LEITURA):
 //      node node_modules/ts-node/dist/bin.js --transpile-only scripts/forecast-produtos-novos.ts --modelo --saida C:\fora-do-repo\produtos-novos.csv
-// O stdout so traz contagens (nunca nomes, codigos nem a DATABASE_URL).
+//   3) preencher a planilha (colunas fonte, leadTimeDias e criar = sim nas linhas aprovadas); salvar como CSV UTF-8;
+//   4) dry-run (padrao, nao grava; --relatorio traz o motivo de cada linha):
+//      node node_modules/ts-node/dist/bin.js --transpile-only scripts/forecast-produtos-novos.ts --criar --entrada C:\fora-do-repo\produtos-novos.csv --relatorio C:\fora-do-repo\relatorio.csv
+//   5) gravar (so apos conferir o dry-run; fora da janela de importacao do Forecast):
+//      ... --criar --entrada C:\fora-do-repo\produtos-novos.csv --gravar --confirmo-banco <host:porta/banco>
+// Exit: 0 = sem conflito/item_mudou/erro; 1 = algum deles ou erro inesperado; 2 = argumentos, cabecalho ou encoding.
+// Idempotente: rodar de novo devolve ja_aplicado. O stdout so traz contagens (nunca nomes, codigos nem a DATABASE_URL).
 import 'dotenv/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { prisma } from '../src/lib/prisma';
-import { gerarModeloProdutosNovos, listarFontesParaPlanilha } from '../src/services/CatalogItemForecastLinkService';
 import {
+  criarProdutosNovos,
+  gerarModeloProdutosNovos,
+  listarFontesParaPlanilha,
+} from '../src/services/CatalogItemForecastLinkService';
+import {
+  codigoDeSaida,
   fontesParaCsv,
   lerArgumentosProdutosNovos,
+  lerPlanilhaProdutosNovos,
   modeloParaCsv,
+  relatorioParaCsv,
   resumoDeLeituraSomente,
+  resumoDoRelatorio,
 } from '../src/utils/forecastProdutosNovos';
 
 function linha(texto: string): void {
@@ -53,8 +67,16 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  process.stderr.write('O modo --criar ainda nao esta disponivel.\n');
-  return 2;
+  // Os erros de leitura so trazem numero de linha e nome de COLUNA (nunca valor de celula).
+  const leitura = lerPlanilhaProdutosNovos(fs.readFileSync(config.entrada, 'utf8'));
+  if (!leitura.ok) {
+    for (const erro of leitura.erros) process.stderr.write(`${erro}\n`);
+    return 2;
+  }
+  const relatorio = await criarProdutosNovos(leitura.linhas, { gravar: config.gravar });
+  for (const texto of resumoDoRelatorio(relatorio)) linha(texto);
+  if (config.relatorio !== null) gravarNovo(config.relatorio, relatorioParaCsv(relatorio.resultados));
+  return codigoDeSaida(relatorio);
 }
 
 main()
