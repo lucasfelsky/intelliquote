@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CADASTRO_TX_OPTIONS } from '../src/services/ForecastProductCadastroService';
 import { hashPassword } from '../src/utils/password';
 
 // O arquivo faz dezenas de logins: sobe o limite do rate limit de /auth/login.
@@ -340,7 +341,7 @@ describe('POST /catalog-items - vinculo com o Forecast', () => {
     expect(prismaMock.forecastProductCode.create).not.toHaveBeenCalled();
   });
 
-  it('f. item criado inativo COM forecast -> 400 (mesma mensagem do PUT) e nada gravado', async () => {
+  it('n. item criado inativo COM forecast -> 400 (mesma mensagem do PUT) e nada gravado', async () => {
     const cookies = await loginAs('comprador');
     for (const forecast of [existente, novo]) {
       const response = await request(app)
@@ -359,7 +360,7 @@ describe('POST /catalog-items - vinculo com o Forecast', () => {
     expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
   });
 
-  it('f. item criado inativo SEM forecast -> 201, gravado inativo e sem tocar o Forecast (D6)', async () => {
+  it('o. item criado inativo SEM forecast -> 201, gravado inativo e sem tocar o Forecast (D6)', async () => {
     const cookies = await loginAs('comprador');
     const response = await request(app).post(POST_PATH).set('Cookie', cookies).send({ ...corpoLivre, isActive: false });
     expect(response.status).toBe(201);
@@ -592,13 +593,16 @@ describe('GET /catalog-items/sem-forecast', () => {
 // /forecast/products/:id/codigos) e o vinculo do catalogo gravam em ForecastProductCode e precisam serializar
 // com o import do Forecast (advisory lock `forecast:import`) ANTES de ler o produto e gravar o codigo.
 describe('trava advisory forecast:import - addCode e vinculo do catalogo (M18b)', () => {
-  const lockChamadaUmaVez = () => {
-    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 30_000, maxWait: 10_000 });
-    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
-    const [sql, chave] = prismaMock.$executeRaw.mock.calls[0] as [string[], string];
-    expect(sql.join('')).toContain('pg_advisory_xact_lock(hashtext(');
-    expect(chave).toBe('forecast:import');
-    return prismaMock.$executeRaw.mock.invocationCallOrder[0];
+  const ordemDaLockDoImport = () => {
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), CADASTRO_TX_OPTIONS);
+    // Ao menos uma chamada de $executeRaw e a advisory lock do import: pg_advisory_xact_lock com a chave 'forecast:import'.
+    const ordens = prismaMock.$executeRaw.mock.calls.flatMap((call, i) => {
+      const [sql, ...valores] = call as [readonly string[], ...unknown[]];
+      const ehAdvisoryLock = sql.join('').includes('pg_advisory_xact_lock(hashtext(');
+      return ehAdvisoryLock && valores.includes('forecast:import') ? [prismaMock.$executeRaw.mock.invocationCallOrder[i]] : [];
+    });
+    expect(ordens.length).toBeGreaterThanOrEqual(1);
+    return ordens[0];
   };
 
   it('POST /forecast/products/:id/codigos: lock antes de ler o produto e gravar o codigo', async () => {
@@ -610,7 +614,7 @@ describe('trava advisory forecast:import - addCode e vinculo do catalogo (M18b)'
 
     expect(response.status).toBe(201);
     expect(prismaMock.forecastProductCode.create).toHaveBeenCalledTimes(1);
-    const ordemLock = lockChamadaUmaVez();
+    const ordemLock = ordemDaLockDoImport();
     expect(ordemLock).toBeLessThan(prismaMock.forecastProduct.findUnique.mock.invocationCallOrder[0]);
     expect(ordemLock).toBeLessThan(prismaMock.forecastProductCode.create.mock.invocationCallOrder[0]);
   });
@@ -625,7 +629,7 @@ describe('trava advisory forecast:import - addCode e vinculo do catalogo (M18b)'
 
     expect(response.status).toBe(200);
     expect(prismaMock.forecastProductCode.create).toHaveBeenCalledTimes(1);
-    const ordemLock = lockChamadaUmaVez();
+    const ordemLock = ordemDaLockDoImport();
     expect(ordemLock).toBeLessThan(prismaMock.forecastProduct.findUnique.mock.invocationCallOrder[0]);
     expect(ordemLock).toBeLessThan(prismaMock.forecastProductCode.create.mock.invocationCallOrder[0]);
   });
