@@ -3,6 +3,7 @@
 // falha no vinculo desfaz o item. Sem pasta repositories: regras e queries ficam no service.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { sugerirVinculos, type LinhaAprovada, type LinhaProposta } from '../utils/forecastCatalogoBackfill';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
 import { HttpError } from '../utils/http';
 import type { CatalogItemForecastLink } from '../validators/domain';
@@ -218,6 +219,152 @@ export async function executarComVinculo<T>(fn: (tx: Db) => Promise<T>): Promise
       }
       throw new HttpError(409, 'Esse código já pertence a um produto.');
     }
+    throw error;
+  }
+}
+
+// ---------- backfill (itens ja existentes sem Forecast) ----------
+
+// Transacao que o Postgres recusa escrever (SET TRANSACTION READ ONLY e a 1a instrucao): a proposta nunca grava.
+export async function emTransacaoSomenteLeitura<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      return fn(tx);
+    },
+    { timeout: 60_000, maxWait: 10_000 },
+  );
+}
+
+// Proposta SOMENTE LEITURA: itens ativos fora do Forecast + produtos com codigos, e a sugestao de cada um.
+export async function gerarPropostaBackfill(): Promise<LinhaProposta[]> {
+  return emTransacaoSomenteLeitura(async (tx) => {
+    const { itens } = await listarSemForecast(tx);
+    const produtos = await tx.forecastProduct.findMany({
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        origin: true,
+        familyId: true,
+        codes: { select: { code: true, catalogItemId: true, catalogItem: { select: { commercialName: true } } } },
+      },
+      orderBy: [{ id: 'asc' }],
+    });
+    return sugerirVinculos(
+      itens.map((item) => ({
+        catalogItemId: item.id,
+        codigo: normalizeProductCode(item.dbcorpCode ?? ''),
+        nomeComercial: item.commercialName,
+        familyId: item.familyId,
+        familia: item.family?.name ?? null,
+      })),
+      produtos.map((p) => ({
+        id: p.id,
+        nome: p.name,
+        ativo: p.isActive,
+        origem: origemDoProduto(p.origin),
+        familyId: p.familyId,
+        codigos: p.codes.map((c) => ({
+          code: c.code,
+          catalogItemId: c.catalogItemId,
+          nomeComercialDoItem: c.catalogItem?.commercialName ?? null,
+        })),
+      })),
+    );
+  });
+}
+
+export type StatusBackfill = 'aplicado' | 'ja_aplicado' | 'conflito' | 'item_mudou' | 'erro';
+
+export interface ResultadoLinhaBackfill {
+  linha: number;
+  catalogItemId: number;
+  produtoId: number;
+  status: StatusBackfill;
+  erro?: string;
+}
+
+export interface RelatorioBackfill {
+  gravar: boolean;
+  resultados: ResultadoLinhaBackfill[];
+  contagem: Record<StatusBackfill, number>;
+}
+
+// Sentinela do dry-run: aborta a transacao (rollback) e carrega o relatorio simulado.
+class DryRunRollback extends Error {
+  constructor(readonly relatorio: RelatorioBackfill) {
+    super('dry-run');
+  }
+}
+
+function contar(resultados: ResultadoLinhaBackfill[]): Record<StatusBackfill, number> {
+  const contagem: Record<StatusBackfill, number> = { aplicado: 0, ja_aplicado: 0, conflito: 0, item_mudou: 0, erro: 0 };
+  for (const r of resultados) contagem[r.status] += 1;
+  return contagem;
+}
+
+// Aplica SO as linhas aprovadas, numa transacao com a lock do import. Idempotente: codigo ja no produto aprovado vira
+// `ja_aplicado`. Por linha, HttpError (produto cheio/inativo/inexistente, codigo ja ocupado) vira resultado da linha
+// (os checks rodam antes de qualquer escrita, entao a transacao segue valida); qualquer outro erro aborta tudo.
+// `gravar: false` = DRY-RUN: tudo e simulado de verdade (vagas acumuladas) e desfeito no fim.
+export async function aplicarBackfill(
+  linhasAprovadas: readonly LinhaAprovada[],
+  { gravar }: { gravar: boolean },
+): Promise<RelatorioBackfill> {
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await travarImportForecast(tx);
+        const resultados: ResultadoLinhaBackfill[] = [];
+        for (const aprovada of linhasAprovadas) {
+          const base = { linha: aprovada.linha, catalogItemId: aprovada.catalogItemId, produtoId: aprovada.produtoId };
+          const codigo = normalizeProductCode(aprovada.codigo);
+          const item = await tx.catalogItem.findUnique({
+            where: { id: aprovada.catalogItemId },
+            select: { id: true, isActive: true, dbcorpCode: true },
+          });
+          if (!item || !item.isActive || normalizeProductCode(item.dbcorpCode ?? '') !== codigo) {
+            resultados.push({ ...base, status: 'item_mudou' });
+            continue;
+          }
+          try {
+            const situacao = await situacaoDoCodigo(tx, codigo);
+            if (situacao.tipo !== 'livre') {
+              if (situacao.produto.id !== aprovada.produtoId) {
+                resultados.push({ ...base, status: 'conflito', erro: 'codigo ja pertence a outro produto' });
+                continue;
+              }
+              // Preenche o catalogItemId se estiver nulo (nunca sobrescreve).
+              await vincularNaTransacao(tx, {
+                catalogItemId: item.id,
+                code: codigo,
+                vinculo: { modo: 'existente', productId: aprovada.produtoId },
+                exigido: true,
+                userId: null,
+                origem: 'backfill_catalogo',
+              });
+              resultados.push({ ...base, status: 'ja_aplicado' });
+              continue;
+            }
+            await adicionarCodigoNaTransacao(tx, aprovada.produtoId, codigo, null, {
+              origem: 'backfill_catalogo',
+              catalogItemId: item.id,
+            });
+            resultados.push({ ...base, status: 'aplicado' });
+          } catch (error) {
+            if (!(error instanceof HttpError)) throw error;
+            resultados.push({ ...base, status: 'erro', erro: error.message });
+          }
+        }
+        const relatorio: RelatorioBackfill = { gravar, resultados, contagem: contar(resultados) };
+        if (!gravar) throw new DryRunRollback(relatorio);
+        return relatorio;
+      },
+      { timeout: 120_000, maxWait: 10_000 },
+    );
+  } catch (error) {
+    if (error instanceof DryRunRollback) return error.relatorio;
     throw error;
   }
 }
