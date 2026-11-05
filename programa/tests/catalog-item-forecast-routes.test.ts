@@ -340,6 +340,38 @@ describe('POST /catalog-items - vinculo com o Forecast', () => {
     expect(prismaMock.forecastProductCode.create).not.toHaveBeenCalled();
   });
 
+  it('f. item criado inativo COM forecast -> 400 (mesma mensagem do PUT) e nada gravado', async () => {
+    const cookies = await loginAs('comprador');
+    for (const forecast of [existente, novo]) {
+      const response = await request(app)
+        .post(POST_PATH)
+        .set('Cookie', cookies)
+        .send({ ...corpoLivre, isActive: false, forecast });
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('Reative o item para vinculá-lo ao Forecast.');
+    }
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    expect(prismaMock.$executeRaw).not.toHaveBeenCalled();
+    expect(prismaMock.catalogItem.create).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProduct.create).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProductCode.create).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('f. item criado inativo SEM forecast -> 201, gravado inativo e sem tocar o Forecast (D6)', async () => {
+    const cookies = await loginAs('comprador');
+    const response = await request(app).post(POST_PATH).set('Cookie', cookies).send({ ...corpoLivre, isActive: false });
+    expect(response.status).toBe(201);
+    expect(response.body.isActive).toBe(false);
+    expect(response.body.forecastVinculo).toBeNull();
+    expect(prismaMock.catalogItem.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.catalogItem.create.mock.calls[0][0].data).toMatchObject({ dbcorpCode: 'TST9001', isActive: false });
+    expect(prismaMock.forecastProduct.create).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProductCode.create).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+  });
+
   it('sem codigo e sem forecast: caminho atual, sem transacao', async () => {
     const cookies = await loginAs('comprador');
     const response = await request(app)
@@ -553,6 +585,49 @@ describe('GET /catalog-items/sem-forecast', () => {
     const cookies = await loginAs('viewer');
     expect((await request(app).get(`${PATH}?x=1`).set('Cookie', cookies)).status).toBe(400);
     expect((await request(app).get(PATH)).status).toBe(401);
+  });
+});
+
+// Mutante M18b: tirar `travarImportForecast(tx)` de ForecastProductCadastroService.addCode. O addCode (POST
+// /forecast/products/:id/codigos) e o vinculo do catalogo gravam em ForecastProductCode e precisam serializar
+// com o import do Forecast (advisory lock `forecast:import`) ANTES de ler o produto e gravar o codigo.
+describe('trava advisory forecast:import - addCode e vinculo do catalogo (M18b)', () => {
+  const lockChamadaUmaVez = () => {
+    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 30_000, maxWait: 10_000 });
+    expect(prismaMock.$executeRaw).toHaveBeenCalledTimes(1);
+    const [sql, chave] = prismaMock.$executeRaw.mock.calls[0] as [string[], string];
+    expect(sql.join('')).toContain('pg_advisory_xact_lock(hashtext(');
+    expect(chave).toBe('forecast:import');
+    return prismaMock.$executeRaw.mock.invocationCallOrder[0];
+  };
+
+  it('POST /forecast/products/:id/codigos: lock antes de ler o produto e gravar o codigo', async () => {
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .post('/api/v1/forecast/products/5/codigos')
+      .set('Cookie', cookies)
+      .send({ codigo: 'TST9300' });
+
+    expect(response.status).toBe(201);
+    expect(prismaMock.forecastProductCode.create).toHaveBeenCalledTimes(1);
+    const ordemLock = lockChamadaUmaVez();
+    expect(ordemLock).toBeLessThan(prismaMock.forecastProduct.findUnique.mock.invocationCallOrder[0]);
+    expect(ordemLock).toBeLessThan(prismaMock.forecastProductCode.create.mock.invocationCallOrder[0]);
+  });
+
+  it('POST /catalog-items/:id/forecast (existente): lock antes de ler o produto e gravar o codigo', async () => {
+    const cookies = await loginAs('comprador');
+    prismaMock.catalogItem.findUnique.mockResolvedValue(itemLegado());
+    const response = await request(app)
+      .post('/api/v1/catalog-items/7/forecast')
+      .set('Cookie', cookies)
+      .send(existente);
+
+    expect(response.status).toBe(200);
+    expect(prismaMock.forecastProductCode.create).toHaveBeenCalledTimes(1);
+    const ordemLock = lockChamadaUmaVez();
+    expect(ordemLock).toBeLessThan(prismaMock.forecastProduct.findUnique.mock.invocationCallOrder[0]);
+    expect(ordemLock).toBeLessThan(prismaMock.forecastProductCode.create.mock.invocationCallOrder[0]);
   });
 });
 

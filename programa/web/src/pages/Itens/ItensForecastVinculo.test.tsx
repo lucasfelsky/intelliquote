@@ -217,7 +217,7 @@ describe('Itens - itens fora do Forecast', () => {
   it('h. painel com a contagem, selo no card e "Vincular" manda o produto escolhido', async () => {
     post.mockResolvedValue({ data: { situacao: 'adicionado', produto: { id: 5, nome: 'PRODUTO 5', origem: 'dbcorp' }, codigoId: 1 } });
     renderPage();
-    expect(await screen.findByText('1 item com código DBCorp fora do Forecast')).toBeTruthy();
+    expect(await screen.findByText('Catálogo sem Forecast: 1 item com código DBCorp fora do Forecast')).toBeTruthy();
     expect(screen.getAllByText('Fora do Forecast')).toHaveLength(1);
 
     const painel = screen.getByLabelText('Catálogo sem Forecast');

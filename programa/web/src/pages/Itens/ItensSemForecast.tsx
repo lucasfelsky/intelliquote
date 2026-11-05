@@ -29,7 +29,7 @@ export default function ItensSemForecast({ onConcluido }: Props) {
     <section className="card" aria-label="Catálogo sem Forecast">
       <details>
         <summary>
-          {itens.length} {itens.length === 1 ? 'item' : 'itens'} com código DBCorp fora do Forecast
+          Catálogo sem Forecast: {itens.length} {itens.length === 1 ? 'item' : 'itens'} com código DBCorp fora do Forecast
         </summary>
         <p className="fcc-dica">{TEXTO_SEM_FORECAST}</p>
         <ul className="itens-sem-forecast">

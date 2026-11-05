@@ -125,6 +125,10 @@ export class CatalogItemController {
       if (forecast && !dbcorpCode) {
         return res.status(400).json({ message: SEM_CODIGO_MESSAGE });
       }
+      // Alinhado ao PUT: vinculo so para item ativo (D6: item inativo sem `forecast` e criado sem vinculo).
+      if (forecast && !isActive) {
+        return res.status(400).json({ message: SEM_ITEM_ATIVO_MESSAGE });
+      }
 
       const data = {
         commercialName,
