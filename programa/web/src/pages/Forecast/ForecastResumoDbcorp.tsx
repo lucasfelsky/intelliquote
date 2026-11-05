@@ -15,7 +15,7 @@ import { AvisosEErros, useFocoNoTitulo } from './ForecastResumoPlanilha';
 import { NOTA_COMPLETAR_MODO_TESTE, textoHistoricoModoTeste } from './forecastModoTeste';
 import { dataBr, inteiroBr } from './forecastPainel';
 import { TabelaPendentes } from './ForecastPendentesCadastro';
-import { textoEntraSemCadastroPrevia, textoPendentesNaQuinzena } from './forecastPendentes';
+import { amostrasIgnoradasTexto, textoEntraSemCadastroPrevia, textoPendentesNaQuinzena } from './forecastPendentes';
 import TabelaRolavel from './ForecastTabelaRolavel';
 import type { ForecastPendentesResumo } from '@/services/forecastPendentes';
 
@@ -294,6 +294,7 @@ function BlocoPendentes({
         soSaldo={pendentes.soSaldo}
         regra={pendentes.regra}
         semVendaRecente={pendentes.semVendaRecente}
+        amostrasIgnoradas={pendentes.amostrasIgnoradas}
         podeCompletar={onCompletar !== undefined}
         onCompletar={onCompletar}
         legenda="Códigos do DBCorp pendentes de cadastro"
@@ -425,6 +426,11 @@ export default function ForecastResumoDbcorp({
       </TabelaRolavel>
       {resumo.pendentes && resumo.pendentes.totalItens > 0 && (
         <BlocoPendentes pendentes={resumo.pendentes} naQuinzena={resumo.pendentesNaQuinzena} onCompletar={onCompletar} modoTeste={modoTeste} />
+      )}
+      {resumo.pendentes && resumo.pendentes.totalItens === 0 && amostrasIgnoradasTexto(resumo.pendentes.amostrasIgnoradas) && (
+        <Bloco titulo="Pendentes de cadastro (0)">
+          <p className="fcp-nota">{amostrasIgnoradasTexto(resumo.pendentes.amostrasIgnoradas)}</p>
+        </Bloco>
       )}
       {saldo && <BlocoSaldo relatorio={saldo} />}
       {vendas.length > 0 && (

@@ -12,6 +12,7 @@ import {
 import ForecastCompletarCadastroModal, { type ResultadoCadastro } from './ForecastCompletarCadastroModal';
 import { inteiroBr } from './forecastPainel';
 import {
+  amostrasIgnoradasTexto,
   contagemTexto,
   criterioTexto,
   estadoDaLinhaPendente,
@@ -47,6 +48,8 @@ interface TabelaProps {
   /** Criterio e contagens fora da lista (regra do COMEX); ausentes em backend antigo. */
   regra?: ForecastPendentesResumo['regra'];
   semVendaRecente?: ForecastPendentesResumo['semVendaRecente'];
+  /** Amostras (prefixo + digito) sem cadastro, ignoradas pela regra e so contadas; ausente em backend antigo. */
+  amostrasIgnoradas?: ForecastPendentesResumo['amostrasIgnoradas'];
   /** Quem completa (admin/comprador) ve a coluna Acao; os demais so leem. */
   podeCompletar: boolean;
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
@@ -64,6 +67,7 @@ export function TabelaPendentes({
   soSaldo,
   regra,
   semVendaRecente,
+  amostrasIgnoradas,
   podeCompletar,
   onCompletar,
   onReativar,
@@ -74,6 +78,7 @@ export function TabelaPendentes({
   const comAcao = podeCompletar && onCompletar !== undefined;
   const temInativo = itens.some((p) => p.situacao === 'produto_inativo');
   const saldoTexto = soSaldoTexto(soSaldo, inteiroBr);
+  const amostrasTexto = amostrasIgnoradasTexto(amostrasIgnoradas);
   const criterio = criterioTexto(regra);
   const semVendaTexto = semVendaRecenteTexto(semVendaRecente, inteiroBr);
   const historicoTexto = historicoAusenteTexto(regra);
@@ -165,6 +170,7 @@ export function TabelaPendentes({
       )}
       {semVendaTexto && <p className="fcp-nota">{semVendaTexto}</p>}
       {saldoTexto && <p className="fcp-nota">{saldoTexto}</p>}
+      {amostrasTexto && <p className="fcp-nota">{amostrasTexto}</p>}
       {historicoTexto && <p className="fcp-nota">{historicoTexto}</p>}
       {temInativo && (
         <p className="fcp-nota">
@@ -402,9 +408,11 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
         {status}
         {alertaReativar}
         <p className="fcp-estado">{nenhumPendenteTexto(dados.regra)}</p>
-        {[semVendaRecenteTexto(dados.semVendaRecente, inteiroBr), historicoAusenteTexto(dados.regra)].map(
-          (nota) => nota && <p key={nota} className="fcp-nota">{nota}</p>,
-        )}
+        {[
+          semVendaRecenteTexto(dados.semVendaRecente, inteiroBr),
+          amostrasIgnoradasTexto(dados.amostrasIgnoradas),
+          historicoAusenteTexto(dados.regra),
+        ].map((nota) => nota && <p key={nota} className="fcp-nota">{nota}</p>)}
       </section>
     );
   }
@@ -426,6 +434,7 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
             soSaldo={dados.soSaldo}
             regra={dados.regra}
             semVendaRecente={dados.semVendaRecente}
+            amostrasIgnoradas={dados.amostrasIgnoradas}
             podeCompletar={podeEditar}
             onCompletar={dialogo.abrir}
             onReativar={(productId, nome) => {

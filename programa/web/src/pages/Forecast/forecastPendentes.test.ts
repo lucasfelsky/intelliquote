@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ForecastFonte } from '@/services/forecastFontes';
 import type { ForecastProdutoCadastro } from '@/services/forecastPendentes';
 import {
+  amostrasIgnoradasTexto,
   contagemTexto,
   criterioTexto,
   filtrarProdutos,
@@ -124,6 +125,18 @@ describe('textos', () => {
     expect(soSaldoTexto({ codigos: 0, kg: 0 }, kg)).toBeNull();
     expect(soSaldoTexto({ codigos: 1, kg: 30 }, kg)).toBe('Só saldo (não listados): 1 código · 30 kg');
     expect(soSaldoTexto({ codigos: 5, kg: 300 }, kg)).toBe('Só saldo (não listados): 5 códigos · 300 kg');
+  });
+
+  it('amostrasIgnoradasTexto: so quando ha codigos; singular/plural; prefixos vem da API (nada fixo)', () => {
+    expect(amostrasIgnoradasTexto(undefined)).toBeNull();
+    expect(amostrasIgnoradasTexto({ codigos: 0, prefixos: ['AM'] })).toBeNull();
+    expect(amostrasIgnoradasTexto({ codigos: 1, prefixos: ['AM'] })).toBe('Amostras ignoradas (prefixo AM): 1 código');
+    expect(amostrasIgnoradasTexto({ codigos: 16, prefixos: ['AM'] })).toBe('Amostras ignoradas (prefixo AM): 16 códigos');
+    expect(amostrasIgnoradasTexto({ codigos: 2, prefixos: ['AM', 'XY'] })).toBe(
+      'Amostras ignoradas (prefixos AM, XY): 2 códigos',
+    );
+    expect(amostrasIgnoradasTexto({ codigos: 2, prefixos: ['XY'] })).toBe('Amostras ignoradas (prefixo XY): 2 códigos');
+    expect(amostrasIgnoradasTexto({ codigos: 2, prefixos: [] })).toBe('Amostras ignoradas: 2 códigos');
   });
 
   it('criterioTexto: meses da regra, compra em aberto do FUP; sem regra (backend antigo) nao afirma nada', () => {

@@ -136,6 +136,16 @@ export function soSaldoTexto(soSaldo: { codigos: number; kg: number }, formatarK
   return `Só saldo (não listados): ${contagemTexto(soSaldo.codigos, 'código', 'códigos')} · ${formatarKg(soSaldo.kg)} kg`;
 }
 
+/** Codigos de amostra ignorados (prefixos vindos da API). `null` sem amostra ou em backend antigo. */
+export function amostrasIgnoradasTexto(a: ForecastPendentesResumo['amostrasIgnoradas']): string | null {
+  if (!a || a.codigos <= 0) return null;
+  const rotulo =
+    a.prefixos.length === 0
+      ? ''
+      : ` (${a.prefixos.length === 1 ? 'prefixo' : 'prefixos'} ${a.prefixos.join(', ')})`;
+  return `Amostras ignoradas${rotulo}: ${contagemTexto(a.codigos, 'código', 'códigos')}`;
+}
+
 /** `jul/2026`, `jul/2026 e ago/2026` ou `jul/2026, ago/2026 e set/2026`. */
 function listaDeMeses(meses: readonly string[]): string {
   const rotulos = meses.map(mesAbrevDoAnoMes);
