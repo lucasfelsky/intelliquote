@@ -28,6 +28,7 @@ const CODE_SO_ANUAL = `${U}A1`; // venda so no acumulado anual: fora da lista (s
 const CODE_FUP_ABERTO = `${U}F1`; // FUP "AG. PAGAMENTO" sem data: compra em aberto
 const CODE_SO_CONCLUIDO = `${U}C1`; // FUP CONCLUIDO: nada
 const CODE_SO_HIST = `${U}H1`; // venda gravada so em base-2 (historico mensal)
+const CODE_AMOSTRA = `AM00${runId.slice(2)}`; // amostra (AM + digitos) so na programacao: nunca vira pendente
 const SOURCE_NAME = `FONTE ${U} 1`;
 const SOURCE_SEM_LT = `FONTE ${U} 2`;
 const NAME_BASE = `PRODUTO ${U} BASE`;
@@ -88,7 +89,10 @@ async function reports() {
     ),
     programacao: file(
       'programacao.xlsx',
-      await xlsxBase64(PROG_HEADERS, [[1, 'Pendente', d('2034-06-20'), CODE_NOVO_2, 60]]),
+      await xlsxBase64(PROG_HEADERS, [
+        [1, 'Pendente', d('2034-06-20'), CODE_NOVO_2, 60],
+        [2, 'Pendente', d('2034-06-20'), CODE_AMOSTRA, 400],
+      ]),
     ),
     fup: file(
       'fup.xlsx',
@@ -220,6 +224,9 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     });
     expect(data.pendentes.soSaldo).toEqual({ codigos: 1, kg: 7 });
     expect(data.pendentes.semVendaRecente).toEqual({ codigos: 0, vendasAnual: 0 });
+    // Codigo de amostra (so na programacao) nao e listado nem entra na contagem do titulo/aviso: so e contado.
+    expect(data.pendentes.amostrasIgnoradas).toEqual({ codigos: 1, prefixos: ['AM'] });
+    expect(JSON.stringify(data.pendentes.itens)).not.toContain(CODE_AMOSTRA);
     expect(data.pendentes.regra).toEqual({
       mesesVenda: ['2034-03', '2034-04', '2034-05'],
       historicoAusente: [],
@@ -341,11 +348,20 @@ describe('Forecast - produtos pendentes de cadastro (DB)', () => {
     expect(itensRelatorio.some((i) => i.item === CODE_NOVO_2 || i.item === CODE_INATIVO)).toBe(false);
     linhaPendenteAntes = pendenteLinha;
 
+    // Amostra: nenhuma linha FZ4 e AuditLog do snapshot com so a contagem (nunca o codigo).
+    expect(linhasCalc.some((l) => l.item === CODE_AMOSTRA)).toBe(false);
+    const auditSnapshot = await prisma.auditLog.findFirstOrThrow({
+      where: { performedById: adminId, entityType: 'forecast_snapshot', entityId: String(snapshotId), action: 'create' },
+    });
+    expect(auditSnapshot.metadata).toMatchObject({ pendentesNaQuinzena: 2, amostrasIgnoradas: 1 });
+    expect(JSON.stringify(auditSnapshot.metadata)).not.toContain(CODE_AMOSTRA);
+
     const pend = await request(app).get(`/api/v1/forecast/snapshots/${snapshotId}/pendentes`).set('Cookie', cookies);
     expect(pend.status).toBe(200);
     expect(pend.body.data).toMatchObject({ aplicavel: true, snapshotId, label: LABEL, totalItens: 2 });
     expect(pend.body.data.itens.map((i: { codigo: string }) => i.codigo)).toEqual([CODE_NOVO_2, CODE_INATIVO]);
     expect(pend.body.data.soSaldo).toEqual({ codigos: 1, kg: 7 });
+    expect(pend.body.data.amostrasIgnoradas).toEqual({ codigos: 1, prefixos: ['AM'] });
     expect(pend.body.data.regra).toEqual({
       mesesVenda: ['2034-03', '2034-04', '2034-05'],
       historicoAusente: [],
