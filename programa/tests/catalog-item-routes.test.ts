@@ -32,7 +32,23 @@ vi.mock('../src/lib/prisma', () => {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
       create: vi.fn(),
-    }
+    },
+    forecastProductCode: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      create: vi.fn(),
+    },
+    forecastProduct: {
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
+    forecastSource: {
+      findUnique: vi.fn(),
+    },
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn(),
   };
 
   return { prisma };
@@ -70,12 +86,30 @@ const prismaMock = prisma as unknown as {
     findUnique: ReturnType<typeof vi.fn>;
     findFirst: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
-  }
+  };
+  forecastProductCode: {
+    findUnique: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+  };
+  forecastProduct: {
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+  };
+  forecastSource: {
+    findUnique: ReturnType<typeof vi.fn>;
+  };
+  $executeRaw: ReturnType<typeof vi.fn>;
+  $transaction: ReturnType<typeof vi.fn>;
 };
 
 describe('CatalogItem routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prismaMock.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prismaMock));
+    prismaMock.$executeRaw.mockResolvedValue(1);
   });
 
   describe('GET /catalog-items', () => {
@@ -168,6 +202,13 @@ describe('CatalogItem routes', () => {
         include: { family: true }
       });
       prismaMock.auditLog.create.mockResolvedValue({ id: 1 });
+      // Codigo ja no Forecast: o item e criado sem precisar escolher produto.
+      prismaMock.forecastProductCode.findUnique.mockResolvedValue({
+        id: 1,
+        catalogItemId: null,
+        product: { id: 5, name: 'PRODUTO TST', isActive: true, origin: 'dbcorp' },
+      });
+      prismaMock.forecastProductCode.update.mockResolvedValue({});
 
       const response = await request(app)
         .post('/api/v1/catalog-items')

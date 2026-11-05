@@ -2,6 +2,18 @@ import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
 import {
+  executarComVinculo,
+  liberarVinculoAntigo,
+  listarSemForecast,
+  vincularNaTransacao,
+} from '../services/CatalogItemForecastLinkService';
+import { normalizeProductCode } from '../utils/forecastWorkbook';
+import {
+  catalogItemForecastFieldSchema,
+  catalogItemForecastLinkSchema,
+  catalogItemSemForecastQuerySchema,
+} from '../validators/domain';
+import {
   handleControllerError,
   HttpError,
   isNonEmptyString,
@@ -11,6 +23,8 @@ import {
 } from '../utils/http';
 
 const NCM_REGEX = /^\d{8}$/;
+const SEM_CODIGO_MESSAGE = 'Informe o código DBCorp para vincular o item ao Forecast.';
+const SEM_ITEM_ATIVO_MESSAGE = 'Reative o item para vinculá-lo ao Forecast.';
 
 export class CatalogItemController {
   static async list(req: Request, res: Response): Promise<Response> {
@@ -107,28 +121,62 @@ export class CatalogItemController {
         });
       }
 
-      const item = await prisma.catalogItem.create({
-        data: {
-          commercialName,
-          marketName,
-          ncm,
-          dbcorpCode,
-          familyId,
-          notes,
-          isActive,
-        },
-        include: { family: true }
+      const forecast = catalogItemForecastFieldSchema.parse(body.forecast) ?? null;
+      if (forecast && !dbcorpCode) {
+        return res.status(400).json({ message: SEM_CODIGO_MESSAGE });
+      }
+
+      const data = {
+        commercialName,
+        marketName,
+        ncm,
+        dbcorpCode,
+        familyId,
+        notes,
+        isActive,
+      };
+
+      // Sem codigo DBCorp nao ha o que vincular: caminho atual, sem transacao.
+      if (!dbcorpCode) {
+        const item = await prisma.catalogItem.create({ data, include: { family: true } });
+
+        await AuditLogService.log({
+          entityType: 'catalog_item',
+          entityId: item.id,
+          action: 'create',
+          performedById: req.user?.id ?? null,
+          afterData: item,
+        });
+
+        return res.status(201).json(item);
+      }
+
+      // Item + codigo no Forecast na MESMA transacao (com a lock do import): falha no vinculo desfaz o item.
+      const userId = req.user?.id ?? null;
+      const { item, vinculo } = await executarComVinculo(async (tx) => {
+        const created = await tx.catalogItem.create({ data, include: { family: true } });
+        await AuditLogService.log(
+          {
+            entityType: 'catalog_item',
+            entityId: created.id,
+            action: 'create',
+            performedById: userId,
+            afterData: created,
+          },
+          tx,
+        );
+        const resultado = await vincularNaTransacao(tx, {
+          catalogItemId: created.id,
+          code: dbcorpCode,
+          vinculo: forecast,
+          exigido: isActive,
+          userId,
+          origem: 'catalogo',
+        });
+        return { item: created, vinculo: resultado };
       });
 
-      await AuditLogService.log({
-        entityType: 'catalog_item',
-        entityId: item.id,
-        action: 'create',
-        performedById: req.user?.id ?? null,
-        afterData: item,
-      });
-
-      return res.status(201).json(item);
+      return res.status(201).json({ ...item, forecastVinculo: vinculo });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
@@ -194,22 +242,117 @@ export class CatalogItemController {
         data.isActive = body.isActive !== false;
       }
 
-      const item = await prisma.catalogItem.update({ 
-        where: { id }, 
-        data,
-        include: { family: true }
+      const forecast = catalogItemForecastFieldSchema.parse(body.forecast) ?? null;
+      const codeAntes = (existing.dbcorpCode ? normalizeProductCode(existing.dbcorpCode) : '') || null;
+      const codeDepois = data.dbcorpCode !== undefined ? (data.dbcorpCode as string | null) : codeAntes;
+      const ativoDepois = data.isActive !== undefined ? (data.isActive as boolean) : existing.isActive;
+      const mudouCodigo = codeDepois !== codeAntes;
+      const reativou = !existing.isActive && ativoDepois === true;
+
+      if (forecast && !codeDepois) {
+        return res.status(400).json({ message: SEM_CODIGO_MESSAGE });
+      }
+      if (forecast && !ativoDepois) {
+        return res.status(400).json({ message: SEM_ITEM_ATIVO_MESSAGE });
+      }
+
+      // Editar nota/NCM/nome sem mexer no codigo (D2) e reativar item sem codigo: caminho atual, sem transacao.
+      if (!forecast && !mudouCodigo && !(reativou && codeDepois)) {
+        const item = await prisma.catalogItem.update({
+          where: { id },
+          data,
+          include: { family: true },
+        });
+
+        await AuditLogService.log({
+          entityType: 'catalog_item',
+          entityId: item.id,
+          action: 'update',
+          performedById: req.user?.id ?? null,
+          beforeData: existing,
+          afterData: item,
+        });
+
+        return res.status(200).json(item);
+      }
+
+      const userId = req.user?.id ?? null;
+      const { item, vinculo } = await executarComVinculo(async (tx) => {
+        const updated = await tx.catalogItem.update({ where: { id }, data, include: { family: true } });
+        await AuditLogService.log(
+          {
+            entityType: 'catalog_item',
+            entityId: updated.id,
+            action: 'update',
+            performedById: userId,
+            beforeData: existing,
+            afterData: updated,
+          },
+          tx,
+        );
+        // Trocou ou zerou o codigo: o antigo so perde o vinculo com este item (continua no Forecast, D1).
+        if (mudouCodigo && codeAntes) {
+          await liberarVinculoAntigo(tx, { catalogItemId: id, codeAntigo: codeAntes, userId });
+        }
+        const resultado =
+          codeDepois && ativoDepois
+            ? await vincularNaTransacao(tx, {
+                catalogItemId: id,
+                code: codeDepois,
+                vinculo: forecast,
+                exigido: mudouCodigo || reativou,
+                userId,
+                origem: 'catalogo',
+              })
+            : null;
+        return { item: updated, vinculo: resultado };
       });
 
-      await AuditLogService.log({
-        entityType: 'catalog_item',
-        entityId: item.id,
-        action: 'update',
-        performedById: req.user?.id ?? null,
-        beforeData: existing,
-        afterData: item,
-      });
+      return res.status(200).json({ ...item, forecastVinculo: vinculo });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
 
-      return res.status(200).json(item);
+  // Itens ATIVOS cujo codigo DBCorp nao esta no Forecast (nao entram no calculo ate serem vinculados).
+  static async semForecast(req: Request, res: Response): Promise<Response> {
+    try {
+      catalogItemSemForecastQuerySchema.parse(req.query);
+      const { itens, total } = await listarSemForecast(prisma);
+      return res.status(200).json({ data: itens, total });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Vincula um item ATIVO ja existente (painel "Catalogo sem Forecast" e reativacao).
+  static async vincularForecast(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) {
+        return res.status(400).json({ message: 'ID do item invalido.' });
+      }
+      const vinculo = catalogItemForecastLinkSchema.parse(req.body);
+
+      const item = await prisma.catalogItem.findUnique({ where: { id } });
+      if (!item) {
+        return res.status(404).json({ message: 'Item de catalogo nao encontrado.' });
+      }
+      if (!item.isActive) {
+        return res.status(400).json({ message: SEM_ITEM_ATIVO_MESSAGE });
+      }
+      const code = item.dbcorpCode ? normalizeProductCode(item.dbcorpCode) : '';
+      if (!code) {
+        return res.status(400).json({ message: 'O item não tem código DBCorp.' });
+      }
+
+      const userId = req.user?.id ?? null;
+      const resultado = await executarComVinculo((tx) =>
+        vincularNaTransacao(tx, { catalogItemId: id, code, vinculo, exigido: true, userId, origem: 'catalogo' }),
+      );
+      return res.status(200).json({ data: resultado });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
