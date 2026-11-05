@@ -11,7 +11,7 @@
 //      node node_modules/ts-node/dist/bin.js --transpile-only scripts/forecast-produtos-novos.ts --criar --entrada C:\fora-do-repo\produtos-novos.csv --relatorio C:\fora-do-repo\relatorio.csv
 //   5) gravar (so apos conferir o dry-run; fora da janela de importacao do Forecast):
 //      ... --criar --entrada C:\fora-do-repo\produtos-novos.csv --gravar --confirmo-banco <host:porta/banco>
-// Exit: 0 = sem conflito/item_mudou/erro; 1 = algum deles ou erro inesperado; 2 = argumentos, cabecalho ou encoding.
+// Exit: 0 = sem conflito/item_mudou/erro; 1 = algum deles ou erro inesperado (no meio do lote, informa so quantas linhas foram gravadas); 2 = argumentos, cabecalho ou encoding.
 // Idempotente: rodar de novo devolve ja_aplicado. O stdout so traz contagens (nunca nomes, codigos nem a DATABASE_URL).
 import 'dotenv/config';
 import * as fs from 'node:fs';
@@ -27,9 +27,11 @@ import {
   fontesParaCsv,
   lerArgumentosProdutosNovos,
   lerPlanilhaProdutosNovos,
+  LoteInterrompido,
   modeloParaCsv,
   relatorioParaCsv,
   resumoDeLeituraSomente,
+  resumoDeLoteInterrompido,
   resumoDoRelatorio,
 } from '../src/utils/forecastProdutosNovos';
 
@@ -83,8 +85,10 @@ main()
   .then((codigo) => {
     process.exitCode = codigo;
   })
-  .catch(() => {
+  .catch((error: unknown) => {
     process.stderr.write('erro inesperado\n');
+    // So o numero de linhas ja gravadas (nunca a causa, que pode ter nome ou codigo).
+    if (error instanceof LoteInterrompido) process.stderr.write(`${resumoDeLoteInterrompido(error.linhasGravadas)}\n`);
     process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());

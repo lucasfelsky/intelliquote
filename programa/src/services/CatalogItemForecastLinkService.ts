@@ -7,6 +7,7 @@ import { sugerirVinculos, type LinhaAprovada, type LinhaProposta } from '../util
 import {
   agruparProdutosNovos,
   contarResultados,
+  LoteInterrompido,
   resolverPorNome,
   type FontePlanilha,
   type LinhaLida,
@@ -451,8 +452,10 @@ async function processarLinhaNova(tx: Db, dados: LinhaProdutoNovo): Promise<Resu
   // c. Idempotencia e conflitos com o que ja existe no Forecast.
   const produto = await tx.forecastProduct.findUnique({
     where: { normalizedName: normalizeProductName(dados.nome) },
-    select: { id: true },
+    select: { id: true, isActive: true },
   });
+  // Produto de mesmo nome INATIVO e conflito: o item ficaria fora do calculo sem ninguem saber. Nada e escrito.
+  if (produto && !produto.isActive) return resultado('conflito', 'produto_inativo', produto.id);
   const situacoes: SituacaoCodigo[] = [];
   for (const codigo of codigos) situacoes.push(await situacaoDoCodigo(tx, codigo));
   if (produto) {
@@ -567,7 +570,9 @@ export async function criarProdutosNovos(
           produtoId: null,
         });
       } else {
-        throw error;
+        // As linhas ja commitadas ficam; o chamador so precisa do numero delas (a linha que falhou foi desfeita).
+        const gravadas = gravar ? resultados.filter((r) => r.status === 'aplicado').length : 0;
+        throw new LoteInterrompido(gravadas, error);
       }
     }
   }

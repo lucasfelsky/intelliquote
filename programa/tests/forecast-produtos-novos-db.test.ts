@@ -334,4 +334,64 @@ describe('Produtos novos em lote (DB)', () => {
     expect(await contagens()).toEqual(antes);
     expect(familiaInativaId).toBeGreaterThan(0);
   });
+
+  const criarProdutoComCodigo = async (nome: string, sufixo: string, isActive: boolean) =>
+    prisma.forecastProduct.create({
+      data: {
+        name: nome,
+        normalizedName: nome,
+        sheetOrder: null,
+        sourceId: fonteComLtId,
+        origin: 'dbcorp',
+        isActive,
+        codes: { create: [{ position: 1, code: code(sufixo) }] },
+      },
+      include: { codes: true },
+    });
+
+  // Mutante: nao olhar isActive do produto de mesmo nome (sairia ja_aplicado e ainda gravaria o catalogItemId).
+  testDbSkip('h. produto de mesmo nome INATIVO com o codigo e conflito produto_inativo: nada gravado, em dry-run e em --gravar', async () => {
+    await criarItem('H1', `FIC ${U} HHI - UN`);
+    const nome = `FIC ${U} INATIVO`;
+    const produto = await criarProdutoComCodigo(nome, 'H1', false);
+    const planilha = csv([{ produtoNovo: nome, codigos: code('H1'), catalogItemIds: String(itens.H1), familia: FAMILIA, fonte: FONTE_COM_LT, criar: 'sim' }]);
+
+    for (const gravar of [false, true]) {
+      const antes = await contagens();
+      const relatorio = await criarProdutosNovos(ler(planilha), { gravar });
+      expect(relatorio.contagem).toEqual({ aplicado: 0, ja_aplicado: 0, conflito: 1, item_mudou: 0, erro: 0, ignorado: 0 });
+      expect(relatorio.resultados.map((r) => [r.linha, r.status, r.motivo])).toEqual([[2, 'conflito', 'produto_inativo']]);
+      expect(await contagens()).toEqual(antes);
+      const codigo = await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: code('H1') } });
+      expect(codigo.catalogItemId).toBeNull();
+      expect(codigo.productId).toBe(produto.id);
+      expect(await prisma.auditLog.count({ where: { entityType: 'forecast_product', entityId: String(produto.id) } })).toBe(0);
+    }
+    expect((await prisma.forecastProduct.findUniqueOrThrow({ where: { id: produto.id } })).isActive).toBe(false);
+  });
+
+  // Mutante: o dry-run nao lancar o rollback forcado quando o status e ja_aplicado (o preenchimento do vinculo seria commitado).
+  testDbSkip('i. produto ATIVO existente com catalogItemId nulo: dry-run deixa nulo, --gravar preenche, contagem igual nos dois modos', async () => {
+    await criarItem('I1', `FIC ${U} III - UN`);
+    const nome = `FIC ${U} ATIVO NULO`;
+    await criarProdutoComCodigo(nome, 'I1', true);
+    const planilha = csv([{ produtoNovo: nome, codigos: code('I1'), catalogItemIds: String(itens.I1), familia: FAMILIA, fonte: FONTE_COM_LT, criar: 'sim' }]);
+    const vinculo = async () => (await prisma.forecastProductCode.findUniqueOrThrow({ where: { code: code('I1') } })).catalogItemId;
+
+    const antes = await contagens();
+    const dry = await criarProdutosNovos(ler(planilha), { gravar: false });
+    expect(dry.contagem).toEqual({ aplicado: 0, ja_aplicado: 1, conflito: 0, item_mudou: 0, erro: 0, ignorado: 0 });
+    expect(await vinculo()).toBeNull();
+    expect(await contagens()).toEqual(antes);
+
+    const real = await criarProdutosNovos(ler(planilha), { gravar: true });
+    expect(real.contagem).toEqual(dry.contagem);
+    expect(real.resultados.map((r) => [r.status, r.motivo])).toEqual(dry.resultados.map((r) => [r.status, r.motivo]));
+    expect(await vinculo()).toBe(itens.I1);
+    // Idempotente: nova execucao nao muda nada.
+    const depois = await contagens();
+    const outra = await criarProdutosNovos(ler(planilha), { gravar: true });
+    expect(outra.contagem).toEqual(dry.contagem);
+    expect(await contagens()).toEqual(depois);
+  });
 });

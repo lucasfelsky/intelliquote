@@ -24,7 +24,7 @@ import {
   listarFontesParaPlanilha,
 } from '../src/services/CatalogItemForecastLinkService';
 import { CADASTRO_TX_OPTIONS } from '../src/services/ForecastProductCadastroService';
-import { chaveDeNome, type LinhaLida, type LinhaProdutoNovo } from '../src/utils/forecastProdutosNovos';
+import { chaveDeNome, LoteInterrompido, type LinhaLida, type LinhaProdutoNovo } from '../src/utils/forecastProdutosNovos';
 import { HttpError } from '../src/utils/http';
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -282,6 +282,32 @@ describe('criarProdutosNovos - isolamento por linha', () => {
     expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
   });
 
+  // Mutante: perder a contagem ao abortar (o script imprimiria 0 ou nada) ou contar a linha que falhou.
+  it('erro inesperado na 2a linha: LoteInterrompido carrega so quantas linhas ja foram gravadas (a 1a); causa em cause', async () => {
+    const causa = new Error('falha inesperada sintetica');
+    prismaMock.forecastProduct.create
+      .mockImplementationOnce(async () => ({ id: 701, name: 'FIC PROD A' }))
+      .mockRejectedValueOnce(causa);
+
+    const erro = await criarProdutosNovos(DUAS_LINHAS(), { gravar: true }).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(LoteInterrompido);
+    expect((erro as LoteInterrompido).linhasGravadas).toBe(1);
+    expect((erro as LoteInterrompido).cause).toBe(causa);
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('dry-run: erro inesperado na 2a linha informa 0 linhas gravadas (nada foi gravado)', async () => {
+    prismaMock.forecastProduct.create
+      .mockImplementationOnce(async () => ({ id: 701, name: 'FIC PROD A' }))
+      .mockRejectedValueOnce(new Error('falha inesperada sintetica'));
+
+    const erro = await criarProdutosNovos(DUAS_LINHAS(), { gravar: false }).catch((e: unknown) => e);
+
+    expect(erro).toBeInstanceOf(LoteInterrompido);
+    expect((erro as LoteInterrompido).linhasGravadas).toBe(0);
+  });
+
   it('erro de unicidade (P2002) no commit vira erro da linha, nao aborta o lote', async () => {
     prismaMock.forecastProductCode.create.mockRejectedValueOnce(
       new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'teste', meta: { target: ['code'] } }),
@@ -491,7 +517,7 @@ describe('criarProdutosNovos - familia', () => {
 });
 
 describe('criarProdutosNovos - produto que ja existe', () => {
-  const produtoExistente = { id: 50 };
+  const produtoExistente = { id: 50, isActive: true };
   const codigoNoProduto = (catalogItemId: number | null, produtoId = 50) => ({
     id: 600,
     catalogItemId,
@@ -536,6 +562,21 @@ describe('criarProdutosNovos - produto que ja existe', () => {
     expect(relatorio.resultados[0]).toMatchObject({ status: 'conflito', motivo: 'produto_ja_existe' });
     expect(prismaMock.forecastProductCode.create).not.toHaveBeenCalled();
     expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+  });
+
+  // Mutante: ignorar isActive (o produto INATIVO sairia ja_aplicado e ainda receberia o catalogItemId).
+  it.each([true, false])('produto de mesmo nome INATIVO com todos os codigos -> conflito produto_inativo; nada e escrito (gravar=%s)', async (gravar) => {
+    prismaMock.forecastProduct.findUnique.mockResolvedValue({ id: 50, isActive: false });
+    prismaMock.forecastProductCode.findUnique.mockImplementation(async ({ where }: { where: { code: string } }) =>
+      codigoNoProduto(where.code === 'FIC-001' ? null : 12),
+    );
+    const relatorio = await criarProdutosNovos([pronta(2)], { gravar });
+    expect(relatorio.resultados[0]).toMatchObject({ status: 'conflito', motivo: 'produto_inativo' });
+    expect(relatorio.contagem).toMatchObject({ conflito: 1, ja_aplicado: 0, aplicado: 0 });
+    expect(prismaMock.forecastProductCode.update).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProductCode.create).not.toHaveBeenCalled();
+    expect(prismaMock.forecastProduct.create).not.toHaveBeenCalled();
+    expect(prismaMock.auditLog.create).not.toHaveBeenCalled();
   });
 
   it('nome novo mas codigo ja em OUTRO produto -> conflito codigo_em_outro_produto', async () => {

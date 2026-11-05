@@ -11,10 +11,12 @@ import {
   lerLeadTimeDias,
   lerListaDaCelula,
   lerPlanilhaProdutosNovos,
+  LoteInterrompido,
   modeloParaCsv,
   relatorioParaCsv,
   resolverPorNome,
   resumoDeLeituraSomente,
+  resumoDeLoteInterrompido,
   resumoDoRelatorio,
   type LinhaLida,
   type LinhaProdutoNovo,
@@ -709,5 +711,27 @@ describe('relatorio da criacao em lote', () => {
     expect(relatorioParaCsv(resultados.slice(0, 3))).toBe(
       `${BOM}linha;status;motivo;produtoId\r\n2;aplicado;;701\r\n3;ja_aplicado;;50\r\n4;conflito;lead_time_divergente;\r\n`,
     );
+  });
+});
+
+// Mutante: a linha de aborto do lote vazar nome, codigo ou mensagem do erro (so o numero pode sair).
+describe('lote interrompido por erro inesperado', () => {
+  it('a unica linha impressa e "Linhas gravadas ate o erro: N" com N inteiro', () => {
+    expect(resumoDeLoteInterrompido(0)).toBe('Linhas gravadas ate o erro: 0');
+    expect(resumoDeLoteInterrompido(7)).toBe('Linhas gravadas ate o erro: 7');
+    expect(resumoDeLoteInterrompido(7)).toMatch(/^Linhas gravadas ate o erro: \d+$/);
+  });
+
+  it('valor nao inteiro ou negativo vira 0 (nunca texto)', () => {
+    for (const ruim of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(resumoDeLoteInterrompido(ruim)).toBe('Linhas gravadas ate o erro: 0');
+    }
+  });
+
+  it('LoteInterrompido guarda o numero e a causa; a linha impressa nao contem a mensagem da causa', () => {
+    const erro = new LoteInterrompido(3, new Error('FIC-SEGREDO 12345'));
+    expect(erro.linhasGravadas).toBe(3);
+    expect((erro.cause as Error).message).toBe('FIC-SEGREDO 12345');
+    expect(resumoDeLoteInterrompido(erro.linhasGravadas)).not.toContain('FIC-SEGREDO');
   });
 });

@@ -72,6 +72,7 @@ export type MotivoProdutoNovo =
   | 'item_inativo'
   | 'codigo_do_item_mudou'
   | 'produto_ja_existe'
+  | 'produto_inativo'
   | 'codigo_em_outro_produto'
   | 'codigo_ligado_a_outro_item'
   | 'codigo_em_mais_de_um_item'
@@ -434,6 +435,28 @@ export function resumoDoRelatorio(relatorio: RelatorioProdutosNovos): string[] {
 export function codigoDeSaida(relatorio: RelatorioProdutosNovos): 0 | 1 {
   const { conflito, item_mudou: itemMudou, erro } = relatorio.contagem;
   return conflito + itemMudou + erro > 0 ? 1 : 0;
+}
+
+/**
+ * Erro inesperado (que nao e HttpError) no meio do lote: as linhas ja gravadas ficam. Carrega SO o numero delas,
+ * para o script informar; a causa original fica em `cause` e nunca e impressa (pode ter nome ou codigo).
+ */
+export class LoteInterrompido extends Error {
+  readonly linhasGravadas: number;
+  readonly cause: unknown;
+
+  constructor(linhasGravadas: number, causa: unknown) {
+    super(causa instanceof Error ? causa.message : 'erro inesperado');
+    this.name = 'LoteInterrompido';
+    this.linhasGravadas = linhasGravadas;
+    this.cause = causa;
+  }
+}
+
+/** Unica linha impressa quando o lote e interrompido: so um inteiro (nunca nome, codigo nem mensagem). */
+export function resumoDeLoteInterrompido(linhasGravadas: number): string {
+  const n = Number.isInteger(linhasGravadas) && linhasGravadas > 0 ? linhasGravadas : 0;
+  return `Linhas gravadas ate o erro: ${n}`;
 }
 
 export function resumoDeLeituraSomente(modo: 'fontes', total: number): string;
