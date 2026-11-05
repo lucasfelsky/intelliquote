@@ -32,6 +32,7 @@
     "services": [
       "AuditLogService.ts",
       "AuthService.ts",
+      "CatalogItemForecastLinkService.ts",
       "CommercialRequestAttachmentService.ts",
       "CommercialRequestNotificationService.ts",
       "CommercialRequestPriceService.ts",
@@ -235,6 +236,7 @@
     "GET /auth/password-recovery/tokens",
     "GET /catalog-items",
     "GET /catalog-items/:id",
+    "GET /catalog-items/sem-forecast",
     "GET /commercial-requests",
     "GET /commercial-requests/:id",
     "GET /commercial-requests/:id/attachments/:attachmentId/download",
@@ -316,6 +318,7 @@
     "POST /auth/refresh",
     "POST /auth/reset-password",
     "POST /catalog-items",
+    "POST /catalog-items/:id/forecast",
     "POST /catalog-items/import",
     "POST /catalog-items/import/confirm",
     "POST /commercial-requests",

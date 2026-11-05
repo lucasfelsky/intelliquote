@@ -6,6 +6,16 @@ import { messageOf } from '@/services/quoteResponses';
 import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
 import { Pagination } from '@/components/Pagination';
+import {
+  catalogForecastKeys,
+  codigoLivreNoForecast,
+  listCatalogoSemForecast,
+  type CatalogForecastVinculo,
+} from '@/services/catalogForecast';
+import { patchForecastSourceLeadTime } from '@/services/forecastFontes';
+import ItemForecastVinculo, { useVinculoDoItem } from './Itens/ItemForecastVinculo';
+import ItemVincularForecastModal, { mensagemVinculado } from './Itens/ItemVincularForecastModal';
+import ItensSemForecast from './Itens/ItensSemForecast';
 
 interface CatalogItem {
   id: number;
@@ -99,6 +109,8 @@ export default function Itens() {
   const [page, setPage] = useState(1);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [modalVinculo, setModalVinculo] = useState<{ item: CatalogItem; modo: 'vincular' | 'reativar' } | null>(null);
+  const leadTimeGravado = useRef(false);
 
   // Import states
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -137,6 +149,15 @@ export default function Itens() {
     setPage(1);
   }, [search, showInactive]);
 
+  // Itens ativos com codigo fora do Forecast (selo "Fora do Forecast"); o painel usa a mesma consulta.
+  const semForecastQuery = useQuery({
+    queryKey: catalogForecastKeys.semForecast,
+    queryFn: listCatalogoSemForecast,
+    staleTime: 30_000,
+  });
+  const semForecastIds = useMemo(() => new Set((semForecastQuery.data ?? []).map((i) => i.id)), [semForecastQuery.data]);
+  const vinc = useVinculoDoItem(form.dbcorpCode, editing);
+
   const familiesQuery = useQuery({
     queryKey: ['item-families', { includeInactive: false }],
     queryFn: async () => {
@@ -165,6 +186,7 @@ export default function Itens() {
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
+    vinc.limpar();
     setFeedback(null);
   }
 
@@ -178,6 +200,7 @@ export default function Itens() {
       familyId: item.familyId ?? '',
       notes: item.notes ?? '',
     });
+    vinc.limpar();
     setFeedback(null);
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -185,20 +208,31 @@ export default function Itens() {
   }
 
   const save = useMutation({
-    mutationFn: async (vars: { id: number | null; payload: CatalogItemPayload }) =>
-      vars.id === null
-        ? api.post<unknown>('/v1/catalog-items', vars.payload)
-        : api.put<unknown>(`/v1/catalog-items/${vars.id}`, vars.payload),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['catalog-items'] });
-      if (vars.id === null) {
-        setFeedback({ kind: 'success', message: `Item "${vars.payload.commercialName}" criado.` });
-        setForm(EMPTY_FORM);
-      } else {
-        setFeedback({ kind: 'success', message: `Item "${vars.payload.commercialName}" atualizado.` });
+    mutationFn: async (vars: { id: number | null; payload: CatalogItemPayload; leadTimeDias: number | null }) => {
+      leadTimeGravado.current = false;
+      const forecast = vars.payload.forecast as { modo?: string; sourceId?: number } | undefined;
+      // O lead time pertence a FONTE: grava antes do item (o backend recusa fonte sem lead time).
+      if (vars.leadTimeDias !== null && forecast?.modo === 'novo' && typeof forecast.sourceId === 'number') {
+        await patchForecastSourceLeadTime(forecast.sourceId, vars.leadTimeDias);
+        leadTimeGravado.current = true;
       }
+      return vars.id === null
+        ? api.post<{ forecastVinculo?: CatalogForecastVinculo | null }>('/v1/catalog-items', vars.payload)
+        : api.put<{ forecastVinculo?: CatalogForecastVinculo | null }>(`/v1/catalog-items/${vars.id}`, vars.payload);
     },
-    onError: (err) => setFeedback({ kind: 'error', message: messageOf(err) }),
+    onSuccess: (data, vars) => {
+      qc.invalidateQueries({ queryKey: ['catalog-items'] });
+      qc.invalidateQueries({ queryKey: ['forecast'] });
+      const vinculado = mensagemVinculado(data?.forecastVinculo);
+      const base = `Item "${vars.payload.commercialName}" ${vars.id === null ? 'criado' : 'atualizado'}.`;
+      setFeedback({ kind: 'success', message: vinculado ? `${base} ${vinculado}` : base });
+      if (vars.id === null) setForm(EMPTY_FORM);
+      if (vars.id === null || vars.payload.forecast) vinc.limpar();
+    },
+    onError: (err) => {
+      const prefixo = leadTimeGravado.current ? 'O lead time da fonte foi gravado, mas o item não foi salvo. ' : '';
+      setFeedback({ kind: 'error', message: prefixo + messageOf(err) });
+    },
   });
 
   function handleSubmit(e: React.FormEvent) {
@@ -211,6 +245,11 @@ export default function Itens() {
       setFeedback({ kind: 'error', message: 'O NCM deve ter 8 dígitos.' });
       return;
     }
+    const validacao = vinc.validar();
+    if (!validacao.ok) {
+      setFeedback({ kind: 'error', message: validacao.erro });
+      return;
+    }
     setFeedback(null);
     const payload: CatalogItemPayload = {
       commercialName: form.commercialName.trim(),
@@ -220,7 +259,8 @@ export default function Itens() {
       familyId: form.familyId !== '' ? Number(form.familyId) : null,
       notes: form.notes.trim() || null,
     };
-    save.mutate({ id: editing ? editing.id : null, payload });
+    if (validacao.forecast) payload.forecast = validacao.forecast;
+    save.mutate({ id: editing ? editing.id : null, payload, leadTimeDias: validacao.leadTimeDias });
   }
 
   const softDelete = useMutation({
@@ -242,11 +282,19 @@ export default function Itens() {
   });
 
   async function handleSoftDelete(item: CatalogItem) {
-    if (!(await confirm(`Inativar o item "${item.commercialName}"?`))) return;
+    // Inativar nao tira o codigo do Forecast (ele segue medindo venda e estoque do DBCorp).
+    const noForecast = !!item.dbcorpCode && semForecastQuery.isSuccess && !semForecastIds.has(item.id);
+    const aviso = noForecast ? ` O código DBCorp ${item.dbcorpCode} continua no Forecast.` : '';
+    if (!(await confirm(`Inativar o item "${item.commercialName}"?${aviso}`))) return;
     softDelete.mutate(item);
   }
 
-  function handleReactivate(item: CatalogItem) {
+  async function handleReactivate(item: CatalogItem) {
+    // Reativar item com codigo fora do Forecast exige o vinculo: abre o modal (o backend recusaria com 400).
+    if (item.dbcorpCode && (await codigoLivreNoForecast(qc, item.dbcorpCode))) {
+      setModalVinculo({ item, modo: 'reativar' });
+      return;
+    }
     reactivate.mutate(item);
   }
 
@@ -363,6 +411,8 @@ export default function Itens() {
         </div>
       )}
 
+      <ItensSemForecast onConcluido={(message) => setFeedback({ kind: 'success', message })} />
+
       <div className="itens-page__split">
         <section className="card itens-page__catalogo" aria-label="Lista de itens do catálogo">
           <div className="itens-page__catalogo-cabecalho">
@@ -407,6 +457,14 @@ export default function Itens() {
                       >
                         {item.isActive ? 'Ativo' : 'Inativo'}
                       </span>
+                      {semForecastIds.has(item.id) && (
+                        <span
+                          className="badge badge--muted itens-card__badge"
+                          title="O código DBCorp deste item não está no Forecast: ele fica fora do cálculo."
+                        >
+                          Fora do Forecast
+                        </span>
+                      )}
                       {item.family && (
                         <span className="badge badge--muted itens-card__badge">
                           {item.family.name}
@@ -447,6 +505,26 @@ export default function Itens() {
                     >
                       Editar
                     </span>
+                    {item.isActive && semForecastIds.has(item.id) && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="itens-card__action"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModalVinculo({ item, modo: 'vincular' });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setModalVinculo({ item, modo: 'vincular' });
+                          }
+                        }}
+                      >
+                        Vincular ao Forecast
+                      </span>
+                    )}
                     {item.isActive ? (
                       <span
                         role="button"
@@ -568,11 +646,26 @@ export default function Itens() {
                   type="text"
                   className="input"
                   value={form.dbcorpCode}
-                  onChange={(e) => setForm({ ...form, dbcorpCode: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, dbcorpCode: e.target.value });
+                    vinc.limpar();
+                  }}
                   placeholder="Ex.: PI-TPO"
                 />
               </label>
             </div>
+            {vinc.aplicavel && (
+              <ItemForecastVinculo
+                codigo={form.dbcorpCode}
+                exigido={vinc.codigoMudou}
+                familiaDoItem={form.familyId === '' ? null : form.familyId}
+                nomeSugerido={form.commercialName}
+                valor={vinc.vinculo}
+                onChange={vinc.setVinculo}
+                erro={vinc.erro}
+                desabilitado={save.isPending}
+              />
+            )}
             <label className="field">
               <span>Observações</span>
               <textarea
@@ -596,6 +689,18 @@ export default function Itens() {
           </form>
         </aside>
       </div>
+
+      {modalVinculo && (
+        <ItemVincularForecastModal
+          item={modalVinculo.item}
+          modo={modalVinculo.modo}
+          onFechar={() => setModalVinculo(null)}
+          onConcluido={(message) => {
+            setModalVinculo(null);
+            setFeedback({ kind: 'success', message });
+          }}
+        />
+      )}
 
       <Modal isOpen={isImportModalOpen} onClose={closeImportModal} title="Importar Itens do Catálogo">
         <div className="import-modal-content importacao-itens">
@@ -724,6 +829,10 @@ export default function Itens() {
                   <strong className="importacao-mono">{importResult.successLines.length}</strong> itens importados com sucesso!
                 </span>
               </div>
+
+              <p className="importacao-texto">
+                Itens com código DBCorp fora do Forecast aparecem em "Catálogo sem Forecast" para vincular.
+              </p>
 
               {importResult.errorLines.length > 0 && (
                 <div

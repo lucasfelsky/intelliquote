@@ -25,6 +25,14 @@ catalogItemRoutes.get(
   CatalogItemController.list,
 );
 
+// ANTES de /catalog-items/:id: senao "sem-forecast" cai no :id (400 "ID do item invalido").
+catalogItemRoutes.get(
+  '/catalog-items/sem-forecast',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  CatalogItemController.semForecast,
+);
+
 catalogItemRoutes.get(
   '/catalog-items/:id',
   requireAuth,
@@ -37,6 +45,13 @@ catalogItemRoutes.post(
   requireAuth,
   allowRoles(['admin', 'comprador']),
   CatalogItemController.create,
+);
+
+catalogItemRoutes.post(
+  '/catalog-items/:id/forecast',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  CatalogItemController.vincularForecast,
 );
 
 catalogItemRoutes.put(

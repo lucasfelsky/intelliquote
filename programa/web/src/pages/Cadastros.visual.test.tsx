@@ -69,6 +69,7 @@ const ITENS = [item(1, 'Item A'), item(2, 'Item B', { notes: null, ncm: null, db
 function mockItens() {
   vi.mocked(api.get).mockImplementation((url: string) => {
     if (url.includes('item-families')) return Promise.resolve({ data: [{ id: 3, name: 'Acidulantes' }] });
+    if (url.includes('sem-forecast')) return Promise.resolve({ data: [] });
     if (url.includes('catalog-items')) {
       return Promise.resolve({ data: ITENS, pagination: { page: 1, pageSize: 50, totalItems: 75, totalPages: 2 } });
     }

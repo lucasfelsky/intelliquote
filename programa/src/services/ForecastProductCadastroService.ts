@@ -110,6 +110,160 @@ async function catalogoPorCodigo(tx: Db): Promise<Map<string, number>> {
   return new Map([...porCodigo].filter(([, ids]) => ids.length === 1).map(([k, ids]) => [k, ids[0]]));
 }
 
+// Mesma advisory lock do import (planilha e DBCorp): DEVE ser a 1a instrucao da transacao de cadastro.
+export async function travarImportForecast(tx: Db): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'forecast:import'}))`;
+}
+
+// Quem pediu o cadastro: vai para o AuditLog (metadata.source). O catalogo grava 'catalogo' (tela do item) ou
+// 'backfill_catalogo' (script); a tela de pendentes grava 'dbcorp_pendente'.
+export type OrigemCadastro = 'dbcorp_pendente' | 'catalogo' | 'backfill_catalogo';
+
+// Corpo de create() SEM a lock (o chamador abre a transacao e chama travarImportForecast antes).
+// catalogItemIdPorCodigo (id explicito do item) tem prioridade sobre catalogoPorCodigo (so vale com 1 item ativo).
+export async function criarProdutoNaTransacao(
+  tx: Db,
+  input: ForecastProductCreateInput,
+  userId: number | null,
+  opcoes: { origem?: OrigemCadastro; catalogItemIdPorCodigo?: ReadonlyMap<string, number> } = {},
+): Promise<ForecastProductCriado> {
+  const source = await tx.forecastSource.findUnique({
+    where: { id: input.sourceId },
+    select: { id: true, isActive: true, leadTimeDays: true },
+  });
+  if (!source || !source.isActive) throw new HttpError(400, 'A fonte escolhida não existe ou está inativa.');
+  if (source.leadTimeDays === null) throw new HttpError(400, 'A fonte escolhida não tem lead time cadastrado.');
+
+  const family = await tx.itemFamily.findUnique({
+    where: { id: input.familyId },
+    select: { id: true, isActive: true },
+  });
+  if (!family || !family.isActive) throw new HttpError(400, 'A família escolhida não existe ou está inativa.');
+
+  const nome = input.nome.replace(/\s+/g, ' ').trim();
+  const normalizedName = normalizeProductName(nome);
+  const duplicado = await tx.forecastProduct.findUnique({
+    where: { normalizedName },
+    select: { id: true },
+  });
+  if (duplicado) throw new HttpError(409, 'Já existe um produto com esse nome.');
+
+  const codigos = input.codigos.map(normalizeProductCode);
+  await assertCodigosLivres(tx, codigos);
+  const catalogByCode = await catalogoPorCodigo(tx);
+
+  const product = await tx.forecastProduct.create({
+    data: {
+      name: nome,
+      normalizedName,
+      sheetOrder: null,
+      sourceId: source.id,
+      familyId: family.id,
+      isActive: true,
+      origin: FORECAST_PRODUCT_ORIGIN_DBCORP,
+    },
+  });
+  const criados: ForecastProductCriado['codigos'] = [];
+  for (const [index, code] of codigos.entries()) {
+    const row = await tx.forecastProductCode.create({
+      data: {
+        productId: product.id,
+        position: index + 1,
+        code,
+        catalogItemId: opcoes.catalogItemIdPorCodigo?.get(code) ?? catalogByCode.get(code) ?? null,
+      },
+    });
+    criados.push({ id: row.id, posicao: row.position, codigo: row.code });
+  }
+
+  await AuditLogService.log(
+    {
+      entityType: ENTITY_TYPE,
+      entityId: product.id,
+      action: 'create',
+      performedById: userId,
+      // So ids e contagens: nunca nome de produto nem codigo DBCorp.
+      metadata: {
+        source: opcoes.origem ?? 'dbcorp_pendente',
+        sourceId: source.id,
+        familyId: family.id,
+        codigos: codigos.length,
+        ...(opcoes.catalogItemIdPorCodigo ? { catalogItemIds: [...opcoes.catalogItemIdPorCodigo.values()] } : {}),
+      },
+    },
+    tx,
+  );
+  return {
+    id: product.id,
+    nome: product.name,
+    ativo: true,
+    origem: FORECAST_PRODUCT_ORIGIN_DBCORP,
+    fonteId: source.id,
+    familiaId: family.id,
+    codigos: criados,
+  };
+}
+
+// Corpo de addCode() SEM a lock: acrescenta 1 codigo a um produto ativo (menor posicao livre de 1..7).
+// catalogItemId explicito (item que originou o vinculo) tem prioridade sobre catalogoPorCodigo.
+export async function adicionarCodigoNaTransacao(
+  tx: Db,
+  productId: number,
+  codigo: string,
+  userId: number | null,
+  opcoes: { origem?: OrigemCadastro; catalogItemId?: number } = {},
+): Promise<ForecastProductCodigoAdicionado> {
+  const product = await tx.forecastProduct.findUnique({
+    where: { id: productId },
+    select: { id: true, isActive: true, origin: true, codes: { select: { position: true } } },
+  });
+  if (!product) throw new HttpError(404, 'Produto não encontrado.');
+  if (!product.isActive) throw new HttpError(400, 'Produto inativo.');
+
+  const usadas = new Set(product.codes.map((c) => c.position));
+  let position = 0;
+  for (let p = 1; p <= FORECAST_MAX_CODES_PER_PRODUCT; p += 1) {
+    if (!usadas.has(p)) {
+      position = p;
+      break;
+    }
+  }
+  if (position === 0) {
+    throw new HttpError(400, `O produto já tem ${FORECAST_MAX_CODES_PER_PRODUCT} códigos.`);
+  }
+
+  const code = normalizeProductCode(codigo);
+  await assertCodigosLivres(tx, [code]);
+  const catalogByCode = await catalogoPorCodigo(tx);
+  const catalogItemId = opcoes.catalogItemId ?? catalogByCode.get(code) ?? null;
+
+  const row = await tx.forecastProductCode.create({
+    data: { productId, position, code, catalogItemId },
+  });
+  await AuditLogService.log(
+    {
+      entityType: ENTITY_TYPE,
+      entityId: productId,
+      action: 'code_add',
+      performedById: userId,
+      // So ids e posicao: nunca o codigo DBCorp.
+      metadata: {
+        source: opcoes.origem ?? 'dbcorp_pendente',
+        position,
+        codeId: row.id,
+        ...(opcoes.catalogItemId ? { catalogItemId: opcoes.catalogItemId } : {}),
+      },
+    },
+    tx,
+  );
+  return {
+    produtoId: productId,
+    produtoOrigem:
+      product.origin === FORECAST_PRODUCT_ORIGIN_DBCORP ? FORECAST_PRODUCT_ORIGIN_DBCORP : FORECAST_PRODUCT_ORIGIN_PLANILHA,
+    codigo: { id: row.id, posicao: row.position, codigo: row.code },
+  };
+}
+
 export class ForecastProductCadastroService {
   // Cria produto a partir de um pendente de cadastro (origin 'dbcorp'). So entra no calculo na PROXIMA
   // quinzena montada: a fonte precisa estar ativa com lead time e a familia ativa. Mesma advisory lock do
@@ -117,82 +271,8 @@ export class ForecastProductCadastroService {
   static async create(input: ForecastProductCreateInput, userId: number | null): Promise<ForecastProductCriado> {
     try {
       return await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'forecast:import'}))`;
-
-        const source = await tx.forecastSource.findUnique({
-          where: { id: input.sourceId },
-          select: { id: true, isActive: true, leadTimeDays: true },
-        });
-        if (!source || !source.isActive) throw new HttpError(400, 'A fonte escolhida não existe ou está inativa.');
-        if (source.leadTimeDays === null) throw new HttpError(400, 'A fonte escolhida não tem lead time cadastrado.');
-
-        const family = await tx.itemFamily.findUnique({
-          where: { id: input.familyId },
-          select: { id: true, isActive: true },
-        });
-        if (!family || !family.isActive) throw new HttpError(400, 'A família escolhida não existe ou está inativa.');
-
-        const nome = input.nome.replace(/\s+/g, ' ').trim();
-        const normalizedName = normalizeProductName(nome);
-        const duplicado = await tx.forecastProduct.findUnique({
-          where: { normalizedName },
-          select: { id: true },
-        });
-        if (duplicado) throw new HttpError(409, 'Já existe um produto com esse nome.');
-
-        const codigos = input.codigos.map(normalizeProductCode);
-        await assertCodigosLivres(tx, codigos);
-        const catalogByCode = await catalogoPorCodigo(tx);
-
-        const product = await tx.forecastProduct.create({
-          data: {
-            name: nome,
-            normalizedName,
-            sheetOrder: null,
-            sourceId: source.id,
-            familyId: family.id,
-            isActive: true,
-            origin: FORECAST_PRODUCT_ORIGIN_DBCORP,
-          },
-        });
-        const criados: ForecastProductCriado['codigos'] = [];
-        for (const [index, code] of codigos.entries()) {
-          const row = await tx.forecastProductCode.create({
-            data: {
-              productId: product.id,
-              position: index + 1,
-              code,
-              catalogItemId: catalogByCode.get(code) ?? null,
-            },
-          });
-          criados.push({ id: row.id, posicao: row.position, codigo: row.code });
-        }
-
-        await AuditLogService.log(
-          {
-            entityType: ENTITY_TYPE,
-            entityId: product.id,
-            action: 'create',
-            performedById: userId,
-            // So ids e contagens: nunca nome de produto nem codigo DBCorp.
-            metadata: {
-              source: 'dbcorp_pendente',
-              sourceId: source.id,
-              familyId: family.id,
-              codigos: codigos.length,
-            },
-          },
-          tx,
-        );
-        return {
-          id: product.id,
-          nome: product.name,
-          ativo: true,
-          origem: FORECAST_PRODUCT_ORIGIN_DBCORP,
-          fonteId: source.id,
-          familiaId: family.id,
-          codigos: criados,
-        };
+        await travarImportForecast(tx);
+        return criarProdutoNaTransacao(tx, input, userId);
       }, CADASTRO_TX_OPTIONS);
     } catch (error) {
       if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);
@@ -256,53 +336,8 @@ export class ForecastProductCadastroService {
   ): Promise<ForecastProductCodigoAdicionado> {
     try {
       return await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'forecast:import'}))`;
-
-        const product = await tx.forecastProduct.findUnique({
-          where: { id: productId },
-          select: { id: true, isActive: true, origin: true, codes: { select: { position: true } } },
-        });
-        if (!product) throw new HttpError(404, 'Produto não encontrado.');
-        if (!product.isActive) throw new HttpError(400, 'Produto inativo.');
-
-        const usadas = new Set(product.codes.map((c) => c.position));
-        let position = 0;
-        for (let p = 1; p <= FORECAST_MAX_CODES_PER_PRODUCT; p += 1) {
-          if (!usadas.has(p)) {
-            position = p;
-            break;
-          }
-        }
-        if (position === 0) {
-          throw new HttpError(400, `O produto já tem ${FORECAST_MAX_CODES_PER_PRODUCT} códigos.`);
-        }
-
-        const code = normalizeProductCode(input.codigo);
-        await assertCodigosLivres(tx, [code]);
-        const catalogByCode = await catalogoPorCodigo(tx);
-
-        const row = await tx.forecastProductCode.create({
-          data: { productId, position, code, catalogItemId: catalogByCode.get(code) ?? null },
-        });
-        await AuditLogService.log(
-          {
-            entityType: ENTITY_TYPE,
-            entityId: productId,
-            action: 'code_add',
-            performedById: userId,
-            // So ids e posicao: nunca o codigo DBCorp.
-            metadata: { source: 'dbcorp_pendente', position, codeId: row.id },
-          },
-          tx,
-        );
-        return {
-          produtoId: productId,
-          produtoOrigem:
-            product.origin === FORECAST_PRODUCT_ORIGIN_DBCORP
-              ? FORECAST_PRODUCT_ORIGIN_DBCORP
-              : FORECAST_PRODUCT_ORIGIN_PLANILHA,
-          codigo: { id: row.id, posicao: row.position, codigo: row.code },
-        };
+        await travarImportForecast(tx);
+        return adicionarCodigoNaTransacao(tx, productId, input.codigo, userId);
       }, CADASTRO_TX_OPTIONS);
     } catch (error) {
       if (isTransactionTimeout(error)) throw new HttpError(503, CADASTRO_OCUPADO_MESSAGE);

@@ -1066,3 +1066,26 @@ export const commercialRequestFulfillSchema = z
 
 export type CommercialRequestFulfillInput = z.infer<typeof commercialRequestFulfillSchema>;
 export type QuoteRequestCreateInput = z.infer<typeof quoteRequestCreateSchema>;
+
+// Vinculo do item de catalogo com o Forecast: produto existente (acrescenta o codigo) ou produto novo (origin dbcorp).
+const catalogForecastId = (message: string) => z.number({ error: message }).int(message).positive(message);
+export const catalogItemForecastLinkSchema = z.discriminatedUnion(
+  'modo',
+  [
+    z.strictObject({ modo: z.literal('existente'), productId: catalogForecastId('Produto do Forecast inválido.') }),
+    z.strictObject({
+      modo: z.literal('novo'),
+      nome: z
+        .string({ error: 'Informe o nome do produto.' })
+        .trim()
+        .min(1, 'Informe o nome do produto.')
+        .max(200, 'O nome aceita no máximo 200 caracteres.'),
+      sourceId: catalogForecastId('Fonte inválida.'),
+      familyId: catalogForecastId('Família inválida.'),
+    }),
+  ],
+  { error: 'Escolha o produto do Forecast ou crie um produto novo.' },
+);
+export const catalogItemForecastFieldSchema = catalogItemForecastLinkSchema.nullish();
+export const catalogItemSemForecastQuerySchema = z.strictObject({});
+export type CatalogItemForecastLink = z.infer<typeof catalogItemForecastLinkSchema>;

@@ -13474,6 +13474,9 @@ i.fc-status--preco { background: var(--info); }
 .fcc-modal .tabs-panel:focus-visible,
 .fcc-produto:has(input:focus-visible) { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
 .fcc-modal [aria-invalid="true"] { border-color: var(--danger); }
+/* ---- Itens: painel "Catalogo sem Forecast" (lista de itens com codigo fora do Forecast) ---- */
+.itens-sem-forecast { display: flex; flex-direction: column; margin: 8px 0 0; padding: 0; list-style: none; }
+.itens-sem-forecast__linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
 @media print {
   body:has(.fcr-resumo) .fcp { display: none !important; }
 }
