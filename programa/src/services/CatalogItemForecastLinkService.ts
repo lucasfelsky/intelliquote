@@ -4,6 +4,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { sugerirVinculos, type LinhaAprovada, type LinhaProposta } from '../utils/forecastCatalogoBackfill';
+import { agruparProdutosNovos, type FontePlanilha, type LinhaModelo } from '../utils/forecastProdutosNovos';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
 import { HttpError } from '../utils/http';
 import type { CatalogItemForecastLink } from '../validators/domain';
@@ -367,4 +368,23 @@ export async function aplicarBackfill(
     if (error instanceof DryRunRollback) return error.relatorio;
     throw error;
   }
+}
+
+// ---------- planilha de produtos novos (somente leitura) ----------
+
+// Fontes do Forecast para o humano escrever o NOME certo na coluna `fonte` da planilha. SOMENTE LEITURA.
+export async function listarFontesParaPlanilha(): Promise<FontePlanilha[]> {
+  return emTransacaoSomenteLeitura(async (tx) => {
+    const fontes = await tx.forecastSource.findMany({
+      select: { id: true, name: true, leadTimeDays: true, isActive: true },
+      orderBy: [{ name: 'asc' }],
+    });
+    return fontes.map((f) => ({ id: f.id, nome: f.name, leadTimeDays: f.leadTimeDays, ativa: f.isActive }));
+  });
+}
+
+// Modelo da planilha de produtos novos: os orfaos `sem_sugestao` da proposta do backfill, agrupados por nome base.
+// Reusa a proposta inteira (nenhuma query nova). SOMENTE LEITURA.
+export async function gerarModeloProdutosNovos(): Promise<LinhaModelo[]> {
+  return agruparProdutosNovos(await gerarPropostaBackfill());
 }
