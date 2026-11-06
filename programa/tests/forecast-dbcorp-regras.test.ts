@@ -272,7 +272,76 @@ describe('aplicarRegrasFup (regra F3)', () => {
     expect(r.estimadasPorEtd.linhas).toBe(0);
     expect(r.avisos).toEqual([
       'FUP: 2 linhas (650 kg) sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + 35 dias (ESTIMADA).',
+      'FUP: 1 linha (600 kg) estimadas pela DATA PRONTIDÃO já tinham a prontidão vencida na data base e seguem sem ETD (EMBARQUE): a chegada estimada pode estar otimista - confira o prazo da fonte.',
     ]);
+  });
+
+  describe('prontidao vencida (opcao c: so aviso, nenhuma data muda)', () => {
+    const BASE_V = '2033-11-05';
+    const AVISO = (v: string) =>
+      `FUP: ${v} estimadas pela DATA PRONTIDÃO já tinham a prontidão vencida na data base e seguem sem ETD (EMBARQUE): a chegada estimada pode estar otimista - confira o prazo da fonte.`;
+
+    it('prontidao 2033-10-23, base 2033-11-05 e 35 dias: a chegada continua no mes 11; conta 1 e avisa', () => {
+      const r = aplicarRegrasFup([linha({ kg: 250, prontidao: '2033-10-23' })], BASE_V);
+      expect(somarDias('2033-10-23', 35)).toBe('2033-11-27');
+      // Nenhuma data ou mes muda: a chegada segue sendo prontidao + 35.
+      expect(r.linhas).toEqual([{ codigo: 'TST0001', qtd: 250, mes: '11', estimada: 'prontidao' }]);
+      expect(r.estimadasPorProntidao).toEqual({ linhas: 1, kg: 250 });
+      expect(r.prontidaoVencida).toEqual({ linhas: 1, kg: 250 });
+      expect(r.avisos).toEqual([
+        'FUP: 1 linha (250 kg) sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + 35 dias (ESTIMADA).',
+        AVISO('1 linha (250 kg)'),
+      ]);
+    });
+
+    it('prontidao na data base ou depois nao conta (so a anterior a data base)', () => {
+      const r = aplicarRegrasFup(
+        [
+          linha({ kg: 10, prontidao: '2033-11-04' }), // um dia antes: conta
+          linha({ kg: 20, prontidao: '2033-11-05' }), // na base: nao
+          linha({ kg: 40, prontidao: '2033-11-20' }), // depois: nao
+        ],
+        BASE_V,
+      );
+      expect(r.estimadasPorProntidao.linhas).toBe(3);
+      expect(r.prontidaoVencida).toEqual({ linhas: 1, kg: 10 });
+    });
+
+    it('sem prontidao vencida: nenhuma linha nova de aviso e contagem zerada', () => {
+      const r = aplicarRegrasFup([linha({ kg: 20, prontidao: '2033-11-20' })], BASE_V);
+      expect(r.prontidaoVencida).toEqual({ linhas: 0, kg: 0 });
+      expect(r.avisos.some((a) => a.includes('prontidão vencida'))).toBe(false);
+    });
+
+    it('linha com ETD ou ETA nao e prontidao estimada: nao conta mesmo com prontidao antiga', () => {
+      const r = aplicarRegrasFup(
+        [
+          linha({ kg: 10, prontidao: '2033-10-01', etd: data('2033-10-10') }),
+          linha({ kg: 20, prontidao: '2033-10-01', eta: data('2033-12-10') }),
+        ],
+        BASE_V,
+      );
+      expect(r.estimadasPorProntidao.linhas).toBe(0);
+      expect(r.prontidaoVencida.linhas).toBe(0);
+    });
+
+    it('o aviso vem logo depois do aviso das estimadas por prontidao e antes do de ETD', () => {
+      const r = aplicarRegrasFup(
+        [linha({ kg: 10, prontidao: '2033-10-01' }), linha({ kg: 20, etd: data('2033-11-10') })],
+        BASE_V,
+      );
+      expect(r.avisos).toHaveLength(3);
+      expect(r.avisos[0]).toContain('usaram DATA PRONTIDÃO + 35 dias (ESTIMADA)');
+      expect(r.avisos[1]).toBe(AVISO('1 linha (10 kg)'));
+      expect(r.avisos[2]).toContain('usaram ETD (EMBARQUE) + 35 dias (ESTIMADA)');
+    });
+
+    it('as chegadas sao as mesmas com a prontidao vencida e sem ela (so o aviso e a contagem mudam)', () => {
+      const vencida = aplicarRegrasFup([linha({ kg: 250, prontidao: '2033-10-23' })], BASE_V);
+      const semBase = aplicarRegrasFup([linha({ kg: 250, prontidao: '2033-10-23' })], '2033-10-01');
+      expect(semBase.prontidaoVencida.linhas).toBe(0);
+      expect(vencida.linhas).toEqual(semBase.linhas);
+    });
   });
 
   it('7. prontidao nao reconhecida fica fora, com detalhe; vazia cai em sem data', () => {
@@ -467,6 +536,7 @@ describe('prazo das chegadas estimadas por fonte (PR 5A)', () => {
     // 1 so aviso de estimadas (nao duplica) e cita as 2 fontes com prazo proprio.
     expect(r.avisos).toEqual([
       'FUP: 3 linhas (700 kg) sem ETA (CHEGADA) nem ETD (EMBARQUE) usaram DATA PRONTIDÃO + prazo da fonte (padrão 35 dias; 2 fontes com prazo próprio) (ESTIMADA).',
+      'FUP: 3 linhas (700 kg) estimadas pela DATA PRONTIDÃO já tinham a prontidão vencida na data base e seguem sem ETD (EMBARQUE): a chegada estimada pode estar otimista - confira o prazo da fonte.',
     ]);
     expect(r.regra.etaPorProntidaoDias).toBe(35);
     expect(r.regra.etaPorEtdDias).toBe(35);

@@ -638,6 +638,7 @@ export class ForecastDbcorpService {
                 regra: FORECAST_DBCORP_FUP_REGRA,
                 estimadasEtd: fup.estimadasPorEtd.linhas,
                 estimadasProntidao: fup.estimadasPorProntidao.linhas,
+                prontidaoVencida: fup.prontidaoVencida.linhas,
                 excluidasAtracadas: fup.excluidas.atracadas.linhas,
                 excluidasEtaFinal: fup.excluidas.etaFinalPreenchida.linhas,
                 prontidaoNaoReconhecida: fup.prontidaoNaoReconhecida.linhas,

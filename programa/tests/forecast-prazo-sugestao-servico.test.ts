@@ -276,6 +276,7 @@ describe('Forecast DBCorp: sugestao de prazo de chegada (nada e gravado sozinho)
     const fup = metadata.fup as Record<string, unknown>;
     expect(typeof fup.fontesComSugestao).toBe('number');
     expect(typeof fup.padroesIguaisASugestao).toBe('number');
+    expect(fup.prontidaoVencida).toBe(2); // as duas linhas em aberto tem prontidao 2033-10-10, antes da base 2033-10-15
     const texto = JSON.stringify(metadata);
     expect(texto).not.toContain('FIC0001');
     expect(texto).not.toContain('FIC-FONTE');
