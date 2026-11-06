@@ -40,6 +40,11 @@ export interface ForecastPendentesResumo {
   soSaldo: { codigos: number; kg: number };
   /** Codigos com venda so no mes atual / acumulado anual (sem venda em 3 meses, programacao nem compra): so contados. */
   semVendaRecente?: { codigos: number; vendasAnual: number };
+  /**
+   * Codigos de amostra (prefixo + digito) sem cadastro que seriam listados: nao viram pendente nem linha da quinzena,
+   * so contados. `prefixos` = os prefixos que o backend aplicou. Ausente em backend antigo.
+   */
+  amostrasIgnoradas?: { codigos: number; prefixos: string[] };
   regra?: ForecastPendentesRegra;
 }
 

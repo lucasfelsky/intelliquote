@@ -90,6 +90,43 @@ beforeEach(() => {
   });
 });
 
+describe('ForecastPendentesCadastro - amostras ignoradas', () => {
+  it('com lista: o titulo segue com o total de pendentes e a nota mostra as amostras ignoradas', async () => {
+    pendentes = dados({ amostrasIgnoradas: { codigos: 16, prefixos: ['AM'] } });
+    const { container } = renderPainel();
+    expect(await screen.findByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
+    const nota = screen.getByText('Amostras ignoradas (prefixo AM): 16 códigos');
+    expect(nota.className).toBe('fcp-nota');
+    expect(container.querySelectorAll('[style]')).toHaveLength(0);
+  });
+
+  it('vazio: so amostras -> a nota aparece, sem tabela', async () => {
+    pendentes = dados({ itens: [], totalItens: 0, amostrasIgnoradas: { codigos: 3, prefixos: ['AM'] } });
+    const { container } = renderPainel();
+    expect(await screen.findByText('Amostras ignoradas (prefixo AM): 3 códigos')).toBeTruthy();
+    expect(screen.queryByRole('table')).toBeNull();
+    expect(container.querySelectorAll('[style]')).toHaveLength(0);
+  });
+
+  it.each([
+    ['codigos 0', { codigos: 0, prefixos: ['AM'] }],
+    ['campo ausente (backend antigo)', undefined],
+  ])('sem nota com %s, com lista e vazio', async (_nome, amostras) => {
+    pendentes = dados({ amostrasIgnoradas: amostras });
+    const comLista = renderPainel();
+    await screen.findByText(/Pendentes de cadastro \(2\)/);
+    expect(screen.queryByText(/Amostras ignoradas/)).toBeNull();
+    expect(comLista.container.querySelectorAll('[style]')).toHaveLength(0);
+    comLista.unmount();
+
+    pendentes = dados({ itens: [], totalItens: 0, amostrasIgnoradas: amostras });
+    const vazio = renderPainel();
+    await screen.findByText(/Pendentes de cadastro: nenhum código/);
+    expect(screen.queryByText(/Amostras ignoradas/)).toBeNull();
+    expect(vazio.container.querySelectorAll('[style]')).toHaveLength(0);
+  });
+});
+
 describe('ForecastPendentesCadastro - estados', () => {
   it('carregando e depois a lista; consulta so os pendentes da quinzena', async () => {
     renderPainel();

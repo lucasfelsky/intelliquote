@@ -155,6 +155,11 @@ export const FORECAST_PRODUCT_ORIGIN_DBCORP = 'dbcorp';
 // Maximo de codigos pendentes devolvidos (a contagem total e o resto omitido vao sempre).
 export const FORECAST_PENDENTES_MAX_ITENS = 200;
 
+// Prefixos de codigo de AMOSTRA (decisao do dono, 2026-11): codigo SEM cadastro que comeca com o prefixo (maiusculas)
+// seguido de DIGITO nao vira pendente de cadastro nem linha da quinzena; so e contado em `amostrasIgnoradas`.
+// O digito e obrigatorio (`AMX01` nao e amostra). Produto ativo ou inativo no cadastro nao e afetado.
+export const FORECAST_PENDENTES_PREFIXOS_AMOSTRA = ['AM'] as const;
+
 // Texto da observacao (coluna AT) do XLSX MACRO nas linhas de codigo pendente de cadastro. O leitor da planilha RECUSA a
 // linha que comeca com ele: o arquivo exportado nao vira import valido (criaria produto com nome = codigo e sem fonte).
 export const FORECAST_MARCA_SEM_CADASTRO = 'SEM CADASTRO';

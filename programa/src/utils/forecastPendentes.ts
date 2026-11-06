@@ -9,7 +9,9 @@
 //   - PROGRAMACAO pendente, OU
 //   - COMPRA em aberto no FUP (qualquer linha nao CONCLUIDA, congelada em `Entradas.comprasEmAberto`).
 // Venda so no acumulado anual (ou so no mes atual) e codigo so com saldo ficam FORA da lista; os dois sao apenas contados.
-import { FORECAST_PENDENTES_MAX_ITENS } from '../constants/forecast';
+// Excecao: codigo SEM cadastro de AMOSTRA (prefixo + digito, `ehCodigoDeAmostra`) que seria listado tambem fica FORA e e
+// apenas contado em `amostrasIgnoradas`. Hierarquia: ativo (nunca pendente) > produto inativo (listado) > amostra > sem cadastro.
+import { FORECAST_PENDENTES_MAX_ITENS, FORECAST_PENDENTES_PREFIXOS_AMOSTRA } from '../constants/forecast';
 import type { Entradas, Produto } from './forecastTypes';
 
 export type PendentesEntradas = Pick<
@@ -62,6 +64,9 @@ export interface PendentesResultado {
   // Codigos sem venda nos ultimos 3 meses, programacao nem compra em aberto, mas com venda no mes atual ou no
   // acumulado anual: nao listados, so contados (`vendasAnual` = kg do acumulado anual desses codigos).
   semVendaRecente: { codigos: number; vendasAnual: number };
+  // Codigos SEM cadastro de amostra (prefixo + digito) que seriam listados: nao viram pendente nem linha da quinzena;
+  // so contados.
+  amostrasIgnoradas: { codigos: number; prefixos: string[] };
   regra: {
     mesesVenda: string[];
     historicoAusente: string[];
@@ -72,6 +77,12 @@ export interface PendentesResultado {
 
 // Mesma regra de normalizeProductCode (forecastWorkbook.ts), repetida aqui para o util nao depender do leitor de planilha.
 const normalizar = (codigo: string): string => codigo.trim().toUpperCase();
+
+// Codigo de amostra: prefixo de `FORECAST_PENDENTES_PREFIXOS_AMOSTRA` seguido de um DIGITO (apos trim/maiusculas).
+export function ehCodigoDeAmostra(codigo: string): boolean {
+  const c = normalizar(codigo);
+  return FORECAST_PENDENTES_PREFIXOS_AMOSTRA.some((p) => c.startsWith(p) && /^\d$/.test(c.charAt(p.length)));
+}
 
 const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
 
@@ -156,6 +167,7 @@ function calcularPendentes(
   const listados: PendenteCadastro[] = [];
   const soSaldo = { codigos: 0, kg: 0 };
   const semVendaRecente = { codigos: 0, vendasAnual: 0 };
+  let amostras = 0;
   for (const item of porCodigo.values()) {
     item.vendasMes = round6(item.vendasMes);
     item.vendasAtual = round6(item.vendasAtual);
@@ -172,6 +184,12 @@ function calcularPendentes(
       if (dono) {
         item.situacao = 'produto_inativo';
         item.produtoInativo = { id: dono.productId, nome: dono.nome };
+        listados.push(item);
+        continue;
+      }
+      if (ehCodigoDeAmostra(item.codigo)) {
+        amostras += 1;
+        continue;
       }
       listados.push(item);
       continue;
@@ -199,6 +217,7 @@ function calcularPendentes(
     omitidos: listados.length - itens.length,
     soSaldo: { codigos: soSaldo.codigos, kg: round6(soSaldo.kg) },
     semVendaRecente: { codigos: semVendaRecente.codigos, vendasAnual: round6(semVendaRecente.vendasAnual) },
+    amostrasIgnoradas: { codigos: amostras, prefixos: [...FORECAST_PENDENTES_PREFIXOS_AMOSTRA] },
     regra: {
       mesesVenda: [...vendas.meses],
       historicoAusente: [...vendas.ausentes],

@@ -611,6 +611,10 @@ export class ForecastDbcorpService {
               ...(built.pendentesNaQuinzena.total > 0
                 ? { pendentesNaQuinzena: built.pendentesNaQuinzena.total }
                 : {}),
+              // Codigos de amostra ignorados nos pendentes: so a contagem (nunca codigo), so quando > 0.
+              ...((built.pendentes?.amostrasIgnoradas.codigos ?? 0) > 0
+                ? { amostrasIgnoradas: built.pendentes?.amostrasIgnoradas.codigos }
+                : {}),
               arquivos: SLOT_ORDER.flatMap((slot) => {
                 const resumo = slot === 'fup' ? fup : parsed[slot];
                 if (!resumo || !input.files[slot]) return [];

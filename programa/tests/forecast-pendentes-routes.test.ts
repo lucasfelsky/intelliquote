@@ -264,10 +264,26 @@ describe('Forecast pendentes - GET /forecast/snapshots/:id/pendentes', () => {
       omitidos: 0,
       soSaldo: { codigos: 0, kg: 0 },
       semVendaRecente: { codigos: 0, vendasAnual: 0 },
+      amostrasIgnoradas: { codigos: 0, prefixos: ['AM'] },
       regra: { mesesVenda: [], historicoAusente: [], compras: 'chegadas' },
     });
     expect(prismaMock.forecastProductCode.findMany).not.toHaveBeenCalled();
     expect(prismaMock.forecastMonthlySale.findMany).not.toHaveBeenCalled();
+  });
+
+  it('quinzena DBCorp gravada com codigo de amostra nas inputs: a leitura nao lista a amostra e so a conta', async () => {
+    const semAmostra = await request(app).get(GET_PATH).set('Cookie', await loginAs('viewer'));
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({
+      ...snapshotDbcorp,
+      inputs: { ...snapshotDbcorp.inputs, programacoes: [{ codigo: 'AM0001', qtd: 400, mes: '11' }] },
+    });
+    const response = await request(app).get(GET_PATH).set('Cookie', await loginAs('viewer'));
+    expect(response.status).toBe(200);
+    const { data } = response.body;
+    expect(data.itens.map((i: { codigo: string }) => i.codigo)).not.toContain('AM0001');
+    expect(data.amostrasIgnoradas).toEqual({ codigos: 1, prefixos: ['AM'] });
+    expect(data.totalItens).toBe(semAmostra.body.data.totalItens);
+    expect(semAmostra.body.data.amostrasIgnoradas).toEqual({ codigos: 0, prefixos: ['AM'] });
   });
 
   it('quinzena inexistente -> 404; id invalido -> 400', async () => {
