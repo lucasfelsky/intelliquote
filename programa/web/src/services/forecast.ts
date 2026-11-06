@@ -684,6 +684,34 @@ export interface ForecastPrazoChegada {
   etdDias: number;
 }
 
+/** Evidencia da sugestao: chegadas reais do FUP (por linha, nao por kg) ate a ETA FINAL. */
+export interface ForecastEvidenciaPrazo {
+  amostras: number;
+  mediana: number;
+  /** Rotulo do percentil do valor sugerido (75 = P75). */
+  percentil: number;
+  valorPercentil: number;
+  min: number;
+  max: number;
+  /** Menor e maior ETA FINAL das amostras (AAAA-MM-DD). */
+  de: string;
+  ate: string;
+  /** Valor do percentil bem acima da mediana: amostra dispersa. */
+  dispersaoAlta: boolean;
+}
+
+/** 'sugerida' = mostra o valor e o botao; 'diferenca_pequena' = prazo atual ja perto; 'poucas_amostras' = so evidencia. */
+export type ForecastSituacaoSugestaoPrazo = 'sugerida' | 'diferenca_pequena' | 'poucas_amostras';
+
+export interface ForecastSugestaoPrazoCampo {
+  situacao: ForecastSituacaoSugestaoPrazo;
+  dias: number | null;
+  /** Prazo contra o qual a diferenca foi medida: salvo da fonte, senao o padrao. */
+  atual: number;
+  minAmostras: number;
+  evidencia: ForecastEvidenciaPrazo;
+}
+
 /** Tabela do prazo por fonte (so fontes com linha estimada). */
 export interface ForecastPrazosEstimativa {
   padrao: ForecastPrazoChegada;
@@ -696,6 +724,8 @@ export interface ForecastPrazosEstimativa {
     usado: ForecastPrazoChegada;
     prontidao: ForecastLinhasKg;
     etd: ForecastLinhasKg;
+    /** So informacao (nada e gravado sem Recalcular + Confirmar). Ausente em backend antigo. */
+    sugestao?: { prontidao: ForecastSugestaoPrazoCampo | null; etd: ForecastSugestaoPrazoCampo | null } | null;
   }>;
   /** Codigo sem produto ativo ou produto sem fonte: usa o padrao, nao editavel. */
   semFonte: { prontidao: ForecastLinhasKg; etd: ForecastLinhasKg };

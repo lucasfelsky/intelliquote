@@ -36,8 +36,12 @@ export interface ForecastPrazoRealFonte {
   clearanceDays: number | null;
   /** Dias ETD -> chegada que o FUP usa hoje para esta fonte (`arrivalFromEtdDays ?? padrao`). */
   etdDiasUsado: number;
-  /** `null` = sem quinzena utilizavel; `po`/`etd` `null` = fonte sem amostra. */
-  real: { po: ForecastPrazoRealEstatistica | null; etd: ForecastPrazoRealEstatistica | null } | null;
+  /** `null` = sem quinzena utilizavel; `po`/`etd`/`prontidao` `null` = fonte sem amostra. `prontidao` ausente = backend antigo. */
+  real: {
+    po: ForecastPrazoRealEstatistica | null;
+    etd: ForecastPrazoRealEstatistica | null;
+    prontidao?: ForecastPrazoRealEstatistica | null;
+  } | null;
 }
 
 /** `GET /forecast/sources/prazo-real` (todos os papeis COMEX; so leitura). */

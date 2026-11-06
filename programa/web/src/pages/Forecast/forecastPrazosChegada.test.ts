@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { ForecastPrazosEstimativa } from '@/services/forecast';
+import type { ForecastPrazosEstimativa, ForecastSugestaoPrazoCampo } from '@/services/forecast';
 import {
   corpoDosPrazos,
+  linhasSugestao,
   mesclarRascunho,
+  podeUsarSugestao,
   prazosMudaram,
   rascunhoInicial,
   rascunhoInvalido,
   textoPadraoSalvo,
   textoPadroesAlterados,
+  textoSugestao,
   validarDias,
 } from './forecastPrazosChegada';
 
@@ -114,5 +117,76 @@ describe('textos', () => {
     expect(textoPadraoSalvo({ prontidaoDias: 60, etdDias: null })).toBe('prontidão 60 dias');
     expect(textoPadraoSalvo({ prontidaoDias: null, etdDias: 20 })).toBe('ETD 20 dias');
     expect(textoPadraoSalvo({ prontidaoDias: 60, etdDias: 20 })).toBe('prontidão 60 · ETD 20 dias');
+  });
+});
+
+describe('sugestao pelo historico do FUP', () => {
+  const sugestao = (
+    situacao: ForecastSugestaoPrazoCampo['situacao'],
+    dias: number | null,
+    evidencia: Partial<ForecastSugestaoPrazoCampo['evidencia']> = {},
+  ): ForecastSugestaoPrazoCampo => ({
+    situacao,
+    dias,
+    atual: 35,
+    minAmostras: 10,
+    evidencia: {
+      amostras: 79,
+      mediana: 58,
+      percentil: 75,
+      valorPercentil: 61,
+      min: 4,
+      max: 91,
+      de: '2033-11-03',
+      ate: '2034-10-31',
+      dispersaoAlta: false,
+      ...evidencia,
+    },
+  });
+
+  it("'sugerida': valor, percentil, mediana, n, faixa e periodo", () => {
+    const s = sugestao('sugerida', 61);
+    expect(linhasSugestao(s)).toEqual([
+      'Sugestão pelo FUP: 61 dias (P75)',
+      'mediana 58 · 79 chegadas',
+      'faixa 4–91 dias',
+      'ETA FINAL 03/11/2033 a 31/10/2034',
+    ]);
+    expect(textoSugestao(s)).toBe(
+      'Sugestão pelo FUP: 61 dias (P75) · mediana 58 · 79 chegadas · faixa 4–91 dias · ETA FINAL 03/11/2033 a 31/10/2034',
+    );
+  });
+
+  it("'sugerida' com 1 chegada usa o singular (e o rotulo do percentil segue o backend)", () => {
+    expect(textoSugestao(sugestao('sugerida', 50, { amostras: 1, percentil: 50 }))).toContain('(P50) · mediana 58 · 1 chegada ·');
+  });
+
+  it("'diferenca_pequena': prazo atual perto do real, com a evidencia", () => {
+    const s = sugestao('diferenca_pequena', 37, { valorPercentil: 37, mediana: 36, amostras: 20 });
+    expect(textoSugestao(s)).toBe('Prazo atual perto do real · P75 37 · mediana 36 · 20 chegadas');
+  });
+
+  it("'poucas_amostras': quantas chegadas e o minimo", () => {
+    expect(textoSugestao(sugestao('poucas_amostras', null, { amostras: 9 }))).toBe('Poucas chegadas no FUP (9 de mínimo 10)');
+  });
+
+  it('sem sugestao (backend antigo ou sem chegada medida): nada', () => {
+    expect(textoSugestao(null)).toBeNull();
+    expect(textoSugestao(undefined)).toBeNull();
+    expect(linhasSugestao(undefined)).toEqual([]);
+  });
+
+  it('podeUsarSugestao: so para sugerida e quando o campo ainda nao esta com o valor', () => {
+    const s = sugestao('sugerida', 61);
+    expect(podeUsarSugestao('35', s)).toBe(true);
+    expect(podeUsarSugestao('', s)).toBe(true);
+    expect(podeUsarSugestao('abc', s)).toBe(true);
+    expect(podeUsarSugestao('61', s)).toBe(false);
+    expect(podeUsarSugestao(' 61 ', s)).toBe(false);
+    expect(podeUsarSugestao('35', sugestao('diferenca_pequena', 37))).toBe(false);
+    expect(podeUsarSugestao('35', sugestao('poucas_amostras', null))).toBe(false);
+    expect(podeUsarSugestao('35', sugestao('sugerida', null))).toBe(false);
+    expect(podeUsarSugestao('35', null)).toBe(false);
+    expect(podeUsarSugestao('35', undefined)).toBe(false);
   });
 });

@@ -172,6 +172,7 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
               <th scope="col">Prazo real PO → ETA FINAL</th>
               <th scope="col">Diferença</th>
               <th scope="col">ETD → ETA FINAL (real)</th>
+              <th scope="col">Prontidão → ETA FINAL (real)</th>
               <th scope="col">ETD + dias usado no FUP</th>
             </tr>
           </thead>
@@ -259,6 +260,9 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
                   <td>
                     <PrazoReal e={f.real?.etd} />
                   </td>
+                  <td>
+                    <PrazoReal e={f.real?.prontidao} />
+                  </td>
                   <td>{f.etdDiasUsado} dias</td>
                 </tr>
               );
@@ -270,7 +274,7 @@ function Conteudo({ dados, podeEditar }: { dados: ForecastPrazoReal; podeEditar:
         <p className="fcd-dica">Chegadas sem fonte no cadastro: {dados.semFonte.chegadas}</p>
       )}
       <p className="fcd-dica">
-        Prazo real = prazo real médio da PO ao ETA FINAL (dias). “Poucas chegadas” aparece quando a amostra é pequena. Diferença = real − cadastrado.
+        Prazo real = prazo real médio da PO ao ETA FINAL (dias). “Prontidão → ETA FINAL” só aparece nas quinzenas DBCorp confirmadas depois da sugestão de prazo. “Poucas chegadas” aparece quando a amostra é pequena. Diferença = real − cadastrado.
       </p>
     </>
   );

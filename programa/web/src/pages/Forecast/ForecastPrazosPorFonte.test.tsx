@@ -175,6 +175,148 @@ describe('ForecastPrazosPorFonte', () => {
     ).toBeTruthy();
   });
 
+  describe('sugestao pelo historico do FUP (so preenche o rascunho)', () => {
+    type Campo = NonNullable<NonNullable<ForecastPrazosEstimativa['fontes'][number]['sugestao']>['prontidao']>;
+    const sugerida = (over: Partial<Campo> = {}, evidencia: Partial<Campo['evidencia']> = {}): Campo => ({
+      situacao: 'sugerida',
+      dias: 61,
+      atual: 35,
+      minAmostras: 10,
+      evidencia: {
+        amostras: 79,
+        mediana: 58,
+        percentil: 75,
+        valorPercentil: 61,
+        min: 4,
+        max: 91,
+        de: '2033-11-03',
+        ate: '2034-10-31',
+        dispersaoAlta: false,
+        ...evidencia,
+      },
+      ...over,
+    });
+    const comSugestao = (sugestao: { prontidao: Campo | null; etd: Campo | null } | null) => {
+      const base = prazos();
+      return prazos({ fontes: [{ ...base.fontes[0]!, sugestao }, base.fontes[1]!] });
+    };
+    const rotuloUsar = 'Usar a sugestão de 61 dias da DATA PRONTIDÃO até a chegada - FONTE 001';
+    const fetchSpy = vi.fn();
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('mostra a evidencia (valor, P75, mediana, n, faixa e periodo) e o botao "Usar 61 dias"', () => {
+      render(<Harness inicial={comSugestao({ prontidao: sugerida(), etd: null })} />);
+      expect(screen.getByText('Sugestão pelo FUP: 61 dias (P75)')).toBeTruthy();
+      expect(screen.getByText('mediana 58 · 79 chegadas')).toBeTruthy();
+      expect(screen.getByText('faixa 4–91 dias')).toBeTruthy();
+      expect(screen.getByText('ETA FINAL 03/11/2033 a 31/10/2034')).toBeTruthy();
+      expect(screen.getByRole('button', { name: rotuloUsar }).textContent).toBe('Usar 61 dias');
+      expect(screen.queryByText('dispersão alta')).toBeNull();
+    });
+
+    it('o clique so muda o campo: pede recalculo, nao chama onRecalcular nem fetch e leva o foco ao campo', () => {
+      vi.stubGlobal('fetch', fetchSpy);
+      const onRecalcular = vi.fn();
+      render(<Harness inicial={comSugestao({ prontidao: sugerida(), etd: null })} onRecalcular={onRecalcular} />);
+      const dias = campo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001');
+      expect(dias.value).toBe('35');
+      fireEvent.click(screen.getByRole('button', { name: rotuloUsar }));
+      expect(dias.value).toBe('61');
+      expect(document.activeElement).toBe(dias);
+      expect(screen.getByText('Você editou prazos: recalcule a pré-visualização antes de confirmar.')).toBeTruthy();
+      expect(recalcular().disabled).toBe(false);
+      expect(onRecalcular).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      // Ja esta em 61: o botao some.
+      expect(screen.queryByRole('button', { name: rotuloUsar })).toBeNull();
+    });
+
+    it('o campo descreve a si mesmo pela evidencia (aria-describedby), junto do erro quando houver', () => {
+      render(<Harness inicial={comSugestao({ prontidao: sugerida(), etd: null })} />);
+      const dias = campo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001');
+      const sugestaoId = dias.getAttribute('aria-describedby')!;
+      expect(document.getElementById(sugestaoId)?.textContent).toContain('Sugestão pelo FUP: 61 dias (P75)');
+      fireEvent.change(dias, { target: { value: 'x' } });
+      expect(dias.getAttribute('aria-describedby')!.split(' ')).toHaveLength(2);
+    });
+
+    it('ETD tem o proprio botao, com o rotulo do ETD', () => {
+      render(<Harness inicial={comSugestao({ prontidao: null, etd: sugerida({ dias: 41 }, { valorPercentil: 41 }) })} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Usar a sugestão de 41 dias do ETD até a chegada - FONTE 001' }));
+      expect(campo('Dias do ETD até a chegada - FONTE 001').value).toBe('41');
+      expect(campo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('35');
+    });
+
+    it('dispersao alta: marca a evidencia e a sugestao continua com o botao', () => {
+      render(
+        <Harness
+          inicial={comSugestao({
+            prontidao: sugerida({ dias: 122 }, { mediana: 66, valorPercentil: 122, min: 30, max: 200, dispersaoAlta: true }),
+            etd: null,
+          })}
+        />,
+      );
+      expect(screen.getByText('dispersão alta').className).toContain('badge--warning');
+      expect(screen.getByText('faixa 30–200 dias')).toBeTruthy();
+      expect(screen.getByText('mediana 66 · 79 chegadas')).toBeTruthy();
+      expect(screen.getByRole('button', { name: /Usar a sugestão de 122 dias/ })).toBeTruthy();
+    });
+
+    it('poucas amostras e diferenca pequena: so evidencia, sem botao', () => {
+      render(
+        <Harness
+          inicial={comSugestao({
+            prontidao: sugerida({ situacao: 'poucas_amostras', dias: null }, { amostras: 9 }),
+            etd: sugerida({ situacao: 'diferenca_pequena', dias: 37 }, { valorPercentil: 37, mediana: 36, amostras: 20 }),
+          })}
+        />,
+      );
+      expect(screen.getByText('Poucas chegadas no FUP (9 de mínimo 10)')).toBeTruthy();
+      expect(screen.getByText('Prazo atual perto do real')).toBeTruthy();
+      expect(screen.getByText('P75 37 · mediana 36 · 20 chegadas')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Usar/ })).toBeNull();
+      expect(screen.queryByText(/Sugestão pelo FUP/)).toBeNull();
+    });
+
+    it('backend antigo (sem sugestao) ou sugestao nula: sem texto e sem botao', () => {
+      const { unmount } = render(<Harness />);
+      expect(screen.queryByText(/Sugestão pelo FUP/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /Usar/ })).toBeNull();
+      unmount();
+      render(<Harness inicial={comSugestao(null)} />);
+      expect(screen.queryByText(/Sugestão pelo FUP/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /Usar/ })).toBeNull();
+    });
+
+    it('campo sem linhas estimadas (traco) nao mostra sugestao', () => {
+      const base = prazos();
+      const inicial = prazos({
+        fontes: [base.fontes[0]!, { ...base.fontes[1]!, sugestao: { prontidao: sugerida(), etd: null } }],
+      });
+      render(<Harness inicial={inicial} />);
+      expect(screen.queryByText(/Sugestão pelo FUP/)).toBeNull();
+    });
+
+    it('ocupado desabilita o botao Usar', () => {
+      render(<Harness inicial={comSugestao({ prontidao: sugerida(), etd: null })} ocupado />);
+      expect((screen.getByRole('button', { name: rotuloUsar }) as HTMLButtonElement).closest('fieldset')?.disabled).toBe(true);
+      expect(screen.getByRole('button', { name: rotuloUsar }).matches(':disabled')).toBe(true);
+    });
+
+    it('sem style inline em nenhum elemento', () => {
+      const { container } = render(
+        <Harness
+          inicial={comSugestao({
+            prontidao: sugerida({}, { dispersaoAlta: true }),
+            etd: sugerida({ situacao: 'poucas_amostras', dias: null }),
+          })}
+        />,
+      );
+      expect(container.querySelectorAll('[style]').length).toBe(0);
+    });
+  });
+
   it('sem fonte nenhuma e sem "Sem fonte": diz que nada precisou de estimativa', () => {
     render(
       <Harness

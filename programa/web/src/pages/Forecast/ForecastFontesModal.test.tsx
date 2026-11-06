@@ -86,6 +86,55 @@ describe('ForecastFontesModal - leitura', () => {
     expect(screen.getByText('Chegadas sem fonte no cadastro: 4')).toBeTruthy();
   });
 
+  describe('coluna Prontidão → ETA FINAL (real), so leitura', () => {
+    const celulaDeProntidao = (nome: string) => {
+      const indice = screen
+        .getAllByRole('columnheader')
+        .findIndex((h) => h.textContent === 'Prontidão → ETA FINAL (real)');
+      expect(indice).toBeGreaterThan(0);
+      // O primeiro cabecalho (Fonte) e o rowheader da linha: as celulas comecam no segundo.
+      return within(linhaDe(nome)).getAllByRole('cell')[indice - 1]!;
+    };
+
+    it('com a medicao: mostra media, mediana e chegadas; sem a medicao (backend antigo ou fonte sem amostra): traco', async () => {
+      get.mockResolvedValue({
+        data: {
+          ...DADOS,
+          fontes: [
+            { ...DADOS.fontes[0]!, real: { po: est(92), etd: est(40), prontidao: est(61) } },
+            { ...DADOS.fontes[1]!, real: { po: est(102), etd: est(55) } },
+            { ...DADOS.fontes[2]!, real: { po: est(70, 2, true), etd: null, prontidao: null } },
+          ],
+        } satisfies ForecastPrazoReal,
+      });
+      renderModal(false);
+      await screen.findByRole('table');
+      expect(celulaDeProntidao('FONTE A').textContent).toBe('61 dias (mediana 65 · 12 chegadas)');
+      expect(celulaDeProntidao('FONTE B').textContent).toBe('—');
+      expect(celulaDeProntidao('FONTE C').textContent).toBe('—');
+    });
+
+    it('poucas chegadas aparece como selo, e nao ha botao de sugestao nesta aba', async () => {
+      get.mockResolvedValue({
+        data: {
+          ...DADOS,
+          fontes: [{ ...DADOS.fontes[0]!, real: { po: est(92), etd: est(40), prontidao: est(61, 2, true) } }],
+        } satisfies ForecastPrazoReal,
+      });
+      renderModal(true);
+      await screen.findByRole('table');
+      expect(within(celulaDeProntidao('FONTE A')).getByText('poucas chegadas')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Usar/ })).toBeNull();
+    });
+
+    it('backend antigo: a tabela segue montando com o resto das colunas', async () => {
+      renderModal(false);
+      await screen.findByRole('table');
+      expect(celulaDeProntidao('FONTE A').textContent).toBe('—');
+      expect(within(linhaDe('FONTE A')).getByText('28 dias')).toBeTruthy();
+    });
+  });
+
   it('viewer nao ve a coluna Acao nem o botao Editar', async () => {
     renderModal(false);
     await screen.findByRole('table');
