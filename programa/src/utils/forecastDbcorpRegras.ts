@@ -147,6 +147,21 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 // mes antes do mes da referencia, virou o ano. Qualquer outro texto ('ASAP', 'WITH PO 123-45') =
 // nao_reconhecida.
 export function parseProntidao(texto: string, dataPo: string | null, baseDate: string): Prontidao {
+  const reconhecida = reconhecerProntidao(texto);
+  if (reconhecida.tipo !== 'mes_dia') return reconhecida;
+
+  const referencia = dataPo !== null && isValidDateKey(dataPo) ? dataPo : baseDate;
+  if (!isValidDateKey(referencia)) return { tipo: 'nao_reconhecida' };
+  let ano = Number(referencia.slice(0, 4));
+  const mesReferencia = Number(referencia.slice(5, 7));
+  if (reconhecida.mes < mesReferencia - 1) ano += 1;
+  return chaveDeMesDia(ano, reconhecida);
+}
+
+type ProntidaoReconhecida = Prontidao | { tipo: 'mes_dia'; mes: number; dia: number };
+
+// Reconhece o texto (date key / dd/mm/aaaa ou 'MON DDth') sem decidir o ano.
+function reconhecerProntidao(texto: string): ProntidaoReconhecida {
   const normalizado = normalizeDbcorpText(texto);
   if (normalizado === '') return { tipo: 'vazia' };
 
@@ -157,16 +172,26 @@ export function parseProntidao(texto: string, dataPo: string | null, baseDate: s
   if (!m) return { tipo: 'nao_reconhecida' };
   const mes = MESES_PRONTIDAO[m[1]];
   if (mes === undefined) return { tipo: 'nao_reconhecida' };
-  const dia = Number(m[2]);
+  return { tipo: 'mes_dia', mes, dia: Number(m[2]) };
+}
 
-  const referencia = dataPo !== null && isValidDateKey(dataPo) ? dataPo : baseDate;
-  if (!isValidDateKey(referencia)) return { tipo: 'nao_reconhecida' };
-  let ano = Number(referencia.slice(0, 4));
-  const mesReferencia = Number(referencia.slice(5, 7));
-  if (mes < mesReferencia - 1) ano += 1;
-
-  const key = `${ano}-${pad2(mes)}-${pad2(dia)}`;
+function chaveDeMesDia(ano: number, md: { mes: number; dia: number }): Prontidao {
+  const key = `${ano}-${pad2(md.mes)}-${pad2(md.dia)}`;
   return isValidDateKey(key) ? { tipo: 'data', key } : { tipo: 'nao_reconhecida' };
+}
+
+// Variante para amostra HISTORICA (a chegada ja aconteceu): com DATA PO valida a inferencia e a de
+// parseProntidao; sem DATA PO o ano e o mais recente cuja data nao passa de `limite` (a ETA FINAL). Sem
+// isso, 'JAN 5' com chegada em marco seria lida contra a data base e descartada.
+export function parseProntidaoAte(texto: string, dataPo: string | null, limite: string): Prontidao {
+  if (dataPo !== null && isValidDateKey(dataPo)) return parseProntidao(texto, dataPo, limite);
+  const reconhecida = reconhecerProntidao(texto);
+  if (reconhecida.tipo !== 'mes_dia') return reconhecida;
+  if (!isValidDateKey(limite)) return { tipo: 'nao_reconhecida' };
+  const anoLimite = Number(limite.slice(0, 4));
+  const candidata = chaveDeMesDia(anoLimite, reconhecida);
+  if (candidata.tipo === 'data' && candidata.key > limite) return chaveDeMesDia(anoLimite - 1, reconhecida);
+  return candidata;
 }
 
 // --- Regra F3 ---------------------------------------------------------------------------------------

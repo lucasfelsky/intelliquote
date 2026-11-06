@@ -684,15 +684,15 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
     const label = '10-1';
     const baseDate = '2033-10-05';
     // 3 chegadas CONCLUIDAS de A1 (DATA PO, ETD e ETA FINAL antes da base) + 1 linha sem ETA FINAL (nao e amostra).
-    const row = (status: string, etd: Cell, dataPo: Cell, etaFinal: Cell): Cell[] => [
+    const row = (status: string, etd: Cell, dataPo: Cell, etaFinal: Cell, prontidao: Cell = null): Cell[] => [
       ...fupRow(status, CODE_A1, 100, etd, VAZIO, etaFinal),
       dataPo,
-      null,
+      prontidao,
     ];
     const fup = file(
       'fup.xlsx',
       await xlsxBase64(FUP_PRAZO_HEADERS, [
-        row('CONCLUÍDO', d('2033-03-01'), d('2033-01-01'), d('2033-04-10')),
+        row('CONCLUÍDO', d('2033-03-01'), d('2033-01-01'), d('2033-04-10'), '2033-02-20'),
         row('CONCLUÍDO', d('2033-04-01'), d('2033-02-01'), d('2033-05-15')),
         row('CONCLUÍDO', d('2033-05-01'), d('2033-03-01'), d('2033-06-20')),
         row('AG. EMBARQUE', d('2033-10-30'), null, VAZIO),
@@ -708,9 +708,9 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
 
       const snapshot = await prisma.forecastSnapshot.findUniqueOrThrow({ where: { id: res.body.data.snapshotId } });
       expect((snapshot.inputs as unknown as { prazosFup: unknown[] }).prazosFup).toEqual([
-        { codigo: CODE_A1, etaFinal: '2033-04-10', poDias: 99, etdDias: 40 },
-        { codigo: CODE_A1, etaFinal: '2033-05-15', poDias: 103, etdDias: 44 },
-        { codigo: CODE_A1, etaFinal: '2033-06-20', poDias: 111, etdDias: 50 },
+        { codigo: CODE_A1, etaFinal: '2033-04-10', poDias: 99, etdDias: 40, prontidaoDias: 49 },
+        { codigo: CODE_A1, etaFinal: '2033-05-15', poDias: 103, etdDias: 44, prontidaoDias: null },
+        { codigo: CODE_A1, etaFinal: '2033-06-20', poDias: 111, etdDias: 50, prontidaoDias: null },
       ]);
 
       // A ultima quinzena DBCorp deste arquivo e a mais nova pela data base: as demais saem da leitura.
@@ -724,9 +724,10 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
       expect(get.status).toBe(200);
       expect(get.body.data.disponivel).toBe(true);
       expect(get.body.data.quinzena).toMatchObject({ id: snapshot.id, label, baseDate });
-      const fonte = (get.body.data.fontes as Array<{ sourceId: number; real: { po: unknown; etd: unknown } }>).find(
-        (f) => f.sourceId === sourceId,
-      )!;
+      const fonte = (
+        get.body.data.fontes as Array<{ sourceId: number; real: { po: unknown; etd: unknown; prontidao: unknown } }>
+      ).find((f) => f.sourceId === sourceId)!;
+      expect(fonte.real.prontidao).toMatchObject({ chegadas: 1, mediana: 49 });
       expect(fonte.real.po).toEqual({ chegadas: 3, media: 104, mediana: 103, min: 99, max: 111, poucasChegadas: false });
       expect(fonte.real.etd).toMatchObject({ chegadas: 3, media: 45, mediana: 44 });
 

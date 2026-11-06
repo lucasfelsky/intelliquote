@@ -4,7 +4,7 @@ import {
   FORECAST_PRAZO_REAL_MIN_CHEGADAS,
 } from '../constants/forecast';
 import { daysUntil } from './supplierDocumentDates';
-import type { DataDaCelula, FupLinha } from './forecastDbcorpRegras';
+import { parseProntidaoAte, type DataDaCelula, type FupLinha } from './forecastDbcorpRegras';
 import type { AmostraPrazoFup } from './forecastTypes';
 
 // Prazo real medio por fonte (3C). PURO: so aritmetica de date key (sem relogio, banco ou planilha).
@@ -21,6 +21,7 @@ export interface EstatisticaPrazo {
 export interface PrazoRealDaFonte {
   po: EstatisticaPrazo | null;
   etd: EstatisticaPrazo | null;
+  prontidao: EstatisticaPrazo | null;
 }
 
 export interface PrazoRealPorFonte {
@@ -36,7 +37,8 @@ function intervaloEmDias(inicio: DataDaCelula, fim: string): number | null {
 }
 
 // Toda linha do FUP com codigo e ETA FINAL valida, de QUALQUER status (CONCLUIDO e ATRAC. AG. LIBERACAO tambem
-// sao historico de chegada), com ETA FINAL entre (base - janela) e a base.
+// sao historico de chegada), com ETA FINAL entre (base - janela) e a base. Mede DATA PO, ETD e DATA PRONTIDAO ate a
+// ETA FINAL; a linha so sai se os tres intervalos forem invalidos.
 export function amostrasDePrazo(linhas: readonly FupLinha[], baseDate: string): AmostraPrazoFup[] {
   const amostras: AmostraPrazoFup[] = [];
   for (const linha of linhas) {
@@ -46,10 +48,21 @@ export function amostrasDePrazo(linhas: readonly FupLinha[], baseDate: string): 
     if (idade < 0 || idade > FORECAST_PRAZO_REAL_JANELA_DIAS) continue;
     const poDias = intervaloEmDias(linha.dataPo, etaFinal);
     const etdDias = intervaloEmDias(linha.etd, etaFinal);
-    if (poDias === null && etdDias === null) continue;
-    amostras.push({ codigo: linha.codigo, etaFinal, poDias, etdDias });
+    const prontidaoDias = prontidaoEmDias(linha, etaFinal);
+    if (poDias === null && etdDias === null && prontidaoDias === null) continue;
+    amostras.push({ codigo: linha.codigo, etaFinal, poDias, etdDias, prontidaoDias });
   }
   return amostras;
+}
+
+// DATA PRONTIDAO -> ETA FINAL. O ano do texto sem ano vem da DATA PO (ou da ETA FINAL, sem DATA PO). Prontidao
+// depois do ETD da mesma linha e dado inconsistente: so este intervalo e anulado.
+function prontidaoEmDias(linha: FupLinha, etaFinal: string): number | null {
+  const dataPo = linha.dataPo.tipo === 'data' ? linha.dataPo.key : null;
+  const prontidao = parseProntidaoAte(linha.prontidao, dataPo, etaFinal);
+  if (prontidao.tipo !== 'data') return null;
+  if (linha.etd.tipo === 'data' && prontidao.key > linha.etd.key) return null;
+  return intervaloEmDias(prontidao, etaFinal);
 }
 
 export function estatisticaDePrazo(dias: readonly number[]): EstatisticaPrazo | null {
@@ -74,7 +87,7 @@ export function prazoRealPorFonte(
   amostras: readonly AmostraPrazoFup[],
   fonteDoCodigo: ReadonlyMap<string, number>,
 ): PrazoRealPorFonte {
-  const acumulado = new Map<number, { po: number[]; etd: number[] }>();
+  const acumulado = new Map<number, { po: number[]; etd: number[]; prontidao: number[] }>();
   let semFonte = 0;
   for (const amostra of amostras) {
     const sourceId = fonteDoCodigo.get(amostra.codigo);
@@ -82,14 +95,21 @@ export function prazoRealPorFonte(
       semFonte += 1;
       continue;
     }
-    const dias = acumulado.get(sourceId) ?? { po: [], etd: [] };
+    const dias = acumulado.get(sourceId) ?? { po: [], etd: [], prontidao: [] };
     if (amostra.poDias !== null) dias.po.push(amostra.poDias);
     if (amostra.etdDias !== null) dias.etd.push(amostra.etdDias);
+    if (amostra.prontidaoDias !== null && amostra.prontidaoDias !== undefined) {
+      dias.prontidao.push(amostra.prontidaoDias);
+    }
     acumulado.set(sourceId, dias);
   }
   const porFonte = new Map<number, PrazoRealDaFonte>();
   for (const [sourceId, dias] of acumulado) {
-    porFonte.set(sourceId, { po: estatisticaDePrazo(dias.po), etd: estatisticaDePrazo(dias.etd) });
+    porFonte.set(sourceId, {
+      po: estatisticaDePrazo(dias.po),
+      etd: estatisticaDePrazo(dias.etd),
+      prontidao: estatisticaDePrazo(dias.prontidao),
+    });
   }
   return { porFonte, semFonte: { chegadas: semFonte } };
 }

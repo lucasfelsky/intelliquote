@@ -46,7 +46,7 @@ describe('amostrasDePrazo', () => {
       [linha({ dataPo: data('2033-01-01'), etd: data('2033-03-01'), etaFinal: data('2033-04-10') })],
       BASE,
     );
-    expect(r).toEqual([{ codigo: 'TST0001', etaFinal: '2033-04-10', poDias: 99, etdDias: 40 }]);
+    expect(r).toEqual([{ codigo: 'TST0001', etaFinal: '2033-04-10', poDias: 99, etdDias: 40, prontidaoDias: null }]);
   });
 
   it('ATRAC. AG. LIBERACAO com ETA FINAL entra (qualquer status e historico)', () => {
@@ -90,7 +90,107 @@ describe('amostrasDePrazo', () => {
 
   it('sem DATA PO: poDias null e etdDias preenchido', () => {
     const r = amostrasDePrazo([linha({ etd: data('2033-03-01'), etaFinal: data('2033-04-10') })], BASE);
-    expect(r).toEqual([{ codigo: 'TST0001', etaFinal: '2033-04-10', poDias: null, etdDias: 40 }]);
+    expect(r).toEqual([{ codigo: 'TST0001', etaFinal: '2033-04-10', poDias: null, etdDias: 40, prontidaoDias: null }]);
+  });
+
+  describe('DATA PRONTIDAO -> ETA FINAL', () => {
+    it('data real (date key) da prontidaoDias; poDias e etdDias seguem iguais', () => {
+      const r = amostrasDePrazo(
+        [
+          linha({
+            dataPo: data('2033-01-01'),
+            prontidao: '2033-02-20',
+            etd: data('2033-03-01'),
+            etaFinal: data('2033-04-10'),
+          }),
+        ],
+        BASE,
+      );
+      expect(r).toEqual([{ codigo: 'TST0001', etaFinal: '2033-04-10', poDias: 99, etdDias: 40, prontidaoDias: 49 }]);
+    });
+
+    it('linha so com prontidao entra (poDias e etdDias null)', () => {
+      const r = amostrasDePrazo([linha({ prontidao: '2033-03-01', etaFinal: data('2033-04-10') })], BASE);
+      expect(r).toEqual([{ codigo: 'TST0001', etaFinal: '2033-04-10', poDias: null, etdDias: null, prontidaoDias: 40 }]);
+    });
+
+    it('texto MON DDth com DATA PO usa o ano da DATA PO', () => {
+      const r = amostrasDePrazo(
+        [linha({ dataPo: data('2033-02-01'), prontidao: 'MAR 5TH', etaFinal: data('2033-04-10') })],
+        BASE,
+      );
+      expect(r[0].prontidaoDias).toBe(36); // 2033-03-05 -> 2033-04-10
+    });
+
+    it('sem DATA PO o ano e o mais recente que nao passa da ETA FINAL (virada do ano)', () => {
+      const r = amostrasDePrazo(
+        [linha({ prontidao: 'DEC 20TH', etaFinal: data('2034-02-10') })],
+        '2034-03-01',
+      );
+      expect(r[0].prontidaoDias).toBe(52); // 2033-12-20 -> 2034-02-10
+    });
+
+    it('sem DATA PO e na mesma virada: JAN 5 com chegada em marco usa o proprio ano', () => {
+      const r = amostrasDePrazo([linha({ prontidao: 'JAN 5', etaFinal: data('2033-03-01') })], BASE);
+      expect(r[0].prontidaoDias).toBe(55); // 2033-01-05 -> 2033-03-01
+    });
+
+    it('ETA FINAL anterior a prontidao vira null e a linha sai se nada mais mede', () => {
+      expect(amostrasDePrazo([linha({ prontidao: '2033-05-01', etaFinal: data('2033-04-10') })], BASE)).toEqual([]);
+      const r = amostrasDePrazo(
+        [linha({ prontidao: '2033-05-01', etd: data('2033-03-01'), etaFinal: data('2033-04-10') })],
+        BASE,
+      );
+      expect(r[0].prontidaoDias).toBeNull();
+      expect(r[0].etdDias).toBe(40);
+    });
+
+    it('prontidao depois do ETD da mesma linha anula so a prontidao', () => {
+      const r = amostrasDePrazo(
+        [
+          linha({
+            dataPo: data('2033-01-01'),
+            prontidao: '2033-03-20',
+            etd: data('2033-03-01'),
+            etaFinal: data('2033-04-10'),
+          }),
+        ],
+        BASE,
+      );
+      expect(r[0]).toMatchObject({ poDias: 99, etdDias: 40, prontidaoDias: null });
+    });
+
+    it('prontidao no mesmo dia do ETD vale', () => {
+      const r = amostrasDePrazo(
+        [linha({ prontidao: '2033-03-01', etd: data('2033-03-01'), etaFinal: data('2033-04-10') })],
+        BASE,
+      );
+      expect(r[0].prontidaoDias).toBe(40);
+    });
+
+    it('texto nao reconhecido ou vazio vira null, sem derrubar a linha que mede outra coisa', () => {
+      const r = amostrasDePrazo(
+        [
+          linha({ prontidao: 'ASAP', dataPo: data('2033-01-01'), etaFinal: data('2033-04-10') }),
+          linha({ prontidao: '', dataPo: data('2033-01-01'), etaFinal: data('2033-04-10') }),
+        ],
+        BASE,
+      );
+      expect(r.map((a) => a.prontidaoDias)).toEqual([null, null]);
+      expect(amostrasDePrazo([linha({ prontidao: 'ASAP', etaFinal: data('2033-04-10') })], BASE)).toEqual([]);
+    });
+
+    it('intervalo de 366 dias vira null; 365 se mantem', () => {
+      const eta = '2033-04-10';
+      const r = amostrasDePrazo(
+        [
+          linha({ prontidao: somarDias(eta, -366), etaFinal: data(eta) }),
+          linha({ prontidao: somarDias(eta, -365), etaFinal: data(eta) }),
+        ],
+        BASE,
+      );
+      expect(r.map((a) => a.prontidaoDias)).toEqual([365]);
+    });
   });
 
   it('DATA PO depois da ETA FINAL (negativo) vira null', () => {
@@ -192,6 +292,26 @@ describe('prazoRealPorFonte', () => {
     expect(r.porFonte.get(1)?.etd).toMatchObject({ chegadas: 2, media: 35 });
     expect(r.porFonte.get(2)?.po).toMatchObject({ chegadas: 1, media: 100, poucasChegadas: true });
     expect(r.porFonte.has(3)).toBe(false);
+  });
+
+  it('prontidao: agrupa por fonte, ignora null e chave ausente (snapshot antigo)', () => {
+    const r = prazoRealPorFonte(
+      [
+        { ...amostra('TST0001', 60, 30), prontidaoDias: 50 },
+        { ...amostra('TST0001', 80, 40), prontidaoDias: 70 },
+        { ...amostra('TST0001', 80, 40), prontidaoDias: null },
+        amostra('TST0001', 90, 45),
+        { ...amostra('TST0009', 10, 10), prontidaoDias: 5 },
+      ],
+      new Map([['TST0001', 1]]),
+    );
+    expect(r.porFonte.get(1)?.prontidao).toMatchObject({ chegadas: 2, media: 60, mediana: 60, min: 50, max: 70 });
+    expect(r.porFonte.get(1)?.po?.chegadas).toBe(4);
+  });
+
+  it('prontidao null quando nenhuma amostra da fonte a mede', () => {
+    const r = prazoRealPorFonte([amostra('TST0001', 60, 30)], new Map([['TST0001', 1]]));
+    expect(r.porFonte.get(1)?.prontidao).toBeNull();
   });
 
   it('po null quando nenhuma amostra da fonte tem poDias', () => {

@@ -14,6 +14,7 @@ import {
   comprasEmAbertoDoFup,
   mudancasDePrazo,
   parseProntidao,
+  parseProntidaoAte,
   resolverPrazosChegada,
   resumirPrazosEstimativa,
   type DataDaCelula,
@@ -103,6 +104,52 @@ describe('parseProntidao', () => {
   it('29 de fevereiro depende do ano inferido', () => {
     expect(p('FEB 29TH', '2027-12-20')).toEqual({ tipo: 'data', key: '2028-02-29' });
     expect(p('FEB 29TH', '2026-12-20')).toEqual({ tipo: 'nao_reconhecida' });
+  });
+});
+
+describe('parseProntidaoAte (amostra historica)', () => {
+  const p = (texto: string, dataPo: string | null, limite: string) => parseProntidaoAte(texto, dataPo, limite);
+
+  it('com DATA PO valida repete a inferencia de parseProntidao', () => {
+    for (const [texto, dataPo] of [
+      ['SEP 30TH', '2026-09-10'],
+      ['JAN 20TH', '2026-12-10'],
+      ['AUG 5TH', '2026-10-02'],
+      ['FEB 29TH', '2027-12-20'],
+    ] as const) {
+      expect(p(texto, dataPo, '2030-01-01')).toEqual(parseProntidao(texto, dataPo, BASE));
+    }
+  });
+
+  it('data real e dd/mm/aaaa independem de DATA PO e do limite', () => {
+    expect(p('2026-10-05', null, '2026-12-01')).toEqual({ tipo: 'data', key: '2026-10-05' });
+    expect(p('05/10/2026', null, '2026-12-01')).toEqual({ tipo: 'data', key: '2026-10-05' });
+  });
+
+  it('sem DATA PO: ano do limite quando a data nao o ultrapassa', () => {
+    expect(p('MAR 5TH', null, '2026-04-10')).toEqual({ tipo: 'data', key: '2026-03-05' });
+    expect(p('JAN 5', null, '2026-03-01')).toEqual({ tipo: 'data', key: '2026-01-05' });
+    expect(p('MAR 5TH', null, '2026-03-05')).toEqual({ tipo: 'data', key: '2026-03-05' });
+  });
+
+  it('sem DATA PO: na virada do ano volta um ano quando a data passaria do limite', () => {
+    expect(p('DEC 20TH', null, '2027-02-10')).toEqual({ tipo: 'data', key: '2026-12-20' });
+    expect(p('MAR 6TH', null, '2026-03-05')).toEqual({ tipo: 'data', key: '2025-03-06' });
+  });
+
+  it('DATA PO invalida cai no ramo sem DATA PO', () => {
+    expect(p('DEC 20TH', 'nao-e-data', '2027-02-10')).toEqual({ tipo: 'data', key: '2026-12-20' });
+  });
+
+  it('29 de fevereiro e dia invalido no ano inferido', () => {
+    expect(p('FEB 29TH', null, '2028-03-01')).toEqual({ tipo: 'data', key: '2028-02-29' });
+    expect(p('FEB 29TH', null, '2027-03-01')).toEqual({ tipo: 'nao_reconhecida' });
+  });
+
+  it('vazio, texto livre e limite invalido', () => {
+    expect(p('', null, '2026-03-01')).toEqual({ tipo: 'vazia' });
+    expect(p('ASAP', null, '2026-03-01')).toEqual({ tipo: 'nao_reconhecida' });
+    expect(p('MAR 5TH', null, 'nao-e-data')).toEqual({ tipo: 'nao_reconhecida' });
   });
 });
 
