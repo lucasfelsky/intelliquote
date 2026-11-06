@@ -386,6 +386,8 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
       semData: 1,
       fontesComPrazoProprio: 0,
       padroesAlterados: 0,
+      fontesComSugestao: 0,
+      padroesIguaisASugestao: 0,
     });
     const auditSales = audits.find((l) => l.entityType === 'forecast_sales' && l.entityId === ANTERIOR)!;
     expect(auditSales.action).toBe('replace_month');
@@ -508,6 +510,8 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
           usado: { prontidaoDias: 35, etdDias: 35 },
           prontidao: { linhas: 1, kg: 200 },
           etd: { linhas: 1, kg: 400 },
+          // Sem chegada medida no FUP deste teste: sem sugestao.
+          sugestao: null,
         },
       ],
       semFonte: { prontidao: { linhas: 0, kg: 0 }, etd: { linhas: 2, kg: 100 } },
@@ -606,6 +610,8 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
       semData: 0,
       fontesComPrazoProprio: 1,
       padroesAlterados: 1,
+      fontesComSugestao: 0,
+      padroesIguaisASugestao: 0,
     });
   });
 
