@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
 import { Icon } from '@/components/icons';
+import { InfoPopover } from '@/components/InfoPopover';
 import {
   baixarForecastRelatorioXlsx,
   forecastErrorMessage,
@@ -73,6 +74,82 @@ interface Props {
 
 const plural = (n: number, singular: string, pluralForm: string) => (n === 1 ? singular : pluralForm);
 
+/**
+ * Indicador do resumo (refino visual, etapa 3). Recebe a frase de sempre ("88 com data-limite vencida",
+ * "6 demandas do comercial abertas (2.225 kg sugeridos)") e a desenha como numero grande + rotulo (+ detalhe entre
+ * parenteses). A frase inteira continua no DOM, so para o leitor de tela e para o papel; a parte visual e aria-hidden.
+ */
+function Indicador({ frase, tom, extras = [] }: { frase: string; tom?: 'danger' | 'warning'; extras?: string[] }) {
+  const partes = /^(\S+)\s+(.*)$/.exec(frase);
+  const numero = partes?.[1] ?? '';
+  const resto = partes?.[2] ?? frase;
+  const detalhe = /^(.*?)\s*\((.*)\)$/.exec(resto);
+  const rotulo = detalhe?.[1] ?? resto;
+  return (
+    <li className={`fcr-ind${tom ? ` fcr-ind--${tom}` : ''}`}>
+      <span className="fcr-so-leitor">{frase}</span>
+      <span className="fcr-ind__n" aria-hidden="true">
+        {numero}
+      </span>
+      <span className="fcr-ind__k" aria-hidden="true">
+        {rotulo}
+      </span>
+      {detalhe?.[2] && (
+        <span className="fcr-ind__s" aria-hidden="true">
+          {detalhe[2]}
+        </span>
+      )}
+      {/* Frases secundarias do mesmo tema (ex.: "7 com mais de uma embalagem"): texto de verdade, sem aria-hidden. */}
+      {extras.map((texto) => (
+        <span key={texto} className="fcr-ind__s fcr-ind__extra">
+          {texto}
+        </span>
+      ))}
+    </li>
+  );
+}
+
+/**
+ * Quinto indicador: ajustes de calculo (media sem meses atipicos, cobertos por grupo de equivalencia). Mostra a soma de
+ * itens e abre o detalhe num balao; as frases de sempre ficam no DOM para o leitor de tela e para o papel.
+ */
+function Ajustes({
+  meses,
+  grupos,
+}: {
+  meses: { n: number; frase: string } | null;
+  grupos: { n: number; frase: string } | null;
+}) {
+  if (!meses && !grupos) return null;
+  const frases = [meses?.frase, grupos?.frase].filter((f): f is string => Boolean(f));
+  const origens = [meses ? 'média atípica' : null, grupos ? 'grupo' : null].filter((o): o is string => o !== null);
+  return (
+    <li className="fcr-ind">
+      {frases.map((frase) => (
+        <span key={frase} className="fcr-so-leitor">
+          {frase}
+        </span>
+      ))}
+      <span className="fcr-ind__n" aria-hidden="true">
+        {(meses?.n ?? 0) + (grupos?.n ?? 0)}
+      </span>
+      <span className="fcr-ind__k fcr-ind__k--com-info" aria-hidden="true">
+        Ajustes de cálculo
+      </span>
+      <span className="fcr-ind__s" aria-hidden="true">
+        {origens.join(' · ')}
+      </span>
+      <InfoPopover label="Ajustes de cálculo: ver detalhes" tone="info" className="fcr-ind__info" trigger={<Icon name="info" size={14} />}>
+        <ul className="cmp-popover__lista">
+          {frases.map((frase) => (
+            <li key={frase}>{frase}</li>
+          ))}
+        </ul>
+      </InfoPopover>
+    </li>
+  );
+}
+
 interface EmbalagemProps {
   item: ForecastItemRelatorio;
   /** Definido so quando o usuario pode editar e o item tem produto no cadastro. */
@@ -89,15 +166,18 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
       className="ghost-button fcr-embalagem__editar"
       aria-haspopup="dialog"
       aria-label={`${usada ? 'Editar embalagens de' : 'Cadastrar embalagem de'} ${item.item}`}
+      title={usada ? 'Editar embalagens' : 'Cadastrar embalagem'}
       onClick={onEditar}
     >
-      {usada ? 'Editar embalagens' : 'Cadastrar embalagem'}
+      {/* So icone na tela (refino visual, etapa 4); o texto segue no botao para o leitor de tela. */}
+      <Icon name={usada ? 'edit' : 'plus'} size={14} />
+      <span className="fcr-so-leitor">{usada ? 'Editar embalagens' : 'Cadastrar embalagem'}</span>
     </button>
   );
   if (!usada) {
     if (!botao) return <span className="badge badge--muted">Embalagem não cadastrada</span>;
     return (
-      <span className="fcr-embalagem">
+      <span className="fcr-embalagem fcr-embalagem--vazia">
         <span className="badge badge--muted">Embalagem não cadastrada</span>
         {botao}
       </span>
@@ -201,8 +281,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
   const [editando, setEditando] = useState(false);
-  // Colunas da linha (Item, Urgencia, Fonte e as 10 comuns): a sublinha do grupo ocupa todas.
-  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 10;
+  // Colunas da linha (Item, Urgencia, Fonte e as 7 comuns): a sublinha do grupo ocupa todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 7;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
@@ -225,7 +305,11 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <div className="fcr-item">
             <span className="fcr-item__nome">{item.item}</span>
             <SeloGrupo grupo={item.grupo} />
-            <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
+            <span className="fcr-item__codigos" title={item.codigos.join(' · ')}>
+              {item.codigos.join(' · ')}
+            </span>
+            {/* Status da compra (antes uma coluna): linha pequena sob os codigos. */}
+            <span className="fcr-item__status">{STATUS_ROTULO[item.status] ?? item.status}</span>
             {item.grupo && <PrincipalDoGrupo grupo={item.grupo} />}
             {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
             <MediaSem meses={item.mesesForaDaMedia} />
@@ -243,11 +327,10 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           </td>
         )}
         {fonte !== undefined && (
-          <td>
+          <td className="fcr-fonte">
             {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
           </td>
         )}
-        <td>{STATUS_ROTULO[item.status] ?? item.status}</td>
         <td className="fcr-num">{d1(item.demanda)}</td>
         <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
         <td>
@@ -269,14 +352,22 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <ForecastDecisaoCompra item={item} />
           <ForecastGerarCotacao item={item} />
         </td>
-        <td className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
-        <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
-        <td>
+        <td className="fcr-col-limite">
           <span className="fcr-limite">
             <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
               {item.dataLimite ? dataBr(item.dataLimite) : '—'}
             </span>
             {item.vencida && <span className="badge badge--danger">Vencida</span>}
+          </span>
+          {/* Saldo zera e Ruptura (antes duas colunas): linhas pequenas sob a data-limite. */}
+          <span className="fcr-limite__prazos">
+            <span>
+              <span className="fcr-fraco">Saldo zera</span> <span className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</span>
+            </span>
+            <span>
+              <span className="fcr-fraco">Ruptura</span>{' '}
+              <span>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</span>
+            </span>
           </span>
         </td>
         <td>
@@ -303,7 +394,6 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
 
 const COLUNAS_COMUNS = (
   <>
-    <th scope="col">Status</th>
     <th scope="col" className="fcr-num">
       Demanda
     </th>
@@ -317,12 +407,25 @@ const COLUNAS_COMUNS = (
     <th scope="col" className="fcr-num">
       Qtd. decidida (kg)
     </th>
-    <th scope="col">Saldo zera</th>
-    <th scope="col">Ruptura</th>
     <th scope="col">Data-limite</th>
     <th scope="col">Em andamento</th>
   </>
 );
+
+/** Seta que recolhe/expande a tabela de uma faixa ou fonte (refino visual, etapa 4). Aberta por padrao; no papel nada some. */
+function AlternarGrupo({ aberto, aoAlternar, nome }: { aberto: boolean; aoAlternar: () => void; nome: string }) {
+  return (
+    <button
+      type="button"
+      className="fcr-grupo__alternar"
+      aria-expanded={aberto}
+      aria-label={`${aberto ? 'Recolher' : 'Expandir'} ${nome}`}
+      onClick={aoAlternar}
+    >
+      <Icon name={aberto ? 'chevron-down' : 'chevron-right'} size={16} />
+    </button>
+  );
+}
 
 interface GrupoProps {
   grupo: ForecastGrupoRelatorio;
@@ -339,12 +442,14 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
     ? `mais urgente ${dataBr(grupo.dataLimiteMaisUrgente)}`
     : 'sem data-limite';
   const titulo = `${grupo.fonte || 'Sem fonte'} · lead time ${grupo.leadTimeDias} dias · ${urgente}`;
+  const [aberto, setAberto] = useState(true);
   return (
     <section className="fc-card fcr-grupo" aria-label={`Fonte ${grupo.fonte || 'sem nome'}`}>
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label={`Itens da fonte ${grupo.fonte || 'sem nome'}`}>
         <table className="fcr-tabela">
           <caption className="fcr-caption">
             <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome={`a fonte ${grupo.fonte || 'sem nome'}`} />
               <span>{titulo}</span>
               {semEstoque > 0 && <span className="badge badge--danger">{semEstoque} sem estoque agora</span>}
               {semEstoque === 0 && critico > 0 && (
@@ -360,14 +465,14 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
               <OcasioesDoGrupoSelo grupo={grupo} />
             </div>
           </caption>
-          <thead>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               {comUrgencia && <th scope="col">Urgência</th>}
               {COLUNAS_COMUNS}
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {grupo.itens.map((item) => (
               <Linha
                 key={item.linha}
@@ -394,18 +499,20 @@ interface SecaoUrgenciaProps {
 // Visao "Por urgencia": uma secao por faixa, com a fonte em coluna propria.
 function SecaoUrgencia({ urgencia, itens, diasCritico, podeEditar }: SecaoUrgenciaProps) {
   const rotulo = rotuloUrgencia(urgencia, diasCritico);
+  const [aberto, setAberto] = useState(true);
   return (
     <section className="fc-card fcr-grupo" aria-label={rotulo}>
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label={`Itens: ${rotulo}`}>
         <table className="fcr-tabela">
           <caption className="fcr-caption">
             <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome={`a faixa ${rotulo}`} />
               <span>
                 {rotulo} · {itens.length} {plural(itens.length, 'item', 'itens')}
               </span>
             </div>
           </caption>
-          <thead>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               <th scope="col">Urgência</th>
@@ -413,7 +520,7 @@ function SecaoUrgencia({ urgencia, itens, diasCritico, podeEditar }: SecaoUrgenc
               {COLUNAS_COMUNS}
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {itens.map(({ item, fonte }) => (
               <Linha
                 key={item.linha}
@@ -520,6 +627,8 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   const [lancando, setLancando] = useState(false);
   const [avisoDemanda, setAvisoDemanda] = useState('');
   const botaoLancar = useRef<HTMLButtonElement>(null);
+  // "Fora da lista de compra": as notas de apoio ficam recolhidas na tela e abertas no papel.
+  const [foraAberto, setForaAberto] = useState(false);
 
   if (relatorio.isLoading) {
     return <Spinner />;
@@ -564,37 +673,36 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
       <section className="fc-card fcr-resumo" aria-label="Resumo do relatório de compras">
         <p className="fcr-resumo__titulo">
           {totais.itens} {plural(totais.itens, 'item', 'itens')} em {totais.fontes}{' '}
-          {plural(totais.fontes, 'fonte', 'fontes')}
+          {plural(totais.fontes, 'fonte', 'fontes')}{' '}
+          <InfoPopover
+            label="Como as datas são calculadas"
+            tone="info"
+            largo
+            className="fcr-regra-info"
+            trigger={<Icon name="ajuda" size={14} />}
+          >
+            <p>
+              O saldo zera no primeiro mês em que a projeção do estoque fica negativa. O dia da ruptura é uma
+              estimativa: o consumo do mês é distribuído de forma linear (no mês base, a partir da data-base).
+            </p>
+            <p>
+              Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite
+              já passou na data de hoje.
+            </p>
+            <p>{PARAGRAFO_EMBALAGEM}</p>
+            {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
+            {semConsumo && <p>{paragrafoSemConsumo()}</p>}
+            {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
+            {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
+            {demandaComercial && <p>{paragrafoDemandaComercial()}</p>}
+            {comGrupos && <p>{paragrafoGruposDeEquivalencia()}</p>}
+            {dados.ocasioes?.estado === 'ok' && <p>{PARAGRAFO_OCASIOES}</p>}
+          </InfoPopover>
+        </p>
+        <p className="fcr-resumo__fora fcr-resumo__quinzena">
+          Quinzena {quinzena.label} (base {dataBr(quinzena.baseDate)}) · datas conferidas em {dataBr(quinzena.hoje)}
         </p>
         <div className="fcr-acoes" role="group" aria-label="Exportar relatório">
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => xlsx.mutate(quinzena.hoje)}
-            disabled={xlsx.isPending}
-            aria-busy={xlsx.isPending}
-          >
-            <Icon name="download" size={16} />
-            {xlsx.isPending ? 'Gerando XLSX…' : 'Baixar XLSX'}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => macro.mutate(quinzena.hoje)}
-            disabled={macro.isPending}
-            aria-busy={macro.isPending}
-          >
-            <Icon name="file" size={16} />
-            {macro.isPending ? 'Gerando planilha MACRO…' : 'Baixar planilha MACRO (XLSX)'}
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => window.print()}
-            aria-describedby="fcr-dica-impressao"
-          >
-            Imprimir / Salvar como PDF
-          </button>
           {podeEditar && dados.demandaComercial !== undefined && (
             <button
               type="button"
@@ -610,7 +718,41 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
               Lançar demanda do comercial
             </button>
           )}
-          <p id="fcr-dica-impressao" className="fcr-acoes__dica">
+          {/* Baixar XLSX com texto; MACRO e Imprimir so com icone (nome acessivel por aria-label, dica ao passar o mouse). */}
+          <span className="fcr-botoes">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => xlsx.mutate(quinzena.hoje)}
+              disabled={xlsx.isPending}
+              aria-busy={xlsx.isPending}
+            >
+              <Icon name="download" size={16} />
+              {xlsx.isPending ? 'Gerando XLSX…' : 'Baixar XLSX'}
+            </button>
+            <button
+              type="button"
+              className="ghost-button fcr-botoes__icone"
+              onClick={() => macro.mutate(quinzena.hoje)}
+              disabled={macro.isPending}
+              aria-busy={macro.isPending}
+              aria-label={macro.isPending ? 'Gerando planilha MACRO…' : 'Baixar planilha MACRO (XLSX)'}
+              data-dica={macro.isPending ? 'Gerando planilha MACRO…' : 'Baixar planilha MACRO (XLSX)'}
+            >
+              <Icon name="file" size={16} />
+            </button>
+            <button
+              type="button"
+              className="ghost-button fcr-botoes__icone"
+              onClick={() => window.print()}
+              aria-label="Imprimir / Salvar como PDF"
+              aria-describedby="fcr-dica-impressao"
+              data-dica="Imprimir / Salvar como PDF"
+            >
+              <Icon name="printer" size={16} />
+            </button>
+          </span>
+          <p id="fcr-dica-impressao" className="fcr-acoes__dica fcr-so-leitor">
             Abre a impressão do navegador; para PDF, escolha “Salvar como PDF” no destino.
           </p>
           {xlsx.isError && (
@@ -639,25 +781,44 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             </p>
           )}
         </div>
-        <ul className="fcr-resumo__lista">
-          <li className={totais.vencidas > 0 ? 'fcr-forte fcr-resumo__alerta' : undefined}>
-            {totais.vencidas} com data-limite vencida
-          </li>
-          {comUrgencia && porUrgencia && <li>{resumoDeUrgencia(porUrgencia, diasCritico)}</li>}
-          <li>{totais.semEmbalagem} sem embalagem cadastrada</li>
-          {totais.multiplasEmbalagens > 0 && <li>{totais.multiplasEmbalagens} com mais de uma embalagem</li>}
-          {(totais.comPallet ?? 0) > 0 && <li>{totais.comPallet} com pallet cadastrado</li>}
-          {sobDemanda && <li>{resumoSobDemanda(fora.sobDemanda ?? sobDemanda.itens.length)}</li>}
-          {comMesesForaDaMedia > 0 && <li>{resumoMesesForaDaMedia(comMesesForaDaMedia)}</li>}
+        {/* Indicadores (refino visual, etapa 3): cada frase vira numero + rotulo na tela; a frase inteira segue no DOM (leitor de tela e papel). */}
+        <ul className="fcr-resumo__lista fcr-ind-grade">
+          <Indicador frase={`${totais.vencidas} com data-limite vencida`} tom={totais.vencidas > 0 ? 'danger' : undefined} />
+          <Indicador
+            frase={`${totais.semEmbalagem} sem embalagem cadastrada`}
+            tom={totais.semEmbalagem > 0 ? 'warning' : undefined}
+            extras={[
+              ...(totais.multiplasEmbalagens > 0 ? [`${totais.multiplasEmbalagens} com mais de uma embalagem`] : []),
+              ...((totais.comPallet ?? 0) > 0 ? [`${totais.comPallet} com pallet cadastrado`] : []),
+            ]}
+          />
+          {sobDemanda && <Indicador frase={resumoSobDemanda(fora.sobDemanda ?? sobDemanda.itens.length)} />}
           {demandaComercial && (
-            <li>{resumoDemandaComercial(demandaComercial.totais.abertas, demandaComercial.totais.sugeridoKg)}</li>
+            <Indicador frase={resumoDemandaComercial(demandaComercial.totais.abertas, demandaComercial.totais.sugeridoKg)} />
           )}
-          {cobertosPorGrupo && <li>{resumoCobertosPorGrupo(cobertosPorGrupo.itens.length)}</li>}
+          <Ajustes
+            meses={comMesesForaDaMedia > 0 ? { n: comMesesForaDaMedia, frase: resumoMesesForaDaMedia(comMesesForaDaMedia) } : null}
+            grupos={
+              cobertosPorGrupo
+                ? { n: cobertosPorGrupo.itens.length, frase: resumoCobertosPorGrupo(cobertosPorGrupo.itens.length) }
+                : null
+            }
+          />
           <OcasioesNoResumo dados={dados} />
         </ul>
         {comUrgencia && porUrgencia && (
+          <>
+            <p className="fcr-so-leitor">{resumoDeUrgencia(porUrgencia, diasCritico)}</p>
+            <div className="fcr-urg" aria-hidden="true">
+              {filtrosVisiveis(diasCritico).map(
+                (u) => porUrgencia[u] > 0 && <span key={u} className={`fcr-urg__seg fcr-urg__seg--${u}`} style={{ flexGrow: porUrgencia[u] }} />,
+              )}
+            </div>
+          </>
+        )}
+        {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
-            <div className="fc-filtros" role="group" aria-label="Organizar relatório">
+            <div className="fc-filtros fcr-seg" role="group" aria-label="Organizar relatório">
               <button type="button" className="fc-filtro" aria-pressed={visao === 'urgencia'} onClick={() => setVisao('urgencia')}>
                 Por urgência
               </button>
@@ -677,6 +838,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
                   aria-pressed={filtro === u}
                   onClick={() => setFiltro(u)}
                 >
+                  <span className={`fcr-ponto fcr-ponto--${u}`} aria-hidden="true" />
                   {rotuloUrgencia(u, diasCritico)} <span className="fc-filtro__conta">{porUrgencia[u]}</span>
                 </button>
               ))}
@@ -688,43 +850,34 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             {textoMostrando(totalMostrado, totais.itens, filtro, visao, diasCritico)}
           </p>
         )}
-        <p className="fcr-resumo__fora">
-          Fora do relatório: {fora.semLeadTime} sem lead time, {fora.semConsumoSemFalta} sem consumo e sem falta
-          {(fora.semCadastro ?? 0) > 0 && `, ${fora.semCadastro} sem cadastro`}
-        </p>
-        {(fora.semCadastro ?? 0) > 0 && (
+        <button
+          type="button"
+          className="fcr-fora__botao"
+          aria-expanded={foraAberto}
+          aria-controls="fcr-fora"
+          onClick={() => setForaAberto((aberto) => !aberto)}
+        >
+          <Icon name={foraAberto ? 'chevron-down' : 'chevron-right'} size={14} />
+          Fora da lista de compra
+        </button>
+        {/* Recolhido na tela; no papel as notas saem abertas (hidden nao imprime sem o override do @media print). */}
+        <div id="fcr-fora" className="fcr-fora" hidden={!foraAberto}>
           <p className="fcr-resumo__fora">
-            {fora.semCadastro} sem cadastro: código do DBCorp ainda não cadastrado, sem fonte, sem lead time e sem sugestão de compra.
+            Fora do relatório: {fora.semLeadTime} sem lead time, {fora.semConsumoSemFalta} sem consumo e sem falta
+            {(fora.semCadastro ?? 0) > 0 && `, ${fora.semCadastro} sem cadastro`}
           </p>
-        )}
-        {semConsumo && (
-          <p className="fcr-resumo__fora">
-            {resumoSemConsumo(semConsumo.itens.length, fora.semConsumoSemMovimento ?? 0)}
-          </p>
-        )}
-        <p className="fcr-resumo__fora">
-          Quinzena {quinzena.label} (base {dataBr(quinzena.baseDate)}) · datas conferidas em {dataBr(quinzena.hoje)}
-        </p>
-        {dados.ocasioes?.estado === 'ok' && <p className="fcr-resumo__fora fcoc-apoio">{APOIO_OCASIOES}</p>}
-        <details className="fcr-regra">
-          <summary>Como as datas são calculadas</summary>
-          <p>
-            O saldo zera no primeiro mês em que a projeção do estoque fica negativa. O dia da ruptura é uma
-            estimativa: o consumo do mês é distribuído de forma linear (no mês base, a partir da data-base).
-          </p>
-          <p>
-            Data-limite do pedido = ruptura − lead time da fonte, em dias corridos e sem folga. Vencida: a data-limite
-            já passou na data de hoje.
-          </p>
-          <p>{PARAGRAFO_EMBALAGEM}</p>
-          {comUrgencia && <p>{paragrafoUrgencia(diasCritico)}</p>}
-          {semConsumo && <p>{paragrafoSemConsumo()}</p>}
-          {sobDemanda && <p>{paragrafoSobDemanda()}</p>}
-          {comMesesForaDaMedia > 0 && <p>{paragrafoMesesForaDaMedia()}</p>}
-          {demandaComercial && <p>{paragrafoDemandaComercial()}</p>}
-          {comGrupos && <p>{paragrafoGruposDeEquivalencia()}</p>}
-          {dados.ocasioes?.estado === 'ok' && <p>{PARAGRAFO_OCASIOES}</p>}
-        </details>
+          {(fora.semCadastro ?? 0) > 0 && (
+            <p className="fcr-resumo__fora">
+              {fora.semCadastro} sem cadastro: código do DBCorp ainda não cadastrado, sem fonte, sem lead time e sem sugestão de compra.
+            </p>
+          )}
+          {semConsumo && (
+            <p className="fcr-resumo__fora">
+              {resumoSemConsumo(semConsumo.itens.length, fora.semConsumoSemMovimento ?? 0)}
+            </p>
+          )}
+          {dados.ocasioes?.estado === 'ok' && <p className="fcr-resumo__fora fcoc-apoio">{APOIO_OCASIOES}</p>}
+        </div>
       </section>
       <ProvedorDecisoesCompra snapshotId={snapshotId} podeEditar={podeEditar}>
         {dados.grupos.length === 0 ? (

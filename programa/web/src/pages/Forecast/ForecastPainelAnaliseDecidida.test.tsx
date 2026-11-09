@@ -257,18 +257,23 @@ describe('Painel - coluna ANALISE FORECAST com a quantidade decidida', () => {
       return { data: { decisoes: [decisao()] } };
     });
     renderPage();
-    const aviso = await screen.findByText(/Não foi possível carregar as quantidades decididas/);
-    expect(aviso.closest('[role="status"]')).toBeTruthy();
+    // O aviso vai para o icone de avisos do cabecalho (refino visual, etapa 1): abre o balao e usa a acao dele.
+    const botaoAvisos = await screen.findByTestId('fc-avisos-botao');
+    expect(screen.queryByText(/Não foi possível carregar as quantidades decididas/)).toBeNull();
     expect(screen.getByRole('region', { name: 'Grade do Forecast' })).toBeTruthy();
     expect(textoDaCelula(await celulaAnalise('PRODUTO A'))).toBe('50,0');
     expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(botaoAvisos);
+    const painel = screen.getByRole('region', { name: 'Avisos' });
+    expect(within(painel).getByText(/Quantidades decididas indisponíveis/)).toBeTruthy();
+    expect(within(painel).getByText(/A coluna ANÁLISE FORECAST mostra o valor importado da quinzena\./)).toBeTruthy();
 
     falhar = false;
-    fireEvent.click(within(aviso.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'Tentar de novo' }));
+    fireEvent.click(within(painel).getByRole('button', { name: 'Tentar de novo' }));
     await waitFor(async () => {
       expect((await celulaAnalise('PRODUTO A')).querySelector('.fcad-decidida')?.textContent).toBe('1.600,0');
     });
-    expect(screen.queryByText(/Não foi possível carregar as quantidades decididas/)).toBeNull();
+    expect(screen.queryByTestId('fc-avisos-botao')).toBeNull();
   });
 
   it('carregando: a grade aparece com o congelado e o aviso de carregamento', async () => {

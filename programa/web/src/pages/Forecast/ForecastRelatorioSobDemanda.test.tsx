@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ForecastItemSobDemanda } from '@/services/forecast';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
@@ -158,6 +158,7 @@ describe('ForecastRelatorioCompras com compra sob demanda', () => {
     renderRelatorio();
     expect(await screen.findByText(resumoSobDemanda(1))).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Itens sob demanda' })).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(paragrafoSobDemanda())).toBeTruthy();
     // A lista de compra continua so com o item regular.
     expect(screen.getByRole('region', { name: 'Itens da fonte FONTE 001' })).toBeTruthy();

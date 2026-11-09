@@ -1,6 +1,8 @@
 import { createContext, useContext, useId, useMemo, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { Icon } from '@/components/icons';
+import { InfoPopover } from '@/components/InfoPopover';
 import type { ForecastItemRelatorio } from '@/services/forecast';
 import { forecastDecisoesKeys, listForecastDecisoes } from '@/services/forecastDecisoes';
 import {
@@ -87,17 +89,26 @@ function Botao({ item, productId, ctx }: BotaoProps) {
         aria-label={`Gerar cotação de ${item.item}`}
         aria-disabled={motivo ? 'true' : undefined}
         aria-describedby={motivo ? idMotivo : undefined}
+        title={motivo ?? 'Gerar cotação'}
         onClick={() => {
           if (motivo || productId === null) return;
           ctx.navegar(linkGerarCotacao(ctx.snapshotId, productId));
         }}
       >
-        Gerar cotação
+        {/* So icone na tela (refino visual, etapa 4); texto e motivo seguem no DOM para o leitor de tela e como dica (title). */}
+        <Icon name="file-plus" size={16} />
+        <span className="fcr-so-leitor">Gerar cotação</span>
       </button>
       {motivo && (
-        <span id={idMotivo} className="fgc-motivo">
+        <span id={idMotivo} className="fgc-motivo fcr-so-leitor">
           {motivo}
         </span>
+      )}
+      {/* Motivo visivel para quem usa teclado ou toque sem leitor de tela. */}
+      {motivo && (
+        <InfoPopover label="Por que não dá para gerar a cotação" tone="warning" className="fgc-motivo-chip" trigger={<Icon name="info" size={14} />}>
+          {motivo}
+        </InfoPopover>
       )}
     </div>
   );

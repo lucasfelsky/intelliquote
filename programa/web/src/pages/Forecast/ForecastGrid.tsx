@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { ForecastDivergencia, ForecastLinha } from '@/services/forecast';
 import { descreverDivergencia, GRUPOS, motivoSemSugestao, seloPendenteTexto, STATUS_ROTULO, type ColunaPainel, type GrupoId } from './forecastPainel';
+import { Icon } from '@/components/icons';
 import { semVendaHa6Meses } from './forecastSemVenda';
 
 export type DivergenciasPorCelula = ReadonlyMap<string, ForecastDivergencia>;
@@ -41,7 +42,12 @@ const Row = memo(function Row({ linha, colunas, inicios, divergencias, buscaDoIt
                 </span>{' '}
               </>
             )}
-            {semVenda && <span className="fcsv-selo">sem venda ≥6 meses</span>}
+            {semVenda && (
+              <span className="fcsv-selo" title="Sem venda há 6 meses ou mais">
+                <Icon name="clock" size={12} />
+                <span className="sr-only">sem venda ≥6 meses</span>
+              </span>
+            )}
             {semVenda && ' '}
             {fonteEStatus}
           </span>
