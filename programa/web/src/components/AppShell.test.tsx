@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import AppShell from './AppShell';
+import AppShell, { CHAVE_SIDEBAR_COLAPSADA } from './AppShell';
 import { ADMIN_NAV, PRIMARY_NAV } from './navConfig';
 
 const logout = vi.fn(async () => undefined);
@@ -35,6 +35,7 @@ function tabbables(root: HTMLElement): HTMLElement[] {
 
 beforeEach(() => {
   logout.mockClear();
+  localStorage.clear();
 });
 
 describe('AppShell (F2)', () => {
@@ -51,9 +52,11 @@ describe('AppShell (F2)', () => {
     });
     const principais = PRIMARY_NAV.map((i) => i.label);
     const admin = ADMIN_NAV.map((i) => i.label);
-    expect(nomes.slice(0, principais.length)).toEqual(principais);
-    expect(nomes.slice(principais.length, principais.length + admin.length)).toEqual(admin);
-    expect(nomes.slice(principais.length + admin.length)).toEqual(['Tema: automático — alternar tema', 'Sair', 'Minha conta']);
+    // o botao de recolher o menu abre a ordem (fica na marca, acima dos links)
+    expect(nomes[0]).toBe('Recolher menu lateral');
+    expect(nomes.slice(1, 1 + principais.length)).toEqual(principais);
+    expect(nomes.slice(1 + principais.length, 1 + principais.length + admin.length)).toEqual(admin);
+    expect(nomes.slice(1 + principais.length + admin.length)).toEqual(['Tema: automático — alternar tema', 'Sair', 'Minha conta']);
     // botao unico de tema (sem radios) e a assinatura "SQ Química" fora da ordem de tab
     expect(container.querySelectorAll('[role="radio"]')).toHaveLength(0);
     const assinatura = container.querySelector('.sidebar__signature');
@@ -89,5 +92,55 @@ describe('AppShell (F2)', () => {
     expect(container.querySelector('main .sidebar, main .topbar')).toBeNull();
     expect(container.querySelector('.app-shell > .sidebar')).not.toBeNull();
     expect(container.querySelector('.app-shell__main > .topbar')).not.toBeNull();
+  });
+});
+
+describe('AppShell: sidebar recolhivel', () => {
+  it('abre expandida; o botao recolhe (so icones), mantem o nome dos links para o leitor de tela e grava a escolha', async () => {
+    const { container } = renderShell();
+    await screen.findByLabelText('3 pendentes');
+    const botao = screen.getByRole('button', { name: 'Recolher menu lateral' });
+    expect(botao.getAttribute('aria-expanded')).toBe('true');
+    expect(botao.getAttribute('aria-controls')).toBe('sidebar-nav');
+    expect(container.querySelector('.sidebar--colapsada')).toBeNull();
+
+    fireEvent.click(botao);
+    expect(container.querySelector('.app-shell.app-shell--colapsada > .sidebar.sidebar--colapsada')).not.toBeNull();
+    const aberto = screen.getByRole('button', { name: 'Expandir menu lateral' });
+    expect(aberto.getAttribute('aria-expanded')).toBe('false');
+    // o texto fica no DOM (some so da tela); cada link segue com nome e ganha a dica
+    const link = screen.getByRole('link', { name: /^Cotações/ });
+    expect(link.getAttribute('title')).toBe('Cotações');
+    expect(localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA)).toBe('1');
+  });
+
+  it('lembra a escolha ao recarregar e expandir de novo apaga a chave', async () => {
+    localStorage.setItem(CHAVE_SIDEBAR_COLAPSADA, '1');
+    const { container } = renderShell();
+    await screen.findByLabelText('3 pendentes');
+    expect(container.querySelector('.sidebar--colapsada')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir menu lateral' }));
+    expect(container.querySelector('.sidebar--colapsada')).toBeNull();
+    expect(localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA)).toBeNull();
+    expect(screen.getByRole('link', { name: /^Cotações/ }).getAttribute('title')).toBeNull();
+  });
+
+  it('storage bloqueado (modo privado) nao quebra: abre expandida e o botao ainda recolhe', async () => {
+    const leitura = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('bloqueado');
+    });
+    const escrita = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('bloqueado');
+    });
+    try {
+      const { container } = renderShell();
+      await screen.findByLabelText('3 pendentes');
+      expect(container.querySelector('.sidebar--colapsada')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Recolher menu lateral' }));
+      expect(container.querySelector('.sidebar--colapsada')).not.toBeNull();
+    } finally {
+      leitura.mockRestore();
+      escrita.mockRestore();
+    }
   });
 });

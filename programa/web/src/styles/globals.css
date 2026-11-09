@@ -661,6 +661,9 @@ h3 {
   margin: 0 auto;
 }
 
+/* Forecast: tabelas largas, sem o teto de 1200px (a sidebar recolhida libera a largura; sem o teto ela nao serviria de nada acima de 1456px) */
+.app-shell__content:has(.fc-pagina) { max-width: none; }
+
 /* Entrada de pagina: sobe 12px + opacidade; sidebar e topbar nao se movem. Sem `key` no React: nao remonta a pagina.
    `backwards`: nada sobra depois dos 500ms (sem transform residual que mude o bloco de contencao de position: fixed). */
 @keyframes rf-page-enter {
@@ -997,12 +1000,76 @@ h3 {
 /* alvo de toque (F2-D2): o botao de tema vai a 44 em ponteiro grosso (Sair ja e 44); mouse segue o mock (tema 40) */
 @media (pointer: coarse) {
   .sidebar__theme { height: 44px; }
+  .sidebar__alternar { width: 44px; height: 44px; }
+}
+
+/* sidebar recolhida (so icones, 72px): a escolha vem do botao .sidebar__alternar. So acima de 880: abaixo a sidebar empilha e o botao some. */
+.sidebar__alternar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--rf-radius-button);
+  background: transparent;
+  color: var(--rf-sidebar-ink-soft);
+  cursor: pointer;
+  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
+}
+.sidebar__alternar svg { transform: rotate(180deg); }
+.sidebar--colapsada .sidebar__alternar svg { transform: none; }
+.sidebar__alternar:hover { background: var(--rf-sidebar-hover); color: var(--rf-sidebar-ink); }
+.sidebar__alternar:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--rf-primary-strong), 0 0 0 4px var(--rf-primary);
+}
+@media (min-width: 881px) {
+  .app-shell--colapsada { grid-template-columns: 72px 1fr; background-size: 72px 100%; }
+  .sidebar--colapsada { padding-left: 12px; padding-right: 12px; }
+  .sidebar--colapsada .sidebar__brand { flex-direction: column; gap: 8px; padding: 0; }
+  .sidebar--colapsada .sidebar__alternar { margin-left: 0; }
+  /* o texto sai da tela mas segue para o leitor de tela (o nome do link nao some) */
+  .sidebar--colapsada .sidebar__brand-name,
+  .sidebar--colapsada .sidebar__label,
+  .sidebar--colapsada .sidebar__tag,
+  .sidebar--colapsada .sidebar__group-title,
+  .sidebar--colapsada .sidebar__theme span,
+  .sidebar--colapsada .sidebar__logout-texto {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .sidebar--colapsada .sidebar__link { position: relative; justify-content: center; gap: 0; padding: 0; }
+  .sidebar--colapsada .sidebar__group .sidebar__link { padding: 0; }
+  .sidebar--colapsada .sidebar__badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+  .sidebar--colapsada .sidebar__group { padding-top: 4px; border-top: 1px solid var(--rf-sidebar-seg-border); }
+  .sidebar--colapsada .sidebar__theme,
+  .sidebar--colapsada .sidebar__logout { width: 44px; padding: 0; gap: 0; }
+  .sidebar--colapsada .sidebar__signature { display: none; }
 }
 
 /* <= 880: sidebar (navy) empilhada acima da topbar, sem hamburguer (F12) */
 @media (max-width: 880px) {
   .app-shell { grid-template-columns: 1fr; background-image: none; }
   .sidebar { position: static; height: auto; }
+  .sidebar__alternar { display: none; }
   .app-shell__content { padding: 16px; }
 }
 
