@@ -14272,7 +14272,7 @@ i.fc-status--preco { background: var(--info); }
 .fc-pagina .fc-filtros-menu__botao:hover { background: var(--hover-tint); }
 .fc-pagina .fc-filtros-menu__botao[aria-expanded="true"] { border-color: var(--primary-700); background: var(--primary-50); color: var(--primary-700); }
 .fc-pagina .fc-filtros-menu__botao:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
-.fc-pagina .fc-filtro__conta.fc-filtros-menu__conta { padding: 1px 7px; background: var(--primary-700); color: var(--on-strong); }
+.fc-pagina .fc-filtro__conta.fc-filtros-menu__conta { padding: 1px 7px; border: 1px solid var(--primary-700); background: var(--primary-50); color: var(--primary-700); }
 .fc-filtros-menu__painel {
   position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
   width: 360px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--border); border-radius: 14px;
