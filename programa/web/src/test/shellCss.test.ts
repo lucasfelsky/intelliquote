@@ -300,6 +300,10 @@ describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
 });
 
 describe('shell F2: botao de recolher a sidebar', () => {
+  it('a marca nao encolhe (flex: none): em janela baixa a sidebar rola e, encolhida, o botao de recolher cairia sobre o 1o link', () => {
+    expect(decl('.sidebar__brand').flex).toBe('none');
+  });
+
   it('o alvo de toque de 44px (pointer: coarse) vem DEPOIS da regra base de 32px (mesma especificidade: a ultima vence)', () => {
     const base = region.indexOf('.sidebar__alternar {');
     const toque = region.indexOf('.sidebar__alternar { width: 44px; height: 44px; }');

@@ -116,6 +116,14 @@ describe('AppShell: sidebar recolhivel', () => {
     expect(container.querySelector('.sidebar__dica')?.textContent).toBe('Cotações');
     fireEvent.mouseLeave(link.closest('li') as HTMLElement);
     expect(container.querySelector('.sidebar__dica')).toBeNull();
+    // foco abre a dica; Esc a dispensa (WCAG 1.4.13) e blur tambem
+    fireEvent.focus(link);
+    expect(container.querySelector('.sidebar__dica')?.textContent).toBe('Cotações');
+    fireEvent.keyDown(link, { key: 'Escape' });
+    expect(container.querySelector('.sidebar__dica')).toBeNull();
+    fireEvent.focus(link);
+    fireEvent.blur(link);
+    expect(container.querySelector('.sidebar__dica')).toBeNull();
     expect(localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA)).toBe('1');
   });
 

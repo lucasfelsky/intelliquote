@@ -34,7 +34,8 @@ export default function Sidebar({
     if (!colapsada) setDica(null);
   }, [colapsada]);
   function mostrarDica(texto: string, el: HTMLElement) {
-    if (!colapsada) return;
+    // abaixo de 880px a sidebar empilha (o estado salvo e ignorado): nada de dica
+    if (!colapsada || (typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 881px)').matches)) return;
     const r = el.getBoundingClientRect();
     setDica({ texto, top: r.top + r.height / 2, left: r.right + 12 });
   }
@@ -43,6 +44,10 @@ export default function Sidebar({
     onMouseLeave: () => setDica(null),
     onFocus: (e: { currentTarget: HTMLElement }) => mostrarDica(texto, e.currentTarget),
     onBlur: () => setDica(null),
+    // WCAG 1.4.13: a dica se dispensa sem mover o ponteiro nem o foco
+    onKeyDown: (e: { key: string }) => {
+      if (e.key === 'Escape') setDica(null);
+    },
   });
 
   // `k` = posicao do item: o texto volta em cascata (CSS: --k)

@@ -699,6 +699,7 @@ h3 {
 
 .sidebar__brand {
   position: relative;
+  flex: none; /* a sidebar rola em janela baixa: sem isto a marca encolhe e o botao de recolher cai sobre o 1o link */
   display: flex;
   align-items: center;
   gap: 12px;
