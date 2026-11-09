@@ -14361,7 +14361,14 @@ i.fc-status--preco { background: var(--info); }
   .fc-pagina .fcr-embalagem { min-width: 0; }
   .fc-pagina .fcr-tabela .fcr-embalagem__editar { width: 28px; min-height: 28px; margin-top: 4px; padding: 0; justify-content: center; }
   .fc-pagina .fcr-tabela .fgc-botao, .fc-pagina .fcr-tabela .fgc-botao[aria-disabled="true"] { width: 36px; padding: 0; justify-content: center; }
-  .fc-pagina .fdec-celula { min-width: 0; }
+  /* a linha "campo + Usar sugerida" tem ~212px: celula menor que isso vaza sobre a Data-limite */
+  .fc-pagina .fdec-celula { min-width: 236px; }
+  .fc-pagina .fdec-linha { flex-wrap: wrap; }
+  /* editor + Gerar cotacao numa grade so: o icone fica na linha do Salvar (a celula perde ~1 linha de altura) */
+  .fc-pagina .fdec-conteudo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 8px; align-items: center; }
+  .fc-pagina .fdec-conteudo > .fdec-editor { display: contents; }
+  .fc-pagina .fdec-conteudo > :not(.fdec-editor):not(.fgc-acao) { grid-column: 1 / 3; }
+  .fc-pagina .fdec-conteudo > .fgc-acao { grid-column: 3; margin-top: 0; }
   .fcr-grupo__alternar { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); cursor: pointer; }
   .fcr-grupo__alternar:hover { background: var(--surface-alt); color: var(--ink); }
   .fcr-grupo__alternar:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
