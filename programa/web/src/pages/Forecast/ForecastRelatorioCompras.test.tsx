@@ -246,7 +246,7 @@ describe('ForecastRelatorioCompras', () => {
       .getAllByRole('columnheader')
       .map((c) => c.textContent);
     expect(colunas).toEqual([
-      'Item', 'Status', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Qtd. decidida (kg)', 'Saldo zera', 'Ruptura', 'Data-limite', 'Em andamento',
+      'Item', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Qtd. decidida (kg)', 'Data-limite', 'Em andamento',
     ]);
   });
 
@@ -530,11 +530,12 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     expect(selo).toHaveLength(1);
     expect(selo[0]?.className).toBe('fcr-item__media');
     expect(selo[0]?.getAttribute('title')).toBe('A média deste item não conta o mês marcado como venda atípica.');
-    // Ordem na celula Item: nome, codigos, selo da media, observacao.
+    // Ordem na celula Item: nome, codigos, status, selo da media, observacao.
     const celula = selo[0]?.parentElement as HTMLElement;
     expect(Array.from(celula.children).map((c) => c.className)).toEqual([
       'fcr-item__nome',
       'fcr-item__codigos',
+      'fcr-item__status',
       'fcr-item__media',
       'fcr-item__obs',
     ]);
@@ -634,6 +635,7 @@ describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
     expect(Array.from(celula.children).map((c) => c.className)).toEqual([
       'fcr-item__nome',
       'fcr-item__codigos',
+      'fcr-item__status',
       'badge badge--warning',
       'fcr-item__demanda',
       'fcr-item__obs',

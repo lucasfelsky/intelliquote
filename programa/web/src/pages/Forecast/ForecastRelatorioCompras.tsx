@@ -166,15 +166,18 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
       className="ghost-button fcr-embalagem__editar"
       aria-haspopup="dialog"
       aria-label={`${usada ? 'Editar embalagens de' : 'Cadastrar embalagem de'} ${item.item}`}
+      title={usada ? 'Editar embalagens' : 'Cadastrar embalagem'}
       onClick={onEditar}
     >
-      {usada ? 'Editar embalagens' : 'Cadastrar embalagem'}
+      {/* So icone na tela (refino visual, etapa 4); o texto segue no botao para o leitor de tela. */}
+      <Icon name={usada ? 'edit' : 'plus'} size={14} />
+      <span className="fcr-so-leitor">{usada ? 'Editar embalagens' : 'Cadastrar embalagem'}</span>
     </button>
   );
   if (!usada) {
     if (!botao) return <span className="badge badge--muted">Embalagem não cadastrada</span>;
     return (
-      <span className="fcr-embalagem">
+      <span className="fcr-embalagem fcr-embalagem--vazia">
         <span className="badge badge--muted">Embalagem não cadastrada</span>
         {botao}
       </span>
@@ -278,8 +281,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
   const [editando, setEditando] = useState(false);
-  // Colunas da linha (Item, Urgencia, Fonte e as 10 comuns): a sublinha do grupo ocupa todas.
-  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 10;
+  // Colunas da linha (Item, Urgencia, Fonte e as 7 comuns): a sublinha do grupo ocupa todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 7;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
@@ -302,7 +305,11 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <div className="fcr-item">
             <span className="fcr-item__nome">{item.item}</span>
             <SeloGrupo grupo={item.grupo} />
-            <span className="fcr-item__codigos">{item.codigos.join(' · ')}</span>
+            <span className="fcr-item__codigos" title={item.codigos.join(' · ')}>
+              {item.codigos.join(' · ')}
+            </span>
+            {/* Status da compra (antes uma coluna): linha pequena sob os codigos. */}
+            <span className="fcr-item__status">{STATUS_ROTULO[item.status] ?? item.status}</span>
             {item.grupo && <PrincipalDoGrupo grupo={item.grupo} />}
             {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
             <MediaSem meses={item.mesesForaDaMedia} />
@@ -320,11 +327,10 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           </td>
         )}
         {fonte !== undefined && (
-          <td>
+          <td className="fcr-fonte">
             {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
           </td>
         )}
-        <td>{STATUS_ROTULO[item.status] ?? item.status}</td>
         <td className="fcr-num">{d1(item.demanda)}</td>
         <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
         <td>
@@ -346,14 +352,22 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           <ForecastDecisaoCompra item={item} />
           <ForecastGerarCotacao item={item} />
         </td>
-        <td className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</td>
-        <td>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</td>
-        <td>
+        <td className="fcr-col-limite">
           <span className="fcr-limite">
             <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
               {item.dataLimite ? dataBr(item.dataLimite) : '—'}
             </span>
             {item.vencida && <span className="badge badge--danger">Vencida</span>}
+          </span>
+          {/* Saldo zera e Ruptura (antes duas colunas): linhas pequenas sob a data-limite. */}
+          <span className="fcr-limite__prazos">
+            <span>
+              <span className="fcr-fraco">Saldo zera</span> <span className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</span>
+            </span>
+            <span>
+              <span className="fcr-fraco">Ruptura</span>{' '}
+              <span>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</span>
+            </span>
           </span>
         </td>
         <td>
@@ -380,7 +394,6 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
 
 const COLUNAS_COMUNS = (
   <>
-    <th scope="col">Status</th>
     <th scope="col" className="fcr-num">
       Demanda
     </th>
@@ -394,12 +407,25 @@ const COLUNAS_COMUNS = (
     <th scope="col" className="fcr-num">
       Qtd. decidida (kg)
     </th>
-    <th scope="col">Saldo zera</th>
-    <th scope="col">Ruptura</th>
     <th scope="col">Data-limite</th>
     <th scope="col">Em andamento</th>
   </>
 );
+
+/** Seta que recolhe/expande a tabela de uma faixa ou fonte (refino visual, etapa 4). Aberta por padrao; no papel nada some. */
+function AlternarGrupo({ aberto, aoAlternar, nome }: { aberto: boolean; aoAlternar: () => void; nome: string }) {
+  return (
+    <button
+      type="button"
+      className="fcr-grupo__alternar"
+      aria-expanded={aberto}
+      aria-label={`${aberto ? 'Recolher' : 'Expandir'} ${nome}`}
+      onClick={aoAlternar}
+    >
+      <Icon name={aberto ? 'chevron-down' : 'chevron-right'} size={16} />
+    </button>
+  );
+}
 
 interface GrupoProps {
   grupo: ForecastGrupoRelatorio;
@@ -416,12 +442,14 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
     ? `mais urgente ${dataBr(grupo.dataLimiteMaisUrgente)}`
     : 'sem data-limite';
   const titulo = `${grupo.fonte || 'Sem fonte'} · lead time ${grupo.leadTimeDias} dias · ${urgente}`;
+  const [aberto, setAberto] = useState(true);
   return (
     <section className="fc-card fcr-grupo" aria-label={`Fonte ${grupo.fonte || 'sem nome'}`}>
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label={`Itens da fonte ${grupo.fonte || 'sem nome'}`}>
         <table className="fcr-tabela">
           <caption className="fcr-caption">
             <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome={`a fonte ${grupo.fonte || 'sem nome'}`} />
               <span>{titulo}</span>
               {semEstoque > 0 && <span className="badge badge--danger">{semEstoque} sem estoque agora</span>}
               {semEstoque === 0 && critico > 0 && (
@@ -437,14 +465,14 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
               <OcasioesDoGrupoSelo grupo={grupo} />
             </div>
           </caption>
-          <thead>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               {comUrgencia && <th scope="col">Urgência</th>}
               {COLUNAS_COMUNS}
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {grupo.itens.map((item) => (
               <Linha
                 key={item.linha}
@@ -471,18 +499,20 @@ interface SecaoUrgenciaProps {
 // Visao "Por urgencia": uma secao por faixa, com a fonte em coluna propria.
 function SecaoUrgencia({ urgencia, itens, diasCritico, podeEditar }: SecaoUrgenciaProps) {
   const rotulo = rotuloUrgencia(urgencia, diasCritico);
+  const [aberto, setAberto] = useState(true);
   return (
     <section className="fc-card fcr-grupo" aria-label={rotulo}>
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label={`Itens: ${rotulo}`}>
         <table className="fcr-tabela">
           <caption className="fcr-caption">
             <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome={`a faixa ${rotulo}`} />
               <span>
                 {rotulo} · {itens.length} {plural(itens.length, 'item', 'itens')}
               </span>
             </div>
           </caption>
-          <thead>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               <th scope="col">Urgência</th>
@@ -490,7 +520,7 @@ function SecaoUrgencia({ urgencia, itens, diasCritico, podeEditar }: SecaoUrgenc
               {COLUNAS_COMUNS}
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {itens.map(({ item, fonte }) => (
               <Linha
                 key={item.linha}

@@ -130,12 +130,32 @@ describe('F13-D: relatorio de compras (markup)', () => {
     expect(bloco?.hasAttribute('hidden')).toBe(false);
   });
 
-  it('a celula "Saldo zera" (mes da ruptura) leva a classe mono; a data da ruptura e a data-limite seguem como estavam', async () => {
+  it('cada faixa/fonte tem uma seta que recolhe e expande a tabela (aberta por padrao; aria-expanded)', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio(false);
-    const celula = (await screen.findByText('nov/2026')).closest('td');
-    expect(celula?.className).toBe('fcr-mono');
-    expect(screen.getByText('21/11/2026').closest('td')?.className).toBe('');
+    const seta = (await screen.findAllByRole('button', { name: /^Recolher / }))[0] as HTMLElement;
+    expect(seta.getAttribute('aria-expanded')).toBe('true');
+    const tabela = seta.closest('table') as HTMLElement;
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(seta);
+    expect(seta.getAttribute('aria-expanded')).toBe('false');
+    expect(seta.getAttribute('aria-label')).toMatch(/^Expandir /);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
+    expect(tabela.querySelector('thead')?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(seta);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('Saldo zera e Ruptura viram linhas da celula Data-limite (etapa 4): o mes leva a classe mono e a data da ruptura segue no texto', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio(false);
+    const zera = await screen.findByText('nov/2026');
+    expect(zera.className).toBe('fcr-mono');
+    const celula = zera.closest('td');
+    expect(celula?.querySelector('.fcr-limite__prazos')).not.toBeNull();
+    expect(screen.getByText('21/11/2026').closest('td')).toBe(celula);
+    expect(screen.queryByRole('columnheader', { name: 'Saldo zera' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Ruptura' })).toBeNull();
   });
 });
 
