@@ -756,9 +756,25 @@ describe('Forecast - pendentes de cadastro (PR 3B-2)', () => {
     mockApi({ 7: detalhe(), 8: DBCORP });
     renderPage('/forecast?quinzena=8');
     await screen.findByText(/Pendentes de cadastro \(2\)/);
+    // O painel de pendentes so abre pelo aviso do cabecalho ("Ver pendentes").
+    fireEvent.click(screen.getByTestId('fc-avisos-botao'));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver pendentes' }));
     expect(screen.getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Completar cadastro do código TST0901' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Completar cadastro do código TST0902' })).toBeNull();
+  });
+
+  it('selo neutro (DBCorp sem planilha) e pendentes vao para o icone de avisos, nao para o corpo', async () => {
+    mockApi({ 7: detalhe(), 8: DBCORP });
+    renderPage('/forecast?quinzena=8');
+    const botao = await screen.findByTestId('fc-avisos-botao');
+    expect(document.querySelector('.fc-selo-conferencia')).toBeNull();
+    expect(botao.getAttribute('aria-label')).toMatch(/^Avisos: \d+$/);
+    fireEvent.click(botao);
+    const painel = screen.getByRole('region', { name: 'Avisos' });
+    expect(within(painel).getByText(/sem planilha para conferir/)).toBeTruthy();
+    expect(within(painel).getByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
+    expect(within(painel).getByText('Ficam fora do cálculo.')).toBeTruthy();
   });
 
   it.each(['gestor', 'viewer'])('%s so ve a lista (sem botao nem coluna Acao)', async (role) => {

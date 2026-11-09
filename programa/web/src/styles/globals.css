@@ -14086,3 +14086,45 @@ i.fc-status--preco { background: var(--info); }
 /* Forecast: exportar planilha MACRO pelo cabecalho do painel. */
 .fcme-msg { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
 .fcme-msg--erro { color: var(--danger); }
+/* Forecast: avisos num so icone do cabecalho (refino visual, etapa 1). So tela; no papel os avisos saem em texto (.fc-avisos__papel). */
+.fc-avisos { position: relative; display: inline-flex; }
+.fc-avisos__botao {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; padding: 0; border-radius: 12px; border: 1px solid var(--border-strong);
+  background: transparent; cursor: pointer;
+}
+.fc-avisos__botao:hover { background: var(--surface-alt); }
+.fc-avisos__botao:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--primary-700); }
+.fc-avisos__botao--erro { color: var(--danger); border-color: var(--danger); }
+.fc-avisos__botao--atencao { color: var(--warning); border-color: var(--warning); }
+.fc-avisos__botao--info { color: var(--info); border-color: var(--info); }
+.fc-avisos__conta {
+  position: absolute; top: -8px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; line-height: 1;
+  background: var(--danger-strong); color: #fff;
+}
+.fc-avisos__botao--atencao .fc-avisos__conta { background: var(--warning-strong); }
+.fc-avisos__botao--info .fc-avisos__conta { background: var(--info); }
+.fc-avisos__painel {
+  position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box;
+  width: 400px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface); box-shadow: var(--shadow-popout); color: var(--ink); text-align: left;
+}
+.fc-avisos__titulo { margin: 0; padding: 8px 12px 4px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-soft); }
+.fc-avisos__lista { margin: 0; padding: 0; list-style: none; }
+.fc-avisos__item { display: flex; gap: 12px; padding: 12px; font-size: 13px; line-height: 1.45; }
+.fc-avisos__item + .fc-avisos__item { border-top: 1px solid var(--border); }
+.fc-avisos__item strong { display: block; font-weight: 700; }
+.fc-avisos__texto { display: block; margin-top: 2px; color: var(--ink-soft); font-size: 12.5px; }
+.fc-avisos__acao { margin-top: 8px; }
+.fc-avisos__marca { flex: none; width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--info); }
+.fc-avisos__item--erro .fc-avisos__marca { background: var(--danger-strong); }
+.fc-avisos__item--atencao .fc-avisos__marca { background: var(--warning-strong); }
+@media print {
+  .fc-avisos__botao, .fc-avisos__painel { display: none !important; }
+  .fc-avisos__papel { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
+}
+@media (max-width: 640px) {
+  .fc-avisos { position: static; }
+  .fc-avisos__painel { left: 16px; right: 16px; width: auto; max-width: none; }
+}
