@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Forecast from '../Forecast';
+import { chaveDoFiltro } from '@/test/forecastFiltros';
 
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 1, name: 'U', email: 'u@exemplo.invalid', role: 'comprador' } }),
@@ -169,7 +170,7 @@ const nomesDosItens = () =>
   screen.queryAllByRole('link', { name: /PRODUTO [A-E]/ }).map((b) => b.querySelector('.fc-item__nome')?.textContent);
 
 const NOME_CHAVE = /^Mostrar produtos sem venda há 6 meses ou mais/;
-const chave = () => screen.getByRole('switch', { name: NOME_CHAVE });
+const chave = () => chaveDoFiltro(NOME_CHAVE);
 const avisoOcultos = () => document.querySelector('.fcsv-ocultos')?.textContent;
 const selos = () => Array.from(document.querySelectorAll('.fcsv-selo')).map((s) => s.closest('tr')?.querySelector('.fc-item__nome')?.textContent);
 const SUBTITULO_PADRAO = 'Quinzena 10-2 · base 15/10/2026 · 4 produtos · origem planilha';
@@ -238,6 +239,18 @@ describe('Forecast - filtro sem venda ha 6 meses ou mais', () => {
     await abrirPainel();
     expect(chave().getAttribute('aria-checked')).toBe('false');
     expect(nomesDosItens()).toEqual(['PRODUTO A', 'PRODUTO C', 'PRODUTO D']);
+  });
+
+  it('legenda do status vira icone com balao (nao ha mais a linha de legenda solta) e o selo de sem venda e um relogio com o texto para o leitor de tela', async () => {
+    await abrirPainel();
+    expect(document.querySelector('.fc-legenda__item')).toBeNull();
+    fireEvent.focus(screen.getByRole('button', { name: 'Legenda do status da compra' }));
+    const balao = await screen.findByRole('tooltip');
+    expect(balao.textContent).toContain('Status da compra');
+    expect(balao.querySelectorAll('.fc-legenda__item').length).toBeGreaterThanOrEqual(4);
+    const selo = document.querySelector('.fcsv-selo') as HTMLElement;
+    expect(selo.querySelector('svg')).toBeTruthy();
+    expect(selo.querySelector('.sr-only')?.textContent).toBe('sem venda ≥6 meses');
   });
 
   it('selo "sem venda ≥6 meses" so nas linhas sem venda (inclusive as excecoes visiveis)', async () => {

@@ -236,7 +236,9 @@ describe('ForecastRelatorioCompras - urgencia (PR 2D)', () => {
         'Sem consumo: 2 em atenção (com estoque ou programação, fora da lista de compra) · 46 sem estoque nem programação',
       ),
     ).toBeTruthy();
-    const regra = within(document.querySelector('.fcr-regra') as HTMLElement);
+    // As regras abrem num balao (InfoPopover) ao passar o mouse no ? do titulo do resumo.
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
+    const regra = within(screen.getByRole('tooltip'));
     expect(regra.getByText(/^Urgência: "Sem estoque agora" = a ruptura cai na data-base/)).toBeTruthy();
     expect(regra.getByText(/^Atenção: sem consumo = média trimestral zero/)).toBeTruthy();
   });

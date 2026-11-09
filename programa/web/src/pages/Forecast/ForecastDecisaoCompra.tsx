@@ -13,6 +13,7 @@ import {
 } from '@/services/forecastDecisoes';
 import { ApiError } from '@/api/client';
 import { kgParaCampo, sugeridaParaCampo, textoSalvaEm, validarDecisao } from './forecastDecisaoCampos';
+import { useAviso } from './ForecastAvisos';
 import { kgBr, STATUS_ORDEM, STATUS_ROTULO } from './forecastPainel';
 
 // Coluna "Qtd. decidida (kg)" do relatorio de compras (PR3): o comprador registra a quantidade que decidiu comprar por
@@ -46,9 +47,20 @@ export function ProvedorDecisoesCompra({ snapshotId, podeEditar, children }: Pro
     () => ({ snapshotId, podeEditar, mapa, carregando: consulta.isLoading, erro: consulta.isError && consulta.data === undefined }),
     [snapshotId, podeEditar, mapa, consulta.isLoading, consulta.isError, consulta.data],
   );
+  const noIcone = useAviso(
+    'decisoes',
+    consulta.isError
+      ? {
+          tom: 'erro',
+          titulo: 'Quantidades decididas indisponíveis',
+          texto: 'Não foi possível carregar as quantidades decididas desta quinzena. O relatório segue disponível.',
+          acao: { rotulo: 'Tentar de novo', aoClicar: () => void consulta.refetch() },
+        }
+      : null,
+  );
   return (
     <ContextoDecisoes.Provider value={valor}>
-      {consulta.isError && (
+      {consulta.isError && !noIcone && (
         <div className="alert alert--error fdec-alerta" role="alert">
           <span>Não foi possível carregar as quantidades decididas desta quinzena. O relatório segue disponível.</span>
           <button type="button" className="ghost-button ghost-button--sm" onClick={() => void consulta.refetch()}>

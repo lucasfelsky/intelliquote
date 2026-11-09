@@ -9,6 +9,7 @@ import {
   type ForecastPendente,
   type ForecastPendentesResumo,
 } from '@/services/forecastPendentes';
+import { useAviso } from './ForecastAvisos';
 import ForecastCompletarCadastroModal, { type ResultadoCadastro } from './ForecastCompletarCadastroModal';
 import { inteiroBr } from './forecastPainel';
 import {
@@ -372,6 +373,29 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
   }, [mensagem]);
 
   const dados = consulta.data;
+  // Refino visual (etapa 1): com o provedor de avisos, o resumo vai para o icone do cabecalho e o painel so aparece
+  // aberto ("Ver pendentes"). Sem o provedor (testes isolados) nada muda: o painel fica fechado e visivel.
+  const [aberto, setAberto] = useState(false);
+  const resumoRef = useRef<HTMLElement>(null);
+  const totalPendentes = dados?.aplicavel ? dados.totalItens : 0;
+  const textoResumo = resumoPendentesPainel(comoLinha);
+  const noIcone = useAviso(
+    'pendentes',
+    totalPendentes > 0
+      ? {
+          tom: 'atencao',
+          titulo: `Pendentes de cadastro (${inteiroBr(totalPendentes)})`,
+          texto: `${textoResumo.charAt(0).toUpperCase()}${textoResumo.slice(1)}.`,
+          acao: {
+            rotulo: 'Ver pendentes',
+            aoClicar: () => {
+              setAberto(true);
+              window.setTimeout(() => resumoRef.current?.focus(), 0);
+            },
+          },
+        }
+      : null,
+  );
   const status = mensagem ? (
     <div ref={statusRef} className="alert alert--success" role="status" tabIndex={-1}>
       {mensagem}
@@ -421,8 +445,13 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
     <section className="fcp" aria-label="Pendentes de cadastro">
       {status}
       {alertaReativar}
-      <details className="fc-card fcp__detalhes">
-        <summary>
+      <details
+        className="fc-card fcp__detalhes"
+        open={aberto}
+        hidden={noIcone && !aberto}
+        onToggle={(e) => setAberto(e.currentTarget.open)}
+      >
+        <summary ref={resumoRef}>
           Pendentes de cadastro ({inteiroBr(dados.totalItens)})
           <span className="fcp__resumo"> · {resumoPendentesPainel(comoLinha)}</span>
         </summary>

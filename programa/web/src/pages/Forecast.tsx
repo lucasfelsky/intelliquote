@@ -19,8 +19,11 @@ import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
+import ForecastAvisos, { ProvedorAvisos, useAviso } from './Forecast/ForecastAvisos';
 import ForecastExportarMacro from './Forecast/ForecastExportarMacro';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
+import ForecastFiltrosMenu from './Forecast/ForecastFiltrosMenu';
+import { InfoPopover } from '@/components/InfoPopover';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import { useDialogoFontes } from './Forecast/useDialogoFontes';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
@@ -65,6 +68,16 @@ const ORIGEM_ROTULO: Record<ForecastOrigin, string> = {
 
 function Selo({ detail }: { detail: ForecastSnapshotDetail }) {
   const selo = textoDoSelo(detail, { regraAL: regraALDoPainel(detail), mediaAjustada: mediaAjustadaDoPainel(detail) });
+  // So o selo neutro ("sem planilha para conferir", puro informativo) vai para o icone de avisos. O resultado da conferencia
+  // (ok, diferencas em colunas informativas ou divergencias) segue visivel no corpo: e o selo de confianca do comprador.
+  const textoDoAviso = [selo.detalhe, selo.informativa, selo.nota, selo.notaRegra, selo.notaMedia]
+    .filter((t): t is string => Boolean(t))
+    .join(' ');
+  const noIcone = useAviso(
+    'conferencia',
+    selo.tom === 'neutro' ? { tom: 'info', titulo: selo.titulo, texto: textoDoAviso || undefined } : null,
+  );
+  if (noIcone) return null;
   return (
     <div className={`fc-selo-conferencia fc-selo-conferencia--${selo.tom}`} role="status">
       <strong>{selo.titulo}</strong>
@@ -195,6 +208,19 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
     mensagemVazia = `Nenhum produto visível com esses filtros: ${ocultosQueCasariam} sem venda há 6 meses ou mais ${ocultosQueCasariam === 1 ? 'está oculto' : 'estão ocultos'}.`;
   }
 
+  const decisoesIndisponiveis = decisoes.isError && decisoesData === undefined;
+  const decisoesNoIcone = useAviso(
+    'decisoes',
+    decisoesIndisponiveis
+      ? {
+          tom: 'erro',
+          titulo: 'Quantidades decididas indisponíveis',
+          texto: 'A coluna ANÁLISE FORECAST mostra o valor importado da quinzena.',
+          acao: { rotulo: 'Tentar de novo', aoClicar: () => void decisoes.refetch() },
+        }
+      : null,
+  );
+
   return (
     <>
       <Selo detail={detail} />
@@ -228,43 +254,42 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={ocultas}
-              className="fc-chave"
-              onClick={alternarOcultas}
-            >
-              <span className={ocultas ? 'fc-trilho fc-trilho--on' : 'fc-trilho'} aria-hidden="true">
-                <span />
-              </span>
-              Colunas ocultas da planilha
-            </button>
-            <ForecastFiltroSemVenda
-              mostrar={mostrarSemVenda}
+            <ForecastFiltrosMenu
+              ocultas={ocultas}
+              onAlternarOcultas={alternarOcultas}
+              mostrarSemVenda={mostrarSemVenda}
               ocultaveis={ocultaveis}
-              onAlternar={() => onMostrarSemVenda(!mostrarSemVenda)}
+              onAlternarSemVenda={() => onMostrarSemVenda(!mostrarSemVenda)}
             />
-          </div>
-        </div>
-        <div className="fc-legenda">
-          <span>Status da compra</span>
-          {STATUS_ORDEM.map((s) => (
-            <span key={s} className="fc-legenda__item">
-              <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
-              {STATUS_ROTULO[s]}
+            <ForecastFiltroSemVenda mostrar={mostrarSemVenda} ocultaveis={ocultaveis} />
+            <InfoPopover
+              label="Legenda do status da compra"
+              tone="info"
+              className="fc-legenda__icone"
+              testId="fc-legenda-botao"
+              trigger={<Icon name="info" size={16} />}
+            >
+              <strong>Status da compra</strong>
+              <ul className="fc-legenda__lista">
+                {STATUS_ORDEM.map((s) => (
+                  <li key={s} className="fc-legenda__item">
+                    <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
+                    {STATUS_ROTULO[s]}
+                  </li>
+                ))}
+              </ul>
+            </InfoPopover>
+            <span className="fc-legenda__total">
+              {visiveis.length} de {detail.linhas.length} produtos
             </span>
-          ))}
-          <span className="fc-legenda__total">
-            {visiveis.length} de {detail.linhas.length} produtos
-          </span>
+          </div>
         </div>
         {decisoes.isLoading && (
           <p className="fcad-aviso" role="status">
             Carregando as quantidades decididas…
           </p>
         )}
-        {decisoes.isError && decisoesData === undefined && (
+        {decisoesIndisponiveis && !decisoesNoIcone && (
           <p className="fcad-aviso" role="status">
             Não foi possível carregar as quantidades decididas. A coluna ANÁLISE FORECAST mostra o valor importado da
             quinzena.
@@ -456,6 +481,7 @@ export default function Forecast() {
     : 'Projeção de estoque e demanda por quinzena, no layout da planilha FORECAST (MACRO).';
 
   return (
+    <ProvedorAvisos>
     <div className="page fc-pagina">
       <div className="page-header">
         <div>
@@ -508,6 +534,7 @@ export default function Forecast() {
               </div>
             )}
             <div className="fc-cabecalho__acoes">
+              <ForecastAvisos />
               {detail && visao === 'painel' && <ForecastExportarMacro key={detail.id} snapshotId={detail.id} hoje={detail.hoje} />}
               {podeImportar && (
                 <button ref={botaoImportar} type="button" className="primary-button" onClick={() => setImportando(true)}>
@@ -637,5 +664,6 @@ export default function Forecast() {
         somenteDbcorp={user?.role !== 'admin'}
       />
     </div>
+    </ProvedorAvisos>
   );
 }
