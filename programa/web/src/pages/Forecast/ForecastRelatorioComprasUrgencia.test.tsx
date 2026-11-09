@@ -17,6 +17,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { expandirSecoes } from '@/test/forecastSecoes';
 
 const get = vi.mocked(api.get);
 
@@ -320,6 +321,7 @@ describe('ForecastRelatorioCompras - urgencia (PR 2D)', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('4 itens em 2 fontes');
+    expandirSecoes();
     const secao = screen.getByRole('region', { name: 'Itens sem consumo' });
     const tabela = within(secao).getByRole('table');
     expect(within(tabela).getByText('Atenção: sem consumo · 2 itens')).toBeTruthy();
@@ -337,7 +339,8 @@ describe('ForecastRelatorioCompras - urgencia (PR 2D)', () => {
     expect(within(tabela).getByText('Programação nov/2026: 300')).toBeTruthy();
     expect(within(tabela).getByText('Chegada dez/2026: 100')).toBeTruthy();
     expect(within(tabela).getByText('FONTE 003 (sem lead time)')).toBeTruthy();
-    expect(within(tabela).queryAllByRole('button')).toHaveLength(0);
+    // so a seta de recolher da secao (aria-expanded); nenhum botao de acao
+    expect(within(tabela).queryAllByRole('button').filter((b) => !b.hasAttribute('aria-expanded'))).toHaveLength(0);
     expect(tabela.querySelector('.badge')).toBeNull();
     expect(
       screen.getByText('Não entram na lista de compra: sem consumo nos últimos 3 meses, mas com estoque ou programação.'),
@@ -384,5 +387,25 @@ describe('ForecastRelatorioCompras - urgencia (PR 2D)', () => {
     expect(screen.queryByRole('columnheader', { name: 'Urgência' })).toBeNull();
     expect(document.querySelectorAll('.fcr-linha--vencida')).toHaveLength(1);
     expect(screen.getAllByRole('table')).toHaveLength(1);
+  });
+});
+
+describe('Sem consumo: secao recolhivel (refino visual)', () => {
+  it('abre recolhida (titulo visivel, tabela escondida) e a seta expande e recolhe', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio();
+    await screen.findByText('4 itens em 2 fontes');
+    const seta = screen.getByRole('button', { name: /^Expandir a seção Sem consumo/ });
+    expect(seta.getAttribute('aria-expanded')).toBe('false');
+    const tabela = seta.closest('table') as HTMLElement;
+    expect((tabela.querySelector('caption')?.textContent ?? '').length).toBeGreaterThan(0);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
+    expect(tabela.querySelector('thead')?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(seta);
+    expect(seta.getAttribute('aria-expanded')).toBe('true');
+    expect(seta.getAttribute('aria-label')).toMatch(/^Recolher a seção /);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(seta);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
   });
 });

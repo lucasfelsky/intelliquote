@@ -28,6 +28,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { expandirSecoes } from '@/test/forecastSecoes';
 
 const get = vi.mocked(api.get);
 
@@ -110,6 +111,7 @@ beforeEach(() => {
 describe('ForecastRelatorioSobDemanda (secao)', () => {
   it('mostra titulo, colunas, motivo, programacao e a programacao descoberta em destaque (> 0)', () => {
     render(<ForecastRelatorioSobDemanda itens={[sob()]} />);
+    expandirSecoes();
     const secao = screen.getByRole('region', { name: 'Itens sob demanda' });
     expect(within(secao).getByText(tituloSobDemanda(1))).toBeTruthy();
     for (const coluna of ['Item', 'Fonte', 'Status', 'Motivo', 'Demanda', 'Programações', 'Programação descoberta', 'Estoque', 'Chegadas']) {
@@ -242,5 +244,23 @@ describe('ForecastRelatorioSobDemanda - meses atipicos (PR 6c)', () => {
       'fcr-item__media',
       'fcr-item__obs',
     ]);
+  });
+});
+
+describe('Sob demanda: secao recolhivel (refino visual)', () => {
+  it('abre recolhida (titulo visivel, tabela escondida) e a seta expande e recolhe', () => {
+    render(<ForecastRelatorioSobDemanda itens={[sob()]} />);
+    const seta = screen.getByRole('button', { name: /^Expandir a seção Sob demanda/ });
+    expect(seta.getAttribute('aria-expanded')).toBe('false');
+    const tabela = seta.closest('table') as HTMLElement;
+    expect((tabela.querySelector('caption')?.textContent ?? '').length).toBeGreaterThan(0);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
+    expect(tabela.querySelector('thead')?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(seta);
+    expect(seta.getAttribute('aria-expanded')).toBe('true');
+    expect(seta.getAttribute('aria-label')).toMatch(/^Recolher a seção /);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(seta);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
   });
 });

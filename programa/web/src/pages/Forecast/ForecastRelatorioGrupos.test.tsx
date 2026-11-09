@@ -24,6 +24,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { expandirSecoes } from '@/test/forecastSecoes';
 
 const get = vi.mocked(api.get);
 
@@ -235,6 +236,7 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('1 item em 1 fonte');
+    expandirSecoes();
     const secao = screen.getByRole('region', { name: 'Itens cobertos por grupo de equivalência' });
     expect(screen.getByText('Cobertos pelo grupo de equivalência · 1 item')).toBeTruthy();
     expect(within(secao).getAllByRole('columnheader').map((c) => c.textContent)).toEqual([
@@ -321,6 +323,7 @@ describe('observacao do grupo na tela (rodada 5 do Comex)', () => {
 describe('ForecastRelatorioGrupos - secao isolada', () => {
   it('varios cobertos: plural no titulo e uma linha por membro', () => {
     render(<ForecastRelatorioGrupos itens={[COBERTO, { ...COBERTO, linha: 10, productId: 10, item: 'PRODUTO 010' }]} />);
+    expandirSecoes();
     expect(screen.getByText('Cobertos pelo grupo de equivalência · 2 itens')).toBeTruthy();
     expect(screen.getAllByRole('row')).toHaveLength(3);
   });
@@ -330,5 +333,23 @@ describe('ForecastRelatorioGrupos - secao isolada', () => {
     expect(
       screen.getByText('Coberto pelo grupo OUTRO GRUPO SINTETICO: estoque somado 1.200 kg, sem consumo no grupo · Equivalência pode não valer para todos os clientes: confira a observação do grupo antes de dispensar a compra.'),
     ).toBeTruthy();
+  });
+});
+
+describe('Cobertos por grupo: secao recolhivel (refino visual)', () => {
+  it('abre recolhida (titulo visivel, tabela escondida) e a seta expande e recolhe', () => {
+    render(<ForecastRelatorioGrupos itens={[COBERTO]} />);
+    const seta = screen.getByRole('button', { name: /^Expandir a seção Cobertos por grupo/ });
+    expect(seta.getAttribute('aria-expanded')).toBe('false');
+    const tabela = seta.closest('table') as HTMLElement;
+    expect((tabela.querySelector('caption')?.textContent ?? '').length).toBeGreaterThan(0);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
+    expect(tabela.querySelector('thead')?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(seta);
+    expect(seta.getAttribute('aria-expanded')).toBe('true');
+    expect(seta.getAttribute('aria-label')).toMatch(/^Recolher a seção /);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(seta);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
   });
 });

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { ForecastDadosDoGrupo, ForecastItemCobertoPorGrupo } from '@/services/forecast';
+import { AlternarGrupo } from './ForecastAlternarGrupo';
 import { d1, inteiroBr, STATUS_ROTULO } from './forecastPainel';
 import {
   APOIO_COBERTOS_POR_GRUPO,
@@ -106,12 +108,18 @@ interface Props {
 // Membros que entrariam sozinhos na lista de compra, mas o estoque somado do grupo cobre. So conferencia: a secao deixa
 // visivel o que o grupo escondeu da lista (grupo errado esconde compra).
 export default function ForecastRelatorioGrupos({ itens }: Props) {
+  const [aberto, setAberto] = useState(false);
   return (
     <section className="fc-card fcr-grupo fcg-cobertos" aria-label="Cobertos pelo grupo de equivalência">
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label="Itens cobertos por grupo de equivalência">
         <table className="fcr-tabela fcr-tabela--compacta">
-          <caption className="fcr-caption">{tituloCobertosPorGrupo(itens.length)}</caption>
-          <thead>
+          <caption className="fcr-caption">
+            <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome="a seção Cobertos por grupo" />
+              <span>{tituloCobertosPorGrupo(itens.length)}</span>
+            </div>
+          </caption>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               <th scope="col">Fonte</th>
@@ -122,7 +130,7 @@ export default function ForecastRelatorioGrupos({ itens }: Props) {
               <th scope="col">Motivo</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {itens.map((i) => {
               const obs = textoObservacao(i.obs);
               const mediaSem = textoMediaSem(i.mesesForaDaMedia);
@@ -153,7 +161,7 @@ export default function ForecastRelatorioGrupos({ itens }: Props) {
           </tbody>
         </table>
       </div>
-      <p className="fcr-sem-consumo__nota">{APOIO_COBERTOS_POR_GRUPO}</p>
+      <p className="fcr-sem-consumo__nota" hidden={!aberto}>{APOIO_COBERTOS_POR_GRUPO}</p>
     </section>
   );
 }

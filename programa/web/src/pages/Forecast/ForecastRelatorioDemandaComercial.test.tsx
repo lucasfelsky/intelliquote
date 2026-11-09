@@ -19,6 +19,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
+import { expandirSecoes } from '@/test/forecastSecoes';
 
 const patch = vi.mocked(api.patch);
 
@@ -49,7 +50,7 @@ function pedido(over: Partial<ForecastItemDemandaComercial> = {}): ForecastItemD
 const onConcluido = vi.fn();
 let client: QueryClient;
 
-function renderSecao(itens: ForecastItemDemandaComercial[], podeEditar: boolean) {
+function renderSecaoFechada(itens: ForecastItemDemandaComercial[], podeEditar: boolean) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const sugeridoKg = itens.reduce((t, i) => t + i.sugerido, 0);
   return render(
@@ -62,6 +63,12 @@ function renderSecao(itens: ForecastItemDemandaComercial[], podeEditar: boolean)
       />
     </QueryClientProvider>,
   );
+}
+
+function renderSecao(itens: ForecastItemDemandaComercial[], podeEditar: boolean) {
+  const r = renderSecaoFechada(itens, podeEditar);
+  expandirSecoes();
+  return r;
 }
 
 beforeEach(() => {
@@ -108,7 +115,8 @@ describe('ForecastRelatorioDemandaComercial - leitura', () => {
   it('leitura (sem permissao): sem coluna Acoes e sem botoes', () => {
     renderSecao([pedido()], false);
     expect(screen.queryByRole('columnheader', { name: 'Ações' })).toBeNull();
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
+    // so a seta de recolher da secao (aria-expanded); nenhum botao de acao
+    expect(screen.queryAllByRole('button').filter((b) => !b.hasAttribute('aria-expanded'))).toHaveLength(0);
   });
 
   it('dentro do horizonte: nao soma, sugerido e saldo com traco e o aviso com a programacao do mes', () => {
@@ -234,5 +242,23 @@ describe('ForecastRelatorioDemandaComercial - fechar o pedido', () => {
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Cancelar demanda' })).toBeNull());
     expect(patch).not.toHaveBeenCalled();
     await waitFor(() => expect(document.activeElement).toBe(botao));
+  });
+});
+
+describe('Demanda do comercial: secao recolhivel (refino visual)', () => {
+  it('abre recolhida (titulo visivel, tabela escondida) e a seta expande e recolhe', () => {
+    renderSecaoFechada([pedido()], true);
+    const seta = screen.getByRole('button', { name: /^Expandir a seção Demanda do comercial/ });
+    expect(seta.getAttribute('aria-expanded')).toBe('false');
+    const tabela = seta.closest('table') as HTMLElement;
+    expect((tabela.querySelector('caption')?.textContent ?? '').length).toBeGreaterThan(0);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
+    expect(tabela.querySelector('thead')?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(seta);
+    expect(seta.getAttribute('aria-expanded')).toBe('true');
+    expect(seta.getAttribute('aria-label')).toMatch(/^Recolher a seção /);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(seta);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
   });
 });

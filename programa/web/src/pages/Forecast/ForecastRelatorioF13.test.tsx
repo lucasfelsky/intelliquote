@@ -23,6 +23,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { expandirSecoes } from '@/test/forecastSecoes';
 
 const get = vi.mocked(api.get);
 
@@ -162,7 +163,7 @@ describe('F13-D: relatorio de compras (markup)', () => {
 describe('F13-D: Demanda do comercial (markup dos botoes de fechamento)', () => {
   const renderSecao = () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    return render(
+    const r = render(
       <QueryClientProvider client={client}>
         <ForecastRelatorioDemandaComercial
           dados={{ itens: [pedido()], totais: { abertas: 1, sugeridoKg: 1100 } }}
@@ -172,6 +173,8 @@ describe('F13-D: Demanda do comercial (markup dos botoes de fechamento)', () => 
         />
       </QueryClientProvider>,
     );
+    expandirSecoes();
+    return r;
   };
 
   it('"Cancelar demanda" e o unico botao de acao em vermelho (ghost-button danger-button); os outros 3 seguem fantasma comum', () => {

@@ -14242,6 +14242,7 @@ i.fc-status--preco { background: var(--info); }
 }
 @media print {
   .fcr-grupo__alternar { display: none; }
+  .fcr-sem-consumo__nota[hidden] { display: block !important; }
   .fcr-tabela thead[hidden] { display: table-header-group !important; }
   .fcr-tabela tbody[hidden] { display: table-row-group !important; }
 }
