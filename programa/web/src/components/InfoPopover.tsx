@@ -15,7 +15,7 @@ type InfoPopoverProps = {
   /** Conteudo do popover (so texto/lista, nada interativo). */
   children: ReactNode;
   tone?: 'warning' | 'info';
-  /** Balao mais largo e com rolagem, para texto corrido (ex.: regras de calculo). */
+  /** Balao mais largo, para texto corrido (ex.: regras de calculo). Sem rolagem interna: o balao nao recebe foco. */
   largo?: boolean;
   className?: string;
   testId?: string;
