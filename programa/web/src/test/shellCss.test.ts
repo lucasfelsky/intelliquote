@@ -298,3 +298,12 @@ describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
     expect(outside).not.toContain('.topbar__user > .ghost-button');
   });
 });
+
+describe('shell F2: botao de recolher a sidebar', () => {
+  it('o alvo de toque de 44px (pointer: coarse) vem DEPOIS da regra base de 32px (mesma especificidade: a ultima vence)', () => {
+    const base = region.indexOf('.sidebar__alternar {');
+    const toque = region.indexOf('.sidebar__alternar { width: 44px; height: 44px; }');
+    expect(base).toBeGreaterThan(-1);
+    expect(toque).toBeGreaterThan(base);
+  });
+});

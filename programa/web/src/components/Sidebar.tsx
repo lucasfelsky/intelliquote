@@ -13,6 +13,9 @@ interface SidebarProps {
   badges?: Record<string, number>;
   /** "Sair" no rodape da sidebar (canvas v72: tema + Sair + assinatura + versao). */
   onLogout?: () => void;
+  /** Sidebar recolhida (so icones). O botao de recolher so aparece quando `onAlternar` e passado. */
+  colapsada?: boolean;
+  onAlternar?: () => void;
 }
 
 export default function Sidebar({
@@ -21,6 +24,8 @@ export default function Sidebar({
   adminHeader = false,
   badges = {},
   onLogout,
+  colapsada = false,
+  onAlternar,
 }: SidebarProps) {
   function renderLink(item: NavItem) {
     const count = badges[item.to] ?? 0;
@@ -30,6 +35,7 @@ export default function Sidebar({
           to={item.to}
           end={item.end}
           className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+          title={colapsada ? item.label : undefined}
         >
           <Icon name={item.icon} className="sidebar__icon" />
           <span className="sidebar__label">{item.label}</span>
@@ -50,12 +56,25 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${colapsada ? ' sidebar--colapsada' : ''}`}>
       <div className="sidebar__brand">
         <BrandMark tone="dark" size={40} />
         <span className="sidebar__brand-name">IntelliQuote</span>
+        {onAlternar && (
+          <button
+            type="button"
+            className="sidebar__alternar"
+            aria-label={colapsada ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-expanded={!colapsada}
+            aria-controls="sidebar-nav"
+            title={colapsada ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            onClick={onAlternar}
+          >
+            <Icon name="chevron-right" size={16} />
+          </button>
+        )}
       </div>
-      <nav className="sidebar__nav" aria-label="Navegação principal">
+      <nav id="sidebar-nav" className="sidebar__nav" aria-label="Navegação principal">
         <ul>{items.map(renderLink)}</ul>
         {adminHeader && adminItems.length > 0 && (
           <div className="sidebar__group">
@@ -68,7 +87,7 @@ export default function Sidebar({
         <ThemeToggle />
         <button type="button" className="sidebar__logout" onClick={onLogout}>
           <Icon name="logout" size={16} />
-          Sair
+          <span className="sidebar__logout-texto">Sair</span>
         </button>
         <div className="sidebar__signature">
           <SqLogo size={32} />

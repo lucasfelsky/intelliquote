@@ -270,6 +270,7 @@ const ALLOWED_AT_RULES = [
   '@keyframes rf-page-enter',
   '@keyframes rf-page-fade',
   '@media (max-width: 880px)',
+  '@media (min-width: 881px)', // sidebar recolhida (so icones): so existe acima do breakpoint de empilhar
   '@media (pointer: coarse)',
   '@media (prefers-reduced-motion: reduce)',
 ];
@@ -330,7 +331,7 @@ describe('--rf-*: invariantes (so as regioes permitidas consomem; so os 2 blocos
     expect(selectors.filter((sel) => !SHELL_SELECTOR.test(sel))).toEqual([]);
   });
 
-  it('shell F2: so os at-rules previstos (keyframes de entrada, <= 880, pointer: coarse e reduced-motion)', () => {
+  it('shell F2: so os at-rules previstos (keyframes de entrada, <= 880, >= 881 da sidebar recolhida, pointer: coarse e reduced-motion)', () => {
     const atRules = regionRules.filter((r) => r.prelude.startsWith('@')).map((r) => r.prelude);
     expect(atRules.filter((a) => !ALLOWED_AT_RULES.includes(a))).toEqual([]);
     for (const required of ALLOWED_AT_RULES) expect(atRules, required).toContain(required);

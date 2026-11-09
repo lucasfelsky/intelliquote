@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Sidebar from './Sidebar';
@@ -6,7 +7,29 @@ import { useAuth } from '@/auth/AuthProvider';
 import { getCommercialRequestsPendingCount } from '@/services/commercialRequests';
 import { COMEX_ROLES, filterNavByRole, PRIMARY_NAV, ADMIN_NAV } from './navConfig';
 
+// Sidebar recolhida (so icones): a escolha fica no navegador. Storage pode falhar (modo privado, bloqueio): nunca quebra a tela.
+export const CHAVE_SIDEBAR_COLAPSADA = 'iq-sidebar-colapsada';
+
+function lerColapsada(): boolean {
+  try {
+    return localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export default function AppShell() {
+  const [colapsada, setColapsada] = useState(lerColapsada);
+  const alternarSidebar = () => {
+    const proxima = !colapsada;
+    setColapsada(proxima);
+    try {
+      if (proxima) localStorage.setItem(CHAVE_SIDEBAR_COLAPSADA, '1');
+      else localStorage.removeItem(CHAVE_SIDEBAR_COLAPSADA);
+    } catch {
+      // sem persistencia: o estado vale so ate recarregar
+    }
+  };
   const { user, logout } = useAuth();
   const role = user?.role;
   const isComex = !!role && COMEX_ROLES.includes(role);
@@ -24,13 +47,15 @@ export default function AppShell() {
   const adminHeader = adminNav.length > 0;
 
   return (
-    <div className={`app-shell${adminHeader ? ' app-shell--with-admin' : ''}`}>
+    <div className={`app-shell${adminHeader ? ' app-shell--with-admin' : ''}${colapsada ? ' app-shell--colapsada' : ''}`}>
       <Sidebar
         items={mainNav}
         adminItems={adminNav}
         adminHeader={adminHeader}
         badges={badges}
         onLogout={() => void logout()}
+        colapsada={colapsada}
+        onAlternar={alternarSidebar}
       />
       <div className="app-shell__main">
         <Topbar />
