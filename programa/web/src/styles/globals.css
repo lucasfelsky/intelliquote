@@ -14101,7 +14101,7 @@ i.fc-status--preco { background: var(--info); }
 .fc-avisos__conta {
   position: absolute; top: -8px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
   display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; line-height: 1;
-  background: var(--danger-strong); color: #fff;
+  background: var(--danger-strong); color: var(--on-strong);
 }
 .fc-avisos__botao--atencao .fc-avisos__conta { background: var(--warning-strong); }
 .fc-avisos__botao--info .fc-avisos__conta { background: var(--info); }
@@ -14127,4 +14127,27 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 640px) {
   .fc-avisos { position: static; }
   .fc-avisos__painel { left: 16px; right: 16px; width: auto; max-width: none; }
+}
+/* Forecast: cabecalho em uma linha e abas Painel/Relatorio em underline (refino visual, etapa 2). So tela. */
+@media screen {
+  /* acoes sempre alinhadas a direita: quando a barra quebra, a 2a linha nao fica solta a esquerda */
+  .fc-pagina .fc-cabecalho__acoes { margin-left: auto; justify-content: flex-end; }
+  .fc-pagina .fc-cabecalho__quinzena { flex: 1 1 300px; }
+
+  /* abas: botoes com aria-pressed (a troca de visao e navegacao, nao painel de abas) desenhados como underline */
+  .fc-pagina .fc-visoes { gap: 24px; margin-top: -4px; border-bottom: 1px solid var(--border); }
+  .fc-pagina .fc-visoes .fc-filtro {
+    min-height: 44px;
+    margin-bottom: -1px;
+    padding: 0 4px;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .fc-pagina .fc-visoes .fc-filtro:hover { background: transparent; color: var(--ink); }
+  .fc-pagina .fc-visoes .fc-filtro[aria-pressed="true"] { background: transparent; border-bottom-color: var(--primary); color: var(--ink); }
 }
