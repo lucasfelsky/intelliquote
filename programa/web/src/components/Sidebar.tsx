@@ -1,3 +1,4 @@
+import { useEffect, useState, type CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
 import BrandMark from './BrandMark';
 import { Icon } from './icons';
@@ -27,15 +28,32 @@ export default function Sidebar({
   colapsada = false,
   onAlternar,
 }: SidebarProps) {
-  function renderLink(item: NavItem) {
+  // Dica do icone quando recolhida: fixa (position: fixed), porque a sidebar rola e cortaria uma dica absoluta.
+  const [dica, setDica] = useState<{ texto: string; top: number; left: number } | null>(null);
+  useEffect(() => {
+    if (!colapsada) setDica(null);
+  }, [colapsada]);
+  function mostrarDica(texto: string, el: HTMLElement) {
+    if (!colapsada) return;
+    const r = el.getBoundingClientRect();
+    setDica({ texto, top: r.top + r.height / 2, left: r.right + 12 });
+  }
+  const dicaProps = (texto: string) => ({
+    onMouseEnter: (e: { currentTarget: HTMLElement }) => mostrarDica(texto, e.currentTarget),
+    onMouseLeave: () => setDica(null),
+    onFocus: (e: { currentTarget: HTMLElement }) => mostrarDica(texto, e.currentTarget),
+    onBlur: () => setDica(null),
+  });
+
+  // `k` = posicao do item: o texto volta em cascata (CSS: --k)
+  function renderLink(item: NavItem, k: number) {
     const count = badges[item.to] ?? 0;
     return (
-      <li key={item.to}>
+      <li key={item.to} style={{ '--k': k } as CSSProperties} {...dicaProps(item.label)}>
         <NavLink
           to={item.to}
           end={item.end}
           className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-          title={colapsada ? item.label : undefined}
         >
           <Icon name={item.icon} className="sidebar__icon" />
           <span className="sidebar__label">{item.label}</span>
@@ -75,17 +93,17 @@ export default function Sidebar({
         )}
       </div>
       <nav id="sidebar-nav" className="sidebar__nav" aria-label="Navegação principal">
-        <ul>{items.map(renderLink)}</ul>
+        <ul>{items.map((item, i) => renderLink(item, i))}</ul>
         {adminHeader && adminItems.length > 0 && (
           <div className="sidebar__group">
             <p className="sidebar__group-title">Administração</p>
-            <ul>{adminItems.map(renderLink)}</ul>
+            <ul>{adminItems.map((item, i) => renderLink(item, items.length + i))}</ul>
           </div>
         )}
       </nav>
-      <footer className="sidebar__footer">
+      <footer className="sidebar__footer" style={{ '--k': items.length + adminItems.length } as CSSProperties}>
         <ThemeToggle />
-        <button type="button" className="sidebar__logout" onClick={onLogout}>
+        <button type="button" className="sidebar__logout" onClick={onLogout} {...dicaProps('Sair')}>
           <Icon name="logout" size={16} />
           <span className="sidebar__logout-texto">Sair</span>
         </button>
@@ -93,6 +111,11 @@ export default function Sidebar({
           <SqLogo size={32} />
         </div>
       </footer>
+      {dica && (
+        <div className="sidebar__dica" role="presentation" aria-hidden="true" style={{ top: dica.top, left: dica.left }}>
+          {dica.texto}
+        </div>
+      )}
     </aside>
   );
 }

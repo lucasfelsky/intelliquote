@@ -269,6 +269,7 @@ describe('--rf-*: contraste nos 2 temas (WCAG 2.x, alpha composto sobre --rf-sur
 const ALLOWED_AT_RULES = [
   '@keyframes rf-page-enter',
   '@keyframes rf-page-fade',
+  '@keyframes rf-dica-in', // dica do icone da sidebar recolhida
   '@media (max-width: 880px)',
   '@media (min-width: 881px)', // sidebar recolhida (so icones): so existe acima do breakpoint de empilhar
   '@media (pointer: coarse)',

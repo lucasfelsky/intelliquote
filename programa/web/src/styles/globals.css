@@ -684,7 +684,7 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 24px 16px 18px;
+  padding: 24px 12px 18px;
   background: var(--rf-sidebar-bg);
   color: var(--rf-sidebar-brand-ink);
   font-family: var(--rf-font-sans);
@@ -692,15 +692,18 @@ h3 {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--rf-sidebar-seg-border) transparent;
 }
 
 .sidebar__brand {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 6px;
+  height: 40px;
+  padding: 0 4px;
 }
 .sidebar__brand-name {
   font-family: var(--rf-font-display);
@@ -731,8 +734,11 @@ h3 {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
   height: 44px;
-  padding: 0 12px 0 14px;
+  padding: 0 12px 0 15px;
+  overflow: hidden;
+  white-space: nowrap;
   border-radius: var(--rf-radius-button);
   color: var(--rf-sidebar-ink-soft);
   font-size: 14px;
@@ -740,7 +746,7 @@ h3 {
   text-decoration: none;
   transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base) var(--rf-ease-out);
 }
-.sidebar__group .sidebar__link { padding: 0 14px; }
+.sidebar__group .sidebar__link { padding: 0 12px 0 15px; }
 .sidebar__link:hover {
   background: var(--rf-sidebar-hover);
   color: var(--rf-sidebar-ink);
@@ -1002,24 +1008,30 @@ h3 {
   .sidebar__theme { height: 44px; }
 }
 
-/* sidebar recolhida (so icones, 72px): a escolha vem do botao .sidebar__alternar. So acima de 880: abaixo a sidebar empilha e o botao some. */
+/* sidebar recolhida (so icones, 72px) com animacao "suave" (mock aprovado): a escolha vem do botao .sidebar__alternar.
+   Movimento (literais: o shell so consome --rf-*): 300ms com cubic-bezier(.2,.8,.2,1); o texto some em 140ms e, ao expandir,
+   volta depois de 30% da duracao, em cascata de 16ms por item (--k, posicao do <li>).
+   So acima de 880: abaixo a sidebar empilha e o botao some. Os icones nao se mexem (27px da borda nos dois estados); o texto
+   fica no DOM (opacity, nao display) para o leitor de tela. */
 .sidebar__alternar {
+  position: absolute;
+  left: calc(100% - 32px);
+  top: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: none;
   width: 32px;
   height: 32px;
-  margin-left: auto;
   padding: 0;
   border: 0;
   border-radius: var(--rf-radius-button);
   background: transparent;
   color: var(--rf-sidebar-ink-soft);
   cursor: pointer;
-  transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
+  transition: left 300ms cubic-bezier(0.2, 0.8, 0.2, 1), top 300ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
 }
-.sidebar__alternar svg { transform: rotate(180deg); }
+.sidebar__alternar svg { transform: rotate(180deg); transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.sidebar--colapsada .sidebar__alternar { left: 8px; top: 46px; }
 .sidebar--colapsada .sidebar__alternar svg { transform: none; }
 .sidebar__alternar:hover { background: var(--rf-sidebar-hover); color: var(--rf-sidebar-ink); }
 .sidebar__alternar:focus-visible {
@@ -1030,29 +1042,70 @@ h3 {
 @media (pointer: coarse) {
   .sidebar__alternar { width: 44px; height: 44px; }
 }
+.sidebar__theme span,
+.sidebar__logout-texto { display: block; max-width: 140px; overflow: hidden; white-space: nowrap; }
+.sidebar__group-title { max-height: 24px; overflow: hidden; white-space: nowrap; }
+
+/* dica do icone quando recolhida (fixa: a sidebar rola e cortaria uma dica absoluta) */
+@keyframes rf-dica-in {
+  from { opacity: 0; transform: translate(-6px, -50%); }
+  to { opacity: 1; transform: translate(0, -50%); }
+}
+.sidebar__dica {
+  position: fixed;
+  z-index: 60;
+  padding: 6px 10px;
+  border: 1px solid var(--rf-sidebar-seg-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-primary-strong);
+  color: var(--rf-sidebar-ink);
+  font: 600 12.5px var(--rf-font-sans);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(0, -50%);
+  animation: rf-dica-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
 @media (min-width: 881px) {
+  .app-shell { transition: grid-template-columns 300ms cubic-bezier(0.2, 0.8, 0.2, 1), background-size 300ms cubic-bezier(0.2, 0.8, 0.2, 1); }
   .app-shell--colapsada { grid-template-columns: 72px 1fr; background-size: 72px 100%; }
-  .sidebar--colapsada { padding-left: 12px; padding-right: 12px; }
-  .sidebar--colapsada .sidebar__brand { flex-direction: column; gap: 8px; padding: 0; }
-  .sidebar--colapsada .sidebar__alternar { margin-left: 0; }
-  /* o texto sai da tela mas segue para o leitor de tela (o nome do link nao some) */
+  .sidebar__brand { transition: height 300ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .sidebar--colapsada .sidebar__brand { height: 84px; align-items: flex-start; }
+  /* expandindo: o texto entra depois da barra abrir, em cascata por item (--k vem do <li>) */
+  .sidebar__brand-name,
+  .sidebar__label,
+  .sidebar__tag {
+    opacity: 1;
+    transform: none;
+    transition: opacity 140ms ease calc(300ms * 0.3 + var(--k, 0) * 16ms), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--k, 0) * 16ms);
+  }
+  .sidebar__group-title,
+  .sidebar__theme span,
+  .sidebar__logout-texto {
+    opacity: 1;
+    transform: none;
+    transition: opacity 140ms ease calc(300ms * 0.3), transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1), max-width 300ms cubic-bezier(0.2, 0.8, 0.2, 1), max-height 300ms cubic-bezier(0.2, 0.8, 0.2, 1), padding 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .sidebar__theme,
+  .sidebar__logout {
+    overflow: hidden;
+    transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base), width 300ms cubic-bezier(0.2, 0.8, 0.2, 1), padding 300ms cubic-bezier(0.2, 0.8, 0.2, 1), gap 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* recolhendo: o texto some rapido, deslizando 8px */
   .sidebar--colapsada .sidebar__brand-name,
   .sidebar--colapsada .sidebar__label,
   .sidebar--colapsada .sidebar__tag,
   .sidebar--colapsada .sidebar__group-title,
   .sidebar--colapsada .sidebar__theme span,
   .sidebar--colapsada .sidebar__logout-texto {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-8px);
+    transition-delay: 0ms;
+    transition-duration: 140ms;
   }
-  .sidebar--colapsada .sidebar__link { position: relative; justify-content: center; gap: 0; padding: 0; }
-  .sidebar--colapsada .sidebar__group .sidebar__link { padding: 0; }
+  .sidebar--colapsada .sidebar__theme span,
+  .sidebar--colapsada .sidebar__logout-texto { max-width: 0; }
+  .sidebar--colapsada .sidebar__group-title { max-height: 0; padding-bottom: 0; }
   .sidebar--colapsada .sidebar__badge {
     position: absolute;
     top: 2px;
@@ -1078,6 +1131,8 @@ h3 {
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell__content > * { animation: rf-page-fade 150ms linear backwards; }
+  .app-shell, .sidebar, .sidebar * { transition-duration: 1ms !important; transition-delay: 0ms !important; }
+  .sidebar__dica { animation: none; }
 }
 /* <<< shell F2 <<< */
 

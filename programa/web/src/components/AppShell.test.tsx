@@ -108,9 +108,14 @@ describe('AppShell: sidebar recolhivel', () => {
     expect(container.querySelector('.app-shell.app-shell--colapsada > .sidebar.sidebar--colapsada')).not.toBeNull();
     const aberto = screen.getByRole('button', { name: 'Expandir menu lateral' });
     expect(aberto.getAttribute('aria-expanded')).toBe('false');
-    // o texto fica no DOM (some so da tela); cada link segue com nome e ganha a dica
+    // o texto fica no DOM (some so da tela, por opacidade); cada link segue com nome e ganha a dica ao apontar
     const link = screen.getByRole('link', { name: /^Cotações/ });
-    expect(link.getAttribute('title')).toBe('Cotações');
+    expect(link.getAttribute('title')).toBeNull();
+    expect(container.querySelector('.sidebar__dica')).toBeNull();
+    fireEvent.mouseEnter(link.closest('li') as HTMLElement);
+    expect(container.querySelector('.sidebar__dica')?.textContent).toBe('Cotações');
+    fireEvent.mouseLeave(link.closest('li') as HTMLElement);
+    expect(container.querySelector('.sidebar__dica')).toBeNull();
     expect(localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA)).toBe('1');
   });
 
@@ -122,7 +127,9 @@ describe('AppShell: sidebar recolhivel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Expandir menu lateral' }));
     expect(container.querySelector('.sidebar--colapsada')).toBeNull();
     expect(localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA)).toBeNull();
-    expect(screen.getByRole('link', { name: /^Cotações/ }).getAttribute('title')).toBeNull();
+    // expandida: sem dica
+    fireEvent.mouseEnter(screen.getByRole('link', { name: /^Cotações/ }).closest('li') as HTMLElement);
+    expect(container.querySelector('.sidebar__dica')).toBeNull();
   });
 
   it('storage bloqueado (modo privado) nao quebra: abre expandida e o botao ainda recolhe', async () => {

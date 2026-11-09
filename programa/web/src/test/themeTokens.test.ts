@@ -301,11 +301,11 @@ describe('tema escuro: guarda do CSS', () => {
     expect(unknownConstants).toEqual([]);
   });
 
-  it('todo var(--x) usado esta definido (fallback var(--x, ...) conta; --val e local)', () => {
+  it('todo var(--x) usado esta definido (fallback var(--x, ...) conta; --val e --k sao locais: --k = posicao do <li> da sidebar, vem de style inline)', () => {
     const used = new Set<string>();
     for (const [, name] of css.matchAll(/var\(\s*(--[\w-]+)\s*[,)]/g)) if (name) used.add(name);
     const defined = new Set(Object.keys(lightTokens));
-    const undefinedVars = [...used].filter((t) => !defined.has(t) && t !== '--val');
+    const undefinedVars = [...used].filter((t) => !defined.has(t) && t !== '--val' && t !== '--k');
     expect(undefinedVars).toEqual([]);
   });
 
