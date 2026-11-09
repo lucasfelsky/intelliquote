@@ -14287,7 +14287,7 @@ i.fc-status--preco { background: var(--info); }
 .fc-filtros-menu__rotulo svg { flex: none; color: var(--ink-soft); }
 .fc-filtros-menu__painel .fc-filtro__conta { margin-left: auto; }
 .fc-legenda__icone { flex: none; }
-.fgc-acao .info-chip { align-self: flex-start; }
+.fgc-motivo-chip { align-self: flex-start; }
 .fc-legenda__lista { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
 .fcsv-selo { display: inline-flex; align-items: center; vertical-align: middle; padding: 0 5px; line-height: 16px; }
 @media (max-width: 640px) {

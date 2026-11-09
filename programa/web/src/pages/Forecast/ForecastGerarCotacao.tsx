@@ -106,7 +106,7 @@ function Botao({ item, productId, ctx }: BotaoProps) {
       )}
       {/* Motivo visivel para quem usa teclado ou toque sem leitor de tela. */}
       {motivo && (
-        <InfoPopover label="Por que não dá para gerar a cotação" tone="warning" trigger={<Icon name="info" size={14} />}>
+        <InfoPopover label="Por que não dá para gerar a cotação" tone="warning" className="fgc-motivo-chip" trigger={<Icon name="info" size={14} />}>
           {motivo}
         </InfoPopover>
       )}

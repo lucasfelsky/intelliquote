@@ -39,6 +39,6 @@ describe('Forecast refino visual: guardas de CSS da revisao', () => {
   });
 
   it('o motivo do Gerar cotacao (icone) nao estica ate a largura da celula', () => {
-    expect(css).toContain('.fgc-acao .info-chip { align-self: flex-start; }');
+    expect(css).toContain('.fgc-motivo-chip { align-self: flex-start; }');
   });
 });
