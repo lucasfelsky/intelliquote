@@ -81,7 +81,7 @@ describe('shell F2: layout e medidas do mock', () => {
 
   it('.sidebar: 256 de coluna, gradiente por token, sticky 100vh com rolagem interna (F2-D7)', () => {
     const sidebar = decl('.sidebar');
-    expect(sidebar.padding).toBe('24px 16px 18px');
+    expect(sidebar.padding).toBe('24px 12px 18px');
     expect(sidebar.gap).toBe('24px');
     expect(sidebar.background).toBe('var(--rf-sidebar-bg)');
     expect(sidebar.position).toBe('sticky');
@@ -89,11 +89,11 @@ describe('shell F2: layout e medidas do mock', () => {
     expect(sidebar['overflow-y']).toBe('auto');
   });
 
-  it('.sidebar__link: altura 44, raio do botao, 14px/600, padding 0 12px 0 14px', () => {
+  it('.sidebar__link: altura 44, raio do botao, 14px/600, padding 0 12px 0 15px', () => {
     const link = decl('.sidebar__link');
     expect(link.height).toBe('44px');
     expect(link['border-radius']).toBe('var(--rf-radius-button)');
-    expect(link.padding).toBe('0 12px 0 14px');
+    expect(link.padding).toBe('0 12px 0 15px');
     expect(link['font-size']).toBe('14px');
     expect(link['font-weight']).toBe('600');
   });
@@ -300,6 +300,10 @@ describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
 });
 
 describe('shell F2: botao de recolher a sidebar', () => {
+  it('a marca nao encolhe (flex: none): em janela baixa a sidebar rola e, encolhida, o botao de recolher cairia sobre o 1o link', () => {
+    expect(decl('.sidebar__brand').flex).toBe('none');
+  });
+
   it('o alvo de toque de 44px (pointer: coarse) vem DEPOIS da regra base de 32px (mesma especificidade: a ultima vence)', () => {
     const base = region.indexOf('.sidebar__alternar {');
     const toque = region.indexOf('.sidebar__alternar { width: 44px; height: 44px; }');
