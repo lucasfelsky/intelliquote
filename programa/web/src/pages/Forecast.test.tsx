@@ -23,6 +23,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
+import { chaveDoFiltro } from '@/test/forecastFiltros';
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
@@ -405,7 +406,7 @@ describe('Forecast', () => {
     expect(screen.queryByRole('columnheader', { name: 'EMB.1–7' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'M1' })).toBeNull();
     expect(screen.getByRole('columnheader', { name: 'M4' })).toBeTruthy();
-    const chave = screen.getByRole('switch', { name: 'Colunas ocultas da planilha' });
+    const chave = chaveDoFiltro('Colunas ocultas da planilha');
     expect((chave)?.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(chave);
     expect((chave)?.getAttribute('aria-checked')).toBe('true');
@@ -475,7 +476,7 @@ describe('Forecast', () => {
     expect(await screen.findByText('Cálculo idêntico ao da planilha')).toBeTruthy();
     expect(nomesDosItens()).toEqual(['PRODUTO A', 'PRODUTO B', 'PRODUTO C']);
     expect(screen.queryByText('Fixo')).toBeNull();
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     expect(screen.getByRole('columnheader', { name: 'M1' })).toBeTruthy();
   });
 });
@@ -756,9 +757,25 @@ describe('Forecast - pendentes de cadastro (PR 3B-2)', () => {
     mockApi({ 7: detalhe(), 8: DBCORP });
     renderPage('/forecast?quinzena=8');
     await screen.findByText(/Pendentes de cadastro \(2\)/);
+    // O painel de pendentes so abre pelo aviso do cabecalho ("Ver pendentes").
+    fireEvent.click(screen.getByTestId('fc-avisos-botao'));
+    fireEvent.click(screen.getByRole('button', { name: 'Ver pendentes' }));
     expect(screen.getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Completar cadastro do código TST0901' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Completar cadastro do código TST0902' })).toBeNull();
+  });
+
+  it('selo neutro (DBCorp sem planilha) e pendentes vao para o icone de avisos, nao para o corpo', async () => {
+    mockApi({ 7: detalhe(), 8: DBCORP });
+    renderPage('/forecast?quinzena=8');
+    const botao = await screen.findByTestId('fc-avisos-botao');
+    expect(document.querySelector('.fc-selo-conferencia')).toBeNull();
+    expect(botao.getAttribute('aria-label')).toMatch(/^Avisos: \d+$/);
+    fireEvent.click(botao);
+    const painel = screen.getByRole('region', { name: 'Avisos' });
+    expect(within(painel).getByText(/sem planilha para conferir/)).toBeTruthy();
+    expect(within(painel).getByText(/Pendentes de cadastro \(2\)/)).toBeTruthy();
+    expect(within(painel).getByText('Ficam fora do cálculo.')).toBeTruthy();
   });
 
   it.each(['gestor', 'viewer'])('%s so ve a lista (sem botao nem coluna Acao)', async (role) => {

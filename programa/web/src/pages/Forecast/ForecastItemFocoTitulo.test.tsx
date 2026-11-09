@@ -22,6 +22,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { chaveDoFiltro } from '@/test/forecastFiltros';
 
 const get = vi.mocked(api.get);
 
@@ -173,7 +174,7 @@ describe('Forecast - foco ao voltar para a grade', () => {
     renderRota('/forecast?quinzena=7');
     fireEvent.click(await screen.findByRole('button', { name: 'Demanda ≤ 0 1' }));
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     fireEvent.click(await linkDoItem('PRODUTO B'));
     await tituloDoItem('PRODUTO B');
 
@@ -183,7 +184,7 @@ describe('Forecast - foco ao voltar para a grade', () => {
     expect(document.title).toBe(TITULO_PAINEL);
     expect(screen.getByRole('button', { name: 'Demanda ≤ 0 1' }).getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByLabelText('Buscar produto, código ou fonte') as HTMLInputElement).value).toBe('FONTE 2');
-    expect(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }).getAttribute('aria-checked')).toBe('true');
+    expect(chaveDoFiltro('Colunas ocultas da planilha').getAttribute('aria-checked')).toBe('true');
   });
 
   it('historico do navegador (Alt+seta esquerda): o foco retorna ao link do item de origem', async () => {

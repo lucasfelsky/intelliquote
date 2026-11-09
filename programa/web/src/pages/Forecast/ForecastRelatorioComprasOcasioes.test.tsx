@@ -210,8 +210,9 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
     expect(screen.getByText('1 item com fonte fora do cadastro de lead time: eventos não avaliados')).toBeTruthy();
     expect(screen.queryByText(/sem país/)).toBeNull();
     expect(screen.getByText(APOIO_OCASIOES)).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(PARAGRAFO_OCASIOES)).toBeTruthy();
-    expect(screen.getByText(PARAGRAFO_OCASIOES).closest('details')).not.toBeNull();
+    expect(screen.getByText(PARAGRAFO_OCASIOES).closest('[role="tooltip"]')).not.toBeNull();
   });
 
   it('visao por fonte: caption do grupo com as ocasioes e a sublinha continua nos itens', async () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ForecastDadosDoGrupo, ForecastItemCobertoPorGrupo } from '@/services/forecast';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
@@ -223,10 +223,10 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     expect(within(linha).getByText('GRUPO SINTETICO')).toBeTruthy();
     expect(within(linha).getByText('Grupo de equivalência')).toBeTruthy();
     expect(within(linha).getAllByText('150,0').length).toBeGreaterThan(0);
-    // Sublinhas na linha seguinte (modo legado: Item + 10 colunas comuns = 11).
+    // Sublinhas na linha seguinte (modo legado: Item + 7 colunas comuns = 8).
     const sublinha = linha.nextElementSibling as HTMLElement;
     expect(sublinha.className).toBe('fcr-linha-grupo');
-    expect(sublinha.querySelector('td')?.getAttribute('colspan')).toBe('11');
+    expect(sublinha.querySelector('td')?.getAttribute('colspan')).toBe('8');
     expect(within(sublinha).getByRole('table', { name: 'Membros do grupo GRUPO SINTETICO' })).toBeTruthy();
     expect(within(sublinha).getByText('PRODUTO 002')).toBeTruthy();
   });
@@ -260,6 +260,7 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     expect(await screen.findByText('1 item coberto por grupo de equivalência')).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(paragrafoGruposDeEquivalencia())).toBeTruthy();
   });
 
@@ -282,6 +283,7 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     await screen.findByText('1 item em 1 fonte');
     expect(screen.queryByText(/Cobertos pelo grupo de equivalência/)).toBeNull();
     expect(screen.queryByText(/item coberto por grupo/)).toBeNull();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(paragrafoGruposDeEquivalencia())).toBeTruthy();
   });
 });

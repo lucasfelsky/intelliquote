@@ -140,4 +140,20 @@ describe('InfoPopover', () => {
     tooltip = screen.getByRole('tooltip');
     expect(tooltip.style.top).toBe(`${innerHeight - 30 - 80 - 6}px`);
   });
+
+  it('largo: o balao ganha o modificador info-popover--largo (texto corrido, com rolagem)', () => {
+    render(
+      <InfoPopover label="Regras" trigger={<>?</>} largo testId="chip">
+        <p>Texto longo</p>
+      </InfoPopover>,
+    );
+    fireEvent.mouseEnter(screen.getByTestId('chip'));
+    expect(screen.getByRole('tooltip').className).toContain('info-popover--largo');
+  });
+
+  it('sem largo: o balao nao ganha o modificador', () => {
+    renderPopover();
+    fireEvent.mouseEnter(screen.getByTestId('chip'));
+    expect(screen.getByRole('tooltip').className).not.toContain('info-popover--largo');
+  });
 });

@@ -93,17 +93,16 @@ beforeEach(() => {
 });
 
 describe('F13-D: relatorio de compras (markup)', () => {
-  it('Baixar XLSX, Baixar planilha MACRO e Lancar demanda ganham icone (escondido do leitor de tela); Imprimir segue sem icone e os nomes nao mudam', async () => {
+  it('Baixar XLSX, MACRO, Imprimir e Lancar demanda ganham icone (escondido do leitor de tela) e os nomes nao mudam', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio(true);
     const grupo = await screen.findByRole('group', { name: 'Exportar relatório' });
-    for (const nome of ['Baixar XLSX', 'Baixar planilha MACRO (XLSX)', 'Lançar demanda do comercial']) {
+    for (const nome of ['Baixar XLSX', 'Baixar planilha MACRO (XLSX)', 'Imprimir / Salvar como PDF', 'Lançar demanda do comercial']) {
       const botao = within(grupo).getByRole('button', { name: nome });
       const svg = botao.querySelector('svg');
       expect(svg, nome).not.toBeNull();
       expect(svg?.getAttribute('aria-hidden'), nome).toBe('true');
     }
-    expect(within(grupo).getByRole('button', { name: 'Imprimir / Salvar como PDF' }).querySelector('svg')).toBeNull();
   });
 
   it('sem permissao de edicao nao ha botao de lancar demanda (e portanto nenhum icone dele)', async () => {
@@ -111,15 +110,52 @@ describe('F13-D: relatorio de compras (markup)', () => {
     renderRelatorio(false);
     const grupo = await screen.findByRole('group', { name: 'Exportar relatório' });
     expect(within(grupo).queryByRole('button', { name: 'Lançar demanda do comercial' })).toBeNull();
-    expect(grupo.querySelectorAll('svg')).toHaveLength(2);
+    expect(grupo.querySelectorAll('svg')).toHaveLength(3);
   });
 
-  it('a celula "Saldo zera" (mes da ruptura) leva a classe mono; a data da ruptura e a data-limite seguem como estavam', async () => {
+  it('resumo: a frase vira indicador (numero e rotulo aria-hidden, frase inteira para o leitor) e "Fora da lista de compra" abre e fecha', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio(false);
-    const celula = (await screen.findByText('nov/2026')).closest('td');
-    expect(celula?.className).toBe('fcr-mono');
-    expect(screen.getByText('21/11/2026').closest('td')?.className).toBe('');
+    const frase = await screen.findByText(/^[0-9]+ com data-limite vencida$/);
+    const li = frase.closest('li');
+    expect(li?.className).toContain('fcr-ind');
+    expect(li?.querySelector('.fcr-ind__n')?.getAttribute('aria-hidden')).toBe('true');
+    expect(li?.querySelector('.fcr-ind__k')?.textContent).toBe('com data-limite vencida');
+    const botao = screen.getByRole('button', { name: 'Fora da lista de compra' });
+    const bloco = document.getElementById('fcr-fora');
+    expect(botao.getAttribute('aria-expanded')).toBe('false');
+    expect(bloco?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(botao);
+    expect(botao.getAttribute('aria-expanded')).toBe('true');
+    expect(bloco?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('cada faixa/fonte tem uma seta que recolhe e expande a tabela (aberta por padrao; aria-expanded)', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio(false);
+    const seta = (await screen.findAllByRole('button', { name: /^Recolher / }))[0] as HTMLElement;
+    expect(seta.getAttribute('aria-expanded')).toBe('true');
+    const tabela = seta.closest('table') as HTMLElement;
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(seta);
+    expect(seta.getAttribute('aria-expanded')).toBe('false');
+    expect(seta.getAttribute('aria-label')).toMatch(/^Expandir /);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(true);
+    expect(tabela.querySelector('thead')?.hasAttribute('hidden')).toBe(true);
+    fireEvent.click(seta);
+    expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('Saldo zera e Ruptura viram linhas da celula Data-limite (etapa 4): o mes leva a classe mono e a data da ruptura segue no texto', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio(false);
+    const zera = await screen.findByText('nov/2026');
+    expect(zera.className).toBe('fcr-mono');
+    const celula = zera.closest('td');
+    expect(celula?.querySelector('.fcr-limite__prazos')).not.toBeNull();
+    expect(screen.getByText('21/11/2026').closest('td')).toBe(celula);
+    expect(screen.queryByRole('columnheader', { name: 'Saldo zera' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Ruptura' })).toBeNull();
   });
 });
 

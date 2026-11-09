@@ -15,6 +15,8 @@ type InfoPopoverProps = {
   /** Conteudo do popover (so texto/lista, nada interativo). */
   children: ReactNode;
   tone?: 'warning' | 'info';
+  /** Balao mais largo, para texto corrido (ex.: regras de calculo). Sem rolagem interna: o balao nao recebe foco. */
+  largo?: boolean;
   className?: string;
   testId?: string;
   contentTestId?: string;
@@ -29,6 +31,7 @@ export function InfoPopover({
   trigger,
   children,
   tone = 'warning',
+  largo = false,
   className,
   testId,
   contentTestId,
@@ -167,7 +170,7 @@ export function InfoPopover({
             ref={popoverRef}
             id={id}
             role="tooltip"
-            className={`info-popover info-popover--${tone}`}
+            className={`info-popover info-popover--${tone}${largo ? ' info-popover--largo' : ''}`}
             data-testid={contentTestId}
             style={{
               position: 'fixed',
