@@ -10,6 +10,7 @@ import {
   validarNotaDeFechamento,
   type ForecastDemandaFechamento,
 } from '@/services/forecastDemandaComercial';
+import { AlternarGrupo } from './ForecastAlternarGrupo';
 import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import { dataBr, kgBr } from './forecastPainel';
 import {
@@ -163,6 +164,7 @@ type Dialogo =
 // mesmo quando a analise do Forecast nao aponta falta; o que soma ao Forecast e a coluna Sugerido.
 export default function ForecastRelatorioDemandaComercial({ dados, podeEditar, hoje, onConcluido }: Props) {
   const [dialogo, setDialogo] = useState<Dialogo | null>(null);
+  const [aberto, setAberto] = useState(false);
   const gatilho = useRef<HTMLElement | null>(null);
   const regiao = useRef<HTMLDivElement>(null);
 
@@ -184,8 +186,13 @@ export default function ForecastRelatorioDemandaComercial({ dados, podeEditar, h
     <section className="fc-card fcr-grupo fcd-secao" aria-label="Demanda do comercial">
       <div ref={regiao} className="fcr-scroll" role="region" tabIndex={0} aria-label="Pedidos abertos do comercial">
         <table className="fcr-tabela fcr-tabela--compacta fcd-tabela">
-          <caption className="fcr-caption">{tituloDemandaComercial(dados.totais.abertas)}</caption>
-          <thead>
+          <caption className="fcr-caption">
+            <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome="a seção Demanda do comercial" />
+              <span>{tituloDemandaComercial(dados.totais.abertas)}</span>
+            </div>
+          </caption>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               <th scope="col">Fonte</th>
@@ -210,7 +217,7 @@ export default function ForecastRelatorioDemandaComercial({ dados, podeEditar, h
               )}
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {dados.itens.map((i) => {
               const obs = textoObservacao(i.obs);
               return (
@@ -291,7 +298,7 @@ export default function ForecastRelatorioDemandaComercial({ dados, podeEditar, h
           </tbody>
         </table>
       </div>
-      <p className="fcr-sem-consumo__nota">{APOIO_DEMANDA_COMERCIAL}</p>
+      <p className="fcr-sem-consumo__nota" hidden={!aberto}>{APOIO_DEMANDA_COMERCIAL}</p>
       {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
       {dialogo?.tipo === 'editar' &&
         createPortal(

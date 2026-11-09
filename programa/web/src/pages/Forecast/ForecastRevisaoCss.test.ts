@@ -41,4 +41,9 @@ describe('Forecast refino visual: guardas de CSS da revisao', () => {
   it('o motivo do Gerar cotacao (icone) nao estica ate a largura da celula', () => {
     expect(css).toContain('.fgc-motivo-chip { align-self: flex-start; }');
   });
+
+  it('papel: tabelas e nota das secoes recolhidas (hidden) saem abertas', () => {
+    expect(css).toContain('.fcr-sem-consumo__nota[hidden] { display: block !important; }');
+    expect(css).toContain('.fcr-tabela tbody[hidden] { display: table-row-group !important; }');
+  });
 });

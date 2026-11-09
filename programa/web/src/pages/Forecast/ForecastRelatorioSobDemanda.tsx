@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { ForecastItemSobDemanda } from '@/services/forecast';
+import { AlternarGrupo } from './ForecastAlternarGrupo';
 import { SeloGrupo } from './ForecastRelatorioGrupos';
 import { d1, inteiroBr, mesAbrevDoAnoMes, STATUS_ROTULO } from './forecastPainel';
 import {
@@ -31,12 +33,18 @@ function ListaDeMeses({ prefixo, meses }: { prefixo: string; meses: Array<{ anoM
 // Itens marcados como "compra sob demanda" que entrariam na lista de compra: saem dela e ficam aqui, com o motivo e a
 // programacao ainda nao coberta por estoque e chegadas. So conferencia; nunca voltam sozinhos para a lista.
 export default function ForecastRelatorioSobDemanda({ itens }: Props) {
+  const [aberto, setAberto] = useState(false);
   return (
     <section className="fc-card fcr-grupo fcr-sob-demanda" aria-label="Sob demanda: só com programação do cliente">
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label="Itens sob demanda">
         <table className="fcr-tabela fcr-tabela--compacta">
-          <caption className="fcr-caption">{tituloSobDemanda(itens.length)}</caption>
-          <thead>
+          <caption className="fcr-caption">
+            <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome="a seção Sob demanda" />
+              <span>{tituloSobDemanda(itens.length)}</span>
+            </div>
+          </caption>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               <th scope="col">Fonte</th>
@@ -55,7 +63,7 @@ export default function ForecastRelatorioSobDemanda({ itens }: Props) {
               <th scope="col">Chegadas</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {itens.map((i) => {
               const obs = textoObservacao(i.obs);
               const mediaSem = textoMediaSem(i.mesesForaDaMedia);
@@ -97,7 +105,7 @@ export default function ForecastRelatorioSobDemanda({ itens }: Props) {
           </tbody>
         </table>
       </div>
-      <p className="fcr-sem-consumo__nota">{APOIO_SOB_DEMANDA}</p>
+      <p className="fcr-sem-consumo__nota" hidden={!aberto}>{APOIO_SOB_DEMANDA}</p>
     </section>
   );
 }

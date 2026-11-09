@@ -19,6 +19,7 @@ import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisao
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastGerarCotacao from './ForecastGerarCotacao';
 import ForecastOcasiaoSelo, { OcasioesDoGrupoSelo, OcasioesDoItemDetalhe, OcasioesNoResumo } from './ForecastOcasiaoSelo';
+import { AlternarGrupo } from './ForecastAlternarGrupo';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
 import ForecastRelatorioGrupos, { PrincipalDoGrupo, SeloGrupo, SublinhasDoGrupo } from './ForecastRelatorioGrupos';
 import ForecastRelatorioSobDemanda from './ForecastRelatorioSobDemanda';
@@ -412,21 +413,6 @@ const COLUNAS_COMUNS = (
   </>
 );
 
-/** Seta que recolhe/expande a tabela de uma faixa ou fonte (refino visual, etapa 4). Aberta por padrao; no papel nada some. */
-function AlternarGrupo({ aberto, aoAlternar, nome }: { aberto: boolean; aoAlternar: () => void; nome: string }) {
-  return (
-    <button
-      type="button"
-      className="fcr-grupo__alternar"
-      aria-expanded={aberto}
-      aria-label={`${aberto ? 'Recolher' : 'Expandir'} ${nome}`}
-      onClick={aoAlternar}
-    >
-      <Icon name={aberto ? 'chevron-down' : 'chevron-right'} size={16} />
-    </button>
-  );
-}
-
 interface GrupoProps {
   grupo: ForecastGrupoRelatorio;
   podeEditar: boolean;
@@ -555,12 +541,18 @@ function ListaDeMeses({ prefixo, meses }: { prefixo: string; meses: Array<{ anoM
 
 // Fim do relatorio: itens fora da lista de compra (media zero) que tem estoque ou programacao. So conferencia.
 function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
+  const [aberto, setAberto] = useState(false);
   return (
     <section className="fc-card fcr-grupo fcr-sem-consumo" aria-label="Atenção: sem consumo">
       <div className="fcr-scroll" role="region" tabIndex={0} aria-label="Itens sem consumo">
         <table className="fcr-tabela fcr-tabela--compacta">
-          <caption className="fcr-caption">{tituloSemConsumo(itens.length)}</caption>
-          <thead>
+          <caption className="fcr-caption">
+            <div className="fcr-caption__corpo">
+              <AlternarGrupo aberto={aberto} aoAlternar={() => setAberto((a) => !a)} nome="a seção Sem consumo" />
+              <span>{tituloSemConsumo(itens.length)}</span>
+            </div>
+          </caption>
+          <thead hidden={!aberto}>
             <tr>
               <th scope="col">Item</th>
               <th scope="col">Fonte</th>
@@ -573,7 +565,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
               <th scope="col">Chegadas</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody hidden={!aberto}>
             {itens.map((i) => (
               <tr key={i.linha} className="fcr-linha">
                 <th scope="row">
@@ -603,7 +595,7 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
           </tbody>
         </table>
       </div>
-      <p className="fcr-sem-consumo__nota">{APOIO_SEM_CONSUMO}</p>
+      <p className="fcr-sem-consumo__nota" hidden={!aberto}>{APOIO_SEM_CONSUMO}</p>
     </section>
   );
 }

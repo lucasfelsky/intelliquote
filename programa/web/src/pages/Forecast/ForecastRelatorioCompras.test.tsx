@@ -17,6 +17,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
+import { expandirSecoes } from '@/test/forecastSecoes';
 
 const get = vi.mocked(api.get);
 
@@ -666,12 +667,14 @@ describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
     get.mockResolvedValue({ data: comPedidos() });
     const { unmount } = renderComPermissao(false);
     await screen.findByText('3 itens em 2 fontes');
+    expandirSecoes();
     expect(screen.queryByRole('button', { name: 'Lançar demanda do comercial' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Ações' })).toBeNull();
     unmount();
 
     renderComPermissao(true);
     await screen.findByText('3 itens em 2 fontes');
+    expandirSecoes();
     expect(screen.getByRole('button', { name: 'Lançar demanda do comercial' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'Ações' })).toBeTruthy();
   });
