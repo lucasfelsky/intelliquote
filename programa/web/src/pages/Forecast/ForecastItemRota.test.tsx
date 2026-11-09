@@ -24,6 +24,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { chaveDoFiltro } from '@/test/forecastFiltros';
 
 const get = vi.mocked(api.get);
 
@@ -215,7 +216,7 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     renderRota('/forecast?quinzena=7');
     fireEvent.click(await screen.findByRole('button', { name: 'Demanda ≤ 0 1' }));
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     await waitFor(() => expect(itensDaGrade()).toEqual(['PRODUTO B']));
     fireEvent.click(screen.getByRole('link', { name: /PRODUTO B/ }));
     await memoria();
@@ -227,7 +228,7 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     renderRota('/forecast?quinzena=7');
     fireEvent.click(await screen.findByRole('button', { name: 'Demanda ≤ 0 1' }));
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     await waitFor(() => expect(itensDaGrade()).toEqual(['PRODUTO B']));
     const link = screen.getByRole('link', { name: /PRODUTO B/ });
     expect(link.tagName).toBe('A');
@@ -282,7 +283,7 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     renderRota('/forecast?quinzena=7');
     fireEvent.click(await screen.findByRole('button', { name: 'Demanda ≤ 0 1' }));
     fireEvent.change(screen.getByLabelText('Buscar produto, código ou fonte'), { target: { value: 'FONTE 2' } });
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     fireEvent.click(screen.getByRole('link', { name: /PRODUTO B/ }));
     await memoria();
 
@@ -292,7 +293,7 @@ describe('Forecast - rota /forecast/item/:linha', () => {
     expect((screen.getByLabelText('Quinzena') as HTMLSelectElement).value).toBe('7');
     expect(screen.getByRole('button', { name: 'Demanda ≤ 0 1' }).getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByLabelText('Buscar produto, código ou fonte') as HTMLInputElement).value).toBe('FONTE 2');
-    expect(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }).getAttribute('aria-checked')).toBe('true');
+    expect(chaveDoFiltro('Colunas ocultas da planilha').getAttribute('aria-checked')).toBe('true');
     expect(itensDaGrade()).toEqual(['PRODUTO B']);
   });
 
@@ -348,7 +349,7 @@ describe('Forecast - filtro, busca e colunas ocultas na URL do painel', () => {
     await screen.findByRole('table');
     expect(screen.getByRole('button', { name: 'Demanda ≤ 0 1' }).getAttribute('aria-pressed')).toBe('true');
     expect((screen.getByLabelText('Buscar produto, código ou fonte') as HTMLInputElement).value).toBe('produto');
-    expect(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }).getAttribute('aria-checked')).toBe('true');
+    expect(chaveDoFiltro('Colunas ocultas da planilha').getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('columnheader', { name: 'EMB.1–7' })).toBeTruthy();
     expect(itensDaGrade()).toEqual(['PRODUTO B']);
   });
@@ -363,10 +364,10 @@ describe('Forecast - filtro, busca e colunas ocultas na URL do painel', () => {
   it('mudar filtro e colunas ocultas escreve na URL; "Todos" e desligar limpam os parametros', async () => {
     renderRota('/forecast?quinzena=7');
     fireEvent.click(await screen.findByRole('button', { name: 'Em andamento 1' }));
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     expect(Object.fromEntries(query())).toEqual({ quinzena: '7', filtro: 'andamento', ocultas: '1' });
     fireEvent.click(screen.getByRole('button', { name: 'Todos 3' }));
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     expect(local()).toBe('/forecast?quinzena=7');
   });
 
@@ -418,6 +419,6 @@ describe('Forecast - filtro, busca e colunas ocultas na URL do painel', () => {
     await waitFor(() => expect(local()).toBe('/forecast?quinzena=8'));
     expect(((await screen.findByLabelText('Buscar produto, código ou fonte')) as HTMLInputElement).value).toBe('');
     expect(screen.getByRole('table', { name: /quinzena 11-1/ })).toBeTruthy();
-    expect(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }).getAttribute('aria-checked')).toBe('false');
+    expect(chaveDoFiltro('Colunas ocultas da planilha').getAttribute('aria-checked')).toBe('false');
   });
 });

@@ -22,6 +22,8 @@ import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModa
 import ForecastAvisos, { ProvedorAvisos, useAviso } from './Forecast/ForecastAvisos';
 import ForecastExportarMacro from './Forecast/ForecastExportarMacro';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
+import ForecastFiltrosMenu from './Forecast/ForecastFiltrosMenu';
+import { InfoPopover } from '@/components/InfoPopover';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import { useDialogoFontes } from './Forecast/useDialogoFontes';
 import { ProvedorGerarCotacao } from './Forecast/ForecastGerarCotacao';
@@ -252,36 +254,35 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={ocultas}
-              className="fc-chave"
-              onClick={alternarOcultas}
-            >
-              <span className={ocultas ? 'fc-trilho fc-trilho--on' : 'fc-trilho'} aria-hidden="true">
-                <span />
-              </span>
-              Colunas ocultas da planilha
-            </button>
-            <ForecastFiltroSemVenda
-              mostrar={mostrarSemVenda}
+            <ForecastFiltrosMenu
+              ocultas={ocultas}
+              onAlternarOcultas={alternarOcultas}
+              mostrarSemVenda={mostrarSemVenda}
               ocultaveis={ocultaveis}
-              onAlternar={() => onMostrarSemVenda(!mostrarSemVenda)}
+              onAlternarSemVenda={() => onMostrarSemVenda(!mostrarSemVenda)}
             />
-          </div>
-        </div>
-        <div className="fc-legenda">
-          <span>Status da compra</span>
-          {STATUS_ORDEM.map((s) => (
-            <span key={s} className="fc-legenda__item">
-              <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
-              {STATUS_ROTULO[s]}
+            <ForecastFiltroSemVenda mostrar={mostrarSemVenda} ocultaveis={ocultaveis} />
+            <InfoPopover
+              label="Legenda do status da compra"
+              tone="info"
+              className="fc-legenda__icone"
+              testId="fc-legenda-botao"
+              trigger={<Icon name="info" size={16} />}
+            >
+              <strong>Status da compra</strong>
+              <ul className="fc-legenda__lista">
+                {STATUS_ORDEM.map((s) => (
+                  <li key={s} className="fc-legenda__item">
+                    <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
+                    {STATUS_ROTULO[s]}
+                  </li>
+                ))}
+              </ul>
+            </InfoPopover>
+            <span className="fc-legenda__total">
+              {visiveis.length} de {detail.linhas.length} produtos
             </span>
-          ))}
-          <span className="fc-legenda__total">
-            {visiveis.length} de {detail.linhas.length} produtos
-          </span>
+          </div>
         </div>
         {decisoes.isLoading && (
           <p className="fcad-aviso" role="status">

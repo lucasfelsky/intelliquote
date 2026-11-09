@@ -23,6 +23,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
+import { chaveDoFiltro } from '@/test/forecastFiltros';
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
@@ -405,7 +406,7 @@ describe('Forecast', () => {
     expect(screen.queryByRole('columnheader', { name: 'EMB.1–7' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'M1' })).toBeNull();
     expect(screen.getByRole('columnheader', { name: 'M4' })).toBeTruthy();
-    const chave = screen.getByRole('switch', { name: 'Colunas ocultas da planilha' });
+    const chave = chaveDoFiltro('Colunas ocultas da planilha');
     expect((chave)?.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(chave);
     expect((chave)?.getAttribute('aria-checked')).toBe('true');
@@ -475,7 +476,7 @@ describe('Forecast', () => {
     expect(await screen.findByText('Cálculo idêntico ao da planilha')).toBeTruthy();
     expect(nomesDosItens()).toEqual(['PRODUTO A', 'PRODUTO B', 'PRODUTO C']);
     expect(screen.queryByText('Fixo')).toBeNull();
-    fireEvent.click(screen.getByRole('switch', { name: 'Colunas ocultas da planilha' }));
+    fireEvent.click(chaveDoFiltro('Colunas ocultas da planilha'));
     expect(screen.getByRole('columnheader', { name: 'M1' })).toBeTruthy();
   });
 });

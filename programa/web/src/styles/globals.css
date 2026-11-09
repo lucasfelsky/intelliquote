@@ -14262,3 +14262,37 @@ i.fc-status--preco { background: var(--info); }
 }
 /* Texto longo nunca vaza do balao de avisos. */
 .fc-avisos__item > div { min-width: 0; overflow-wrap: anywhere; }
+/* Forecast, Painel: botao "Filtros" com balao das duas chaves, icone de legenda e selo de relogio (refino visual, etapa 5). */
+.fc-filtros-menu { position: relative; }
+.fc-pagina .fc-filtros-menu__botao {
+  display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 40px; padding: 0 14px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: transparent; color: var(--ink-soft);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.fc-pagina .fc-filtros-menu__botao:hover { background: var(--hover-tint); }
+.fc-pagina .fc-filtros-menu__botao[aria-expanded="true"] { border-color: var(--primary-700); background: var(--primary-50); color: var(--primary-700); }
+.fc-pagina .fc-filtros-menu__botao:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); }
+.fc-pagina .fc-filtro__conta.fc-filtros-menu__conta { padding: 1px 7px; background: var(--primary-700); color: var(--on-strong); }
+.fc-filtros-menu__painel {
+  position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
+  width: 360px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface); box-shadow: var(--shadow-popout); color: var(--ink); text-align: left;
+}
+.fc-filtros-menu__painel .fc-chave { width: 100%; justify-content: flex-start; height: auto; }
+.fc-filtros-menu__painel .fc-chave:hover { background: var(--hover-tint); }
+.fc-filtros-menu__rotulo { display: inline-flex; align-items: center; gap: 6px; flex: 1; min-width: 0; text-align: left; }
+.fc-filtros-menu__rotulo svg { flex: none; color: var(--ink-soft); }
+.fc-filtros-menu__painel .fc-filtro__conta { margin-left: auto; }
+.fc-legenda__icone { flex: none; }
+.fc-legenda__lista { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.fcsv-selo { display: inline-flex; align-items: center; vertical-align: middle; padding: 0 5px; line-height: 16px; }
+@media (max-width: 640px) {
+  .fc-filtros-menu { position: static; }
+  .fc-filtros-menu__painel { left: 16px; right: 16px; width: auto; max-width: none; }
+}
+@media print {
+  .fc-filtros-menu, .fc-legenda__icone { display: none !important; }
+  .fcsv-selo { display: inline-block; }
+  .fcsv-selo svg { display: none; }
+  .fcsv-selo .sr-only { position: static; width: auto; height: auto; margin: 0; clip: auto; overflow: visible; white-space: nowrap; }
+}
