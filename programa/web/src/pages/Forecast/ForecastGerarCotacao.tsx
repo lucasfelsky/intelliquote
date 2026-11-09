@@ -2,6 +2,7 @@ import { createContext, useContext, useId, useMemo, type ReactNode } from 'react
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Icon } from '@/components/icons';
+import { InfoPopover } from '@/components/InfoPopover';
 import type { ForecastItemRelatorio } from '@/services/forecast';
 import { forecastDecisoesKeys, listForecastDecisoes } from '@/services/forecastDecisoes';
 import {
@@ -102,6 +103,12 @@ function Botao({ item, productId, ctx }: BotaoProps) {
         <span id={idMotivo} className="fgc-motivo fcr-so-leitor">
           {motivo}
         </span>
+      )}
+      {/* Motivo visivel para quem usa teclado ou toque sem leitor de tela. */}
+      {motivo && (
+        <InfoPopover label="Por que não dá para gerar a cotação" tone="warning" trigger={<Icon name="info" size={14} />}>
+          {motivo}
+        </InfoPopover>
       )}
     </div>
   );

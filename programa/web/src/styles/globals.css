@@ -5444,7 +5444,7 @@ dialog.modal-dialog[open] {
   animation: rf-cmp-pop var(--rf-dur-base) var(--rf-ease-out) both;
 }
 .info-popover--info { border-color: var(--rf-border); }
-.info-popover--largo { width: 460px; max-height: min(70vh, 520px); overflow-y: auto; }
+.info-popover--largo { width: 460px; max-width: calc(100vw - 16px); }
 .cmp-popover__titulo {
   display: flex;
   align-items: center;
@@ -13385,7 +13385,7 @@ i.fc-status--preco { background: var(--info); }
 @media print {
   body:has(.fcr-resumo) #root { page: fcr-paisagem; }
   html:has(.fcr-resumo), body:has(.fcr-resumo), body:has(.fcr-resumo) #root { height: auto; }
-  body:has(.fcr-resumo) :is(.sidebar, .topbar, .page-header__actions, .fc-visoes, .alert--success, .fcr-acoes, .fcr-acoes__dica, .fcr-acoes__ok, .fcr-regra) { display: none !important; }
+  body:has(.fcr-resumo) :is(.sidebar, .topbar, .page-header__actions > :not(.fc-avisos), .fc-visoes, .alert--success, .fcr-acoes, .fcr-acoes__dica, .fcr-acoes__ok, .fcr-regra) { display: none !important; }
   body:has(.fcr-resumo) .app-shell { display: block; min-height: 0; background: var(--paper); }
   body:has(.fcr-resumo) .app-shell__content { padding: 0; max-width: none; }
   .fcr-resumo, .fcr-grupo { overflow: visible; box-shadow: none; }
@@ -14105,7 +14105,7 @@ i.fc-status--preco { background: var(--info); }
   background: var(--danger-strong); color: var(--on-strong);
 }
 .fc-avisos__botao--atencao .fc-avisos__conta { background: var(--warning-strong); }
-.fc-avisos__botao--info .fc-avisos__conta { background: var(--info); }
+.fc-avisos__botao--info .fc-avisos__conta { background: var(--info); color: var(--surface); }
 .fc-avisos__painel {
   position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; box-sizing: border-box;
   width: 400px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--border); border-radius: 14px;
@@ -14126,6 +14126,8 @@ i.fc-status--preco { background: var(--info); }
   .fc-avisos__papel { margin: 6px 0 0; padding-left: 18px; font-size: 12px; }
 }
 @media (max-width: 640px) {
+  /* o balao ancora no cabecalho (avisos) e na barra de filtros (Filtros): sem ancestral posicionado ele cairia no fim da pagina */
+  .fc-pagina > .page-header { position: relative; }
   .fc-avisos { position: static; }
   .fc-avisos__painel { left: 16px; right: 16px; width: auto; max-width: none; }
 }
@@ -14264,6 +14266,7 @@ i.fc-status--preco { background: var(--info); }
 .fc-avisos__item > div { min-width: 0; overflow-wrap: anywhere; }
 /* Forecast, Painel: botao "Filtros" com balao das duas chaves, icone de legenda e selo de relogio (refino visual, etapa 5). */
 .fc-filtros-menu { position: relative; }
+.fc-card:has(.fc-filtros-menu__painel) { overflow: visible; }
 .fc-pagina .fc-filtros-menu__botao {
   display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; min-height: 40px; padding: 0 14px;
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: transparent; color: var(--ink-soft);
@@ -14287,6 +14290,7 @@ i.fc-status--preco { background: var(--info); }
 .fc-legenda__lista { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
 .fcsv-selo { display: inline-flex; align-items: center; vertical-align: middle; padding: 0 5px; line-height: 16px; }
 @media (max-width: 640px) {
+  .fc-pagina .fc-barra { position: relative; }
   .fc-filtros-menu { position: static; }
   .fc-filtros-menu__painel { left: 16px; right: 16px; width: auto; max-width: none; }
 }
@@ -14294,5 +14298,5 @@ i.fc-status--preco { background: var(--info); }
   .fc-filtros-menu, .fc-legenda__icone { display: none !important; }
   .fcsv-selo { display: inline-block; }
   .fcsv-selo svg { display: none; }
-  .fcsv-selo .sr-only { position: static; width: auto; height: auto; margin: 0; clip: auto; overflow: visible; white-space: nowrap; }
+  .fc-grid .fcsv-selo .sr-only { display: inline !important; position: static; width: auto; height: auto; margin: 0; clip: auto; overflow: visible; white-space: nowrap; }
 }
