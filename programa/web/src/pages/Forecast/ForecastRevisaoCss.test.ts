@@ -52,5 +52,6 @@ describe('Forecast refino visual: guardas de CSS da revisao', () => {
     expect(css).not.toContain('.fc-pagina .fdec-celula { min-width: 0; }');
     expect(css).toContain('.fc-pagina .fdec-linha { flex-wrap: wrap; }');
     expect(css).toContain('.fc-pagina .fdec-conteudo > .fgc-acao { grid-column: 3; margin-top: 0; }');
+    expect(css).toContain('.fc-pagina .fdec-conteudo > .fdec-editor { display: contents; }');
   });
 });

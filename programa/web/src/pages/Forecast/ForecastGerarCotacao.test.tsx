@@ -177,6 +177,10 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     renderRelatorio();
     const b = await botao();
     expect(b.closest('td')?.className).toContain('fdec-celula');
+    // o editor e o Gerar cotacao dividem a grade .fdec-conteudo (o icone fica na linha do Salvar)
+    const grade = b.closest('.fdec-conteudo') as HTMLElement;
+    expect(grade.parentElement).toBe(b.closest('td'));
+    expect(grade.querySelector(':scope > .fgc-acao')).not.toBeNull();
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
   });
 
