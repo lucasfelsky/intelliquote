@@ -350,8 +350,10 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
         </td>
         <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
         <td className="fdec-celula">
-          <ForecastDecisaoCompra item={item} />
-          <ForecastGerarCotacao item={item} />
+          <div className="fdec-conteudo">
+            <ForecastDecisaoCompra item={item} />
+            <ForecastGerarCotacao item={item} />
+          </div>
         </td>
         <td className="fcr-col-limite">
           <span className="fcr-limite">

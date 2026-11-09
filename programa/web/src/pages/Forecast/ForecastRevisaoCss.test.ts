@@ -46,4 +46,11 @@ describe('Forecast refino visual: guardas de CSS da revisao', () => {
     expect(css).toContain('.fcr-sem-consumo__nota[hidden] { display: block !important; }');
     expect(css).toContain('.fcr-tabela tbody[hidden] { display: table-row-group !important; }');
   });
+
+  it('celula Qtd. decidida: largura minima que comporta a linha campo + Usar sugerida (sem vazar sobre a Data-limite) e grade com o Gerar cotacao na linha do Salvar', () => {
+    expect(css).toContain('.fc-pagina .fdec-celula { min-width: 236px; }');
+    expect(css).not.toContain('.fc-pagina .fdec-celula { min-width: 0; }');
+    expect(css).toContain('.fc-pagina .fdec-linha { flex-wrap: wrap; }');
+    expect(css).toContain('.fc-pagina .fdec-conteudo > .fgc-acao { grid-column: 3; margin-top: 0; }');
+  });
 });
