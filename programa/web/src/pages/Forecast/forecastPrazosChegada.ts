@@ -110,6 +110,9 @@ export function textoPadraoSalvo(salvo: { prontidaoDias: number | null; etdDias:
 
 const chegadas = (n: number) => (n === 1 ? '1 chegada' : `${n} chegadas`);
 
+/** `1 dia` / `N dias`. */
+export const dias = (n: number) => (n === 1 ? '1 dia' : `${n} dias`);
+
 /**
  * Linhas curtas da evidencia da sugestao (a celula da tabela nao quebra linha sozinha, entao a tela as separa).
  * Vazio quando nao ha sugestao para o campo (sem chegada medida ou backend antigo).
@@ -120,20 +123,16 @@ export function linhasSugestao(s: ForecastSugestaoPrazoCampo | null | undefined)
   if (s.situacao === 'poucas_amostras') {
     return [`Poucas chegadas no FUP (${e.amostras} de mínimo ${s.minAmostras})`];
   }
+  const atual = `Prazo atual: ${dias(s.atual)}`;
   const valor = `P${e.percentil} ${e.valorPercentil} · mediana ${e.mediana} · ${chegadas(e.amostras)}`;
-  if (s.situacao === 'diferenca_pequena') return ['Prazo atual perto do real', valor];
+  if (s.situacao === 'diferenca_pequena') return ['Prazo atual perto do real', atual, valor];
   return [
-    `Sugestão pelo FUP: ${s.dias} dias (P${e.percentil})`,
+    `Sugestão pelo FUP: ${dias(s.dias ?? e.valorPercentil)} (P${e.percentil})`,
+    atual,
     `mediana ${e.mediana} · ${chegadas(e.amostras)}`,
-    `faixa ${e.min}–${e.max} dias`,
+    e.min === e.max ? `faixa ${dias(e.min)}` : `faixa ${e.min}–${e.max} dias`,
     `ETA FINAL ${dataBr(e.de)} a ${dataBr(e.ate)}`,
   ];
-}
-
-/** Evidencia da sugestao em uma linha so (descricao do campo); `null` quando nao ha sugestao. */
-export function textoSugestao(s: ForecastSugestaoPrazoCampo | null | undefined): string | null {
-  const linhas = linhasSugestao(s);
-  return linhas.length > 0 ? linhas.join(' · ') : null;
 }
 
 /** O botao "Usar N dias" aparece? So para sugestao 'sugerida' e quando o campo ainda nao esta com esse valor. */

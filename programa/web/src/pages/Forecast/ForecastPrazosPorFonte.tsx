@@ -3,6 +3,7 @@ import type { ForecastLinhasKg, ForecastPrazosEstimativa, ForecastSugestaoPrazoC
 import { NOTA_PRAZOS_MODO_TESTE, textoPadroesNaoGravados } from './forecastModoTeste';
 import { inteiroBr } from './forecastPainel';
 import {
+  dias,
   linhasSugestao,
   podeUsarSugestao,
   rascunhoInvalido,
@@ -100,13 +101,13 @@ function CampoDias({ id, rotulo, valor, habilitado, padrao, onMudar, sugestao, r
         <button
           type="button"
           className="ghost-button"
-          aria-label={`Usar a sugestão de ${usar} dias ${rotuloUsar ?? ''}`.trim()}
+          aria-label={`Usar ${dias(usar)} - sugestão P${sugestao?.evidencia.percentil} ${rotuloUsar ?? ''}`.trim()}
           onClick={() => {
             onMudar(String(usar));
             campo.current?.focus();
           }}
         >
-          Usar {usar} dias
+          Usar {dias(usar)}
         </button>
       )}
     </div>

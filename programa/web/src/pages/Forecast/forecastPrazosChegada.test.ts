@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ForecastPrazosEstimativa, ForecastSugestaoPrazoCampo } from '@/services/forecast';
 import {
   corpoDosPrazos,
+  dias,
   linhasSugestao,
   mesclarRascunho,
   podeUsarSugestao,
@@ -10,7 +11,6 @@ import {
   rascunhoInvalido,
   textoPadraoSalvo,
   textoPadroesAlterados,
-  textoSugestao,
   validarDias,
 } from './forecastPrazosChegada';
 
@@ -144,35 +144,48 @@ describe('sugestao pelo historico do FUP', () => {
     },
   });
 
-  it("'sugerida': valor, percentil, mediana, n, faixa e periodo", () => {
+  it('dias: singular para 1, plural nos demais (inclusive 0)', () => {
+    expect(dias(1)).toBe('1 dia');
+    expect(dias(0)).toBe('0 dias');
+    expect(dias(2)).toBe('2 dias');
+    expect(dias(61)).toBe('61 dias');
+  });
+
+  it("'sugerida': valor, percentil, prazo atual, mediana, n, faixa e periodo", () => {
     const s = sugestao('sugerida', 61);
     expect(linhasSugestao(s)).toEqual([
       'Sugestão pelo FUP: 61 dias (P75)',
+      'Prazo atual: 35 dias',
       'mediana 58 · 79 chegadas',
       'faixa 4–91 dias',
       'ETA FINAL 03/11/2033 a 31/10/2034',
     ]);
-    expect(textoSugestao(s)).toBe(
-      'Sugestão pelo FUP: 61 dias (P75) · mediana 58 · 79 chegadas · faixa 4–91 dias · ETA FINAL 03/11/2033 a 31/10/2034',
-    );
   });
 
-  it("'sugerida' com 1 chegada usa o singular (e o rotulo do percentil segue o backend)", () => {
-    expect(textoSugestao(sugestao('sugerida', 50, { amostras: 1, percentil: 50 }))).toContain('(P50) · mediana 58 · 1 chegada ·');
+  it("'sugerida' usa o singular (1 dia, 1 chegada, faixa de um valor so) e o rotulo do percentil segue o backend", () => {
+    const s = { ...sugestao('sugerida', 1, { amostras: 1, percentil: 50, min: 1, max: 1 }), atual: 1 };
+    expect(linhasSugestao(s)).toEqual([
+      'Sugestão pelo FUP: 1 dia (P50)',
+      'Prazo atual: 1 dia',
+      'mediana 58 · 1 chegada',
+      'faixa 1 dia',
+      'ETA FINAL 03/11/2033 a 31/10/2034',
+    ]);
+    expect(linhasSugestao(sugestao('sugerida', 5, { min: 5, max: 5 }))).toContain('faixa 5 dias');
   });
 
-  it("'diferenca_pequena': prazo atual perto do real, com a evidencia", () => {
+  it("'diferenca_pequena': prazo atual perto do real, com o prazo atual e a evidencia", () => {
     const s = sugestao('diferenca_pequena', 37, { valorPercentil: 37, mediana: 36, amostras: 20 });
-    expect(textoSugestao(s)).toBe('Prazo atual perto do real · P75 37 · mediana 36 · 20 chegadas');
+    expect(linhasSugestao(s)).toEqual(['Prazo atual perto do real', 'Prazo atual: 35 dias', 'P75 37 · mediana 36 · 20 chegadas']);
+    expect(linhasSugestao({ ...s, atual: 1 })).toContain('Prazo atual: 1 dia');
   });
 
   it("'poucas_amostras': quantas chegadas e o minimo", () => {
-    expect(textoSugestao(sugestao('poucas_amostras', null, { amostras: 9 }))).toBe('Poucas chegadas no FUP (9 de mínimo 10)');
+    expect(linhasSugestao(sugestao('poucas_amostras', null, { amostras: 9 }))).toEqual(['Poucas chegadas no FUP (9 de mínimo 10)']);
   });
 
   it('sem sugestao (backend antigo ou sem chegada medida): nada', () => {
-    expect(textoSugestao(null)).toBeNull();
-    expect(textoSugestao(undefined)).toBeNull();
+    expect(linhasSugestao(null)).toEqual([]);
     expect(linhasSugestao(undefined)).toEqual([]);
   });
 

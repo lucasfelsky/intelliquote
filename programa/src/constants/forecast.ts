@@ -175,8 +175,8 @@ export const FORECAST_PRAZO_REAL_MIN_CHEGADAS = 3;
 // --- Sugestao do prazo de chegada por fonte (prontidao / ETD -> ETA FINAL) ---
 // A sugestao nunca e gravada sozinha: so preenche o rascunho da tabela de prazos (Recalcular e Confirmar seguem
 // obrigatorios). Evidencia mostrada junto: n, mediana, faixa e periodo.
-// Percentil (0..1, nearest-rank) do valor SUGERIDO. 0.75: no teste com dados reais acertou o mes de chegada colocado
-// a mao com mais frequencia que a mediana (0.5) e que o padrao de 35 dias. Trocavel aqui.
+// Percentil (0..1, nearest-rank) do valor SUGERIDO. 0.75: escolhido pelo dono do negocio em 06/11/2026 por reproduzir
+// melhor a data de chegada que o Comex estima a mao. Trocavel aqui.
 export const FORECAST_PRAZO_SUGESTAO_PERCENTIL = 0.75;
 // Menos chegadas medidas que isso na fonte: so a evidencia, sem sugestao.
 export const FORECAST_PRAZO_SUGESTAO_MIN_AMOSTRAS = 10;

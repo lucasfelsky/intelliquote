@@ -200,7 +200,7 @@ describe('ForecastPrazosPorFonte', () => {
       const base = prazos();
       return prazos({ fontes: [{ ...base.fontes[0]!, sugestao }, base.fontes[1]!] });
     };
-    const rotuloUsar = 'Usar a sugestão de 61 dias da DATA PRONTIDÃO até a chegada - FONTE 001';
+    const rotuloUsar = 'Usar 61 dias - sugestão P75 da DATA PRONTIDÃO até a chegada - FONTE 001';
     const fetchSpy = vi.fn();
 
     afterEach(() => vi.unstubAllGlobals());
@@ -208,11 +208,25 @@ describe('ForecastPrazosPorFonte', () => {
     it('mostra a evidencia (valor, P75, mediana, n, faixa e periodo) e o botao "Usar 61 dias"', () => {
       render(<Harness inicial={comSugestao({ prontidao: sugerida(), etd: null })} />);
       expect(screen.getByText('Sugestão pelo FUP: 61 dias (P75)')).toBeTruthy();
+      expect(screen.getByText('Prazo atual: 35 dias')).toBeTruthy();
       expect(screen.getByText('mediana 58 · 79 chegadas')).toBeTruthy();
       expect(screen.getByText('faixa 4–91 dias')).toBeTruthy();
       expect(screen.getByText('ETA FINAL 03/11/2033 a 31/10/2034')).toBeTruthy();
       expect(screen.getByRole('button', { name: rotuloUsar }).textContent).toBe('Usar 61 dias');
       expect(screen.queryByText('dispersão alta')).toBeNull();
+    });
+
+    it('o nome acessivel do botao comeca com o rotulo visivel (WCAG 2.5.3)', () => {
+      render(<Harness inicial={comSugestao({ prontidao: sugerida(), etd: null })} />);
+      const botao = screen.getByRole('button', { name: rotuloUsar });
+      expect(botao.getAttribute('aria-label')!.startsWith(botao.textContent!)).toBe(true);
+    });
+
+    it('singular: botao "Usar 1 dia" e prazo atual de 1 dia', () => {
+      render(<Harness inicial={comSugestao({ prontidao: sugerida({ dias: 1, atual: 1 }, { valorPercentil: 1, min: 1, max: 1 }), etd: null })} />);
+      expect(screen.getByRole('button', { name: /^Usar 1 dia - sugestão P75 / }).textContent).toBe('Usar 1 dia');
+      expect(screen.getByText('Prazo atual: 1 dia')).toBeTruthy();
+      expect(screen.getByText('faixa 1 dia')).toBeTruthy();
     });
 
     it('o clique so muda o campo: pede recalculo, nao chama onRecalcular nem fetch e leva o foco ao campo', () => {
@@ -243,7 +257,7 @@ describe('ForecastPrazosPorFonte', () => {
 
     it('ETD tem o proprio botao, com o rotulo do ETD', () => {
       render(<Harness inicial={comSugestao({ prontidao: null, etd: sugerida({ dias: 41 }, { valorPercentil: 41 }) })} />);
-      fireEvent.click(screen.getByRole('button', { name: 'Usar a sugestão de 41 dias do ETD até a chegada - FONTE 001' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Usar 41 dias - sugestão P75 do ETD até a chegada - FONTE 001' }));
       expect(campo('Dias do ETD até a chegada - FONTE 001').value).toBe('41');
       expect(campo('Dias da DATA PRONTIDÃO até a chegada - FONTE 001').value).toBe('35');
     });
@@ -260,7 +274,7 @@ describe('ForecastPrazosPorFonte', () => {
       expect(screen.getByText('dispersão alta').className).toContain('badge--warning');
       expect(screen.getByText('faixa 30–200 dias')).toBeTruthy();
       expect(screen.getByText('mediana 66 · 79 chegadas')).toBeTruthy();
-      expect(screen.getByRole('button', { name: /Usar a sugestão de 122 dias/ })).toBeTruthy();
+      expect(screen.getByRole('button', { name: /^Usar 122 dias - sugestão P75/ })).toBeTruthy();
     });
 
     it('poucas amostras e diferenca pequena: so evidencia, sem botao', () => {
@@ -275,6 +289,7 @@ describe('ForecastPrazosPorFonte', () => {
       expect(screen.getByText('Poucas chegadas no FUP (9 de mínimo 10)')).toBeTruthy();
       expect(screen.getByText('Prazo atual perto do real')).toBeTruthy();
       expect(screen.getByText('P75 37 · mediana 36 · 20 chegadas')).toBeTruthy();
+      expect(screen.getAllByText('Prazo atual: 35 dias')).toHaveLength(1);
       expect(screen.queryByRole('button', { name: /Usar/ })).toBeNull();
       expect(screen.queryByText(/Sugestão pelo FUP/)).toBeNull();
     });
