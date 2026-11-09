@@ -69,6 +69,7 @@ export const ICONS = {
   layers: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
   ellipsis: 'M5 12h.01M12 12h.01M19 12h.01',
   'file-x': 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13l4 5M13 13l-4 5',
+  printer: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z',
 } as const;
 
 // Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.

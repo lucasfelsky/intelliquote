@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ForecastDadosDoGrupo, ForecastItemCobertoPorGrupo } from '@/services/forecast';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
@@ -260,6 +260,7 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     expect(await screen.findByText('1 item coberto por grupo de equivalência')).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(paragrafoGruposDeEquivalencia())).toBeTruthy();
   });
 
@@ -282,6 +283,7 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     await screen.findByText('1 item em 1 fonte');
     expect(screen.queryByText(/Cobertos pelo grupo de equivalência/)).toBeNull();
     expect(screen.queryByText(/item coberto por grupo/)).toBeNull();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(paragrafoGruposDeEquivalencia())).toBeTruthy();
   });
 });

@@ -301,6 +301,7 @@ describe('ForecastRelatorioCompras - pallet fechado (PR 6e)', () => {
     mockApi([comPallet()]);
     renderRelatorio();
     await screen.findByText('56 × 25 kg (código C0001)');
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(screen.getByText(/O pallet é uma opção de compra informada pelo cadastro, não uma regra, e pode não ser múltiplo da embalagem/)).toBeTruthy();
   });
 });

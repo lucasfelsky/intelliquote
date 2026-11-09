@@ -115,7 +115,7 @@ describe('ForecastRelatorioCompras', () => {
     expect(screen.getByText('2 sem embalagem cadastrada')).toBeTruthy();
     expect(screen.getByText('1 com mais de uma embalagem')).toBeTruthy();
     expect(screen.getByText('Fora do relatório: 4 sem lead time, 5 sem consumo e sem falta')).toBeTruthy();
-    expect(screen.getByText('Como as datas são calculadas')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Como as datas são calculadas' })).toBeTruthy();
   });
 
   it('FZ4: "N sem cadastro" junto das contagens "fora" (so quando > 0), separado de "sem lead time"', async () => {
@@ -284,6 +284,7 @@ describe('ForecastRelatorioCompras', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(
       screen.getByText(/Com mais de uma embalagem, mostra também a quantidade arredondada para cada uma/),
     ).toBeTruthy();
@@ -546,6 +547,7 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     get.mockResolvedValue({ data: com() });
     const { unmount } = renderRelatorio();
     expect(await screen.findByText('2 itens usam média sem meses atípicos')).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     expect(
       screen.getByText(
         'Meses marcados como venda atípica ficam fora das médias trimestral e semestral (e do consumo do mês, se marcado o mês atual). A conferência com a planilha usa a regra original.',
@@ -602,6 +604,7 @@ describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
     get.mockResolvedValue({ data: comPedidos() });
     renderComPermissao(false);
     expect(await screen.findByText('1 demanda do comercial aberta (1.100 kg sugeridos)')).toBeTruthy();
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Como as datas são calculadas' }));
     const secao = screen.getByRole('region', { name: 'Demanda do comercial' });
     expect(within(secao).getByText('Demanda do comercial · 1 pedido aberto')).toBeTruthy();
     expect(within(secao).getByText('Além do horizonte: soma ao Forecast')).toBeTruthy();
