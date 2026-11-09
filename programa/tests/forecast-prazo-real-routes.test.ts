@@ -160,7 +160,35 @@ describe('GET /forecast/sources/prazo-real - conteudo', () => {
     prismaMock.forecastSnapshot.findFirst.mockResolvedValue(snapshot({ prazosFup: [amostra('TST0001', 60, 30)] }));
     const cookies = await loginAs('admin');
     const response = await request(app).get(PATH).set('Cookie', cookies);
-    expect(response.body.data.fontes[1].real).toEqual({ po: null, etd: null });
+    expect(response.body.data.fontes[1].real).toEqual({ po: null, etd: null, prontidao: null });
+  });
+
+  it('snapshot antigo (amostra sem prontidaoDias) segue valido: prontidao null', async () => {
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue(snapshot({ prazosFup: [amostra('TST0001', 60, 30)] }));
+    const cookies = await loginAs('admin');
+    const response = await request(app).get(PATH).set('Cookie', cookies);
+    expect(response.body.data.disponivel).toBe(true);
+    expect(response.body.data.fontes[0].real.po).toMatchObject({ chegadas: 1, media: 60 });
+    expect(response.body.data.fontes[0].real.prontidao).toBeNull();
+  });
+
+  it('prontidaoDias: numero e null valem; texto ou objeto descarta so aquela amostra', async () => {
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue(
+      snapshot({
+        prazosFup: [
+          { ...amostra('TST0001', 60, 30), prontidaoDias: 50 },
+          { ...amostra('TST0001', 70, 35), prontidaoDias: null },
+          { ...amostra('TST0001', 80, 40), prontidaoDias: '50' },
+          { ...amostra('TST0001', 90, 45), prontidaoDias: {} },
+        ],
+      }),
+    );
+    const cookies = await loginAs('admin');
+    const response = await request(app).get(PATH).set('Cookie', cookies);
+    expect(response.status).toBe(200);
+    const real = response.body.data.fontes[0].real;
+    expect(real.po.chegadas).toBe(2);
+    expect(real.prontidao).toEqual({ chegadas: 1, media: 50, mediana: 50, min: 50, max: 50, poucasChegadas: true });
   });
 
   it('prazosFup vazio e historico valido (disponivel, tudo null)', async () => {

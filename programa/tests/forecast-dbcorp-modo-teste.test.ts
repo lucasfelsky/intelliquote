@@ -94,6 +94,7 @@ function syntheticParsed() {
     ...resumo(5),
     estimadasPorEtd: { linhas: 2 },
     estimadasPorProntidao: { linhas: 1 },
+    prontidaoVencida: { linhas: 1 },
     excluidas: { atracadas: { linhas: 1 }, etaFinalPreenchida: { linhas: 3 } },
     prontidaoNaoReconhecida: { linhas: 0 },
     semData: { linhas: 4 },

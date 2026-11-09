@@ -85,7 +85,8 @@ function ehAmostraPrazoFup(v: unknown): v is AmostraPrazoFup {
     typeof a.etaFinal === 'string' &&
     isValidDateKey(a.etaFinal) &&
     dias(a.poDias) &&
-    dias(a.etdDias)
+    dias(a.etdDias) &&
+    (a.prontidaoDias === undefined || dias(a.prontidaoDias))
   );
 }
 
@@ -309,7 +310,7 @@ export class ForecastSourceService {
         leadTimeDays: s.leadTimeDays,
         clearanceDays: s.clearanceDays,
         etdDiasUsado: s.arrivalFromEtdDays ?? FORECAST_DBCORP_ETA_POR_ETD_DIAS,
-        real: agrupado ? (agrupado.porFonte.get(s.id) ?? { po: null, etd: null }) : null,
+        real: agrupado ? (agrupado.porFonte.get(s.id) ?? { po: null, etd: null, prontidao: null }) : null,
       })),
       semFonte: agrupado ? agrupado.semFonte : { chegadas: 0 },
     };

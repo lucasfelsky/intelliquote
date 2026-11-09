@@ -4,7 +4,9 @@
 import type {
   ForecastPrazoEstimativaBody,
   ForecastPrazosEstimativa,
+  ForecastSugestaoPrazoCampo,
 } from '@/services/forecast';
+import { dataBr } from './forecastPainel';
 
 /** Mesmo limite do backend (`FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS`). */
 export const PRAZO_MAX_DIAS = 365;
@@ -104,4 +106,36 @@ export function textoPadraoSalvo(salvo: { prontidaoDias: number | null; etdDias:
     salvo.etdDias !== null ? `ETD ${salvo.etdDias}` : null,
   ].filter((p): p is string => p !== null);
   return partes.length > 0 ? `${partes.join(' · ')} dias` : '—';
+}
+
+const chegadas = (n: number) => (n === 1 ? '1 chegada' : `${n} chegadas`);
+
+/** `1 dia` / `N dias`. */
+export const dias = (n: number) => (n === 1 ? '1 dia' : `${n} dias`);
+
+/**
+ * Linhas curtas da evidencia da sugestao (a celula da tabela nao quebra linha sozinha, entao a tela as separa).
+ * Vazio quando nao ha sugestao para o campo (sem chegada medida ou backend antigo).
+ */
+export function linhasSugestao(s: ForecastSugestaoPrazoCampo | null | undefined): string[] {
+  if (!s) return [];
+  const e = s.evidencia;
+  if (s.situacao === 'poucas_amostras') {
+    return [`Poucas chegadas no FUP (${e.amostras} de mínimo ${s.minAmostras})`];
+  }
+  const atual = `Prazo atual: ${dias(s.atual)}`;
+  const valor = `P${e.percentil} ${e.valorPercentil} · mediana ${e.mediana} · ${chegadas(e.amostras)}`;
+  if (s.situacao === 'diferenca_pequena') return ['Prazo atual perto do real', atual, valor];
+  return [
+    `Sugestão pelo FUP: ${dias(s.dias ?? e.valorPercentil)} (P${e.percentil})`,
+    atual,
+    `mediana ${e.mediana} · ${chegadas(e.amostras)}`,
+    e.min === e.max ? `faixa ${dias(e.min)}` : `faixa ${e.min}–${e.max} dias`,
+    `ETA FINAL ${dataBr(e.de)} a ${dataBr(e.ate)}`,
+  ];
+}
+
+/** O botao "Usar N dias" aparece? So para sugestao 'sugerida' e quando o campo ainda nao esta com esse valor. */
+export function podeUsarSugestao(texto: string, s: ForecastSugestaoPrazoCampo | null | undefined): boolean {
+  return s?.situacao === 'sugerida' && s.dias !== null && texto.trim() !== String(s.dias);
 }

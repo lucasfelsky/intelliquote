@@ -151,7 +151,7 @@ describe('F13-E: Fontes e lead time', () => {
     expect(within(leadTime).getByRole('button', { name: 'Editar lead time de FONTE A' })).toBeTruthy();
     expect(leadTime.textContent).toContain('60 dias');
     expect(screen.queryByRole('columnheader', { name: 'Ação' })).toBeNull();
-    expect(screen.getAllByRole('columnheader')).toHaveLength(8);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(9); // + Prontidão → ETA FINAL (real)
     expect(screen.getByRole('table', { name: 'Lead time cadastrado e prazo real por fonte' }).className).toBe('table');
   });
 

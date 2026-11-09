@@ -51,12 +51,15 @@ export interface Entradas {
   saldoPedVenda?: Lancamento[];
 }
 
-// Amostra de prazo de uma chegada do FUP (linha com ETA FINAL): dias DATA PO -> ETA FINAL e ETD -> ETA FINAL.
+// Amostra de prazo de uma chegada do FUP (linha com ETA FINAL): dias DATA PO -> ETA FINAL, ETD -> ETA FINAL e
+// DATA PRONTIDAO -> ETA FINAL.
 export interface AmostraPrazoFup {
   codigo: string;
   etaFinal: string; // yyyy-mm-dd
   poDias: number | null;
   etdDias: number | null;
+  // Opcional: quinzena gravada antes da sugestao de prazo nao tem a chave.
+  prontidaoDias?: number | null;
 }
 
 export interface Quinzena {

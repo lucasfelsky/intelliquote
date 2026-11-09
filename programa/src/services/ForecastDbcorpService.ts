@@ -31,7 +31,6 @@ import {
   resumirPrazosEstimativa,
   type MudancaDePrazo,
   type ResultadoRegrasFup,
-  type ResumoPrazosEstimativa,
 } from '../utils/forecastDbcorpRegras';
 import { mesesHistorico, rotulosDaQuinzena, type RotulosDaQuinzena } from '../utils/forecastMonths';
 import {
@@ -40,7 +39,14 @@ import {
   linhaDePendente,
   type PendentesResultado,
 } from '../utils/forecastPendentes';
-import { amostrasDePrazo } from '../utils/forecastPrazoReal';
+import {
+  amostrasDePrazo,
+  anexarSugestoes,
+  contarFontesComSugestao,
+  contarMudancasIguaisASugestao,
+  sugerirPrazosChegada,
+  type ResumoPrazosComSugestao,
+} from '../utils/forecastPrazoReal';
 import type { Entradas, Quinzena } from '../utils/forecastTypes';
 import { normalizeProductCode } from '../utils/forecastWorkbook';
 import type { ForecastDbcorpConfirmInput, ForecastDbcorpPreviewInput } from '../validators/forecast';
@@ -112,7 +118,7 @@ interface BuiltQuinzena {
   pendentesNaQuinzena: PendentesNaQuinzena;
   // FUP calculado com o prazo de cada fonte (o de `parsed.fup` usa so o padrao). null = cadastro vazio.
   fup: ResultadoRegrasFup | null;
-  prazosEstimativa: ResumoPrazosEstimativa | null;
+  prazosEstimativa: ResumoPrazosComSugestao | null;
   // Fontes do corpo cujo prazo usado vira o novo padrao no confirm.
   mudancasDePrazo: MudancaDePrazo[];
   avisos: string[];
@@ -130,8 +136,9 @@ export interface ForecastDbcorpSummary {
   pendentes: PendentesResultado | null;
   // Linhas pendentes que a quinzena ganhou (por situacao); zeros quando nao ha.
   pendentesNaQuinzena: PendentesNaQuinzena;
-  // Prazo das chegadas estimadas por fonte (PR 5A); null quando ha erro de leitura ou cadastro vazio.
-  prazosEstimativa: ResumoPrazosEstimativa | null;
+  // Prazo das chegadas estimadas por fonte (PR 5A), com a sugestao pelo historico do FUP em cada fonte (so informacao:
+  // nada e gravado sem o Recalcular e o Confirmar); null quando ha erro de leitura ou cadastro vazio.
+  prazosEstimativa: ResumoPrazosComSugestao | null;
   avisos: string[];
   erros: string[];
 }
@@ -360,13 +367,18 @@ export class ForecastDbcorpService {
       porFonte,
       sourceIds: editados.map((e) => e.sourceId),
     });
-    built.prazosEstimativa = resumirPrazosEstimativa({
-      padrao: PRAZO_CHEGADA_PADRAO,
-      fontes,
-      porFonte,
-      estimadasPorFonte: fup.estimadasPorFonte,
-      padroesAlterados: built.mudancasDePrazo.length,
-    });
+    // Chegadas reais do FUP corrente: congeladas no snapshot e base da sugestao de prazo (so informacao).
+    const amostras = amostrasDePrazo(parsed.fup.fupLinhas, baseDate);
+    built.prazosEstimativa = anexarSugestoes(
+      resumirPrazosEstimativa({
+        padrao: PRAZO_CHEGADA_PADRAO,
+        fontes,
+        porFonte,
+        estimadasPorFonte: fup.estimadasPorFonte,
+        padroesAlterados: built.mudancasDePrazo.length,
+      }),
+      sugerirPrazosChegada({ amostras, fonteDoCodigo, fontes, padrao: PRAZO_CHEGADA_PADRAO, baseDate }),
+    );
 
     const entradas: Entradas = {
       estoque: parsed.saldo.linhas,
@@ -379,7 +391,7 @@ export class ForecastDbcorpService {
       margem: parsed.margem?.linhas ?? [],
       clientesAtivos: parsed.clientesAtivos?.linhas ?? [],
       comprasEmAberto: parsed.fup.comprasEmAberto,
-      prazosFup: amostrasDePrazo(parsed.fup.fupLinhas, baseDate),
+      prazosFup: amostras,
       ...(parsed.saldo.saldoPedVenda !== undefined ? { saldoPedVenda: parsed.saldo.saldoPedVenda } : {}),
     };
 
@@ -626,6 +638,7 @@ export class ForecastDbcorpService {
                 regra: FORECAST_DBCORP_FUP_REGRA,
                 estimadasEtd: fup.estimadasPorEtd.linhas,
                 estimadasProntidao: fup.estimadasPorProntidao.linhas,
+                prontidaoVencida: fup.prontidaoVencida.linhas,
                 excluidasAtracadas: fup.excluidas.atracadas.linhas,
                 excluidasEtaFinal: fup.excluidas.etaFinalPreenchida.linhas,
                 prontidaoNaoReconhecida: fup.prontidaoNaoReconhecida.linhas,
@@ -636,6 +649,10 @@ export class ForecastDbcorpService {
                     f.usado.etdDias !== PRAZO_CHEGADA_PADRAO.etdDias,
                 ).length,
                 padroesAlterados: built.mudancasDePrazo.length,
+                // Sugestao pelo historico do FUP (so contagens): fontes da tabela com alguma sugestao e padroes
+                // gravados iguais ao valor sugerido.
+                fontesComSugestao: prazos ? contarFontesComSugestao(prazos) : 0,
+                padroesIguaisASugestao: prazos ? contarMudancasIguaisASugestao(built.mudancasDePrazo, prazos) : 0,
               },
               // So booleanos/contagens, e so no modo teste (sem a chave, o metadata fica como na importacao normal).
               ...(modoTeste

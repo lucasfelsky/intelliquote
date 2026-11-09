@@ -172,6 +172,22 @@ export const FORECAST_PRAZO_REAL_MAX_DIAS = 365;
 // Abaixo desse numero de chegadas a media e marcada como "poucas chegadas".
 export const FORECAST_PRAZO_REAL_MIN_CHEGADAS = 3;
 
+// --- Sugestao do prazo de chegada por fonte (prontidao / ETD -> ETA FINAL) ---
+// A sugestao nunca e gravada sozinha: so preenche o rascunho da tabela de prazos (Recalcular e Confirmar seguem
+// obrigatorios). Evidencia mostrada junto: n, mediana, faixa e periodo.
+// Percentil (0..1, nearest-rank) do valor SUGERIDO. 0.75: escolhido pelo dono do negocio em 06/11/2026 por reproduzir
+// melhor a data de chegada que o Comex estima a mao. Trocavel aqui.
+export const FORECAST_PRAZO_SUGESTAO_PERCENTIL = 0.75;
+// Menos chegadas medidas que isso na fonte: so a evidencia, sem sugestao.
+export const FORECAST_PRAZO_SUGESTAO_MIN_AMOSTRAS = 10;
+// Sugestao so aparece se diferir do prazo atual (salvo da fonte, ou o padrao) em pelo menos esses dias.
+export const FORECAST_PRAZO_SUGESTAO_DIFERENCA_MIN_DIAS = 5;
+// Janela da ETA FINAL (base - N dias .. base). Nao pode passar de FORECAST_PRAZO_REAL_JANELA_DIAS.
+export const FORECAST_PRAZO_SUGESTAO_JANELA_DIAS = 365;
+// Dispersao alta: o valor no percentil de sugestao fica pelo menos N dias acima da mediana. A sugestao continua
+// aparecendo (quem decide e a pessoa); a tela so marca a evidencia.
+export const FORECAST_PRAZO_SUGESTAO_DISPERSAO_ALTA_DIAS = 30;
+
 // --- Ocasioes que afetam o lead time (PR 1) ---
 // Vocabularios aqui (nao no validator) porque a util pura forecastOcasioes.ts nao importa zod.
 export const FORECAST_OCASIAO_ESCOPOS = ['global', 'pais', 'fonte'] as const;

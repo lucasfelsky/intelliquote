@@ -1,8 +1,11 @@
 import { useEffect, useId, useRef } from 'react';
-import type { ForecastLinhasKg, ForecastPrazosEstimativa } from '@/services/forecast';
+import type { ForecastLinhasKg, ForecastPrazosEstimativa, ForecastSugestaoPrazoCampo } from '@/services/forecast';
 import { NOTA_PRAZOS_MODO_TESTE, textoPadroesNaoGravados } from './forecastModoTeste';
 import { inteiroBr } from './forecastPainel';
 import {
+  dias,
+  linhasSugestao,
+  podeUsarSugestao,
   rascunhoInvalido,
   prazosMudaram,
   textoPadraoSalvo,
@@ -42,14 +45,25 @@ interface CampoProps {
   habilitado: boolean;
   padrao: number;
   onMudar: (texto: string) => void;
+  /** Sugestao pelo historico do FUP (ausente em backend antigo ou sem chegada medida). So preenche o campo. */
+  sugestao?: ForecastSugestaoPrazoCampo | null;
+  /** Fim do rotulo do botao: o que o campo mede (ex.: `da DATA PRONTIDÃO até a chegada - FONTE`). */
+  rotuloUsar?: string;
 }
 
-function CampoDias({ id, rotulo, valor, habilitado, padrao, onMudar }: CampoProps) {
+function CampoDias({ id, rotulo, valor, habilitado, padrao, onMudar, sugestao, rotuloUsar }: CampoProps) {
+  const campo = useRef<HTMLInputElement>(null);
   if (!habilitado) return <span className="fci-prazo__sem" title="Nenhuma linha estimada por este critério">—</span>;
   const erro = validarDias(valor);
+  const linhas = linhasSugestao(sugestao);
+  const descricoes = [linhas.length > 0 ? `${id}-sugestao` : null, erro ? `${id}-erro` : null].filter(
+    (d): d is string => d !== null,
+  );
+  const usar = sugestao && podeUsarSugestao(valor, sugestao) ? sugestao.dias : null;
   return (
     <div className="fci-prazo__campo">
       <input
+        ref={campo}
         id={id}
         className="input fci-prazo__input"
         type="text"
@@ -59,13 +73,42 @@ function CampoDias({ id, rotulo, valor, habilitado, padrao, onMudar }: CampoProp
         placeholder={String(padrao)}
         aria-label={rotulo}
         aria-invalid={erro ? true : undefined}
-        aria-describedby={erro ? `${id}-erro` : undefined}
+        aria-describedby={descricoes.length > 0 ? descricoes.join(' ') : undefined}
         onChange={(e) => onMudar(e.target.value)}
       />
       {erro && (
         <span id={`${id}-erro`} className="fci-prazo__erro">
           {erro}
         </span>
+      )}
+      {linhas.length > 0 && (
+        <span id={`${id}-sugestao`} className="field-hint">
+          {linhas.map((linha, i) => (
+            <span key={linha}>
+              {i > 0 && <br />}
+              {linha}
+            </span>
+          ))}
+          {sugestao?.evidencia.dispersaoAlta && (
+            <>
+              <br />
+              <span className="badge badge--warning">dispersão alta</span>
+            </>
+          )}
+        </span>
+      )}
+      {usar !== null && (
+        <button
+          type="button"
+          className="ghost-button"
+          aria-label={`Usar ${dias(usar)} - sugestão P${sugestao?.evidencia.percentil} ${rotuloUsar ?? ''}`.trim()}
+          onClick={() => {
+            onMudar(String(usar));
+            campo.current?.focus();
+          }}
+        >
+          Usar {dias(usar)}
+        </button>
       )}
     </div>
   );
@@ -153,6 +196,8 @@ export default function ForecastPrazosPorFonte({
                           habilitado={f.prontidao.linhas > 0}
                           padrao={prazos.padrao.prontidaoDias}
                           onMudar={(texto) => onMudar(f.sourceId, 'prontidao', texto)}
+                          sugestao={f.sugestao?.prontidao}
+                          rotuloUsar={`da DATA PRONTIDÃO até a chegada - ${f.nome}`}
                         />
                       </td>
                       <td data-rotulo="Por ETD">
@@ -166,6 +211,8 @@ export default function ForecastPrazosPorFonte({
                           habilitado={f.etd.linhas > 0}
                           padrao={prazos.padrao.etdDias}
                           onMudar={(texto) => onMudar(f.sourceId, 'etd', texto)}
+                          sugestao={f.sugestao?.etd}
+                          rotuloUsar={`do ETD até a chegada - ${f.nome}`}
                         />
                       </td>
                       <td data-rotulo="Padrão salvo">{textoPadraoSalvo(f.salvo)}</td>
