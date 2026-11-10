@@ -15,6 +15,7 @@ vi.mock('../src/lib/prisma', () => {
     auditLog: { create: vi.fn() },
     forecastSnapshot: { findFirst: vi.fn() },
     forecastPurchaseDecision: { findMany: vi.fn() },
+    quoteRequestItem: { findMany: vi.fn() },
     $transaction: vi.fn(),
   };
 
@@ -35,6 +36,7 @@ const prismaMock = prisma as unknown as {
   auditLog: { create: Mock };
   forecastSnapshot: { findFirst: Mock };
   forecastPurchaseDecision: { findMany: Mock };
+  quoteRequestItem: { findMany: Mock };
   $transaction: Mock;
 };
 
@@ -98,6 +100,8 @@ beforeEach(() => {
     products: [{ linha: 3, productId: 42 }, { linha: 4, productId: 43 }, { linha: 5 }],
   });
   prismaMock.forecastPurchaseDecision.findMany.mockResolvedValue([linha()]);
+  // E4a: sem item de cotacao vinculado ao Forecast por padrao.
+  prismaMock.quoteRequestItem.findMany.mockResolvedValue([]);
   tx.forecastSnapshot.findFirst.mockResolvedValue({ id: 7 });
   tx.forecastPurchaseDecision.findUnique.mockResolvedValue(null);
   tx.forecastPurchaseDecision.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) =>
@@ -123,6 +127,12 @@ describe('GET /forecast/snapshots/:id/decisoes', () => {
       linha({ id: 9, productId: 42 }),
       linha({ id: 11, productId: 43, quantityKg: '0', status: 'po', note: 'NOTA' }),
     ]);
+    prismaMock.quoteRequestItem.findMany.mockResolvedValue([
+      {
+        forecastProductId: 42,
+        quoteRequest: { id: 90, requestCode: 'QR-20261110-ABC123', status: 'open', purchaseOrderSentAt: null, dispatchEvents: [] },
+      },
+    ]);
     const cookies = await loginAs(role);
     const response = await request(app).get(BASE).set('Cookie', cookies);
     expect(response.status).toBe(200);
@@ -141,6 +151,11 @@ describe('GET /forecast/snapshots/:id/decisoes', () => {
           decididaPorId: 1,
           criadaEm: '2099-01-01T12:00:00.000Z',
           atualizadaEm: '2099-01-02T12:00:00.000Z',
+          // E4a (aditivo): item 42 tem cotacao criada e ainda nao enviada.
+          cotacao: { id: 90, requestCode: 'QR-20261110-ABC123', statusCotacao: 'criada' },
+          finalKg: null,
+          finalAt: null,
+          statusDerivado: 'cotacao_criada',
         },
         {
           productId: 43,
@@ -153,6 +168,11 @@ describe('GET /forecast/snapshots/:id/decisoes', () => {
           decididaPorId: 1,
           criadaEm: '2099-01-01T12:00:00.000Z',
           atualizadaEm: '2099-01-02T12:00:00.000Z',
+          // Sem cotacao vinculada: status congelado (itens antigos nao mudam) e Qtd. final vazia.
+          cotacao: null,
+          finalKg: null,
+          finalAt: null,
+          statusDerivado: 'po',
         },
       ],
     });

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { ForecastCotacaoLoteService } from '../services/ForecastCotacaoLoteService';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
 import { ForecastDecisaoCompraService } from '../services/ForecastDecisaoCompraService';
 import { ForecastRascunhoCotacaoService } from '../services/ForecastRascunhoCotacaoService';
@@ -21,6 +22,7 @@ import {
   forecastDemandaComercialQuerySchema,
   forecastDbcorpPreviewSchema,
   forecastCandidatosCotacaoQuerySchema,
+  forecastCotacoesLotePostSchema,
   forecastDecisaoPutSchema,
   forecastRascunhoCotacaoPutSchema,
   forecastEmbalagensPatchSchema,
@@ -442,6 +444,21 @@ export class ForecastController {
       const input = forecastDecisaoPutSchema.parse(req.body);
       const data = await ForecastDecisaoCompraService.gravar(id, productId, input, req.user?.id ?? null);
       return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Cotacoes em lote a partir do Forecast (E4a): uma cotacao por fonte, numa transacao. Admin/comprador (rota).
+  static async postCotacoesLote(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const input = forecastCotacoesLotePostSchema.parse(req.body);
+      const data = await ForecastCotacaoLoteService.criar(id, input, rascunhoUserId(req));
+      return res.status(201).json({ data });
     } catch (error) {
       return sendError(res, error);
     }

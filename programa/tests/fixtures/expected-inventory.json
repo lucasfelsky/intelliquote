@@ -44,6 +44,8 @@
       "CreditSupportService.ts",
       "EmailTemplateService.ts",
       "ExchangeRateService.ts",
+      "ForecastCotacaoLoteService.ts",
+      "ForecastCotacaoVinculoService.ts",
       "ForecastDbcorpService.ts",
       "ForecastDecisaoCompraService.ts",
       "ForecastDemandaComercialService.ts",
@@ -189,7 +191,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 73
+    "migrations": 74
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -346,6 +348,7 @@
     "POST /forecast/products",
     "POST /forecast/products/:id/codigos",
     "POST /forecast/products/:id/reativar",
+    "POST /forecast/snapshots/:id/cotacoes",
     "POST /forwarders",
     "POST /item-families",
     "POST /portal-tokens/:id/regenerate",

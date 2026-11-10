@@ -166,7 +166,7 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
       WHERE table_name = 'ForecastPurchaseDecision'`;
     const col = (nome: string) => cols.find((c) => c.column_name === nome);
     expect(cols.map((c) => c.column_name).sort()).toEqual(
-      ['createdAt', 'decidedById', 'demandKg', 'id', 'manuallyIncluded', 'note', 'productId', 'quantityKg', 'snapshotId', 'status', 'suggestedKg', 'updatedAt'].sort(),
+      ['createdAt', 'decidedById', 'demandKg', 'finalAt', 'finalKg', 'finalQuoteRequestId', 'id', 'manuallyIncluded', 'note', 'productId', 'quantityKg', 'snapshotId', 'status', 'suggestedKg', 'updatedAt'].sort(),
     );
     for (const nome of ['quantityKg', 'suggestedKg', 'demandKg']) {
       expect(Number(col(nome)?.numeric_precision), nome).toBe(18);

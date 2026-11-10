@@ -1,5 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// O arquivo faz dezenas de logins: sobe o limite do rate limit de /auth/login (sem isso os ultimos testes tomam 429).
+vi.hoisted(() => {
+  process.env.AUTH_RATE_LIMIT_MAX = '1000';
+});
+
 vi.mock('../src/mailer/MailerService', () => ({
   sendAndLog: vi.fn(),
   getComexCcList: vi.fn(() => [{ email: 'comex@intelliquote.local' }]),
@@ -8,8 +13,10 @@ vi.mock('../src/mailer/MailerService', () => ({
 
 import request from 'supertest';
 import { app } from '../src/app';
+import { logger } from '../src/lib/logger';
 import { prisma } from '../src/lib/prisma';
 import { getComexCcList, sendAndLog } from '../src/mailer/MailerService';
+import { ForecastCotacaoVinculoService } from '../src/services/ForecastCotacaoVinculoService';
 import { hashPassword } from '../src/utils/password';
 import {
   renderDispatchFromTemplate,
@@ -321,6 +328,103 @@ describe('Dispatch controller', () => {
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.to.email).toBe('john@acme.com');
     expect(call.cc[0].email).toBe('comex@intelliquote.local');
+  });
+
+  // E4a: gancho da Qtd. final do Forecast depois do envio. O service do gancho e espionado (sua logica tem testes proprios).
+  describe('gancho da Qtd. final do Forecast (E4a)', () => {
+    async function prepararEnvioSimples(): Promise<string> {
+      const cookieHeader = await loginAndGetCookie();
+      prismaMock.quoteRequest.findFirst.mockResolvedValue({
+        id: 5,
+        requestCode: 'QR-2026-001',
+        productName: 'Acido sulfurico',
+        desiredIncoterm: ['FOB'],
+        currency: 'USD',
+        deadlineAt: null,
+        status: 'open',
+        items: [
+          { id: 11, itemCode: 'A1', productName: 'Acido sulfurico', quantity: 1, unit: 'UN', targetPrice: null, createdAt: new Date() },
+        ],
+      });
+      prismaMock.supplierContact.findMany.mockImplementation(async (args: { where?: { id?: { in?: number[] } } } = {}) => {
+        const ids = args?.where?.id?.in ?? [];
+        const all = [
+          { id: 9, name: 'John', email: 'john@acme.com', supplierId: 2, isActive: true, supplier: { id: 2, name: 'Acme' } },
+        ];
+        return ids.length === 0 ? all : all.filter((c) => ids.includes(c.id));
+      });
+      prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+        id: 42,
+        rawTokenHash: 'h',
+        expiresAt: new Date(Date.now() + 7 * 86_400_000),
+        revokedAt: null,
+        firstSeenAt: null,
+        lastSeenAt: null,
+        accessCount: 0,
+        respondedAt: null,
+        quoteRequestId: 5,
+        supplierId: 2,
+        supplierContactId: 9,
+        dispatchEventId: 123,
+        createdById: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      prismaMock.supplierPortalToken.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.supplierPortalToken.create.mockImplementation(({ data }) => Promise.resolve({ id: 42, ...data }));
+      return cookieHeader;
+    }
+    const enviar = (cookieHeader: string) =>
+      request(app)
+        .post('/api/v1/quote-requests/5/dispatch')
+        .set('Cookie', cookieHeader)
+        .send({ recipientContactIds: [9], expiresInDays: 7 });
+
+    it('envio com sucesso chama o gancho com (cotacao, usuario)', async () => {
+      const cookieHeader = await prepararEnvioSimples();
+      sendAndLogMock.mockResolvedValue({ providerMessageId: 'msg-1', status: 'sent' });
+      const gancho = vi.spyOn(ForecastCotacaoVinculoService, 'registrarEnvio').mockResolvedValue({ atualizadas: 1 });
+
+      const res = await enviar(cookieHeader);
+
+      expect(res.status).toBe(201);
+      expect(res.body.sentCount).toBe(1);
+      expect(gancho).toHaveBeenCalledTimes(1);
+      expect(gancho).toHaveBeenCalledWith(5, 1);
+      gancho.mockRestore();
+    });
+
+    it('falha do gancho NAO derruba o envio: 201 com o mesmo corpo (o erro so vai ao log)', async () => {
+      const cookieHeader = await prepararEnvioSimples();
+      sendAndLogMock.mockResolvedValue({ providerMessageId: 'msg-1', status: 'sent' });
+      const gancho = vi.spyOn(ForecastCotacaoVinculoService, 'registrarEnvio').mockRejectedValue(new Error('banco fora'));
+      const erroLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+      const res = await enviar(cookieHeader);
+
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ status: 'completed', sentCount: 1, failedCount: 0 });
+      expect(gancho).toHaveBeenCalledTimes(1);
+      expect(erroLog).toHaveBeenCalledWith(
+        expect.objectContaining({ quoteRequestId: 5, reason: 'banco fora' }),
+        expect.stringContaining('Qtd. final'),
+      );
+      gancho.mockRestore();
+      erroLog.mockRestore();
+    });
+
+    it('nenhum e-mail entregue (tudo falhou): o gancho nao roda e a Qtd. final nao muda', async () => {
+      const cookieHeader = await prepararEnvioSimples();
+      sendAndLogMock.mockResolvedValue({ status: 'failed', error: 'smtp fora' });
+      const gancho = vi.spyOn(ForecastCotacaoVinculoService, 'registrarEnvio').mockResolvedValue({ atualizadas: 0 });
+
+      const res = await enviar(cookieHeader);
+
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ status: 'failed', sentCount: 0, failedCount: 1 });
+      expect(gancho).not.toHaveBeenCalled();
+      gancho.mockRestore();
+    });
   });
 
   it('adiciona contatos secundarios do mesmo fornecedor como CC automatico', async () => {

@@ -252,6 +252,14 @@ router.put(
   ForecastController.putDecisao,
 );
 
+// Cotacoes em lote a partir do Forecast (E4a): uma QuoteRequest por fonte, numa transacao, ja vinculadas ao Forecast.
+router.post(
+  '/forecast/snapshots/:id/cotacoes',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.postCotacoesLote,
+);
+
 // Rascunho da cotacao do Forecast (E5): privado do dono, so admin/comprador (leitura inclusive).
 router.get(
   '/forecast/snapshots/:id/rascunho-cotacao',
