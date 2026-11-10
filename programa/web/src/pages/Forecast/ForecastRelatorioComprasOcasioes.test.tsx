@@ -194,7 +194,10 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
     const sublinhas = [...document.querySelectorAll('tr.fcoc-linha')];
     expect(sublinhas).toHaveLength(2);
     for (const linha of sublinhas) {
-      const dados = linha.previousElementSibling as HTMLTableRowElement;
+      // antes da sublinha vem a linha de detalhes; antes dela, a linha de dados do item
+      const detalhes = linha.previousElementSibling as HTMLTableRowElement;
+      expect((detalhes.querySelector('td') as HTMLTableCellElement).colSpan).toBe(detalhes.previousElementSibling?.children.length);
+      const dados = linha.previousElementSibling?.previousElementSibling as HTMLTableRowElement;
       expect(dados.className).toContain('fcr-linha');
       const celula = linha.querySelector('td') as HTMLTableCellElement;
       expect(celula.colSpan).toBe(dados.children.length);
@@ -231,7 +234,7 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
     }
     expect(screen.getAllByRole('img', { name: /Evento estrangeiro no lead time/ })).toHaveLength(2);
     const sublinha = document.querySelector('tr.fcoc-linha') as HTMLElement;
-    const dados = sublinha.previousElementSibling as HTMLTableRowElement;
+    const dados = sublinha.previousElementSibling?.previousElementSibling as HTMLTableRowElement;
     expect((sublinha.querySelector('td') as HTMLTableCellElement).colSpan).toBe(dados.children.length);
   });
 

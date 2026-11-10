@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type Ref } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Spinner from '@/components/Spinner';
@@ -277,24 +277,54 @@ interface LinhaProps {
   fonte?: string;
 }
 
+/** Um bloco do expansor "Detalhes": rotulo pequeno + conteudo. */
+function Detalhe({ rotulo, children, largo = false }: { rotulo: string; children: ReactNode; largo?: boolean }) {
+  return (
+    <div className={largo ? 'fcr-det fcr-det--largo' : 'fcr-det'}>
+      <div className="fcr-det__rotulo">{rotulo}</div>
+      <div className="fcr-det__valor">{children}</div>
+    </div>
+  );
+}
+
 function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }: LinhaProps) {
   const { ruptura } = item;
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
   const [editando, setEditando] = useState(false);
-  // Colunas da linha (Item, Urgencia, Fonte e as 7 comuns): a sublinha do grupo ocupa todas.
-  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 7;
+  // Detalhes (refino do relatorio, etapa E1): o que saiu da linha (demanda, embalagem, andamento, saldo, media, obs.) e a
+  // decisao de compra ficam num expansor sob o item. Fechado por padrao; no papel sai aberto.
+  const [aberto, setAberto] = useState(false);
+  const idDetalhes = useId();
+  // Colunas da linha (Item, Urgencia, Fonte e as 3 comuns): a sublinha do grupo e o expansor ocupam todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 3;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
-  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
+  const focoPendente = useRef(false);
+  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu. Se o expansor foi
+  // fechado enquanto o dialogo estava aberto, reabre antes (o botao fica numa linha oculta e nao recebe foco).
   useEffect(() => {
     if (editando) {
       abriuAntes.current = true;
     } else if (abriuAntes.current) {
       abriuAntes.current = false;
+      if (aberto) {
+        botao.current?.focus();
+      } else {
+        focoPendente.current = true;
+        setAberto(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editando]);
+  useEffect(() => {
+    if (aberto && focoPendente.current) {
+      focoPendente.current = false;
       botao.current?.focus();
     }
-  }, [editando]);
+  }, [aberto]);
+  const mediaSem = textoMediaSem(item.mesesForaDaMedia);
+  const obs = textoObservacao(item.obs);
   return (
     <>
       <tr
@@ -309,14 +339,20 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             <span className="fcr-item__codigos" title={item.codigos.join(' · ')}>
               {item.codigos.join(' · ')}
             </span>
-            {/* Status da compra (antes uma coluna): linha pequena sob os codigos. */}
-            <span className="fcr-item__status">{STATUS_ROTULO[item.status] ?? item.status}</span>
             {item.grupo && <PrincipalDoGrupo grupo={item.grupo} />}
-            {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
-            <MediaSem meses={item.mesesForaDaMedia} />
             <SeloDemanda kg={item.demandaComercialKg} />
             <ForecastOcasiaoSelo ocasioes={item.ocasioes} />
-            <Observacao obs={item.obs} />
+            <button
+              type="button"
+              className="fcr-detalhes__alternar"
+              aria-expanded={aberto}
+              aria-controls={idDetalhes}
+              aria-label={`${aberto ? 'Recolher' : 'Ver'} detalhes de ${item.item}`}
+              onClick={() => setAberto((a) => !a)}
+            >
+              Detalhes
+              <Icon name={aberto ? 'chevron-up' : 'chevron-down'} size={14} />
+            </button>
           </div>
         </th>
         {comUrgencia && urgencia && (
@@ -332,29 +368,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             {fonte || 'Sem fonte'} · {item.leadTimeDias} dias
           </td>
         )}
-        <td className="fcr-num">{d1(item.demanda)}</td>
-        <td className="fcr-num">{d1(item.quantidadeSugerida)}</td>
-        <td>
-          <Embalagem
-            item={item}
-            botaoRef={botao}
-            onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
-          />
-          {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
-          {editando &&
-            productId !== null &&
-            createPortal(
-              <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
-              document.body,
-            )}
-        </td>
-        <td className="fcr-num fcr-forte">{d1(item.quantidadeFinal)}</td>
-        <td className="fdec-celula">
-          <div className="fdec-conteudo">
-            <ForecastDecisaoCompra item={item} />
-            <ForecastGerarCotacao item={item} />
-          </div>
-        </td>
+        <td className="fcr-num fcr-forte">{d1(item.quantidadeSugerida)}</td>
         <td className="fcr-col-limite">
           <span className="fcr-limite">
             <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
@@ -362,19 +376,66 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             </span>
             {item.vencida && <span className="badge badge--danger">Vencida</span>}
           </span>
-          {/* Saldo zera e Ruptura (antes duas colunas): linhas pequenas sob a data-limite. */}
-          <span className="fcr-limite__prazos">
-            <span>
-              <span className="fcr-fraco">Saldo zera</span> <span className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</span>
-            </span>
-            <span>
-              <span className="fcr-fraco">Ruptura</span>{' '}
-              <span>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</span>
-            </span>
-          </span>
         </td>
-        <td>
-          <EmAndamento item={item} />
+        <td className="fcr-status">{STATUS_ROTULO[item.status] ?? item.status}</td>
+      </tr>
+      <tr id={idDetalhes} className="fcr-detalhes" hidden={!aberto}>
+        <td colSpan={colunas}>
+          <div className="fcr-detalhes__grade">
+            <Detalhe rotulo="Demanda">
+              <span className="fcr-mono">{d1(item.demanda)}</span>
+            </Detalhe>
+            <Detalhe rotulo="Qtd. final">
+              <span className="fcr-mono">{d1(item.quantidadeFinal)}</span>
+            </Detalhe>
+            <Detalhe rotulo="Saldo e ruptura">
+              <span className="fcr-limite__prazos">
+                <span>
+                  <span className="fcr-fraco">Saldo zera</span> <span className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</span>
+                </span>
+                <span>
+                  <span className="fcr-fraco">Ruptura</span>{' '}
+                  <span>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</span>
+                </span>
+              </span>
+            </Detalhe>
+            <Detalhe rotulo="Em andamento">
+              <EmAndamento item={item} />
+            </Detalhe>
+            <Detalhe rotulo="Embalagem" largo>
+              {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+              <Embalagem
+                item={item}
+                botaoRef={botao}
+                onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
+              />
+              {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
+              {editando &&
+                productId !== null &&
+                createPortal(
+                  <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
+                  document.body,
+                )}
+            </Detalhe>
+            {mediaSem && (
+              <Detalhe rotulo="Média">
+                <MediaSem meses={item.mesesForaDaMedia} />
+              </Detalhe>
+            )}
+            {obs && (
+              <Detalhe rotulo="Observação" largo>
+                <Observacao obs={item.obs} />
+              </Detalhe>
+            )}
+            <Detalhe rotulo="Decisão de compra" largo>
+              <div className="fdec-celula">
+                <div className="fdec-conteudo">
+                  <ForecastDecisaoCompra item={item} />
+                  <ForecastGerarCotacao item={item} />
+                </div>
+              </div>
+            </Detalhe>
+          </div>
         </td>
       </tr>
       {item.grupo && (
@@ -398,20 +459,10 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
 const COLUNAS_COMUNS = (
   <>
     <th scope="col" className="fcr-num">
-      Demanda
-    </th>
-    <th scope="col" className="fcr-num">
       Qtd. sugerida
     </th>
-    <th scope="col">Embalagem</th>
-    <th scope="col" className="fcr-num">
-      Qtd. final
-    </th>
-    <th scope="col" className="fcr-num">
-      Qtd. decidida (kg)
-    </th>
     <th scope="col">Data-limite</th>
-    <th scope="col">Em andamento</th>
+    <th scope="col">Status</th>
   </>
 );
 

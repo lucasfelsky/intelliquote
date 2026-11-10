@@ -27,6 +27,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
+import { expandirDetalhes } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
@@ -155,7 +156,12 @@ function renderRelatorio(o: Opcoes = {}) {
 }
 
 const chamadas = (fim: string) => get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith(fim));
-const botao = (nome = 'PRODUTO 002') => screen.findByRole('button', { name: `Gerar cotação de ${nome}` });
+// O botao mora no expansor "Detalhes" da linha (fechado por padrao): abre todos antes de procurar.
+const botao = async (nome = 'PRODUTO 002') => {
+  await screen.findAllByRole('button', { name: /^Ver detalhes de / });
+  expandirDetalhes();
+  return screen.findByRole('button', { name: `Gerar cotação de ${nome}` });
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -176,10 +182,10 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     mockApi();
     renderRelatorio();
     const b = await botao();
-    expect(b.closest('td')?.className).toContain('fdec-celula');
+    expect(b.closest('.fdec-celula')).not.toBeNull();
     // o editor e o Gerar cotacao dividem a grade .fdec-conteudo (o icone fica na linha do Salvar)
     const grade = b.closest('.fdec-conteudo') as HTMLElement;
-    expect(grade.parentElement).toBe(b.closest('td'));
+    expect(grade.parentElement).toBe(b.closest('.fdec-celula'));
     expect(grade.querySelector(':scope > .fgc-acao')).not.toBeNull();
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
   });
@@ -210,7 +216,7 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
       produtos: [produto(41, 'PRODUTO 001'), produto(42, 'PRODUTO 002'), produto(43, 'PRODUTO 003')],
     });
     renderRelatorio();
-    await screen.findByRole('button', { name: 'Gerar cotação de PRODUTO 003' });
+    await botao('PRODUTO 003');
     expect(screen.getAllByRole('button', { name: /^Gerar cotação de/ })).toHaveLength(3);
     await waitFor(() => expect(chamadas('/decisoes')).toHaveLength(1));
     expect(chamadas('/v1/forecast/products')).toHaveLength(1);
@@ -237,7 +243,7 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     it('aria-disabled, motivo ligado por aria-describedby, foco e clique nao navegam', async () => {
       mockApi(cenario);
       renderRelatorio();
-      const b = await screen.findByRole('button', { name: 'Gerar cotação de PRODUTO 002' });
+      const b = await botao('PRODUTO 002');
       await waitFor(() => expect(b.getAttribute('aria-describedby')).not.toBeNull());
       await waitFor(() => expect(document.getElementById(b.getAttribute('aria-describedby') as string)?.textContent).toBe(texto));
       expect(b.getAttribute('aria-disabled')).toBe('true');
@@ -357,7 +363,7 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
       produtos: [produto(42, 'PRODUTO 002'), produto(43, 'PRODUTO 003')],
     });
     renderRelatorio();
-    const b = await screen.findByRole('button', { name: 'Gerar cotação de GRUPO SINTETICO' });
+    const b = await botao('GRUPO SINTETICO');
     await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
     fireEvent.click(b);
     expect((await screen.findByTestId('destino')).textContent).toBe('?fromForecast=7-42');
