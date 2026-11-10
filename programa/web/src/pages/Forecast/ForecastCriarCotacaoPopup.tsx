@@ -267,7 +267,7 @@ function CorpoDoPopup({
   const manterFoco = () => {
     window.requestAnimationFrame(() => {
       const a = document.activeElement;
-      if (!a || a === document.body || a.tagName === 'DIALOG' || !a.isConnected) tituloItensRef.current?.focus();
+      if (!a || a === document.body || a.tagName === 'DIALOG' || !a.isConnected) tituloItensRef.current?.focus({ preventScroll: true });
     });
   };
   const tirar = (productId: number) => {
@@ -557,7 +557,6 @@ function CorpoDoPopup({
   };
 
   const statusRascunho = (() => {
-    if (itens.length > RASCUNHO_ITENS_MAX) return `O rascunho guarda até ${RASCUNHO_ITENS_MAX} itens: os demais não serão salvos.`;
     if (!baseOk) return 'Rascunho indisponível: não foi possível ler o rascunho desta quinzena. Você ainda pode gerar as cotações.';
     if (estado === 'pendente') return 'Alterações a salvar…';
     if (estado === 'salvando') return 'Salvando o rascunho…';
@@ -565,6 +564,9 @@ function CorpoDoPopup({
     if (estado === 'salvo' && salvoEm) return `Rascunho salvo às ${horaDe(salvoEm)}.`;
     return temRascunho ? 'Há um rascunho salvo desta quinzena.' : '';
   })();
+  // Acima do limite do rascunho os demais itens nao sao gravados: o aviso acompanha o status em vez de substitui-lo.
+  const avisoLimiteRascunho =
+    baseOk && itens.length > RASCUNHO_ITENS_MAX ? ` O rascunho guarda até ${RASCUNHO_ITENS_MAX} itens: os demais não serão salvos.` : '';
 
   return (
     <div className="fcl-popup" aria-busy={gerando}>
@@ -740,9 +742,10 @@ function CorpoDoPopup({
             O status de cada item muda sozinho: Cotação criada ao gerar; Cotando ao enviar aos fornecedores; Confirmado e PO
             enviada ao fechar com o fornecedor. A Qtd. final é preenchida ao enviar a cotação.
           </span>
-          {statusRascunho && (
+          {(statusRascunho || avisoLimiteRascunho) && (
             <span className={estado === 'erro' || !baseOk ? 'fcl-erro' : 'fcl-dica'} role="status">
               {statusRascunho}
+              {avisoLimiteRascunho}
               {estado === 'salvo' && ' Só vira cotação quando você gerar; fica na linha como “Rascunho”.'}
             </span>
           )}

@@ -810,6 +810,18 @@ describe('pop-up Criar cotacao: rascunho (E5)', () => {
     expect(del).not.toHaveBeenCalled();
   });
 
+  it('Gerar com edicao pendente que falha (500): o autosave e rearmado e grava o rascunho depois', async () => {
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    renderRelatorio();
+    const d = await abrirCotar('PRODUTO 001');
+    fireEvent.change(campoKg(d, 'PRODUTO 001'), { target: { value: '9' } });
+    fireEvent.click(botaoGerar(d));
+    await within(d).findByRole('alert');
+    expect(put).not.toHaveBeenCalled();
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1), { timeout: 4000 });
+    expect(put.mock.calls[0]![1]).toMatchObject({ itens: [{ productId: 41, quantidadeKg: 9 }] });
+  });
+
   it('falha ao gravar o rascunho (500): mostra o erro sem fechar nem perder a digitacao', async () => {
     put.mockRejectedValueOnce(new ApiError(500, null));
     renderRelatorio();
