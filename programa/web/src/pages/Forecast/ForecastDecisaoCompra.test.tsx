@@ -20,6 +20,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
+import { expandirDetalhes } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
@@ -241,18 +242,22 @@ function renderRelatorio(podeEditar: boolean) {
 const chamadasDeDecisoes = () => get.mock.calls.filter(([url]) => String(url).endsWith('/decisoes'));
 
 describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
-  it('1 GET de decisoes por quinzena e a coluna aparece em todas as tabelas', async () => {
+  it('1 GET de decisoes por quinzena e o editor aparece no expansor de todas as tabelas', async () => {
     get.mockImplementation(async (url: string) =>
       String(url).endsWith('/decisoes')
         ? resposta([decisao({ productId: 43, quantidadeKg: 77 })])
         : { data: relatorio() },
     );
     renderRelatorio(true);
+    await screen.findAllByRole('button', { name: /^Ver detalhes de / });
+    expandirDetalhes();
     await screen.findByLabelText('Qtd. decidida (kg) de PRODUTO 002');
     const tabelas = screen.getAllByRole('table');
     expect(tabelas).toHaveLength(2);
+    // o editor da decisao mora no expansor "Detalhes" de cada item, em todas as tabelas (sem coluna propria)
     for (const t of tabelas) {
-      expect(within(t).getAllByRole('columnheader').map((c) => c.textContent)).toContain('Qtd. decidida (kg)');
+      expect(within(t).queryAllByRole('columnheader').map((c) => c.textContent)).not.toContain('Qtd. decidida (kg)');
+      expect(t.querySelectorAll('.fcr-detalhes .fdec-editor').length).toBeGreaterThan(0);
     }
     expect(chamadasDeDecisoes()).toHaveLength(1);
     expect(chamadasDeDecisoes()[0]![0]).toBe('/v1/forecast/snapshots/7/decisoes');

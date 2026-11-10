@@ -18,6 +18,7 @@ vi.mock('@/api/client', () => ({
 
 import { api, ApiError } from '@/api/client';
 import { expandirSecoes } from '@/test/forecastSecoes';
+import { linhaCompleta } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 
@@ -167,7 +168,7 @@ describe('ForecastRelatorioCompras', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
-    const linha = screen.getByText('PRODUTO 003').closest('tr') as HTMLElement;
+    const linha = linhaCompleta('PRODUTO 003');
     expect(within(linha).getByText('Embalagem não cadastrada')).toBeTruthy();
     expect(within(linha).getAllByText('40,0')).toHaveLength(2); // sugerida e final iguais (sem arredondar)
     expect(within(linha).getByText('-40,0')).toBeTruthy(); // demanda
@@ -177,7 +178,7 @@ describe('ForecastRelatorioCompras', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
-    const linha = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    const linha = linhaCompleta('PRODUTO 002');
     expect(within(linha).getByText('5 × 25 kg (código C0005)')).toBeTruthy();
     const chip = within(linha).getByText('Arredondado pela embalagem do código C0005');
     expect(chip.getAttribute('title')).toBe('Outras embalagens: C0004 (200 kg)');
@@ -211,7 +212,7 @@ describe('ForecastRelatorioCompras', () => {
     });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
-    const linha = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    const linha = linhaCompleta('PRODUTO 002');
     // A usada continua em destaque e a Qtd. final e a dela.
     expect(within(linha).getByText('5 × 25 kg (código C0005)')).toBeTruthy();
     expect(within(linha).getByText('125,0')).toBeTruthy();
@@ -238,17 +239,16 @@ describe('ForecastRelatorioCompras', () => {
     });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
-    const comObs = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    const comObs = linhaCompleta('PRODUTO 002');
     const obs = comObs.querySelector('.fcr-item__obs');
     expect(obs?.textContent).toBe('Obs.: OBS SINTETICA 002');
-    expect(obs?.closest('th')).toBe(comObs.querySelector('th'));
+    // a observacao mora no expansor "Detalhes" do item (nao ha coluna propria)
+    expect(obs?.closest('.fcr-detalhes')).not.toBeNull();
     expect(document.querySelectorAll('.fcr-item__obs')).toHaveLength(1);
     const colunas = within(screen.getAllByRole('table')[0] as HTMLElement)
       .getAllByRole('columnheader')
       .map((c) => c.textContent);
-    expect(colunas).toEqual([
-      'Item', 'Demanda', 'Qtd. sugerida', 'Embalagem', 'Qtd. final', 'Qtd. decidida (kg)', 'Data-limite', 'Em andamento',
-    ]);
+    expect(colunas).toEqual(['Item', 'Qtd. sugerida', 'Data-limite', 'Status']);
   });
 
   it('Observação tambem aparece na secao "Atencao: sem consumo"', async () => {
@@ -295,7 +295,7 @@ describe('ForecastRelatorioCompras', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
-    const linha = screen.getByText('PRODUTO 003').closest('tr') as HTMLElement;
+    const linha = linhaCompleta('PRODUTO 003');
     expect(within(linha).getByText('Não fraciona')).toBeTruthy();
     expect(screen.getAllByText('Não fraciona')).toHaveLength(1);
   });
@@ -304,10 +304,10 @@ describe('ForecastRelatorioCompras', () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio();
     await screen.findByText('3 itens em 2 fontes');
-    const comAndamento = screen.getByText('PRODUTO 002').closest('tr') as HTMLElement;
+    const comAndamento = linhaCompleta('PRODUTO 002');
     expect(within(comAndamento).getByText('Chegada nov/2026: 300')).toBeTruthy();
     expect(within(comAndamento).getByText('Programação jan/2027: 20')).toBeTruthy();
-    const semRuptura = screen.getByText('PRODUTO 004').closest('tr') as HTMLElement;
+    const semRuptura = linhaCompleta('PRODUTO 004');
     expect(within(semRuptura).getByText('sem ruptura em 6 meses')).toBeTruthy();
     expect(within(comAndamento).getByText('nov/2026')).toBeTruthy(); // saldo zera
     expect(within(comAndamento).getAllByText('21/11/2026')).toHaveLength(1);
@@ -523,6 +523,27 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
       fora: { semLeadTime: 0, semConsumoSemFalta: 0, semConsumoSemMovimento: 0 },
     });
 
+  it('Detalhes: o expansor de cada item abre fechado (aria-expanded), mostra demanda, Qtd. final, saldo, andamento, embalagem e a decisao, e recolhe', async () => {
+    get.mockResolvedValue({ data: relatorio() });
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const botao = screen.getAllByRole('button', { name: /^Ver detalhes de PRODUTO 002/ })[0] as HTMLElement;
+    expect(botao.getAttribute('aria-expanded')).toBe('false');
+    const linha = (botao.closest('tr') as HTMLElement).nextElementSibling as HTMLElement;
+    expect(linha.className).toBe('fcr-detalhes');
+    expect(linha.hasAttribute('hidden')).toBe(true);
+    expect(botao.getAttribute('aria-controls')).toBe(linha.id);
+    // o conteudo segue no DOM (leitor de tela, impressao e testes), mesmo fechado
+    const rotulos = Array.from(linha.querySelectorAll('.fcr-det__rotulo')).map((r) => r.textContent);
+    expect(rotulos).toEqual(expect.arrayContaining(['Demanda', 'Qtd. final', 'Saldo e ruptura', 'Em andamento', 'Embalagem', 'Decisão de compra']));
+    fireEvent.click(botao);
+    expect(botao.getAttribute('aria-expanded')).toBe('true');
+    expect(botao.getAttribute('aria-label')).toBe('Recolher detalhes de PRODUTO 002');
+    expect(linha.hasAttribute('hidden')).toBe(false);
+    fireEvent.click(botao);
+    expect(linha.hasAttribute('hidden')).toBe(true);
+  });
+
   it('selo "Média sem: ..." na celula Item, antes da observacao, so nos itens com meses marcados', async () => {
     get.mockResolvedValue({ data: com() });
     renderRelatorio();
@@ -531,15 +552,9 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     expect(selo).toHaveLength(1);
     expect(selo[0]?.className).toBe('fcr-item__media');
     expect(selo[0]?.getAttribute('title')).toBe('A média deste item não conta o mês marcado como venda atípica.');
-    // Ordem na celula Item: nome, codigos, status, selo da media, observacao.
-    const celula = selo[0]?.parentElement as HTMLElement;
-    expect(Array.from(celula.children).map((c) => c.className)).toEqual([
-      'fcr-item__nome',
-      'fcr-item__codigos',
-      'fcr-item__status',
-      'fcr-item__media',
-      'fcr-item__obs',
-    ]);
+    // O selo da media mora no expansor "Detalhes" do item (bloco "Média"), nao mais na celula Item.
+    expect(selo[0]?.closest('.fcr-detalhes')).not.toBeNull();
+    expect(selo[0]?.closest('.fcr-det')?.querySelector('.fcr-det__rotulo')?.textContent).toBe('Média');
     // PRODUTO 003 (sem marca) nao ganha o selo; a secao sem consumo mostra o do item dela.
     expect(screen.getByText('Média sem: ago/2026')).toBeTruthy();
     expect(screen.getAllByText(/^Média sem:/)).toHaveLength(2);
@@ -620,7 +635,7 @@ describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
     expect(tabelas.at(-1)).toBe(secao);
   });
 
-  it('o item da lista de compra com pedido a somar ganha o selo, depois dos selos de media e antes da observacao', async () => {
+  it('o item da lista de compra com pedido a somar ganha o selo na celula Item, antes do botao Detalhes', async () => {
     const dados = relatorio({
       demandaComercial: { itens: [pedido({ linha: 6, noRelatorio: true })], totais: { abertas: 1, sugeridoKg: 1100 } },
     });
@@ -632,14 +647,13 @@ describe('ForecastRelatorioCompras - demanda do comercial (PR 6d)', () => {
     const selo = screen.getAllByText('+ 1.100 kg pedidos pelo comercial');
     expect(selo).toHaveLength(1);
     expect(selo[0]?.className).toBe('fcr-item__demanda');
+    // Celula Item enxuta: nome, codigos, selo do pedido e o botao Detalhes (media, obs. e "Nao fraciona" foram para o expansor).
     const celula = selo[0]?.parentElement as HTMLElement;
     expect(Array.from(celula.children).map((c) => c.className)).toEqual([
       'fcr-item__nome',
       'fcr-item__codigos',
-      'fcr-item__status',
-      'badge badge--warning',
       'fcr-item__demanda',
-      'fcr-item__obs',
+      'fcr-detalhes__alternar',
     ]);
   });
 

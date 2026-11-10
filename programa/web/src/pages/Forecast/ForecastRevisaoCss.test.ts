@@ -38,6 +38,11 @@ describe('Forecast refino visual: guardas de CSS da revisao', () => {
     expect(css).toContain('.fc-card:has(.fc-filtros-menu__painel) { overflow: visible; }');
   });
 
+  it('papel: o expansor Detalhes sai aberto (hidden vence por !important) e o botao some', () => {
+    expect(css).toContain('.fcr-detalhes[hidden] { display: table-row !important; }');
+    expect(css).toContain('.fcr-detalhes__alternar { display: none; }');
+  });
+
   it('o motivo do Gerar cotacao (icone) nao estica ate a largura da celula', () => {
     expect(css).toContain('.fgc-motivo-chip { align-self: flex-start; }');
   });

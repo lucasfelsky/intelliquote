@@ -17,6 +17,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api } from '@/api/client';
+import { abrirDetalhes } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 
@@ -85,6 +86,7 @@ describe('ForecastRelatorioCompras - botao de embalagens', () => {
   it('editor + item sem embalagem com productId: "Cadastrar embalagem" abre o dialogo do produto', async () => {
     mockApi([item()]);
     renderRelatorio(true);
+    await abrirDetalhes();
     const botao = await screen.findByRole('button', { name: 'Cadastrar embalagem de PRODUTO 001' });
     expect(botao.textContent).toBe('Cadastrar embalagem');
     expect(botao.getAttribute('aria-haspopup')).toBe('dialog');
@@ -99,6 +101,7 @@ describe('ForecastRelatorioCompras - botao de embalagens', () => {
   it('fechar o dialogo devolve o foco ao botao', async () => {
     mockApi([item()]);
     renderRelatorio(true);
+    await abrirDetalhes();
     const botao = await screen.findByRole('button', { name: 'Cadastrar embalagem de PRODUTO 001' });
     fireEvent.click(botao);
     fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
@@ -134,6 +137,7 @@ describe('ForecastRelatorioCompras - botao de embalagens', () => {
       }),
     ]);
     renderRelatorio(true);
+    await abrirDetalhes();
     expect(await screen.findByText(/× 22,68 kg \(código C0001\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Editar embalagens de PRODUTO 001' }).textContent).toBe(
       'Editar embalagens',
