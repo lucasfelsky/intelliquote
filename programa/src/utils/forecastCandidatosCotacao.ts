@@ -15,8 +15,9 @@
 //  - 'sem-consumo-com-movimento': esta em relatorio.semConsumo (media <= 0) e tem programacao ou venda no mes (demandaKg > 0);
 //  - 'coberto-por-grupo': esta em relatorio.cobertosPorGrupo (o estoque somado do grupo cobre o membro);
 //  - 'sem-falta': tem lead time e consumo, mas o calculo nao aponta compra (AN > 0).
-// Fora da lista, sem aparecer em nenhuma secao e SEM lead time (AN nulo): `excluidos` com motivo 'sem-lead-time' (o
-// relatorio tambem os esconde). Membro de grupo que nao e a linha do grupo nem esta coberto sai quieto: ele e comprado pela
+// Item SEM lead time (AN nulo) ou codigo pendente de cadastro NUNCA e candidato, em nenhuma combinacao (inclusive sem consumo
+// com programacao): vai para `excluidos` com motivo 'sem-lead-time'. Assim o `anMotorKg` congelado na decisao e sempre o AN
+// real do motor. Membro de grupo que nao e a linha do grupo nem esta coberto sai quieto: ele e comprado pela
 // linha do grupo (principal). Um productId aparece uma vez; "coberto-por-grupo" vence a linha do grupo do mesmo principal.
 //
 // Excluidos (contados, nunca listados): sem productId ('sem-cadastro'), sem fonte ('sem-fonte'), sem codigo vinculado ao
@@ -73,8 +74,8 @@ export interface CandidatoCotacao {
 export interface CandidatoComFonte extends CandidatoCotacao {
   /** Chave de comparacao da fonte (trim + maiusculas). */
   fonteChave: string;
-  /** AN do motor (sinal da planilha) no momento da leitura; nulo = sem lead time. */
-  anMotorKg: number | null;
+  /** AN do motor (sinal da planilha) no momento da leitura; sempre presente (sem lead time nunca e candidato). */
+  anMotorKg: number;
 }
 
 export interface ExcluidoDoCandidato {
@@ -154,22 +155,35 @@ export function montarCandidatosCotacao(
   const semConsumo = new Set(relatorio.semConsumo.itens.map((i) => i.linha));
 
   const porProduto = new Map<number, CandidatoComFonte>();
-  const excluidos: ExcluidoDoCandidato[] = [];
+  // Um item excluido conta UMA vez (chave = productId; sem productId, o numero da linha), mesmo que apareca como linha do
+  // grupo e como membro coberto.
+  const excluidosPorChave = new Map<string, ExcluidoDoCandidato>();
 
-  // Aplica as exclusoes (sem cadastro, sem fonte, sem lead time, sem catalogo) e guarda o candidato.
+  // Aplica as exclusoes (sem cadastro, sem fonte, sem lead time, sem catalogo) e guarda o candidato. Sem lead time NUNCA e
+  // candidato (nem sem consumo com programacao, nem codigo pendente de cadastro): `anMotorKg` do candidato e sempre o AN real.
   const registrar = (
-    productId: number | null,
-    fonteBruta: string,
-    semLeadTime: boolean,
-    candidato: Omit<CandidatoComFonte, 'productId' | 'fonte' | 'fonteChave'>,
+    alvo: { productId: number | null; linha: number; fonte: string; semLeadTime: boolean },
+    montar: (anMotorKg: number) => Omit<CandidatoComFonte, 'productId' | 'fonte' | 'fonteChave' | 'anMotorKg'>,
+    anMotorKg: number | null,
   ) => {
+    const { productId, fonte: fonteBruta } = alvo;
     const fonte = fonteBruta.trim();
-    const excluir = (motivo: MotivoExcluido) => excluidos.push({ motivo, fonte });
+    const chave = productId !== null ? `p${productId}` : `l${alvo.linha}`;
+    const excluir = (motivo: MotivoExcluido) => {
+      excluidosPorChave.set(chave, { motivo, fonte });
+    };
     if (productId === null) return excluir('sem-cadastro');
     if (fonte === '') return excluir('sem-fonte');
-    if (semLeadTime) return excluir('sem-lead-time');
+    if (alvo.semLeadTime || anMotorKg === null) return excluir('sem-lead-time');
     if (!opcoes.produtosComVinculoCatalogo.has(productId)) return excluir('sem-vinculo-catalogo');
-    porProduto.set(productId, { ...candidato, productId, fonte, fonteChave: chaveDaFonte(fonte) });
+    excluidosPorChave.delete(chave);
+    porProduto.set(productId, {
+      ...montar(anMotorKg),
+      productId,
+      fonte,
+      fonteChave: chaveDaFonte(fonte),
+      anMotorKg,
+    });
   };
 
   for (const l of agrupado.linhas) {
@@ -177,25 +191,31 @@ export function montarCandidatosCotacao(
     const demandaKg = demandaDoHorizonte(l);
     if (demandaKg <= 0) continue;
     const sob = sobDemanda.get(l.linha);
-    // Sem lead time (AN nulo) fora das secoes do relatorio, ou codigo pendente de cadastro (nunca vira sugestao): o
-    // relatorio nao mostra; so conta nos excluidos.
-    const semLeadTime = !sob && !semConsumo.has(l.linha) && (l.AN === null || l.pendenteCadastro !== undefined);
     const motivo: MotivoForaDaLista = sob
       ? 'sob-demanda'
       : semConsumo.has(l.linha)
         ? 'sem-consumo-com-movimento'
         : 'sem-falta';
-    registrar(l.productId ?? null, l.fonte, semLeadTime, {
-      item: l.item,
-      codigos: l.codigos,
-      demandaKg,
-      quantidadeSugeridaKg: sob ? sob.quantidadeSugerida : null,
-      motivoForaDaLista: motivo,
-      ...cobertura(l, q.baseDate),
-      urgencia: urgenciaDe(l, q, diasCritico),
-      grupoNome: nomeDoGrupoDaLinha.get(l.linha) ?? null,
-      anMotorKg: l.AN,
-    });
+    registrar(
+      {
+        productId: l.productId ?? null,
+        linha: l.linha,
+        fonte: l.fonte,
+        // Sem lead time (AN nulo) ou codigo pendente de cadastro: o relatorio nao os trata como compra; so contam nos excluidos.
+        semLeadTime: l.AN === null || l.pendenteCadastro !== undefined,
+      },
+      () => ({
+        item: l.item,
+        codigos: l.codigos,
+        demandaKg,
+        quantidadeSugeridaKg: sob ? sob.quantidadeSugerida : null,
+        motivoForaDaLista: motivo,
+        ...cobertura(l, q.baseDate),
+        urgencia: urgenciaDe(l, q, diasCritico),
+        grupoNome: nomeDoGrupoDaLinha.get(l.linha) ?? null,
+      }),
+      l.AN,
+    );
   }
 
   // Membros que entrariam sozinhos, mas o estoque somado do grupo cobre: demanda propria, cobertura pela linha do grupo.
@@ -205,20 +225,23 @@ export function montarCandidatosCotacao(
     if (!propria || !grupo) continue;
     const demandaKg = demandaDoHorizonte(propria);
     if (demandaKg <= 0) continue;
-    registrar(m.productId, m.fonte, false, {
-      item: m.item,
-      codigos: m.codigos,
-      demandaKg,
-      quantidadeSugeridaKg: m.quantidadeSugerida,
-      motivoForaDaLista: 'coberto-por-grupo',
-      ...cobertura(grupo, q.baseDate),
-      urgencia: urgenciaDe(grupo, q, diasCritico),
-      grupoNome: m.grupoNome,
-      anMotorKg: m.demanda,
-    });
+    registrar(
+      { productId: m.productId, linha: m.linha, fonte: m.fonte, semLeadTime: false },
+      () => ({
+        item: m.item,
+        codigos: m.codigos,
+        demandaKg,
+        quantidadeSugeridaKg: m.quantidadeSugerida,
+        motivoForaDaLista: 'coberto-por-grupo',
+        ...cobertura(grupo, q.baseDate),
+        urgencia: urgenciaDe(grupo, q, diasCritico),
+        grupoNome: m.grupoNome,
+      }),
+      m.demanda,
+    );
   }
 
-  return { candidatos: [...porProduto.values()], excluidos };
+  return { candidatos: [...porProduto.values()], excluidos: [...excluidosPorChave.values()] };
 }
 
 const compararTexto = (a: string, b: string) => a.localeCompare(b, 'pt-BR');

@@ -93,7 +93,7 @@ export class ForecastDecisaoCompraService {
         if (candidato) {
           referencia = {
             sugeridaKg: candidato.quantidadeSugeridaKg ?? 0,
-            demandaKg: candidato.anMotorKg ?? 0,
+            demandaKg: candidato.anMotorKg,
             manual: true,
           };
         }
@@ -133,6 +133,7 @@ export class ForecastDecisaoCompraService {
                 sugeridaKg: Number(atual.suggestedKg),
                 status: atual.status,
                 comObservacao: atual.note != null,
+                ...(atual.manuallyIncluded ? { incluidoManualmente: true } : {}),
               },
             },
             tx,

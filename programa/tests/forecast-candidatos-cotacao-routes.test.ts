@@ -180,6 +180,13 @@ describe('GET /forecast/snapshots/:id/candidatos-cotacao', () => {
     expect(response.status).toBe(400);
   });
 
+  it.each(['fonte=a&fonte=b', 'hoje=2026-10-20&hoje=2026-10-21'])('parametro repetido (%s) -> 400, nao ignora em silencio', async (qs) => {
+    const cookies = await loginAs('admin');
+    const response = await request(app).get(`${URL_BASE}?${qs}`).set('Cookie', cookies);
+    expect(response.status).toBe(400);
+    expect(candidatosDaQuinzena()).not.toHaveBeenCalled();
+  });
+
   it('quinzena inexistente -> 404 vindo do service', async () => {
     candidatosDaQuinzena().mockRejectedValue(new HttpError(404, 'Quinzena nao encontrada.'));
     const cookies = await loginAs('admin');

@@ -24,6 +24,8 @@ vi.mock('../src/lib/prisma', () => {
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 import { ForecastSnapshotService } from '../src/services/ForecastSnapshotService';
+import { montarCandidatosCotacao } from '../src/utils/forecastCandidatosCotacao';
+import { montarRelatorioCompras, type LinhaParaRelatorio } from '../src/utils/forecastRelatorioCompras';
 import type { RelatorioCompras } from '../src/utils/forecastRelatorioCompras';
 
 type Mock = ReturnType<typeof vi.fn>;
@@ -402,6 +404,60 @@ describe('PUT /forecast/snapshots/:id/decisoes/:productId - incluidoManualmente 
       .send({ quantidadeKg: 5, incluidoManualmente: true });
     expect(response.status).toBe(403);
     expect(candidatoSpy).not.toHaveBeenCalled();
+  });
+});
+
+// Sem lead time NUNCA e candidato: com a regra real de candidatos (so o acesso ao banco/motor e trocado), a flag e recusada.
+describe('PUT /forecast/snapshots/:id/decisoes/:productId - incluidoManualmente em item sem lead time (E3)', () => {
+  const base: LinhaParaRelatorio = {
+    linha: 1,
+    item: 'X',
+    codigos: ['C'],
+    fonte: 'FONTE 001',
+    status: 'nao',
+    Q: 0,
+    AG: 0,
+    U: 0,
+    AN: null,
+    AQ: null,
+    projecao: [0, 0, 0, 0, 0, 0],
+    chegadas: [0, 0, 0, 0, 0],
+    programacoes: [30, 0, 0, 0],
+  };
+
+  it.each<[string, Partial<LinhaParaRelatorio>]>([
+    ['Q = 0, AN nulo (sem lead time) e programacao', { productId: 44 }],
+    ['codigo pendente de cadastro com Q <= 0', { productId: 44, AN: 100, AQ: 30, pendenteCadastro: 'sem_cadastro' }],
+  ])('%s -> 400 e nada e gravado', async (_nome, parcial) => {
+    const linhas = [{ ...base, ...parcial }];
+    const q = { id: 7, label: '10-2', baseDate: '2099-01-15', half: 2, origin: 'planilha', hoje: '2099-01-20', linhas };
+    const relatorio = montarRelatorioCompras(q, []);
+    const resultado = montarCandidatosCotacao(q, relatorio, { produtosComVinculoCatalogo: new Set([44]) });
+    expect(resultado.candidatos).toEqual([]);
+    expect(resultado.excluidos).toEqual([{ motivo: 'sem-lead-time', fonte: 'FONTE 001' }]);
+
+    prismaMock.forecastSnapshot.findFirst.mockResolvedValue({ id: 7, label: '10-2', products: [{ linha: 1, productId: 44 }] });
+    vi.spyOn(ForecastSnapshotService as unknown as { candidatosDaQuinzena: () => Promise<unknown> }, 'candidatosDaQuinzena').mockResolvedValue({
+      calc: q,
+      resultado,
+    });
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .put(`${BASE}/44`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 30, incluidoManualmente: true });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('O item não está na lista de compra desta quinzena.');
+    expect(tx.forecastPurchaseDecision.create).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('apagar decisao incluida de proposito audita incluidoManualmente', async () => {
+    tx.forecastPurchaseDecision.findUnique.mockResolvedValue(linha({ productId: 43, manuallyIncluded: true }));
+    const cookies = await loginAs('admin');
+    const response = await request(app).put(`${BASE}/43`).set('Cookie', cookies).send({ quantidadeKg: null });
+    expect(response.status).toBe(200);
+    expect(tx.auditLog.create.mock.calls[0][0].data.metadata).toMatchObject({ incluidoManualmente: true });
   });
 });
 

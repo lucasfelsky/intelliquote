@@ -81,11 +81,36 @@ const linhas: LinhaParaRelatorio[] = [
   linha({ linha: 13, productId: 13, item: 'SEM FONTE', fonte: '', AN: null, AQ: null, projecao: POSITIVA }),
   linha({ linha: 14, productId: 14, item: 'NA LISTA B', fonte: 'FONTE B' }),
   linha({ linha: 15, productId: 15, item: 'SEM FALTA B', fonte: 'fonte b', AN: 10, Q: 5, AG: 5, projecao: POSITIVA }),
+  // Sem lead time com programacao (cai em "sem consumo" no relatorio) e codigo pendente de cadastro com Q <= 0: nunca candidatos.
+  linha({
+    linha: 16,
+    productId: 16,
+    item: 'SEM LEAD TIME COM PROGRAMACAO',
+    fonte: 'FONTE A',
+    Q: 0,
+    AG: 0,
+    AN: null,
+    AQ: null,
+    projecao: [0, 0, 0, 0, 0, 0],
+    programacoes: [30, 0, 0, 0],
+  }),
+  linha({
+    linha: 17,
+    productId: 17,
+    item: 'PENDENTE DE CADASTRO',
+    fonte: 'FONTE A',
+    Q: 0,
+    AG: 0,
+    AN: 100,
+    projecao: [0, 0, 0, 0, 0, 0],
+    programacoes: [30, 0, 0, 0],
+    pendenteCadastro: 'sem_cadastro',
+  }),
 ];
 
 const grupos: GrupoDeEquivalencia[] = [{ id: 1, nome: 'GRUPO COBERTO', principalProductId: 10, productIds: [10, 11] }];
 const sobDemanda = new Map([[3, { motivo: 'so com programacao' }]]);
-const comCatalogo = new Set([1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]);
+const comCatalogo = new Set([1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15, 16, 17]);
 
 const q = quinzena(linhas);
 const relatorio = montarRelatorioCompras(q, [], { sobDemanda, grupos });
@@ -190,8 +215,18 @@ describe('montarCandidatosCotacao', () => {
     expect(candidatoDoProduto(duplo, 11)?.motivoForaDaLista).toBe('coberto-por-grupo');
   });
 
+  it('sem lead time NUNCA e candidato: Q <= 0 com AN nulo e programacao, ou codigo pendente de cadastro com Q <= 0', () => {
+    // O relatorio os coloca em "sem consumo" (programacao > 0), mas sem lead time o AN do motor nao existe.
+    expect(relatorio.semConsumo.itens.map((i) => i.productId)).toEqual(expect.arrayContaining([16, 17]));
+    expect(demandaDoHorizonte(linhas.find((l) => l.linha === 16) as LinhaParaRelatorio)).toBe(30);
+    expect(doProduto(16)).toBeNull();
+    expect(doProduto(17)).toBeNull();
+    // Nenhum candidato, em nenhuma combinacao, chega sem o AN real.
+    for (const c of resultado.candidatos) expect(typeof c.anMotorKg).toBe('number');
+  });
+
   it('exclui e conta: sem cadastro, sem fonte, sem vinculo no catalogo e sem lead time', () => {
-    for (const id of [9, 12, 13]) expect(doProduto(id)).toBeNull();
+    for (const id of [9, 12, 13, 16, 17]) expect(doProduto(id)).toBeNull();
     expect(resultado.excluidos).toEqual(
       expect.arrayContaining([
         { motivo: 'sem-cadastro', fonte: 'FONTE A' },
@@ -200,7 +235,20 @@ describe('montarCandidatosCotacao', () => {
         { motivo: 'sem-lead-time', fonte: 'FONTE B' },
       ]),
     );
-    expect(resultado.excluidos).toHaveLength(4);
+    // sem-cadastro, sem-fonte, sem-vinculo-catalogo e 3 x sem-lead-time (12, 16 e 17).
+    expect(resultado.excluidos).toHaveLength(6);
+    expect(resultado.excluidos.filter((e) => e.motivo === 'sem-lead-time')).toHaveLength(3);
+  });
+
+  it('o mesmo produto conta uma vez em excluidos (linha do grupo e membro coberto)', () => {
+    const semCatalogoDe11 = new Set([...comCatalogo].filter((id) => id !== 11));
+    const dupla = montarCandidatosCotacao(q, relatorio, {
+      grupos: [{ ...grupos[0], principalProductId: 11 }],
+      produtosComVinculoCatalogo: semCatalogoDe11,
+    });
+    // Baseline: o produto 9 (sem vinculo) + o produto 11 UMA vez, apesar de aparecer nos dois laços.
+    expect(dupla.excluidos.filter((e) => e.motivo === 'sem-vinculo-catalogo')).toHaveLength(2);
+    expect(candidatoDoProduto(dupla, 11)).toBeNull();
   });
 
   it('nao toca o relatorio: a mesma entrada gera o mesmo relatorio', () => {
@@ -221,7 +269,7 @@ describe('agruparPorFonte', () => {
       { motivo: 'sem-cadastro', quantidade: 1 },
       { motivo: 'sem-fonte', quantidade: 1 },
       { motivo: 'sem-vinculo-catalogo', quantidade: 1 },
-      { motivo: 'sem-lead-time', quantidade: 1 },
+      { motivo: 'sem-lead-time', quantidade: 3 },
     ]);
   });
 
