@@ -27,7 +27,7 @@ import { api, ApiError } from '@/api/client';
 import { abrirCotar } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
-const put = vi.mocked(api.put);
+const post = vi.mocked(api.post);
 const del = vi.mocked(api.del);
 
 // Dados 100% sinteticos.
@@ -285,28 +285,51 @@ describe('Painel - coluna ANALISE FORECAST com a quantidade decidida', () => {
     expect(textoDaCelula(await celulaAnalise('PRODUTO A'))).toBe('50,0');
   });
 
-  it('compartilha o cache com o relatorio: salvar la atualiza a grade sem novo GET', async () => {
-    mockApi(comDecisoes(decisao()));
-    put.mockResolvedValue({
-      data: { acao: 'update', decisao: decisao({ quantidadeKg: 2000, atualizadaEm: '2026-10-27T15:00:00.000Z' }) },
-    } as never);
+  it('compartilha o cache com o relatorio: gerar a cotacao la grava a decisao e o Painel recarrega a lista uma vez', async () => {
+    let decisoes = [decisao()];
+    mockApi(() => ({ data: { decisoes } }));
+    const base = get.getMockImplementation() as (path: string) => Promise<unknown>;
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/forecast/products') {
+        return {
+          data: [
+            { id: 42, name: 'PRODUTO A', codes: [{ code: 'C0001', position: 1, catalogItemId: 5, catalogItem: { id: 5, commercialName: 'ITEM 5', marketName: 'M5' } }] },
+          ],
+        };
+      }
+      return base(path);
+    });
+    post.mockImplementation((async () => {
+      decisoes = [decisao({ quantidadeKg: 2000, atualizadaEm: '2026-10-27T15:00:00.000Z' })];
+      return {
+        data: {
+          snapshotId: 7,
+          label: '10-2',
+          cotacoes: [{ id: 55, requestCode: 'COT-0055', fonte: 'FONTE 1', itens: [{ productId: 42, item: 'PRODUTO A', quantidadeKg: 2000 }] }],
+        },
+      };
+    }) as never);
     renderPage({ staleTime: Infinity });
     await waitFor(async () => {
       expect((await celulaAnalise('PRODUTO A')).querySelector('.fcad-decidida')?.textContent).toBe('1.600,0');
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Relatório de compras' }));
-    await abrirCotar('PRODUTO A');
-    const campo = (await screen.findByLabelText('Qtd. decidida (kg) de PRODUTO A')) as HTMLInputElement;
+    const dialogo = await abrirCotar('PRODUTO A');
+    const campo = within(dialogo).getByLabelText('Quantidade a cotar de PRODUTO A') as HTMLInputElement;
+    expect(campo.value).toBe('1600');
     fireEvent.change(campo, { target: { value: '2000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar decisão de PRODUTO A' }));
-    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((within(dialogo).getByRole('button', { name: 'Gerar cotação' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Gerar cotação' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('link', { name: 'Abrir COT-0055' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Painel' }));
     await waitFor(async () => {
       expect((await celulaAnalise('PRODUTO A')).querySelector('.fcad-decidida')?.textContent).toBe('2.000,0');
     });
-    expect(decisoesChamadas()).toHaveLength(1);
+    // o POST invalida a lista (1 GET a mais); a grade do Painel le o mesmo cache do relatorio
+    expect(decisoesChamadas()).toHaveLength(2);
   });
 
   it('excluir a quinzena tira as decisoes dela do cache', async () => {

@@ -25,7 +25,7 @@ const fontes = import.meta.glob(['../**/*.tsx', '../**/*.ts', '!../test/**', '!.
 }) as Record<string, string>;
 
 // Os 4 componentes do Forecast cujo <Modal> e a raiz de um createPortal(document.body) (ForecastRelatorioCompras.tsx e ForecastRelatorioDemandaComercial.tsx): so eles usam `fc-portal`.
-const ARQUIVOS_PORTAL = ['/pages/Forecast/ForecastCotar.tsx', '/pages/Forecast/ForecastDemandaComercialModal.tsx', '/pages/Forecast/ForecastEmbalagensModal.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx'];
+const ARQUIVOS_PORTAL = ['/pages/Forecast/ForecastCriarCotacaoPopup.tsx', '/pages/Forecast/ForecastDemandaComercialModal.tsx', '/pages/Forecast/ForecastEmbalagensModal.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx'];
 
 // Cores NOMEADAS do CSS (as palavras-chave de cor; `transparent` e `currentcolor` ficam de fora: nao sao cor literal).
 const CORES_NOMEADAS = new Set(
@@ -199,9 +199,9 @@ describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
     }
   });
 
-  it('todo createPortal de src/pages/Forecast* esta nos 3 arquivos (2 de relatorio e o pop-up Cotar) e so renderiza modais cuja raiz carrega `fc-portal` (<Modal className="fc-portal">)', () => {
+  it('todo createPortal de src/pages/Forecast* esta nos 3 arquivos (2 de relatorio e o provedor do pop-up Criar cotacao) e so renderiza modais cuja raiz carrega `fc-portal` (<Modal className="fc-portal">)', () => {
     const portais = Object.entries(fontes).filter(([c, src]) => /\/pages\/Forecast(\.tsx|\/)/.test(c) && src.includes('createPortal(')).map(([c]) => c.replace(/^\.\.\//, '/'));
-    expect(portais.sort()).toEqual(['/pages/Forecast/ForecastCotar.tsx', '/pages/Forecast/ForecastRelatorioCompras.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx']);
+    expect(portais.sort()).toEqual(['/pages/Forecast/ForecastCriarCotacao.tsx', '/pages/Forecast/ForecastRelatorioCompras.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx']);
     // os 3 modais que esses portais montam: Embalagens e Demanda comercial (componentes proprios) e o <Modal> de fechamento escrito no proprio arquivo
     const demanda = Object.entries(fontes).find(([c]) => c.endsWith('/pages/Forecast/ForecastRelatorioDemandaComercial.tsx'))?.[1] ?? '';
     expect(demanda).toContain('<Modal isOpen onClose={fecharDialogo} title={ROTULO_FECHAMENTO[dialogo.status].titulo} className="fc-portal">');

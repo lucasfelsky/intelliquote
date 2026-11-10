@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import type { ForecastDadosDoGrupo } from '@/services/forecast';
-import type { ForecastDecisao } from '@/services/forecastDecisoes';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Forecast from '../Forecast';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
 import { ProvedorGerarCotacao } from './ForecastGerarCotacao';
+
+// Provedor do vinculo com o catalogo e papeis do "Criar cotacao" (E6): quem pode criar ve a selecao e a acao Cotar; quem so
+// le (e o relatorio fora do provedor) nao ve nada e nao consulta o vinculo nem o rascunho. O pop-up em si fica em
+// ForecastCriarCotacao.test.tsx.
 
 let mockRole = 'comprador';
 vi.mock('@/auth/AuthProvider', () => ({
@@ -26,11 +28,9 @@ vi.mock('@/api/client', () => ({
   },
 }));
 
-import { api, ApiError } from '@/api/client';
-import { abrirCotar } from '@/test/forecastDetalhes';
+import { api } from '@/api/client';
 
 const get = vi.mocked(api.get);
-const put = vi.mocked(api.put);
 
 // Dados 100% sinteticos.
 function item(over: Record<string, unknown> = {}) {
@@ -83,55 +83,26 @@ function produto(id: number, name: string, catalogItemId: number | null = id + 1
   };
 }
 
-function decisao(over: Partial<ForecastDecisao> = {}): ForecastDecisao {
-  return {
-    productId: 42,
-    quantidadeKg: 1234.5,
-    status: 'confirmado',
-    observacao: null,
-    sugeridaKg: 125,
-    demandaKg: -40,
-    decididaPorId: 3,
-    criadaEm: '2026-10-26T17:30:00.000Z',
-    atualizadaEm: '2026-10-26T17:30:00.000Z',
-    ...over,
-  };
-}
-
-interface Cenario {
-  itens?: Array<Record<string, unknown>>;
-  produtos?: unknown[];
-  decisoes?: ForecastDecisao[];
-  produtosErro?: boolean;
-}
-
 const LINHA_PADRAO = [item({ linha: 4, productId: 42, item: 'PRODUTO 002' })];
 
-function mockApi(c: Cenario = {}) {
+function mockApi() {
   get.mockImplementation(async (path: string) => {
-    if (path === '/v1/forecast/products') {
-      if (c.produtosErro) throw new ApiError(500, null);
-      return { data: c.produtos ?? [produto(41, 'PRODUTO 001'), produto(42, 'PRODUTO 002')] };
-    }
-    if (path.endsWith('/decisoes')) return { data: { snapshotId: 7, label: '10-2', decisoes: c.decisoes ?? [] } };
-    if (path.endsWith('/relatorio-compras')) return { data: relatorio(c.itens ?? LINHA_PADRAO) };
+    if (path === '/v1/forecast/products') return { data: [produto(41, 'PRODUTO 001'), produto(42, 'PRODUTO 002')] };
+    if (path.endsWith('/decisoes')) return { data: { snapshotId: 7, label: '10-2', decisoes: [] } };
+    if (path.endsWith('/rascunho-cotacao')) return { data: null };
+    if (path.endsWith('/relatorio-compras')) return { data: relatorio(LINHA_PADRAO) };
     return { data: {} };
   });
 }
 
-function Destino() {
-  return <div data-testid="destino">{useLocation().search}</div>;
-}
-
 interface Opcoes {
   podeCriar?: boolean;
-  podeEditar?: boolean;
   semProvedor?: boolean;
 }
 
 function renderRelatorio(o: Opcoes = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const relatorioEl = <ForecastRelatorioCompras snapshotId={7} podeEditar={o.podeEditar ?? false} />;
+  const relatorioEl = <ForecastRelatorioCompras snapshotId={7} podeEditar={o.podeCriar ?? true} />;
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/forecast']}>
@@ -148,7 +119,6 @@ function renderRelatorio(o: Opcoes = {}) {
               )
             }
           />
-          <Route path="/cotacoes/nova" element={<Destino />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -156,222 +126,42 @@ function renderRelatorio(o: Opcoes = {}) {
 }
 
 const chamadas = (fim: string) => get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith(fim));
-// O botao mora no pop-up "Cotar" da linha (E2 do relatorio enxuto): abre o pop-up antes de procurar.
-const botao = async (nome = 'PRODUTO 002') => {
-  await abrirCotar(nome);
-  return screen.findByRole('button', { name: `Gerar cotação de ${nome}` });
-};
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockRole = 'comprador';
 });
 
-describe('ForecastGerarCotacao (botao da linha)', () => {
-  it('clique leva para /cotacoes/nova?fromForecast=<quinzena>-<produto> (SPA)', async () => {
-    mockApi({ decisoes: [decisao({ productId: 42, quantidadeKg: 300 })] });
-    renderRelatorio();
-    const b = await botao();
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
-    fireEvent.click(b);
-    expect((await screen.findByTestId('destino')).textContent).toBe('?fromForecast=7-42');
-  });
-
-  it('o botao (com rotulo visivel) nao tem role="alert" e fica na celula da decisao do pop-up', async () => {
+describe('ProvedorGerarCotacao (vinculo com o catalogo e papeis)', () => {
+  it('quem pode criar ve a selecao da linha e a acao Cotar; 1 GET de produtos, de decisoes e de rascunho', async () => {
     mockApi();
     renderRelatorio();
-    const b = await botao();
-    expect(b.textContent).toBe('Gerar cotação');
-    expect(b.closest('dialog')).not.toBeNull();
-    expect(b.closest('.fdec-celula')).not.toBeNull();
-    // o editor e o Gerar cotacao dividem a grade .fdec-conteudo (o icone fica na linha do Salvar)
-    const grade = b.closest('.fdec-conteudo') as HTMLElement;
-    expect(grade.parentElement).toBe(b.closest('.fdec-celula'));
-    expect(grade.querySelector(':scope > .fgc-acao')).not.toBeNull();
-    expect(screen.queryAllByRole('alert')).toHaveLength(0);
-  });
-
-  it('sem permissao de criar (gestor/viewer): nenhum botao e ZERO GET de produtos', async () => {
-    mockApi();
-    renderRelatorio({ podeCriar: false });
-    await screen.findByText('1 item em 1 fonte');
-    expect(screen.queryByRole('button', { name: /Gerar cotação/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
-    expect(chamadas('/v1/forecast/products')).toHaveLength(0);
-  });
-
-  it('sem provedor (relatorio puro): nenhum botao e ZERO GET de produtos', async () => {
-    mockApi();
-    renderRelatorio({ semProvedor: true });
-    await screen.findByText('1 item em 1 fonte');
-    expect(screen.queryByRole('button', { name: /Gerar cotação/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
-    expect(chamadas('/v1/forecast/products')).toHaveLength(0);
-  });
-
-  it('varias linhas: uma acao Cotar por linha e exatamente 1 GET de produtos e 1 GET de decisoes (deduplicado)', async () => {
-    mockApi({
-      itens: [
-        item({ linha: 3, productId: 41, item: 'PRODUTO 001' }),
-        item({ linha: 4, productId: 42, item: 'PRODUTO 002' }),
-        item({ linha: 5, productId: 43, item: 'PRODUTO 003' }),
-      ],
-      produtos: [produto(41, 'PRODUTO 001'), produto(42, 'PRODUTO 002'), produto(43, 'PRODUTO 003')],
-    });
-    renderRelatorio();
-    await botao('PRODUTO 003');
-    expect(screen.getAllByRole('button', { name: /^Cotar PRODUTO/ })).toHaveLength(3);
-    // so o pop-up aberto tem o Gerar cotacao
-    expect(screen.getAllByRole('button', { name: /^Gerar cotação de/ })).toHaveLength(1);
-    await waitFor(() => expect(chamadas('/decisoes')).toHaveLength(1));
+    expect(await screen.findByRole('button', { name: 'Cotar PRODUTO 002' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Selecionar PRODUTO 002' })).toBeTruthy();
+    await waitFor(() => expect(chamadas('/rascunho-cotacao')).toHaveLength(1));
     expect(chamadas('/v1/forecast/products')).toHaveLength(1);
-  });
-
-  describe.each([
-    ['item fora do cadastro (productId nulo)', { itens: [item({ linha: 4, productId: null, item: 'PRODUTO 002' })] }, 'Item fora do cadastro do Forecast.'],
-    [
-      'produto sem codigo vinculado ao catalogo',
-      { produtos: [produto(42, 'PRODUTO 002', null)] },
-      'Nenhum código deste produto está vinculado a um item do catálogo.',
-    ],
-    [
-      'decisao salva = 0 (nao comprar)',
-      { decisoes: [decisao({ productId: 42, quantidadeKg: 0 })] },
-      'A decisão salva desta quinzena é não comprar (0 kg).',
-    ],
-    [
-      'sem decisao e Qtd. final 0',
-      { itens: [item({ linha: 4, productId: 42, item: 'PRODUTO 002', quantidadeFinal: 0 })] },
-      'Sem quantidade a comprar nesta quinzena.',
-    ],
-  ] as Array<[string, Cenario, string]>)('desabilitado: %s', (_nome, cenario, texto) => {
-    it('aria-disabled, motivo ligado por aria-describedby, foco e clique nao navegam', async () => {
-      mockApi(cenario);
-      renderRelatorio();
-      const b = await botao('PRODUTO 002');
-      await waitFor(() => expect(b.getAttribute('aria-describedby')).not.toBeNull());
-      await waitFor(() => expect(document.getElementById(b.getAttribute('aria-describedby') as string)?.textContent).toBe(texto));
-      expect(b.getAttribute('aria-disabled')).toBe('true');
-      expect((b as HTMLButtonElement).disabled).toBe(false);
-      b.focus();
-      expect(document.activeElement).toBe(b);
-      fireEvent.click(b);
-      expect(screen.queryByTestId('destino')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Gerar cotação de PRODUTO 002' })).toBe(b);
-    });
-  });
-
-  it('decisao > 0 com Qtd. final 0: habilitado', async () => {
-    mockApi({
-      itens: [item({ linha: 4, productId: 42, item: 'PRODUTO 002', quantidadeFinal: 0 })],
-      decisoes: [decisao({ productId: 42, quantidadeKg: 10 })],
-    });
-    renderRelatorio();
-    const b = await botao();
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
-    expect(b.getAttribute('aria-describedby')).toBeNull();
-  });
-
-  it('enquanto verifica o vinculo, mostra o motivo de espera e depois habilita', async () => {
-    mockApi();
-    const base = get.getMockImplementation() as (path: string) => Promise<unknown>;
-    let liberar: () => void = () => {};
-    const espera = new Promise<void>((r) => (liberar = r));
-    get.mockImplementation(async (path: string) => {
-      if (path === '/v1/forecast/products') await espera;
-      return base(path);
-    });
-    renderRelatorio();
-    const b = await botao();
-    expect(await screen.findByText('Verificando o vínculo com o catálogo…')).toBeTruthy();
-    expect(b.getAttribute('aria-disabled')).toBe('true');
-    liberar();
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
-    expect(screen.queryByText('Verificando o vínculo com o catálogo…')).toBeNull();
-  });
-
-  it('salvar a decisao 0 na mesma linha desabilita o botao sem recarregar', async () => {
-    mockApi({ decisoes: [decisao({ productId: 42, quantidadeKg: 300 })] });
-    put.mockResolvedValue({ data: { acao: 'update', decisao: decisao({ productId: 42, quantidadeKg: 0 }) } });
-    renderRelatorio({ podeEditar: true });
-    const b = await botao();
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
-
-    fireEvent.change(await screen.findByLabelText('Qtd. decidida (kg) de PRODUTO 002'), { target: { value: '0' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar decisão de PRODUTO 002' }));
-
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBe('true'));
-    expect(document.getElementById(b.getAttribute('aria-describedby') as string)?.textContent).toBe(
-      'A decisão salva desta quinzena é não comprar (0 kg).',
-    );
     expect(chamadas('/decisoes')).toHaveLength(1);
   });
 
-  it('GET de produtos falha (500): motivo visivel, sem alerta', async () => {
-    mockApi({ produtosErro: true });
-    renderRelatorio();
-    const b = await botao();
-    await waitFor(() => expect(b.getAttribute('aria-describedby')).not.toBeNull());
-    expect(await screen.findByText('Não foi possível verificar o vínculo com o catálogo. Recarregue a página.')).toBeTruthy();
-    expect(b.getAttribute('aria-disabled')).toBe('true');
-    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+  it('sem permissao de criar (gestor/viewer): nenhuma selecao, nenhum Cotar e ZERO GET de produtos e de rascunho', async () => {
+    mockApi();
+    renderRelatorio({ podeCriar: false });
+    await screen.findByText('1 item em 1 fonte');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Criar cotação/ })).toBeNull();
+    expect(chamadas('/v1/forecast/products')).toHaveLength(0);
+    expect(chamadas('/rascunho-cotacao')).toHaveLength(0);
   });
 
-  it('linha de grupo de equivalencia cota o produto PRINCIPAL do grupo', async () => {
-    const grupo: ForecastDadosDoGrupo = {
-      id: 10,
-      nome: 'GRUPO SINTETICO',
-      principalProductId: 42,
-      principalItem: 'PRODUTO 002',
-      membros: [
-        {
-          linha: 4,
-          productId: 42,
-          item: 'PRODUTO 002',
-          codigos: ['C0042'],
-          fonte: 'FONTE 001',
-          principal: true,
-          estoque: 0,
-          chegadas: 0,
-          programado: 0,
-          mediaTrimestral: 100,
-          demandaIndividual: -300,
-          semLeadTime: false,
-          obs: '',
-        },
-        {
-          linha: 5,
-          productId: 43,
-          item: 'PRODUTO 003',
-          codigos: ['C0043'],
-          fonte: 'FONTE 001',
-          principal: false,
-          estoque: 100,
-          chegadas: 0,
-          programado: 0,
-          mediaTrimestral: 50,
-          demandaIndividual: -70,
-          semLeadTime: false,
-          obs: '',
-        },
-      ],
-      estoque: 100,
-      chegadas: 0,
-      programado: 0,
-      mediaTrimestral: 150,
-      seguranca: 300,
-      demanda: -150,
-      cobertura: 2,
-    };
-    mockApi({
-      itens: [item({ linha: 4, productId: 42, item: 'GRUPO SINTETICO', quantidadeFinal: 150, grupo })],
-      produtos: [produto(42, 'PRODUTO 002'), produto(43, 'PRODUTO 003')],
-    });
-    renderRelatorio();
-    const b = await botao('GRUPO SINTETICO');
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
-    fireEvent.click(b);
-    expect((await screen.findByTestId('destino')).textContent).toBe('?fromForecast=7-42');
+  it('sem provedor (relatorio puro): nenhuma selecao, nenhum Cotar e ZERO GET de produtos e de rascunho', async () => {
+    mockApi();
+    renderRelatorio({ semProvedor: true });
+    await screen.findByText('1 item em 1 fonte');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
+    expect(chamadas('/v1/forecast/products')).toHaveLength(0);
+    expect(chamadas('/rascunho-cotacao')).toHaveLength(0);
   });
 });
 
@@ -410,6 +200,7 @@ function mockPagina() {
       };
     }
     if (path === '/v1/forecast/products') return { data: [produto(42, 'PRODUTO 002')] };
+    if (path.endsWith('/rascunho-cotacao')) return { data: null };
     if (path.endsWith('/decisoes')) return { data: { snapshotId: 7, label: '10-2', decisoes: [] } };
     if (path.endsWith('/relatorio-compras')) return { data: relatorio(LINHA_PADRAO) };
     return { data: {} };
@@ -423,31 +214,30 @@ function renderPagina() {
       <MemoryRouter initialEntries={['/forecast?visao=compras']}>
         <Routes>
           <Route path="/forecast" element={<Forecast />} />
-          <Route path="/cotacoes/nova" element={<Destino />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe('Forecast (pagina): botao Gerar cotacao no relatorio de compras', () => {
-  it.each(['comprador', 'admin'])('%s ve o botao e navega para o formulario', async (role) => {
+describe('Forecast (pagina): selecao e Cotar no relatorio de compras', () => {
+  it.each(['comprador', 'admin'])('%s ve a selecao e a acao Cotar e abre o pop-up Criar cotacao', async (role) => {
     mockRole = role;
     mockPagina();
     renderPagina();
-    const b = await botao();
-    await waitFor(() => expect(b.getAttribute('aria-disabled')).toBeNull());
-    fireEvent.click(b);
-    expect((await screen.findByTestId('destino')).textContent).toBe('?fromForecast=7-42');
+    fireEvent.click(await screen.findByRole('button', { name: 'Cotar PRODUTO 002' }));
+    expect(await screen.findByRole('heading', { name: 'Criar cotação' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Selecionar PRODUTO 002' })).toBeTruthy();
   });
 
-  it.each(['viewer', 'gestor'])('%s nao ve o botao e nao consulta o vinculo', async (role) => {
+  it.each(['viewer', 'gestor'])('%s nao ve a selecao nem o Cotar e nao consulta o vinculo nem o rascunho', async (role) => {
     mockRole = role;
     mockPagina();
     renderPagina();
     await screen.findByText('1 item em 1 fonte');
-    expect(screen.queryByRole('button', { name: /Gerar cotação/ })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
     expect(chamadas('/v1/forecast/products')).toHaveLength(0);
+    expect(chamadas('/rascunho-cotacao')).toHaveLength(0);
   });
 });

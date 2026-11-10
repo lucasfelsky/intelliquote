@@ -1,69 +1,57 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Modal } from '@/components/Modal';
+import { useId } from 'react';
+import { InfoPopover } from '@/components/InfoPopover';
+import { Icon } from '@/components/icons';
 import type { ForecastItemRelatorio } from '@/services/forecast';
-import ForecastDecisaoCompra, { usePodeEditarDecisao } from './ForecastDecisaoCompra';
-import ForecastGerarCotacao, { usePodeCriarCotacao } from './ForecastGerarCotacao';
-import { kgBr } from './forecastPainel';
+import { useCriarCotacao } from './ForecastCriarCotacao';
+import { MOTIVO_FORA_CADASTRO } from './forecastGerarCotacaoRegras';
 
-// Acao "Cotar" da linha do relatorio de compras (E2 do relatorio enxuto): abre um pop-up com a quantidade a cotar e a
-// observacao (o editor de decisao de antes, sem o status) e o botao "Gerar cotacao". Quem so le nao ve a acao.
+// Acao da linha do relatorio de compras (E2, refeita na E6): "Cotar" abre o pop-up "Criar cotacao" com este item ja escolhido;
+// "Continuar" aparece quando o item esta no rascunho da pessoa. Quem so le (ou fora do provedor) nao ve a acao.
 
-function PopupCotar({ item, onFechar }: { item: ForecastItemRelatorio; onFechar: () => void }) {
-  return (
-    <Modal
-      isOpen
-      onClose={onFechar}
-      title={`Cotar ${item.item}`}
-      subtitle={item.codigos.join(' · ')}
-      size="wide"
-      className="fc-portal"
-    >
-      <div className="fcq-corpo">
-        <p className="fcq-sugerida">
-          Qtd. final calculada: <strong>{kgBr(item.quantidadeFinal)} kg</strong> (a que “Usar sugerida” preenche)
-        </p>
-        <div className="fdec-celula fcq-decisao">
-          <div className="fdec-conteudo">
-            <ForecastDecisaoCompra item={item} />
-            <ForecastGerarCotacao item={item} comTexto />
-          </div>
-        </div>
-      </div>
-    </Modal>
-  );
+interface Props {
+  item: ForecastItemRelatorio;
+  /** Fonte do grupo em que o item aparece (o item do relatorio nao carrega a fonte). */
+  fonte: string;
 }
 
-export default function ForecastCotar({ item }: { item: ForecastItemRelatorio }) {
-  const podeEditar = usePodeEditarDecisao();
-  const podeCriar = usePodeCriarCotacao();
-  const [aberto, setAberto] = useState(false);
-  const botao = useRef<HTMLButtonElement>(null);
-  const abriuAntes = useRef(false);
-  // O pop-up e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
-  useEffect(() => {
-    if (aberto) {
-      abriuAntes.current = true;
-    } else if (abriuAntes.current) {
-      abriuAntes.current = false;
-      botao.current?.focus();
-    }
-  }, [aberto]);
-  if (!podeEditar && !podeCriar) return null;
+export default function ForecastCotar({ item, fonte }: Props) {
+  const ctx = useCriarCotacao();
+  const idMotivo = useId();
+  if (!ctx) return null;
+  const productId = item.productId ?? null;
+  if (productId === null) {
+    // Itens sem produto no cadastro nao entram na cotacao: o motivo fica visivel (balao) e para o leitor de tela.
+    return (
+      <span className="fcq-acao">
+        <button
+          type="button"
+          className="ghost-button ghost-button--sm fcq-botao"
+          aria-label={`Cotar ${item.item}`}
+          aria-disabled="true"
+          aria-describedby={idMotivo}
+          title={MOTIVO_FORA_CADASTRO}
+        >
+          Cotar
+        </button>
+        <span id={idMotivo} className="fcr-so-leitor">
+          {MOTIVO_FORA_CADASTRO}
+        </span>
+        <InfoPopover label="Por que não dá para cotar" tone="warning" className="fgc-motivo-chip" trigger={<Icon name="info" size={14} />}>
+          {MOTIVO_FORA_CADASTRO}
+        </InfoPopover>
+      </span>
+    );
+  }
+  const rascunho = ctx.noRascunho(productId) !== undefined;
   return (
-    <>
-      <button
-        ref={botao}
-        type="button"
-        className="ghost-button ghost-button--sm fcq-botao"
-        aria-label={`Cotar ${item.item}`}
-        aria-haspopup="dialog"
-        onClick={() => setAberto(true)}
-      >
-        Cotar
-      </button>
-      {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o pop-up. */}
-      {aberto && createPortal(<PopupCotar item={item} onFechar={() => setAberto(false)} />, document.body)}
-    </>
+    <button
+      type="button"
+      className="ghost-button ghost-button--sm fcq-botao"
+      aria-label={rascunho ? `Continuar cotação de ${item.item}` : `Cotar ${item.item}`}
+      aria-haspopup="dialog"
+      onClick={(e) => ctx.abrir([{ item, fonte }], e.currentTarget)}
+    >
+      {rascunho ? 'Continuar' : 'Cotar'}
+    </button>
   );
 }
