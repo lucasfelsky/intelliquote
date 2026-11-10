@@ -18,7 +18,15 @@ import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import { ForecastDecisaoLeitura, ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastCotar from './ForecastCotar';
-import { ProvedorCriarCotacao, textoRascunhoDaLinha, useCriarCotacao } from './ForecastCriarCotacao';
+import { ProvedorCriarCotacao, useCriarCotacao } from './ForecastCriarCotacao';
+import {
+  CabecalhoQtdFinal,
+  CelulaQtdFinal,
+  LinkInterno,
+  StatusDaLinha,
+  useDecisaoDaLinha,
+} from './ForecastTrackingLinha';
+import { rotaDaCotacao, rotaDoPedido, temPedido, textoStatusDaCotacao } from './forecastTrackingRegras';
 import type { ItemSelecionado } from './forecastCriarCotacaoRegras';
 import ForecastOcasiaoSelo, { OcasioesDoGrupoSelo, OcasioesDoItemDetalhe, OcasioesNoResumo } from './ForecastOcasiaoSelo';
 import { AlternarGrupo } from './ForecastAlternarGrupo';
@@ -330,21 +338,34 @@ function SelecionarTodos({ itens, rotulo }: { itens: ItemSelecionado[]; rotulo: 
   );
 }
 
-/** Marca "Rascunho" na celula do status quando o item esta no rascunho da pessoa (E6). */
-function RascunhoDaLinha({ item }: { item: ForecastItemRelatorio }) {
-  const ctx = useCriarCotacao();
-  const noRascunho = ctx && item.productId != null ? ctx.noRascunho(item.productId) : undefined;
-  if (!ctx || !noRascunho) return null;
+/** Cotacao vinculada no expansor: codigo (sai no papel), situacao e, com a PO enviada, o atalho para o pedido. */
+function CotacaoDoItem({ item }: { item: ForecastItemRelatorio }) {
+  const cotacao = useDecisaoDaLinha(item)?.cotacao ?? null;
+  if (!cotacao) return null;
   return (
-    <span className="fcl-rascunho">
-      <span className="badge badge--muted">Rascunho</span>
-      <span className="fcr-fraco">{textoRascunhoDaLinha(ctx.rascunho, noRascunho)}</span>
-    </span>
+    <Detalhe rotulo="Cotação">
+      <span className="fcr-mono">{cotacao.requestCode}</span>
+      <span className="fcr-fraco">{textoStatusDaCotacao(cotacao)}</span>
+      <span className="fcr-det__links">
+        <LinkInterno to={rotaDaCotacao(cotacao.id)} className="fcr-det__link" aria-label={`Abrir cotação ${cotacao.requestCode} de ${item.item}`}>
+          Abrir cotação
+        </LinkInterno>
+        {temPedido(cotacao) && (
+          <LinkInterno
+            to={rotaDoPedido(cotacao.id)}
+            className="fcr-det__link"
+            aria-label={`Ver pedido da cotação ${cotacao.requestCode} de ${item.item}`}
+          >
+            Ver pedido
+          </LinkInterno>
+        )}
+      </span>
+    </Detalhe>
   );
 }
 
 /** Um bloco do expansor "Detalhes": rotulo pequeno + conteudo. */
-function Detalhe({ rotulo, children, largo = false }: { rotulo: string; children: ReactNode; largo?: boolean }) {
+function Detalhe({ rotulo, children, largo = false }: { rotulo: ReactNode; children: ReactNode; largo?: boolean }) {
   return (
     <div className={largo ? 'fcr-det fcr-det--largo' : 'fcr-det'}>
       <div className="fcr-det__rotulo">{rotulo}</div>
@@ -364,7 +385,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
   const idDetalhes = useId();
   // Colunas da linha (Item, Urgencia, Fonte e as 4 comuns): a sublinha do grupo e o expansor ocupam todas.
   const comSelecao = useCriarCotacao() !== null;
-  const colunas = (comSelecao ? 1 : 0) + 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 4;
+  const colunas = (comSelecao ? 1 : 0) + 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 5;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   const focoPendente = useRef(false);
@@ -437,6 +458,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
           </td>
         )}
         <td className="fcr-num fcr-forte">{d1(item.quantidadeSugerida)}</td>
+        <CelulaQtdFinal item={item} />
         <td className="fcr-col-limite">
           <span className="fcr-limite">
             <span className={item.vencida ? 'fcr-forte fcr-limite__data--vencida' : 'fcr-forte'}>
@@ -446,8 +468,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
           </span>
         </td>
         <td className="fcr-status">
-          {STATUS_ROTULO[item.status] ?? item.status}
-          <RascunhoDaLinha item={item} />
+          <StatusDaLinha item={item} />
         </td>
         <td className="fcr-acao">
           <ForecastCotar item={item} fonte={fonteDoItem} />
@@ -459,7 +480,14 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
             <Detalhe rotulo="Demanda">
               <span className="fcr-mono">{d1(item.demanda)}</span>
             </Detalhe>
-            <Detalhe rotulo="Qtd. final">
+            {/* Literal "Qtd. final" exigido pela paridade com o XLSX (aqui e a quantidade CALCULADA); a fixa e a coluna "Qtd. final (sistema)". */}
+            <Detalhe
+              rotulo={
+                <>
+                  Qtd. final <span className="fcr-det__sufixo">calculada</span>
+                </>
+              }
+            >
               <span className="fcr-mono">{d1(item.quantidadeFinal)}</span>
             </Detalhe>
             <Detalhe rotulo="Saldo e ruptura">
@@ -501,6 +529,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
                 <Observacao obs={item.obs} />
               </Detalhe>
             )}
+            <CotacaoDoItem item={item} />
             <Detalhe rotulo="Decisão de compra" largo>
               <div className="fdec-celula">
                 <ForecastDecisaoLeitura item={item} />
@@ -532,6 +561,7 @@ const COLUNAS_COMUNS = (
     <th scope="col" className="fcr-num">
       Qtd. sugerida
     </th>
+    <CabecalhoQtdFinal />
     <th scope="col">Data-limite</th>
     <th scope="col">Status</th>
     <th scope="col" className="fcr-acao">

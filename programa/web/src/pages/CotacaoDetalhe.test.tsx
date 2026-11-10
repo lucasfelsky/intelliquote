@@ -165,11 +165,11 @@ const tokenFixture: PortalTokenListItem = {
   createdAt: new Date().toISOString(),
 };
 
-function renderPage() {
+function renderPage(entrada = '/cotacoes/1') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/cotacoes/1']}>
+      <MemoryRouter initialEntries={[entrada]}>
         <ConfirmProvider>
           <Routes>
             <Route path="/cotacoes/:id" element={<CotacaoDetalhe />} />
@@ -230,6 +230,20 @@ describe('CotacaoDetalhe', () => {
       'Editar cotação',
     ]) {
       expect(dialogByTitle(container, title).open).toBe(false);
+    }
+  });
+
+  it('1b. ?aba=comparacao abre direto na aba Comparações (destino do "Ver pedido" do Forecast); sem ?aba ou aba inválida, Resumo', async () => {
+    const a = renderPage('/cotacoes/1?aba=comparacao');
+    await a.findByRole('heading', { name: 'RFQ-001' });
+    expect(a.getByRole('tab', { name: 'Comparações' }).getAttribute('aria-selected')).toBe('true');
+    expect(a.getByRole('tab', { name: 'Resumo' }).getAttribute('aria-selected')).toBe('false');
+    a.unmount();
+    for (const entrada of ['/cotacoes/1', '/cotacoes/1?aba=qualquer']) {
+      const b = renderPage(entrada);
+      await b.findByRole('heading', { name: 'RFQ-001' });
+      expect(b.getByRole('tab', { name: 'Resumo' }).getAttribute('aria-selected')).toBe('true');
+      b.unmount();
     }
   });
 

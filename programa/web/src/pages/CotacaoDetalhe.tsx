@@ -1,6 +1,6 @@
 import { useConfirm } from '@/components/useConfirm';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
@@ -300,6 +300,7 @@ export default function CotacaoDetalhe() {
   const confirm = useConfirm();
   const params = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const { user } = useAuth();
   const id = Number(params.id);
@@ -344,7 +345,11 @@ export default function CotacaoDetalhe() {
   const [copiedTokenId, setCopiedTokenId] = useState<number | null>(null);
 
   const [actionError, setActionError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('resumo');
+  // `?aba=` abre direto numa aba (ex.: "Ver pedido" do relatorio do Forecast leva a "comparacao", onde a PO e enviada).
+  const [activeTab, setActiveTab] = useState(() => {
+    const aba = searchParams.get('aba');
+    return aba === 'itens' || aba === 'respostas' || aba === 'comparacao' ? aba : 'resumo';
+  });
 
     const canEdit = user?.role === 'admin' || user?.role === 'comprador';
     const canManageStatus = user?.role === 'admin' || user?.role === 'gestor';

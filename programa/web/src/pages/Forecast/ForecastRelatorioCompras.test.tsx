@@ -248,7 +248,7 @@ describe('ForecastRelatorioCompras', () => {
     const colunas = within(screen.getAllByRole('table')[0] as HTMLElement)
       .getAllByRole('columnheader')
       .map((c) => c.textContent);
-    expect(colunas).toEqual(['Item', 'Qtd. sugerida', 'Data-limite', 'Status', 'Ação']);
+    expect(colunas).toEqual(['Item', 'Qtd. sugerida', 'Qtd. final (sistema)', 'Data-limite', 'Status', 'Ação']);
   });
 
   it('Observação tambem aparece na secao "Atencao: sem consumo"', async () => {
@@ -535,7 +535,7 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     expect(botao.getAttribute('aria-controls')).toBe(linha.id);
     // o conteudo segue no DOM (leitor de tela, impressao e testes), mesmo fechado
     const rotulos = Array.from(linha.querySelectorAll('.fcr-det__rotulo')).map((r) => r.textContent);
-    expect(rotulos).toEqual(expect.arrayContaining(['Demanda', 'Qtd. final', 'Saldo e ruptura', 'Em andamento', 'Embalagem', 'Decisão de compra']));
+    expect(rotulos).toEqual(expect.arrayContaining(['Demanda', 'Qtd. final calculada', 'Saldo e ruptura', 'Em andamento', 'Embalagem', 'Decisão de compra']));
     fireEvent.click(botao);
     expect(botao.getAttribute('aria-expanded')).toBe('true');
     expect(botao.getAttribute('aria-label')).toBe('Recolher detalhes de PRODUTO 002');
