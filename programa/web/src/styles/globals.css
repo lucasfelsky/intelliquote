@@ -1120,6 +1120,9 @@ h3 {
   .sidebar--colapsada .sidebar__theme,
   .sidebar--colapsada .sidebar__logout { width: 44px; padding: 0; gap: 0; }
   .sidebar--colapsada .sidebar__signature { display: none; }
+  /* sem barra de rolagem no trilho de icones: ela tira ~10px da largura e o icone ativo sai do centro do destaque (a rolagem por roda/teclado segue) */
+  .sidebar--colapsada { scrollbar-width: none; }
+  .sidebar--colapsada::-webkit-scrollbar { display: none; }
 }
 
 /* <= 880: sidebar (navy) empilhada acima da topbar, sem hamburguer (F12) */

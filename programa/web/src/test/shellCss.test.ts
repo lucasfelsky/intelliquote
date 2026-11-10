@@ -300,6 +300,11 @@ describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
 });
 
 describe('shell F2: botao de recolher a sidebar', () => {
+  it('recolhida, a sidebar esconde a barra de rolagem (ela estreitava o destaque e descentralizava o icone ativo)', () => {
+    expect(region).toContain('.sidebar--colapsada { scrollbar-width: none; }');
+    expect(region).toContain('.sidebar--colapsada::-webkit-scrollbar { display: none; }');
+  });
+
   it('a marca nao encolhe (flex: none): em janela baixa a sidebar rola e, encolhida, o botao de recolher cairia sobre o 1o link', () => {
     expect(decl('.sidebar__brand').flex).toBe('none');
   });
