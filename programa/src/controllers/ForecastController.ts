@@ -19,6 +19,7 @@ import {
   forecastDemandaComercialPatchSchema,
   forecastDemandaComercialQuerySchema,
   forecastDbcorpPreviewSchema,
+  forecastCandidatosCotacaoQuerySchema,
   forecastDecisaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
@@ -294,6 +295,24 @@ export class ForecastController {
         hoje: typeof req.query.hoje === 'string' ? req.query.hoje : undefined,
       });
       const data = await ForecastSnapshotService.getRelatorioCompras(id, query.hoje);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Candidatos a cotacao (E3): itens da quinzena fora da lista de compra, com demanda, por fonte.
+  static async getCandidatosCotacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const query = forecastCandidatosCotacaoQuerySchema.parse({
+        hoje: typeof req.query.hoje === 'string' ? req.query.hoje : undefined,
+        fonte: typeof req.query.fonte === 'string' ? req.query.fonte : undefined,
+      });
+      const data = await ForecastSnapshotService.getCandidatosCotacao(id, query.fonte ?? null, query.hoje);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

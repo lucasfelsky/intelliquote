@@ -135,6 +135,7 @@ describe('GET /forecast/snapshots/:id/decisoes', () => {
           observacao: null,
           sugeridaKg: 1000,
           demandaKg: -800,
+          incluidoManualmente: false,
           decididaPorId: 1,
           criadaEm: '2099-01-01T12:00:00.000Z',
           atualizadaEm: '2099-01-02T12:00:00.000Z',
@@ -146,6 +147,7 @@ describe('GET /forecast/snapshots/:id/decisoes', () => {
           observacao: 'NOTA',
           sugeridaKg: 1000,
           demandaKg: -800,
+          incluidoManualmente: false,
           decididaPorId: 1,
           criadaEm: '2099-01-01T12:00:00.000Z',
           atualizadaEm: '2099-01-02T12:00:00.000Z',
@@ -218,6 +220,8 @@ describe('PUT /forecast/snapshots/:id/decisoes/:productId - validacao', () => {
     ['chave desconhecida', { quantidadeKg: 1, extra: true }],
     ['null com observacao', { quantidadeKg: null, observacao: 'x' }],
     ['null com status', { quantidadeKg: null, status: 'po' }],
+    ['null com incluidoManualmente', { quantidadeKg: null, incluidoManualmente: true }],
+    ['incluidoManualmente nao booleano', { quantidadeKg: 1, incluidoManualmente: 'sim' }],
     ['corpo sem quantidadeKg', { observacao: 'x' }],
     ['corpo vazio', {}],
   ])('%s -> 400 sem abrir transacao', async (_nome, corpo) => {
@@ -270,6 +274,134 @@ describe('PUT /forecast/snapshots/:id/decisoes/:productId - validacao', () => {
     expect(tx.forecastPurchaseDecision.create.mock.calls[0][0].data.note).toBeNull();
     await request(app).put(PUT_URL).set('Cookie', cookies).send({ quantidadeKg: 5, observacao: '  texto  ' });
     expect(tx.forecastPurchaseDecision.create.mock.calls[1][0].data.note).toBe('texto');
+  });
+});
+
+// E3: item de FORA da lista de compra so aceita quantidade com `incluidoManualmente: true` e sendo candidato a cotacao.
+describe('PUT /forecast/snapshots/:id/decisoes/:productId - incluidoManualmente (E3)', () => {
+  const candidato = (over: Record<string, unknown> = {}) => ({
+    productId: 43,
+    quantidadeSugeridaKg: 300,
+    anMotorKg: -120,
+    ...over,
+  });
+  let candidatoSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    candidatoSpy = vi
+      .spyOn(ForecastSnapshotService, 'getCandidatoDoProduto')
+      .mockResolvedValue(candidato() as never);
+  });
+
+  it('candidato valido + flag: cria a decisao, marca manuallyIncluded e audita incluidoManualmente (sem observacao)', async () => {
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .put(`${BASE}/43`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 450, observacao: OBSERVACAO, incluidoManualmente: true });
+    expect(response.status).toBe(200);
+    expect(response.body.data.acao).toBe('create');
+    expect(response.body.data.decisao).toMatchObject({ productId: 43, quantidadeKg: 450, incluidoManualmente: true });
+    expect(candidatoSpy).toHaveBeenCalledWith(7, 43);
+    expect(tx.forecastPurchaseDecision.create.mock.calls[0][0].data).toMatchObject({
+      snapshotId: 7,
+      productId: 43,
+      quantityKg: 450,
+      suggestedKg: 300,
+      demandKg: -120,
+      manuallyIncluded: true,
+    });
+    const audit = tx.auditLog.create.mock.calls[0][0].data;
+    expect(audit.action).toBe('create');
+    expect(audit.metadata).toMatchObject({ productId: 43, quantidadeKg: 450, comObservacao: true, incluidoManualmente: true });
+    expect(JSON.stringify(audit)).not.toContain(OBSERVACAO);
+  });
+
+  it('candidato sem sugestao (sem falta) congela 0 na sugerida e o AN do motor na demanda', async () => {
+    candidatoSpy.mockResolvedValue(candidato({ quantidadeSugeridaKg: null, anMotorKg: 500 }) as never);
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .put(`${BASE}/43`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 100, incluidoManualmente: true });
+    expect(response.status).toBe(200);
+    expect(tx.forecastPurchaseDecision.create.mock.calls[0][0].data).toMatchObject({ suggestedKg: 0, demandKg: 500 });
+  });
+
+  it('flag em item que NAO e candidato (sem demanda, sem cadastro...) -> 400 e nada e gravado', async () => {
+    candidatoSpy.mockResolvedValue(null);
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .put(`${BASE}/43`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 5, incluidoManualmente: true });
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe('O item não está na lista de compra desta quinzena.');
+    expect(tx.forecastPurchaseDecision.create).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('sem a flag o comportamento nao muda: 400 e o candidato nem e consultado', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app).put(`${BASE}/43`).set('Cookie', cookies).send({ quantidadeKg: 5 });
+    expect(response.status).toBe(400);
+    expect(candidatoSpy).not.toHaveBeenCalled();
+    expect(tx.forecastPurchaseDecision.create).not.toHaveBeenCalled();
+  });
+
+  it('incluidoManualmente: false tambem nao abre a excecao', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .put(`${BASE}/43`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 5, incluidoManualmente: false });
+    expect(response.status).toBe(400);
+    expect(candidatoSpy).not.toHaveBeenCalled();
+  });
+
+  it('item da lista com a flag: grava normal (manuallyIncluded false) sem consultar candidato', async () => {
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .put(PUT_URL)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 1200, incluidoManualmente: true });
+    expect(response.status).toBe(200);
+    expect(candidatoSpy).not.toHaveBeenCalled();
+    expect(tx.forecastPurchaseDecision.create.mock.calls[0][0].data.manuallyIncluded).toBe(false);
+    expect(tx.auditLog.create.mock.calls[0][0].data.metadata).not.toHaveProperty('incluidoManualmente');
+  });
+
+  it('mudar a quantidade de decisao existente de item de fora com a flag atualiza e marca como incluido', async () => {
+    tx.forecastPurchaseDecision.findUnique
+      .mockResolvedValueOnce(linha({ productId: 43, quantityKg: '100' }))
+      .mockResolvedValueOnce(linha({ productId: 43, quantityKg: '250', manuallyIncluded: true }));
+    const cookies = await loginAs('admin');
+    const response = await request(app)
+      .put(`${BASE}/43`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 250, incluidoManualmente: true });
+    expect(response.status).toBe(200);
+    expect(response.body.data.acao).toBe('update');
+    expect(tx.forecastPurchaseDecision.updateMany.mock.calls[0][0].data).toMatchObject({
+      quantityKg: 250,
+      suggestedKg: 300,
+      demandKg: -120,
+      manuallyIncluded: true,
+    });
+    expect(tx.auditLog.create.mock.calls[0][0].data.metadata).toMatchObject({
+      incluidoManualmente: true,
+      camposAlterados: ['quantidadeKg', 'incluidoManualmente'],
+    });
+  });
+
+  it('papeis de leitura -> 403 mesmo com a flag', async () => {
+    const cookies = await loginAs('gestor');
+    const response = await request(app)
+      .put(`${BASE}/43`)
+      .set('Cookie', cookies)
+      .send({ quantidadeKg: 5, incluidoManualmente: true });
+    expect(response.status).toBe(403);
+    expect(candidatoSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -351,6 +483,7 @@ describe('PUT /forecast/snapshots/:id/decisoes/:productId - regras de negocio', 
         note: OBSERVACAO,
         suggestedKg: 1000,
         demandKg: -750.5,
+        manuallyIncluded: false,
         decidedById: 1,
       },
     });
