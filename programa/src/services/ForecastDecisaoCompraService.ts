@@ -3,12 +3,15 @@ import { prisma } from '../lib/prisma';
 import {
   itemDaListaDeCompra,
   paraDecisaoCompraData,
+  paraDecisaoCompraLeitura,
   type DecisaoCompraData,
+  type DecisaoCompraLeitura,
 } from '../utils/forecastDecisaoCompra';
 import type { ItemRelatorioCompras } from '../utils/forecastRelatorioCompras';
 import { HttpError } from '../utils/http';
 import type { ForecastDecisaoPutInput } from '../validators/forecast';
 import { AuditLogService } from './AuditLogService';
+import { ForecastCotacaoVinculoService } from './ForecastCotacaoVinculoService';
 import { ForecastSnapshotService, type FrozenProduct } from './ForecastSnapshotService';
 
 const ENTITY_TYPE = 'forecast_purchase_decision';
@@ -21,7 +24,7 @@ export type AcaoDecisao = 'create' | 'update' | 'delete' | 'nenhuma';
 export interface ForecastDecisoesData {
   snapshotId: number;
   label: string;
-  decisoes: DecisaoCompraData[];
+  decisoes: DecisaoCompraLeitura[];
 }
 
 export interface ForecastDecisaoGravada {
@@ -29,7 +32,7 @@ export interface ForecastDecisaoGravada {
   decisao: DecisaoCompraData | null;
 }
 
-type CampoAlterado = 'quantidadeKg' | 'status' | 'observacao';
+type CampoAlterado = 'quantidadeKg' | 'status' | 'observacao' | 'incluidoManualmente';
 
 function naoEncontrada(): HttpError {
   return new HttpError(404, 'Quinzena nao encontrada.');
@@ -45,7 +48,9 @@ function foraDaLista(): HttpError {
 
 // Quantidade decidida de compra (PR3 do piloto do Forecast), por item e quinzena. A quinzena excluida (soft delete) some
 // da rota (404) e mantem as decisoes. O AuditLog guarda so ids, kg, rotulo da quinzena, status e se ha observacao: nunca o
-// texto da observacao (texto livre). Este service importa o ForecastSnapshotService; o inverso nao existe (evita ciclo).
+// texto da observacao (texto livre). Item de fora da lista so aceita quantidade com `incluidoManualmente: true` e sendo
+// candidato a cotacao (E3); a decisao guarda `manuallyIncluded` e o AuditLog `incluidoManualmente`. Este service importa o
+// ForecastSnapshotService; o inverso nao existe (evita ciclo).
 export class ForecastDecisaoCompraService {
   static async listar(snapshotId: number): Promise<ForecastDecisoesData> {
     const snapshot = await prisma.forecastSnapshot.findFirst({
@@ -57,7 +62,13 @@ export class ForecastDecisaoCompraService {
       where: { snapshotId },
       orderBy: { productId: 'asc' },
     });
-    return { snapshotId: snapshot.id, label: snapshot.label, decisoes: rows.map(paraDecisaoCompraData) };
+    // E4a: campos aditivos (cotacao vinculada, Qtd. final e status derivado); so 1 consulta extra, sem vinculo = null.
+    const cotacoes = await ForecastCotacaoVinculoService.cotacoesDosItens(snapshotId);
+    return {
+      snapshotId: snapshot.id,
+      label: snapshot.label,
+      decisoes: rows.map((row) => paraDecisaoCompraLeitura(row, cotacoes.get(row.productId) ?? null)),
+    };
   }
 
   // Grava (cria/atualiza/apaga) a decisao de um item. `quantidadeKg: null` apaga. Sem mudanca = 'nenhuma' (sem gravar nem
@@ -78,10 +89,24 @@ export class ForecastDecisaoCompraService {
       throw new HttpError(400, 'O produto não faz parte desta quinzena.');
     }
 
-    let item: ItemRelatorioCompras | null = null;
+    // Referencia que a quantidade nova congela (suggestedKg/demandKg): o item da lista de compra ou, so com
+    // `incluidoManualmente: true`, o candidato a cotacao (mesma regra de GET .../candidatos-cotacao).
+    let referencia: { sugeridaKg: number; demandaKg: number; manual: boolean } | null = null;
     if (input.quantidadeKg !== null) {
       const relatorio = await ForecastSnapshotService.getRelatorioCompras(snapshotId);
-      item = itemDaListaDeCompra(relatorio, productId);
+      const item: ItemRelatorioCompras | null = itemDaListaDeCompra(relatorio, productId);
+      if (item) {
+        referencia = { sugeridaKg: item.quantidadeFinal, demandaKg: item.demanda, manual: false };
+      } else if (input.incluidoManualmente === true) {
+        const candidato = await ForecastSnapshotService.getCandidatoDoProduto(snapshotId, productId);
+        if (candidato) {
+          referencia = {
+            sugeridaKg: candidato.quantidadeSugeridaKg ?? 0,
+            demandaKg: candidato.anMotorKg,
+            manual: true,
+          };
+        }
+      }
     }
     const label = snapshot.label;
 
@@ -117,6 +142,7 @@ export class ForecastDecisaoCompraService {
                 sugeridaKg: Number(atual.suggestedKg),
                 status: atual.status,
                 comObservacao: atual.note != null,
+                ...(atual.manuallyIncluded ? { incluidoManualmente: true } : {}),
               },
             },
             tx,
@@ -127,7 +153,7 @@ export class ForecastDecisaoCompraService {
         const quantidadeKg = input.quantidadeKg;
 
         if (!atual) {
-          if (!item) throw foraDaLista();
+          if (!referencia) throw foraDaLista();
           const criada = await tx.forecastPurchaseDecision.create({
             data: {
               snapshotId,
@@ -135,8 +161,9 @@ export class ForecastDecisaoCompraService {
               quantityKg: quantidadeKg,
               status: input.status ?? 'nao',
               note: input.observacao ?? null,
-              suggestedKg: item.quantidadeFinal,
-              demandKg: item.demanda,
+              suggestedKg: referencia.sugeridaKg,
+              demandKg: referencia.demandaKg,
+              manuallyIncluded: referencia.manual,
               decidedById: userId,
             },
           });
@@ -151,10 +178,11 @@ export class ForecastDecisaoCompraService {
                 productId,
                 label,
                 quantidadeKg,
-                sugeridaKg: item.quantidadeFinal,
-                demandaKg: item.demanda,
+                sugeridaKg: referencia.sugeridaKg,
+                demandaKg: referencia.demandaKg,
                 status: criada.status,
                 comObservacao: criada.note != null,
+                ...(referencia.manual ? { incluidoManualmente: true } : {}),
               },
             },
             tx,
@@ -165,12 +193,17 @@ export class ForecastDecisaoCompraService {
         const camposAlterados: CampoAlterado[] = [];
         const data: Prisma.ForecastPurchaseDecisionUncheckedUpdateManyInput = {};
         if (Number(atual.quantityKg) !== quantidadeKg) {
-          if (!item) throw foraDaLista();
+          if (!referencia) throw foraDaLista();
           camposAlterados.push('quantidadeKg');
           data.quantityKg = quantidadeKg;
           // Mudou a quantidade: recongela a sugestao e a demanda do momento.
-          data.suggestedKg = item.quantidadeFinal;
-          data.demandKg = item.demanda;
+          data.suggestedKg = referencia.sugeridaKg;
+          data.demandKg = referencia.demandaKg;
+          // Item de fora da lista aceito pela flag: a decisao passa a constar como incluida de proposito.
+          if (referencia.manual && !atual.manuallyIncluded) {
+            camposAlterados.push('incluidoManualmente');
+            data.manuallyIncluded = true;
+          }
         }
         if (input.status !== undefined && input.status !== atual.status) {
           camposAlterados.push('status');
@@ -207,6 +240,7 @@ export class ForecastDecisaoCompraService {
               demandaKg: Number(depois.demandKg),
               status: depois.status,
               comObservacao: depois.note != null,
+              ...(depois.manuallyIncluded ? { incluidoManualmente: true } : {}),
               antes: { quantidadeKg: Number(atual.quantityKg), status: atual.status },
               camposAlterados,
             },

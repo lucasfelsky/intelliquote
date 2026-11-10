@@ -223,11 +223,15 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     const linha = principal.closest('tr') as HTMLElement;
     expect(within(linha).getByText('GRUPO SINTETICO')).toBeTruthy();
     expect(within(linha).getByText('Grupo de equivalência')).toBeTruthy();
-    expect(within(linha).getAllByText('150,0').length).toBeGreaterThan(0);
-    // Sublinhas na linha seguinte (modo legado: Item + 7 colunas comuns = 8).
-    const sublinha = linha.nextElementSibling as HTMLElement;
+    // o valor de 150,0 esta na linha do item ou no expansor logo abaixo (nao em qualquer linha da tabela)
+    const dosDetalhes = linha.nextElementSibling as HTMLElement;
+    expect(within(linha).queryAllByText('150,0').length + within(dosDetalhes).queryAllByText('150,0').length).toBeGreaterThan(0);
+    // Sublinhas depois da linha de detalhes (modo legado: Item + 4 colunas comuns = 5).
+    const detalhes = linha.nextElementSibling as HTMLElement;
+    expect(detalhes.className).toBe('fcr-detalhes');
+    const sublinha = detalhes.nextElementSibling as HTMLElement;
     expect(sublinha.className).toBe('fcr-linha-grupo');
-    expect(sublinha.querySelector('td')?.getAttribute('colspan')).toBe('8');
+    expect(sublinha.querySelector('td')?.getAttribute('colspan')).toBe('5');
     expect(within(sublinha).getByRole('table', { name: 'Membros do grupo GRUPO SINTETICO' })).toBeTruthy();
     expect(within(sublinha).getByText('PRODUTO 002')).toBeTruthy();
   });

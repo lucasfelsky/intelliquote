@@ -38,6 +38,18 @@ describe('Forecast refino visual: guardas de CSS da revisao', () => {
     expect(css).toContain('.fc-card:has(.fc-filtros-menu__painel) { overflow: visible; }');
   });
 
+  it('papel: o expansor Detalhes sai aberto (hidden vence por !important) e o botao some', () => {
+    expect(css).toContain('.fcr-detalhes[hidden] { display: table-row !important; }');
+    expect(css).toContain('.fcr-detalhes__alternar { display: none; }');
+  });
+
+  it('expansor Detalhes: contem os absolutos do leitor de tela (pagina nao estica no celular), mantem a divisoria das sublinhas e arruma o papel', () => {
+    expect(css).toContain('.fcr-detalhes > td { position: relative; }');
+    expect(css).toContain('tr:has(+ .fcr-detalhes + .fcr-linha-grupo)');
+    expect(css).toContain('tr:has(+ .fcr-detalhes + .fcoc-linha)');
+    expect(css).toContain('.fcr-limite__prazos { display: flex; flex-direction: column; }');
+  });
+
   it('o motivo do Gerar cotacao (icone) nao estica ate a largura da celula', () => {
     expect(css).toContain('.fgc-motivo-chip { align-self: flex-start; }');
   });

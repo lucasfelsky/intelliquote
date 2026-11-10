@@ -14359,7 +14359,6 @@ i.fc-status--preco { background: var(--info); }
   .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) { min-width: 980px; }
   .fc-pagina .fcr-item { min-width: 170px; }
   .fc-pagina .fcr-item__codigos { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fcr-item__status { color: var(--ink-soft); font-size: 12px; }
   .fcr-limite__prazos { display: flex; flex-direction: column; margin-top: 2px; color: var(--ink-soft); font-size: 12px; line-height: 1.4; }
   .fc-pagina .fcr-embalagem { min-width: 0; }
   .fc-pagina .fcr-tabela .fcr-embalagem__editar { width: 28px; min-height: 28px; margin-top: 4px; padding: 0; justify-content: center; }
@@ -14437,4 +14436,61 @@ i.fc-status--preco { background: var(--info); }
   .fcsv-selo { display: inline-block; }
   .fcsv-selo svg { display: none; }
   .fc-grid .fcsv-selo .sr-only { display: inline !important; position: static; width: auto; height: auto; margin: 0; clip: auto; overflow: visible; white-space: nowrap; }
+}
+/* Relatorio de compras enxuto (E1): 7 colunas e expansor "Detalhes" sob cada item. So tokens legados fora das regioes de tema. */
+.fcr-item__codigos { display: block; }
+.fcr-status { color: var(--ink-soft); font-size: 13px; }
+.fcr-detalhes__alternar {
+  display: inline-flex; align-items: center; align-self: flex-start; gap: 4px; margin-top: 6px; padding: 0; border: 0; background: none;
+  color: var(--primary-700); font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.fcr-detalhes__alternar:hover { text-decoration: underline; }
+.fcr-detalhes__alternar:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; box-shadow: 0 0 0 4px var(--focus-ring-strong); border-radius: 4px; }
+.fcr-detalhes > td { padding: 14px 16px 16px; background: var(--surface-alt); border-bottom: 1px solid var(--border); text-align: left; white-space: normal; }
+.fcr-detalhes__grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 28px; align-items: start; }
+.fcr-det__rotulo { margin-bottom: 4px; color: var(--ink-soft); font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; }
+.fcr-det__valor { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 13px; font-weight: 600; }
+.fcr-det--largo { grid-column: span 2; }
+.fcr-det__valor .fcr-embalagem { min-width: 0; }
+.fcr-det__valor .fdec-celula { width: 100%; }
+@media screen {
+  /* o rf-region alinha a cabecalho "Qtd. decidida" a esquerda pelo nth-last-child(3): agora e a Qtd. sugerida (numerica, a direita) */
+  .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) thead th:nth-last-child(3).fcr-num { text-align: right; }
+  .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) { min-width: 0; }
+  .fc-pagina .fcr-det__valor .fdec-celula { min-width: 0; }
+}
+@media (max-width: 640px) {
+  .fcr-det--largo { grid-column: auto; }
+}
+@media screen {
+  /* os .fcr-so-leitor (absolutos) do expansor ficavam a ate 864px e estendiam a pagina a 390px: o td contem */
+  .fcr-detalhes > td { position: relative; }
+  /* a divisoria entre o item e as sublinhas (grupo/ocasiao) agora tem o expansor no meio */
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcr-linha-grupo) > th,
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcr-linha-grupo) > td,
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcoc-linha) > th,
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcoc-linha) > td { border-bottom: 0; }
+}
+@media print {
+  .fcr-detalhes[hidden] { display: table-row !important; }
+  .fcr-detalhes__alternar { display: none; }
+  .fcr-detalhes > td { padding: 4px 6px 8px; }
+  .fcr-det__valor { font-size: 8.5pt; }
+  .fcr-limite__prazos { display: flex; flex-direction: column; }
+}
+/* Acao "Cotar" e pop-up (E2 do relatorio enxuto). So tokens legados fora das regioes de tema. */
+.fcr-acao { text-align: right; white-space: nowrap; }
+.fcq-corpo { display: flex; flex-direction: column; gap: 12px; }
+.fcq-sugerida { margin: 0; color: var(--ink-soft); font-size: 13px; }
+.fcq-decisao { min-width: 0; }
+.fcq-corpo .fdec-conteudo { display: flex; flex-direction: column; gap: 14px; }
+.fcq-corpo .fdec-editor { gap: 12px; }
+.fcq-corpo .fdec-kg { width: 160px; padding: 8px 10px; font-size: 14px; }
+.fcq-corpo .fdec-obs { padding: 8px 10px; font-size: 14px; }
+.fcq-corpo .fdec-salvar { padding: 8px 20px; font-size: 14px; }
+.fcq-corpo .fgc-acao { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.fcq-corpo .fgc-botao { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 1.5px solid var(--primary-700); border-radius: 8px; background: transparent; color: var(--primary-700); font-size: 14px; font-weight: 700; }
+.fcq-corpo .fgc-botao[aria-disabled="true"] { border-color: var(--border); color: var(--ink-soft); }
+@media print {
+  .fcr-acao { display: none; }
 }

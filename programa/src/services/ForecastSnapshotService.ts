@@ -12,6 +12,14 @@ import {
   produtosComDecisao,
   type DecisaoCompraData,
 } from '../utils/forecastDecisaoCompra';
+import {
+  agruparPorFonte,
+  candidatoDoProduto,
+  chaveDaFonte,
+  montarCandidatosCotacao,
+  type CandidatoComFonte,
+  type CandidatosAgrupados,
+} from '../utils/forecastCandidatosCotacao';
 import { calcular, conferir, type Divergencia } from '../utils/forecastEngine';
 import { gruposDasLinhas } from '../utils/forecastGruposEquivalencia';
 import { mapaForaDaMedia, marcasNaJanela } from '../utils/forecastMesesAtipicos';
@@ -412,6 +420,21 @@ export class ForecastSnapshotService {
   // Relatorio de compras: a quinzena calculada + a embalagem do cadastro ATUAL por codigo (nao e congelada
   // na quinzena; reusa o 404 de getCalculated). Nada aqui escreve em forecastSnapshot.
   static async getRelatorioCompras(id: number, hoje?: string): Promise<RelatorioCompras> {
+    const { ocasioes, relatorio } = await ForecastSnapshotService.montarRelatorio(id, hoje);
+    // Blocos no relatorio (pos-motor): falha ao anexar = relatorio sem blocos e com o aviso de indisponivel.
+    return ocasioes
+      ? ForecastSnapshotService.comFallbackDeOcasioes(
+          id,
+          'Eventos estrangeiros do lead time indisponiveis; relatorio sem o bloco.',
+          () => anexarOcasioesAoRelatorio(relatorio, ocasioes),
+          () => anexarOcasioesAoRelatorio(relatorio, { indisponivel: true }),
+        )
+      : relatorio;
+  }
+
+  // Corpo do relatorio (sem o bloco de ocasioes) + o que os candidatos a cotacao reaproveitam: a quinzena calculada e os
+  // grupos de equivalencia. Mesmas consultas de antes (extraido de getRelatorioCompras sem mudar o resultado).
+  private static async montarRelatorio(id: number, hoje: string | undefined) {
     const { calc, ocasioes } = await ForecastSnapshotService.calcularComOcasioes(id, hoje, false);
     const embalagens: EmbalagemCadastrada[] = await ForecastProductService.embalagensDosCodigos(
       calc.linhas.flatMap((l) => l.codigos),
@@ -423,20 +446,59 @@ export class ForecastSnapshotService {
     );
     // Demanda do comercial (PR 6d): pedidos abertos do cadastro ATUAL (nao congelados na quinzena), 1 consulta.
     const demandasComerciais = await ForecastDemandaComercialService.abertas();
-    const relatorio = montarRelatorioCompras(calc, embalagens, {
-      sobDemanda,
-      demandasComerciais,
-      grupos: gruposDasLinhas(calc.linhas),
+    const grupos = gruposDasLinhas(calc.linhas);
+    const relatorio = montarRelatorioCompras(calc, embalagens, { sobDemanda, demandasComerciais, grupos });
+    return { calc, ocasioes, relatorio, grupos };
+  }
+
+  // Candidatos a cotacao da quinzena (E3): itens FORA da lista de compra com demanda (regra em forecastCandidatosCotacao.ts).
+  // Cadastro ATUAL, so leitura: 1 consulta a mais (codigos vinculados ao catalogo).
+  private static async candidatosDaQuinzena(id: number, hoje: string | undefined) {
+    const { calc, relatorio, grupos } = await ForecastSnapshotService.montarRelatorio(id, hoje);
+    const productIds = calc.linhas.flatMap((l) => (l.productId != null ? [l.productId] : []));
+    const vinculados =
+      productIds.length === 0
+        ? []
+        : await prisma.forecastProductCode.findMany({
+            where: { productId: { in: productIds }, catalogItemId: { not: null } },
+            select: { productId: true },
+            distinct: ['productId'],
+          });
+    const resultado = montarCandidatosCotacao(calc, relatorio, {
+      grupos,
+      produtosComVinculoCatalogo: new Set(vinculados.map((v) => v.productId)),
     });
-    // Blocos no relatorio (pos-motor): falha ao anexar = relatorio sem blocos e com o aviso de indisponivel.
-    return ocasioes
-      ? ForecastSnapshotService.comFallbackDeOcasioes(
-          id,
-          'Eventos estrangeiros do lead time indisponiveis; relatorio sem o bloco.',
-          () => anexarOcasioesAoRelatorio(relatorio, ocasioes),
-          () => anexarOcasioesAoRelatorio(relatorio, { indisponivel: true }),
-        )
-      : relatorio;
+    return { calc, relatorio, resultado };
+  }
+
+  // Lista de compra (grupos[].itens, corpo do relatorio sem o bloco de ocasioes) + candidatos da MESMA quinzena, calculados
+  // uma unica vez: a criacao de cotacoes em lote (E4a) resolve fonte e referencia de cada item sem recalcular por item.
+  static async getListaECandidatos(id: number, hoje?: string) {
+    const { relatorio, resultado } = await ForecastSnapshotService.candidatosDaQuinzena(id, hoje);
+    return { relatorio, resultado };
+  }
+
+  // Candidatos agrupados por fonte (`fonte` nula = todas). Fonte que nao existe na quinzena = 404.
+  static async getCandidatosCotacao(
+    id: number,
+    fonte: string | null,
+    hoje?: string,
+  ): Promise<CandidatosAgrupados & { snapshotId: number; label: string }> {
+    const { calc, resultado } = await ForecastSnapshotService.candidatosDaQuinzena(id, hoje);
+    let nomeDaFonte: string | null = null;
+    if (fonte !== null) {
+      const chave = chaveDaFonte(fonte);
+      const existente = calc.linhas.find((l) => chaveDaFonte(l.fonte) === chave && chave !== '');
+      if (!existente) throw new HttpError(404, 'Fonte nao encontrada nesta quinzena.');
+      nomeDaFonte = existente.fonte.trim();
+    }
+    return { snapshotId: calc.id, label: calc.label, ...agruparPorFonte(resultado, nomeDaFonte) };
+  }
+
+  // Candidato valido de UM produto (mesma regra da listagem), com o AN do motor; nulo = nao e candidato.
+  static async getCandidatoDoProduto(id: number, productId: number, hoje?: string): Promise<CandidatoComFonte | null> {
+    const { resultado } = await ForecastSnapshotService.candidatosDaQuinzena(id, hoje);
+    return candidatoDoProduto(resultado, productId);
   }
 
   // Decisoes de compra da quinzena (PR3), por productId: 1 consulta. So os caminhos XLSX leem; a rota JSON do relatorio e o

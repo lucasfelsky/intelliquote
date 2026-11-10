@@ -25,6 +25,9 @@ const CODE_C = `${U}C1`;
 const NAME_A = `PRODUTO ${U} A`;
 const NAME_B = `PRODUTO ${U} B`;
 const NAME_C = `PRODUTO ${U} C`;
+const NAME_D = `PRODUTO ${U} D`;
+const CODE_D = `${U}D1`;
+const CATALOGO_B = `CATALOGO ${U} B`;
 const FONTE = `FONTE ${U}`;
 const OBSERVACAO = `OBSERVACAO SINTETICA ${U}`;
 const MIGRATION_SQL = 'prisma/migrations/20261026120000_forecast_purchase_decision/migration.sql';
@@ -78,7 +81,7 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
 
   // Quinzena sintetica congelada direto no banco: A e C entram na lista de compra (estoque 0, mesma demanda); B tem estoque
   // de sobra (fica FORA da lista). Todos tem linha na quinzena.
-  const criarQuinzena = async (label: string) =>
+  const criarQuinzena = async (label: string, extraProdutos: ReturnType<typeof produto>[] = []) =>
     (
       await prisma.forecastSnapshot.create({
         data: {
@@ -87,7 +90,12 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
           half: 2,
           origin: 'planilha',
           months: { consumo: rotulos.consumo, chegada: rotulos.chegada, programacao: rotulos.programacao },
-          products: [produto(3, NAME_A, CODE_A, productA), produto(4, NAME_B, CODE_B, productB), produto(5, NAME_C, CODE_C, productC)],
+          products: [
+            produto(3, NAME_A, CODE_A, productA),
+            produto(4, NAME_B, CODE_B, productB),
+            produto(5, NAME_C, CODE_C, productC),
+            ...extraProdutos,
+          ],
           inputs: {
             estoque: [{ codigo: CODE_B, qtd: 1_000_000 }],
             vendasMes: [CODE_A, CODE_B, CODE_C].map((codigo) => ({ codigo, qtd: 400 })),
@@ -141,6 +149,7 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
     await prisma.forecastPurchaseDecision.deleteMany({ where: { product: { name: { contains: U } } } });
     await prisma.forecastSnapshot.deleteMany({ where: { createdById: adminId } });
     await prisma.forecastProduct.deleteMany({ where: { name: { contains: U } } });
+    await prisma.catalogItem.deleteMany({ where: { marketName: { contains: U } } });
     await prisma.forecastSource.deleteMany({ where: { name: { contains: U } } });
     await prisma.auditLog.deleteMany({ where: { performedById: adminId } });
     if (adminId) {
@@ -157,7 +166,7 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
       WHERE table_name = 'ForecastPurchaseDecision'`;
     const col = (nome: string) => cols.find((c) => c.column_name === nome);
     expect(cols.map((c) => c.column_name).sort()).toEqual(
-      ['createdAt', 'decidedById', 'demandKg', 'id', 'note', 'productId', 'quantityKg', 'snapshotId', 'status', 'suggestedKg', 'updatedAt'].sort(),
+      ['createdAt', 'decidedById', 'demandKg', 'finalAt', 'finalKg', 'finalQuoteRequestId', 'id', 'manuallyIncluded', 'note', 'productId', 'quantityKg', 'snapshotId', 'status', 'suggestedKg', 'updatedAt'].sort(),
     );
     for (const nome of ['quantityKg', 'suggestedKg', 'demandKg']) {
       expect(Number(col(nome)?.numeric_precision), nome).toBe(18);
@@ -167,6 +176,9 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
     expect(col('status')?.is_nullable).toBe('NO');
     expect(String(col('status')?.column_default)).toContain("'nao'");
     expect(col('note')?.is_nullable).toBe('YES');
+    // E3: coluna aditiva, NOT NULL com default false (linhas antigas ficam false).
+    expect(col('manuallyIncluded')?.is_nullable).toBe('NO');
+    expect(String(col('manuallyIncluded')?.column_default)).toBe('false');
     expect(col('decidedById')?.is_nullable).toBe('YES');
 
     const idx: Array<Record<string, unknown>> = await prisma.$queryRaw`
@@ -422,5 +434,85 @@ describe('Forecast - quantidade decidida de compra (DB)', () => {
     await expect(prisma.forecastProduct.delete({ where: { id: productA } })).rejects.toThrow(
       /ForecastPurchaseDecision_productId_fkey/,
     );
+  });
+  // E3: candidatos a cotacao e inclusao explicita. Quinzena propria ('03-2') com B (estoque de sobra, fora da lista) e D (sem
+  // venda nem estoque, sem demanda); B ganha vinculo com o catalogo so aqui.
+  testDbSkip('E3: candidatos por fonte e incluidoManualmente (aceito, recusado, sem demanda, sem vinculo)', async () => {
+    const produtoD = await prisma.forecastProduct.create({
+      data: { name: NAME_D, normalizedName: normalizeProductName(NAME_D), codes: { create: [{ position: 1, code: CODE_D }] } },
+    });
+    // Historico zerado e sem vendas/estoque no codigo: media 0, AN 0 e nenhuma programacao = sem demanda.
+    const quinzena = await criarQuinzena('03-2', [{ ...produto(6, NAME_D, CODE_D, produtoD.id), historico: [0, 0, 0, 0, 0] }]);
+    const candidatos = (fonte?: string, snapshot = quinzena) =>
+      request(app)
+        .get(
+          `/api/v1/forecast/snapshots/${snapshot}/candidatos-cotacao?hoje=${HOJE}${fonte ? `&fonte=${encodeURIComponent(fonte)}` : ''}`,
+        )
+        .set('Cookie', cookies);
+    const codigoB = () => prisma.forecastProductCode.findFirstOrThrow({ where: { productId: productB } });
+
+    // Sem vinculo com o catalogo: B (e D, sem demanda) nao aparecem; B e contado em excluidos.
+    const semVinculo = await candidatos(FONTE);
+    expect(semVinculo.status).toBe(200);
+    expect(semVinculo.body.data.fontes).toEqual([{ fonte: FONTE, itens: [] }]);
+    expect(semVinculo.body.data.excluidos).toEqual([{ motivo: 'sem-vinculo-catalogo', quantidade: 1 }]);
+
+    const catalogo = await prisma.catalogItem.create({ data: { commercialName: CATALOGO_B, marketName: CATALOGO_B } });
+    await prisma.forecastProductCode.update({ where: { id: (await codigoB()).id }, data: { catalogItemId: catalogo.id } });
+
+    const comVinculo = await candidatos(FONTE.toLowerCase());
+    expect(comVinculo.status).toBe(200);
+    expect(comVinculo.body.data.fonte).toBe(FONTE);
+    expect(comVinculo.body.data.fontes[0].itens).toEqual([
+      expect.objectContaining({
+        productId: productB,
+        item: NAME_B,
+        fonte: FONTE,
+        motivoForaDaLista: 'sem-falta',
+        quantidadeSugeridaKg: null,
+        urgencia: null,
+        grupoNome: null,
+      }),
+    ]);
+    expect(comVinculo.body.data.fontes[0].itens[0].demandaKg).toBeGreaterThan(0);
+    expect(comVinculo.body.data.excluidos).toEqual([]);
+
+    // Sem o parametro: agrupado por fonte; fonte inexistente: 404.
+    const todas = await candidatos();
+    expect(todas.body.data.fonte).toBeNull();
+    expect(todas.body.data.fontes.map((f: { fonte: string }) => f.fonte)).toEqual([FONTE]);
+    expect((await candidatos(`INEXISTENTE ${U}`)).status).toBe(404);
+
+    // Sem a flag nada muda; com a flag o candidato e aceito e fica marcado.
+    expect((await put(productB, { quantidadeKg: 50 }, quinzena)).status).toBe(400);
+    const incluida = await put(productB, { quantidadeKg: 50, observacao: OBSERVACAO, incluidoManualmente: true }, quinzena);
+    expect(incluida.status).toBe(200);
+    expect(incluida.body.data.acao).toBe('create');
+    expect(incluida.body.data.decisao).toMatchObject({ productId: productB, quantidadeKg: 50, incluidoManualmente: true, sugeridaKg: 0 });
+    const gravada = await prisma.forecastPurchaseDecision.findFirstOrThrow({ where: { snapshotId: quinzena, productId: productB } });
+    expect(gravada.manuallyIncluded).toBe(true);
+    expect(Number(gravada.demandKg)).toBeGreaterThan(0);
+    const registros = await logs(gravada.id);
+    expect(registros).toHaveLength(1);
+    expect(registros[0].metadata).toMatchObject({ incluidoManualmente: true, comObservacao: true });
+    expect(JSON.stringify(registros[0].metadata)).not.toContain(OBSERVACAO);
+    const lista = await listar(quinzena);
+    expect(lista.body.data.decisoes).toEqual([expect.objectContaining({ productId: productB, incluidoManualmente: true })]);
+
+    // Mudar a quantidade de item de fora continua exigindo a flag.
+    expect((await put(productB, { quantidadeKg: 80 }, quinzena)).status).toBe(400);
+    expect((await put(productB, { quantidadeKg: 80, incluidoManualmente: true }, quinzena)).status).toBe(200);
+
+    // Item sem demanda (D) e item da lista com a flag: D recusado; item da lista grava normal e nao fica marcado.
+    const semDemanda = await put(produtoD.id, { quantidadeKg: 10, incluidoManualmente: true }, quinzena);
+    expect(semDemanda.status).toBe(400);
+    expect(semDemanda.body.message).toBe('O item não está na lista de compra desta quinzena.');
+    const daLista = await put(productA, { quantidadeKg: 10, incluidoManualmente: true }, quinzena);
+    expect(daLista.status).toBe(200);
+    expect(daLista.body.data.decisao.incluidoManualmente).toBe(false);
+
+    // A lista de compra e o relatorio nao mudam: B continua fora e a rota segue sem campo novo.
+    const itens = await itensDaLista(quinzena);
+    expect(itens.some((i) => i.productId === productB)).toBe(false);
   });
 });

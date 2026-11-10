@@ -229,6 +229,14 @@ router.get(
   ForecastController.getRelatorioComprasXlsx,
 );
 
+// Candidatos a cotacao (E3): itens fora da lista de compra com demanda, por fonte; leitura = equipe COMEX.
+router.get(
+  '/forecast/snapshots/:id/candidatos-cotacao',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getCandidatosCotacao,
+);
+
 // Quantidade decidida de compra por item e quinzena (PR3): ler = equipe COMEX; gravar/apagar = admin/comprador.
 router.get(
   '/forecast/snapshots/:id/decisoes',
@@ -242,6 +250,36 @@ router.put(
   requireAuth,
   allowRoles(['admin', 'comprador']),
   ForecastController.putDecisao,
+);
+
+// Cotacoes em lote a partir do Forecast (E4a): uma QuoteRequest por fonte, numa transacao, ja vinculadas ao Forecast.
+router.post(
+  '/forecast/snapshots/:id/cotacoes',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.postCotacoesLote,
+);
+
+// Rascunho da cotacao do Forecast (E5): privado do dono, so admin/comprador (leitura inclusive).
+router.get(
+  '/forecast/snapshots/:id/rascunho-cotacao',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.getRascunhoCotacao,
+);
+
+router.put(
+  '/forecast/snapshots/:id/rascunho-cotacao',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putRascunhoCotacao,
+);
+
+router.delete(
+  '/forecast/snapshots/:id/rascunho-cotacao',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteRascunhoCotacao,
 );
 
 export { router as forecastRoutes };
