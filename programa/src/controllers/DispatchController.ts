@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import { Prisma, QuoteRequestStatus } from '@prisma/client';
+import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
+import { ForecastCotacaoVinculoService } from '../services/ForecastCotacaoVinculoService';
 import {
   CompanyProfileService,
   excludeComercialEmails,
@@ -389,6 +391,23 @@ export class DispatchController {
           comexCcContactId,
         },
       });
+
+      // E4a (relatorio de compras enxuto): cotacao com itens vinculados ao Forecast enviada com sucesso (ao menos 1 e-mail
+      // entregue) preenche a Qtd. final das decisoes. NUNCA derruba o envio: o e-mail ja saiu; falha so entra no log.
+      if (sentCount > 0) {
+        try {
+          await ForecastCotacaoVinculoService.registrarEnvio(id, userId);
+        } catch (hookError) {
+          logger.error(
+            {
+              quoteRequestId: id,
+              dispatchEventId: dispatchEvent.id,
+              reason: hookError instanceof Error ? hookError.message : String(hookError),
+            },
+            'Falha ao registrar a Qtd. final do Forecast apos o envio da cotacao.',
+          );
+        }
+      }
 
       return res.status(201).json({
         dispatchEventId: dispatchEvent.id,

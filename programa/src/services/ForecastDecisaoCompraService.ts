@@ -3,12 +3,15 @@ import { prisma } from '../lib/prisma';
 import {
   itemDaListaDeCompra,
   paraDecisaoCompraData,
+  paraDecisaoCompraLeitura,
   type DecisaoCompraData,
+  type DecisaoCompraLeitura,
 } from '../utils/forecastDecisaoCompra';
 import type { ItemRelatorioCompras } from '../utils/forecastRelatorioCompras';
 import { HttpError } from '../utils/http';
 import type { ForecastDecisaoPutInput } from '../validators/forecast';
 import { AuditLogService } from './AuditLogService';
+import { ForecastCotacaoVinculoService } from './ForecastCotacaoVinculoService';
 import { ForecastSnapshotService, type FrozenProduct } from './ForecastSnapshotService';
 
 const ENTITY_TYPE = 'forecast_purchase_decision';
@@ -21,7 +24,7 @@ export type AcaoDecisao = 'create' | 'update' | 'delete' | 'nenhuma';
 export interface ForecastDecisoesData {
   snapshotId: number;
   label: string;
-  decisoes: DecisaoCompraData[];
+  decisoes: DecisaoCompraLeitura[];
 }
 
 export interface ForecastDecisaoGravada {
@@ -59,7 +62,13 @@ export class ForecastDecisaoCompraService {
       where: { snapshotId },
       orderBy: { productId: 'asc' },
     });
-    return { snapshotId: snapshot.id, label: snapshot.label, decisoes: rows.map(paraDecisaoCompraData) };
+    // E4a: campos aditivos (cotacao vinculada, Qtd. final e status derivado); so 1 consulta extra, sem vinculo = null.
+    const cotacoes = await ForecastCotacaoVinculoService.cotacoesDosItens(snapshotId);
+    return {
+      snapshotId: snapshot.id,
+      label: snapshot.label,
+      decisoes: rows.map((row) => paraDecisaoCompraLeitura(row, cotacoes.get(row.productId) ?? null)),
+    };
   }
 
   // Grava (cria/atualiza/apaga) a decisao de um item. `quantidadeKg: null` apaga. Sem mudanca = 'nenhuma' (sem gravar nem

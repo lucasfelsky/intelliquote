@@ -468,7 +468,14 @@ export class ForecastSnapshotService {
       grupos,
       produtosComVinculoCatalogo: new Set(vinculados.map((v) => v.productId)),
     });
-    return { calc, resultado };
+    return { calc, relatorio, resultado };
+  }
+
+  // Lista de compra (grupos[].itens, corpo do relatorio sem o bloco de ocasioes) + candidatos da MESMA quinzena, calculados
+  // uma unica vez: a criacao de cotacoes em lote (E4a) resolve fonte e referencia de cada item sem recalcular por item.
+  static async getListaECandidatos(id: number, hoje?: string) {
+    const { relatorio, resultado } = await ForecastSnapshotService.candidatosDaQuinzena(id, hoje);
+    return { relatorio, resultado };
   }
 
   // Candidatos agrupados por fonte (`fonte` nula = todas). Fonte que nao existe na quinzena = 404.

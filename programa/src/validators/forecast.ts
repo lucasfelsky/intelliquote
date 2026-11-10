@@ -1,3 +1,4 @@
+import { Incoterm } from '@prisma/client';
 import { z } from 'zod';
 import {
   FORECAST_BASE64_MAX_LENGTH,
@@ -697,6 +698,69 @@ export const forecastRascunhoCotacaoPutSchema = z
   });
 
 export type ForecastRascunhoCotacaoPutInput = z.infer<typeof forecastRascunhoCotacaoPutSchema>;
+
+// Criacao de cotacoes em lote a partir do Forecast (E4a): POST /forecast/snapshots/:id/cotacoes. Cada item: produto da
+// quinzena, kg a cotar (> 0 e <= 10.000.000, ate 3 casas; a cotacao leva o kg inteiro para cima), observacao interna
+// (grava so na decisao, nunca na cotacao nem no AuditLog), `incluidoManualmente` (item de fora da lista, como no PUT de
+// decisao) e `atualizadoEm` (opcional: o `atualizadaEm` da decisao que o cliente leu; `null` = o cliente nao viu decisao).
+// Os campos da cotacao sao opcionais e herdam os padroes da CotacaoNova (FOB, origem Shanghai, USD, sem prazo/destino) e
+// valem para TODAS as cotacoes do lote (uma por fonte). Chave desconhecida = 400.
+export const FORECAST_COTACAO_LOTE_ITENS_MAX = 100;
+const COTACAO_PORTO_MAX = 120;
+
+const cotacaoLoteItemSchema = z.strictObject({
+  productId: z
+    .number({ error: 'Informe o produto de cada item.' })
+    .int('O produto do item é inválido.')
+    .positive('O produto do item é inválido.'),
+  quantidadeKg: decisaoKgField.refine((v) => v > 0, { message: 'A quantidade a cotar deve ser maior que zero.' }),
+  observacao: decisaoObservacaoField.optional(),
+  incluidoManualmente: z.boolean({ error: 'incluidoManualmente deve ser true ou false.' }).optional(),
+  atualizadoEm: z.iso.datetime({ error: 'atualizadoEm deve ser uma data ISO 8601.' }).nullable().optional(),
+});
+
+const cotacaoPortoField = z
+  .string({ error: 'O porto deve ser um texto.' })
+  .trim()
+  .max(COTACAO_PORTO_MAX, `O porto aceita no máximo ${COTACAO_PORTO_MAX} caracteres.`)
+  .transform((value) => (value === '' ? null : value))
+  .nullable();
+
+export const forecastCotacoesLotePostSchema = z
+  .strictObject({
+    itens: z
+      .array(cotacaoLoteItemSchema, { error: 'Informe a lista de itens a cotar.' })
+      .min(1, 'Informe ao menos um item a cotar.')
+      .max(FORECAST_COTACAO_LOTE_ITENS_MAX, `O lote aceita no máximo ${FORECAST_COTACAO_LOTE_ITENS_MAX} itens.`),
+    desiredIncoterm: z
+      .array(z.nativeEnum(Incoterm, { error: 'Incoterm inválido.' }), { error: 'Informe os Incoterms em uma lista.' })
+      .min(1, 'Informe ao menos um Incoterm.')
+      .optional(),
+    destinationPort: cotacaoPortoField.optional(),
+    originPort: cotacaoPortoField.optional(),
+    currency: z
+      .string({ error: 'Informe um código de moeda válido.' })
+      .trim()
+      .transform((value) => value.toUpperCase())
+      .refine((value) => /^[A-Z]{3}$/.test(value), { message: 'Informe um código de moeda válido.' })
+      .optional(),
+    deadlineAt: z.iso.datetime({ error: 'deadlineAt deve ser uma data ISO 8601.' }).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const vistos = new Set<number>();
+    value.itens.forEach((item, index) => {
+      if (vistos.has(item.productId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['itens', index, 'productId'],
+          message: 'O mesmo produto aparece mais de uma vez no lote.',
+        });
+      }
+      vistos.add(item.productId);
+    });
+  });
+
+export type ForecastCotacoesLotePostInput = z.infer<typeof forecastCotacoesLotePostSchema>;
 
 // Ocasioes que afetam o lead time (PR 1): feriado, greve, fechamento de porto, safra. Cadastro por admin/comprador; so
 // informa no relatorio (nao muda o motor). Chave desconhecida = 400 (inclusive `coverWithStock`, que existe so na coluna).
