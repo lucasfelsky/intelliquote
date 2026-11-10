@@ -330,7 +330,7 @@ describe('Fornecedores (visual, F10)', () => {
     expect(botao.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     expect(form.querySelector('.documentos-arquivo__nome')?.textContent).toBe('Nenhum arquivo escolhido');
     expect(form.querySelector('.documentos-arquivo__nome--vazio')).not.toBeNull();
-    expect(Array.from(form.querySelectorAll('.documentos-dica')).map((p) => p.textContent)).toEqual(['Último dia de validade.', 'PDF, PNG ou JPEG, até 10 MB.']);
+    expect(Array.from(form.querySelectorAll('.documentos-dica')).map((p) => p.textContent)).toEqual(['Último dia de validade. Deixe em branco se não vence.', 'PDF, PNG ou JPEG, até 10 MB.']);
     expect(form.querySelectorAll('[style]')).toHaveLength(0);
 
     const arquivo = new File(['%PDF-1.7 conteudo'], 'Novo.pdf', { type: 'application/pdf' });
