@@ -18,6 +18,8 @@ import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import { ForecastDecisaoLeitura, ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastCotar from './ForecastCotar';
+import { ProvedorCriarCotacao, textoRascunhoDaLinha, useCriarCotacao } from './ForecastCriarCotacao';
+import type { ItemSelecionado } from './forecastCriarCotacaoRegras';
 import ForecastOcasiaoSelo, { OcasioesDoGrupoSelo, OcasioesDoItemDetalhe, OcasioesNoResumo } from './ForecastOcasiaoSelo';
 import { AlternarGrupo } from './ForecastAlternarGrupo';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
@@ -275,6 +277,70 @@ interface LinhaProps {
   diasCritico?: number;
   /** Definido so na visao por urgencia: mostra a coluna Fonte. */
   fonte?: string;
+  /** Fonte do grupo em que o item aparece (sempre definida; o pop-up Cotar agrupa por ela). */
+  fonteDoItem: string;
+}
+
+/** Selecao da linha para o pop-up "Criar cotacao" (E6): so aparece para quem pode criar cotacao. */
+function SelecaoDaLinha({ item, fonte }: { item: ForecastItemRelatorio; fonte: string }) {
+  const ctx = useCriarCotacao();
+  if (!ctx) return null;
+  const id = item.productId ?? null;
+  const motivo = ctx.motivoSemSelecao(item);
+  return (
+    <td className="fcr-sel">
+      {id !== null && (
+        <input
+          type="checkbox"
+          className="fcr-sel__caixa"
+          aria-label={`Selecionar ${item.item}`}
+          title={motivo ?? undefined}
+          checked={ctx.selecionados.has(id)}
+          disabled={motivo !== null}
+          onChange={() => ctx.alternar({ item, fonte })}
+        />
+      )}
+    </td>
+  );
+}
+
+/** "Selecionar todos" do cabecalho da tabela (so os itens que podem ser marcados); parcial = indeterminado. */
+function SelecionarTodos({ itens, rotulo }: { itens: ItemSelecionado[]; rotulo: string }) {
+  const ctx = useCriarCotacao();
+  const caixa = useRef<HTMLInputElement>(null);
+  const marcaveis = ctx ? itens.filter((s) => s.item.productId != null && ctx.podeSelecionar(s.item)) : [];
+  const marcados = ctx ? marcaveis.filter((s) => ctx.selecionados.has(s.item.productId as number)).length : 0;
+  const todos = marcaveis.length > 0 && marcados === marcaveis.length;
+  useEffect(() => {
+    if (caixa.current) caixa.current.indeterminate = marcados > 0 && !todos;
+  }, [marcados, todos]);
+  if (!ctx) return null;
+  return (
+    <th scope="col" className="fcr-sel">
+      <input
+        ref={caixa}
+        type="checkbox"
+        className="fcr-sel__caixa"
+        aria-label={`Selecionar todos os itens ${rotulo}`}
+        checked={todos}
+        disabled={marcaveis.length === 0}
+        onChange={() => ctx.marcar(marcaveis, !todos)}
+      />
+    </th>
+  );
+}
+
+/** Marca "Rascunho" na celula do status quando o item esta no rascunho da pessoa (E6). */
+function RascunhoDaLinha({ item }: { item: ForecastItemRelatorio }) {
+  const ctx = useCriarCotacao();
+  const noRascunho = ctx && item.productId != null ? ctx.noRascunho(item.productId) : undefined;
+  if (!ctx || !noRascunho) return null;
+  return (
+    <span className="fcl-rascunho">
+      <span className="badge badge--muted">Rascunho</span>
+      <span className="fcr-fraco">{textoRascunhoDaLinha(ctx.rascunho, noRascunho)}</span>
+    </span>
+  );
 }
 
 /** Um bloco do expansor "Detalhes": rotulo pequeno + conteudo. */
@@ -287,7 +353,7 @@ function Detalhe({ rotulo, children, largo = false }: { rotulo: string; children
   );
 }
 
-function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }: LinhaProps) {
+function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, fonteDoItem }: LinhaProps) {
   const { ruptura } = item;
   const urgencia = item.urgencia;
   const productId = item.productId ?? null;
@@ -297,7 +363,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const [aberto, setAberto] = useState(false);
   const idDetalhes = useId();
   // Colunas da linha (Item, Urgencia, Fonte e as 4 comuns): a sublinha do grupo e o expansor ocupam todas.
-  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 4;
+  const comSelecao = useCriarCotacao() !== null;
+  const colunas = (comSelecao ? 1 : 0) + 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 4;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   const focoPendente = useRef(false);
@@ -332,6 +399,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           urgencia ? `fcr-linha fcr-linha--${urgencia}` : item.vencida ? 'fcr-linha fcr-linha--vencida' : 'fcr-linha'
         }
       >
+        <SelecaoDaLinha item={item} fonte={fonteDoItem} />
         <th scope="row">
           <div className="fcr-item">
             <span className="fcr-item__nome">{item.item}</span>
@@ -377,9 +445,12 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             {item.vencida && <span className="badge badge--danger">Vencida</span>}
           </span>
         </td>
-        <td className="fcr-status">{STATUS_ROTULO[item.status] ?? item.status}</td>
+        <td className="fcr-status">
+          {STATUS_ROTULO[item.status] ?? item.status}
+          <RascunhoDaLinha item={item} />
+        </td>
         <td className="fcr-acao">
-          <ForecastCotar item={item} />
+          <ForecastCotar item={item} fonte={fonteDoItem} />
         </td>
       </tr>
       <tr id={idDetalhes} className="fcr-detalhes" hidden={!aberto}>
@@ -509,6 +580,10 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
           </caption>
           <thead hidden={!aberto}>
             <tr>
+              <SelecionarTodos
+                itens={grupo.itens.map((item) => ({ item, fonte: grupo.fonte }))}
+                rotulo={`da fonte ${grupo.fonte || 'sem nome'}`}
+              />
               <th scope="col">Item</th>
               {comUrgencia && <th scope="col">Urgência</th>}
               {COLUNAS_COMUNS}
@@ -522,6 +597,7 @@ function Grupo({ grupo, podeEditar, comUrgencia = false, diasCritico = 0 }: Grup
                 podeEditar={podeEditar}
                 comUrgencia={comUrgencia}
                 diasCritico={diasCritico}
+                fonteDoItem={grupo.fonte}
               />
             ))}
           </tbody>
@@ -556,6 +632,7 @@ function SecaoUrgencia({ urgencia, itens, diasCritico, podeEditar }: SecaoUrgenc
           </caption>
           <thead hidden={!aberto}>
             <tr>
+              <SelecionarTodos itens={itens.map(({ item, fonte }) => ({ item, fonte }))} rotulo={`da faixa ${rotulo}`} />
               <th scope="col">Item</th>
               <th scope="col">Urgência</th>
               <th scope="col">Fonte</th>
@@ -571,6 +648,7 @@ function SecaoUrgencia({ urgencia, itens, diasCritico, podeEditar }: SecaoUrgenc
                 comUrgencia
                 diasCritico={diasCritico}
                 fonte={fonte}
+                fonteDoItem={fonte}
               />
             ))}
           </tbody>
@@ -928,6 +1006,12 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
         </div>
       </section>
       <ProvedorDecisoesCompra snapshotId={snapshotId} podeEditar={podeEditar}>
+        <ProvedorCriarCotacao
+          snapshotId={snapshotId}
+          quinzena={quinzena.label}
+          diasCritico={diasCritico}
+          itensDaLista={dados.grupos.flatMap((g) => g.itens.map((item) => ({ item, fonte: g.fonte })))}
+        >
         {dados.grupos.length === 0 ? (
           <div className="empty-state">Nenhum item com demanda ≤ 0 nesta quinzena.</div>
         ) : !comUrgencia ? (
@@ -946,6 +1030,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
             <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} comUrgencia diasCritico={diasCritico} />
           ))
         )}
+        </ProvedorCriarCotacao>
       </ProvedorDecisoesCompra>
       {demandaComercial && (
         <ForecastRelatorioDemandaComercial

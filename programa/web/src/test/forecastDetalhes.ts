@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 
 /**
  * Relatorio de compras enxuto (E1): demanda, embalagem, andamento, saldo, media, observacao e a decisao de compra ficam no
@@ -24,9 +24,12 @@ export function linhaCompleta(nome: string): HTMLElement {
   return caixa;
 }
 
-/** Abre o pop-up "Cotar" do item (E2) e devolve o <dialog>. */
+/** Abre o pop-up "Criar cotacao" pela acao "Cotar" da linha do item (E6) e devolve o <dialog>. */
 export async function abrirCotar(nome: string): Promise<HTMLElement> {
-  fireEvent.click(await screen.findByRole('button', { name: `Cotar ${nome}` }));
-  const titulo = await screen.findByRole('heading', { name: `Cotar ${nome}` });
-  return titulo.closest('dialog') as HTMLElement;
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^(Cotar|Continuar cotação de) ${nome}$`) }));
+  const titulo = await screen.findByRole('heading', { name: 'Criar cotação' });
+  const dialogo = titulo.closest('dialog') as HTMLElement;
+  // O corpo so monta depois de ler o rascunho e as decisoes (antes disso o pop-up mostra "Carregando o rascunho…").
+  await within(dialogo).findByRole('button', { name: 'Cancelar' });
+  return dialogo;
 }

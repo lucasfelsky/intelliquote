@@ -255,7 +255,13 @@ export function usePodeEditarDecisao(): boolean {
   return useContext(ContextoDecisoes)?.podeEditar === true;
 }
 
-/** Resumo somente leitura da decisao (tela e papel); a edicao fica no pop-up "Cotar". */
+/** Decisoes da quinzena (a consulta unica do provedor) para quem so precisa ler: `null` fora do provedor. */
+export function useDecisoesDaQuinzena(): { mapa: ReadonlyMap<number, ForecastDecisao>; carregando: boolean; erro: boolean } | null {
+  const ctx = useContext(ContextoDecisoes);
+  return ctx ? { mapa: ctx.mapa, carregando: ctx.carregando, erro: ctx.erro } : null;
+}
+
+/** Resumo somente leitura da decisao (tela e papel); a edicao fica no pop-up "Criar cotação". */
 export function ForecastDecisaoLeitura({ item }: { item: ForecastItemRelatorio }) {
   const ctx = useContext(ContextoDecisoes);
   if (!ctx) return null;

@@ -21,12 +21,39 @@ export interface ForecastDecisao {
   decididaPorId: number | null;
   criadaEm: string;
   atualizadaEm: string;
+  /** E3: item de fora da lista de compra incluido de proposito (opcional: backend antigo nao manda). */
+  incluidoManualmente?: boolean;
+  /** E4a: cotacao viva mais recente vinculada ao item (opcional: backend antigo nao manda). */
+  cotacao?: ForecastCotacaoVinculada | null;
+  /** E4a: Qtd. final gravada no envio/fechamento (nula = ainda nao enviada). */
+  finalKg?: number | null;
+  finalAt?: string | null;
+  statusDerivado?: ForecastDecisaoStatus | 'cotacao_criada';
+}
+
+/** 'criada' = aberta e ainda nao enviada; 'enviada' = aberta e enviada a fornecedores; depois 'fechada' e 'po_enviada'. */
+export interface ForecastCotacaoVinculada {
+  id: number;
+  requestCode: string;
+  statusCotacao: 'criada' | 'enviada' | 'fechada' | 'po_enviada';
+}
+
+/** Cotacao aberta (criada ou enviada): o backend recusa cotar de novo o mesmo item enquanto ela estiver aberta. */
+export function cotacaoAbertaDaDecisao(decisao: ForecastDecisao | undefined): ForecastCotacaoVinculada | null {
+  const c = decisao?.cotacao;
+  return c && (c.statusCotacao === 'criada' || c.statusCotacao === 'enviada') ? c : null;
 }
 
 /** Corpo do PUT: `quantidadeKg: null` apaga a decisao (e nao aceita mais nenhum campo). */
 export type ForecastDecisaoPut =
   | { quantidadeKg: null }
-  | { quantidadeKg: number; status?: ForecastDecisaoStatus; observacao?: string | null };
+  | {
+      quantidadeKg: number;
+      status?: ForecastDecisaoStatus;
+      observacao?: string | null;
+      /** Item de fora da lista de compra: reenviar sempre `true` ao gravar (E3). */
+      incluidoManualmente?: boolean;
+    };
 
 export interface ForecastDecisaoGravada {
   acao: 'create' | 'update' | 'delete' | 'nenhuma';

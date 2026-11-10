@@ -5,6 +5,7 @@ import type { ForecastItemRelatorio } from '@/services/forecast';
 import type { ForecastDecisao } from '@/services/forecastDecisoes';
 import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
+import { ProvedorGerarCotacao } from './ForecastGerarCotacao';
 
 vi.mock('@/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), del: vi.fn() },
@@ -234,7 +235,9 @@ function renderRelatorio(podeEditar: boolean) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ForecastRelatorioCompras snapshotId={7} podeEditar={podeEditar} />
+      <ProvedorGerarCotacao snapshotId={7} podeCriar={podeEditar}>
+        <ForecastRelatorioCompras snapshotId={7} podeEditar={podeEditar} />
+      </ProvedorGerarCotacao>
     </QueryClientProvider>,
   );
 }
@@ -242,7 +245,7 @@ function renderRelatorio(podeEditar: boolean) {
 const chamadasDeDecisoes = () => get.mock.calls.filter(([url]) => String(url).endsWith('/decisoes'));
 
 describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
-  it('1 GET de decisoes por quinzena; o editor abre no pop-up Cotar e as tabelas so mostram o resumo', async () => {
+  it('1 GET de decisoes por quinzena; a acao Cotar abre o pop-up Criar cotacao e as tabelas so mostram o resumo', async () => {
     get.mockImplementation(async (url: string) =>
       String(url).endsWith('/decisoes')
         ? resposta([decisao({ productId: 43, quantidadeKg: 77 })])
@@ -260,26 +263,27 @@ describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
       expect(t.querySelectorAll('.fdec-editor')).toHaveLength(0);
     }
     expect(screen.queryByLabelText(/Qtd\. decidida \(kg\) de/)).toBeNull();
+    // no pop-up a quantidade a cotar nasce da decisao salva (77) ou, sem decisao, da Qtd. final calculada (125,12 -> 126 kg)
     const dialogo2 = await abrirCotar('PRODUTO 002');
-    expect((within(dialogo2).getByLabelText('Qtd. decidida (kg) de PRODUTO 002') as HTMLInputElement).value).toBe('77');
+    expect((within(dialogo2).getByLabelText('Quantidade a cotar de PRODUTO 002') as HTMLInputElement).value).toBe('77');
     expect(chamadasDeDecisoes()).toHaveLength(1);
     expect(chamadasDeDecisoes()[0]![0]).toBe('/v1/forecast/snapshots/7/decisoes');
     fireEvent.click(within(dialogo2).getByRole('button', { name: /^Fechar/ }));
-    await waitFor(() => expect(screen.queryByLabelText('Qtd. decidida (kg) de PRODUTO 002')).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText('Quantidade a cotar de PRODUTO 002')).toBeNull());
     const dialogo1 = await abrirCotar('PRODUTO 001');
-    expect((within(dialogo1).getByLabelText('Qtd. decidida (kg) de PRODUTO 001') as HTMLInputElement).value).toBe('');
+    expect((within(dialogo1).getByLabelText('Quantidade a cotar de PRODUTO 001') as HTMLInputElement).value).toBe('126');
   });
 
-  it('pop-up Cotar: abre com o titulo do item, fecha pelo botao e devolve o foco a acao', async () => {
+  it('pop-up Criar cotacao: abre com o item da linha, fecha pelo botao e devolve o foco a acao', async () => {
     get.mockImplementation(async (url: string) => (String(url).endsWith('/decisoes') ? resposta([]) : { data: relatorio() }));
     renderRelatorio(true);
     const acao = await screen.findByRole('button', { name: 'Cotar PRODUTO 001' });
     const dialogo = await abrirCotar('PRODUTO 001');
-    expect(within(dialogo).getByText(/Qtd. final calculada/)).toBeTruthy();
+    expect(within(dialogo).getByLabelText('Quantidade a cotar de PRODUTO 001')).toBeTruthy();
     expect(within(dialogo).queryByRole('combobox')).toBeNull();
     fireEvent.click(within(dialogo).getByRole('button', { name: /^Fechar/ }));
     await waitFor(() => expect(document.activeElement).toBe(acao));
-    expect(screen.queryByRole('heading', { name: 'Cotar PRODUTO 001' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Criar cotação' })).toBeNull();
   });
 
   it('quem so le nao ve a acao Cotar', async () => {
@@ -316,6 +320,6 @@ describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
     fireEvent.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     const dialogo = await abrirCotar('PRODUTO 001');
-    expect(within(dialogo).getByLabelText('Qtd. decidida (kg) de PRODUTO 001')).toBeTruthy();
+    expect(within(dialogo).getByLabelText('Quantidade a cotar de PRODUTO 001')).toBeTruthy();
   });
 });
