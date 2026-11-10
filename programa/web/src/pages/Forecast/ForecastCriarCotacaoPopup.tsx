@@ -246,6 +246,8 @@ function CorpoDoPopup({
   const pendenteRef = useRef(false);
   const sujoRef = useRef(false);
   const gerouRef = useRef(false);
+  const gerandoRef = useRef(false);
+  const tituloItensRef = useRef<HTMLHeadingElement>(null);
   const conflitoRef = useRef(false);
   conflitoRef.current = conflito !== null;
   const idErroGerar = useId();
@@ -261,7 +263,15 @@ function CorpoDoPopup({
   }, []);
   const editar = (productId: number, parte: Partial<ItemDaCotacao>) =>
     mudar((a) => a.map((i) => (i.productId === productId ? { ...i, ...parte } : i)));
+  // O botao clicado (lixeira, Adicionar, Incluir, Agora nao) sai da tela: sem isto o foco cai no <dialog> e o Tab recomeca do topo.
+  const manterFoco = () => {
+    window.requestAnimationFrame(() => {
+      const a = document.activeElement;
+      if (!a || a === document.body || a.tagName === 'DIALOG' || !a.isConnected) tituloItensRef.current?.focus();
+    });
+  };
   const tirar = (productId: number) => {
+    manterFoco();
     mudar((a) => a.filter((i) => i.productId !== productId));
     setConvite((c) => {
       const novo = new Set(c);
@@ -270,6 +280,7 @@ function CorpoDoPopup({
     });
   };
   const adicionar = (o: Opcao, viaConvite = false) => {
+    manterFoco();
     mudar((a) => (a.some((i) => i.productId === o.productId) ? a : [...a, o.montar()]));
     if (viaConvite) setConvite((c) => new Set(c).add(o.productId));
   };
@@ -339,6 +350,8 @@ function CorpoDoPopup({
   }, [baseOk]);
 
   const fechar = useCallback(() => {
+    // Durante o POST do lote o pop-up nao fecha (X, Esc, fundo e Cancelar): o resultado ainda vai decidir o que a tela mostra.
+    if (gerandoRef.current) return;
     gravarPendente();
     onFechar();
   }, [gravarPendente, onFechar]);
@@ -505,6 +518,7 @@ function CorpoDoPopup({
     if (!podeGerar) return;
     window.clearTimeout(timerRef.current);
     gerouRef.current = true;
+    gerandoRef.current = true;
     setGerando(true);
     setErroGerar('');
     await emVooRef.current;
@@ -515,21 +529,27 @@ function CorpoDoPopup({
         ),
       };
       const criadas = await postForecastCotacoes(snapshotId, corpo);
-      try {
-        await deleteForecastRascunho(snapshotId);
-      } catch {
-        // O rascunho some na proxima gravacao/descarte; as cotacoes ja foram criadas.
+      // Sem a leitura do rascunho (ou em conflito) o que esta salvo e de quem nao foi visto aqui: nao apaga.
+      if (baseOk && !conflitoRef.current) {
+        try {
+          await deleteForecastRascunho(snapshotId);
+        } catch {
+          // O rascunho some na proxima gravacao/descarte; as cotacoes ja foram criadas.
+        }
+        atualizadoEmRef.current = null;
+        qc.setQueryData(chaveRascunho, null);
       }
-      atualizadoEmRef.current = null;
-      qc.setQueryData(chaveRascunho, null);
       void qc.invalidateQueries({ queryKey: forecastDecisoesKeys.lista(snapshotId) });
       void qc.invalidateQueries({ queryKey: ['forecast', 'candidatos', snapshotId] });
       onGerado(criadas);
     } catch (err) {
       // Nada foi criado (lote atomico): a pessoa segue com o que digitou, e o rascunho volta a ser gravado.
       gerouRef.current = false;
+      gerandoRef.current = false;
       setGerando(false);
       setErroGerar(forecastLoteErrorMessage(err));
+      // O Gerar parou o timer do autosave: se havia edicao pendente, rearma.
+      if (sujoRef.current) setVersao((v) => v + 1);
       if (err instanceof ApiError && err.status === 409) {
         void qc.invalidateQueries({ queryKey: forecastDecisoesKeys.lista(snapshotId) });
       }
@@ -537,6 +557,7 @@ function CorpoDoPopup({
   };
 
   const statusRascunho = (() => {
+    if (itens.length > RASCUNHO_ITENS_MAX) return `O rascunho guarda até ${RASCUNHO_ITENS_MAX} itens: os demais não serão salvos.`;
     if (!baseOk) return 'Rascunho indisponível: não foi possível ler o rascunho desta quinzena. Você ainda pode gerar as cotações.';
     if (estado === 'pendente') return 'Alterações a salvar…';
     if (estado === 'salvando') return 'Salvando o rascunho…';
@@ -566,7 +587,9 @@ function CorpoDoPopup({
 
       <section aria-label="Itens das cotações" className="fcl-secao">
         <div className="fcl-secao__cab">
-          <h3>Itens das cotações</h3>
+          <h3 ref={tituloItensRef} tabIndex={-1}>
+            Itens das cotações
+          </h3>
           <span className="badge badge--muted">
             {itens.length} {itens.length === 1 ? 'item' : 'itens'}
           </span>
@@ -684,7 +707,10 @@ function CorpoDoPopup({
           aoTentarDeNovo={() => void consultas[idx]?.refetch()}
           noLote={noLote}
           dispensado={dispensados.has(g.chave)}
-          aoDispensar={() => setDispensados((d) => new Set(d).add(g.chave))}
+          aoDispensar={() => {
+            manterFoco();
+            setDispensados((d) => new Set(d).add(g.chave));
+          }}
           aoIncluir={(o) => adicionar(o, true)}
           aoTirar={tirar}
           desabilitado={gerando}
@@ -740,7 +766,7 @@ function CorpoDoPopup({
               Descartar rascunho
             </button>
           )}
-          <button type="button" className="ghost-button" onClick={fechar}>
+          <button type="button" className="ghost-button" disabled={gerando} onClick={fechar}>
             Cancelar
           </button>
           <button

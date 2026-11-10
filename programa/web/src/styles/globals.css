@@ -14402,8 +14402,6 @@ i.fc-status--preco { background: var(--info); }
 .fcr-det__valor .fcr-embalagem { min-width: 0; }
 .fcr-det__valor .fdec-celula { width: 100%; }
 @media screen {
-  /* o rf-region alinha a cabecalho "Qtd. decidida" a esquerda pelo nth-last-child(3): agora e a Qtd. sugerida (numerica, a direita) */
-  .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) thead th:nth-last-child(3).fcr-num { text-align: right; }
   .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) { min-width: 0; }
 }
 @media (max-width: 640px) {
@@ -14441,7 +14439,6 @@ i.fc-status--preco { background: var(--info); }
 .fcr-sel__caixa:disabled { cursor: not-allowed; }
 .fcr-sel__caixa:focus-visible { outline: 2px solid var(--primary-700); outline-offset: 2px; }
 .fcq-acao { display: inline-flex; align-items: center; gap: 6px; }
-.fcl-rascunho { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 4px; font-size: 12px; font-weight: 500; }
 .fcl-barra {
   position: sticky; bottom: 16px; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 12px;
   padding: 12px 16px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-popout); color: var(--ink);
@@ -14534,7 +14531,7 @@ i.fc-status--preco { background: var(--info); }
   .fcl-barra { bottom: 8px; }
 }
 @media print {
-  .fcr-sel, .fcl-barra, .fcl-criadas, .fcl-rascunho { display: none !important; }
+  .fcr-sel, .fcl-barra, .fcl-criadas { display: none !important; }
 }
 /* Qtd. final fixa, status automatico e tracking por linha (E7 do relatorio enxuto). So tokens legados fora das regioes de tema. */
 .fcr-final-cab__corpo { display: inline-block; }

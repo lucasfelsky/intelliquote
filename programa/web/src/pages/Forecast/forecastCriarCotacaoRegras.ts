@@ -261,7 +261,8 @@ export function paraItemDoRascunho(item: ItemDaCotacao): ForecastRascunhoItem {
 
 /**
  * Item do lote. `incluidoManualmente: true` SEMPRE que o item e de fora da lista (o backend recusa sem ela). `atualizadoEm`
- * e o `atualizadaEm` da decisao que a tela leu (`null` = nao havia); `leuDecisoes: false` nao manda (nada para conferir).
+ * e o `atualizadaEm` da decisao que a tela leu (`null` = nao havia); `leuDecisoes: false` nao manda (nada para conferir) e, com a
+ * observacao vazia, tambem nao manda `observacao` (a nota ja gravada que a tela nao conseguiu ler nao pode ser apagada).
  */
 export function paraItemDoLote(
   item: ItemDaCotacao,
@@ -273,7 +274,7 @@ export function paraItemDoLote(
   return {
     productId: item.productId,
     quantidadeKg: kg,
-    observacao: obs === '' ? null : obs,
+    ...(obs === '' && !leuDecisoes ? {} : { observacao: obs === '' ? null : obs }),
     ...(item.origem === 'candidato' ? { incluidoManualmente: true } : {}),
     ...(leuDecisoes ? { atualizadoEm: decisao?.atualizadaEm ?? null } : {}),
   };
