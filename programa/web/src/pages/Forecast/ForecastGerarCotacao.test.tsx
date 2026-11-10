@@ -27,7 +27,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
-import { expandirDetalhes } from '@/test/forecastDetalhes';
+import { abrirCotar } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
@@ -156,10 +156,9 @@ function renderRelatorio(o: Opcoes = {}) {
 }
 
 const chamadas = (fim: string) => get.mock.calls.map((c) => String(c[0])).filter((p) => p.endsWith(fim));
-// O botao mora no expansor "Detalhes" da linha (fechado por padrao): abre todos antes de procurar.
+// O botao mora no pop-up "Cotar" da linha (E2 do relatorio enxuto): abre o pop-up antes de procurar.
 const botao = async (nome = 'PRODUTO 002') => {
-  await screen.findAllByRole('button', { name: /^Ver detalhes de / });
-  expandirDetalhes();
+  await abrirCotar(nome);
   return screen.findByRole('button', { name: `Gerar cotação de ${nome}` });
 };
 
@@ -178,10 +177,12 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     expect((await screen.findByTestId('destino')).textContent).toBe('?fromForecast=7-42');
   });
 
-  it('o botao nao tem role="alert" e fica na celula da decisao', async () => {
+  it('o botao (com rotulo visivel) nao tem role="alert" e fica na celula da decisao do pop-up', async () => {
     mockApi();
     renderRelatorio();
     const b = await botao();
+    expect(b.textContent).toBe('Gerar cotação');
+    expect(b.closest('dialog')).not.toBeNull();
     expect(b.closest('.fdec-celula')).not.toBeNull();
     // o editor e o Gerar cotacao dividem a grade .fdec-conteudo (o icone fica na linha do Salvar)
     const grade = b.closest('.fdec-conteudo') as HTMLElement;
@@ -195,6 +196,7 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     renderRelatorio({ podeCriar: false });
     await screen.findByText('1 item em 1 fonte');
     expect(screen.queryByRole('button', { name: /Gerar cotação/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
     expect(chamadas('/v1/forecast/products')).toHaveLength(0);
   });
 
@@ -203,10 +205,11 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     renderRelatorio({ semProvedor: true });
     await screen.findByText('1 item em 1 fonte');
     expect(screen.queryByRole('button', { name: /Gerar cotação/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
     expect(chamadas('/v1/forecast/products')).toHaveLength(0);
   });
 
-  it('varias linhas: exatamente 1 GET de produtos e 1 GET de decisoes (deduplicado)', async () => {
+  it('varias linhas: uma acao Cotar por linha e exatamente 1 GET de produtos e 1 GET de decisoes (deduplicado)', async () => {
     mockApi({
       itens: [
         item({ linha: 3, productId: 41, item: 'PRODUTO 001' }),
@@ -217,7 +220,9 @@ describe('ForecastGerarCotacao (botao da linha)', () => {
     });
     renderRelatorio();
     await botao('PRODUTO 003');
-    expect(screen.getAllByRole('button', { name: /^Gerar cotação de/ })).toHaveLength(3);
+    expect(screen.getAllByRole('button', { name: /^Cotar PRODUTO/ })).toHaveLength(3);
+    // so o pop-up aberto tem o Gerar cotacao
+    expect(screen.getAllByRole('button', { name: /^Gerar cotação de/ })).toHaveLength(1);
     await waitFor(() => expect(chamadas('/decisoes')).toHaveLength(1));
     expect(chamadas('/v1/forecast/products')).toHaveLength(1);
   });
@@ -442,6 +447,7 @@ describe('Forecast (pagina): botao Gerar cotacao no relatorio de compras', () =>
     renderPagina();
     await screen.findByText('1 item em 1 fonte');
     expect(screen.queryByRole('button', { name: /Gerar cotação/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
     expect(chamadas('/v1/forecast/products')).toHaveLength(0);
   });
 });

@@ -63,14 +63,22 @@ interface BotaoProps {
   item: ForecastItemRelatorio;
   productId: number | null;
   ctx: Contexto;
+  comTexto: boolean;
 }
 
-function Botao({ item, productId, ctx }: BotaoProps) {
+/** Permissao de criar cotacao do provedor (false fora dele). */
+export function usePodeCriarCotacao(): boolean {
+  return useContext(ContextoGerarCotacao)?.podeCriar === true;
+}
+
+function Botao({ item, productId, ctx, comTexto }: BotaoProps) {
   const idMotivo = useId();
   // Mesma key e fn do ProvedorDecisoesCompra: deduplicado (nenhum GET a mais) e reage na hora quando a decisao e salva.
   const decisoes = useQuery({
     queryKey: forecastDecisoesKeys.lista(ctx.snapshotId),
     queryFn: () => listForecastDecisoes(ctx.snapshotId),
+    // O botao agora nasce ao abrir o pop-up Cotar: a lista ja esta no cache (provedor) e nao deve ser buscada de novo.
+    refetchOnMount: false,
   });
   const decisao = productId === null ? undefined : (decisoes.data ?? []).find((d) => d.productId === productId);
   const motivo = motivoDoBotao({
@@ -95,9 +103,10 @@ function Botao({ item, productId, ctx }: BotaoProps) {
           ctx.navegar(linkGerarCotacao(ctx.snapshotId, productId));
         }}
       >
-        {/* So icone na tela (refino visual, etapa 4); texto e motivo seguem no DOM para o leitor de tela e como dica (title). */}
+        {/* Na tabela: so icone (refino visual, etapa 4); texto e motivo seguem no DOM para o leitor de tela e como dica (title).
+            No pop-up "Cotar" (comTexto) o rotulo aparece. */}
         <Icon name="file-plus" size={16} />
-        <span className="fcr-so-leitor">Gerar cotação</span>
+        <span className={comTexto ? undefined : 'fcr-so-leitor'}>Gerar cotação</span>
       </button>
       {motivo && (
         <span id={idMotivo} className="fgc-motivo fcr-so-leitor">
@@ -114,8 +123,14 @@ function Botao({ item, productId, ctx }: BotaoProps) {
   );
 }
 
-export default function ForecastGerarCotacao({ item }: { item: ForecastItemRelatorio }) {
+interface Props {
+  item: ForecastItemRelatorio;
+  /** Mostra o rotulo "Gerar cotação" (pop-up Cotar); na tabela so o icone. */
+  comTexto?: boolean;
+}
+
+export default function ForecastGerarCotacao({ item, comTexto = false }: Props) {
   const ctx = useContext(ContextoGerarCotacao);
   if (!ctx || !ctx.podeCriar) return null;
-  return <Botao item={item} productId={item.productId ?? null} ctx={ctx} />;
+  return <Botao item={item} productId={item.productId ?? null} ctx={ctx} comTexto={comTexto} />;
 }

@@ -23,3 +23,10 @@ export function linhaCompleta(nome: string): HTMLElement {
   if (detalhes?.classList.contains('fcr-detalhes')) caixa.append(detalhes.cloneNode(true));
   return caixa;
 }
+
+/** Abre o pop-up "Cotar" do item (E2) e devolve o <dialog>. */
+export async function abrirCotar(nome: string): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: `Cotar ${nome}` }));
+  const titulo = await screen.findByRole('heading', { name: `Cotar ${nome}` });
+  return titulo.closest('dialog') as HTMLElement;
+}
