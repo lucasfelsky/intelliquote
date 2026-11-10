@@ -44,12 +44,13 @@ export interface SerializedSupplierDocument {
   id: number;
   supplierId: number;
   name: string;
-  expiresOn: string;
+  // null = documento sem vencimento (status 'no_expiry', daysLeft null).
+  expiresOn: string | null;
   notes: string | null;
   fileName: string;
   mimeType: string;
   fileSize: number;
-  daysLeft: number;
+  daysLeft: number | null;
   status: SupplierDocumentStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -75,9 +76,13 @@ function activeWhere(
   return { ...extra, deletedAt: null, supplier: { deletedAt: null } };
 }
 
+function keyOrNull(date: Date | null): string | null {
+  return date ? dbDateToKey(date) : null;
+}
+
 function serialize(row: DocumentRow, now: Date): SerializedSupplierDocument {
-  const expiresOn = dbDateToKey(row.expiresOn);
-  const daysLeft = daysUntil(expiresOn, todayKeyInSaoPaulo(now));
+  const expiresOn = keyOrNull(row.expiresOn);
+  const daysLeft = expiresOn === null ? null : daysUntil(expiresOn, todayKeyInSaoPaulo(now));
 
   return {
     id: row.id,
@@ -89,7 +94,7 @@ function serialize(row: DocumentRow, now: Date): SerializedSupplierDocument {
     mimeType: row.mimeType,
     fileSize: row.fileSize,
     daysLeft,
-    status: documentStatus(daysLeft),
+    status: daysLeft === null ? 'no_expiry' : documentStatus(daysLeft),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy ? { id: row.createdBy.id, name: row.createdBy.name } : null,
@@ -99,7 +104,7 @@ function serialize(row: DocumentRow, now: Date): SerializedSupplierDocument {
 // Metadados para o AuditLog (nunca os bytes).
 function auditSnapshot(row: {
   name: string;
-  expiresOn: Date;
+  expiresOn: Date | null;
   notes: string | null;
   fileName: string;
   mimeType: string;
@@ -108,7 +113,7 @@ function auditSnapshot(row: {
 }) {
   return {
     name: row.name,
-    expiresOn: dbDateToKey(row.expiresOn),
+    expiresOn: keyOrNull(row.expiresOn),
     notes: row.notes,
     fileName: row.fileName,
     mimeType: row.mimeType,
@@ -180,7 +185,8 @@ export class SupplierDocumentService {
     const rows = await prisma.supplierDocument.findMany({
       where: activeWhere({ supplierId }),
       include: documentInclude,
-      orderBy: [{ expiresOn: 'asc' }, { id: 'asc' }],
+      // Sem vencimento por ultimo (NULLS LAST explicito, nao depende do default do banco).
+      orderBy: [{ expiresOn: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
     });
 
     return rows.map((row) => serialize(row, now));
@@ -198,6 +204,10 @@ export class SupplierDocumentService {
     const bySupplier: Record<string, SupplierDocumentSummaryEntry> = {};
 
     for (const row of rows) {
+      // `lte` ja exclui NULL no SQL; o guard e para o tipo (sem vencimento nunca entra no resumo).
+      if (!row.expiresOn) {
+        continue;
+      }
       const daysLeft = daysUntil(dbDateToKey(row.expiresOn), todayKey);
       const status = documentStatus(daysLeft);
       if (status === 'ok') {
@@ -240,7 +250,7 @@ export class SupplierDocumentService {
         data: {
           supplierId: input.supplierId,
           name: input.name,
-          expiresOn: dateKeyToDbDate(input.expiresOn),
+          expiresOn: input.expiresOn ? dateKeyToDbDate(input.expiresOn) : null,
           notes: input.notes ?? null,
           fileName: file.fileName,
           mimeType: file.mimeType,
@@ -275,7 +285,7 @@ export class SupplierDocumentService {
     return prisma.$transaction(async (tx) => {
       const before = await findActiveOrThrow(tx, id);
       const dateChanged =
-        input.expiresOn !== undefined && input.expiresOn !== dbDateToKey(before.expiresOn);
+        input.expiresOn !== undefined && input.expiresOn !== keyOrNull(before.expiresOn);
 
       const updated = await tx.supplierDocument.update({
         where: { id },
@@ -283,7 +293,7 @@ export class SupplierDocumentService {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.notes !== undefined ? { notes: input.notes } : {}),
           ...(input.expiresOn !== undefined
-            ? { expiresOn: dateKeyToDbDate(input.expiresOn) }
+            ? { expiresOn: input.expiresOn ? dateKeyToDbDate(input.expiresOn) : null }
             : {}),
           // Renovacao (data mudou de fato) reinicia os marcos de aviso.
           ...(dateChanged ? { alertCycle: { increment: 1 } } : {}),
@@ -317,7 +327,8 @@ export class SupplierDocumentService {
 
     return prisma.$transaction(async (tx) => {
       const before = await findActiveOrThrow(tx, id);
-      const dateChanged = input.expiresOn !== dbDateToKey(before.expiresOn);
+      const dateChanged =
+        input.expiresOn !== undefined && input.expiresOn !== keyOrNull(before.expiresOn);
 
       const updated = await tx.supplierDocument.update({
         where: { id },
@@ -325,7 +336,9 @@ export class SupplierDocumentService {
           fileName: file.fileName,
           mimeType: file.mimeType,
           fileSize: file.fileSize,
-          expiresOn: dateKeyToDbDate(input.expiresOn),
+          ...(input.expiresOn !== undefined
+            ? { expiresOn: input.expiresOn ? dateKeyToDbDate(input.expiresOn) : null }
+            : {}),
           ...(dateChanged ? { alertCycle: { increment: 1 } } : {}),
           file: { upsert: { create: { data: file.data }, update: { data: file.data } } },
         },

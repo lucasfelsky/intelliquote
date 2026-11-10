@@ -9,20 +9,20 @@ export const SUPPLIER_DOCUMENT_ALLOWED_MIME = [
 ] as const;
 export type SupplierDocumentMime = (typeof SUPPLIER_DOCUMENT_ALLOWED_MIME)[number];
 
-export type SupplierDocumentStatus = 'ok' | 'expiring' | 'due_today' | 'expired';
+export type SupplierDocumentStatus = 'ok' | 'expiring' | 'due_today' | 'expired' | 'no_expiry';
 
 export interface SupplierDocument {
   id: number;
   supplierId: number;
   name: string;
-  /** YYYY-MM-DD (ultimo dia valido). */
-  expiresOn: string;
+  /** YYYY-MM-DD (ultimo dia valido); null = documento sem vencimento. */
+  expiresOn: string | null;
   notes: string | null;
   fileName: string;
   mimeType: string;
   fileSize: number;
   /** Calculado pelo backend (calendario de Sao Paulo). O web nunca calcula status. */
-  daysLeft: number;
+  daysLeft: number | null;
   status: SupplierDocumentStatus;
   createdAt: string;
   updatedAt: string;
@@ -48,18 +48,20 @@ export interface SupplierDocumentFilePayload {
 export interface CreateSupplierDocumentInput extends SupplierDocumentFilePayload {
   supplierId: number;
   name: string;
-  expiresOn: string;
+  /** null/omitido = sem vencimento. */
+  expiresOn?: string | null;
   notes?: string | null;
 }
 
 export interface UpdateSupplierDocumentInput {
   name?: string;
-  expiresOn?: string;
+  /** null = passa a ficar sem vencimento. */
+  expiresOn?: string | null;
   notes?: string | null;
 }
 
 export interface ReplaceSupplierDocumentFileInput extends SupplierDocumentFilePayload {
-  expiresOn: string;
+  expiresOn: string | null;
 }
 
 const BASE = '/api/v1/supplier-documents';
@@ -138,7 +140,8 @@ export async function downloadSupplierDocument(id: number): Promise<void> {
 }
 
 /** '2026-10-19' -> '19/10/2026' por split (sem new Date: sem deslocamento de fuso). */
-export function formatDateKeyBR(key: string): string {
+export function formatDateKeyBR(key: string | null): string {
+  if (key === null) return '—';
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
   if (!match) return key;
   return `${match[3]}/${match[2]}/${match[1]}`;
@@ -156,6 +159,8 @@ export function statusLabel(doc: Pick<SupplierDocument, 'status' | 'daysLeft'>):
   badgeClass: string;
 } {
   switch (doc.status) {
+    case 'no_expiry':
+      return { text: 'Sem vencimento', badgeClass: 'badge' };
     case 'expired':
       return { text: 'Vencido', badgeClass: 'badge badge--danger' };
     case 'due_today':

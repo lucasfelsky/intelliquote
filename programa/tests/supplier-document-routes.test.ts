@@ -372,14 +372,26 @@ describe('Supplier document routes', () => {
       expect(prismaMock.supplierDocument.create).not.toHaveBeenCalled();
     });
 
-    it('PUT sem expiresOn responde 400', async () => {
+    it('PUT sem expiresOn mantem o vencimento atual (200, sem tocar na data nem no ciclo)', async () => {
       const cookies = await loginAs('admin');
       const response = await request(app)
         .put('/api/v1/supplier-documents/5/file')
         .set('Cookie', cookies)
         .send({ fileName: 'x.pdf', mimeType: 'application/pdf', contentBase64: PDF_B64 });
+      expect(response.status).toBe(200);
+      const data = prismaMock.supplierDocument.update.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('expiresOn');
+      expect(data).not.toHaveProperty('alertCycle');
+    });
+
+    it('vencimento com formato invalido (nao string) responde 400', async () => {
+      const cookies = await loginAs('admin');
+      const response = await request(app)
+        .post('/api/v1/supplier-documents')
+        .set('Cookie', cookies)
+        .send(createPayload({ expiresOn: 20991201 }));
       expect(response.status).toBe(400);
-      expect(prismaMock.supplierDocument.update).not.toHaveBeenCalled();
+      expect(prismaMock.supplierDocument.create).not.toHaveBeenCalled();
     });
 
     it('PATCH sem nenhum campo responde 400', async () => {
@@ -411,6 +423,103 @@ describe('Supplier document routes', () => {
         entityType: 'supplier_document',
         action: 'create',
       });
+    });
+  });
+
+  describe('documento sem vencimento', () => {
+    it('POST sem expiresOn, com null ou com string vazia grava expiresOn null', async () => {
+      const cookies = await loginAs('admin');
+      const { expiresOn: _omitted, ...semCampo } = createPayload();
+      for (const body of [semCampo, createPayload({ expiresOn: null }), createPayload({ expiresOn: '' })]) {
+        prismaMock.supplierDocument.create.mockClear();
+        prismaMock.supplierDocument.create.mockResolvedValue(documentRow({ expiresOn: null }));
+        const response = await request(app)
+          .post('/api/v1/supplier-documents')
+          .set('Cookie', cookies)
+          .send(body);
+        expect(response.status).toBe(201);
+        expect(prismaMock.supplierDocument.create.mock.calls[0][0].data.expiresOn).toBeNull();
+        expect(response.body).toMatchObject({ expiresOn: null, daysLeft: null, status: 'no_expiry' });
+      }
+    });
+
+    it('listagem serializa no_expiry e manda os sem vencimento por ultimo', async () => {
+      const cookies = await loginAs('viewer');
+      prismaMock.supplierDocument.findMany.mockResolvedValue([
+        documentRow(),
+        documentRow({ id: 6, name: 'ISO 9001', expiresOn: null }),
+      ]);
+      const response = await request(app)
+        .get('/api/v1/supplier-documents?supplierId=10')
+        .set('Cookie', cookies);
+      expect(response.status).toBe(200);
+      expect(response.body[1]).toMatchObject({ id: 6, expiresOn: null, daysLeft: null, status: 'no_expiry' });
+      expect(prismaMock.supplierDocument.findMany.mock.calls[0][0].orderBy).toEqual([
+        { expiresOn: { sort: 'asc', nulls: 'last' } },
+        { id: 'asc' },
+      ]);
+    });
+
+    it('PATCH com expiresOn null limpa o vencimento e reinicia os marcos', async () => {
+      const cookies = await loginAs('admin');
+      prismaMock.supplierDocument.update.mockResolvedValue(documentRow({ expiresOn: null }));
+      const response = await request(app)
+        .patch('/api/v1/supplier-documents/5')
+        .set('Cookie', cookies)
+        .send({ expiresOn: null });
+      expect(response.status).toBe(200);
+      const data = prismaMock.supplierDocument.update.mock.calls[0][0].data;
+      expect(data.expiresOn).toBeNull();
+      expect(data.alertCycle).toEqual({ increment: 1 });
+    });
+
+    it('PATCH e PUT com expiresOn "" tratam como sem vencimento', async () => {
+      const cookies = await loginAs('admin');
+      await request(app)
+        .patch('/api/v1/supplier-documents/5')
+        .set('Cookie', cookies)
+        .send({ expiresOn: '' });
+      await request(app)
+        .put('/api/v1/supplier-documents/5/file')
+        .set('Cookie', cookies)
+        .send({ fileName: 'x.pdf', mimeType: 'application/pdf', contentBase64: PDF_B64, expiresOn: '' });
+      const [patch, put] = prismaMock.supplierDocument.update.mock.calls.map((c) => c[0].data);
+      expect(patch.expiresOn).toBeNull();
+      expect(put.expiresOn).toBeNull();
+    });
+
+    it('PATCH null em documento que ja nao tem vencimento nao incrementa o ciclo', async () => {
+      const cookies = await loginAs('admin');
+      prismaMock.supplierDocument.findFirst.mockResolvedValue(documentRow({ expiresOn: null }));
+      await request(app)
+        .patch('/api/v1/supplier-documents/5')
+        .set('Cookie', cookies)
+        .send({ expiresOn: null, name: 'Novo nome' });
+      const data = prismaMock.supplierDocument.update.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('alertCycle');
+    });
+
+    it('PUT do arquivo com expiresOn null passa a documento sem vencimento', async () => {
+      const cookies = await loginAs('admin');
+      await request(app)
+        .put('/api/v1/supplier-documents/5/file')
+        .set('Cookie', cookies)
+        .send({ fileName: 'x.pdf', mimeType: 'application/pdf', contentBase64: PDF_B64, expiresOn: null });
+      const data = prismaMock.supplierDocument.update.mock.calls[0][0].data;
+      expect(data.expiresOn).toBeNull();
+      expect(data.alertCycle).toEqual({ increment: 1 });
+    });
+
+    it('resumo ignora documento sem vencimento', async () => {
+      const cookies = await loginAs('viewer');
+      prismaMock.supplierDocument.findMany.mockResolvedValue([
+        { supplierId: 10, expiresOn: null },
+      ]);
+      const response = await request(app)
+        .get('/api/v1/supplier-documents/summary')
+        .set('Cookie', cookies);
+      expect(response.status).toBe(200);
+      expect(response.body.bySupplier).toEqual({});
     });
   });
 

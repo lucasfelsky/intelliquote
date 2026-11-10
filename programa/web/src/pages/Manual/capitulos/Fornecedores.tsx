@@ -44,7 +44,7 @@ export default function Fornecedores() {
 
       <h3 className="manual-secao">Documentos com vencimento</h3>
       <p>
-        Na linha expandida, a seção <strong>Documentos</strong> guarda certificados, licenças e afins: PDF, PNG ou JPEG de até 10 MB, sempre com data de vencimento. A lista mostra o selo{' '}
+        Na linha expandida, a seção <strong>Documentos</strong> guarda certificados, licenças e afins: PDF, PNG ou JPEG de até 10 MB. A data de vencimento é opcional: documento sem vencimento fica com o selo “Sem vencimento” e não gera aviso. A lista mostra o selo{' '}
         <span className="badge badge--warning">Doc. vence em 7 d</span> ou <span className="badge badge--danger">Doc. vencido</span> ao lado do nome.
       </p>
       <Figura
