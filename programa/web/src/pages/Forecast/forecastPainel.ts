@@ -1,6 +1,7 @@
 // Funcoes puras do painel do Forecast (sem React, sem Date local).
 // Datas sao sempre manipuladas pelo texto AAAA-MM-DD: new Date(...) / toISOString()
 // mostram o dia anterior em BRT.
+import type { ReactNode } from 'react';
 import type {
   ForecastConferencia,
   ForecastDivergencia,
@@ -163,6 +164,8 @@ export interface ColunaPainel {
   titulo?: (linha: ForecastLinha) => string | undefined;
   /** Texto so para leitor de tela (`sr-only` dentro da celula); `title` em `<td>` nao e anunciado de forma confiavel. */
   textoAcessivel?: (linha: ForecastLinha) => string | undefined;
+  /** Conteudo proprio da celula (ex.: campo editavel); nulo = o texto/destaque padrao. `texto`/`destaque` ja vem calculados. */
+  celula?: (linha: ForecastLinha, base: { texto: string; destaque: string | undefined }) => ReactNode | null;
 }
 
 type ColunaDefinida = ColunaPainel & { oculta?: boolean };
