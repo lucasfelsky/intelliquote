@@ -458,13 +458,16 @@ describe('pop-up Criar cotacao: bloqueios', () => {
     expect(botaoGerar(d).disabled).toBe(true);
   });
 
-  it('Cotar de item que ja esta em cotacao aberta: bloqueado com o codigo da cotacao e Gerar desabilitado', async () => {
+  it('item que ja esta em cotacao aberta: a linha troca "Cotar" por "Ver cotacao" (E7) e o checkbox fica bloqueado com o codigo', async () => {
     c.decisoes = [decisao({ productId: 42, cotacao: { id: 9, requestCode: 'COT-0009', statusCotacao: 'enviada' } })];
     renderRelatorio();
     await waitFor(() => expect(chamadas('/decisoes')).toHaveLength(1));
-    const d = await abrirCotar('PRODUTO 002');
-    expect(within(d).getByText('Este item já está na cotação aberta COT-0009.')).toBeTruthy();
-    expect(botaoGerar(d).disabled).toBe(true);
+    const ver = await screen.findByRole('link', { name: 'Ver cotação COT-0009 de PRODUTO 002' });
+    expect(ver.getAttribute('href')).toBe('/cotacoes/9');
+    expect(screen.queryByRole('button', { name: 'Cotar PRODUTO 002' })).toBeNull();
+    const caixa = screen.getByRole('checkbox', { name: 'Selecionar PRODUTO 002' }) as HTMLInputElement;
+    expect(caixa.disabled).toBe(true);
+    expect(caixa.getAttribute('title')).toBe('Já está na cotação aberta COT-0009.');
   });
 });
 

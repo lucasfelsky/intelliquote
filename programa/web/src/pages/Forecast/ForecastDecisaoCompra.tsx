@@ -14,7 +14,8 @@ import {
 import { ApiError } from '@/api/client';
 import { kgParaCampo, sugeridaParaCampo, textoSalvaEm, validarDecisao } from './forecastDecisaoCampos';
 import { useAviso } from './ForecastAvisos';
-import { kgBr, STATUS_ROTULO } from './forecastPainel';
+import { kgBr } from './forecastPainel';
+import { qtdFinalDaLinha, statusDaLinha, TITULO_COLUNA_QTD_FINAL } from './forecastTrackingRegras';
 
 // Coluna "Qtd. decidida (kg)" do relatorio de compras (PR3): o comprador registra a quantidade que decidiu comprar por
 // item da lista, quinzena a quinzena. O provedor busca a lista da quinzena UMA vez (1 GET para todas as tabelas); a celula
@@ -81,10 +82,17 @@ function aplicarGravacao(lista: ForecastDecisao[] | undefined, productId: number
 
 function Leitura({ decisao }: { decisao: ForecastDecisao | undefined }) {
   if (!decisao) return <span className="fdec-estado">Sem decisão</span>;
+  // E7: a Qtd. final fixa (preenchida pelo sistema) e a cotacao vinculada entram no resumo da decisao.
+  const final = qtdFinalDaLinha(decisao);
   return (
     <div className="fdec-leitura">
       <span className="fdec-valor">{kgBr(decisao.quantidadeKg)} kg</span>
-      <span className="fdec-estado">{STATUS_ROTULO[decisao.status] ?? decisao.status}</span>
+      <span className="fdec-estado">{statusDaLinha(decisao.status, decisao, false).rotulo}</span>
+      {final.preenchida && (
+        <span className="fdec-estado" title={final.dica}>
+          {TITULO_COLUNA_QTD_FINAL}: {final.texto} kg{decisao.cotacao ? ` · ${decisao.cotacao.requestCode}` : ''}
+        </span>
+      )}
       {decisao.observacao && <span className="fdec-estado">Obs.: {decisao.observacao}</span>}
       <span className="fdec-estado">{textoSalvaEm(decisao.atualizadaEm)}</span>
     </div>

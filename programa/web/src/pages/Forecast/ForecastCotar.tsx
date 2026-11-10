@@ -3,10 +3,13 @@ import { InfoPopover } from '@/components/InfoPopover';
 import { Icon } from '@/components/icons';
 import type { ForecastItemRelatorio } from '@/services/forecast';
 import { useCriarCotacao } from './ForecastCriarCotacao';
+import { useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
+import { LinksDaCotacao } from './ForecastTrackingLinha';
 import { MOTIVO_FORA_CADASTRO } from './forecastGerarCotacaoRegras';
 
-// Acao da linha do relatorio de compras (E2, refeita na E6): "Cotar" abre o pop-up "Criar cotacao" com este item ja escolhido;
-// "Continuar" aparece quando o item esta no rascunho da pessoa. Quem so le (ou fora do provedor) nao ve a acao.
+// Acao da linha do relatorio de compras (E2, refeita na E6, tracking na E7): "Cotar" abre o pop-up "Criar cotacao" com este item
+// ja escolhido; "Continuar" aparece quando o item esta no rascunho da pessoa; com cotacao vinculada a linha mostra "Ver cotacao"
+// (e "Ver pedido" com a PO enviada), links que qualquer perfil de leitura ve. Quem so le nunca ve "Cotar"/"Continuar".
 
 interface Props {
   item: ForecastItemRelatorio;
@@ -16,9 +19,12 @@ interface Props {
 
 export default function ForecastCotar({ item, fonte }: Props) {
   const ctx = useCriarCotacao();
+  const decisoes = useDecisoesDaQuinzena();
   const idMotivo = useId();
-  if (!ctx) return null;
   const productId = item.productId ?? null;
+  const cotacao = productId !== null ? (decisoes?.mapa.get(productId)?.cotacao ?? null) : null;
+  const links = cotacao ? <LinksDaCotacao cotacao={cotacao} nome={item.item} /> : null;
+  if (!ctx) return links;
   if (productId === null) {
     // Itens sem produto no cadastro nao entram na cotacao: o motivo fica visivel (balao) e para o leitor de tela.
     return (
@@ -43,15 +49,20 @@ export default function ForecastCotar({ item, fonte }: Props) {
     );
   }
   const rascunho = ctx.noRascunho(productId) !== undefined;
+  // Cotacao vinculada sem rascunho novo: so o tracking (o backend recusa cotar de novo enquanto ela esta aberta).
+  if (cotacao && !rascunho) return links;
   return (
-    <button
-      type="button"
-      className="ghost-button ghost-button--sm fcq-botao"
-      aria-label={rascunho ? `Continuar cotação de ${item.item}` : `Cotar ${item.item}`}
-      aria-haspopup="dialog"
-      onClick={(e) => ctx.abrir([{ item, fonte }], e.currentTarget)}
-    >
-      {rascunho ? 'Continuar' : 'Cotar'}
-    </button>
+    <span className="fcq-acao fcq-acao--pilha">
+      <button
+        type="button"
+        className="ghost-button ghost-button--sm fcq-botao"
+        aria-label={rascunho ? `Continuar cotação de ${item.item}` : `Cotar ${item.item}`}
+        aria-haspopup="dialog"
+        onClick={(e) => ctx.abrir([{ item, fonte }], e.currentTarget)}
+      >
+        {rascunho ? 'Continuar' : 'Cotar'}
+      </button>
+      {links}
+    </span>
   );
 }

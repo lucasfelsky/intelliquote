@@ -12,13 +12,19 @@ const PARTES_DATA_SP = new Intl.DateTimeFormat('pt-BR', {
   hour12: false,
 });
 
-/** ISO (UTC, do backend) -> `salva em dd/mm hh:mm` no horario de Brasilia. Data invalida = vazio. */
-export function textoSalvaEm(iso: string): string {
+/** ISO (UTC, do backend) -> `dd/mm hh:mm` no horario de Brasilia. Data invalida = vazio. */
+export function dataHoraSp(iso: string): string {
   const data = new Date(iso);
   if (Number.isNaN(data.getTime())) return '';
   const partes = Object.fromEntries(PARTES_DATA_SP.formatToParts(data).map((p) => [p.type, p.value]));
   const hora = partes.hour === '24' ? '00' : partes.hour;
-  return `salva em ${partes.day}/${partes.month} ${hora}:${partes.minute}`;
+  return `${partes.day}/${partes.month} ${hora}:${partes.minute}`;
+}
+
+/** ISO (UTC, do backend) -> `salva em dd/mm hh:mm` no horario de Brasilia. Data invalida = vazio. */
+export function textoSalvaEm(iso: string): string {
+  const quando = dataHoraSp(iso);
+  return quando ? `salva em ${quando}` : '';
 }
 
 /** Numero -> texto do campo: virgula decimal, ate 3 casas, sem separador de milhar (1234,5). */
