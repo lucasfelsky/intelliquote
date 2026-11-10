@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { Icon } from './icons';
 
 interface ModalProps {
@@ -15,6 +15,7 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, subtitle, children, size, className: extra }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const tituloId = useId();
   const mousedownTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
@@ -72,16 +73,16 @@ export function Modal({ isOpen, onClose, title, subtitle, children, size, classN
   const className = extra ? `${base} ${extra}` : base;
 
   return (
-    <dialog ref={dialogRef} className={className}>
+    <dialog ref={dialogRef} className={className} aria-labelledby={tituloId}>
       <div className="modal-content">
         <header className="modal-header">
           {subtitle ? (
             <div className="modal-header__titles">
-              <h2>{title}</h2>
+              <h2 id={tituloId}>{title}</h2>
               <p className="modal-subtitle">{subtitle}</p>
             </div>
           ) : (
-            <h2>{title}</h2>
+            <h2 id={tituloId}>{title}</h2>
           )}
           <button type="button" onClick={onClose} className="btn-close" aria-label="Fechar">
             <Icon name="x" size={16} strokeWidth={2} />
