@@ -14213,6 +14213,19 @@ i.fc-status--preco { background: var(--info); }
 .fcad-decidida--po::before { background: var(--primary-700); }
 .fcad-decidida--preco::before { background: var(--info); }
 .fcad-aviso { display: flex; gap: 10px; align-items: center; margin: 6px 12px; font-size: 12px; color: var(--ink-soft); }
+/* Forecast: ANALISE FORECAST editavel (admin/comprador). Botao com o valor; clicar troca pelo campo. So tokens do tema. */
+.fcae-retorno--erro { color: var(--danger); font-weight: 600; }
+.fc-grid .fcae-botao, .fc-grid .fcae-campo { display: block; width: 100%; min-height: 44px; margin: 0; padding: 0 6px; border-radius: var(--radius-sm); color: inherit; font: inherit; text-align: right; }
+.fc-grid .fcae-botao { border: 1px dashed transparent; background: transparent; cursor: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-grid .fcae-botao:hover { border-color: var(--border-strong); background: var(--surface); }
+.fc-grid .fcae-campo { border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); }
+.fc-grid .fcae-campo[aria-invalid="true"] { border-color: var(--danger); }
+.fc-grid .fcae-campo:disabled { opacity: 0.7; cursor: progress; }
+.fc-grid .fcae-botao:focus-visible, .fc-grid .fcae-campo:focus-visible { outline: 2px solid var(--primary-700); outline-offset: -2px; }
+@media print {
+  .fc-grid .fcae-botao { min-height: 0; padding: 0; border: 0; background: transparent; }
+  .fcae-apoio, .fcae-retorno { display: none; }
+}
 /* Forecast: exportar planilha MACRO pelo cabecalho do painel. */
 .fcme-msg { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--ink-soft); }
 .fcme-msg--erro { color: var(--danger); }
