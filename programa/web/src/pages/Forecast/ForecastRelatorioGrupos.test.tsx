@@ -223,7 +223,9 @@ describe('ForecastRelatorioCompras - grupos de equivalencia', () => {
     const linha = principal.closest('tr') as HTMLElement;
     expect(within(linha).getByText('GRUPO SINTETICO')).toBeTruthy();
     expect(within(linha).getByText('Grupo de equivalência')).toBeTruthy();
-    expect(within(linha.parentElement as HTMLElement).getAllByText('150,0').length).toBeGreaterThan(0);
+    // o valor de 150,0 esta na linha do item ou no expansor logo abaixo (nao em qualquer linha da tabela)
+    const dosDetalhes = linha.nextElementSibling as HTMLElement;
+    expect(within(linha).queryAllByText('150,0').length + within(dosDetalhes).queryAllByText('150,0').length).toBeGreaterThan(0);
     // Sublinhas depois da linha de detalhes (modo legado: Item + 3 colunas comuns = 4).
     const detalhes = linha.nextElementSibling as HTMLElement;
     expect(detalhes.className).toBe('fcr-detalhes');

@@ -195,6 +195,8 @@ describe('ForecastRelatorioCompras com ocasioes (PR 3)', () => {
     expect(sublinhas).toHaveLength(2);
     for (const linha of sublinhas) {
       // antes da sublinha vem a linha de detalhes; antes dela, a linha de dados do item
+      const detalhes = linha.previousElementSibling as HTMLTableRowElement;
+      expect((detalhes.querySelector('td') as HTMLTableCellElement).colSpan).toBe(detalhes.previousElementSibling?.children.length);
       const dados = linha.previousElementSibling?.previousElementSibling as HTMLTableRowElement;
       expect(dados.className).toContain('fcr-linha');
       const celula = linha.querySelector('td') as HTMLTableCellElement;

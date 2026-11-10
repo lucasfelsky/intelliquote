@@ -14359,7 +14359,6 @@ i.fc-status--preco { background: var(--info); }
   .fc-pagina .fcr-tabela:not(.fcr-tabela--compacta) { min-width: 980px; }
   .fc-pagina .fcr-item { min-width: 170px; }
   .fc-pagina .fcr-item__codigos { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fcr-item__status { color: var(--ink-soft); font-size: 12px; }
   .fcr-limite__prazos { display: flex; flex-direction: column; margin-top: 2px; color: var(--ink-soft); font-size: 12px; line-height: 1.4; }
   .fc-pagina .fcr-embalagem { min-width: 0; }
   .fc-pagina .fcr-tabela .fcr-embalagem__editar { width: 28px; min-height: 28px; margin-top: 4px; padding: 0; justify-content: center; }
@@ -14463,8 +14462,19 @@ i.fc-status--preco { background: var(--info); }
 @media (max-width: 640px) {
   .fcr-det--largo { grid-column: auto; }
 }
+@media screen {
+  /* os .fcr-so-leitor (absolutos) do expansor ficavam a ate 864px e estendiam a pagina a 390px: o td contem */
+  .fcr-detalhes > td { position: relative; }
+  /* a divisoria entre o item e as sublinhas (grupo/ocasiao) agora tem o expansor no meio */
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcr-linha-grupo) > th,
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcr-linha-grupo) > td,
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcoc-linha) > th,
+  .fc-pagina .fcr-tabela tbody tr:has(+ .fcr-detalhes + .fcoc-linha) > td { border-bottom: 0; }
+}
 @media print {
   .fcr-detalhes[hidden] { display: table-row !important; }
   .fcr-detalhes__alternar { display: none; }
-  .fcr-detalhes > td { padding: 4px 0 8px; }
+  .fcr-detalhes > td { padding: 4px 6px 8px; }
+  .fcr-det__valor { font-size: 8.5pt; }
+  .fcr-limite__prazos { display: flex; flex-direction: column; }
 }

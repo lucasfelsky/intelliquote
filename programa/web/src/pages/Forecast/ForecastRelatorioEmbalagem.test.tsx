@@ -98,6 +98,22 @@ describe('ForecastRelatorioCompras - botao de embalagens', () => {
     expect(screen.getByRole('heading', { name: 'Embalagens do item' }).closest('table')).toBeNull();
   });
 
+  it('se o expansor for fechado com o dialogo aberto, ao fechar o dialogo ele reabre e o foco volta ao botao', async () => {
+    mockApi([item()]);
+    renderRelatorio(true);
+    await abrirDetalhes();
+    const botao = await screen.findByRole('button', { name: 'Cadastrar embalagem de PRODUTO 001' });
+    fireEvent.click(botao);
+    await screen.findByRole('heading', { name: 'Embalagens do item' });
+    // fecha o expansor por baixo do dialogo (nao e possivel pela UI: o dialogo e modal)
+    const alternar = document.querySelector('.fcr-detalhes__alternar') as HTMLElement;
+    fireEvent.click(alternar);
+    expect((document.querySelector('tr.fcr-detalhes') as HTMLElement).hidden).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /^Fechar/ }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cadastrar embalagem de PRODUTO 001' })));
+    expect((document.querySelector('tr.fcr-detalhes') as HTMLElement).hidden).toBe(false);
+  });
+
   it('fechar o dialogo devolve o foco ao botao', async () => {
     mockApi([item()]);
     renderRelatorio(true);

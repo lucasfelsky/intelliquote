@@ -300,15 +300,29 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 3;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
-  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu.
+  const focoPendente = useRef(false);
+  // O dialogo e desmontado ao fechar (o foco cairia no BODY): devolve o foco ao botao que o abriu. Se o expansor foi
+  // fechado enquanto o dialogo estava aberto, reabre antes (o botao fica numa linha oculta e nao recebe foco).
   useEffect(() => {
     if (editando) {
       abriuAntes.current = true;
     } else if (abriuAntes.current) {
       abriuAntes.current = false;
+      if (aberto) {
+        botao.current?.focus();
+      } else {
+        focoPendente.current = true;
+        setAberto(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editando]);
+  useEffect(() => {
+    if (aberto && focoPendente.current) {
+      focoPendente.current = false;
       botao.current?.focus();
     }
-  }, [editando]);
+  }, [aberto]);
   const mediaSem = textoMediaSem(item.mesesForaDaMedia);
   const obs = textoObservacao(item.obs);
   return (
