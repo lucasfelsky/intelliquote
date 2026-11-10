@@ -72,6 +72,7 @@ model User {
   commercialRequestStatusChanges CommercialRequest[] @relation("CommercialRequestStatusChangedBy")
   commercialRequestAttachments CommercialRequestAttachment[] @relation("CommercialRequestAttachmentUploadedBy")
   createdForecastSnapshots ForecastSnapshot[] @relation("ForecastSnapshotCreatedBy")
+  forecastQuoteDrafts    ForecastQuoteDraft[]
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -1314,6 +1315,7 @@ model ForecastSnapshot {
   deletedAt   DateTime?
   sales       ForecastMonthlySale[]
   purchaseDecisions ForecastPurchaseDecision[]
+  quoteDrafts       ForecastQuoteDraft[]
 
   @@index([baseDate])
   @@index([deletedAt])
@@ -1345,6 +1347,25 @@ model ForecastPurchaseDecision {
 
   @@unique([snapshotId, productId])
   @@index([productId])
+}
+
+// Rascunho da cotacao montada no pop-up "Criar cotacao" (E5 do relatorio de compras enxuto). PRIVADO do dono: um por
+// (quinzena, usuario). `items` e um JSON validado na borda (Zod): lista de { productId, quantidadeKg, observacao } com
+// `productId` de um produto da quinzena (conferido no service; sem FK, como o JSON `products` da quinzena). Nao e
+// `QuoteRequestStatus.draft` de proposito: o enum open/closed e usado no app inteiro. A quinzena excluida (soft delete)
+// mantem o rascunho, que some junto com a quinzena (a rota devolve 404). A `observacao` e texto livre: nunca vai ao AuditLog.
+model ForecastQuoteDraft {
+  id         Int              @id @default(autoincrement())
+  snapshotId Int
+  snapshot   ForecastSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  userId     Int
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items      Json
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([snapshotId, userId])
+  @@index([userId])
 }
 
 // Ocasiao que afeta o lead time (feriado, greve, fechamento de porto, safra): periodo + alcance (global, pais ou fonte) +

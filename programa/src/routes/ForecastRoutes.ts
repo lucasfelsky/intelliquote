@@ -252,4 +252,26 @@ router.put(
   ForecastController.putDecisao,
 );
 
+// Rascunho da cotacao do Forecast (E5): privado do dono, so admin/comprador (leitura inclusive).
+router.get(
+  '/forecast/snapshots/:id/rascunho-cotacao',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.getRascunhoCotacao,
+);
+
+router.put(
+  '/forecast/snapshots/:id/rascunho-cotacao',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putRascunhoCotacao,
+);
+
+router.delete(
+  '/forecast/snapshots/:id/rascunho-cotacao',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteRascunhoCotacao,
+);
+
 export { router as forecastRoutes };

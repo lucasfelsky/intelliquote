@@ -53,6 +53,7 @@
       "ForecastOcasioesService.ts",
       "ForecastProductCadastroService.ts",
       "ForecastProductService.ts",
+      "ForecastRascunhoCotacaoService.ts",
       "ForecastSnapshotService.ts",
       "ForecastSobDemandaService.ts",
       "ForecastSourceService.ts",
@@ -146,6 +147,7 @@
       "ForecastProduct",
       "ForecastProductCode",
       "ForecastPurchaseDecision",
+      "ForecastQuoteDraft",
       "ForecastSnapshot",
       "ForecastSource",
       "Forwarder",
@@ -187,7 +189,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 72
+    "migrations": 73
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -212,6 +214,7 @@
     "DELETE /forecast/equivalence-groups/:id",
     "DELETE /forecast/lead-time-events/:id",
     "DELETE /forecast/snapshots/:id",
+    "DELETE /forecast/snapshots/:id/rascunho-cotacao",
     "DELETE /forwarders/:id",
     "DELETE /quote-request-items/:id",
     "DELETE /quote-request-purchase-orders/:id",
@@ -257,6 +260,7 @@
     "GET /forecast/snapshots/:id/candidatos-cotacao",
     "GET /forecast/snapshots/:id/decisoes",
     "GET /forecast/snapshots/:id/pendentes",
+    "GET /forecast/snapshots/:id/rascunho-cotacao",
     "GET /forecast/snapshots/:id/relatorio-compras",
     "GET /forecast/snapshots/:id/relatorio-compras/xlsx",
     "GET /forecast/sources",
@@ -380,6 +384,7 @@
     "PUT /credit-partners/:id",
     "PUT /forecast/products/:id/meses-atipicos",
     "PUT /forecast/snapshots/:id/decisoes/:productId",
+    "PUT /forecast/snapshots/:id/rascunho-cotacao",
     "PUT /forwarders/:id",
     "PUT /item-families/:id",
     "PUT /quote-request-items/:id",
