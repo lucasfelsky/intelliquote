@@ -644,6 +644,44 @@ export const forecastDecisaoPutSchema = z
 
 export type ForecastDecisaoPutInput = z.infer<typeof forecastDecisaoPutSchema>;
 
+// Rascunho da cotacao do Forecast (E5): PUT com a lista COMPLETA de itens (lista vazia = apagar o rascunho). Cada item:
+// produto da quinzena (conferido no service), kg de 0 a 10.000.000 com ate 3 casas e observacao de ate 300 caracteres (as
+// mesmas regras da decisao). Produto repetido = 400. `atualizadoEm` (opcional) e o `atualizadoEm` que o cliente leu: se o
+// rascunho mudou depois (outra aba), o service responde 409. Chave desconhecida = 400.
+export const FORECAST_RASCUNHO_ITENS_MAX = 200;
+
+const rascunhoItemSchema = z.strictObject({
+  productId: z
+    .number({ error: 'Informe o produto de cada item.' })
+    .int('O produto do item é inválido.')
+    .positive('O produto do item é inválido.'),
+  quantidadeKg: decisaoKgField,
+  observacao: decisaoObservacaoField.optional(),
+});
+
+export const forecastRascunhoCotacaoPutSchema = z
+  .strictObject({
+    itens: z
+      .array(rascunhoItemSchema, { error: 'Informe a lista de itens do rascunho.' })
+      .max(FORECAST_RASCUNHO_ITENS_MAX, `O rascunho aceita no máximo ${FORECAST_RASCUNHO_ITENS_MAX} itens.`),
+    atualizadoEm: z.iso.datetime({ error: 'atualizadoEm deve ser uma data ISO 8601.' }).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const vistos = new Set<number>();
+    value.itens.forEach((item, index) => {
+      if (vistos.has(item.productId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['itens', index, 'productId'],
+          message: 'O mesmo produto aparece mais de uma vez no rascunho.',
+        });
+      }
+      vistos.add(item.productId);
+    });
+  });
+
+export type ForecastRascunhoCotacaoPutInput = z.infer<typeof forecastRascunhoCotacaoPutSchema>;
+
 // Ocasioes que afetam o lead time (PR 1): feriado, greve, fechamento de porto, safra. Cadastro por admin/comprador; so
 // informa no relatorio (nao muda o motor). Chave desconhecida = 400 (inclusive `coverWithStock`, que existe so na coluna).
 // Escopo: `global` sem pais/fonte; `pais` com `countryCode`; `fonte` com `sourceId` (a fonte ativa e conferida no service).

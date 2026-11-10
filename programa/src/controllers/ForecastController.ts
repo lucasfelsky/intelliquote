@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
 import { ForecastDecisaoCompraService } from '../services/ForecastDecisaoCompraService';
+import { ForecastRascunhoCotacaoService } from '../services/ForecastRascunhoCotacaoService';
 import { ForecastDemandaComercialService } from '../services/ForecastDemandaComercialService';
 import { ForecastGrupoEquivalenciaService } from '../services/ForecastGrupoEquivalenciaService';
 import { ForecastImportService } from '../services/ForecastImportService';
@@ -20,6 +21,7 @@ import {
   forecastDemandaComercialQuerySchema,
   forecastDbcorpPreviewSchema,
   forecastDecisaoPutSchema,
+  forecastRascunhoCotacaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
   forecastGrupoEquivalenciaPatchSchema,
@@ -42,6 +44,15 @@ import {
 function sendError(res: Response, error: unknown): Response {
   const handled = handleControllerError(error);
   return res.status(handled.status).json({ message: handled.message });
+}
+
+// O rascunho e do usuario logado: sem usuario na requisicao nao ha rascunho (requireAuth ja barra antes).
+function rascunhoUserId(req: Request): number {
+  const userId = req.user?.id;
+  if (typeof userId !== 'number') {
+    throw new HttpError(401, 'Sessao invalida.');
+  }
+  return userId;
 }
 
 export class ForecastController {
@@ -408,6 +419,47 @@ export class ForecastController {
       }
       const input = forecastDecisaoPutSchema.parse(req.body);
       const data = await ForecastDecisaoCompraService.gravar(id, productId, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Rascunho da cotacao do Forecast (E5): privado do usuario logado (sem login nao chega aqui: requireAuth).
+  static async getRascunhoCotacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const data = await ForecastRascunhoCotacaoService.obter(id, rascunhoUserId(req));
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async putRascunhoCotacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const input = forecastRascunhoCotacaoPutSchema.parse(req.body);
+      const data = await ForecastRascunhoCotacaoService.gravar(id, rascunhoUserId(req), input);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async deleteRascunhoCotacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const data = await ForecastRascunhoCotacaoService.apagar(id, rascunhoUserId(req));
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
