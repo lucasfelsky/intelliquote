@@ -14,6 +14,8 @@ export interface DecisaoCompraData {
   sugeridaKg: number;
   /** AN do motor (sinal da planilha: <= 0 = falta) no momento em que a quantidade foi decidida (congelada). */
   demandaKg: number;
+  /** E3: item de fora da lista de compra incluido de proposito (candidato a cotacao); false nos demais. */
+  incluidoManualmente: boolean;
   decididaPorId: number | null;
   /** ISO 8601. */
   criadaEm: string;
@@ -30,6 +32,8 @@ export interface DecisaoCompraLinha {
   suggestedKg: unknown;
   demandKg: unknown;
   decidedById: number | null;
+  /** Ausente = false (linhas montadas antes da coluna existir, ex.: testes). */
+  manuallyIncluded?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,6 +46,7 @@ export function paraDecisaoCompraData(row: DecisaoCompraLinha): DecisaoCompraDat
     observacao: row.note,
     sugeridaKg: Number(row.suggestedKg),
     demandaKg: Number(row.demandKg),
+    incluidoManualmente: row.manuallyIncluded === true,
     decididaPorId: row.decidedById,
     criadaEm: row.createdAt.toISOString(),
     atualizadaEm: row.updatedAt.toISOString(),

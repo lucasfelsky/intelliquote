@@ -632,15 +632,31 @@ export const forecastDecisaoPutSchema = z
     quantidadeKg: decisaoKgField.nullable(),
     observacao: decisaoObservacaoField.optional(),
     status: z.enum(FORECAST_DECISAO_STATUS, { error: 'Status da decisão inválido.' }).optional(),
+    // E3: inclui de proposito um item de FORA da lista de compra (candidato a cotacao); sem a flag so a lista aceita quantidade.
+    incluidoManualmente: z.boolean({ error: 'incluidoManualmente deve ser true ou false.' }).optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.quantidadeKg === null && (value.observacao !== undefined || value.status !== undefined)) {
+    if (
+      value.quantidadeKg === null &&
+      (value.observacao !== undefined || value.status !== undefined || value.incluidoManualmente !== undefined)
+    ) {
       ctx.addIssue({
         code: 'custom',
         message: 'Para apagar a decisão, envie só quantidadeKg: null.',
       });
     }
   });
+
+// Candidatos a cotacao (E3): `fonte` opcional (sem ela devolve agrupado por fonte); `hoje` so para testes e conferencia.
+export const FORECAST_CANDIDATOS_FONTE_MAX = 200;
+export const forecastCandidatosCotacaoQuerySchema = forecastSnapshotQuerySchema.extend({
+  fonte: z
+    .string({ error: 'Fonte invalida.' })
+    .trim()
+    .min(1, 'Informe a fonte (ou omita o parametro para ver todas).')
+    .max(FORECAST_CANDIDATOS_FONTE_MAX, `A fonte aceita no maximo ${FORECAST_CANDIDATOS_FONTE_MAX} caracteres.`)
+    .optional(),
+});
 
 export type ForecastDecisaoPutInput = z.infer<typeof forecastDecisaoPutSchema>;
 

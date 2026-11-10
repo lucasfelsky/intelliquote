@@ -229,6 +229,14 @@ router.get(
   ForecastController.getRelatorioComprasXlsx,
 );
 
+// Candidatos a cotacao (E3): itens fora da lista de compra com demanda, por fonte; leitura = equipe COMEX.
+router.get(
+  '/forecast/snapshots/:id/candidatos-cotacao',
+  requireAuth,
+  allowRoles(COMEX_ROLES),
+  ForecastController.getCandidatosCotacao,
+);
+
 // Quantidade decidida de compra por item e quinzena (PR3): ler = equipe COMEX; gravar/apagar = admin/comprador.
 router.get(
   '/forecast/snapshots/:id/decisoes',
