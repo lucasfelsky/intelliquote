@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ForecastItemRelatorio } from '@/services/forecast';
 import type { ForecastDecisao } from '@/services/forecastDecisoes';
-import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
+import { ForecastDecisaoLeitura, ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastRelatorioCompras from './ForecastRelatorioCompras';
 import { ProvedorGerarCotacao } from './ForecastGerarCotacao';
 
@@ -24,7 +24,6 @@ import { api, ApiError } from '@/api/client';
 import { abrirCotar, expandirDetalhes } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
-const put = vi.mocked(api.put);
 
 // Dados 100% sinteticos.
 function item(over: Record<string, unknown> = {}): ForecastItemRelatorio {
@@ -67,32 +66,30 @@ function decisao(over: Partial<ForecastDecisao> = {}): ForecastDecisao {
 
 const resposta = (decisoes: ForecastDecisao[]) => ({ data: { snapshotId: 7, label: '10-2', decisoes } });
 
-function renderCelula(it: ForecastItemRelatorio, opts: { podeEditar: boolean; decisoes?: ForecastDecisao[] }) {
+function renderCelula(it: ForecastItemRelatorio, opts: { decisoes?: ForecastDecisao[] } = {}) {
   get.mockResolvedValue(resposta(opts.decisoes ?? []));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ProvedorDecisoesCompra snapshotId={7} podeEditar={opts.podeEditar}>
-        <ForecastDecisaoCompra item={it} />
+      <ProvedorDecisoesCompra snapshotId={7}>
+        <ForecastDecisaoLeitura item={it} />
       </ProvedorDecisoesCompra>
     </QueryClientProvider>,
   );
 }
 
-const campoKg = () => screen.findByLabelText('Qtd. decidida (kg) de PRODUTO 001') as Promise<HTMLInputElement>;
-
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('ForecastDecisaoCompra (celula)', () => {
+describe('ForecastDecisaoLeitura (resumo da decisao)', () => {
   it('fora do provedor nao renderiza nada', () => {
-    const { container } = render(<ForecastDecisaoCompra item={item()} />);
+    const { container } = render(<ForecastDecisaoLeitura item={item()} />);
     expect(container.innerHTML).toBe('');
   });
 
-  it('leitura (gestor/viewer): sem campos nem botoes; "Sem decisao" quando nao ha', async () => {
-    renderCelula(item(), { podeEditar: false });
+  it('sem campos nem botoes; "Sem decisao" quando nao ha', async () => {
+    renderCelula(item());
     expect(await screen.findByText('Sem decisão')).toBeTruthy();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('combobox')).toBeNull();
@@ -100,7 +97,7 @@ describe('ForecastDecisaoCompra (celula)', () => {
   });
 
   it('leitura com decisao: quantidade, status, observacao e quando foi salva (horario de Brasilia)', async () => {
-    renderCelula(item(), { podeEditar: false, decisoes: [decisao({ observacao: 'OBS SINTETICA' })] });
+    renderCelula(item(), { decisoes: [decisao({ observacao: 'OBS SINTETICA' })] });
     expect(await screen.findByText('1.234,5 kg')).toBeTruthy();
     expect(screen.getByText('Confirmado, aguarda PO')).toBeTruthy();
     expect(screen.getByText('Obs.: OBS SINTETICA')).toBeTruthy();
@@ -109,104 +106,11 @@ describe('ForecastDecisaoCompra (celula)', () => {
   });
 
   it('item sem productId: "Sem cadastro" e nenhum campo', async () => {
-    renderCelula(item({ productId: null }), { podeEditar: true });
+    renderCelula(item({ productId: null }));
     const texto = await screen.findByText('Sem cadastro');
     expect(texto.getAttribute('title')).toMatch(/fora do cadastro/);
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();
-  });
-
-  it('edicao: "Usar sugerida" preenche com a Qtd. final (3 casas), nao com a sugerida', async () => {
-    renderCelula(item(), { podeEditar: true });
-    const kg = await campoKg();
-    expect(kg.value).toBe('');
-    fireEvent.click(screen.getByRole('button', { name: /Usar sugerida/ }));
-    expect(kg.value).toBe('125,123');
-  });
-
-  it('Salvar fica desabilitado sem mudanca; o status nao aparece na tela', async () => {
-    renderCelula(item(), { podeEditar: true });
-    const kg = await campoKg();
-    expect((screen.getByRole('button', { name: /Salvar decisão/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByLabelText('Status da decisão de PRODUTO 001')).toBeNull();
-    expect(screen.queryByRole('combobox')).toBeNull();
-    fireEvent.change(kg, { target: { value: '10' } });
-    expect((screen.getByRole('button', { name: /Salvar decisão/ }) as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('grava por PUT com o corpo exato (status preservado: o congelado do item); mostra "Salvando…" e depois "salva em"', async () => {
-    let resolver: (v: unknown) => void = () => {};
-    put.mockReturnValue(new Promise((r) => (resolver = r)) as never);
-    renderCelula(item(), { podeEditar: true });
-    const kg = await campoKg();
-    fireEvent.change(kg, { target: { value: '1.600,5' } });
-    fireEvent.change(screen.getByLabelText('Obs. da decisão de PRODUTO 001'), { target: { value: '  OBS SINTETICA ' } });
-    fireEvent.click(screen.getByRole('button', { name: /Salvar decisão/ }));
-
-    await waitFor(() =>
-      expect(put).toHaveBeenCalledWith('/v1/forecast/snapshots/7/decisoes/42', {
-        quantidadeKg: 1600.5,
-        status: 'cotando',
-        observacao: 'OBS SINTETICA',
-      }),
-    );
-    const botao = await screen.findByRole('button', { name: /Salvar decisão/ });
-    expect(botao.textContent).toBe('Salvando…');
-    expect((botao as HTMLButtonElement).disabled).toBe(true);
-    expect(botao.closest('[aria-busy="true"]')).not.toBeNull();
-
-    resolver({
-      data: {
-        acao: 'create',
-        decisao: decisao({ quantidadeKg: 1600.5, status: 'po', observacao: 'OBS SINTETICA' }),
-      },
-    });
-    const status = await screen.findByRole('status');
-    expect(status.textContent).toBe('salva em 26/10 14:30');
-    expect(kg.value).toBe('1600,5');
-  });
-
-  it('erro: alerta com a mensagem e "Tentar de novo" reenvia o MESMO corpo', async () => {
-    put.mockRejectedValueOnce(new ApiError(409, { message: 'Gravada por outra pessoa.' }));
-    put.mockResolvedValueOnce({ data: { acao: 'create', decisao: decisao({ quantidadeKg: 10 }) } });
-    renderCelula(item(), { podeEditar: true });
-    fireEvent.change(await campoKg(), { target: { value: '10' } });
-    fireEvent.click(screen.getByRole('button', { name: /Salvar decisão/ }));
-
-    const alerta = await screen.findByRole('alert');
-    expect(alerta.textContent).toContain('Gravada por outra pessoa.');
-    const corpo = put.mock.calls[0]![1];
-    fireEvent.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }));
-    await screen.findByRole('status');
-    expect(put).toHaveBeenCalledTimes(2);
-    expect(put.mock.calls[1]![1]).toEqual(corpo);
-  });
-
-  it('campo vazio com decisao existente: "Apagar decisao" envia { quantidadeKg: null }', async () => {
-    put.mockResolvedValue({ data: { acao: 'delete', decisao: null } });
-    renderCelula(item(), { podeEditar: true, decisoes: [decisao()] });
-    const kg = await campoKg();
-    expect(kg.value).toBe('1234,5');
-    fireEvent.change(kg, { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: /Apagar decisão/ }));
-    await waitFor(() =>
-      expect(put).toHaveBeenCalledWith('/v1/forecast/snapshots/7/decisoes/42', { quantidadeKg: null }),
-    );
-    expect((await screen.findByRole('status')).textContent).toBe('Decisão apagada');
-  });
-
-  it('campo vazio sem decisao: nada a salvar (botao desabilitado)', async () => {
-    renderCelula(item(), { podeEditar: true });
-    await campoKg();
-    expect((screen.getByRole('button', { name: /Salvar decisão/ }) as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('validacao local: valor invalido mostra alerta e nao chama a API', async () => {
-    renderCelula(item(), { podeEditar: true });
-    fireEvent.change(await campoKg(), { target: { value: 'abc' } });
-    fireEvent.click(screen.getByRole('button', { name: /Salvar decisão/ }));
-    expect((await screen.findByRole('alert')).textContent).toMatch(/Informe a quantidade em kg/);
-    expect(put).not.toHaveBeenCalled();
   });
 });
 
@@ -244,7 +148,7 @@ function renderRelatorio(podeEditar: boolean) {
 
 const chamadasDeDecisoes = () => get.mock.calls.filter(([url]) => String(url).endsWith('/decisoes'));
 
-describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
+describe('ForecastRelatorioCompras com o pop-up Criar cotacao e o resumo da decisao', () => {
   it('1 GET de decisoes por quinzena; a acao Cotar abre o pop-up Criar cotacao e as tabelas so mostram o resumo', async () => {
     get.mockImplementation(async (url: string) =>
       String(url).endsWith('/decisoes')

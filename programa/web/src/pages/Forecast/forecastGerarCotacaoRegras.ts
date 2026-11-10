@@ -1,5 +1,5 @@
-// Regras puras do "Gerar cotacao" a partir de uma linha do relatorio de compras (piloto PR6): formato do link, escolha do codigo
-// vinculado ao catalogo, quantidade em kg inteiro e motivos para o botao ficar desabilitado. Sem React nem HTTP.
+// Regras puras de cotacao a partir do Forecast (piloto PR6): leitura do link legado `?fromForecast=`, escolha do codigo
+// vinculado ao catalogo e quantidade em kg inteiro (usadas tambem pelo pop-up "Criar cotacao"). Sem React nem HTTP.
 
 export const PARAM_FROM_FORECAST = 'fromForecast';
 
@@ -13,11 +13,6 @@ export const MOTIVO_SEM_VINCULO = 'Nenhum código deste produto está vinculado 
 export const MOTIVO_NAO_COMPRAR = 'A decisão salva desta quinzena é não comprar (0 kg).';
 export const MOTIVO_SEM_QUANTIDADE = 'Sem quantidade a comprar nesta quinzena.';
 export const MOTIVO_ACIMA_LIMITE = 'Quantidade acima do limite da cotação.';
-
-/** `/cotacoes/nova?fromForecast=<snapshotId>-<productId>`. */
-export function linkGerarCotacao(snapshotId: number, productId: number): string {
-  return `/cotacoes/nova?${PARAM_FROM_FORECAST}=${snapshotId}-${productId}`;
-}
 
 export interface ParamFromForecast {
   snapshotId: number;
@@ -85,24 +80,4 @@ export function quantidadeParaCotacao(
 /** So o rotulo da quinzena: o texto pode chegar ao fornecedor (nunca nome de cliente, produto ou observacao). */
 export function descricaoDoForecast(label: string): string {
   return `Forecast ${label}`;
-}
-
-export interface EntradaMotivoDoBotao {
-  productId: number | null;
-  produtosCarregando: boolean;
-  produtosErro: boolean;
-  /** Codigos do produto no cadastro do Forecast; `undefined` = produto fora da lista. */
-  codes: readonly CodigoVinculavel[] | undefined;
-  decisaoKg: number | null | undefined;
-  quantidadeFinal: number;
-}
-
-/** Motivo visivel do botao desabilitado, na ordem do plano; `null` = pode gerar. */
-export function motivoDoBotao(e: EntradaMotivoDoBotao): string | null {
-  if (e.productId === null) return MOTIVO_FORA_CADASTRO;
-  if (e.produtosCarregando) return MOTIVO_VERIFICANDO;
-  if (e.produtosErro) return MOTIVO_ERRO_VINCULO;
-  if (!e.codes || codigoParaCotacao(e.codes, null) === null) return MOTIVO_SEM_VINCULO;
-  const quantidade = quantidadeParaCotacao(e.decisaoKg, e.quantidadeFinal);
-  return quantidade.ok ? null : quantidade.motivo;
 }
