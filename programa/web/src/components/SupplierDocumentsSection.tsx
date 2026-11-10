@@ -190,7 +190,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
         const { doc } = currentMode;
         const patch: UpdateSupplierDocumentInput = {};
         if (name.trim() !== doc.name) patch.name = name.trim();
-        if (expiresOn !== doc.expiresOn) patch.expiresOn = expiresOn;
+        if (expiresOn !== (doc.expiresOn ?? '')) patch.expiresOn = expiresOn === '' ? null : expiresOn;
         if (notes.trim() !== (doc.notes ?? '')) patch.notes = notes.trim() === '' ? null : notes.trim();
         if (Object.keys(patch).length === 0) return;
         await updateSupplierDocument(doc.id, patch);
@@ -207,7 +207,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
           fileName: file.name,
           mimeType: resolved.mime,
           contentBase64,
-          expiresOn,
+          expiresOn: expiresOn === '' ? null : expiresOn,
         });
         return;
       }
@@ -215,7 +215,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
       await createSupplierDocument({
         supplierId,
         name: name.trim(),
-        expiresOn,
+        expiresOn: expiresOn === '' ? null : expiresOn,
         notes: notes.trim() === '' ? null : notes.trim(),
         fileName: file.name,
         mimeType: resolved.mime,
@@ -255,7 +255,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
 
   function openEdit(doc: SupplierDocument) {
     setName(doc.name);
-    setExpiresOn(doc.expiresOn);
+    setExpiresOn(doc.expiresOn ?? '');
     setNotes(doc.notes ?? '');
     setFile(null);
     setFormError(null);
@@ -264,7 +264,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
 
   function openReplace(doc: SupplierDocument) {
     setName(doc.name);
-    setExpiresOn(doc.expiresOn);
+    setExpiresOn(doc.expiresOn ?? '');
     setNotes(doc.notes ?? '');
     setFile(null);
     setFormError(null);
@@ -295,8 +295,9 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
       setFormError('Informe o nome do documento.');
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) {
-      setFormError('Informe a data de vencimento.');
+    // Vencimento e opcional: vazio = sem vencimento; preenchido precisa ser uma data valida.
+    if (expiresOn !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(expiresOn)) {
+      setFormError('Data de vencimento inválida.');
       return;
     }
     if (mode.kind !== 'edit') {
@@ -523,7 +524,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
                 </div>
               )}
               <div className="documentos-campo">
-                <label className="field-label" htmlFor="sd-expires">Vencimento *</label>
+                <label className="field-label" htmlFor="sd-expires">Vencimento</label>
                 <input
                   id="sd-expires"
                   className="input documentos-form__data"
@@ -532,7 +533,7 @@ export function SupplierDocumentsSection({ supplierId, supplierName }: SupplierD
                   onChange={(e) => setExpiresOn(e.target.value)}
                 />
                 <p className="text-sm documentos-dica">
-                  Último dia de validade.
+                  Último dia de validade. Deixe em branco se não vence.
                 </p>
               </div>
               {mode.kind !== 'edit' && (

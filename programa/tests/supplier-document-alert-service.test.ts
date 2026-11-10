@@ -140,6 +140,14 @@ describe('SupplierDocumentAlertService.runExpiryAlertSweep', () => {
     expect(createdKeys()).toEqual([{ documentId: 1, alertCycle: 1, milestone: 'D30' }]);
   });
 
+  it('documento sem vencimento (expiresOn null) nunca gera aviso', async () => {
+    mocks.docFindMany.mockResolvedValue([{ ...doc(1, '2026-11-10'), expiresOn: null }]);
+    const result = await SupplierDocumentAlertService.runExpiryAlertSweep(NOW);
+    expect(result.outcome).toBe('nothing_due');
+    expect(mocks.alertCreate).not.toHaveBeenCalled();
+    expect(mocks.sendAndLog).not.toHaveBeenCalled();
+  });
+
   it('descarta documento fora da janela (31 dias)', async () => {
     mocks.docFindMany.mockResolvedValue([doc(1, '2026-11-19')]);
     const result = await SupplierDocumentAlertService.runExpiryAlertSweep(NOW);

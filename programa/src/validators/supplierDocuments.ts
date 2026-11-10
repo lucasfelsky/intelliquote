@@ -12,9 +12,15 @@ const nameField = z
   .min(1, 'Informe o nome do documento.')
   .max(120, 'O nome do documento aceita no maximo 120 caracteres.');
 
+// Vencimento e opcional: null (ou string vazia) = documento sem vencimento.
 const expiresOnField = z
-  .string({ error: 'Informe a data de vencimento (AAAA-MM-DD).' })
-  .refine((value) => isValidDateKey(value), 'Data de vencimento invalida (use AAAA-MM-DD).');
+  .string({ error: 'Data de vencimento invalida (use AAAA-MM-DD).' })
+  .nullable()
+  .transform((value) => (value === '' ? null : value))
+  .refine(
+    (value) => value === null || isValidDateKey(value),
+    'Data de vencimento invalida (use AAAA-MM-DD).',
+  );
 
 const notesField = z
   .string()
@@ -42,7 +48,7 @@ const contentBase64Field = z
 export const supplierDocumentCreateSchema = z.object({
   supplierId: z.coerce.number().int().positive('Fornecedor invalido.'),
   name: nameField,
-  expiresOn: expiresOnField,
+  expiresOn: expiresOnField.optional(),
   notes: notesField.optional(),
   fileName: fileNameField,
   mimeType: mimeTypeField,
@@ -65,7 +71,8 @@ export const supplierDocumentReplaceFileSchema = z.object({
   fileName: fileNameField,
   mimeType: mimeTypeField,
   contentBase64: contentBase64Field,
-  expiresOn: expiresOnField,
+  // Ausente = mantem o vencimento atual; null = passa a ficar sem vencimento.
+  expiresOn: expiresOnField.optional(),
 });
 
 export const supplierDocumentListQuerySchema = z.object({

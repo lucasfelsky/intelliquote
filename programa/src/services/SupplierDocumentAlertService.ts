@@ -103,6 +103,8 @@ export class SupplierDocumentAlertService {
 
     const due: PendingAlert[] = [];
     for (const doc of candidates) {
+      // `lte` ja exclui NULL no SQL; documento sem vencimento nunca gera aviso (guard p/ o tipo).
+      if (!doc.expiresOn) continue;
       const expiresOn = dbDateToKey(doc.expiresOn);
       const daysLeft = daysUntil(expiresOn, todayKey);
       const milestone = resolveMilestone(daysLeft);
