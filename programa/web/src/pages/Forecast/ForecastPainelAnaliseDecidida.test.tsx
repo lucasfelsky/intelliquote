@@ -24,7 +24,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
-import { expandirDetalhes } from '@/test/forecastDetalhes';
+import { abrirCotar } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
@@ -296,8 +296,7 @@ describe('Painel - coluna ANALISE FORECAST com a quantidade decidida', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Relatório de compras' }));
-    await screen.findAllByRole('button', { name: /^Ver detalhes de / });
-    expandirDetalhes();
+    await abrirCotar('PRODUTO A');
     const campo = (await screen.findByLabelText('Qtd. decidida (kg) de PRODUTO A')) as HTMLInputElement;
     fireEvent.change(campo, { target: { value: '2000' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar decisão de PRODUTO A' }));

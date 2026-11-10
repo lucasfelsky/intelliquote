@@ -14478,3 +14478,19 @@ i.fc-status--preco { background: var(--info); }
   .fcr-det__valor { font-size: 8.5pt; }
   .fcr-limite__prazos { display: flex; flex-direction: column; }
 }
+/* Acao "Cotar" e pop-up (E2 do relatorio enxuto). So tokens legados fora das regioes de tema. */
+.fcr-acao { text-align: right; white-space: nowrap; }
+.fcq-corpo { display: flex; flex-direction: column; gap: 12px; }
+.fcq-sugerida { margin: 0; color: var(--ink-soft); font-size: 13px; }
+.fcq-decisao { min-width: 0; }
+.fcq-corpo .fdec-conteudo { display: flex; flex-direction: column; gap: 14px; }
+.fcq-corpo .fdec-editor { gap: 12px; }
+.fcq-corpo .fdec-kg { width: 160px; padding: 8px 10px; font-size: 14px; }
+.fcq-corpo .fdec-obs { padding: 8px 10px; font-size: 14px; }
+.fcq-corpo .fdec-salvar { padding: 8px 20px; font-size: 14px; }
+.fcq-corpo .fgc-acao { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.fcq-corpo .fgc-botao { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 1.5px solid var(--primary-700); border-radius: 8px; background: transparent; color: var(--primary-700); font-size: 14px; font-weight: 700; }
+.fcq-corpo .fgc-botao[aria-disabled="true"] { border-color: var(--border); color: var(--ink-soft); }
+@media print {
+  .fcr-acao { display: none; }
+}

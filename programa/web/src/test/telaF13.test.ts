@@ -24,8 +24,8 @@ const fontes = import.meta.glob(['../**/*.tsx', '../**/*.ts', '!../test/**', '!.
   eager: true,
 }) as Record<string, string>;
 
-// Os 3 componentes do Forecast cujo <Modal> e a raiz de um createPortal(document.body) (ForecastRelatorioCompras.tsx e ForecastRelatorioDemandaComercial.tsx): so eles usam `fc-portal`.
-const ARQUIVOS_PORTAL = ['/pages/Forecast/ForecastDemandaComercialModal.tsx', '/pages/Forecast/ForecastEmbalagensModal.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx'];
+// Os 4 componentes do Forecast cujo <Modal> e a raiz de um createPortal(document.body) (ForecastRelatorioCompras.tsx e ForecastRelatorioDemandaComercial.tsx): so eles usam `fc-portal`.
+const ARQUIVOS_PORTAL = ['/pages/Forecast/ForecastCotar.tsx', '/pages/Forecast/ForecastDemandaComercialModal.tsx', '/pages/Forecast/ForecastEmbalagensModal.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx'];
 
 // Cores NOMEADAS do CSS (as palavras-chave de cor; `transparent` e `currentcolor` ficam de fora: nao sao cor literal).
 const CORES_NOMEADAS = new Set(
@@ -186,7 +186,7 @@ describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
     expect(declarados.filter((n) => n !== '--val')).toEqual([]);
   });
 
-  it('a raiz `.fc-pagina` vem so do Forecast.tsx (1 vez, no wrapper da pagina) e `fc-portal` so dos 3 componentes de modal que vao para document.body por createPortal (allowlist explicita)', () => {
+  it('a raiz `.fc-pagina` vem so do Forecast.tsx (1 vez, no wrapper da pagina) e `fc-portal` so dos 4 componentes de modal que vao para document.body por createPortal (allowlist explicita)', () => {
     expect(forecastTsx.split('className="page fc-pagina"')).toHaveLength(2);
     expect(forecastTsx.split('fc-pagina')).toHaveLength(2);
     const usosPagina = Object.entries(fontes).filter(([caminho, src]) => src.includes('fc-pagina') && !caminho.endsWith('/pages/Forecast.tsx'));
@@ -199,9 +199,9 @@ describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
     }
   });
 
-  it('todo createPortal de src/pages/Forecast* esta nos 2 arquivos de relatorio e so renderiza modais cuja raiz carrega `fc-portal` (<Modal className="fc-portal">)', () => {
+  it('todo createPortal de src/pages/Forecast* esta nos 3 arquivos (2 de relatorio e o pop-up Cotar) e so renderiza modais cuja raiz carrega `fc-portal` (<Modal className="fc-portal">)', () => {
     const portais = Object.entries(fontes).filter(([c, src]) => /\/pages\/Forecast(\.tsx|\/)/.test(c) && src.includes('createPortal(')).map(([c]) => c.replace(/^\.\.\//, '/'));
-    expect(portais.sort()).toEqual(['/pages/Forecast/ForecastRelatorioCompras.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx']);
+    expect(portais.sort()).toEqual(['/pages/Forecast/ForecastCotar.tsx', '/pages/Forecast/ForecastRelatorioCompras.tsx', '/pages/Forecast/ForecastRelatorioDemandaComercial.tsx']);
     // os 3 modais que esses portais montam: Embalagens e Demanda comercial (componentes proprios) e o <Modal> de fechamento escrito no proprio arquivo
     const demanda = Object.entries(fontes).find(([c]) => c.endsWith('/pages/Forecast/ForecastRelatorioDemandaComercial.tsx'))?.[1] ?? '';
     expect(demanda).toContain('<Modal isOpen onClose={fecharDialogo} title={ROTULO_FECHAMENTO[dialogo.status].titulo} className="fc-portal">');

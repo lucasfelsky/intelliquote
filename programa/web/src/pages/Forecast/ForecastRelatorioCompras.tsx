@@ -15,9 +15,9 @@ import {
   type ForecastUrgencia,
 } from '@/services/forecast';
 import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
-import ForecastDecisaoCompra, { ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
+import { ForecastDecisaoLeitura, ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
-import ForecastGerarCotacao from './ForecastGerarCotacao';
+import ForecastCotar from './ForecastCotar';
 import ForecastOcasiaoSelo, { OcasioesDoGrupoSelo, OcasioesDoItemDetalhe, OcasioesNoResumo } from './ForecastOcasiaoSelo';
 import { AlternarGrupo } from './ForecastAlternarGrupo';
 import ForecastRelatorioDemandaComercial from './ForecastRelatorioDemandaComercial';
@@ -296,8 +296,8 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
   // decisao de compra ficam num expansor sob o item. Fechado por padrao; no papel sai aberto.
   const [aberto, setAberto] = useState(false);
   const idDetalhes = useId();
-  // Colunas da linha (Item, Urgencia, Fonte e as 3 comuns): a sublinha do grupo e o expansor ocupam todas.
-  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 3;
+  // Colunas da linha (Item, Urgencia, Fonte e as 4 comuns): a sublinha do grupo e o expansor ocupam todas.
+  const colunas = 1 + (comUrgencia && urgencia ? 1 : 0) + (fonte !== undefined ? 1 : 0) + 4;
   const botao = useRef<HTMLButtonElement>(null);
   const abriuAntes = useRef(false);
   const focoPendente = useRef(false);
@@ -378,6 +378,9 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
           </span>
         </td>
         <td className="fcr-status">{STATUS_ROTULO[item.status] ?? item.status}</td>
+        <td className="fcr-acao">
+          <ForecastCotar item={item} />
+        </td>
       </tr>
       <tr id={idDetalhes} className="fcr-detalhes" hidden={!aberto}>
         <td colSpan={colunas}>
@@ -429,10 +432,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte }
             )}
             <Detalhe rotulo="Decisão de compra" largo>
               <div className="fdec-celula">
-                <div className="fdec-conteudo">
-                  <ForecastDecisaoCompra item={item} />
-                  <ForecastGerarCotacao item={item} />
-                </div>
+                <ForecastDecisaoLeitura item={item} />
               </div>
             </Detalhe>
           </div>
@@ -463,6 +463,9 @@ const COLUNAS_COMUNS = (
     </th>
     <th scope="col">Data-limite</th>
     <th scope="col">Status</th>
+    <th scope="col" className="fcr-acao">
+      <span className="fcr-so-leitor">Ação</span>
+    </th>
   </>
 );
 

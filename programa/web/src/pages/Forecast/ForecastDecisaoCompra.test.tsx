@@ -20,7 +20,7 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { api, ApiError } from '@/api/client';
-import { expandirDetalhes } from '@/test/forecastDetalhes';
+import { abrirCotar, expandirDetalhes } from '@/test/forecastDetalhes';
 
 const get = vi.mocked(api.get);
 const put = vi.mocked(api.put);
@@ -123,29 +123,29 @@ describe('ForecastDecisaoCompra (celula)', () => {
     expect(kg.value).toBe('125,123');
   });
 
-  it('Salvar fica desabilitado sem mudanca e o status inicial e o congelado do item', async () => {
+  it('Salvar fica desabilitado sem mudanca; o status nao aparece na tela', async () => {
     renderCelula(item(), { podeEditar: true });
     const kg = await campoKg();
     expect((screen.getByRole('button', { name: /Salvar decisão/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByLabelText('Status da decisão de PRODUTO 001') as HTMLSelectElement).value).toBe('cotando');
+    expect(screen.queryByLabelText('Status da decisão de PRODUTO 001')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
     fireEvent.change(kg, { target: { value: '10' } });
     expect((screen.getByRole('button', { name: /Salvar decisão/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('grava por PUT com o corpo exato; mostra "Salvando…" e depois "salva em"', async () => {
+  it('grava por PUT com o corpo exato (status preservado: o congelado do item); mostra "Salvando…" e depois "salva em"', async () => {
     let resolver: (v: unknown) => void = () => {};
     put.mockReturnValue(new Promise((r) => (resolver = r)) as never);
     renderCelula(item(), { podeEditar: true });
     const kg = await campoKg();
     fireEvent.change(kg, { target: { value: '1.600,5' } });
-    fireEvent.change(screen.getByLabelText('Status da decisão de PRODUTO 001'), { target: { value: 'po' } });
     fireEvent.change(screen.getByLabelText('Obs. da decisão de PRODUTO 001'), { target: { value: '  OBS SINTETICA ' } });
     fireEvent.click(screen.getByRole('button', { name: /Salvar decisão/ }));
 
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith('/v1/forecast/snapshots/7/decisoes/42', {
         quantidadeKg: 1600.5,
-        status: 'po',
+        status: 'cotando',
         observacao: 'OBS SINTETICA',
       }),
     );
@@ -242,7 +242,7 @@ function renderRelatorio(podeEditar: boolean) {
 const chamadasDeDecisoes = () => get.mock.calls.filter(([url]) => String(url).endsWith('/decisoes'));
 
 describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
-  it('1 GET de decisoes por quinzena e o editor aparece no expansor de todas as tabelas', async () => {
+  it('1 GET de decisoes por quinzena; o editor abre no pop-up Cotar e as tabelas so mostram o resumo', async () => {
     get.mockImplementation(async (url: string) =>
       String(url).endsWith('/decisoes')
         ? resposta([decisao({ productId: 43, quantidadeKg: 77 })])
@@ -251,18 +251,42 @@ describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
     renderRelatorio(true);
     await screen.findAllByRole('button', { name: /^Ver detalhes de / });
     expandirDetalhes();
-    await screen.findByLabelText('Qtd. decidida (kg) de PRODUTO 002');
     const tabelas = screen.getAllByRole('table');
     expect(tabelas).toHaveLength(2);
-    // o editor da decisao mora no expansor "Detalhes" de cada item, em todas as tabelas (sem coluna propria)
+    // nas tabelas so o resumo (leitura) e a acao "Cotar"; o editor nao fica na linha nem no expansor
+    expect(await screen.findByText('77 kg')).toBeTruthy();
     for (const t of tabelas) {
       expect(within(t).queryAllByRole('columnheader').map((c) => c.textContent)).not.toContain('Qtd. decidida (kg)');
-      expect(t.querySelectorAll('.fcr-detalhes .fdec-editor').length).toBeGreaterThan(0);
+      expect(t.querySelectorAll('.fdec-editor')).toHaveLength(0);
     }
+    expect(screen.queryByLabelText(/Qtd\. decidida \(kg\) de/)).toBeNull();
+    const dialogo2 = await abrirCotar('PRODUTO 002');
+    expect((within(dialogo2).getByLabelText('Qtd. decidida (kg) de PRODUTO 002') as HTMLInputElement).value).toBe('77');
     expect(chamadasDeDecisoes()).toHaveLength(1);
     expect(chamadasDeDecisoes()[0]![0]).toBe('/v1/forecast/snapshots/7/decisoes');
-    expect((screen.getByLabelText('Qtd. decidida (kg) de PRODUTO 002') as HTMLInputElement).value).toBe('77');
-    expect((screen.getByLabelText('Qtd. decidida (kg) de PRODUTO 001') as HTMLInputElement).value).toBe('');
+    fireEvent.click(within(dialogo2).getByRole('button', { name: /^Fechar/ }));
+    await waitFor(() => expect(screen.queryByLabelText('Qtd. decidida (kg) de PRODUTO 002')).toBeNull());
+    const dialogo1 = await abrirCotar('PRODUTO 001');
+    expect((within(dialogo1).getByLabelText('Qtd. decidida (kg) de PRODUTO 001') as HTMLInputElement).value).toBe('');
+  });
+
+  it('pop-up Cotar: abre com o titulo do item, fecha pelo botao e devolve o foco a acao', async () => {
+    get.mockImplementation(async (url: string) => (String(url).endsWith('/decisoes') ? resposta([]) : { data: relatorio() }));
+    renderRelatorio(true);
+    const acao = await screen.findByRole('button', { name: 'Cotar PRODUTO 001' });
+    const dialogo = await abrirCotar('PRODUTO 001');
+    expect(within(dialogo).getByText(/Qtd. final calculada/)).toBeTruthy();
+    expect(within(dialogo).queryByRole('combobox')).toBeNull();
+    fireEvent.click(within(dialogo).getByRole('button', { name: /^Fechar/ }));
+    await waitFor(() => expect(document.activeElement).toBe(acao));
+    expect(screen.queryByRole('heading', { name: 'Cotar PRODUTO 001' })).toBeNull();
+  });
+
+  it('quem so le nao ve a acao Cotar', async () => {
+    get.mockImplementation(async (url: string) => (String(url).endsWith('/decisoes') ? resposta([]) : { data: relatorio() }));
+    renderRelatorio(false);
+    await screen.findAllByRole('button', { name: /^Ver detalhes de / });
+    expect(screen.queryByRole('button', { name: /^Cotar / })).toBeNull();
   });
 
   it('sem permissao de edicao a coluna so le (sem campos)', async () => {
@@ -291,6 +315,7 @@ describe('ForecastRelatorioCompras com a coluna Qtd. decidida', () => {
     );
     fireEvent.click(within(alerta).getByRole('button', { name: 'Tentar de novo' }));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
-    expect(await screen.findByLabelText('Qtd. decidida (kg) de PRODUTO 001')).toBeTruthy();
+    const dialogo = await abrirCotar('PRODUTO 001');
+    expect(within(dialogo).getByLabelText('Qtd. decidida (kg) de PRODUTO 001')).toBeTruthy();
   });
 });

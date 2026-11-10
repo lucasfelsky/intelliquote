@@ -14,7 +14,7 @@ import {
 import { ApiError } from '@/api/client';
 import { kgParaCampo, sugeridaParaCampo, textoSalvaEm, validarDecisao } from './forecastDecisaoCampos';
 import { useAviso } from './ForecastAvisos';
-import { kgBr, STATUS_ORDEM, STATUS_ROTULO } from './forecastPainel';
+import { kgBr, STATUS_ROTULO } from './forecastPainel';
 
 // Coluna "Qtd. decidida (kg)" do relatorio de compras (PR3): o comprador registra a quantidade que decidiu comprar por
 // item da lista, quinzena a quinzena. O provedor busca a lista da quinzena UMA vez (1 GET para todas as tabelas); a celula
@@ -195,22 +195,7 @@ function Editor({ item, productId, decisao, snapshotId }: EditorProps) {
           Usar sugerida
         </button>
       </div>
-      <select
-        className="select fdec-status"
-        aria-label={`Status da decisão de ${nome}`}
-        value={status}
-        disabled={salvando}
-        onChange={(e) => {
-          setStatus(e.target.value as ForecastStatus);
-          editou();
-        }}
-      >
-        {STATUS_ORDEM.map((s) => (
-          <option key={s} value={s}>
-            {STATUS_ROTULO[s]}
-          </option>
-        ))}
-      </select>
+      {/* O status saiu da tela (E2 do relatorio enxuto): a API segue aceitando e o valor atual e preservado no PUT. */}
       <input
         type="text"
         className="input fdec-obs"
@@ -263,6 +248,28 @@ function Editor({ item, productId, decisao, snapshotId }: EditorProps) {
       )}
     </div>
   );
+}
+
+/** Permissao de edicao do provedor (false fora dele): quem pode abrir o pop-up "Cotar". */
+export function usePodeEditarDecisao(): boolean {
+  return useContext(ContextoDecisoes)?.podeEditar === true;
+}
+
+/** Resumo somente leitura da decisao (tela e papel); a edicao fica no pop-up "Cotar". */
+export function ForecastDecisaoLeitura({ item }: { item: ForecastItemRelatorio }) {
+  const ctx = useContext(ContextoDecisoes);
+  if (!ctx) return null;
+  const productId = item.productId ?? null;
+  if (productId === null) {
+    return (
+      <span className="fdec-estado" title="Item fora do cadastro do Forecast: não recebe quantidade decidida.">
+        Sem cadastro
+      </span>
+    );
+  }
+  if (ctx.erro) return <span className="fdec-estado">Indisponível</span>;
+  if (ctx.carregando) return <span className="fdec-estado">Carregando…</span>;
+  return <Leitura decisao={ctx.mapa.get(productId)} />;
 }
 
 export default function ForecastDecisaoCompra({ item }: { item: ForecastItemRelatorio }) {

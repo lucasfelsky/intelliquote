@@ -248,7 +248,7 @@ describe('ForecastRelatorioCompras', () => {
     const colunas = within(screen.getAllByRole('table')[0] as HTMLElement)
       .getAllByRole('columnheader')
       .map((c) => c.textContent);
-    expect(colunas).toEqual(['Item', 'Qtd. sugerida', 'Data-limite', 'Status']);
+    expect(colunas).toEqual(['Item', 'Qtd. sugerida', 'Data-limite', 'Status', 'Ação']);
   });
 
   it('Observação tambem aparece na secao "Atencao: sem consumo"', async () => {
