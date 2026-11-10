@@ -987,7 +987,7 @@ model SupplierDocument {
   id          Int                   @id @default(autoincrement())
   supplierId  Int
   name        String
-  expiresOn   DateTime              @db.Date
+  expiresOn   DateTime?             @db.Date
   notes       String?
   fileName    String
   mimeType    String

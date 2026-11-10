@@ -18,9 +18,15 @@ vi.mock('@/api/client', () => ({
 
 import { api } from '@/api/client';
 
-type Status = 'ok' | 'expiring' | 'due_today' | 'expired';
+type Status = 'ok' | 'expiring' | 'due_today' | 'expired' | 'no_expiry';
 
-function doc(id: number, name: string, status: Status, daysLeft: number, expiresOn = '2026-12-01') {
+function doc(
+  id: number,
+  name: string,
+  status: Status,
+  daysLeft: number | null,
+  expiresOn: string | null = '2026-12-01',
+) {
   return {
     id,
     supplierId: 10,
@@ -310,6 +316,58 @@ describe('SupplierDocumentsSection', () => {
       mimeType: 'application/pdf',
     });
     expect(atob(body.contentBase64 as string)).toBe('%PDF-1.7 conteudo');
+  });
+
+  it('novo documento sem vencimento envia expiresOn null e nao bloqueia o formulario', async () => {
+    mockList([]);
+    vi.mocked(api.post).mockResolvedValue(doc(9, 'ISO 9001', 'no_expiry', null, null));
+    renderSection();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Novo documento' }));
+    // Vencimento deixou de ser obrigatorio: o rotulo nao tem asterisco.
+    expect(screen.getByText('Vencimento')).toBeTruthy();
+    pickFile(new File(['%PDF-1.7 conteudo'], 'ISO 9001.pdf', { type: 'application/pdf' }));
+    await waitFor(() =>
+      expect((document.querySelector('#sd-name') as HTMLInputElement).value).toBe('ISO 9001'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    const [, body] = vi.mocked(api.post).mock.calls[0] as [string, Record<string, unknown>];
+    expect(body).toMatchObject({ supplierId: 10, name: 'ISO 9001', expiresOn: null });
+  });
+
+  it('documento sem vencimento mostra "Sem vencimento" e editar so o nome nao manda a data', async () => {
+    mockList([doc(1, 'ISO 9001', 'no_expiry', null, null)]);
+    vi.mocked(api.patch).mockResolvedValue(doc(1, 'ISO 14001', 'no_expiry', null, null));
+    renderSection();
+
+    expect((await screen.findAllByText('Sem vencimento')).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect((document.querySelector('#sd-expires') as HTMLInputElement).value).toBe('');
+    fireEvent.change(document.querySelector('#sd-name') as HTMLInputElement, {
+      target: { value: 'ISO 14001' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    expect(api.patch).toHaveBeenCalledWith('/api/v1/supplier-documents/1', { name: 'ISO 14001' });
+  });
+
+  it('limpar a data de um documento com vencimento envia expiresOn null', async () => {
+    mockList([doc(1, 'Licenca', 'ok', 90)]);
+    vi.mocked(api.patch).mockResolvedValue(doc(1, 'Licenca', 'no_expiry', null, null));
+    renderSection();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
+    fireEvent.change(document.querySelector('#sd-expires') as HTMLInputElement, {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(api.patch).toHaveBeenCalledTimes(1));
+    expect(api.patch).toHaveBeenCalledWith('/api/v1/supplier-documents/1', { expiresOn: null });
   });
 
   it('renomear chama api.patch so com { name }', async () => {

@@ -1,6 +1,7 @@
 import { SUPPLIER_DOCUMENT_EXPIRING_WINDOW_DAYS } from '../constants/supplierDocuments';
 
-export type SupplierDocumentStatus = 'ok' | 'expiring' | 'due_today' | 'expired';
+// 'no_expiry' = documento sem vencimento (expiresOn null); nunca gera aviso.
+export type SupplierDocumentStatus = 'ok' | 'expiring' | 'due_today' | 'expired' | 'no_expiry';
 
 const DATE_KEY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
