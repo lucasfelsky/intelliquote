@@ -57,14 +57,47 @@ export function statusDaCotacao(q: {
   return q.enviada ? 'enviada' : 'criada';
 }
 
+// Ordem de progresso do status da decisao: um gancho so AVANCA, nunca regride (ex.: 'po' e 'preco' nao voltam a 'confirmado').
+// Status desconhecido (texto livre no banco) conta como o mais baixo.
+const ORDEM_STATUS: Record<StatusCompra, number> = { nao: 0, cotando: 1, confirmado: 2, po: 3, preco: 4 };
+
+export function ordemDoStatus(status: string): number {
+  return (ORDEM_STATUS as Record<string, number>)[status] ?? -1;
+}
+
+/** Leva `atual` a `alvo` so se `alvo` estiver adiante; senao devolve `atual` (sem regredir). */
+export function avancarStatus(atual: StatusCompra, alvo: StatusCompra): StatusCompra {
+  return ordemDoStatus(alvo) > ordemDoStatus(atual) ? alvo : atual;
+}
+
 // Sem cotacao vinculada vale o status salvo/congelado (itens antigos nao mudam). Criada (nao enviada) = 'cotacao_criada';
-// enviada = 'cotando', sem regredir um status salvo mais adiante (preco/confirmado/po). Cotacao fechada ou com PO enviada
-// mantem o status salvo: quem o avanca e o fechamento/PO (E4b).
+// enviada = 'cotando'; fechada = 'confirmado'; PO enviada = 'po'. Em todos os casos sem regredir um status salvo mais
+// adiante (preco/po/confirmado): os ganchos de E4a/E4b ja gravam o mesmo status, a leitura so cobre o intervalo entre o
+// evento e a gravacao (e cotacoes anteriores ao gancho).
 export function statusDerivadoDoItem(salvo: StatusCompra, cotacao: CotacaoVinculadaData | null): StatusDerivado {
   if (!cotacao) return salvo;
-  if (cotacao.statusCotacao === 'criada') return 'cotacao_criada';
-  if (cotacao.statusCotacao === 'enviada') {
-    return salvo === 'preco' || salvo === 'confirmado' || salvo === 'po' ? salvo : 'cotando';
+  switch (cotacao.statusCotacao) {
+    case 'criada':
+      return 'cotacao_criada';
+    case 'enviada':
+      return avancarStatus(salvo, 'cotando');
+    case 'fechada':
+      return avancarStatus(salvo, 'confirmado');
+    case 'po_enviada':
+      return avancarStatus(salvo, 'po');
   }
-  return salvo;
+}
+
+/**
+ * Qtd. final de UM item no fechamento (E4b): soma das quantidades das respostas VENCEDORAS do item (na pratica uma so: ha no
+ * maximo um vencedor por cotacao), ignorando as nao positivas (item indisponivel grava 0). Sem vencedor para o item = a
+ * quantidade cotada (nunca zera nem apaga). `origem` diz de onde veio, para o AuditLog.
+ */
+export function quantidadeFinalNoFechamento(
+  cotada: number,
+  quantidadesVencedoras: readonly number[],
+): { kg: number; origem: 'vencedora' | 'cotada' } {
+  const validas = quantidadesVencedoras.filter((q) => Number.isFinite(q) && q > 0);
+  if (validas.length === 0) return { kg: cotada, origem: 'cotada' };
+  return { kg: validas.reduce((soma, q) => soma + q, 0), origem: 'vencedora' };
 }

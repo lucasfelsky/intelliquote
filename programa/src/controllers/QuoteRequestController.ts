@@ -8,6 +8,7 @@ import { clearCreditWinners } from '../services/ComparisonCandidateService';
 import { CommercialRequestNotificationService } from '../services/CommercialRequestNotificationService';
 import { CommercialRequestWorkflowService } from '../services/CommercialRequestWorkflowService';
 import { SupplierRegretNotificationService } from '../services/SupplierRegretNotificationService';
+import { ForecastCotacaoVinculoService } from '../services/ForecastCotacaoVinculoService';
 import {
   quoteRequestCloseSchema,
   quoteRequestCreateSchema,
@@ -404,6 +405,21 @@ export class QuoteRequestController {
 
         return closedQuoteRequest;
       });
+
+      // E4b (relatorio de compras enxuto): congela a Qtd. final (resposta vencedora do item; sem vencedor, a cotada) das
+      // decisoes do Forecast vinculadas e leva o status a 'confirmado'. Depois do commit e NUNCA derruba o fechamento:
+      // falha so entra no log.
+      try {
+        await ForecastCotacaoVinculoService.registrarFechamento(id, req.user?.id ?? null);
+      } catch (hookError) {
+        logger.error(
+          {
+            quoteRequestId: id,
+            reason: hookError instanceof Error ? hookError.message : String(hookError),
+          },
+          'Falha ao congelar a Qtd. final do Forecast apos o fechamento da cotacao.',
+        );
+      }
 
       // F8 (backlog 2026-07-12): opt-in — avisa os fornecedores nao
       // selecionados. So DEPOIS do commit do fechamento; best-effort (nunca
