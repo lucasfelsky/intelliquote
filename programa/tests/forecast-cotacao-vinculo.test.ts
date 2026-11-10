@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  avancarStatus,
+  quantidadeFinalNoFechamento,
   chaveFonte,
   codigoParaCotacao,
   kgInteiroParaCima,
@@ -100,9 +102,53 @@ describe('statusDerivadoDoItem (T6)', () => {
     expect(statusDerivadoDoItem('po', cotacao('enviada'))).toBe('po');
   });
 
-  it('cotacao fechada ou com PO enviada mantem o status salvo (quem avanca e a E4b)', () => {
-    expect(statusDerivadoDoItem('cotando', cotacao('fechada'))).toBe('cotando');
+  it('cotacao fechada = confirmado, sem regredir po/preco', () => {
+    expect(statusDerivadoDoItem('nao', cotacao('fechada'))).toBe('confirmado');
+    expect(statusDerivadoDoItem('cotando', cotacao('fechada'))).toBe('confirmado');
+    expect(statusDerivadoDoItem('confirmado', cotacao('fechada'))).toBe('confirmado');
+    expect(statusDerivadoDoItem('po', cotacao('fechada'))).toBe('po');
+    expect(statusDerivadoDoItem('preco', cotacao('fechada'))).toBe('preco');
+  });
+
+  it('cotacao com PO enviada = po, sem regredir preco', () => {
+    expect(statusDerivadoDoItem('nao', cotacao('po_enviada'))).toBe('po');
+    expect(statusDerivadoDoItem('cotando', cotacao('po_enviada'))).toBe('po');
+    expect(statusDerivadoDoItem('confirmado', cotacao('po_enviada'))).toBe('po');
     expect(statusDerivadoDoItem('po', cotacao('po_enviada'))).toBe('po');
+    expect(statusDerivadoDoItem('preco', cotacao('po_enviada'))).toBe('preco');
+  });
+
+  it('sem cotacao vinculada vale o status salvo', () => {
+    for (const s of ['nao', 'cotando', 'confirmado', 'po', 'preco'] as const) {
+      expect(statusDerivadoDoItem(s, null)).toBe(s);
+    }
+  });
+});
+
+describe('avancarStatus (ganchos nunca regridem)', () => {
+  it('avanca ate o alvo e nunca volta', () => {
+    expect(avancarStatus('nao', 'confirmado')).toBe('confirmado');
+    expect(avancarStatus('cotando', 'confirmado')).toBe('confirmado');
+    expect(avancarStatus('confirmado', 'confirmado')).toBe('confirmado');
+    expect(avancarStatus('po', 'confirmado')).toBe('po');
+    expect(avancarStatus('preco', 'po')).toBe('preco');
+    expect(avancarStatus('confirmado', 'po')).toBe('po');
+  });
+});
+
+describe('quantidadeFinalNoFechamento (E4b)', () => {
+  it('usa a quantidade da resposta vencedora do item', () => {
+    expect(quantidadeFinalNoFechamento(1000, [800])).toEqual({ kg: 800, origem: 'vencedora' });
+  });
+  it('sem vencedor para o item mantem a quantidade cotada', () => {
+    expect(quantidadeFinalNoFechamento(1000, [])).toEqual({ kg: 1000, origem: 'cotada' });
+  });
+  it('ignora quantidades nao positivas (item indisponivel grava 0)', () => {
+    expect(quantidadeFinalNoFechamento(1000, [0])).toEqual({ kg: 1000, origem: 'cotada' });
+    expect(quantidadeFinalNoFechamento(1000, [0, 300])).toEqual({ kg: 300, origem: 'vencedora' });
+  });
+  it('soma as vencedoras do item (defensivo: o normal e uma so)', () => {
+    expect(quantidadeFinalNoFechamento(1000, [300, 200])).toEqual({ kg: 500, origem: 'vencedora' });
   });
 });
 

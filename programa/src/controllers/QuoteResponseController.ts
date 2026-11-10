@@ -1171,6 +1171,7 @@ export class QuoteResponseController {
       const result = await sendPurchaseOrderEmail({
         payload: parsedBody.data,
         quoteRequest: quoteResponse.quoteRequest,
+        quoteResponseId: quoteResponse.id,
         recipient: { name: primaryContact.name, email: primaryContact.email },
         cc: QuoteResponseController.buildPoCc(context),
         user: req.user,

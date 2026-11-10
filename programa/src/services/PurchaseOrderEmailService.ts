@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { AuditLogService } from './AuditLogService';
+import { ForecastCotacaoVinculoService } from './ForecastCotacaoVinculoService';
 import { sendAndLog } from '../mailer/MailerService';
 import { renderPoFromTemplate } from '../mailer/renderQuotePo';
 import {
@@ -50,6 +51,9 @@ export interface PurchaseOrderEmailInput {
     destinationPort?: string | null;
     items?: Array<{ destinationPort?: string | null }>;
   };
+  // Proposta que recebe a PO (a do fornecedor, ou a de origem da alternativa via parceiro): delimita os itens do Forecast
+  // que passam a 'po'. Opcional.
+  quoteResponseId?: number | null;
   // Destinatario unico (To). `name` tambem alimenta "supplierContactName" do template.
   recipient: { name: string; email: string };
   // Lista final (contatos + COMEX), ja filtrada e sem o destinatario.
@@ -286,6 +290,23 @@ export async function sendPurchaseOrderEmail(
         reason: error instanceof Error ? error.message : String(error),
       },
       'Falha ao marcar PO enviada; e-mail ja enviado.',
+    );
+  }
+
+  // E4b (relatorio de compras enxuto): leva a decisao do Forecast dos itens vinculados a 'po'. Nunca derruba o envio.
+  try {
+    await ForecastCotacaoVinculoService.registrarPoEnviada(
+      quoteRequest.id,
+      user?.id ?? null,
+      input.quoteResponseId ?? null,
+    );
+  } catch (error) {
+    logger.error(
+      {
+        quoteRequestId: quoteRequest.id,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+      'Falha ao registrar a PO enviada no Forecast; e-mail ja enviado.',
     );
   }
 

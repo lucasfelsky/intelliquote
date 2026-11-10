@@ -193,6 +193,7 @@ export class CreditSupportController {
       const result = await sendPurchaseOrderEmail({
         payload: parsedBody.data,
         quoteRequest: row.quoteRequest,
+        quoteResponseId: row.quoteResponseId,
         recipient: { name: recipient.name, email: recipient.email },
         cc: recipients.cc,
         user: req.user,
