@@ -17,6 +17,7 @@ import {
 import { forecastDecisoesKeys, listForecastDecisoes, type ForecastDecisao } from '@/services/forecastDecisoes';
 import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
+import { colunasComEdicao, type FeedbackCelula } from './Forecast/ForecastPainelAnaliseEditavel';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
 import ForecastAvisos, { ProvedorAvisos, useAviso } from './Forecast/ForecastAvisos';
@@ -177,10 +178,16 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
     () => (decisoesData ? new Map<number, ForecastDecisao>(decisoesData.map((d) => [d.productId, d])) : null),
     [decisoesData],
   );
-  const colunas = useMemo(
-    () => colunasComDecisoes(colunasDoPainel(detail.months, { ocultas }), mapaDecisoes),
-    [detail.months, ocultas, mapaDecisoes],
-  );
+  // ANALISE FORECAST editavel para admin/comprador (grava a mesma decisao do relatorio); os demais papeis so leem.
+  const { user } = useAuth();
+  const podeEditarAnalise = user?.role === 'admin' || user?.role === 'comprador';
+  const [feedbackAnalise, setFeedbackAnalise] = useState<FeedbackCelula>(null);
+  const colunas = useMemo(() => {
+    const base = colunasComDecisoes(colunasDoPainel(detail.months, { ocultas }), mapaDecisoes);
+    return podeEditarAnalise
+      ? colunasComEdicao(base, { snapshotId: detail.id, mapa: mapaDecisoes, aoFeedback: setFeedbackAnalise })
+      : base;
+  }, [detail.months, detail.id, ocultas, mapaDecisoes, podeEditarAnalise]);
   const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
   const contagem = useMemo(() => contarPorFiltro(base), [base]);
   const divergencias = useMemo(() => {
@@ -296,6 +303,20 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
             <button type="button" className="ghost-button ghost-button--sm" onClick={() => void decisoes.refetch()}>
               Tentar de novo
             </button>
+          </p>
+        )}
+        {podeEditarAnalise && mapaDecisoes !== null && (
+          <p className="fcad-aviso fcae-apoio">
+            Clique na ANÁLISE FORECAST para preencher a quantidade fechada (Enter grava, Esc cancela, vazio apaga). Item
+            fora da lista de compra (sem falta) preenchido passa a ser candidato a cotação.
+          </p>
+        )}
+        {feedbackAnalise && (
+          <p
+            className={`fcad-aviso fcae-retorno fcae-retorno--${feedbackAnalise.tipo}`}
+            role={feedbackAnalise.tipo === 'erro' ? 'alert' : 'status'}
+          >
+            {feedbackAnalise.texto}
           </p>
         )}
         <ForecastGrid
