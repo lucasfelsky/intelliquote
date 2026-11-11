@@ -822,27 +822,28 @@ h3 {
   gap: 6px;
 }
 
-/* botao de tema (ThemeToggle, ciclo unico) e Sair: 176 centralizados no bloco de 224 (canvas v72). Tema 40 / Sair 44. */
+/* botao de tema (ThemeToggle, ciclo unico) e Sair: na largura do bloco, alinhados a esquerda, icone no eixo dos icones do menu
+   (12 + 16 + 8 = 36 = 12 + 15 + 9), paridade com o rodape do Portal (substitui o canvas v72). Tema 44 / Sair 44. */
 .sidebar__theme,
 .sidebar__logout {
-  align-self: center;
+  align-self: stretch;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 12px;
   box-sizing: border-box;
-  width: 176px;
-  padding: 0 14px;
+  width: 100%;
+  padding: 0 0 0 16px;
   border: 0;
   border-radius: var(--rf-radius-button);
   background: transparent;
   color: var(--rf-sidebar-ink-soft);
   font: 600 13px var(--rf-font-sans);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   transition: background-color var(--rf-dur-base) var(--rf-ease-out), color var(--rf-dur-base);
 }
-.sidebar__theme { height: 40px; }
+.sidebar__theme { height: 44px; }
 .sidebar__logout { height: 44px; }
 .sidebar__theme:hover,
 .sidebar__logout:hover {
@@ -850,11 +851,11 @@ h3 {
   color: var(--rf-sidebar-ink);
 }
 
-/* assinatura "sq química" (SqLogo, tom dark): decorativa, sem foco nem clique */
+/* assinatura "sq química" (SqLogo, tom dark): alinhada a esquerda (recuo de 14px como no Portal), decorativa, sem foco nem clique */
 .sidebar__signature {
   display: flex;
-  justify-content: center;
-  padding-top: 8px;
+  justify-content: flex-start;
+  padding: 14px 0 0 14px;
   pointer-events: none;
   user-select: none;
 }
@@ -1007,7 +1008,7 @@ h3 {
   box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
 }
 
-/* alvo de toque (F2-D2): o botao de tema vai a 44 em ponteiro grosso (Sair ja e 44); mouse segue o mock (tema 40) */
+/* alvo de toque (F2-D2): o botao de tema e o Sair ja medem 44 (paridade Portal); em ponteiro grosso o 44 do tema fica garantido aqui */
 @media (pointer: coarse) {
   .sidebar__theme { height: 44px; }
 }
@@ -1120,8 +1121,6 @@ h3 {
     font-size: 10px;
   }
   .sidebar--colapsada .sidebar__group { padding-top: 4px; border-top: 1px solid var(--rf-sidebar-seg-border); }
-  .sidebar--colapsada .sidebar__theme,
-  .sidebar--colapsada .sidebar__logout { width: 44px; padding: 0; gap: 0; }
   .sidebar--colapsada .sidebar__signature { display: none; }
   /* sem barra de rolagem no trilho de icones: ela tira ~10px da largura e o icone ativo sai do centro do destaque (a rolagem por roda/teclado segue) */
   .sidebar--colapsada { scrollbar-width: none; }
