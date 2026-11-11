@@ -246,4 +246,20 @@ describe('Modal', () => {
     const com = render(<Modal isOpen={true} onClose={vi.fn()} title="Título" size="wide" className="fc-portal"><p>Conteúdo</p></Modal>);
     expect(getDialog(com.container).className).toBe('modal-dialog modal-dialog--wide fc-portal');
   });
+
+  it('19. E8: o <dialog> tem nome acessivel (aria-labelledby aponta para o h2 do titulo, com ou sem subtitle)', () => {
+    for (const subtitle of [undefined, 'Apoio']) {
+      const { container, unmount } = render(
+        <Modal isOpen={true} onClose={vi.fn()} title="Criar cotação" subtitle={subtitle}>
+          <p>Conteúdo</p>
+        </Modal>
+      );
+      const dialog = getDialog(container);
+      const id = dialog.getAttribute('aria-labelledby');
+      expect(id).toBeTruthy();
+      expect(dialog.querySelector('h2')?.id).toBe(id);
+      expect(document.getElementById(id as string)?.textContent).toBe('Criar cotação');
+      unmount();
+    }
+  });
 });

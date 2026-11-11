@@ -642,7 +642,25 @@ describe('pop-up Criar cotacao: gerar', () => {
     const d = await abrirPelaBarra();
     fireEvent.click(botaoGerar(d));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post.mock.calls[0]![1]).toEqual({ itens: [{ productId: 41, quantidadeKg: 126, observacao: null }] });
+    // sem ler as decisoes a nota ja gravada e desconhecida: a observacao vazia nao vai (o backend so mexe na nota quando a chave vem)
+    expect(post.mock.calls[0]![1]).toEqual({ itens: [{ productId: 41, quantidadeKg: 126 }] });
+  });
+
+  it('durante o POST o pop-up nao fecha (Cancelar desabilitado; Esc ignorado) e depois do erro volta ao normal', async () => {
+    let falhar: (e: unknown) => void = () => {};
+    post.mockReturnValueOnce(new Promise((_, rej) => (falhar = rej)) as never);
+    renderRelatorio();
+    await marcar('PRODUTO 001');
+    const d = await abrirPelaBarra();
+    fireEvent.click(botaoGerar(d));
+    await waitFor(() => expect((within(d).getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement).disabled).toBe(true));
+    fireEvent(d, new Event('cancel', { cancelable: true }));
+    expect(screen.queryByRole('heading', { name: 'Criar cotação' })).not.toBeNull();
+    await act(async () => {
+      falhar(new ApiError(500, null));
+    });
+    await within(d).findByRole('alert');
+    expect((within(d).getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
@@ -787,6 +805,21 @@ describe('pop-up Criar cotacao: rascunho (E5)', () => {
     expect(within(d).queryByRole('button', { name: 'Descartar rascunho' })).toBeNull();
     fireEvent.click(botaoGerar(d));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    // o rascunho salvo nunca foi visto aqui: gerar nao o apaga
+    await screen.findByRole('status', { name: 'Cotações criadas' });
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('Gerar com edicao pendente que falha (500): o autosave e rearmado e grava o rascunho depois', async () => {
+    post.mockRejectedValueOnce(new ApiError(500, null));
+    renderRelatorio();
+    const d = await abrirCotar('PRODUTO 001');
+    fireEvent.change(campoKg(d, 'PRODUTO 001'), { target: { value: '9' } });
+    fireEvent.click(botaoGerar(d));
+    await within(d).findByRole('alert');
+    expect(put).not.toHaveBeenCalled();
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1), { timeout: 4000 });
+    expect(put.mock.calls[0]![1]).toMatchObject({ itens: [{ productId: 41, quantidadeKg: 9 }] });
   });
 
   it('falha ao gravar o rascunho (500): mostra o erro sem fechar nem perder a digitacao', async () => {

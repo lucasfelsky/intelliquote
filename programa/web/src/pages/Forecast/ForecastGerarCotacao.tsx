@@ -9,7 +9,7 @@ import {
 // Vinculo dos codigos do Forecast com o catalogo para o "Criar cotacao" do relatorio de compras (piloto PR6, refeito na E6): o
 // provedor le o vinculo UMA vez (1 GET para o relatorio inteiro) e so existe para quem pode criar cotacao. O botao antigo
 // "Gerar cotacao" (navegava para /cotacoes/nova?fromForecast=...) saiu da tela na E6: o pop-up "Criar cotacao" gera em lote.
-// A rota /cotacoes/nova com `fromForecast` segue valida (usePrefillDoForecast); a E8 decide a limpeza.
+// A rota /cotacoes/nova com `fromForecast` segue valida (usePrefillDoForecast) para links antigos e favoritos.
 
 interface Contexto {
   snapshotId: number;
@@ -49,11 +49,6 @@ export function ProvedorGerarCotacao({ snapshotId, podeCriar, children }: Proved
     [snapshotId, podeCriar, produtos, consulta.isLoading, consulta.isError, consulta.data],
   );
   return <ContextoGerarCotacao.Provider value={valor}>{children}</ContextoGerarCotacao.Provider>;
-}
-
-/** Permissao de criar cotacao do provedor (false fora dele). */
-export function usePodeCriarCotacao(): boolean {
-  return useContext(ContextoGerarCotacao)?.podeCriar === true;
 }
 
 export interface VinculosDeCotacao {

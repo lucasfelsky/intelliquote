@@ -4,21 +4,14 @@ import {
   descricaoDoForecast,
   kgInteiroParaCima,
   lerParamFromForecast,
-  linkGerarCotacao,
-  motivoDoBotao,
   MOTIVO_ACIMA_LIMITE,
-  MOTIVO_ERRO_VINCULO,
-  MOTIVO_FORA_CADASTRO,
   MOTIVO_NAO_COMPRAR,
   MOTIVO_SEM_QUANTIDADE,
-  MOTIVO_SEM_VINCULO,
-  MOTIVO_VERIFICANDO,
   quantidadeParaCotacao,
-  type EntradaMotivoDoBotao,
 } from './forecastGerarCotacaoRegras';
 
 // Dados 100% sinteticos.
-describe('lerParamFromForecast / linkGerarCotacao', () => {
+describe('lerParamFromForecast', () => {
   it('ausente = null (hook inerte)', () => {
     expect(lerParamFromForecast(null)).toBeNull();
   });
@@ -35,10 +28,6 @@ describe('lerParamFromForecast / linkGerarCotacao', () => {
     },
   );
 
-  it('o link montado volta pelo parser', () => {
-    expect(linkGerarCotacao(7, 42)).toBe('/cotacoes/nova?fromForecast=7-42');
-    expect(lerParamFromForecast('7-42')).toEqual({ snapshotId: 7, productId: 42 });
-  });
 });
 
 describe('codigoParaCotacao', () => {
@@ -113,33 +102,5 @@ describe('kgInteiroParaCima / quantidadeParaCotacao', () => {
 describe('descricaoDoForecast', () => {
   it('so o rotulo da quinzena', () => {
     expect(descricaoDoForecast('11-1')).toBe('Forecast 11-1');
-  });
-});
-
-describe('motivoDoBotao', () => {
-  const base: EntradaMotivoDoBotao = {
-    productId: 42,
-    produtosCarregando: false,
-    produtosErro: false,
-    codes: [{ code: 'C0001', position: 1, catalogItemId: 10 }],
-    decisaoKg: undefined,
-    quantidadeFinal: 125,
-  };
-
-  it('habilitado quando tudo confere', () => {
-    expect(motivoDoBotao(base)).toBeNull();
-    expect(motivoDoBotao({ ...base, decisaoKg: 300, quantidadeFinal: 0 })).toBeNull();
-  });
-
-  it('motivos, em ordem', () => {
-    expect(motivoDoBotao({ ...base, productId: null, produtosCarregando: true })).toBe(MOTIVO_FORA_CADASTRO);
-    expect(motivoDoBotao({ ...base, produtosCarregando: true, produtosErro: true })).toBe(MOTIVO_VERIFICANDO);
-    expect(motivoDoBotao({ ...base, produtosErro: true, codes: undefined })).toBe(MOTIVO_ERRO_VINCULO);
-    expect(motivoDoBotao({ ...base, codes: [{ code: 'C0001', position: 1, catalogItemId: null }], decisaoKg: 0 })).toBe(
-      MOTIVO_SEM_VINCULO,
-    );
-    expect(motivoDoBotao({ ...base, codes: undefined })).toBe(MOTIVO_SEM_VINCULO);
-    expect(motivoDoBotao({ ...base, decisaoKg: 0 })).toBe(MOTIVO_NAO_COMPRAR);
-    expect(motivoDoBotao({ ...base, quantidadeFinal: 0 })).toBe(MOTIVO_SEM_QUANTIDADE);
   });
 });

@@ -233,12 +233,11 @@ describe('F13-D: CSS do par `F13-D` (so tela, papel intacto)', () => {
     expect(regra('.fc-pagina .fcr-tabela thead th')).toMatch(/padding: 10px 12px[\s\S]*letter-spacing: normal/);
   });
 
-  it('botao fantasma de tabela: 32 de altura, sem contorno (vence a compat Forecast F3 pela especificidade), 12/700; "Gerar cotacao" ganha contorno', () => {
+  it('botao fantasma de tabela: 32 de altura, sem contorno (vence a compat Forecast F3 pela especificidade), 12/700', () => {
     const fantasma = regra('.fc-pagina .fcr-tabela .ghost-button');
     expect(fantasma).toMatch(/min-height: 32px/);
     expect(fantasma).toMatch(/border: 0;/);
     expect(fantasma).toMatch(/font-size: 12px; font-weight: 700/);
-    expect(regra('.fc-pagina .fcr-tabela .fgc-botao')).toMatch(/border-width: 1\.5px; border-style: solid; border-color: var\(--rf-action\)/);
   });
 
   it('linha critica, sem estoque e vencida sem tom e sem faixa (o board nao pinta a linha inteira), nos 2 temas', () => {
@@ -260,7 +259,6 @@ describe('F13-D: CSS do par `F13-D` (so tela, papel intacto)', () => {
     expect(regra('.fc-portal .fcd-form > p.fcd-produto')).toMatch(/display: block/);
     expect(par).toMatch(/clip-path: inset\(50%\)/);
     expect(par).toMatch(/content: attr\(data-rotulo\)/);
-    expect(par).toMatch(/.fdec-editor > .fdec-erro { order: 2; }/);
     expect(par).not.toMatch(/grid-row: 4/);
   });
 

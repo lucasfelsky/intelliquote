@@ -47,7 +47,6 @@ const PERMITIDAS_COMPAT = new Set([
   'fcr-linha--critico',
   'badge--danger',
   'fcr-embalagem__editar',
-  'fgc-botao',
   'fco-acoes',
   'fco-grupo-alvos',
 ]);
@@ -309,7 +308,7 @@ describe('F3 compat: S confere com as <table> do Forecast (so os .tsx; sem mudan
     const blocoForecast = achatar(parseRules(css.slice(iForecast).replace(/\/\*[\s\S]*?\*\//g, '')));
     const BASE: Spec = [0, 2, 0];
     const PROPS_DA_COMPAT = ['justify-content', 'min-height', 'padding', 'border', 'border-radius', 'background', 'color', 'font-weight', 'font-size'];
-    const alvejaBotao = (sel: string) => /(^button\b|ghost-button|fgc-botao|__editar)/.test(ultimoComposto(sel));
+    const alvejaBotao = (sel: string) => /(^button\b|ghost-button|__editar)/.test(ultimoComposto(sel));
     const colidem = blocoForecast
       .filter((a) => !(a.media ?? '').includes('print'))
       .filter((a) => alvejaBotao(a.seletor) && cmp(especificidade(a.seletor), BASE) < 0)
@@ -319,7 +318,6 @@ describe('F3 compat: S confere com as <table> do Forecast (so os .tsx; sem mudan
     // seletor do Forecast -> [seletor e media da compat que o reafirma]
     const REAFIRMADAS: Record<string, [string, string | null]> = {
       '- | .fcr-embalagem__editar': [`${S} .fcr-embalagem__editar`, null],
-      '@media (max-width: 700px) | .fgc-botao': [`${S} .fgc-botao`, '@media (max-width: 700px)'],
       '@media (max-width: 700px), (pointer: coarse) | .fco-acoes button': [`${S} .fco-acoes .ghost-button`, '@media (max-width: 700px)'],
       '@media (max-width: 700px), (pointer: coarse) | .fco-grupo-alvos button': [`${S} .fco-grupo-alvos .ghost-button`, '@media (max-width: 700px)'],
     };
@@ -416,14 +414,12 @@ describe('F3 compat: declaracoes (valores de ec2c5c3, antes da F3a; contorno 1,5
     expect(de(`${S} .ghost-button`, '@media (pointer: coarse)')).toEqual({ 'min-height': '44px' });
   });
 
-  it('toque em <= 700 px: reafirma as sobrescritas de classe unica do bloco Forecast (.fgc-botao, .fco-acoes button, .fco-grupo-alvos button)', () => {
+  it('toque em <= 700 px: reafirma as sobrescritas de classe unica do bloco Forecast (.fco-acoes button, .fco-grupo-alvos button)', () => {
     const m = '@media (max-width: 700px)';
-    for (const sel of [`${S} .fgc-botao`, `${S} .fco-acoes .ghost-button`, `${S} .fco-grupo-alvos .ghost-button`]) {
+    for (const sel of [`${S} .fco-acoes .ghost-button`, `${S} .fco-grupo-alvos .ghost-button`]) {
       expect(de(sel, m), sel).toEqual({ 'min-height': '44px' });
       expect(cmp(especificidade(sel), especificidade(`${S} .ghost-button`)), sel).toBeGreaterThanOrEqual(0);
     }
-    // o valor e o do bloco Forecast (copia)
-    expect(css).toMatch(/@media \(max-width: 700px\) \{\n  \.fgc-botao \{ min-height: 44px; \}/);
   });
 
   it('foco: a compat nao declara (anel da F3a e aneis proprios do Forecast continuam)', () => {

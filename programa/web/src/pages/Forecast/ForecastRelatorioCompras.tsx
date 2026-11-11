@@ -1035,7 +1035,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {dados.ocasioes?.estado === 'ok' && <p className="fcr-resumo__fora fcoc-apoio">{APOIO_OCASIOES}</p>}
         </div>
       </section>
-      <ProvedorDecisoesCompra snapshotId={snapshotId} podeEditar={podeEditar}>
+      <ProvedorDecisoesCompra snapshotId={snapshotId}>
         <ProvedorCriarCotacao
           snapshotId={snapshotId}
           quinzena={quinzena.label}

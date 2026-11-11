@@ -219,4 +219,10 @@ describe('rascunho e lote', () => {
   it('lote sem leitura das decisoes: nao manda atualizadoEm (nada para conferir)', () => {
     expect(paraItemDoLote(item(), 10, undefined, false)).not.toHaveProperty('atualizadoEm');
   });
+
+  it('lote sem leitura das decisoes: observacao vazia nao vai (nao apaga a nota ja gravada); observacao digitada vai', () => {
+    expect(paraItemDoLote(item(), 10, undefined, false)).not.toHaveProperty('observacao');
+    expect(paraItemDoLote(item({ obs: ' x ' }), 10, undefined, false)).toMatchObject({ observacao: 'x' });
+    expect(paraItemDoLote(item(), 10, undefined, true)).toHaveProperty('observacao', null);
+  });
 });

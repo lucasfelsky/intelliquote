@@ -49,7 +49,8 @@ export default function ForecastCotar({ item, fonte }: Props) {
     );
   }
   const rascunho = ctx.noRascunho(productId) !== undefined;
-  // Cotacao vinculada sem rascunho novo: so o tracking (o backend recusa cotar de novo enquanto ela esta aberta).
+  // Cotacao vinculada (aberta ou fechada) sem rascunho novo: so o tracking (decisao do E7: o backend recusa cotar de novo enquanto ela
+  // esta aberta; depois de fechada, recotar o item e pela selecao + barra).
   if (cotacao && !rascunho) return links;
   return (
     <span className="fcq-acao fcq-acao--pilha">
