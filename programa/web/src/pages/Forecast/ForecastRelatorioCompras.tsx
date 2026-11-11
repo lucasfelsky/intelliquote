@@ -188,43 +188,45 @@ function Embalagem({ item, onEditar, botaoRef }: EmbalagemProps) {
   if (!usada) {
     if (!botao) return <span className="badge badge--muted">Embalagem não cadastrada</span>;
     return (
-      <span className="fcr-embalagem fcr-embalagem--vazia">
+      <div className="fcr-emb">
         <span className="badge badge--muted">Embalagem não cadastrada</span>
         {botao}
-      </span>
+      </div>
     );
   }
   const outras = opcoesOutrasComPallet(item);
   const palletsUsada = palletsDoDestaque(item);
   const nome = usada.rotulo ?? `${kgBr(usada.quantidade)} kg`;
   return (
-    <span className="fcr-embalagem">
-      <span>
-        {item.quantidadeEmbalagens} × {nome} (código {usada.codigo})
+    <div className="fcr-emb">
+      <span className="fcr-embalagem">
+        <span>
+          {item.quantidadeEmbalagens} × {nome} (código {usada.codigo})
+        </span>
+        {multiplas && (
+          <span className="badge badge--info" title={tituloOutrasEmbalagens(item)}>
+            Arredondado pela embalagem do código {usada.codigo}
+          </span>
+        )}
+        {palletsUsada.map((texto) => (
+          <span key={texto} className="fcr-embalagem__pallet">
+            {texto}
+          </span>
+        ))}
+        {outras.map(({ texto, pallet, outrosPallets }) => (
+          <Fragment key={texto}>
+            <span className="fcr-embalagem__outras">{texto}</span>
+            {pallet && <span className="fcr-embalagem__pallet">{pallet}</span>}
+            {outrosPallets.map((p) => (
+              <span key={p} className="fcr-embalagem__pallet">
+                {p}
+              </span>
+            ))}
+          </Fragment>
+        ))}
       </span>
-      {multiplas && (
-        <span className="badge badge--info" title={tituloOutrasEmbalagens(item)}>
-          Arredondado pela embalagem do código {usada.codigo}
-        </span>
-      )}
-      {palletsUsada.map((texto) => (
-        <span key={texto} className="fcr-embalagem__pallet">
-          {texto}
-        </span>
-      ))}
-      {outras.map(({ texto, pallet, outrosPallets }) => (
-        <Fragment key={texto}>
-          <span className="fcr-embalagem__outras">{texto}</span>
-          {pallet && <span className="fcr-embalagem__pallet">{pallet}</span>}
-          {outrosPallets.map((p) => (
-            <span key={p} className="fcr-embalagem__pallet">
-              {p}
-            </span>
-          ))}
-        </Fragment>
-      ))}
       {botao}
-    </span>
+    </div>
   );
 }
 
@@ -259,10 +261,10 @@ function SeloDemanda({ kg }: { kg?: number }) {
 function EmAndamento({ item }: { item: ForecastItemRelatorio }) {
   const { chegadas, programacoes } = item.emAndamento;
   if (chegadas.length === 0 && programacoes.length === 0) {
-    return <span className="fcr-fraco">—</span>;
+    return <div className="fcr-vz">Sem chegadas ou programações.</div>;
   }
   return (
-    <ul className="fcr-andamento">
+    <ul className="fcr-tl">
       {chegadas.map((c) => (
         <li key={`c-${c.anoMes}`}>
           Chegada {mesAbrevDoAnoMes(c.anoMes)}: {inteiroBr(c.quantidade)}
@@ -365,12 +367,82 @@ function CotacaoDoItem({ item }: { item: ForecastItemRelatorio }) {
 }
 
 /** Um bloco do expansor "Detalhes": rotulo pequeno + conteudo. */
-function Detalhe({ rotulo, children, largo = false }: { rotulo: ReactNode; children: ReactNode; largo?: boolean }) {
+function Detalhe({ rotulo, children }: { rotulo: ReactNode; children: ReactNode }) {
   return (
-    <div className={largo ? 'fcr-det fcr-det--largo' : 'fcr-det'}>
+    <div className="fcr-det">
       <div className="fcr-det__rotulo">{rotulo}</div>
       <div className="fcr-det__valor">{children}</div>
     </div>
+  );
+}
+
+/** Card do painel "Detalhes": icone num quadradinho com a cor do tema + rotulo, e o conteudo. */
+function CardDetalhe({
+  tom,
+  icone,
+  rotulo,
+  children,
+}: {
+  tom: 'danger' | 'ok' | 'info';
+  icone: ReactNode;
+  rotulo: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="fcr-dc">
+      <div className="fcr-dc__cab">
+        <span className={`fcr-dci fcr-dci--${tom}`} aria-hidden="true">
+          {icone}
+        </span>
+        <span className="fcr-det__rotulo">{rotulo}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Icone de traco do painel (24x24, currentColor), decorativo. */
+function TracoDet({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+/** Selo de ruptura do card "Saldo e ruptura": vermelho ja na data-base (ou vencida), amarelo em N dias, verde sem ruptura. */
+function SeloRuptura({ item }: { item: ForecastItemRelatorio }) {
+  const { ruptura, diasAteRuptura: dias } = item;
+  if (!ruptura) return <span className="badge badge--success badge--dot">sem ruptura em 6 meses</span>;
+  if (ruptura.jaNaDataBase) return <span className="badge badge--danger badge--dot">já na data-base</span>;
+  const quando =
+    dias === null || dias === undefined
+      ? ''
+      : dias === 0
+        ? 'hoje'
+        : dias === 1
+          ? 'em 1 dia'
+          : dias > 1
+            ? `em ${dias} dias`
+            : `há ${-dias} dias`;
+  const vencida = dias !== null && dias !== undefined && dias <= 0;
+  return (
+    <span className={vencida ? 'badge badge--danger badge--dot' : 'badge badge--warning badge--dot'}>
+      {quando}
+      {quando && ' · '}
+      <span>{dataBr(ruptura.data)}</span>
+    </span>
   );
 }
 
@@ -411,6 +483,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
       botao.current?.focus();
     }
   }, [aberto]);
+  const decisao = useDecisaoDaLinha(item);
   const mediaSem = textoMediaSem(item.mesesForaDaMedia);
   const obs = textoObservacao(item.obs);
   return (
@@ -476,65 +549,107 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
       </tr>
       <tr id={idDetalhes} className="fcr-detalhes" hidden={!aberto}>
         <td colSpan={colunas}>
-          <div className="fcr-detalhes__grade">
-            <Detalhe rotulo="Demanda">
-              <span className="fcr-mono">{d1(item.demanda)}</span>
-            </Detalhe>
-            {/* Literal "Qtd. final" exigido pela paridade com o XLSX (aqui e a quantidade CALCULADA); a fixa e a coluna "Qtd. final (sistema)". */}
-            <Detalhe
-              rotulo={
-                <>
-                  Qtd. final <span className="fcr-det__sufixo">calculada</span>
-                </>
-              }
-            >
-              <span className="fcr-mono">{d1(item.quantidadeFinal)}</span>
-            </Detalhe>
-            <Detalhe rotulo="Saldo e ruptura">
-              <span className="fcr-limite__prazos">
-                <span>
-                  <span className="fcr-fraco">Saldo zera</span> <span className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</span>
-                </span>
-                <span>
-                  <span className="fcr-fraco">Ruptura</span>{' '}
-                  <span>{ruptura ? (ruptura.jaNaDataBase ? 'já na data-base' : dataBr(ruptura.data)) : 'sem ruptura em 6 meses'}</span>
-                </span>
+          <div className="fcr-dp">
+            <div className="fcr-dg">
+              <CardDetalhe
+                tom="danger"
+                icone={
+                  <TracoDet>
+                    <path d="M3 17l6-6 4 4 8-8" />
+                    <path d="M15 7h6v6" />
+                  </TracoDet>
+                }
+                rotulo="Saldo e ruptura"
+              >
+                <div className="fcr-dc__grande">
+                  <span>Saldo zera</span> <span className="fcr-mono">{ruptura ? mesAbrevDoAnoMes(ruptura.anoMes) : '—'}</span>
+                </div>
+                <div>
+                  <SeloRuptura item={item} />
+                </div>
+                <div className="fcr-dc__linha">
+                  <span>
+                    Demanda <span className="fcr-mono">(AN do motor)</span>
+                  </span>
+                  <b>
+                    <span className="fcr-mono">{d1(item.demanda)}</span> kg
+                  </b>
+                </div>
+              </CardDetalhe>
+              {/* Literal "Qtd. final" exigido pela paridade com o XLSX (aqui e a quantidade CALCULADA); a fixa e a coluna "Qtd. final (sistema)". */}
+              <CardDetalhe
+                tom="ok"
+                icone={<Icon name="package" size={16} />}
+                rotulo={
+                  <>
+                    Qtd. final <span className="fcr-det__sufixo">calculada</span>
+                  </>
+                }
+              >
+                <div className="fcr-qf">
+                  <div>
+                    <div className="fcr-qf__n fcr-mono">{d1(item.quantidadeSugerida)}</div>
+                    <div className="fcr-qf__l">sugerida</div>
+                  </div>
+                  <span className="fcr-qf__seta" aria-hidden="true">
+                    <Icon name="arrow-right" size={16} />
+                  </span>
+                  <div className="fcr-qf__final">
+                    <div className="fcr-qf__n fcr-mono">{d1(item.quantidadeFinal)}</div>
+                    <div className="fcr-qf__l">final · kg</div>
+                  </div>
+                </div>
+                <div className="fcr-dc__emb">
+                  {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
+                  <Embalagem
+                    item={item}
+                    botaoRef={botao}
+                    onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
+                  />
+                  {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
+                  {editando &&
+                    productId !== null &&
+                    createPortal(
+                      <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
+                      document.body,
+                    )}
+                </div>
+              </CardDetalhe>
+              <CardDetalhe
+                tom="info"
+                icone={
+                  <TracoDet>
+                    <g transform="translate(.5 -1.4)">
+                      <rect x="1" y="7" width="14" height="10" rx="1.5" />
+                      <path d="M15 10h4l3 3v4h-7z" />
+                      <circle cx="6" cy="18" r="1.8" />
+                      <circle cx="18" cy="18" r="1.8" />
+                    </g>
+                  </TracoDet>
+                }
+                rotulo="Em andamento"
+              >
+                <EmAndamento item={item} />
+              </CardDetalhe>
+            </div>
+            <div className={decisao ? 'fcr-dec fcr-dec--tem' : 'fcr-dec'}>
+              <span className="fcr-dci" aria-hidden="true">
+                <Icon name="clipboard" size={16} />
               </span>
-            </Detalhe>
-            <Detalhe rotulo="Em andamento">
-              <EmAndamento item={item} />
-            </Detalhe>
-            <Detalhe rotulo="Embalagem" largo>
-              {item.naoFraciona && <span className="badge badge--warning">Não fraciona</span>}
-              <Embalagem
-                item={item}
-                botaoRef={botao}
-                onEditar={podeEditar && productId !== null ? () => setEditando(true) : undefined}
-              />
-              {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o dialogo. */}
-              {editando &&
-                productId !== null &&
-                createPortal(
-                  <ForecastEmbalagensModal productId={productId} podeEditar onFechar={() => setEditando(false)} />,
-                  document.body,
-                )}
-            </Detalhe>
-            {mediaSem && (
-              <Detalhe rotulo="Média">
-                <MediaSem meses={item.mesesForaDaMedia} />
-              </Detalhe>
-            )}
-            {obs && (
-              <Detalhe rotulo="Observação" largo>
-                <Observacao obs={item.obs} />
-              </Detalhe>
-            )}
-            <CotacaoDoItem item={item} />
-            <Detalhe rotulo="Decisão de compra" largo>
-              <div className="fdec-celula">
-                <ForecastDecisaoLeitura item={item} />
+              <div className="fcr-dec__corpo">
+                <div className="fcr-det__rotulo">Decisão de compra</div>
+                <div className="fdec-celula">
+                  <ForecastDecisaoLeitura item={item} />
+                </div>
               </div>
-            </Detalhe>
+              <CotacaoDoItem item={item} />
+            </div>
+            {(mediaSem || obs) && (
+              <div className="fcr-dnote">
+                {mediaSem && <MediaSem meses={item.mesesForaDaMedia} />}
+                {obs && <Observacao obs={item.obs} />}
+              </div>
+            )}
           </div>
         </td>
       </tr>

@@ -170,7 +170,7 @@ describe('ForecastRelatorioCompras', () => {
     await screen.findByText('3 itens em 2 fontes');
     const linha = linhaCompleta('PRODUTO 003');
     expect(within(linha).getByText('Embalagem não cadastrada')).toBeTruthy();
-    expect(within(linha).getAllByText('40,0')).toHaveLength(2); // sugerida e final iguais (sem arredondar)
+    expect(within(linha).getAllByText('40,0')).toHaveLength(3); // sugerida (coluna), sugerida e final do card "Qtd. final calculada" iguais (sem arredondar)
     expect(within(linha).getByText('-40,0')).toBeTruthy(); // demanda
   });
 
@@ -535,7 +535,7 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     expect(botao.getAttribute('aria-controls')).toBe(linha.id);
     // o conteudo segue no DOM (leitor de tela, impressao e testes), mesmo fechado
     const rotulos = Array.from(linha.querySelectorAll('.fcr-det__rotulo')).map((r) => r.textContent);
-    expect(rotulos).toEqual(expect.arrayContaining(['Demanda', 'Qtd. final calculada', 'Saldo e ruptura', 'Em andamento', 'Embalagem', 'Decisão de compra']));
+    expect(rotulos).toEqual(expect.arrayContaining(['Qtd. final calculada', 'Saldo e ruptura', 'Em andamento', 'Decisão de compra']));
     fireEvent.click(botao);
     expect(botao.getAttribute('aria-expanded')).toBe('true');
     expect(botao.getAttribute('aria-label')).toBe('Recolher detalhes de PRODUTO 002');
@@ -552,9 +552,9 @@ describe('ForecastRelatorioCompras - meses atipicos fora da media (PR 6c)', () =
     expect(selo).toHaveLength(1);
     expect(selo[0]?.className).toBe('fcr-item__media');
     expect(selo[0]?.getAttribute('title')).toBe('A média deste item não conta o mês marcado como venda atípica.');
-    // O selo da media mora no expansor "Detalhes" do item (bloco "Média"), nao mais na celula Item.
+    // O selo da media mora no expansor "Detalhes" do item (nota de rodape, sem rotulo: o texto ja diz "Média sem"), nao mais na celula Item.
     expect(selo[0]?.closest('.fcr-detalhes')).not.toBeNull();
-    expect(selo[0]?.closest('.fcr-det')?.querySelector('.fcr-det__rotulo')?.textContent).toBe('Média');
+    expect(selo[0]?.closest('.fcr-dnote')).not.toBeNull();
     // PRODUTO 003 (sem marca) nao ganha o selo; a secao sem consumo mostra o do item dela.
     expect(screen.getByText('Média sem: ago/2026')).toBeTruthy();
     expect(screen.getAllByText(/^Média sem:/)).toHaveLength(2);
