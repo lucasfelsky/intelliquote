@@ -55,7 +55,7 @@ export default function ForecastFiltrosMenu({ ocultas, onAlternarOcultas, mostra
         onClick={() => setAberto((a) => !a)}
       >
         <Icon name="filter" size={16} />
-        Filtros
+        <span className="fc-filtros-menu__txt">Filtros</span>
         {ativos > 0 && (
           <span className="fc-filtro__conta fc-filtros-menu__conta" aria-hidden="true">
             {ativos}

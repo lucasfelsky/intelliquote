@@ -266,9 +266,22 @@ describe('Painel - ANALISE FORECAST editavel', () => {
     expect(await screen.findByText(/Quantidade fechada de PRODUTO C salva: 100 kg\. Item fora da lista de compra: passou a ser candidato a cotação\./)).toBeTruthy();
   });
 
-  it('o texto de apoio explica o efeito para itens fora da lista', async () => {
+  it('a frase de apoio saiu da tela: o texto segue no DOM so para leitor de tela e o icone "i" do titulo abre o balao', async () => {
     renderPage();
-    expect((await screen.findByText(/Clique na ANÁLISE FORECAST/)).textContent).toContain('candidato a cotação');
+    const apoio = await screen.findByText(/Coluna ANÁLISE FORECAST: Clique na célula/);
+    expect(apoio.className).toContain('sr-only');
+    expect(apoio.textContent).toContain('Enter grava, Esc cancela e campo vazio apaga');
+    expect(apoio.textContent).toContain('candidato a cotação');
+    expect(apoio.textContent).toContain('Item já em cotação fica só para leitura');
+    const dica = await screen.findByRole('button', { name: 'Como preencher a análise forecast' });
+    expect(dica.closest('th')?.textContent).toBe('ANÁLISE FORECAST');
+    expect(screen.queryByTestId('fc-analise-dica-balao')).toBeNull();
+    fireEvent.mouseEnter(dica);
+    const balao = screen.getByTestId('fc-analise-dica-balao');
+    expect(balao.getAttribute('role')).toBe('tooltip');
+    expect(balao.textContent).toContain('Enter grava, Esc cancela e campo vazio apaga');
+    expect(balao.textContent).toContain('candidato a cotação');
+    expect(balao.textContent).toContain('Item já em cotação fica só para leitura');
   });
 
   it('valor invalido: avisa, nao envia e mantem o digitado', async () => {
@@ -353,5 +366,98 @@ describe('Painel - ANALISE FORECAST editavel', () => {
     await celula('PRODUTO A');
     await waitFor(() => expect(decisoesChamadas().length).toBeGreaterThan(0));
     expect(screen.queryByRole('button', { name: rotulo('PRODUTO A') })).toBeNull();
+  });
+});
+
+describe('Painel - aviso flutuante da quantidade fechada', () => {
+  it('salvar mostra o toast (role=status) com titulo e texto, destaca a celula e nao deixa linha de texto fixa', async () => {
+    put.mockResolvedValue({ data: { acao: 'update', decisao: decisao({ quantidadeKg: 2000 }) } });
+    renderPage();
+    const campo = await abrir('PRODUTO A');
+    fireEvent.change(campo, { target: { value: '2.000' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    const toast = await screen.findByTestId('fc-toast');
+    expect(toast.getAttribute('role')).toBe('status');
+    expect(toast.getAttribute('aria-live')).toBe('polite');
+    expect(toast.querySelector('.fct__titulo')?.textContent).toBe('Quantidade salva');
+    expect(toast.querySelector('.fct__texto')?.textContent).toBe('Quantidade fechada de PRODUTO A salva: 2.000 kg.');
+    expect(toast.className).toContain('fct--salvo');
+    expect(document.querySelector('.fcae-retorno')).toBeNull();
+    expect((await botao('PRODUTO A')).className).toContain('fcae-botao--piscar');
+  });
+
+  it('remover mostra "Quantidade removida" (lixeira) e a celula nao pisca', async () => {
+    put.mockResolvedValue({ data: { acao: 'delete', decisao: null } });
+    renderPage();
+    const campo = await abrir('PRODUTO A');
+    fireEvent.change(campo, { target: { value: '' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    const toast = await screen.findByTestId('fc-toast');
+    expect(toast.querySelector('.fct__titulo')?.textContent).toBe('Quantidade removida');
+    expect(toast.querySelector('.fct__texto')?.textContent).toBe('Quantidade fechada de PRODUTO A removida.');
+    expect(toast.className).toContain('fct--removido');
+    expect((await botao('PRODUTO A')).className).not.toContain('piscar');
+  });
+
+  it('gravacoes seguidas: um aviso por vez, o novo substitui o anterior', async () => {
+    put.mockResolvedValueOnce({ data: { acao: 'update', decisao: decisao({ quantidadeKg: 2000 }) } });
+    put.mockResolvedValueOnce({ data: { acao: 'create', decisao: decisao({ productId: 45, quantidadeKg: 500, status: 'cotando' }) } });
+    renderPage();
+    let campo = await abrir('PRODUTO A');
+    fireEvent.change(campo, { target: { value: '2000' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    expect((await screen.findByTestId('fc-toast')).textContent).toContain('PRODUTO A');
+    campo = await abrir('PRODUTO E');
+    fireEvent.change(campo, { target: { value: '500' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByTestId('fc-toast').textContent).toContain('PRODUTO E'));
+    expect(screen.getAllByTestId('fc-toast')).toHaveLength(1);
+  });
+
+  it('o botao fechar tira o aviso', async () => {
+    put.mockResolvedValue({ data: { acao: 'update', decisao: decisao({ quantidadeKg: 2000 }) } });
+    renderPage();
+    const campo = await abrir('PRODUTO A');
+    fireEvent.change(campo, { target: { value: '2000' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    await screen.findByTestId('fc-toast');
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar aviso' }));
+    await waitFor(() => expect(screen.queryByTestId('fc-toast')).toBeNull());
+  });
+
+  it('erro e conflito (409) seguem como alerta persistente (role=alert), sem toast; salvar depois limpa o alerta', async () => {
+    put.mockRejectedValueOnce(new ApiError(409, null, 'conflito'));
+    put.mockResolvedValueOnce({ data: { acao: 'update', decisao: decisao({ quantidadeKg: 3000 }) } });
+    renderPage();
+    const campo = await abrir('PRODUTO A');
+    fireEvent.change(campo, { target: { value: '3000' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    const alerta = await screen.findByRole('alert');
+    expect(alerta.textContent).toContain('A lista foi recarregada');
+    expect(alerta.className).toContain('fcae-retorno--erro');
+    expect(screen.queryByTestId('fc-toast')).toBeNull();
+    fireEvent.keyDown(screen.getByRole('textbox', { name: rotulo('PRODUTO A') }), { key: 'Enter' });
+    await screen.findByTestId('fc-toast');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('valor invalido: alerta, sem toast', async () => {
+    renderPage();
+    const campo = await abrir('PRODUTO A');
+    fireEvent.change(campo, { target: { value: 'abc' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    expect((await screen.findByRole('alert')).textContent).toContain('Informe a quantidade em kg');
+    expect(screen.queryByTestId('fc-toast')).toBeNull();
+  });
+
+  it('item fora da lista: o toast carrega o aviso do efeito (candidato a cotacao)', async () => {
+    put.mockResolvedValue({
+      data: { acao: 'create', decisao: decisao({ productId: 43, quantidadeKg: 100, status: 'nao', incluidoManualmente: true }) },
+    });
+    renderPage();
+    const campo = await abrir('PRODUTO C');
+    fireEvent.change(campo, { target: { value: '100' } });
+    fireEvent.keyDown(campo, { key: 'Enter' });
+    expect((await screen.findByTestId('fc-toast')).textContent).toContain('passou a ser candidato a cotação');
   });
 });

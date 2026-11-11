@@ -164,6 +164,8 @@ export interface ColunaPainel {
   titulo?: (linha: ForecastLinha) => string | undefined;
   /** Texto so para leitor de tela (`sr-only` dentro da celula); `title` em `<td>` nao e anunciado de forma confiavel. */
   textoAcessivel?: (linha: ForecastLinha) => string | undefined;
+  /** Extra ao lado do rotulo no cabecalho (ex.: icone "i" com a dica da coluna); o `rotulo` segue sendo o texto da coluna. */
+  rotuloExtra?: ReactNode;
   /** Conteudo proprio da celula (ex.: campo editavel); nulo = o texto/destaque padrao. `texto`/`destaque` ja vem calculados. */
   celula?: (linha: ForecastLinha, base: { texto: string; destaque: string | undefined }) => ReactNode | null;
 }
@@ -366,7 +368,7 @@ function definirColunas(months: ForecastMonths): ColunaDefinida[] {
       id: 'analiseForecast',
       grupo: 'comp',
       rotulo: 'ANÁLISE FORECAST',
-      largura: 124,
+      largura: 156,
       texto: (l) => contabil1(l.analiseForecast),
       classe: (l) => (l.analiseForecast ? 'fc-cell--forte' : ''),
     },

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
+import { Icon } from '@/components/icons';
+import { InfoPopover } from '@/components/InfoPopover';
 import type { ForecastLinha } from '@/services/forecast';
 import {
   forecastDecisaoErrorMessage,
@@ -11,6 +13,8 @@ import {
 import { ID_COLUNA_ANALISE } from './forecastAnaliseDecidida';
 import {
   aplicarGravacao,
+  APOIO_ANALISE_CANDIDATO,
+  APOIO_ANALISE_PREENCHER,
   corpoDaGravacao,
   DICA_FORA_DA_LISTA,
   foraDaListaDeCompra,
@@ -24,7 +28,14 @@ import { kgBr, type ColunaPainel } from './forecastPainel';
 // Esc cancela; campo vazio apaga a decisao. Grava a mesma ForecastPurchaseDecision do relatorio e atualiza o MESMO cache
 // (forecastDecisoesKeys), sem novo GET. So a celula em edicao tem mutacao (o painel tem centenas de linhas).
 
-export type FeedbackCelula = { tipo: 'ok' | 'erro'; texto: string } | null;
+// Retorno da celula para o Painel: "ok" vira o aviso flutuante (toast); "erro" segue como alerta persistente; nulo limpa o alerta.
+export type FeedbackCelula =
+  | { tipo: 'ok'; acao: 'salvo' | 'removido'; texto: string }
+  | { tipo: 'erro'; texto: string }
+  | null;
+
+/** Duracao do destaque da celula recem gravada (CSS .fcae-botao--piscar). */
+export const PISCAR_CELULA_MS = 1500;
 
 interface CelulaProps {
   linha: ForecastLinha;
@@ -42,6 +53,7 @@ export function CelulaAnaliseEditavel({ linha, decisao, snapshotId, texto, desta
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState('');
   const [erro, setErro] = useState('');
+  const [piscar, setPiscar] = useState(false);
   const botao = useRef<HTMLButtonElement>(null);
   const campo = useRef<HTMLInputElement>(null);
   const devolverFoco = useRef(false);
@@ -60,9 +72,12 @@ export function CelulaAnaliseEditavel({ linha, decisao, snapshotId, texto, desta
       ocupado.current = false;
       setErro('');
       setEditando(false);
+      // Remocao nao pisca (a celula volta ao vazio); gravar destaca a celula por ~1,5 s.
+      setPiscar(kg !== null);
       const manual = r.decisao?.incluidoManualmente === true && decisao?.incluidoManualmente !== true;
       aoFeedback({
         tipo: 'ok',
+        acao: kg === null ? 'removido' : 'salvo',
         texto:
           kg === null
             ? `Quantidade fechada de ${nome} removida.`
@@ -80,6 +95,13 @@ export function CelulaAnaliseEditavel({ linha, decisao, snapshotId, texto, desta
       aoFeedback({ tipo: 'erro', texto: `${rotuloDoCampo(nome)}: ${msg}` });
     },
   });
+
+  // O destaque some depois de ~1,5 s (a animacao CSS acompanha; o estado so evita repeti-la ao remontar o botao).
+  useEffect(() => {
+    if (!piscar) return undefined;
+    const t = window.setTimeout(() => setPiscar(false), PISCAR_CELULA_MS);
+    return () => window.clearTimeout(t);
+  }, [piscar]);
 
   // Volta o foco ao botao so quando o teclado encerrou a edicao (Enter/Esc); clicar fora nao rouba o foco.
   useEffect(() => {
@@ -148,7 +170,7 @@ export function CelulaAnaliseEditavel({ linha, decisao, snapshotId, texto, desta
       <button
         ref={botao}
         type="button"
-        className="fcae-botao"
+        className={piscar ? 'fcae-botao fcae-botao--piscar' : 'fcae-botao'}
         aria-label={rotuloDoCampo(nome)}
         title={fora ? DICA_FORA_DA_LISTA : 'Clique para preencher a quantidade fechada'}
         onClick={abrir}
@@ -183,6 +205,24 @@ export function CelulaAnaliseEditavel({ linha, decisao, snapshotId, texto, desta
   );
 }
 
+/** Icone "i" no titulo da coluna ANALISE FORECAST: balao (hover, foco ou clique) com como preencher. So admin/comprador (quem edita). */
+export function DicaAnaliseForecast() {
+  return (
+    <InfoPopover
+      label="Como preencher a análise forecast"
+      tone="info"
+      className="fcae-dica"
+      testId="fc-analise-dica"
+      contentTestId="fc-analise-dica-balao"
+      trigger={<Icon name="info" size={14} />}
+    >
+      <strong>Quantidade fechada</strong>
+      <span>{APOIO_ANALISE_PREENCHER}</span>
+      <span>{APOIO_ANALISE_CANDIDATO}</span>
+    </InfoPopover>
+  );
+}
+
 interface OpcoesEdicao {
   snapshotId: number;
   mapa: ReadonlyMap<number, ForecastDecisao> | null;
@@ -204,6 +244,7 @@ export function colunasComEdicao(colunas: ColunaPainel[], { snapshotId, mapa, ao
     if (c.id !== ID_COLUNA_ANALISE) return c;
     return {
       ...c,
+      rotuloExtra: <DicaAnaliseForecast />,
       celula: (l, base) => {
         if (somenteLeitura(l, decisaoDaLinha(l, mapa))) return null;
         return (

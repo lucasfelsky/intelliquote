@@ -55,6 +55,12 @@ export function incluiManualmente(linha: Pick<ForecastLinha, 'AN'>, decisao: For
 export const DICA_FORA_DA_LISTA =
   'Item fora da lista de compra (sem falta): ao preencher, ele entra como incluído manualmente e passa a ser candidato a cotação.';
 
+/** Dica da coluna ANALISE FORECAST (balao do icone "i" no titulo; o mesmo texto fica no DOM para leitor de tela). */
+export const APOIO_ANALISE_PREENCHER =
+  'Clique na célula para preencher a quantidade fechada no forecast. Enter grava, Esc cancela e campo vazio apaga.';
+export const APOIO_ANALISE_CANDIDATO =
+  'Item fora da lista de compra (sem falta) preenchido passa a ser candidato a cotação. Item já em cotação fica só para leitura.';
+
 export const MOTIVO_SEM_CADASTRO = 'Item fora do cadastro do Forecast: não recebe quantidade fechada.';
 
 /** Por que a celula nao edita (nulo = edita). Papel de leitura e dado de decisoes indisponivel ficam a cargo de quem monta. */

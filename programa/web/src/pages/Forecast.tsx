@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
@@ -18,12 +18,16 @@ import { forecastDecisoesKeys, listForecastDecisoes, type ForecastDecisao } from
 import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
 import { colunasComEdicao, type FeedbackCelula } from './Forecast/ForecastPainelAnaliseEditavel';
+import { APOIO_ANALISE_CANDIDATO, APOIO_ANALISE_PREENCHER } from './Forecast/forecastAnaliseEditavel';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
 import ForecastAvisos, { ProvedorAvisos, useAviso } from './Forecast/ForecastAvisos';
 import ForecastExportarMacro from './Forecast/ForecastExportarMacro';
 import ForecastFiltroSemVenda from './Forecast/ForecastFiltroSemVenda';
 import ForecastFiltrosMenu from './Forecast/ForecastFiltrosMenu';
+import ForecastNotasIcone, { ProvedorNotas } from './Forecast/ForecastNotas';
+import { ForecastToast, useToastForecast } from './Forecast/ForecastToast';
+import { useMediaQuery } from './Forecast/useMediaQuery';
 import { InfoPopover } from '@/components/InfoPopover';
 import ForecastFontesModal from './Forecast/ForecastFontesModal';
 import { useDialogoFontes } from './Forecast/useDialogoFontes';
@@ -58,6 +62,9 @@ import {
 } from './Forecast/forecastSemVenda';
 
 const TITULO_FORECAST = 'Forecast de compras · IntelliQuote';
+
+/** Abaixo disto a busca da barra de filtros vira so a lupa (a barra segue numa linha so). Igual ao @media do CSS (.fc-busca). */
+const CONSULTA_BUSCA_COMPACTA = '(max-width: 980px)';
 
 // De onde o comprador saiu ao abrir a pagina de um item: ao voltar para a grade da MESMA quinzena o foco retorna ao link desse item.
 type OrigemDoItem = { linha: number; quinzena: number } | null;
@@ -118,6 +125,28 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
   const buscaUrl = params.get('busca') ?? '';
   const [busca, setBusca] = useState(buscaUrl);
   const termo = useDeferredValue(busca);
+  // Largura estreita (<= 980 px): a busca vira so o icone de lupa; clicar abre o campo ao lado (Esc fecha, devolvendo o foco a lupa).
+  const buscaCompacta = useMediaQuery(CONSULTA_BUSCA_COMPACTA);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const idCampoBusca = useId();
+  const lupa = useRef<HTMLButtonElement>(null);
+  const campoBusca = useRef<HTMLInputElement>(null);
+  const buscaVisivel = !buscaCompacta || buscaAberta;
+  // Os chips rolam por dentro da barra: o chip ligado sempre fica a vista (some atras da rolagem se o filtro vier da URL).
+  const grupoChips = useRef<HTMLDivElement>(null);
+  // So na horizontal (scrollIntoView poderia rolar a pagina inteira).
+  useEffect(() => {
+    const grupo = grupoChips.current;
+    const ligado = grupo?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!grupo || !ligado) return;
+    const g = grupo.getBoundingClientRect();
+    const c = ligado.getBoundingClientRect();
+    if (c.left < g.left) grupo.scrollLeft -= g.left - c.left + 8;
+    else if (c.right > g.right) grupo.scrollLeft += c.right - g.right + 8;
+  }, [filtro]);
+  useEffect(() => {
+    if (buscaCompacta && buscaAberta) campoBusca.current?.focus();
+  }, [buscaCompacta, buscaAberta]);
 
   // Voltar da pagina do item (aba Painel, Alt+seta esquerda, historico): o foco retorna ao link do item de origem; se o filtro o escondeu, a regiao da grade.
   const secao = useRef<HTMLElement>(null);
@@ -181,13 +210,28 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
   // ANALISE FORECAST editavel para admin/comprador (grava a mesma decisao do relatorio); os demais papeis so leem.
   const { user } = useAuth();
   const podeEditarAnalise = user?.role === 'admin' || user?.role === 'comprador';
-  const [feedbackAnalise, setFeedbackAnalise] = useState<FeedbackCelula>(null);
+  // Retorno da celula editavel: gravar/remover vira o aviso flutuante (toast); erro e conflito seguem como alerta persistente.
+  const [erroAnalise, setErroAnalise] = useState('');
+  const { toast, mostrar: mostrarToast, fechar: fecharToast } = useToastForecast();
+  const aoFeedbackAnalise = useCallback(
+    (f: FeedbackCelula) => {
+      if (f === null) {
+        setErroAnalise('');
+      } else if (f.tipo === 'erro') {
+        setErroAnalise(f.texto);
+      } else {
+        setErroAnalise('');
+        mostrarToast(f.acao, f.acao === 'removido' ? 'Quantidade removida' : 'Quantidade salva', f.texto);
+      }
+    },
+    [mostrarToast],
+  );
   const colunas = useMemo(() => {
     const base = colunasComDecisoes(colunasDoPainel(detail.months, { ocultas }), mapaDecisoes);
     return podeEditarAnalise
-      ? colunasComEdicao(base, { snapshotId: detail.id, mapa: mapaDecisoes, aoFeedback: setFeedbackAnalise })
+      ? colunasComEdicao(base, { snapshotId: detail.id, mapa: mapaDecisoes, aoFeedback: aoFeedbackAnalise })
       : base;
-  }, [detail.months, detail.id, ocultas, mapaDecisoes, podeEditarAnalise]);
+  }, [detail.months, detail.id, ocultas, mapaDecisoes, podeEditarAnalise, aoFeedbackAnalise]);
   const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
   const contagem = useMemo(() => contarPorFiltro(base), [base]);
   const divergencias = useMemo(() => {
@@ -232,8 +276,8 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
     <>
       <Selo detail={detail} />
       <section ref={secao} className="fc-card" aria-label="Produtos da quinzena">
-        <div className="fc-barra">
-          <div className="fc-filtros" role="group" aria-label="Filtros">
+        <div className="fc-barra fc-barra--linha">
+          <div ref={grupoChips} className="fc-filtros fc-filtros--chips" role="group" aria-label="Filtros">
             {FILTROS.map((f) => (
               <button
                 key={f.id}
@@ -246,50 +290,74 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
               </button>
             ))}
           </div>
-          <div className="fc-filtros">
-            <div className="fc-busca">
-              <label className="sr-only" htmlFor="fc-busca">
+          {buscaVisivel && (
+            <div className={buscaCompacta ? 'fc-busca fc-busca--compacta' : 'fc-busca'}>
+              <label className="sr-only" htmlFor={idCampoBusca}>
                 Buscar produto, código ou fonte
               </label>
               <Icon name="search" size={16} />
               <input
-                id="fc-busca"
+                ref={campoBusca}
+                id={idCampoBusca}
                 className="input"
                 type="search"
                 placeholder="Produto, código ou fonte"
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && buscaCompacta) {
+                    e.stopPropagation();
+                    setBuscaAberta(false);
+                    lupa.current?.focus();
+                  }
+                }}
               />
             </div>
-            <ForecastFiltrosMenu
-              ocultas={ocultas}
-              onAlternarOcultas={alternarOcultas}
-              mostrarSemVenda={mostrarSemVenda}
-              ocultaveis={ocultaveis}
-              onAlternarSemVenda={() => onMostrarSemVenda(!mostrarSemVenda)}
-            />
-            <ForecastFiltroSemVenda mostrar={mostrarSemVenda} ocultaveis={ocultaveis} />
-            <InfoPopover
-              label="Legenda do status da compra"
-              tone="info"
-              className="fc-legenda__icone"
-              testId="fc-legenda-botao"
-              trigger={<Icon name="info" size={16} />}
+          )}
+          {buscaCompacta && (
+            <button
+              ref={lupa}
+              type="button"
+              className={busca ? 'fc-busca__lupa fc-busca__lupa--ativa' : 'fc-busca__lupa'}
+              aria-label="Buscar produto, código ou fonte"
+              aria-expanded={buscaAberta}
+              aria-controls={buscaAberta ? idCampoBusca : undefined}
+              data-testid="fc-busca-lupa"
+              title={busca ? `Busca ativa: ${busca}` : undefined}
+              onClick={() => setBuscaAberta((a) => !a)}
             >
-              <strong>Status da compra</strong>
-              <ul className="fc-legenda__lista">
-                {STATUS_ORDEM.map((s) => (
-                  <li key={s} className="fc-legenda__item">
-                    <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
-                    {STATUS_ROTULO[s]}
-                  </li>
-                ))}
-              </ul>
-            </InfoPopover>
-            <span className="fc-legenda__total">
-              {visiveis.length} de {detail.linhas.length} produtos
-            </span>
-          </div>
+              <Icon name="search" size={20} />
+            </button>
+          )}
+          <ForecastFiltrosMenu
+            ocultas={ocultas}
+            onAlternarOcultas={alternarOcultas}
+            mostrarSemVenda={mostrarSemVenda}
+            ocultaveis={ocultaveis}
+            onAlternarSemVenda={() => onMostrarSemVenda(!mostrarSemVenda)}
+          />
+          <ForecastFiltroSemVenda mostrar={mostrarSemVenda} ocultaveis={ocultaveis} />
+          <ForecastNotasIcone />
+          <InfoPopover
+            label="Legenda do status da compra"
+            tone="info"
+            className="fc-legenda__icone"
+            testId="fc-legenda-botao"
+            trigger={<Icon name="info" size={20} />}
+          >
+            <strong>Status da compra</strong>
+            <ul className="fc-legenda__lista">
+              {STATUS_ORDEM.map((s) => (
+                <li key={s} className="fc-legenda__item">
+                  <i className={`fc-legenda__marca fc-status--${s}`} aria-hidden="true" />
+                  {STATUS_ROTULO[s]}
+                </li>
+              ))}
+            </ul>
+          </InfoPopover>
+          <span className="fc-legenda__total">
+            {visiveis.length} de {detail.linhas.length} produtos
+          </span>
         </div>
         {decisoes.isLoading && (
           <p className="fcad-aviso" role="status">
@@ -306,17 +374,14 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
           </p>
         )}
         {podeEditarAnalise && mapaDecisoes !== null && (
-          <p className="fcad-aviso fcae-apoio">
-            Clique na ANÁLISE FORECAST para preencher a quantidade fechada (Enter grava, Esc cancela, vazio apaga). Item
-            fora da lista de compra (sem falta) preenchido passa a ser candidato a cotação.
+          // A frase de apoio saiu da tela: virou o icone "i" no titulo da coluna. O texto segue no DOM para leitor de tela.
+          <p className="fcae-apoio sr-only">
+            Coluna ANÁLISE FORECAST: {APOIO_ANALISE_PREENCHER} {APOIO_ANALISE_CANDIDATO}
           </p>
         )}
-        {feedbackAnalise && (
-          <p
-            className={`fcad-aviso fcae-retorno fcae-retorno--${feedbackAnalise.tipo}`}
-            role={feedbackAnalise.tipo === 'erro' ? 'alert' : 'status'}
-          >
-            {feedbackAnalise.texto}
+        {erroAnalise && (
+          <p className="fcad-aviso fcae-retorno fcae-retorno--erro" role="alert">
+            {erroAnalise}
           </p>
         )}
         <ForecastGrid
@@ -328,6 +393,7 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
           mensagemVazia={mensagemVazia}
         />
       </section>
+      {toast && <ForecastToast key={toast.id} dados={toast} onFechar={fecharToast} />}
     </>
   );
 }
@@ -503,6 +569,7 @@ export default function Forecast() {
 
   return (
     <ProvedorAvisos>
+    <ProvedorNotas>
     <div className="page fc-pagina">
       <div className="page-header">
         <div>
@@ -685,6 +752,7 @@ export default function Forecast() {
         somenteDbcorp={user?.role !== 'admin'}
       />
     </div>
+    </ProvedorNotas>
     </ProvedorAvisos>
   );
 }
