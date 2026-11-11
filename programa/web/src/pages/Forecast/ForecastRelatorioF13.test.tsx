@@ -147,14 +147,15 @@ describe('F13-D: relatorio de compras (markup)', () => {
     expect(tabela.querySelector('tbody')?.hasAttribute('hidden')).toBe(false);
   });
 
-  it('Saldo zera e Ruptura viram linhas da celula Data-limite (etapa 4): o mes leva a classe mono e a data da ruptura segue no texto', async () => {
+  it('Saldo zera e Ruptura ficam no card "Saldo e ruptura" do expansor: o mes leva a classe mono e a data da ruptura segue no texto', async () => {
     get.mockResolvedValue({ data: relatorio() });
     renderRelatorio(false);
     const zera = await screen.findByText('nov/2026');
     expect(zera.className).toBe('fcr-mono');
-    const celula = zera.closest('td');
-    expect(celula?.querySelector('.fcr-limite__prazos')).not.toBeNull();
-    expect(screen.getByText('21/11/2026').closest('td')).toBe(celula);
+    const card = zera.closest('.fcr-dc');
+    expect(card).not.toBeNull();
+    expect(card?.closest('.fcr-detalhes')).not.toBeNull();
+    expect(screen.getByText('21/11/2026').closest('.fcr-dc')).toBe(card);
     expect(screen.queryByRole('columnheader', { name: 'Saldo zera' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: 'Ruptura' })).toBeNull();
   });
