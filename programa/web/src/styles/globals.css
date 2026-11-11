@@ -690,6 +690,9 @@ h3 {
   font-family: var(--rf-font-sans);
   position: sticky;
   top: 0;
+  /* sticky cria contexto de empilhamento: sem z-index a dica (.sidebar__dica, fixa) fica presa no nivel 0 e passa por baixo
+     dos cards/barras da pagina. 50 < modais/toasts (>= 80), entao nenhum overlay fica sob a sidebar. */
+  z-index: 50;
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
