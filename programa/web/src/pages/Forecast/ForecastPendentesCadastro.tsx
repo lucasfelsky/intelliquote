@@ -10,6 +10,7 @@ import {
   type ForecastPendentesResumo,
 } from '@/services/forecastPendentes';
 import { useAviso } from './ForecastAvisos';
+import { useNotas } from './ForecastNotas';
 import ForecastCompletarCadastroModal, { type ResultadoCadastro } from './ForecastCompletarCadastroModal';
 import { inteiroBr } from './forecastPainel';
 import {
@@ -51,6 +52,8 @@ interface TabelaProps {
   semVendaRecente?: ForecastPendentesResumo['semVendaRecente'];
   /** Amostras (prefixo + digito) sem cadastro, ignoradas pela regra e so contadas; ausente em backend antigo. */
   amostrasIgnoradas?: ForecastPendentesResumo['amostrasIgnoradas'];
+  /** As notas de resumo (sem venda, amostras, historico) ja estao no icone de notas da barra do Painel: nao repetir sob a tabela. */
+  notasNoIcone?: boolean;
   /** Quem completa (admin/comprador) ve a coluna Acao; os demais so leem. */
   podeCompletar: boolean;
   onCompletar?: (codigo: string, gatilho: HTMLElement) => void;
@@ -69,6 +72,7 @@ export function TabelaPendentes({
   regra,
   semVendaRecente,
   amostrasIgnoradas,
+  notasNoIcone = false,
   podeCompletar,
   onCompletar,
   onReativar,
@@ -169,10 +173,10 @@ export function TabelaPendentes({
       {omitidos > 0 && (
         <p className="fcp-nota">… e mais {contagemTexto(omitidos, 'código', 'códigos')} (lista cortada nos primeiros itens).</p>
       )}
-      {semVendaTexto && <p className="fcp-nota">{semVendaTexto}</p>}
+      {!notasNoIcone && semVendaTexto && <p className="fcp-nota">{semVendaTexto}</p>}
       {saldoTexto && <p className="fcp-nota">{saldoTexto}</p>}
-      {amostrasTexto && <p className="fcp-nota">{amostrasTexto}</p>}
-      {historicoTexto && <p className="fcp-nota">{historicoTexto}</p>}
+      {!notasNoIcone && amostrasTexto && <p className="fcp-nota">{amostrasTexto}</p>}
+      {!notasNoIcone && historicoTexto && <p className="fcp-nota">{historicoTexto}</p>}
       {temInativo && (
         <p className="fcp-nota">
           {textoProdutoInativo(null)} {onReativar ? TEXTO_REATIVACAO_NO_PAINEL : TEXTO_REATIVACAO_INDISPONIVEL}
@@ -396,6 +400,17 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
         }
       : null,
   );
+  // Notas da quinzena (refino de UX): com o provedor, as frases fixas vao para o icone de prancheta da barra de filtros do
+  // Painel e saem do fluxo da pagina; sem ele (testes isolados) seguem no corpo, como antes.
+  const aplicavel = dados?.aplicavel === true;
+  const notaNenhum = aplicavel && dados.totalItens === 0 ? nenhumPendenteTexto(dados.regra) : null;
+  const notaSemVenda = aplicavel ? semVendaRecenteTexto(dados.semVendaRecente, inteiroBr) : null;
+  const notaAmostras = aplicavel ? amostrasIgnoradasTexto(dados.amostrasIgnoradas) : null;
+  const notaHistorico = aplicavel ? historicoAusenteTexto(dados.regra) : null;
+  const nenhumNoIcone = useNotas('pendentes', notaNenhum ? { texto: notaNenhum, tom: 'atencao' } : null);
+  const semVendaNoIcone = useNotas('sem-venda', notaSemVenda ? { texto: notaSemVenda, tom: 'neutro' } : null);
+  const amostrasNoIcone = useNotas('amostras', notaAmostras ? { texto: notaAmostras, tom: 'neutro' } : null);
+  const historicoNoIcone = useNotas('historico', notaHistorico ? { texto: notaHistorico, tom: 'atencao' } : null);
   const status = mensagem ? (
     <div ref={statusRef} className="alert alert--success" role="status" tabIndex={-1}>
       {mensagem}
@@ -427,16 +442,23 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
   if (!dados || !dados.aplicavel) return null;
 
   if (dados.totalItens === 0) {
+    // Tudo no icone: sobra so o retorno de uma acao (mensagem ou erro), se houver.
+    const notasNoCorpo = [
+      [semVendaNoIcone, notaSemVenda],
+      [amostrasNoIcone, notaAmostras],
+      [historicoNoIcone, notaHistorico],
+    ].flatMap(([noIcone, nota]) => (!noIcone && typeof nota === 'string' ? [nota] : []));
+    if (nenhumNoIcone && notasNoCorpo.length === 0 && !status && !alertaReativar) return null;
     return (
       <section className="fcp" aria-label="Pendentes de cadastro">
         {status}
         {alertaReativar}
-        <p className="fcp-estado">{nenhumPendenteTexto(dados.regra)}</p>
-        {[
-          semVendaRecenteTexto(dados.semVendaRecente, inteiroBr),
-          amostrasIgnoradasTexto(dados.amostrasIgnoradas),
-          historicoAusenteTexto(dados.regra),
-        ].map((nota) => nota && <p key={nota} className="fcp-nota">{nota}</p>)}
+        {!nenhumNoIcone && <p className="fcp-estado">{nenhumPendenteTexto(dados.regra)}</p>}
+        {notasNoCorpo.map((nota) => (
+          <p key={nota} className="fcp-nota">
+            {nota}
+          </p>
+        ))}
       </section>
     );
   }
@@ -464,6 +486,7 @@ export default function ForecastPendentesCadastro({ snapshotId, label, podeEdita
             regra={dados.regra}
             semVendaRecente={dados.semVendaRecente}
             amostrasIgnoradas={dados.amostrasIgnoradas}
+            notasNoIcone={semVendaNoIcone || amostrasNoIcone || historicoNoIcone}
             podeCompletar={podeEditar}
             onCompletar={dialogo.abrir}
             onReativar={(productId, nome) => {

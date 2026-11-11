@@ -67,11 +67,12 @@ const MOCK: Record<string, string> = {
   ellipsis: 'M5 12h.01M12 12h.01M19 12h.01',
   'file-x': 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13l4 5M13 13l-4 5',
   printer: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z',
+  clipboard: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M10 3h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM9 12h6M9 16h4',
 };
 
 describe('icons', () => {
-  it('tem os 61 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5, os 10 da F6/F7, os 3 da F8/F9 os 10 da F10/F11 e os 4 da F13-C)', () => {
-    expect(ICON_NAMES).toHaveLength(62);
+  it('tem os 63 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5, os 10 da F6/F7, os 3 da F8/F9 os 10 da F10/F11, os 4 da F13-C e a prancheta das notas do Painel)', () => {
+    expect(ICON_NAMES).toHaveLength(63);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
@@ -113,7 +114,7 @@ describe('icons', () => {
   });
 
   it('nenhum icone repete o path de outro', () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(62);
+    expect(new Set(Object.values(ICONS)).size).toBe(63);
   });
 
   it.each(ICON_NAMES)('<Icon name="%s"> renderiza svg decorativo de traco com currentColor', (name) => {

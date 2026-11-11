@@ -158,6 +158,7 @@ export default function ForecastGrid({
                   .join(' ')}
               >
                 {c.rotulo}
+                {c.rotuloExtra}
               </th>
             ))}
           </tr>
