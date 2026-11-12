@@ -142,8 +142,8 @@ describe('shell F2: foco visivel (anel por box-shadow, sem outline)', () => {
 });
 
 describe('shell F2: alvo de toque (F2-D2)', () => {
-  it('mouse segue o canvas v72: tema 40 e Sair 44', () => {
-    expect(decl('.sidebar__theme').height).toBe('40px');
+  it('paridade com o Portal: tema 44 e Sair 44', () => {
+    expect(decl('.sidebar__theme').height).toBe('44px');
     expect(decl('.sidebar__logout').height).toBe('44px');
   });
 
@@ -153,7 +153,7 @@ describe('shell F2: alvo de toque (F2-D2)', () => {
   });
 });
 
-describe('shell F2b: rodape da sidebar (canvas v72)', () => {
+describe('shell F2b: rodape da sidebar (paridade Portal COMEX)', () => {
   it('.sidebar__footer: empurrado para baixo, coluna, gap 6', () => {
     const footer = decl('.sidebar__footer');
     expect(footer['margin-top']).toBe('auto');
@@ -161,15 +161,15 @@ describe('shell F2b: rodape da sidebar (canvas v72)', () => {
     expect(footer.gap).toBe('6px');
   });
 
-  it.each(['.sidebar__theme', '.sidebar__logout'])('%s: 176 centralizado, padding 0 14px, gap 12, raio do botao, 600 13px', (selector) => {
+  it.each(['.sidebar__theme', '.sidebar__logout'])('%s: largura do bloco, alinhado a esquerda, padding 0 0 0 16px, gap 12, raio do botao, 600 13px', (selector) => {
     const botao = decl(selector);
-    expect(botao['align-self'], selector).toBe('center');
-    expect(botao.width, selector).toBe('176px');
+    expect(botao['align-self'], selector).toBe('stretch');
+    expect(botao.width, selector).toBe('100%');
     expect(botao['box-sizing'], selector).toBe('border-box');
-    expect(botao.padding, selector).toBe('0 14px');
+    expect(botao.padding, selector).toBe('0 0 0 16px');
     expect(botao.gap, selector).toBe('12px');
-    expect(botao['justify-content'], selector).toBe('center');
-    expect(botao['text-align'], selector).toBe('center');
+    expect(botao['justify-content'], selector).toBe('flex-start');
+    expect(botao['text-align'], selector).toBe('left');
     expect(botao.border, selector).toBe('0');
     expect(botao['border-radius'], selector).toBe('var(--rf-radius-button)');
     expect(botao.background, selector).toBe('transparent');
@@ -184,11 +184,12 @@ describe('shell F2b: rodape da sidebar (canvas v72)', () => {
     expect(hover.color, selector).toBe('var(--rf-sidebar-ink)');
   });
 
-  it('.sidebar__signature: centralizada, padding-top 8, sem clique nem selecao', () => {
+  it('.sidebar__signature: alinhada a esquerda (recuo 14), 14 acima, sem clique nem selecao', () => {
     const assinatura = decl('.sidebar__signature');
     expect(assinatura.display).toBe('flex');
-    expect(assinatura['justify-content']).toBe('center');
-    expect(assinatura['padding-top']).toBe('8px');
+    expect(assinatura['justify-content']).toBe('flex-start');
+    expect(assinatura.padding).toBe('14px 0 0 14px');
+    expect(assinatura['padding-top']).toBeUndefined();
     expect(assinatura['pointer-events']).toBe('none');
     expect(assinatura['user-select']).toBe('none');
   });
@@ -231,6 +232,45 @@ describe('shell F2b: rodape da sidebar (canvas v72)', () => {
   it('o seletor segmentado .theme-toggle saiu de TODO o CSS (regiao e fora dela)', () => {
     expect(region).not.toContain('theme-toggle');
     expect(outside).not.toContain('theme-toggle');
+  });
+});
+
+describe('shell F2b: rodape alinhado ao eixo dos icones do menu (paridade Portal)', () => {
+  const px = (value: string | undefined, index: number) => Number.parseFloat((value ?? '').split(' ')[index] ?? '');
+  const sidebarPadLeft = px(decl('.sidebar').padding, 1);
+  const eixoMenu = sidebarPadLeft + px(decl('.sidebar__link').padding, 3) + Number.parseFloat(decl('.sidebar__icon').width ?? '') / 2;
+
+  it('o icone do menu fica no eixo x=36 (12 + 15 + 9)', () => {
+    expect(eixoMenu).toBe(36);
+  });
+
+  it('o icone dos botoes do rodape tem 16px (fonte do componente)', () => {
+    expect(readSource('../components/Sidebar.tsx')).toContain('<Icon name="logout" size={16} />');
+    expect(readSource('../components/ThemeToggle.tsx')).toContain('size={16}');
+  });
+
+  it.each(['.sidebar__theme', '.sidebar__logout'])('%s: icone de 16px no mesmo eixo dos icones do menu', (selector) => {
+    expect(sidebarPadLeft + px(decl(selector).padding, 3) + 16 / 2, selector).toBe(eixoMenu);
+  });
+
+  it.each(['.sidebar--colapsada .sidebar__theme', '.sidebar--colapsada .sidebar__logout'])(
+    '%s: recolhida mantem padding e gap (sem width), so o texto some',
+    (selector) => {
+      const botao = mediaDecl('@media (min-width: 881px)', selector);
+      expect(botao.width, selector).toBeUndefined();
+      expect(botao.padding, selector).toBeUndefined();
+      expect(botao.gap, selector).toBeUndefined();
+    },
+  );
+
+  it('recolhida: texto com max-width 0 e assinatura escondida', () => {
+    expect(mediaDecl('@media (min-width: 881px)', '.sidebar--colapsada .sidebar__theme span')['max-width']).toBe('0');
+    expect(mediaDecl('@media (min-width: 881px)', '.sidebar--colapsada .sidebar__signature').display).toBe('none');
+  });
+
+  it('assinatura: recuo esquerdo de 14 e alinhada a esquerda', () => {
+    expect(px(decl('.sidebar__signature').padding, 3)).toBe(14);
+    expect(decl('.sidebar__signature')['justify-content']).toBe('flex-start');
   });
 });
 
