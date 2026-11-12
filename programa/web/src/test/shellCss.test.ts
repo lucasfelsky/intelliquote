@@ -184,11 +184,11 @@ describe('shell F2b: rodape da sidebar (paridade Portal COMEX)', () => {
     expect(hover.color, selector).toBe('var(--rf-sidebar-ink)');
   });
 
-  it('.sidebar__signature: alinhada a esquerda (recuo 14), 14 acima, sem clique nem selecao', () => {
+  it('.sidebar__signature: centralizada (sem recuo lateral), 14 acima, sem clique nem selecao', () => {
     const assinatura = decl('.sidebar__signature');
     expect(assinatura.display).toBe('flex');
-    expect(assinatura['justify-content']).toBe('flex-start');
-    expect(assinatura.padding).toBe('14px 0 0 14px');
+    expect(assinatura['justify-content']).toBe('center');
+    expect(assinatura.padding).toBe('14px 0 0');
     expect(assinatura['padding-top']).toBeUndefined();
     expect(assinatura['pointer-events']).toBe('none');
     expect(assinatura['user-select']).toBe('none');
@@ -268,9 +268,21 @@ describe('shell F2b: rodape alinhado ao eixo dos icones do menu (paridade Portal
     expect(mediaDecl('@media (min-width: 881px)', '.sidebar--colapsada .sidebar__signature').display).toBe('none');
   });
 
-  it('assinatura: recuo esquerdo de 14 e alinhada a esquerda', () => {
-    expect(px(decl('.sidebar__signature').padding, 3)).toBe(14);
-    expect(decl('.sidebar__signature')['justify-content']).toBe('flex-start');
+  it('assinatura: centro da logo no centro da sidebar expandida (256/2 = 128)', () => {
+    const largura = Number.parseFloat((decl('.app-shell')['grid-template-columns'] ?? '').split(' ')[0] ?? '');
+    const sidebarPadDireita = px(decl('.sidebar').padding, 1);
+    const assinatura = decl('.sidebar__signature');
+    // shorthand de 3 valores (cima, laterais, baixo): indice 1 vale para esquerda e direita
+    const assinaturaPad = px(assinatura.padding, 1);
+    expect(largura).toBe(256);
+    expect(sidebarPadLeft).toBe(sidebarPadDireita);
+    expect(assinaturaPad).toBe(0);
+    expect(assinatura['justify-content']).toBe('center');
+    const centro = sidebarPadLeft + (largura - sidebarPadLeft - sidebarPadDireita - assinaturaPad - assinaturaPad) / 2;
+    expect(centro).toBe(128);
+    // o rodape nao pode deslocar o centro (stretch padrao e sem padding lateral)
+    expect(decl('.sidebar__footer')['align-items']).toBeUndefined();
+    expect(decl('.sidebar__footer').padding).toBeUndefined();
   });
 });
 

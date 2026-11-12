@@ -851,11 +851,11 @@ h3 {
   color: var(--rf-sidebar-ink);
 }
 
-/* assinatura "sq química" (SqLogo, tom dark): alinhada a esquerda (recuo de 14px como no Portal), decorativa, sem foco nem clique */
+/* assinatura "sq química" (SqLogo, tom dark): centralizada na largura do rodape (centro em 128 = 256/2; sidebar com padding lateral simetrico de 12), decorativa, sem foco nem clique */
 .sidebar__signature {
   display: flex;
-  justify-content: flex-start;
-  padding: 14px 0 0 14px;
+  justify-content: center;
+  padding: 14px 0 0;
   pointer-events: none;
   user-select: none;
 }
