@@ -19,6 +19,7 @@ function renderAt(path: string) {
           <Route path="/manual" element={<div>pagina-manual</div>} />
           <Route path="/ajuda" element={<Navigate to="/manual" replace />} />
           <Route path="/manualx" element={<div>pagina-manualx</div>} />
+          <Route path="/indent/clientes" element={<div>pagina-indent-clientes</div>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -81,5 +82,18 @@ describe('ComercialRouteGuard', () => {
     mockRole = 'comprador';
     renderAt('/cotacoes');
     expect(screen.getByText('pagina-cotacoes')).toBeTruthy();
+  });
+
+  it('comercial em /indent/clientes volta a /solicitacoes (o Indent e so da equipe COMEX)', () => {
+    mockRole = 'comercial';
+    renderAt('/indent/clientes');
+    expect(screen.getByText('pagina-solicitacoes')).toBeTruthy();
+    expect(screen.queryByText('pagina-indent-clientes')).toBeNull();
+  });
+
+  it.each(['viewer', 'gestor', 'comprador', 'admin'])('%s em /indent/clientes permanece', (role) => {
+    mockRole = role;
+    renderAt('/indent/clientes');
+    expect(screen.getByText('pagina-indent-clientes')).toBeTruthy();
   });
 });

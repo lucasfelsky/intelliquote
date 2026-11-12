@@ -17,6 +17,16 @@ interface SidebarProps {
   /** Sidebar recolhida (so icones). O botao de recolher so aparece quando `onAlternar` e passado. */
   colapsada?: boolean;
   onAlternar?: () => void;
+  /** Variante do IQ Indent (selo "Indent" na marca, "Voltar ao IntelliQuote" e titulo de secao). Sem estas props o markup e o do IQ, byte a byte. */
+  variant?: 'indent';
+  /** Selo curto abaixo do nome da marca (ex.: "Indent"). */
+  brandTag?: string;
+  /** Link "Voltar" numa navegacao propria acima da principal (renderizado como os demais links). */
+  backLink?: NavItem;
+  /** Titulo de secao (estilo do rotulo Administracao) acima da lista principal. */
+  sectionTitle?: string;
+  /** aria-label da navegacao principal (padrao: "Navegação principal"). */
+  navLabel?: string;
 }
 
 export default function Sidebar({
@@ -27,6 +37,11 @@ export default function Sidebar({
   onLogout,
   colapsada = false,
   onAlternar,
+  variant,
+  brandTag,
+  backLink,
+  sectionTitle,
+  navLabel,
 }: SidebarProps) {
   // Dica do icone quando recolhida: fixa (position: fixed), porque a sidebar rola e cortaria uma dica absoluta.
   const [dica, setDica] = useState<{ texto: string; top: number; left: number } | null>(null);
@@ -78,11 +93,22 @@ export default function Sidebar({
     );
   }
 
+  // O link "Voltar" abre a cascata do texto (--k = 0); os itens principais seguem a partir de 1.
+  const deslocamento = backLink ? 1 : 0;
+  const principais = items.map((item, i) => renderLink(item, i + deslocamento));
+
   return (
-    <aside className={`sidebar${colapsada ? ' sidebar--colapsada' : ''}`}>
+    <aside className={`sidebar${colapsada ? ' sidebar--colapsada' : ''}${variant === 'indent' ? ' sidebar--indent' : ''}`}>
       <div className="sidebar__brand">
         <BrandMark tone="dark" size={40} />
-        <span className="sidebar__brand-name">IntelliQuote</span>
+        {brandTag ? (
+          <span className="sidebar__brand-text">
+            <span className="sidebar__brand-name">IntelliQuote</span>
+            <span className="sidebar__brand-tag">{brandTag}</span>
+          </span>
+        ) : (
+          <span className="sidebar__brand-name">IntelliQuote</span>
+        )}
         {onAlternar && (
           <button
             type="button"
@@ -97,16 +123,28 @@ export default function Sidebar({
           </button>
         )}
       </div>
-      <nav id="sidebar-nav" className="sidebar__nav" aria-label="Navegação principal">
-        <ul>{items.map((item, i) => renderLink(item, i))}</ul>
+      {backLink && (
+        <nav className="sidebar__nav sidebar__nav--voltar" aria-label="Voltar">
+          <ul>{renderLink(backLink, 0)}</ul>
+        </nav>
+      )}
+      <nav id="sidebar-nav" className="sidebar__nav" aria-label={navLabel ?? 'Navegação principal'}>
+        {sectionTitle ? (
+          <div className="sidebar__group">
+            <p className="sidebar__group-title">{sectionTitle}</p>
+            <ul>{principais}</ul>
+          </div>
+        ) : (
+          <ul>{principais}</ul>
+        )}
         {adminHeader && adminItems.length > 0 && (
           <div className="sidebar__group">
             <p className="sidebar__group-title">Administração</p>
-            <ul>{adminItems.map((item, i) => renderLink(item, items.length + i))}</ul>
+            <ul>{adminItems.map((item, i) => renderLink(item, items.length + deslocamento + i))}</ul>
           </div>
         )}
       </nav>
-      <footer className="sidebar__footer" style={{ '--k': items.length + adminItems.length } as CSSProperties}>
+      <footer className="sidebar__footer" style={{ '--k': items.length + adminItems.length + deslocamento } as CSSProperties}>
         <ThemeToggle />
         <button type="button" className="sidebar__logout" onClick={onLogout} {...dicaProps('Sair')}>
           <Icon name="logout" size={16} />

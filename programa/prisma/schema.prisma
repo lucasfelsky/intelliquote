@@ -1408,3 +1408,112 @@ model ForecastLeadTimeEvent {
   @@index([sourceId])
   @@index([scopeType, countryCode])
 }
+
+// ---------------------------------------------------------------------------------------------
+// IQ Indent (PR 1: cadastros). Cadastros PROPRIOS do Indent, separados do IntelliQuote.
+// Sem FK para Supplier/CatalogItem/QuoteRequest/CommercialRequest/User: FKs so entre tabelas Indent.
+// Sem exclusao fisica (inativar = isActive=false), por isso sem deletedAt. `ownerName` e texto (vem do
+// Pipedrive em PR futuro); quem alterou fica no AuditLog.performedById.
+// ---------------------------------------------------------------------------------------------
+enum IndentSupplierRuleMode {
+  LIVRE
+  APROVADOS
+  BLOQUEIO
+}
+
+enum IndentSupplierType {
+  FABRICANTE
+  TRADING
+  IMPORTADO
+}
+
+enum IndentProductOrigin {
+  CADASTRADO
+  LIVRE
+}
+
+model IndentClient {
+  id               Int                        @id @default(autoincrement())
+  name             String
+  cnpj             String                     @unique // so digitos
+  city             String?
+  ownerName        String? // responsavel (texto)
+  pipedriveOrgId   Int?                       @unique
+  supplierRuleMode IndentSupplierRuleMode     @default(LIVRE)
+  ruleReason       String?
+  isActive         Boolean                    @default(true)
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+  supplierRules    IndentClientSupplierRule[]
+
+  @@index([isActive])
+  @@index([name])
+}
+
+model IndentClientSupplierRule {
+  id         Int            @id @default(autoincrement())
+  clientId   Int
+  supplierId Int
+  createdAt  DateTime       @default(now())
+  client     IndentClient   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  supplier   IndentSupplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@unique([clientId, supplierId])
+  @@index([supplierId])
+}
+
+model IndentSupplier {
+  id              Int                        @id @default(autoincrement())
+  name            String
+  nameKey         String                     @unique
+  country         String?
+  contactName     String?
+  type            IndentSupplierType         @default(TRADING)
+  defaultCurrency String                     @default("USD")
+  defaultIncoterm Incoterm                   @default(CFR)
+  hasPartnership  Boolean                    @default(false)
+  importedFromIq  Boolean                    @default(false)
+  isActive        Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  clientRules     IndentClientSupplierRule[]
+  products        IndentSupplierProduct[]
+
+  @@index([isActive])
+}
+
+model IndentProduct {
+  id                  Int                     @id @default(autoincrement())
+  name                String // nome comercial / codigo do fabricante
+  nameKey             String                  @unique
+  acronym             String? // sigla
+  manufacturer        String?
+  cas                 String?
+  unit                String                  @default("kg")
+  synonyms            String[]                @default([])
+  notes               String?
+  origin              IndentProductOrigin     @default(CADASTRADO)
+  sourceRequestNumber String? // NNN/AA do item livre (texto, sem FK)
+  importedFromIq      Boolean                 @default(false)
+  isActive            Boolean                 @default(true)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  suppliers           IndentSupplierProduct[]
+
+  @@index([isActive])
+  @@index([origin])
+}
+
+// Vinculo fornecedor x produto. Cascade no fornecedor (o vinculo e atributo dele); Restrict no produto
+// (compartilhado por varios fornecedores e, a partir do PR 2, por itens de solicitacao).
+model IndentSupplierProduct {
+  id         Int            @id @default(autoincrement())
+  supplierId Int
+  productId  Int
+  createdAt  DateTime       @default(now())
+  supplier   IndentSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product    IndentProduct  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([supplierId, productId])
+  @@index([productId])
+}

@@ -10,6 +10,7 @@ import { creditPartnerRoutes } from './CreditPartnerRoutes';
 import { creditSupportRoutes } from './CreditSupportRoutes';
 import { forecastRoutes } from './ForecastRoutes';
 import { forwarderRoutes } from './ForwarderRoutes';
+import { indentRoutes } from './IndentRoutes';
 import { emailTemplateRoutes } from './EmailTemplateRoutes';
 import { portalIntegrationsRoutes } from './PortalIntegrationsRoutes';
 import { quoteRequestRoutes } from './QuoteRequestRoutes';
@@ -46,5 +47,6 @@ router.use('/api/v1', attachmentRoutes);
 router.use('/api/v1', userRoutes);
 router.use('/api/v1/company-profile', companyProfileRoutes);
 router.use('/api/v1/email-templates', emailTemplateRoutes);
+router.use('/api/v1/indent', indentRoutes);
 
 export { router };

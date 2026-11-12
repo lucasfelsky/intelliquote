@@ -107,12 +107,13 @@ function fimDoBloco(css: string, desde: number): number {
 }
 
 describe('F13: regiao `tela F13` (preparada vazia na F13-0)', () => {
-  it('existe uma vez, logo depois da tela F12 (so espaco entre elas) e e a ultima das regioes', () => {
+  it('existe uma vez, logo depois da tela F12 (so espaco entre elas) e so e seguida da tela F14 (a ultima das regioes)', () => {
     expect(regiao).toBeDefined();
     const nomes = regs.map((r) => r.nome);
     expect(nomes.filter((n) => n === NOME)).toHaveLength(1);
-    expect(nomes.at(-1)).toBe(NOME);
-    expect(nomes.at(-2)).toBe('tela F12');
+    expect(nomes.at(-1)).toBe('tela F14');
+    expect(nomes.at(-2)).toBe(NOME);
+    expect(nomes.at(-3)).toBe('tela F12');
     const f12 = regs.find((r) => r.nome === 'tela F12');
     expect(rawLf.slice(f12?.fim ?? 0, regiao?.inicio ?? 0).trim()).toBe('');
     expect(rawLf.split(`/* >>> ${NOME} (Suite COMEX) >>> */`)).toHaveLength(2);
@@ -249,7 +250,13 @@ describe('F13-0b: sentinelas de tokens por frente na ancora (nos 2 blocos)', () 
   const tFecha = (s: string) => `/* -- <<< tokens F13-${s} -- */`;
   const posicoes = [...rawLf.matchAll(/\/\* tokens F13 \(forecast\) \*\//g)].map((m) => m.index ?? 0);
   // faixa da ancora: da ancora ate o fim do bloco de token (a "}" que fecha o :root; comentarios com "}" nao contam)
-  const faixas = posicoes.map((p) => rawLf.slice(p, fimDoBloco(rawLf, p)));
+  // A faixa termina na ancora `tokens F14 (indent)` quando ela existir no mesmo bloco: os tokens do Indent nao sao "--rf-* fora de um par F13".
+  const ANCORA_F14 = '/* tokens F14 (indent) */';
+  const faixas = posicoes.map((p) => {
+    const fim = fimDoBloco(rawLf, p);
+    const f14 = rawLf.indexOf(ANCORA_F14, p);
+    return rawLf.slice(p, f14 >= 0 && f14 < fim ? f14 : fim);
+  });
   const nomesBloco = ['claro', 'escuro'];
   const arquivoDe = (s: string) => `suiteComexTokens.f13${s.toLowerCase()}.json`;
 

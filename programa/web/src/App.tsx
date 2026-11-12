@@ -24,6 +24,9 @@ import Templates from '@/pages/Templates';
 import MinhaConta from '@/pages/MinhaConta';
 import Solicitacoes from '@/pages/Solicitacoes';
 import Forecast from '@/pages/Forecast';
+import IndentCatalogo from '@/pages/Indent/IndentCatalogo';
+import IndentFornecedores from '@/pages/Indent/IndentFornecedores';
+import IndentClientes from '@/pages/Indent/IndentClientes';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -89,6 +92,10 @@ export default function App() {
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/forecast" element={<Forecast />} />
                   <Route path="/forecast/item/:linha" element={<Forecast />} />
+                  <Route path="/indent" element={<Navigate to="/indent/catalogo" replace />} />
+                  <Route path="/indent/catalogo" element={<IndentCatalogo />} />
+                  <Route path="/indent/fornecedores" element={<IndentFornecedores />} />
+                  <Route path="/indent/clientes" element={<IndentClientes />} />
                   <Route path="/manual" element={<Manual />} />
                   <Route path="/ajuda" element={<Navigate to="/manual" replace />} />
                   <Route path="/auditoria" element={<Auditoria />} />
