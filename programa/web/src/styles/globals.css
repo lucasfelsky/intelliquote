@@ -696,9 +696,10 @@ h3 {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--rf-sidebar-seg-border) transparent;
+  /* sem barra visivel: a classica de ~10px estreitava a coluna para 246px e tirava a assinatura do centro 128px; rola por roda/toque/teclado/foco */
+  scrollbar-width: none;
 }
+.sidebar::-webkit-scrollbar { display: none; }
 
 .sidebar__brand {
   position: relative;
@@ -1122,9 +1123,6 @@ h3 {
   }
   .sidebar--colapsada .sidebar__group { padding-top: 4px; border-top: 1px solid var(--rf-sidebar-seg-border); }
   .sidebar--colapsada .sidebar__signature { display: none; }
-  /* sem barra de rolagem no trilho de icones: ela tira ~10px da largura e o icone ativo sai do centro do destaque (a rolagem por roda/teclado segue) */
-  .sidebar--colapsada { scrollbar-width: none; }
-  .sidebar--colapsada::-webkit-scrollbar { display: none; }
 }
 
 /* <= 880: sidebar (navy) empilhada acima da topbar, sem hamburguer (F12) */

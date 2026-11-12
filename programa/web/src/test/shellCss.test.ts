@@ -79,7 +79,7 @@ describe('shell F2: layout e medidas do mock', () => {
     expect(decl('.app-shell__content')['max-width']).toBe('1200px');
   });
 
-  it('.sidebar: 256 de coluna, gradiente por token, sticky 100vh com rolagem interna (F2-D7)', () => {
+  it('.sidebar: 256 de coluna, gradiente por token, sticky 100vh com rolagem interna sem barra visivel (nao reserva gutter) (F2-D7)', () => {
     const sidebar = decl('.sidebar');
     expect(sidebar.padding).toBe('24px 12px 18px');
     expect(sidebar.gap).toBe('24px');
@@ -87,6 +87,10 @@ describe('shell F2: layout e medidas do mock', () => {
     expect(sidebar.position).toBe('sticky');
     expect(sidebar.height).toBe('100vh');
     expect(sidebar['overflow-y']).toBe('auto');
+    expect(sidebar['overflow-x']).toBe('hidden');
+    expect(sidebar['scrollbar-width']).toBe('none');
+    expect(sidebar['scrollbar-color']).toBeUndefined();
+    expect(decl('.sidebar::-webkit-scrollbar').display).toBe('none');
   });
 
   it('.sidebar__link: altura 44, raio do botao, 14px/600, padding 0 12px 0 15px', () => {
@@ -352,9 +356,10 @@ describe('shell F2: nenhuma regra antiga do shell fora da regiao', () => {
 });
 
 describe('shell F2: botao de recolher a sidebar', () => {
-  it('recolhida, a sidebar esconde a barra de rolagem (ela estreitava o destaque e descentralizava o icone ativo)', () => {
-    expect(region).toContain('.sidebar--colapsada { scrollbar-width: none; }');
-    expect(region).toContain('.sidebar--colapsada::-webkit-scrollbar { display: none; }');
+  it('a regra de scrollbar nao depende do estado recolhido: a barra classica de 10px estreitava a sidebar para 246px e deslocava icone ativo e assinatura (centro 122,8px em vez de 128px)', () => {
+    expect(region).not.toContain('.sidebar--colapsada { scrollbar-width');
+    expect(region).not.toContain('.sidebar--colapsada::-webkit-scrollbar');
+    expect(mediaDecl('@media (max-width: 880px)', '.sidebar')['scrollbar-width']).toBeUndefined();
   });
 
   it('a marca nao encolhe (flex: none): em janela baixa a sidebar rola e, encolhida, o botao de recolher cairia sobre o 1o link', () => {
