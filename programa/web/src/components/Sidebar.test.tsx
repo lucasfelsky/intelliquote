@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { ADMIN_NAV, COMEX_ROLES, PRIMARY_NAV, filterNavByRole } from './navConfig';
+import { ADMIN_NAV, COMEX_ROLES, INDENT_NAV, PRIMARY_NAV, filterNavByRole, type NavItem } from './navConfig';
 
 function renderSidebar(role: string, badges?: Record<string, number>) {
   return render(
@@ -105,7 +105,7 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
   it('um icone SVG por item de navegacao e nenhum glifo unicode no texto', () => {
     const { container } = renderAt('admin', '/');
     const links = container.querySelectorAll('.sidebar__link');
-    expect(links).toHaveLength(14);
+    expect(links).toHaveLength(15);
     for (const link of Array.from(links)) {
       expect(link.querySelectorAll('svg.sidebar__icon'), link.textContent ?? '').toHaveLength(1);
     }
@@ -176,5 +176,111 @@ describe('Sidebar - marca e estrutura (F2, mock v68)', () => {
     expect(contadores).toHaveLength(1);
     expect(contadores[0]?.getAttribute('aria-label')).toBe('3 pendentes');
     expect(contadores[0]?.textContent).toBe('3');
+  });
+});
+
+// ---------- Variante Indent (abordagem A: props opcionais; sem elas o markup e o do IQ, ver Sidebar.regressao.test.tsx) ----------
+const VOLTAR: NavItem = { to: '/', label: 'Voltar ao IntelliQuote', icon: 'arrow-left', end: true };
+
+function renderIndent(path = '/indent/catalogo', extra: { colapsada?: boolean; onLogout?: () => void } = {}) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Sidebar
+        items={filterNavByRole(INDENT_NAV, 'admin')}
+        variant="indent"
+        brandTag="Indent"
+        backLink={VOLTAR}
+        sectionTitle="Indent"
+        navLabel="Indent"
+        onAlternar={() => {}}
+        {...extra}
+      />
+    </MemoryRouter>,
+  );
+}
+
+describe('Sidebar - variante Indent', () => {
+  it('marca com o selo "Indent" abaixo do nome (so na variante) e classe sidebar--indent no aside', () => {
+    const { container } = renderIndent();
+    const texto = container.querySelector('.sidebar__brand .sidebar__brand-text');
+    expect(texto).not.toBeNull();
+    expect(texto?.querySelector('.sidebar__brand-name')?.textContent).toBe('IntelliQuote');
+    expect(texto?.querySelector('.sidebar__brand-tag')?.textContent).toBe('Indent');
+    expect(texto?.lastElementChild?.className).toBe('sidebar__brand-tag');
+    expect(container.querySelector('aside')?.className).toBe('sidebar sidebar--indent');
+  });
+
+  it('"Voltar ao IntelliQuote" leva a / numa navegacao propria "Voltar", antes da navegacao principal', () => {
+    const { container } = renderIndent();
+    const voltar = container.querySelector('nav[aria-label="Voltar"]');
+    expect(voltar?.className).toBe('sidebar__nav sidebar__nav--voltar');
+    const link = screen.getByRole('link', { name: 'Voltar ao IntelliQuote' });
+    expect(link.getAttribute('href')).toBe('/');
+    expect(voltar?.contains(link)).toBe(true);
+    expect(link.querySelector('svg.sidebar__icon')).not.toBeNull();
+    const principal = container.querySelector('#sidebar-nav');
+    expect(voltar && principal && voltar.compareDocumentPosition(principal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // em /indent/* o Voltar nunca fica ativo (end em "/")
+    expect(link.hasAttribute('aria-current')).toBe(false);
+  });
+
+  it('titulo de secao "Indent" e navegacao principal rotulada "Indent" com so os 3 links do INDENT_NAV', () => {
+    const { container } = renderIndent();
+    const nav = container.querySelector('#sidebar-nav');
+    expect(nav?.getAttribute('aria-label')).toBe('Indent');
+    expect(nav?.querySelector('.sidebar__group > .sidebar__group-title')?.textContent).toBe('Indent');
+    const links = Array.from(nav?.querySelectorAll('a') ?? []);
+    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['Catálogo', '/indent/catalogo'],
+      ['Fornecedores', '/indent/fornecedores'],
+      ['Clientes', '/indent/clientes'],
+    ]);
+    const todos = screen.getAllByRole('link').map((l) => l.getAttribute('href'));
+    expect(todos).toHaveLength(4);
+    expect(todos.some((h) => /solicitacoes|cotacoes|integracao/.test(h ?? ''))).toBe(false);
+    expect(container.querySelector('.sidebar__badge')).toBeNull();
+    expect(screen.queryByText(/Administração/)).toBeNull();
+  });
+
+  it('a pagina atual fica marcada com aria-current="page"', () => {
+    renderIndent('/indent/clientes');
+    const atuais = screen.getAllByRole('link').filter((l) => l.getAttribute('aria-current') === 'page');
+    expect(atuais.map((l) => l.textContent)).toEqual(['Clientes']);
+  });
+
+  it('rodape (tema -> Sair -> assinatura) identico ao da sidebar padrao, e Sair chama onLogout', () => {
+    const onLogout = vi.fn();
+    const indent = renderIndent('/indent/catalogo', { onLogout });
+    const rodapeIndent = indent.container.querySelector('.sidebar__footer') as HTMLElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Sair' }));
+    expect(onLogout).toHaveBeenCalledTimes(1);
+    const semEstilo = (el: HTMLElement) => {
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.removeAttribute('style'); // --k (cascata) depende do numero de itens
+      return clone.outerHTML;
+    };
+    const indentHtml = semEstilo(rodapeIndent);
+    indent.unmount();
+    const padrao = renderAt('admin', '/cotacoes', () => {});
+    expect(semEstilo(padrao.container.querySelector('.sidebar__footer') as HTMLElement)).toBe(indentHtml);
+  });
+
+  it('recolhida: o Voltar herda a dica ao apontar (so icone na tela, texto no DOM)', () => {
+    const { container } = renderIndent('/indent/catalogo', { colapsada: true });
+    const link = screen.getByRole('link', { name: 'Voltar ao IntelliQuote' });
+    fireEvent.mouseEnter(link.closest('li') as HTMLElement);
+    expect(container.querySelector('.sidebar__dica')?.textContent).toBe('Voltar ao IntelliQuote');
+    expect(container.querySelector('.sidebar--colapsada.sidebar--indent')).not.toBeNull();
+  });
+
+  it('sidebar padrao (sem as props): sem selo, sem navegacao "Voltar", sem classe da variante, rotulo "Navegação principal" e 15 links', () => {
+    const { container } = renderAt('admin', '/cotacoes');
+    expect(container.querySelector('.sidebar__brand-tag')).toBeNull();
+    expect(container.querySelector('.sidebar__brand-text')).toBeNull();
+    expect(container.querySelector('nav[aria-label="Voltar"]')).toBeNull();
+    expect(container.querySelector('.sidebar--indent')).toBeNull();
+    expect(container.querySelector('#sidebar-nav')?.getAttribute('aria-label')).toBe('Navegação principal');
+    expect(container.querySelectorAll('.sidebar__link')).toHaveLength(15);
+    expect(container.querySelectorAll('#sidebar-nav .sidebar__group-title')).toHaveLength(1); // so Administração
   });
 });

@@ -96,6 +96,7 @@ const SAME_IN_BOTH_THEMES = [
   '--rf-shadow-primary-hover',
   '--rf-toast-ink',
   '--rf-toast-ink-soft',
+  '--rf-indent-acc',
 ];
 
 // Valores do :root claro depois da TROCA-2 (plano-mestre §2.2).

@@ -7,13 +7,15 @@ interface ModalProps {
   title: string;
   /** Linha de apoio abaixo do titulo (ex.: codigo da cotacao). Opcional; sem ela o cabecalho segue como antes. */
   subtitle?: React.ReactNode;
+  /** Linha curta ACIMA do titulo (ex.: "Restricao de fornecedores"). Opcional; sem ela o cabecalho segue como antes. */
+  eyebrow?: React.ReactNode;
   children: React.ReactNode;
   size?: 'default' | 'wide' | 'xl';
   /** Classe EXTRA no <dialog> (ex.: raiz de portal do Forecast). Opcional; sem ela o className segue como antes. */
   className?: string;
 }
 
-export function Modal({ isOpen, onClose, title, subtitle, children, size, className: extra }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, size, className: extra }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const tituloId = useId();
   const mousedownTargetRef = useRef<EventTarget | null>(null);
@@ -24,6 +26,9 @@ export function Modal({ isOpen, onClose, title, subtitle, children, size, classN
 
     if (isOpen && !dialog.open) {
       dialog.showModal();
+      // O autoFocus do React age com o <dialog> ainda fechado e o showModal() depois foca o 1o focavel (o Fechar): quem quer o foco
+      // inicial num campo marca o elemento com data-autofocus. Sem o atributo nada muda.
+      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     } else if (!isOpen && dialog.open) {
       dialog.close();
     }
@@ -76,10 +81,11 @@ export function Modal({ isOpen, onClose, title, subtitle, children, size, classN
     <dialog ref={dialogRef} className={className} aria-labelledby={tituloId}>
       <div className="modal-content">
         <header className="modal-header">
-          {subtitle ? (
+          {subtitle || eyebrow ? (
             <div className="modal-header__titles">
+              {eyebrow && <p className="modal-eyebrow">{eyebrow}</p>}
               <h2 id={tituloId}>{title}</h2>
-              <p className="modal-subtitle">{subtitle}</p>
+              {subtitle && <p className="modal-subtitle">{subtitle}</p>}
             </div>
           ) : (
             <h2 id={tituloId}>{title}</h2>

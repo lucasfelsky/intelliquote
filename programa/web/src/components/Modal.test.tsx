@@ -262,4 +262,75 @@ describe('Modal', () => {
       unmount();
     }
   });
+
+  it('20. eyebrow: <p class="modal-eyebrow"> vem ANTES do h2, dentro de .modal-header__titles; o nome acessivel do dialog segue sendo o titulo', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Acme Chemicals" eyebrow="Editar fornecedor">
+        <p>Corpo</p>
+      </Modal>,
+    );
+    const titulos = container.querySelector('.modal-header > .modal-header__titles');
+    expect(titulos).not.toBeNull();
+    expect(Array.from(titulos?.children ?? []).map((el) => el.tagName)).toEqual(['P', 'H2']);
+    expect(titulos?.firstElementChild?.className).toBe('modal-eyebrow');
+    expect(titulos?.firstElementChild?.textContent).toBe('Editar fornecedor');
+    const h2 = container.querySelector('h2');
+    expect(h2?.textContent).toBe('Acme Chemicals');
+    expect(getDialog(container).getAttribute('aria-labelledby')).toBe(h2?.id);
+    expect(container.querySelector('.modal-subtitle')).toBeNull();
+  });
+
+  it('21. eyebrow + subtitle: eyebrow, h2 e subtitulo, nessa ordem', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo" eyebrow="Linha" subtitle="Apoio">
+        <p>Corpo</p>
+      </Modal>,
+    );
+    const titulos = container.querySelector('.modal-header__titles');
+    expect(Array.from(titulos?.children ?? []).map((el) => el.className || el.tagName)).toEqual(['modal-eyebrow', 'H2', 'modal-subtitle']);
+  });
+
+  it('22. sem eyebrow o markup e o de antes: h2 filho direto do header (sem subtitle) e sem .modal-eyebrow', () => {
+    const semTudo = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo">
+        <p>Corpo</p>
+      </Modal>,
+    );
+    expect(semTudo.container.querySelector('.modal-eyebrow')).toBeNull();
+    expect(semTudo.container.querySelector('.modal-header__titles')).toBeNull();
+    expect(semTudo.container.querySelector('.modal-header > h2')?.textContent).toBe('Titulo');
+    semTudo.unmount();
+    const soSubtitle = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo" subtitle="Apoio">
+        <p>Corpo</p>
+      </Modal>,
+    );
+    expect(soSubtitle.container.querySelector('.modal-eyebrow')).toBeNull();
+    expect(Array.from(soSubtitle.container.querySelector('.modal-header__titles')?.children ?? []).map((el) => el.tagName)).toEqual(['H2', 'P']);
+  });
+
+  it('23. data-autofocus: depois do showModal() o foco vai para o elemento marcado (o autoFocus do React age com o dialog fechado)', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo">
+        <input aria-label="primeiro" />
+        <input aria-label="segundo" data-autofocus />
+      </Modal>,
+    );
+    expect(getDialog(container).open).toBe(true);
+    expect(document.activeElement).toBe(container.querySelector('input[aria-label="segundo"]'));
+  });
+
+  it('24. sem data-autofocus nada e focado pelo Modal (comportamento dos demais modais do IQ inalterado)', () => {
+    const foco = vi.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      render(
+        <Modal isOpen={true} onClose={vi.fn()} title="Titulo">
+          <input aria-label="primeiro" />
+        </Modal>,
+      );
+      expect(foco).not.toHaveBeenCalled();
+    } finally {
+      foco.mockRestore();
+    }
+  });
 });

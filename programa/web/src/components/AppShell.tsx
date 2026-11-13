@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { useAuth } from '@/auth/AuthProvider';
 import { getCommercialRequestsPendingCount } from '@/services/commercialRequests';
-import { COMEX_ROLES, filterNavByRole, PRIMARY_NAV, ADMIN_NAV } from './navConfig';
+import { COMEX_ROLES, filterNavByRole, INDENT_NAV, PRIMARY_NAV, ADMIN_NAV, type NavItem } from './navConfig';
 
 // Sidebar recolhida (so icones): a escolha fica no navegador. Storage pode falhar (modo privado, bloqueio): nunca quebra a tela.
 export const CHAVE_SIDEBAR_COLAPSADA = 'iq-sidebar-colapsada';
@@ -17,6 +17,9 @@ function lerColapsada(): boolean {
     return false;
   }
 }
+
+// "Voltar ao IntelliQuote" da variante Indent: link comum da sidebar (NavLink end em "/", nunca ativo dentro de /indent/*).
+const VOLTAR_AO_IQ: NavItem = { to: '/', label: 'Voltar ao IntelliQuote', icon: 'arrow-left', end: true };
 
 export default function AppShell() {
   const [colapsada, setColapsada] = useState(lerColapsada);
@@ -30,6 +33,8 @@ export default function AppShell() {
       // sem persistencia: o estado vale so ate recarregar
     }
   };
+  // Em /indent/* a sidebar troca para a variante do IQ Indent (selo na marca, "Voltar", so as 3 paginas de cadastro).
+  const indent = /^\/indent(\/|$)/.test(useLocation().pathname);
   const { user, logout } = useAuth();
   const role = user?.role;
   const isComex = !!role && COMEX_ROLES.includes(role);
@@ -41,13 +46,13 @@ export default function AppShell() {
     enabled: isComex,
     refetchInterval: 60_000,
   });
-  const badges: Record<string, number> = { '/solicitacoes': pending.data?.count ?? 0 };
-  const mainNav = filterNavByRole(PRIMARY_NAV, role);
-  const adminNav = filterNavByRole(ADMIN_NAV, role);
+  const badges: Record<string, number> = indent ? {} : { '/solicitacoes': pending.data?.count ?? 0 };
+  const mainNav = indent ? filterNavByRole(INDENT_NAV, role) : filterNavByRole(PRIMARY_NAV, role);
+  const adminNav = indent ? [] : filterNavByRole(ADMIN_NAV, role);
   const adminHeader = adminNav.length > 0;
 
   return (
-    <div className={`app-shell${adminHeader ? ' app-shell--with-admin' : ''}${colapsada ? ' app-shell--colapsada' : ''}`}>
+    <div className={`app-shell${adminHeader ? ' app-shell--with-admin' : ''}${colapsada ? ' app-shell--colapsada' : ''}${indent ? ' app-shell--indent' : ''}`}>
       <Sidebar
         items={mainNav}
         adminItems={adminNav}
@@ -56,6 +61,9 @@ export default function AppShell() {
         onLogout={() => void logout()}
         colapsada={colapsada}
         onAlternar={alternarSidebar}
+        {...(indent
+          ? { variant: 'indent' as const, brandTag: 'Indent', backLink: VOLTAR_AO_IQ, sectionTitle: 'Indent', navLabel: 'Indent' }
+          : {})}
       />
       <div className="app-shell__main">
         <Topbar />

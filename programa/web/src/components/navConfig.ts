@@ -25,10 +25,18 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/itens',     label: 'Itens',              icon: 'itens',             group: 'main', roles: COMEX_ROLES },
   { to: '/fornecedores', label: 'Fornecedores',    icon: 'fornecedores',             group: 'main', roles: COMEX_ROLES },
   { to: '/forecast',  label: 'Forecast',           icon: 'forecast',             group: 'main', roles: COMEX_ROLES, tag: 'Beta' },
+  { to: '/indent',    label: 'Indent',             icon: 'globe',             group: 'main', roles: COMEX_ROLES },
   { to: '/forwarders', label: 'Forwarders',       icon: 'forwarders',             group: 'main', roles: COMEX_ROLES },
   { to: '/familias',  label: 'Famílias',           icon: 'familias',             group: 'main', roles: COMEX_ROLES },
   { to: '/relatorios',label: 'Relatórios',         icon: 'relatorios',             group: 'main', roles: COMEX_ROLES },
   { to: '/manual',    label: 'Manual',             icon: 'ajuda',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
+];
+
+// Navegacao do IQ Indent (variante da sidebar em /indent/*): so as 3 paginas de cadastro do PR 1. Solicitacoes, Cotacoes e Integracao entram nos PRs seguintes.
+export const INDENT_NAV: NavItem[] = [
+  { to: '/indent/catalogo',     label: 'Catálogo',     icon: 'itens',        group: 'main', roles: COMEX_ROLES },
+  { to: '/indent/fornecedores', label: 'Fornecedores', icon: 'fornecedores', group: 'main', roles: COMEX_ROLES },
+  { to: '/indent/clientes',     label: 'Clientes',     icon: 'usuarios',     group: 'main', roles: COMEX_ROLES },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

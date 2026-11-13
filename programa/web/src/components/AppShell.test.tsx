@@ -159,3 +159,59 @@ describe('AppShell: sidebar recolhivel', () => {
     }
   });
 });
+
+// ---------- Variante Indent por rota ----------
+function renderShellEm(path: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/cotacoes" element={<section data-testid="pagina">pagina-cotacoes</section>} />
+            <Route path="/indent/catalogo" element={<section data-testid="pagina">pagina-indent</section>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('AppShell: variante Indent (sidebar por rota)', () => {
+  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, so os 3 links), classe app-shell--indent, sem Administracao nem contador', async () => {
+    const { container } = renderShellEm('/indent/catalogo');
+    expect(container.querySelector('.app-shell.app-shell--indent > .sidebar.sidebar--indent')).not.toBeNull();
+    expect(container.querySelector('.sidebar__brand-tag')?.textContent).toBe('Indent');
+    expect(screen.getByRole('link', { name: 'Voltar ao IntelliQuote' }).getAttribute('href')).toBe('/');
+    const principal = container.querySelector('#sidebar-nav');
+    expect(principal?.getAttribute('aria-label')).toBe('Indent');
+    expect(Array.from(principal?.querySelectorAll('a') ?? []).map((a) => a.textContent)).toEqual(['Catálogo', 'Fornecedores', 'Clientes']);
+    expect(container.querySelectorAll('.sidebar__group-title')).toHaveLength(1);
+    expect(screen.queryByText('Administração')).toBeNull();
+    expect(container.querySelector('.sidebar__badge')).toBeNull();
+    expect(screen.queryByLabelText(/pendentes/)).toBeNull();
+    // topbar e a do IQ (sem mudanca) e a pagina continua filha direta do main
+    expect(container.querySelector('.app-shell__main > .topbar')).not.toBeNull();
+    expect(screen.getByTestId('pagina').parentElement).toBe(container.querySelector('main.app-shell__content'));
+  });
+
+  it('em /cotacoes nada muda: sidebar padrao do IQ, sem classes nem selo do Indent', async () => {
+    const { container } = renderShellEm('/cotacoes');
+    await screen.findByLabelText('3 pendentes');
+    expect(container.querySelector('.app-shell--indent')).toBeNull();
+    expect(container.querySelector('.sidebar--indent')).toBeNull();
+    expect(container.querySelector('.sidebar__brand-tag')).toBeNull();
+    expect(container.querySelector('nav[aria-label="Voltar"]')).toBeNull();
+    expect(container.querySelector('#sidebar-nav')?.getAttribute('aria-label')).toBe('Navegação principal');
+    expect(screen.getByRole('link', { name: 'Indent' }).getAttribute('href')).toBe('/indent');
+  });
+
+  it('a escolha de recolher vale para as duas variantes (mesma chave)', () => {
+    localStorage.setItem(CHAVE_SIDEBAR_COLAPSADA, '1');
+    const { container } = renderShellEm('/indent/catalogo');
+    expect(container.querySelector('.app-shell--indent.app-shell--colapsada > .sidebar--indent.sidebar--colapsada')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expandir menu lateral' }));
+    expect(container.querySelector('.sidebar--colapsada')).toBeNull();
+    expect(localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA)).toBeNull();
+  });
+});

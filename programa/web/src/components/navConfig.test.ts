@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ADMIN_NAV,
   COMEX_ROLES,
+  INDENT_NAV,
   PRIMARY_NAV,
   filterNavByRole,
   isComercialRole,
@@ -115,9 +116,44 @@ describe('navConfig', () => {
     }
   });
 
-  it('os 14 icones de navegacao continuam unicos', () => {
+  it('os 15 icones de navegacao continuam unicos', () => {
     const all = [...PRIMARY_NAV, ...ADMIN_NAV];
-    expect(all).toHaveLength(14);
-    expect(new Set(all.map((item) => item.icon)).size).toBe(14);
+    expect(all).toHaveLength(15);
+    expect(new Set(all.map((item) => item.icon)).size).toBe(15);
+  });
+});
+
+describe('navConfig: IQ Indent', () => {
+  it.each(COMEX_ROLES)('%s (COMEX) ve a entrada Indent no menu principal', (role) => {
+    expect(visiblePaths(role)).toContain('/indent');
+  });
+
+  it('comercial nao ve Indent (nem no principal nem na navegacao do Indent)', () => {
+    expect(visiblePaths('comercial')).not.toContain('/indent');
+    expect(filterNavByRole(INDENT_NAV, 'comercial')).toEqual([]);
+  });
+
+  it('Indent: rotulo, icone globe (so dele), grupo main, sem selo, logo depois de Forecast', () => {
+    const indent = PRIMARY_NAV.find((item) => item.to === '/indent');
+    expect(indent).toMatchObject({ label: 'Indent', icon: 'globe', group: 'main' });
+    expect(indent?.tag).toBeUndefined();
+    expect(indent?.roles).toEqual(COMEX_ROLES);
+    const paths = PRIMARY_NAV.map((item) => item.to);
+    expect(paths.indexOf('/indent')).toBe(paths.indexOf('/forecast') + 1);
+    expect([...PRIMARY_NAV, ...ADMIN_NAV].filter((item) => item.icon === 'globe')).toHaveLength(1);
+  });
+
+  it('INDENT_NAV: Catalogo, Fornecedores e Clientes (nessa ordem), so equipe COMEX, icones validos e sem link para Solicitacoes/Cotacoes/Integracao', () => {
+    expect(INDENT_NAV.map((item) => [item.to, item.label, item.icon])).toEqual([
+      ['/indent/catalogo', 'Catálogo', 'itens'],
+      ['/indent/fornecedores', 'Fornecedores', 'fornecedores'],
+      ['/indent/clientes', 'Clientes', 'usuarios'],
+    ]);
+    for (const item of INDENT_NAV) {
+      expect(item.roles, item.to).toEqual(COMEX_ROLES);
+      expect(Object.keys(ICONS), item.to).toContain(item.icon);
+    }
+    expect(INDENT_NAV.some((item) => /solicitacoes|cotacoes|integracao/.test(item.to))).toBe(false);
+    for (const role of COMEX_ROLES) expect(filterNavByRole(INDENT_NAV, role), role).toHaveLength(3);
   });
 });

@@ -1,0 +1,26 @@
+[
+  {
+    "token": "--rf-indent-acc",
+    "claro": "#f5a524",
+    "escuro": null,
+    "constante": true,
+    "fonte": "mock",
+    "ref": "IQ Indent v5"
+  },
+  {
+    "token": "--rf-indent-acc-700",
+    "claro": "#8a5200",
+    "escuro": "#f2c46b",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "IQ Indent v5"
+  },
+  {
+    "token": "--rf-indent-acc-50",
+    "claro": "#fff4df",
+    "escuro": "#33290f",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "IQ Indent v5"
+  }
+]
