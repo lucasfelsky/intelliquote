@@ -299,9 +299,12 @@ describe('Solicitacoes do Indent: marcacao x regiao `tela F14`', () => {
     expect(corpo('.indent-page .indent-gerar')).toContain('background: var(--rf-action-hover-bg)');
     expect(corpo('.indent-page .indent-gerar .primary-button')).toContain('padding: 0 18px');
     expect(corpo('.indent-page .indent-sup__motivo .input')).toContain('min-height: 36px');
-    // Contorno por borda real: box-shadow/background aqui anulariam o anel de foco e o hover do .ghost-button do sistema.
+    // Secundario padrao do sistema (.ghost-button, sem --sm): o contorno vem dos tokens ghost-escuro (legivel no escuro) e o anel de
+    // foco e o hover do sistema seguem valendo; aqui so as medidas. Nada de borda, box-shadow ou background proprios.
     const confirmar = corpo('.indent-page .indent-sup__motivo .ghost-button');
-    expect(confirmar).toContain('border: 1.5px solid var(--rf-action)');
+    expect(confirmar).toContain('min-height: 36px');
+    expect(confirmar).toContain('font-size: 13px');
+    expect(confirmar).not.toContain('border');
     expect(confirmar).not.toContain('box-shadow');
     expect(confirmar).not.toContain('background');
     expect(corpo('.indent-page .indent-excbanner strong')).toContain('line-height: normal');

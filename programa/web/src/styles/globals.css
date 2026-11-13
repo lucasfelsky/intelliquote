@@ -13649,7 +13649,9 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   min-height: 36px;
 }
 .indent-page .indent-sup__motivo .ghost-button {
-  border: 1.5px solid var(--rf-action);
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 .indent-page .indent-sup__motivo .field-error { margin: 0; }
 .indent-page .indent-linkbtn {

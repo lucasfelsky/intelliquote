@@ -227,7 +227,7 @@ export default function IndentSupplierPicker({ request, canWrite, onGenerated }:
                           />
                           <button
                             type="button"
-                            className="ghost-button ghost-button--sm"
+                            className="ghost-button"
                             onClick={() => confirmarExcecao(opcao.id)}
                           >
                             Confirmar exceção
