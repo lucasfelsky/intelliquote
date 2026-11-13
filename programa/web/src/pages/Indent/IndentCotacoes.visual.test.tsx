@@ -148,6 +148,18 @@ describe('Cotacoes: marcacao x regiao `tela F14` (PR 3)', () => {
     expect(corpo('.indent-page .indent-total')).toContain('border-top: 1px solid var(--rf-divider)');
   });
 
+  it('acabamento da gaveta (contrato de CSS): inputs de 36px com min-height, secundarios so com medidas, tag que nao estica', () => {
+    for (const seletor of ['.indent-page .indent-preco', '.indent-page .indent-desc', '.indent-page .indent-data']) {
+      expect(corpo(seletor), seletor).toContain('min-height: 36px');
+    }
+    // Botoes secundarios: so medidas; borda, sombra ou fundo proprios anulariam o anel de foco e o guard de borda do secundario (F12).
+    const ghost = corpo('.indent-page .indent-gaveta .ghost-button');
+    expect(ghost).toContain('min-height: 36px');
+    expect(ghost).toContain('font-size: 13px');
+    expect(ghost).not.toMatch(/border|box-shadow|background/);
+    expect(corpo('.indent-page .indent-cell-main > .indent-tag')).toContain('align-self: flex-start');
+  });
+
   it('toda classe indent-* do PR 3 existe na regiao e toda regra desta secao e usada no DOM (lista + gaveta em 3 estados + item livre)', async () => {
     const todas = new Set<string>();
     const add = (root: HTMLElement) => classesDoDom(root).forEach((c) => todas.add(c));

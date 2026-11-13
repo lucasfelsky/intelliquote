@@ -57,10 +57,15 @@ export default function IndentCotacaoItens({
 }: Props) {
   const base = useId();
   const descricaoRef = useRef<HTMLInputElement>(null);
+  const adicionarRef = useRef<HTMLButtonElement>(null);
+  const estavaAberto = useRef(false);
 
   // Ao abrir a linha do item livre, o foco vai para a descricao (como o mock).
+  // Ao fechar a linha sem incluir (Cancelar), o botao que a abriu volta a existir e recebe o foco (nao cai no body).
   useEffect(() => {
     if (free.aberto) descricaoRef.current?.focus();
+    else if (estavaAberto.current) adicionarRef.current?.focus();
+    estavaAberto.current = free.aberto;
   }, [free.aberto]);
 
   function aoTeclarNoItemLivre(event: KeyboardEvent<HTMLInputElement>) {
@@ -76,7 +81,7 @@ export default function IndentCotacaoItens({
       <div className="indent-painel__cabeca">
         <h2>Itens e preços (por kg)</h2>
         {canAddFree && !free.aberto && (
-          <button type="button" className="ghost-button ghost-button--sm" onClick={onFreeOpen}>
+          <button ref={adicionarRef} type="button" className="ghost-button" onClick={onFreeOpen}>
             <Icon name="plus" size={15} strokeWidth={2.4} />
             Adicionar item livre
           </button>
@@ -232,10 +237,10 @@ export default function IndentCotacaoItens({
                     />
                   </td>
                   <td colSpan={2} className="indent-acao">
-                    <button type="button" className="ghost-button ghost-button--sm" aria-busy={pendente} disabled={pendente} onClick={onFreeSubmit}>
+                    <button type="button" className="ghost-button" aria-busy={pendente} disabled={pendente} onClick={onFreeSubmit}>
                       Incluir item
                     </button>{' '}
-                    <button type="button" className="ghost-button ghost-button--sm" disabled={pendente} onClick={onFreeCancel}>
+                    <button type="button" className="ghost-button" disabled={pendente} onClick={onFreeCancel}>
                       Cancelar
                     </button>
                   </td>

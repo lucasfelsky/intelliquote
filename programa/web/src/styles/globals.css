@@ -13946,12 +13946,14 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 .indent-page .indent-preco {
   width: 112px;
   height: 36px;
+  min-height: 36px;
   padding: 0 10px;
   font-family: var(--rf-font-mono);
   text-align: right;
 }
 .indent-page .indent-desc {
   height: 36px;
+  min-height: 36px;
   min-width: 120px;
 }
 .indent-page .indent-mono { font-family: var(--rf-font-mono); }
@@ -13977,7 +13979,15 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 .indent-page .indent-data {
   width: 160px;
   height: 36px;
+  min-height: 36px;
 }
+/* Botoes secundarios da gaveta: o .ghost-button padrao do sistema (contorno e fundo do mock); so medidas aqui, sem borda/sombra/fundo proprios. */
+.indent-page .indent-gaveta .ghost-button {
+  min-height: 36px;
+  font-size: 13px;
+}
+/* Tag dentro de coluna (ex.: "Item livre" na celula do item): nao estica na largura da celula. */
+.indent-page .indent-cell-main > .indent-tag { align-self: flex-start; }
 /* <<< tela F14 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar

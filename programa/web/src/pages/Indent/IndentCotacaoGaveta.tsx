@@ -17,6 +17,7 @@ import {
 import {
   QUOTE_STATUS,
   acceptedNotice,
+  endSentence,
   estimateTotal,
   firstWords,
   formatDateKey,
@@ -314,7 +315,7 @@ function GavetaFormulario({
   function aceitar() {
     disparar({
       executar: () => acceptIndentQuote(quote.id),
-      mensagem: () => `Processo ${quote.ref} aberto com ${fornecedor}. Outras cotações da mesma solicitação seguem em análise`,
+      mensagem: () => `Processo ${quote.ref} aberto com ${endSentence(fornecedor)} Outras cotações da mesma solicitação seguem em análise`,
       fecha: true,
     });
   }

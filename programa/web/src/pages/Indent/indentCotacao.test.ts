@@ -4,6 +4,7 @@ import {
   QUOTE_STATUS,
   acceptedNotice,
   cfrHeader,
+  endSentence,
   firstWords,
   formatDateKey,
   formatMoney,
@@ -141,6 +142,8 @@ describe('groupQuotes', () => {
   });
 });
 
+const ACEITA_SEM_PONTO = { id: 9, ref: '270/26', supplierName: 'Beta Corp' };
+
 describe('acceptedNotice', () => {
   const aceita = { id: 9, ref: '270/26', supplierName: 'Beta Corp' };
   const base = 'A solicitação 270/26 já tem uma cotação aceita: 270/26 · Beta Corp. Esta cotação não pode mais ser aceita nem revisada.';
@@ -152,6 +155,15 @@ describe('acceptedNotice', () => {
     );
     expect(acceptedNotice({ acceptedQuote: aceita, processNumber: '270/26', status: 'RASCUNHO' })).toBe(`${base} Ela não será enviada.`);
     expect(acceptedNotice({ acceptedQuote: aceita, processNumber: '270/26', status: 'RECUSADA' })).toBe(base);
+  });
+
+  it('nome do fornecedor terminado em ponto nao duplica a pontuacao (Co. Esta, nunca Co.. Esta)', () => {
+    const aviso = acceptedNotice({ acceptedQuote: { id: 9, ref: '270/26', supplierName: 'Shandong Chemical Co.' }, processNumber: '270/26', status: 'RESPONDIDA' });
+    expect(aviso).toContain('270/26 · Shandong Chemical Co. Esta cotação');
+    expect(aviso).not.toContain('..');
+    expect(acceptedNotice({ acceptedQuote: ACEITA_SEM_PONTO, processNumber: '270/26', status: 'RESPONDIDA' })).toContain('· Beta Corp. Esta');
+    expect(endSentence('Co.')).toBe('Co.');
+    expect(endSentence('Beta')).toBe('Beta.');
   });
 
   it('sem OUTRA cotacao aceita (inclui a propria ACEITA) = sem aviso', () => {

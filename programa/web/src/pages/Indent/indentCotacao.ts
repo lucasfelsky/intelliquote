@@ -134,11 +134,16 @@ export function groupQuotes(linhas: IndentQuoteRow[], por: QuoteGroupBy): QuoteG
   return lista.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
 }
 
+/** Fecha a frase com ponto sem duplicar a pontuacao ("Chemical Co." + "." = "Chemical Co."). */
+export function endSentence(texto: string): string {
+  return /[.!?]$/.test(texto) ? texto : `${texto}.`;
+}
+
 /** Aviso do aceite unico (Decisao 8 do plano); `null` quando a solicitacao nao tem OUTRA cotacao aceita (inclui a propria ACEITA). */
 export function acceptedNotice(quote: Pick<IndentQuoteDetail, 'acceptedQuote' | 'processNumber' | 'status'>): string | null {
   if (!quote.acceptedQuote) return null;
 
-  const base = `A solicitação ${quote.processNumber} já tem uma cotação aceita: ${quote.acceptedQuote.ref} · ${quote.acceptedQuote.supplierName}. Esta cotação não pode mais ser aceita nem revisada.`;
+  const base = `A solicitação ${quote.processNumber} já tem uma cotação aceita: ${quote.acceptedQuote.ref} · ${endSentence(quote.acceptedQuote.supplierName)} Esta cotação não pode mais ser aceita nem revisada.`;
   if (quote.status === 'RESPONDIDA') return `${base} Você ainda pode recusá-la.`;
   if (quote.status === 'ENVIADA') return `${base} Você ainda pode registrar a resposta do fornecedor, para histórico.`;
   if (quote.status === 'RASCUNHO') return `${base} Ela não será enviada.`;

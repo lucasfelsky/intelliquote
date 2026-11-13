@@ -473,6 +473,27 @@ describe('IndentCotacaoGaveta - registrar resposta (bloco da divergencia aceita)
 });
 
 describe('IndentCotacaoGaveta - item livre', () => {
+  it('Cancelar devolve o foco ao botao "Adicionar item livre" (nao cai no body) e os secundarios sao o .ghost-button padrao (sem --sm)', async () => {
+    mockCotacao(cotacao());
+    renderGaveta();
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar item livre' }));
+    await screen.findByLabelText('Descrição do item');
+    expect(document.querySelector('.indent-gaveta .ghost-button--sm')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    const adicionar = await screen.findByRole('button', { name: 'Adicionar item livre' });
+    await waitFor(() => expect(document.activeElement).toBe(adicionar));
+  });
+
+  it('aceite com fornecedor terminado em ponto: toast e aviso sem pontuacao duplicada', async () => {
+    mockCotacao(cotacao({ status: 'RESPONDIDA', allowedActions: ['accept'], supplier: { id: 5, name: 'Acme Chem Co.', country: null, contactName: null, hasPartnership: true, type: 'TRADING' } }));
+    vi.mocked(api.post).mockResolvedValue(cotacao({ status: 'ACEITA', allowedActions: [] }));
+    const { onClose } = renderGaveta();
+    fireEvent.click(await screen.findByRole('button', { name: 'Aceitar e abrir processo' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith('Processo 270/26 aberto com Acme Chem Co. Outras cotações da mesma solicitação seguem em análise'));
+  });
+
   it('Enter com descricao e quantidade preenchidas inclui o item (e nunca marca como enviada)', async () => {
     mockCotacao(cotacao());
     resolvePost(cotacao({ items: [item(201, 21), item(202, 22), item(203, 23, { name: 'Livre Z', isFree: true, cas: null })] }));
@@ -553,7 +574,7 @@ describe('IndentCotacaoGaveta - aceitar, recusar e pedir revisao fecham a gaveta
     fireEvent.click(await screen.findByRole('button', { name: 'Aceitar e abrir processo' }));
 
     await waitFor(() =>
-      expect(onClose).toHaveBeenCalledWith('Processo 270/26 aberto com Shandong Haohua Chemical Co.. Outras cotações da mesma solicitação seguem em análise'),
+      expect(onClose).toHaveBeenCalledWith('Processo 270/26 aberto com Shandong Haohua Chemical Co. Outras cotações da mesma solicitação seguem em análise'),
     );
     expect(api.post).toHaveBeenCalledWith('/api/v1/indent/quotes/100/accept', {});
   });
