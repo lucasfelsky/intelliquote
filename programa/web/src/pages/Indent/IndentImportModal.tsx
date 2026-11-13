@@ -99,7 +99,7 @@ export default function IndentImportModal({ kind, onClose, onImported }: Props) 
   const titulo = produtos ? 'Importar produtos do IntelliQuote' : 'Importar fornecedores do IntelliQuote';
 
   return (
-    <Modal isOpen onClose={onClose} title={titulo}>
+    <Modal isOpen restoreFocus onClose={onClose} title={titulo}>
       <form className="indent-form" onSubmit={(event) => event.preventDefault()} noValidate>
         <div className="alert alert--info">
           Os dados são copiados. Depois de importar, o cadastro do Indent não acompanha mais o do IntelliQuote.

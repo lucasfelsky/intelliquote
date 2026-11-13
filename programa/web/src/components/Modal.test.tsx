@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { Modal } from './Modal';
@@ -332,5 +333,107 @@ describe('Modal', () => {
     } finally {
       foco.mockRestore();
     }
+  });
+
+  // restoreFocus (opt-in): devolve o foco a quem abriu o modal quando ele fecha ou desmonta (os modais do Indent desmontam).
+  function Host({ aberto, comBotao = true, restaurar }: { aberto: boolean; comBotao?: boolean; restaurar?: boolean }) {
+    return (
+      <div>
+        {comBotao && <button type="button">abrir</button>}
+        {aberto && (
+          <Modal isOpen restoreFocus={restaurar} onClose={vi.fn()} title="Titulo">
+            <input aria-label="campo" data-autofocus />
+          </Modal>
+        )}
+      </div>
+    );
+  }
+
+  it('25. restoreFocus: ao desmontar, o foco volta ao botao que abriu o modal', () => {
+    const { getByText, getByLabelText, rerender } = render(<Host aberto={false} restaurar />);
+    const botao = getByText('abrir');
+    botao.focus();
+    expect(document.activeElement).toBe(botao);
+
+    rerender(<Host aberto restaurar />);
+    expect(document.activeElement).toBe(getByLabelText('campo'));
+
+    rerender(<Host aberto={false} restaurar />);
+    expect(document.activeElement).toBe(botao);
+  });
+
+  it('26. sem restoreFocus o foco nao volta (comportamento dos demais modais do IQ inalterado)', () => {
+    const { getByText, rerender } = render(<Host aberto={false} />);
+    const botao = getByText('abrir');
+    botao.focus();
+
+    rerender(<Host aberto />);
+    rerender(<Host aberto={false} />);
+    expect(document.activeElement).not.toBe(botao);
+  });
+
+  it('27. restoreFocus: elemento que abriu ja saiu do DOM nao quebra nem recebe foco', () => {
+    const { getByText, rerender } = render(<Host aberto={false} restaurar />);
+    const botao = getByText('abrir');
+    botao.focus();
+
+    rerender(<Host aberto restaurar />);
+    const foco = vi.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      expect(() => rerender(<Host aberto={false} comBotao={false} restaurar />)).not.toThrow();
+      expect(foco).not.toHaveBeenCalled();
+      expect(botao.isConnected).toBe(false);
+    } finally {
+      foco.mockRestore();
+    }
+  });
+
+  it('28. restoreFocus sob React.StrictMode (efeito em dobro): o foco volta ao botao ao desmontar e o foco inicial segue no campo', () => {
+    const { getByText, getByLabelText, rerender } = render(
+      <StrictMode>
+        <Host aberto={false} restaurar />
+      </StrictMode>,
+    );
+    const botao = getByText('abrir');
+    botao.focus();
+
+    rerender(
+      <StrictMode>
+        <Host aberto restaurar />
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(getByLabelText('campo'));
+
+    rerender(
+      <StrictMode>
+        <Host aberto={false} restaurar />
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(botao);
+  });
+
+  it('29. restoreFocus com o modal montado e isOpen alternando: devolve ao fechar e captura a nova origem ao reabrir', () => {
+    function Alterna({ aberto }: { aberto: boolean }) {
+      return (
+        <div>
+          <button type="button">abrir</button>
+          <Modal isOpen={aberto} restoreFocus onClose={vi.fn()} title="Titulo">
+            <input aria-label="campo" data-autofocus />
+          </Modal>
+        </div>
+      );
+    }
+    const { getByText, getByLabelText, rerender } = render(<Alterna aberto={false} />);
+    const botao = getByText('abrir');
+    botao.focus();
+    rerender(<Alterna aberto />);
+    expect(document.activeElement).toBe(getByLabelText('campo'));
+    rerender(<Alterna aberto={false} />);
+    expect(document.activeElement).toBe(botao);
+
+    getByLabelText('campo').focus();
+    rerender(<Alterna aberto />);
+    rerender(<Alterna aberto={false} />);
+    expect(document.activeElement).toBe(getByLabelText('campo'));
   });
 });

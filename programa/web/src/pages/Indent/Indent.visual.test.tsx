@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { classesDoSeletor, readSource, regioes } from '@/test/rfCss';
+import { classesDoSeletor, parseRules, readSource, regioes, stripComments } from '@/test/rfCss';
 import IndentCatalogo from './IndentCatalogo';
 import IndentClientes from './IndentClientes';
 import IndentFornecedores from './IndentFornecedores';
@@ -116,8 +116,12 @@ const classesDoDom = (root: HTMLElement) => new Set(Array.from(root.querySelecto
 // classes `indent-*` e `.modal-eyebrow` que a regiao `tela F14` consome
 const css = readSource('../styles/globals.css').replace(/\r\n/g, '\n');
 const regiao = regioes(css).find((r) => r.nome === 'tela F14');
+// So as regras do PR 1: a parte da regiao depois do marcador 'Solicitacoes (PR 2)' e conferida no IndentSolicitacoes.visual.test.tsx.
+const brutoPr1 = (regiao?.bruto ?? '').split('/* ======================= Solicitacoes (PR 2)')[0] ?? '';
 const classesDoCss = new Set(
-  (regiao?.regras ?? []).flatMap((r) => r.prelude.split(',').flatMap((sel) => classesDoSeletor(sel))).filter((c) => c.startsWith('indent-') || c === 'modal-eyebrow'),
+  parseRules(stripComments(brutoPr1))
+    .flatMap((r) => r.prelude.split(',').flatMap((sel) => classesDoSeletor(sel)))
+    .filter((c) => c.startsWith('indent-') || c === 'modal-eyebrow'),
 );
 
 describe('Indent: marcacao x regiao `tela F14`', () => {

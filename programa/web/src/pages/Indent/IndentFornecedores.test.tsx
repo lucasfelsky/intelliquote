@@ -213,4 +213,32 @@ describe('IndentFornecedores', () => {
     renderPage();
     expect(await screen.findByText('Nenhum fornecedor cadastrado.')).toBeTruthy();
   });
+
+  it('restoreFocus: fechar por Cancelar devolve o foco ao botao que abriu o modal', async () => {
+    mockApi();
+    renderPage();
+    for (const nome of ["Novo fornecedor","Importar do IntelliQuote"]) {
+      const botao = await screen.findByRole('button', { name: nome });
+      botao.focus();
+      fireEvent.click(botao);
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement, nome).toBe(botao);
+    }
+  });
+
+  it('restoreFocus: fechar o modal de edicao aberto pela linha devolve o foco a linha', async () => {
+    mockApi();
+    const { container } = renderPage();
+    await screen.findByText('Shandong Haohua Chemical Co.');
+    const linha = container.querySelector('tbody tr') as HTMLElement;
+    linha.focus();
+    fireEvent.click(linha);
+    const dialog = await screen.findByRole('dialog', { name: 'Shandong Haohua Chemical Co.' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(linha);
+  });
+
 });

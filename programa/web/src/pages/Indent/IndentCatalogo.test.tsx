@@ -261,4 +261,19 @@ describe('IndentCatalogo', () => {
       expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/indent/products', expect.objectContaining({ page: 2 })),
     );
   });
+
+  it('restoreFocus: fechar por Cancelar devolve o foco ao botao que abriu o modal', async () => {
+    mockApi();
+    renderPage();
+    for (const nome of ["Novo produto","Importar do IntelliQuote"]) {
+      const botao = await screen.findByRole('button', { name: nome });
+      botao.focus();
+      fireEvent.click(botao);
+      const dialog = await screen.findByRole('dialog');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement, nome).toBe(botao);
+    }
+  });
+
 });

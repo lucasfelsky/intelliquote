@@ -316,7 +316,7 @@ function NovoProdutoModal({ onClose, onSaved }: NovoProdutoModalProps) {
   }
 
   return (
-    <Modal isOpen onClose={onClose} title="Novo produto">
+    <Modal isOpen restoreFocus onClose={onClose} title="Novo produto">
       <form onSubmit={enviar} noValidate className="indent-form">
         {erroForm && (
           <div role="alert" className="alert alert--error">

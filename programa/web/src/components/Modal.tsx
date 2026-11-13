@@ -13,25 +13,48 @@ interface ModalProps {
   size?: 'default' | 'wide' | 'xl';
   /** Classe EXTRA no <dialog> (ex.: raiz de portal do Forecast). Opcional; sem ela o className segue como antes. */
   className?: string;
+  /** Opt-in: devolve o foco a quem o tinha antes de abrir (botao ou linha) quando o modal fecha ou desmonta. Padrao false: nada muda. */
+  restoreFocus?: boolean;
 }
 
-export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, size, className: extra }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, size, className: extra, restoreFocus = false }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const restoreFocusRef = useRef(restoreFocus);
+  restoreFocusRef.current = restoreFocus;
+  const origemRef = useRef<HTMLElement | null>(null);
   const tituloId = useId();
   const mousedownTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog) return;
+    if (!dialog) return undefined;
+
+    // Opt-in (restoreFocus): guarda quem tinha o foco ANTES do showModal() e o devolve quando o modal fecha ou desmonta.
+    // A origem fica num ref (nao numa variavel do efeito): sob React.StrictMode o efeito roda duas vezes e na 2a o dialog ja esta aberto.
+    const devolverFoco = () => {
+      const origem = origemRef.current;
+      origemRef.current = null;
+      // `isConnected`: o botao/linha que abriu pode ter sumido (ex.: a tela navegou depois de criar).
+      if (origem?.isConnected) origem.focus();
+    };
 
     if (isOpen && !dialog.open) {
+      if (restoreFocusRef.current && origemRef.current === null && document.activeElement instanceof HTMLElement) {
+        origemRef.current = document.activeElement;
+      }
       dialog.showModal();
       // O autoFocus do React age com o <dialog> ainda fechado e o showModal() depois foca o 1o focavel (o Fechar): quem quer o foco
       // inicial num campo marca o elemento com data-autofocus. Sem o atributo nada muda.
       dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     } else if (!isOpen && dialog.open) {
       dialog.close();
+      devolverFoco();
     }
+
+    return () => {
+      // Desmontagem de verdade: o <dialog> ja saiu do DOM. (A limpeza simulada do StrictMode roda com ele ainda conectado e nao devolve nada.)
+      if (!dialog.isConnected) devolverFoco();
+    };
   }, [isOpen]);
 
   useEffect(() => {

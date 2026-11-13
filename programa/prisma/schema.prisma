@@ -1445,6 +1445,7 @@ model IndentClient {
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
   supplierRules    IndentClientSupplierRule[]
+  requests         IndentRequest[]
 
   @@index([isActive])
   @@index([name])
@@ -1478,6 +1479,7 @@ model IndentSupplier {
   updatedAt       DateTime                   @updatedAt
   clientRules     IndentClientSupplierRule[]
   products        IndentSupplierProduct[]
+  quotes          IndentQuote[]
 
   @@index([isActive])
 }
@@ -1499,6 +1501,7 @@ model IndentProduct {
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
   suppliers           IndentSupplierProduct[]
+  requestItems        IndentRequestItem[]
 
   @@index([isActive])
   @@index([origin])
@@ -1516,4 +1519,120 @@ model IndentSupplierProduct {
 
   @@unique([supplierId, productId])
   @@index([productId])
+}
+
+// IQ Indent PR 2: solicitacoes manuais e cotacoes em rascunho. Prefixo Indent em tudo; sem FK para tabelas do IQ principal.
+enum IndentRequestOrigin {
+  PIPEDRIVE
+  IQ_INDENT
+}
+
+enum IndentRequestStatus {
+  NOVA
+  COTACAO
+  RESPONDIDA
+  CONVERTIDA
+  PERDIDA
+}
+
+// Enum completo desde ja; o PR 2 so grava RASCUNHO (o resto e do PR 3/4).
+enum IndentQuoteStatus {
+  RASCUNHO
+  ENVIADA
+  RESPONDIDA
+  ACEITA
+  RECUSADA
+  REVISADA
+}
+
+// Sequencia NNN/AA por ano (calendario BRT). Lida com FOR UPDATE na criacao da solicitacao.
+model IndentSequence {
+  year       Int      @id
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+}
+
+model IndentRequest {
+  id              Int                 @id @default(autoincrement())
+  processNumber   String              @unique // NNN/AA
+  processYear     Int
+  processSeq      Int
+  origin          IndentRequestOrigin
+  pipedriveDealId Int?                @unique
+  dealTitle       String?
+  clientId        Int? // null = cliente pendente
+  ownerName       String
+  status          IndentRequestStatus @default(NOVA)
+  statusChangedAt DateTime            @default(now())
+  stageEnteredAt  DateTime            @default(now())
+  rawNote         String?
+  dealType        String?
+  createdById     Int? // sem FK para User
+  createdByName   String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  client          IndentClient?       @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  items           IndentRequestItem[]
+  quotes          IndentQuote[]
+
+  @@unique([processYear, processSeq])
+  @@index([status])
+  @@index([clientId])
+  @@index([origin])
+  @@index([createdAt])
+}
+
+model IndentRequestItem {
+  id          Int               @id @default(autoincrement())
+  requestId   Int
+  productId   Int? // null = item ainda sem produto (PR 5)
+  description String
+  quantityKg  Decimal           @db.Decimal(14, 3)
+  confirmed   Boolean           @default(false)
+  position    Int
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  request     IndentRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  product     IndentProduct?    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quoteItems  IndentQuoteItem[]
+
+  @@index([requestId])
+  @@index([productId])
+}
+
+model IndentQuote {
+  id              Int               @id @default(autoincrement())
+  requestId       Int
+  supplierId      Int
+  status          IndentQuoteStatus @default(RASCUNHO)
+  revision        Int               @default(1)
+  currency        String
+  incoterm        Incoterm
+  destination     String?
+  exceptionReason String?
+  exceptionById   Int? // sem FK para User
+  exceptionByName String?
+  exceptionAt     DateTime?
+  createdById     Int?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  request         IndentRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  supplier        IndentSupplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  items           IndentQuoteItem[]
+
+  @@unique([requestId, supplierId, revision])
+  @@index([supplierId])
+  @@index([status])
+}
+
+model IndentQuoteItem {
+  id            Int               @id @default(autoincrement())
+  quoteId       Int
+  requestItemId Int
+  createdAt     DateTime          @default(now())
+  quote         IndentQuote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  requestItem   IndentRequestItem @relation(fields: [requestItemId], references: [id], onDelete: Restrict)
+
+  @@unique([quoteId, requestItemId])
+  @@index([requestItemId])
 }

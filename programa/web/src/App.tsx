@@ -24,6 +24,8 @@ import Templates from '@/pages/Templates';
 import MinhaConta from '@/pages/MinhaConta';
 import Solicitacoes from '@/pages/Solicitacoes';
 import Forecast from '@/pages/Forecast';
+import IndentSolicitacoes from '@/pages/Indent/IndentSolicitacoes';
+import IndentSolicitacaoDetalhe from '@/pages/Indent/IndentSolicitacaoDetalhe';
 import IndentCatalogo from '@/pages/Indent/IndentCatalogo';
 import IndentFornecedores from '@/pages/Indent/IndentFornecedores';
 import IndentClientes from '@/pages/Indent/IndentClientes';
@@ -92,7 +94,9 @@ export default function App() {
                   <Route path="/relatorios" element={<Relatorios />} />
                   <Route path="/forecast" element={<Forecast />} />
                   <Route path="/forecast/item/:linha" element={<Forecast />} />
-                  <Route path="/indent" element={<Navigate to="/indent/catalogo" replace />} />
+                  <Route path="/indent" element={<Navigate to="/indent/solicitacoes" replace />} />
+                  <Route path="/indent/solicitacoes" element={<IndentSolicitacoes />} />
+                  <Route path="/indent/solicitacoes/:id" element={<IndentSolicitacaoDetalhe />} />
                   <Route path="/indent/catalogo" element={<IndentCatalogo />} />
                   <Route path="/indent/fornecedores" element={<IndentFornecedores />} />
                   <Route path="/indent/clientes" element={<IndentClientes />} />

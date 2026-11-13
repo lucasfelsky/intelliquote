@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { useAuth } from '@/auth/AuthProvider';
 import { getCommercialRequestsPendingCount } from '@/services/commercialRequests';
+import { getIndentRequestsNewCount } from '@/services/indentRequests';
 import { COMEX_ROLES, filterNavByRole, INDENT_NAV, PRIMARY_NAV, ADMIN_NAV, type NavItem } from './navConfig';
 
 // Sidebar recolhida (so icones): a escolha fica no navegador. Storage pode falhar (modo privado, bloqueio): nunca quebra a tela.
@@ -33,7 +34,7 @@ export default function AppShell() {
       // sem persistencia: o estado vale so ate recarregar
     }
   };
-  // Em /indent/* a sidebar troca para a variante do IQ Indent (selo na marca, "Voltar", so as 3 paginas de cadastro).
+  // Em /indent/* a sidebar troca para a variante do IQ Indent (selo na marca, "Voltar", Solicitacoes e as 3 paginas de cadastro).
   const indent = /^\/indent(\/|$)/.test(useLocation().pathname);
   const { user, logout } = useAuth();
   const role = user?.role;
@@ -46,7 +47,16 @@ export default function AppShell() {
     enabled: isComex,
     refetchInterval: 60_000,
   });
-  const badges: Record<string, number> = indent ? {} : { '/solicitacoes': pending.data?.count ?? 0 };
+  // Badge das solicitacoes NOVAS do Indent (com cliente; cliente pendente nao conta). So dentro de /indent/*.
+  const novasIndent = useQuery({
+    queryKey: ['indent', 'requests', 'new-count'],
+    queryFn: getIndentRequestsNewCount,
+    enabled: isComex && indent,
+    refetchInterval: 60_000,
+  });
+  const badges: Record<string, number> = indent
+    ? { '/indent/solicitacoes': novasIndent.data?.count ?? 0 }
+    : { '/solicitacoes': pending.data?.count ?? 0 };
   const mainNav = indent ? filterNavByRole(INDENT_NAV, role) : filterNavByRole(PRIMARY_NAV, role);
   const adminNav = indent ? [] : filterNavByRole(ADMIN_NAV, role);
   const adminHeader = adminNav.length > 0;

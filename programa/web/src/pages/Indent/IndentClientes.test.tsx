@@ -338,4 +338,26 @@ describe('IndentClientes', () => {
     fireEvent.keyDown(celula.closest('tr') as HTMLElement, { key: 'Enter' });
     expect(await screen.findByRole('dialog', { name: 'Tintas Serra Gaúcha S.A.' })).toBeTruthy();
   });
+
+  it('restoreFocus: fechar o modal de restricao (aberto pela linha) e o de Novo cliente devolve o foco a quem abriu', async () => {
+    mockApi();
+    renderPage();
+    const celula = await screen.findByText('Indústria Química Vale do Itajaí Ltda');
+    const linha = celula.closest('tr') as HTMLElement;
+    linha.focus();
+    fireEvent.click(linha);
+    const restricao = await screen.findByRole('dialog', { name: 'Indústria Química Vale do Itajaí Ltda' });
+    fireEvent.click(within(restricao).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(linha);
+
+    const novo = screen.getByRole('button', { name: 'Novo cliente' });
+    novo.focus();
+    fireEvent.click(novo);
+    const dialog = await screen.findByRole('dialog', { name: 'Novo cliente' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(novo);
+  });
+
 });
