@@ -10,6 +10,7 @@ import {
   listIndentClients,
   listIndentSupplierOptions,
   setIndentClientRule,
+  updateIndentClient,
   type IndentClient,
   type IndentRuleMode,
 } from '@/services/indent';
@@ -31,6 +32,13 @@ const ROTULO_MODO: Record<IndentRuleMode, { texto: string; tom: 'muted' | 'warni
   APROVADOS: { texto: 'Só aprovados', tom: 'warning' },
   BLOQUEIO: { texto: 'Bloqueios', tom: 'danger' },
 };
+
+type Filtro = 'todos' | 'semCnpj';
+
+const FILTROS: ReadonlyArray<{ id: Filtro; rotulo: string }> = [
+  { id: 'todos', rotulo: 'Todos' },
+  { id: 'semCnpj', rotulo: 'Sem CNPJ' },
+];
 
 function messageOf(err: unknown): string {
   if (err instanceof ApiError) {
@@ -55,14 +63,18 @@ export default function IndentClientes() {
   const [page, setPage] = useState(1);
   const [restricao, setRestricao] = useState<IndentClient | null>(null);
   const [novoAberto, setNovoAberto] = useState(false);
+  const [edicao, setEdicao] = useState<IndentClient | null>(null);
+  const [filtro, setFiltro] = useState<Filtro>('todos');
+  const semCnpj = filtro === 'semCnpj';
 
   const clientes = useQuery({
-    queryKey: ['indent', 'clients', { page }],
-    queryFn: () => listIndentClients({ page, pageSize: PAGE_SIZE }),
+    queryKey: ['indent', 'clients', { page, semCnpj }],
+    queryFn: () => listIndentClients({ page, pageSize: PAGE_SIZE, semCnpj }),
     placeholderData: keepPreviousData,
   });
 
   const linhas = clientes.data?.data ?? [];
+  const contas = clientes.data?.counts;
   const totalPaginas = clientes.data?.pagination.totalPages ?? 1;
 
   function abrir(cliente: IndentClient) {
@@ -70,6 +82,8 @@ export default function IndentClientes() {
   }
 
   function aoTeclar(event: KeyboardEvent<HTMLTableRowElement>, cliente: IndentClient) {
+    // Enter/Espaco num botao dentro da linha (Completar CNPJ) e do botao, nao da linha.
+    if (event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       abrir(cliente);
@@ -95,6 +109,35 @@ export default function IndentClientes() {
       </header>
 
       {canWrite && <p className="indent-cell-sub indent-dica">Clique em um cliente para editar a restrição.</p>}
+
+      <div className="indent-toolbar">
+        <div className="indent-chips" role="group" aria-label="Filtrar por CNPJ">
+          {FILTROS.map((item) => {
+            const ativo = filtro === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={`chip${ativo ? ' chip--active' : ''}`}
+                aria-pressed={ativo}
+                onClick={() => {
+                  setFiltro(item.id);
+                  setPage(1);
+                }}
+              >
+                {item.rotulo}{' '}
+                <span className="indent-chip-conta">{(contas?.[item.id] ?? 0).toLocaleString('pt-BR')}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {semCnpj && (
+        <div className="alert alert--info">
+          Clientes sem CNPJ não casam automaticamente com o Pipedrive. Preencha o CNPJ ou informe a organização do Pipedrive (Org #).
+        </div>
+      )}
 
       {clientes.isError && (
         <div role="alert" className="alert alert--error">
@@ -129,7 +172,29 @@ export default function IndentClientes() {
                     <td>
                       <div className="indent-cell-main">
                         <span>{cliente.name}</span>
-                        <span className="indent-cell-sub">{[formatCnpj(cliente.cnpj), cliente.city].filter(Boolean).join(' · ')}</span>
+                        {cliente.cnpj === null ? (
+                          <span className="indent-cell-sub">
+                            <span className="indent-tag indent-tag--manual">CNPJ pendente</span>
+                            {cliente.city ? ` · ${cliente.city}` : ''}
+                            {canWrite && (
+                              <>
+                                {' '}
+                                <button
+                                  type="button"
+                                  className="ghost-button ghost-button--sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setEdicao(cliente);
+                                  }}
+                                >
+                                  Completar CNPJ
+                                </button>
+                              </>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="indent-cell-sub">{[formatCnpj(cliente.cnpj), cliente.city].filter(Boolean).join(' · ')}</span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -174,7 +239,7 @@ export default function IndentClientes() {
           </div>
         )}
         {!clientes.isLoading && !clientes.isError && linhas.length === 0 && (
-          <div className="indent-vazio">Nenhum cliente cadastrado.</div>
+          <div className="indent-vazio">{semCnpj ? 'Nenhum cliente sem CNPJ.' : 'Nenhum cliente cadastrado.'}</div>
         )}
       </div>
 
@@ -210,12 +275,24 @@ export default function IndentClientes() {
       )}
 
       {novoAberto && (
-        <NovoClienteModal
+        <ClienteModal
           onClose={() => setNovoAberto(false)}
           onSaved={(nome) => {
             setNovoAberto(false);
             void qc.invalidateQueries({ queryKey: ['indent'] });
             mostrar('salvo', `Cliente ${nome} cadastrado`, '');
+          }}
+        />
+      )}
+
+      {edicao && (
+        <ClienteModal
+          cliente={edicao}
+          onClose={() => setEdicao(null)}
+          onSaved={(nome) => {
+            setEdicao(null);
+            void qc.invalidateQueries({ queryKey: ['indent'] });
+            mostrar('salvo', `Cliente ${nome} atualizado`, '');
           }}
         />
       )}
@@ -390,23 +467,42 @@ function RestricaoModal({ cliente, onClose, onSaved }: RestricaoModalProps) {
   );
 }
 
-interface NovoClienteModalProps {
+interface ClienteModalProps {
+  /** Ausente = Novo cliente; presente = edicao dos dados (Completar CNPJ). */
+  cliente?: IndentClient;
   onClose: () => void;
   onSaved: (nome: string) => void;
 }
 
-// openSimple('Novo cliente'): Razao social, CNPJ e Cidade. CNPJ com mascara ao digitar e a mesma validacao do backend antes de enviar.
-function NovoClienteModal({ onClose, onSaved }: NovoClienteModalProps) {
-  const [nome, setNome] = useState('');
-  const [cnpj, setCnpj] = useState('');
-  const [cidade, setCidade] = useState('');
+// openSimple('Novo cliente'): Razao social, CNPJ (opcional) e Cidade. CNPJ com mascara ao digitar e a mesma validacao do backend antes de enviar.
+// Modo edicao (divergencia consciente do mock v13, consequencia da D1): mesmos campos + Org # do Pipedrive, via PUT.
+function ClienteModal({ cliente, onClose, onSaved }: ClienteModalProps) {
+  const edicao = cliente !== undefined;
+  const [nome, setNome] = useState(cliente?.name ?? '');
+  const [cnpj, setCnpj] = useState(cliente?.cnpj ? maskCnpjInput(cliente.cnpj) : '');
+  const [cidade, setCidade] = useState(cliente?.city ?? '');
+  const [orgId, setOrgId] = useState(cliente?.pipedriveOrgId != null ? String(cliente.pipedriveOrgId) : '');
   const [erroNome, setErroNome] = useState<string | null>(null);
   const [erroCnpj, setErroCnpj] = useState<string | null>(null);
+  const [erroOrg, setErroOrg] = useState<string | null>(null);
   const [erroForm, setErroForm] = useState<string | null>(null);
 
   const salvar = useMutation({
-    mutationFn: () => createIndentClient({ name: nome.trim(), cnpj: normalizeCnpj(cnpj), city: toNullable(cidade) }),
-    onSuccess: (cliente) => onSaved(cliente.name),
+    mutationFn: () => {
+      const digitos = normalizeCnpj(cnpj);
+      const org = orgId.trim();
+      if (!cliente) {
+        return createIndentClient({ name: nome.trim(), cnpj: digitos === '' ? null : digitos, city: toNullable(cidade) });
+      }
+      return updateIndentClient(cliente.id, {
+        name: nome.trim(),
+        // Cliente pendente que continua sem CNPJ: nao envia a chave (o backend nao aceita remover, so completar).
+        ...(digitos === '' ? {} : { cnpj: digitos }),
+        city: toNullable(cidade),
+        pipedriveOrgId: org === '' ? null : Number(org),
+      });
+    },
+    onSuccess: (salvo) => onSaved(salvo.name),
     onError: (err) => setErroForm(messageOf(err)),
   });
 
@@ -414,15 +510,21 @@ function NovoClienteModal({ onClose, onSaved }: NovoClienteModalProps) {
     event.preventDefault();
     setErroForm(null);
     const semNome = nome.trim().length === 0;
-    const cnpjInvalido = !isValidCnpj(cnpj);
+    const preenchido = normalizeCnpj(cnpj) !== '';
+    // CNPJ e opcional (vazio = CNPJ pendente); preenchido, tem de ser valido. Gravado, nao pode voltar a vazio.
+    const removendo = !preenchido && cliente?.cnpj != null;
+    const cnpjInvalido = preenchido && !isValidCnpj(cnpj);
+    const org = orgId.trim();
+    const orgInvalido = org !== '' && !/^[1-9]\d*$/.test(org);
     setErroNome(semNome ? 'Informe a razão social.' : null);
-    setErroCnpj(cnpjInvalido ? 'CNPJ inválido.' : null);
-    if (semNome || cnpjInvalido) return;
+    setErroCnpj(removendo ? 'O CNPJ não pode ser removido.' : cnpjInvalido ? 'CNPJ inválido.' : null);
+    setErroOrg(orgInvalido ? 'Informe um número inteiro positivo.' : null);
+    if (semNome || removendo || cnpjInvalido || orgInvalido) return;
     salvar.mutate();
   }
 
   return (
-    <Modal isOpen restoreFocus onClose={onClose} title="Novo cliente">
+    <Modal isOpen restoreFocus onClose={onClose} title={edicao ? 'Editar cliente' : 'Novo cliente'}>
       <form onSubmit={enviar} noValidate className="indent-form">
         {erroForm && (
           <div role="alert" className="alert alert--error">
@@ -461,6 +563,7 @@ function NovoClienteModal({ onClose, onSaved }: NovoClienteModalProps) {
               aria-invalid={erroCnpj ? true : undefined}
               onChange={(event) => setCnpj(maskCnpjInput(event.target.value))}
             />
+            <span className="field-hint">Opcional. Sem CNPJ o cliente fica como CNPJ pendente.</span>
             {erroCnpj && (
               <p className="field-error" role="alert">
                 {erroCnpj}
@@ -473,6 +576,27 @@ function NovoClienteModal({ onClose, onSaved }: NovoClienteModalProps) {
             </label>
             <input id="nc-cidade" className="input" value={cidade} onChange={(event) => setCidade(event.target.value)} />
           </div>
+          {edicao && (
+            <div className="field">
+              <label className="field-label" htmlFor="nc-org">
+                Org # do Pipedrive
+              </label>
+              <input
+                id="nc-org"
+                className="input"
+                inputMode="numeric"
+                autoComplete="off"
+                value={orgId}
+                aria-invalid={erroOrg ? true : undefined}
+                onChange={(event) => setOrgId(event.target.value)}
+              />
+              {erroOrg && (
+                <p className="field-error" role="alert">
+                  {erroOrg}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         <div className="modal-actions">
           <button type="button" className="ghost-button" onClick={onClose}>

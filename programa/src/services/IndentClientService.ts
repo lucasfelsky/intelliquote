@@ -2,11 +2,12 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { buildPaginatedResponse, HttpError } from '../utils/http';
 import { normalizeCnpj } from '../utils/cnpj';
+import { normalizeItemNameKey } from '../utils/commercialItemName';
 import type {
   IndentClientCreateInput,
+  IndentClientListQuery,
   IndentClientRuleInput,
   IndentClientUpdateInput,
-  IndentListQuery,
 } from '../validators/indent';
 import { AuditLogService } from './AuditLogService';
 
@@ -75,10 +76,12 @@ function translateConflict(error: unknown): never {
 }
 
 export class IndentClientService {
-  static async list(query: IndentListQuery) {
+  static async list(query: IndentClientListQuery) {
     const digits = query.q ? normalizeCnpj(query.q) : '';
+    const scope: Prisma.IndentClientWhereInput = query.inativos ? {} : { isActive: true };
     const where: Prisma.IndentClientWhereInput = {
-      ...(query.inativos ? {} : { isActive: true }),
+      ...scope,
+      ...(query.semCnpj ? { cnpj: null } : {}),
       ...(query.q
         ? {
             OR: [
@@ -96,7 +99,8 @@ export class IndentClientService {
       take: query.pageSize,
     };
 
-    const [rows, total] = await Promise.all([
+    // Contagens dos chips (Todos / Sem CNPJ): respeitam "inativos", ignoram busca e chip ativo.
+    const [rows, total, todos, semCnpj] = await Promise.all([
       prisma.indentClient.findMany({
         where,
         include: clientInclude,
@@ -105,18 +109,32 @@ export class IndentClientService {
         take: pagination.take,
       }),
       prisma.indentClient.count({ where }),
+      prisma.indentClient.count({ where: scope }),
+      prisma.indentClient.count({ where: { ...scope, cnpj: null } }),
     ]);
 
-    return buildPaginatedResponse(rows, total, pagination);
+    return { ...buildPaginatedResponse(rows, total, pagination), counts: { todos, semCnpj } };
   }
 
   static async create(input: IndentClientCreateInput, userId: number | null) {
     try {
       return await prisma.$transaction(async (tx) => {
+        const cnpj = input.cnpj ?? null;
+
+        // Sem CNPJ nao ha indice que barre duplicidade: confere o mesmo nome (sem acento/caixa) entre os sem CNPJ.
+        if (cnpj === null) {
+          const key = normalizeItemNameKey(input.name);
+          const semCnpj = await tx.indentClient.findMany({ where: { cnpj: null }, select: { name: true } });
+
+          if (semCnpj.some((other) => normalizeItemNameKey(other.name) === key)) {
+            throw new HttpError(409, 'Já existe um cliente sem CNPJ com este nome.');
+          }
+        }
+
         const created = await tx.indentClient.create({
           data: {
             name: input.name,
-            cnpj: input.cnpj,
+            cnpj,
             city: input.city ?? null,
             ownerName: input.ownerName ?? null,
             pipedriveOrgId: input.pipedriveOrgId ?? null,
@@ -151,11 +169,16 @@ export class IndentClientService {
           throw new HttpError(404, 'Cliente não encontrado.');
         }
 
+        // CNPJ gravado nao pode ser removido; completar (null -> valor) e trocar por outro valido seguem permitidos.
+        if (input.cnpj === null && before.cnpj !== null) {
+          throw new HttpError(400, 'O CNPJ não pode ser removido.');
+        }
+
         const updated = await tx.indentClient.update({
           where: { id },
           data: {
             ...(input.name !== undefined ? { name: input.name } : {}),
-            ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
+            ...(input.cnpj ? { cnpj: input.cnpj } : {}),
             ...(input.city !== undefined ? { city: input.city } : {}),
             ...(input.ownerName !== undefined ? { ownerName: input.ownerName } : {}),
             ...(input.pipedriveOrgId !== undefined ? { pipedriveOrgId: input.pipedriveOrgId } : {}),

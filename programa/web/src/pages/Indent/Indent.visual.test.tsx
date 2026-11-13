@@ -214,6 +214,26 @@ describe('Indent: marcacao x regiao `tela F14`', () => {
     expect(container.querySelector('[style]')).toBeNull();
   });
 
+  it('Clientes sem CNPJ: etiqueta, chips com contagem, botao Completar CNPJ, aviso e modal de edicao so com classes da F14 e dos componentes base', async () => {
+    vi.mocked(api.get).mockImplementation((async (url: string) =>
+      url === '/api/v1/indent/clients'
+        ? { ...pagina([{ ...cliente, cnpj: null }], 1), counts: { todos: 1, semCnpj: 1 } }
+        : []) as typeof api.get);
+    const { container } = renderPage(<IndentClientes />);
+    await screen.findByText('CNPJ pendente');
+    expect(container.querySelector('.indent-cell-sub > .indent-tag.indent-tag--manual')).not.toBeNull();
+    expect(container.querySelector('.indent-cell-sub > .ghost-button.ghost-button--sm')).not.toBeNull();
+    expect(container.querySelector('.indent-toolbar > .indent-chips[role="group"] > .chip.chip--active .indent-chip-conta')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Sem CNPJ/ }));
+    await waitFor(() => expect(container.querySelector('.alert.alert--info')).not.toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Completar CNPJ' }));
+    await screen.findByRole('dialog', { name: 'Editar cliente' });
+    expect(container.querySelector('dialog .field-hint')).not.toBeNull();
+    expect(container.querySelector('[style]')).toBeNull();
+  });
+
   it('Importacao: busca cheia, caixa da lista, item ja existente (tag) e paginacao', async () => {
     const { container } = renderPage(<IndentCatalogo />);
     fireEvent.click(await screen.findByRole('button', { name: 'Importar do IntelliQuote' }));

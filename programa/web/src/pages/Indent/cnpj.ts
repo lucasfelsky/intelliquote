@@ -28,9 +28,9 @@ export function isValidCnpj(raw: string): boolean {
   return first === Number(digits[12]) && second === Number(digits[13]);
 }
 
-/** "11222333000181" -> "11.222.333/0001-81". Com menos/mais de 14 digitos devolve so os digitos. */
-export function formatCnpj(raw: string): string {
-  const digits = normalizeCnpj(raw);
+/** "11222333000181" -> "11.222.333/0001-81". Com menos/mais de 14 digitos devolve so os digitos; null (CNPJ pendente) devolve "". */
+export function formatCnpj(raw: string | null): string {
+  const digits = normalizeCnpj(raw ?? '');
 
   if (digits.length !== 14) {
     return digits;

@@ -35,10 +35,22 @@ function dedupe<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }
 
-const cnpjField = z
-  .string('Informe o CNPJ.')
-  .transform((value) => normalizeCnpj(value))
-  .refine((value) => isValidCnpj(value), { message: 'CNPJ inválido.' });
+// CNPJ opcional ("CNPJ pendente"): ausente continua ausente (update parcial); '' / so espacos / null viram null.
+// Texto informado continua so digitos + DV valido (o 409 de duplicidade vem do indice unico).
+const cnpjField = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    return value;
+  },
+  z
+    .string('CNPJ inválido.')
+    .transform((value) => normalizeCnpj(value))
+    .refine((value) => isValidCnpj(value), { message: 'CNPJ inválido.' })
+    .nullable()
+    .optional(),
+);
 
 const pipedriveOrgIdField = z.number().int().positive().nullable().optional();
 
@@ -52,7 +64,7 @@ export const indentClientCreateSchema = z.object({
 
 export const indentClientUpdateSchema = z.object({
   name: requiredName(200, 'Informe a razão social.').optional(),
-  cnpj: cnpjField.optional(),
+  cnpj: cnpjField,
   city: optionalText(120),
   ownerName: optionalText(120),
   pipedriveOrgId: pipedriveOrgIdField,
@@ -200,6 +212,10 @@ export const indentListQuerySchema = z.object({
   inativos: z.preprocess(queryFlag, z.boolean()).default(false),
 });
 
+export const indentClientListQuerySchema = indentListQuerySchema.extend({
+  semCnpj: z.preprocess(queryFlag, z.boolean()).default(false),
+});
+
 export const indentProductListQuerySchema = indentListQuerySchema.extend({
   origin: z.enum(['CADASTRADO', 'LIVRE']).optional(),
 });
@@ -230,4 +246,5 @@ export type IndentSupplierUpdateInput = z.infer<typeof indentSupplierUpdateSchem
 export type IndentProductCreateInput = z.infer<typeof indentProductCreateSchema>;
 export type IndentProductUpdateInput = z.infer<typeof indentProductUpdateSchema>;
 export type IndentListQuery = z.infer<typeof indentListQuerySchema>;
+export type IndentClientListQuery = z.infer<typeof indentClientListQuerySchema>;
 export type IndentProductListQuery = z.infer<typeof indentProductListQuerySchema>;

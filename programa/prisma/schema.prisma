@@ -1435,7 +1435,7 @@ enum IndentProductOrigin {
 model IndentClient {
   id               Int                        @id @default(autoincrement())
   name             String
-  cnpj             String                     @unique // so digitos
+  cnpj             String?                    @unique // so digitos; null = CNPJ pendente
   city             String?
   ownerName        String? // responsavel (texto)
   pipedriveOrgId   Int?                       @unique
