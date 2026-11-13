@@ -163,6 +163,23 @@ function GavetaFormulario({
   const [focoErro, setFocoErro] = useState(0);
   const [livre, setLivre] = useState<FreeItemState>({ aberto: false, descricao: '', quantidade: '', erro: null });
 
+  // Foco inicial: o formulario so existe depois da consulta (o Modal ja procurou o data-autofocus no "Carregando") e remonta a cada acao
+  // bem-sucedida (marcar como enviada, incluir item). Vai para o campo marcado com data-autofocus; sem ele, so se o foco se perdeu
+  // (o botao focado sumiu na remontagem) cai no 1o controle do formulario. Nunca autoFocus do React.
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const alvo = form.querySelector<HTMLElement>('[data-autofocus]');
+    if (alvo) {
+      alvo.focus();
+      return;
+    }
+    const ativo = document.activeElement;
+    if (!ativo || ativo === document.body || !form.closest('dialog')?.contains(ativo)) {
+      form.querySelector<HTMLElement>('input, select, button')?.focus();
+    }
+  }, []);
+
   // Depois de um erro de validacao, o foco vai para o 1o campo marcado (aria-invalid).
   useEffect(() => {
     if (focoErro === 0) return;
@@ -190,7 +207,7 @@ function GavetaFormulario({
 
         if (erro.status === 400 && caminho) {
           if (caminho === 'description' || caminho === 'quantityKg') {
-            setLivre((atual) => ({ ...atual, erro: mensagem }));
+            setLivre((atual) => ({ ...atual, erro: { campo: caminho === 'description' ? 'descricao' : 'quantidade', mensagem } }));
           } else {
             setErros((atual) => ({ ...atual, [caminho]: mensagem }));
           }
@@ -278,11 +295,11 @@ function GavetaFormulario({
     const quantidade = parseQuantidadePtBr(livre.quantidade);
 
     if (descricao === '') {
-      setLivre({ ...livre, erro: 'Informe o produto.' });
+      setLivre({ ...livre, erro: { campo: 'descricao', mensagem: 'Informe o produto.' } });
       return;
     }
     if (quantidade === null || quantidade <= 0) {
-      setLivre({ ...livre, erro: 'Informe a quantidade em kg.' });
+      setLivre({ ...livre, erro: { campo: 'quantidade', mensagem: 'Informe a quantidade em kg.' } });
       return;
     }
 

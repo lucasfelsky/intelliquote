@@ -13753,7 +13753,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 /* ======================= Cotacoes (PR 3): agrupar por, grupos recolhiveis e gaveta ======================= */
 /* Metricas do mock (.seg, .group, .drawer, .processbox, .priceinp, .totalrow). Cada token do mock virou o --rf-* mais proximo que ja existe
    (navy -> --rf-sidebar-bg, shadow-sm -> --rf-shadow-rest, shadow-xl -> --rf-shadow-modal, radius-md -> --rf-radius-card). A gaveta e um <Modal>
-   (dialog) a direita; a animacao de abertura e a do modal existente (divergencia aceita). Sem at-rule: nada de @media nem @keyframes. */
+   (dialog) a direita; a animacao de abertura e a do modal existente (divergencia aceita). Sem media query e sem keyframes. */
 .indent-page .indent-seg-rotulo {
   font-size: 12px;
   font-weight: 700;

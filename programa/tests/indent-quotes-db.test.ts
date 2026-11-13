@@ -163,6 +163,41 @@ describe('IQ Indent - cotacoes (DB)', () => {
     expect(await prisma.auditLog.count({ where: { action: 'indent_request.status_changed', entityId: String(requestId) } })).toBeGreaterThanOrEqual(1);
   });
 
+  testDbSkip('a trava da SOLICITACAO e real: o aceite espera quem a segura e, depois, ve o que ele gravou (409 por aceite unico)', async () => {
+    const { requestId, quoteIds } = await newRequest([supplierIds[0]!, supplierIds[1]!]);
+    const [primeira, segunda] = quoteIds as [number, number];
+    await respond(primeira);
+    await respond(segunda);
+
+    // Quem segura a linha da solicitacao grava a ACEITA da segunda cotacao e so libera (commit) depois.
+    let liberar!: () => void;
+    const segurando = new Promise<void>((resolve) => (liberar = resolve));
+    let travou!: () => void;
+    const travado = new Promise<void>((resolve) => (travou = resolve));
+    const segurador = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "IndentRequest" WHERE id = ${requestId} FOR NO KEY UPDATE`;
+        await tx.indentQuote.update({ where: { id: segunda }, data: { status: 'ACEITA', decidedAt: new Date() } });
+        travou();
+        await segurando;
+      },
+      { timeout: 30000 },
+    );
+    await travado;
+
+    const aceite = Promise.resolve(api('post', `/quotes/${primeira}/accept`));
+    const estado = await Promise.race([aceite.then(() => 'terminou'), new Promise<string>((resolve) => setTimeout(() => resolve('pendente'), 800))]);
+    expect(estado).toBe('pendente');
+
+    liberar();
+    await segurador;
+    // Sem a trava, o aceite leria "nenhuma ACEITA" antes de esperar e gravaria a 2a ACEITA (200).
+    const res = await aceite;
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/^Esta solicitação já tem uma cotação aceita \(/);
+    expect(await prisma.indentQuote.count({ where: { requestId, status: 'ACEITA' } })).toBe(1);
+  });
+
   testDbSkip('depois do aceite, a outra cotacao RESPONDIDA ainda pode ser recusada, mas nao aceita nem revisada', async () => {
     const { quoteIds } = await newRequest([supplierIds[0]!, supplierIds[1]!]);
     for (const id of quoteIds) await respond(id);

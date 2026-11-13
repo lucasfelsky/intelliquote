@@ -16,7 +16,8 @@ export interface FreeItemState {
   aberto: boolean;
   descricao: string;
   quantidade: string;
-  erro: string | null;
+  /** Erro de validacao com o campo a que pertence (aria-invalid e aria-describedby so nele). */
+  erro: { campo: 'descricao' | 'quantidade'; mensagem: string } | null;
 }
 
 interface Props {
@@ -207,8 +208,8 @@ export default function IndentCotacaoItens({
                       className="input indent-desc"
                       placeholder="Digite o item"
                       value={free.descricao}
-                      aria-invalid={free.erro ? true : undefined}
-                      aria-describedby={free.erro ? `${base}-livre-erro` : undefined}
+                      aria-invalid={free.erro?.campo === 'descricao' ? true : undefined}
+                      aria-describedby={free.erro?.campo === 'descricao' ? `${base}-livre-erro` : undefined}
                       onChange={(event) => onFreeChange('descricao', event.target.value)}
                       onKeyDown={aoTeclarNoItemLivre}
                     />
@@ -224,7 +225,8 @@ export default function IndentCotacaoItens({
                       inputMode="decimal"
                       placeholder="Qtd. (kg)"
                       value={free.quantidade}
-                      aria-invalid={free.erro ? true : undefined}
+                      aria-invalid={free.erro?.campo === 'quantidade' ? true : undefined}
+                      aria-describedby={free.erro?.campo === 'quantidade' ? `${base}-livre-erro` : undefined}
                       onChange={(event) => onFreeChange('quantidade', event.target.value)}
                       onKeyDown={aoTeclarNoItemLivre}
                     />
@@ -246,7 +248,7 @@ export default function IndentCotacaoItens({
 
       {free.aberto && free.erro && (
         <p id={`${base}-livre-erro`} className="field-error" role="alert">
-          {free.erro}
+          {free.erro.mensagem}
         </p>
       )}
 
@@ -259,4 +261,3 @@ export default function IndentCotacaoItens({
     </section>
   );
 }
-

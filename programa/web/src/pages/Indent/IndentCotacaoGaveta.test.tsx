@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import IndentCotacaoGaveta from './IndentCotacaoGaveta';
 import { todayKeyBr } from './indentCotacao';
@@ -307,6 +307,39 @@ describe('IndentCotacaoGaveta - botoes por allowedActions', () => {
   });
 });
 
+describe('IndentCotacaoGaveta - foco inicial', () => {
+  it('ENVIADA: o foco vai para o 1o campo (data-autofocus), nao para o Fechar', async () => {
+    mockCotacao(cotacao({ status: 'ENVIADA', sentAt: '2026-11-11T15:00:00.000Z', allowedActions: ['response'] }));
+    renderGaveta();
+    const campo = await screen.findByLabelText('Data da resposta');
+    await waitFor(() => expect(document.activeElement).toBe(campo));
+  });
+
+  it('apos "Marcar como enviada" (o formulario remonta) o foco vai para a Data da resposta, nao para o body', async () => {
+    mockCotacao(cotacao());
+    resolvePost(cotacao({ status: 'ENVIADA', sentAt: '2026-11-13T15:00:00.000Z', allowedActions: ['response'] }));
+    renderGaveta();
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar como enviada' }));
+
+    const campo = await screen.findByLabelText('Data da resposta');
+    await waitFor(() => expect(document.activeElement).toBe(campo));
+  });
+
+  it('apos "Incluir item" (remonta, sem data-autofocus) o foco nao se perde no body', async () => {
+    mockCotacao(cotacao());
+    resolvePost(cotacao({ items: [item(201, 21), item(202, 22), item(203, 23, { name: 'Livre Z', isFree: true, cas: null })] }));
+    renderGaveta();
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar item livre' }));
+    fireEvent.change(screen.getByLabelText('Descrição do item'), { target: { value: 'Livre Z' } });
+    fireEvent.change(screen.getByLabelText('Quantidade (kg)'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Incluir item' }));
+
+    await screen.findByText('Livre Z');
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    expect(document.querySelector('dialog')?.contains(document.activeElement)).toBe(true);
+  });
+});
+
 describe('IndentCotacaoGaveta - marcar como enviada', () => {
   it('envia a data, mostra o toast e a gaveta continua aberta com o novo status', async () => {
     mockCotacao(cotacao());
@@ -440,6 +473,39 @@ describe('IndentCotacaoGaveta - registrar resposta (bloco da divergencia aceita)
 });
 
 describe('IndentCotacaoGaveta - item livre', () => {
+  it('Enter com descricao e quantidade preenchidas inclui o item (e nunca marca como enviada)', async () => {
+    mockCotacao(cotacao());
+    resolvePost(cotacao({ items: [item(201, 21), item(202, 22), item(203, 23, { name: 'Livre Z', isFree: true, cas: null })] }));
+    renderGaveta();
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar item livre' }));
+    fireEvent.change(screen.getByLabelText('Descrição do item'), { target: { value: 'Livre Z' } });
+    fireEvent.change(screen.getByLabelText('Quantidade (kg)'), { target: { value: '10' } });
+
+    const campo = screen.getByLabelText('Quantidade (kg)');
+    const evento = createEvent.keyDown(campo, { key: 'Enter' });
+    fireEvent(campo, evento);
+
+    expect(evento.defaultPrevented).toBe(true);
+    await screen.findByText('Item livre incluído em 270/26');
+    expect(vi.mocked(api.post).mock.calls.map((c) => c[0])).toEqual(['/api/v1/indent/quotes/100/items']);
+  });
+
+  it('erro de quantidade marca so o campo da quantidade (aria-invalid + aria-describedby), nao a descricao', async () => {
+    mockCotacao(cotacao());
+    renderGaveta();
+    fireEvent.click(await screen.findByRole('button', { name: 'Adicionar item livre' }));
+    fireEvent.change(screen.getByLabelText('Descrição do item'), { target: { value: 'Livre Z' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Incluir item' }));
+
+    const erro = await screen.findByText('Informe a quantidade em kg.');
+    const qtd = screen.getByLabelText('Quantidade (kg)');
+    expect(qtd.getAttribute('aria-invalid')).toBe('true');
+    expect(qtd.getAttribute('aria-describedby')).toBe(erro.id);
+    expect(screen.getByLabelText('Descrição do item').getAttribute('aria-invalid')).toBeNull();
+    expect(screen.getByLabelText('Descrição do item').getAttribute('aria-describedby')).toBeNull();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('abre a linha (descricao com foco + quantidade + "Incluir item"), envia pt-BR como numero e mostra o toast', async () => {
     mockCotacao(cotacao());
     resolvePost(
@@ -460,13 +526,16 @@ describe('IndentCotacaoGaveta - item livre', () => {
     await screen.findByText('Produto livre Y');
   });
 
-  it('Enter na linha do item livre inclui o item (nao envia o formulario) e descricao vazia mostra o erro', async () => {
+  it('Enter na linha do item livre inclui o item e NAO envia o formulario (preventDefault); descricao vazia mostra o erro', async () => {
     mockCotacao(cotacao());
     renderGaveta();
     fireEvent.click(await screen.findByRole('button', { name: 'Adicionar item livre' }));
 
-    fireEvent.keyDown(screen.getByLabelText('Descrição do item'), { key: 'Enter' });
-
+    // O jsdom nao simula a submissao implicita: a prova e o preventDefault do keydown (sem ele o navegador marcaria como enviada).
+    const campo = screen.getByLabelText('Descrição do item');
+    const evento = createEvent.keyDown(campo, { key: 'Enter' });
+    fireEvent(campo, evento);
+    expect(evento.defaultPrevented).toBe(true);
     expect(await screen.findByText('Informe o produto.')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
