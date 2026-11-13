@@ -404,17 +404,18 @@ export function createPipedriveHttpClient(options: PipedriveHttpClientOptions): 
   /** UNICO ponto de chamada ao Pipedrive. Sempre GET; o token vai so no header. */
   async function request(path: string, query: Record<string, QueryValue> = {}): Promise<unknown> {
     const url = new URL(path, baseUrl);
-    for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== null && value !== '') {
-        url.searchParams.set(key, String(value));
-      }
-    }
+    // encodeURIComponent: espaco sai como %20 (URLSearchParams usaria "+"; a sonda real usou %20, ex.: add_time%20ASC).
+    url.search = Object.entries(query)
+      .filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
+      .join('&');
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       let response: Response;
       try {
         response = await fetchImpl(url.toString(), {
           method: 'GET',
+          redirect: 'error', // o header do token nao pode seguir redirecionamento para outra origem
           headers: { [HEADER_NAME_TOKEN]: apiToken, Accept: 'application/json', 'User-Agent': USER_AGENT },
           signal: AbortSignal.timeout(timeoutMs),
         });

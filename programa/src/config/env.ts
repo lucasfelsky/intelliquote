@@ -215,8 +215,7 @@ export const internalJobsEnv = {
 // Formato invalido NAO derruba o boot: `configured=false` e `configErrors` guarda so os NOMES das envs (nunca valores);
 // o erro e logado uma vez aqui. Nenhuma chamada ao Pipedrive acontece no boot nem em /health*.
 // Funil, coluna e prazo "oficiais" ficam no banco (IndentIntegrationConfig); estas envs sao o valor inicial.
-// O nome da env do token e montado em duas partes para a guarda estatica de `src/` (nada de "api" + "_token" em query).
-const PIPEDRIVE_TOKEN_ENV = 'PIPEDRIVE_API' + '_TOKEN';
+const PIPEDRIVE_TOKEN_ENV = 'PIPEDRIVE_API_TOKEN';
 const PIPEDRIVE_ENV_NAMES = [
   PIPEDRIVE_TOKEN_ENV,
   'PIPEDRIVE_DOMAIN',

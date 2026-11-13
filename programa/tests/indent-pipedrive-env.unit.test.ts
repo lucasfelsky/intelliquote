@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parsePipedriveEnv } from '../src/config/env';
 
 // Valores FICTICIOS (repositorio publico): token inventado, ids 9xxx e chaves de campo de teste.
-const TOKEN_NAME = 'PIPEDRIVE_API' + '_TOKEN';
+const TOKEN_NAME = 'PIPEDRIVE_API_TOKEN';
 const VALID: Record<string, string> = {
   [TOKEN_NAME]: 'tok-exemplo-0000-aaaa',
   PIPEDRIVE_DOMAIN: 'exemplo',

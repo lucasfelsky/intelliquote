@@ -26,6 +26,8 @@ const CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
 
 const BLOCK_TAGS = new Set(['div', 'p', 'li', 'ul', 'ol', 'table', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 const DROP_WITH_CONTENT = new Set(['script', 'style']);
+const CLOSE_SCRIPT = /<\/script/gi;
+const CLOSE_STYLE = /<\/style/gi;
 
 /** Decodifica uma unica vez (sem dupla decodificacao); codigo fora de 1..0x10FFFF ou substituto mantem o literal. */
 function decodeEntities(text: string): string {
@@ -48,7 +50,6 @@ function decodeEntities(text: string): string {
  */
 export function noteHtmlToText(html: string): string {
   const src = String(html ?? '').slice(0, NOTE_HTML_MAX_CHARS);
-  const lower = src.toLowerCase();
   let out = '';
   let inCell = false;
   let i = 0;
@@ -105,11 +106,14 @@ export function noteHtmlToText(html: string): string {
     const name = (tag[2] as string).toLowerCase();
 
     if (DROP_WITH_CONTENT.has(name) && !closing) {
-      const closeStart = lower.indexOf(`</${name}`, i);
-      if (closeStart === -1) {
+      // Fecha com busca por regex sobre `src` (sem baixar a caixa do texto: toLowerCase pode mudar o comprimento).
+      const closer = name === 'script' ? CLOSE_SCRIPT : CLOSE_STYLE;
+      closer.lastIndex = i;
+      const closeMatch = closer.exec(src);
+      if (closeMatch === null) {
         break;
       }
-      const closeEnd = src.indexOf('>', closeStart);
+      const closeEnd = src.indexOf('>', closeMatch.index);
       if (closeEnd === -1) {
         break;
       }
@@ -151,7 +155,7 @@ export function noteHtmlToText(html: string): string {
         .replace(/[ \f\v]+/g, ' ')
         .replace(/ ?\t ?/g, '\t')
         .replace(/^ +/, '')
-        .replace(/[ \t]+$/, ''),
+        .trimEnd(), // nesta altura a linha nao tem \n, \r nem NBSP; trimEnd e linear (a regex `[ \t]+$` era quadratica)
     );
 
   const compact: string[] = [];
@@ -283,6 +287,15 @@ function takeMetadata(target: Metadata, incoterm: string | null, destination?: s
 }
 
 const HAS_LETTER = /\p{L}/u;
+
+/** Remove separadores e espacos do fim (laco linear; a regex `[-:;,]+\s*$` e quadratica em "-----...x"). */
+function stripTrailingSeparators(text: string): string {
+  let end = text.length;
+  while (end > 0 && /[\s\-–:;,]/.test(text.charAt(end - 1))) {
+    end -= 1;
+  }
+  return text.slice(0, end);
+}
 
 function isTableRow(line: string): boolean {
   return line.includes('\t') && line.split('\t').filter((cell) => cell.trim() !== '').length >= 2;
@@ -445,7 +458,7 @@ export function parseDealNote(text: string, catalog: NoteCatalogProduct[] = []):
     let quantityKg: number | null = null;
     const trailing = QUANTITY_TAIL.exec(body);
     if (trailing) {
-      name = cleanProposedName(body.slice(0, trailing.index).replace(/[-–:;,]+\s*$/, ''));
+      name = cleanProposedName(stripTrailingSeparators(body.slice(0, trailing.index)));
       quantityKg = quantityToKg(trailing[1] as string, trailing[2], trailing[3]);
     }
     if (name === '' || !HAS_LETTER.test(name) || name.length > MAX_ITEM_TEXT_CHARS) {

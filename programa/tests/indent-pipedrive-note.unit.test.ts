@@ -83,13 +83,31 @@ describe('noteHtmlToText', () => {
     expect(out.length).toBe(NOTE_TEXT_MAX_CHARS);
   });
 
-  it('entrada patologica termina rapido (tokenizador linear)', () => {
-    const started = Date.now();
-    noteHtmlToText('<script>'.repeat(14_000));
-    noteHtmlToText('<a'.repeat(50_000));
-    noteHtmlToText('<td>'.repeat(25_000));
-    noteHtmlToText('&#'.repeat(50_000));
-    expect(Date.now() - started).toBeLessThan(1500);
+  // Cada entrada e medida POR CHAMADA (nao somada): o limite de 100.000 caracteres nao protege o pior caso.
+  const pathological: Array<[string, () => string]> = [
+    ['<script> repetido', () => '<script>'.repeat(14_000)],
+    ['<style> repetido', () => '<style>'.repeat(14_000)],
+    ['< e a repetidos sem >', () => '<a'.repeat(50_000)],
+    ['<td> repetido sem fechamento', () => '<td>'.repeat(25_000)],
+    ['&# repetido', () => '&#'.repeat(50_000)],
+    ['a + 99.000 TABs + b', () => 'a' + '\t'.repeat(99_000) + 'b'],
+    ['99.999 TABs + x', () => '\t'.repeat(99_999) + 'x'],
+    ['99.999 espacos + x', () => ' '.repeat(99_999) + 'x'],
+    ['</td> repetido dentro de div', () => '<div>a' + '</td>'.repeat(19_000) + 'b</div>'],
+    ['comentarios abertos', () => '<!--'.repeat(25_000)],
+    ['entidades validas repetidas', () => '&amp;'.repeat(19_000)],
+  ];
+  it.each(pathological)('entrada patologica (%s) termina em menos de 500 ms', (_label, build) => {
+    const input = build();
+    const started = performance.now();
+    noteHtmlToText(input);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('o fim de <script> e achado sem desalinhar indices (U+0130 muda o comprimento em toLowerCase)', () => {
+    const dotted = String.fromCharCode(0x130).repeat(30);
+    expect(noteHtmlToText(`<script>${dotted}</script><div>visivel</div><div>fim</div>`)).toBe('visivel\nfim');
+    expect(noteHtmlToText(`<STYLE>${dotted}</STYLE><div>visivel</div>`)).toBe('visivel');
   });
 
   it('entrada nula ou vazia', () => {
@@ -206,6 +224,24 @@ describe('parseDealNote: linhas de texto', () => {
     const parsed = parseDealNote('RESINA EXEMPLO 223 (RXE)\n500.000 kg - CFR Santos');
     expect(parsed.items).toEqual([{ text: 'RESINA EXEMPLO 223 (RXE)', quantityKg: 500000, productId: null, line: 1 }]);
     expect([parsed.incoterm, parsed.destination, parsed.supplierHint]).toEqual(['CFR', 'Santos', null]);
+  });
+
+  it('linhas longas de separadores ou numeros terminam rapido', () => {
+    const inputs = [
+      `${'-'.repeat(19_000)}x 1.000`,
+      `PRODUTO EXEMPLO ${'-,'.repeat(9_000)}x 1.000`,
+      `${'1.000 '.repeat(3_000)}x`,
+      `${'('.repeat(19_000)}`,
+      `PRODUTO (${'a'.repeat(19_000)}`,
+      `${'a '.repeat(9_000)}2.000`,
+      `CFR ${'a - '.repeat(5_000)}`,
+      `${'x\t'.repeat(9_000)}`,
+    ];
+    for (const input of inputs) {
+      const started = performance.now();
+      parseDealNote(input);
+      expect(performance.now() - started).toBeLessThan(500);
+    }
   });
 
   it('toneladas: 2,5 t = 2500 e 25 MT = 25000; > 1e9 vira nulo', () => {

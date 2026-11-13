@@ -148,7 +148,7 @@ describe('somente GET', () => {
       if (!isClient && /x-api-token|pipedrive\.com/i.test(text)) {
         offenders.push(`dominio/header em ${file}`);
       }
-      if (/api_token/i.test(text)) {
+      if (/api_token/.test(text)) {
         offenders.push(`parametro de token em ${file}`);
       }
     }
@@ -168,6 +168,16 @@ describe('cliente: requisicao e token', () => {
     expect(url.toString()).not.toContain(TOKEN);
     expect([...url.searchParams.keys()].map((key) => key.toLowerCase())).not.toContain('api_token');
     expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.redirect).toBe('error');
+  });
+
+  it('monta a query com %20 (nao +): a ordem das notas sai como add_time%20ASC', async () => {
+    const { fetchImpl, calls } = routedFetch(ALL_ROUTES);
+    await makeClient(fetchImpl).listDealNotes(900001);
+    const search = (calls[0] as FetchCall).url.search;
+    expect(search).toContain('sort=add_time%20ASC');
+    expect(search).not.toContain('+');
+    expect(search).toBe('?deal_id=900001&sort=add_time%20ASC&limit=100');
   });
 
   it('rejeita dominio invalido e token ausente ou com espaco', () => {
