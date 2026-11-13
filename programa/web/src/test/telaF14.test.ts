@@ -230,12 +230,22 @@ describe('F14: tokens ambar (ancora `tokens F14 (indent)` nos 2 blocos e fixture
       '.sidebar__nav--voltar .sidebar__link',
       '.app-shell--indent .topbar',
       '.sidebar--colapsada .sidebar__brand-tag',
+      '.sidebar__brand-pill',
+      '.sidebar--indent.sidebar--colapsada .sidebar__brand-pill',
     ]) {
       expect(selShell, esperado).toContain(esperado);
     }
     const tag = regras.find((r) => listaDeSeletores(r.prelude).includes('.sidebar__brand-tag'));
     expect(tag?.body).toContain('background: var(--rf-indent-acc)');
     expect(tag?.body).toContain('color: var(--rf-on-primary)');
+    const pilula = regras
+      .filter((r) => r.prelude.startsWith('@media'))
+      .flatMap((r) => parseRules(r.body))
+      .find((r) => listaDeSeletores(r.prelude).includes('.sidebar--indent.sidebar--colapsada .sidebar__brand-pill'));
+    expect(pilula?.body).toContain('background: var(--rf-indent-acc)');
+    expect(pilula?.body).toContain('color: var(--rf-on-primary)');
+    expect(pilula?.body).toContain('font: 700 10px var(--rf-font-mono)');
+    expect(regras.find((r) => listaDeSeletores(r.prelude).includes('.sidebar__brand-pill'))?.body).toContain('display: none');
     const topbar = regras.find((r) => listaDeSeletores(r.prelude).includes('.app-shell--indent .topbar'));
     expect(topbar?.body).toMatch(/border-top:\s*3px solid var\(--rf-indent-acc\)/);
     const ativo = regras.find((r) => listaDeSeletores(r.prelude).includes('.sidebar--indent .sidebar__link--active'));

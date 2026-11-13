@@ -1133,6 +1133,23 @@ h3 {
   .sidebar--colapsada .sidebar__group { padding-top: 4px; border-top: 1px solid var(--rf-sidebar-seg-border); }
   .sidebar--colapsada .sidebar__signature { display: none; }
   .sidebar--colapsada .sidebar__brand-tag { display: none; }
+  /* Variante Indent recolhida: pilula ambar "IND" colada abaixo do icone (o selo completo so cabe na sidebar aberta); o botao de recolher desce junto. */
+  .sidebar--indent.sidebar--colapsada .sidebar__brand { height: 116px; }
+  .sidebar--indent.sidebar--colapsada .sidebar__alternar { top: 78px; }
+  .sidebar--indent.sidebar--colapsada .sidebar__brand-pill {
+    position: absolute;
+    top: 50px;
+    left: 24px;
+    display: inline-block;
+    transform: translateX(-50%);
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--rf-indent-acc);
+    color: var(--rf-on-primary);
+    font: 700 10px var(--rf-font-mono);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
 }
 
 /* <= 880: sidebar (navy) empilhada acima da topbar, sem hamburguer (F12) */
@@ -1166,6 +1183,8 @@ h3 {
   padding: 0 6px;
 }
 .sidebar--indent .sidebar__group-title { line-height: 1.3; }
+/* Pilula "IND" da sidebar recolhida: escondida por padrao (so a regra de 881px+ da variante Indent recolhida a mostra). */
+.sidebar__brand-pill { display: none; }
 .sidebar__brand-tag {
   align-self: flex-start;
   display: inline-block;
@@ -13429,6 +13448,306 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   line-height: normal;
   color: var(--rf-ink-soft);
 }
+
+/* ======================= Solicitacoes (PR 2): KPIs, colunas, paineis, itens, cliente ======================= */
+/* Metricas do mock (.sq-kpi, .sq-panel, .cols, .itemrow, .dl, .nota). A grade de 2 colunas do mock (corte de 1100px) vira flex-wrap: sem at-rule. */
+.indent-page .indent-ref {
+  font-family: var(--rf-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--rf-ink);
+  white-space: nowrap;
+}
+.indent-page .indent-ref--indent { color: var(--rf-primary-700); }
+.indent-page .page-header h1 .indent-ref { font-size: inherit; }
+.indent-page .indent-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+}
+.indent-page .indent-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-card-lg);
+  background: var(--rf-surface);
+  box-shadow: var(--rf-shadow-rest);
+}
+.indent-page .indent-kpi .eyebrow {
+  margin: 0;
+  color: var(--rf-primary-700);
+}
+.indent-page .indent-kpi__valor {
+  font-family: var(--rf-font-mono);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--rf-ink);
+}
+.indent-page .indent-kpi__sub {
+  font-size: 13px;
+  color: var(--rf-ink-soft);
+}
+.indent-page .indent-cols {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+.indent-page .indent-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+/* Bases na proporcao 1,7 : 1 (480 : 282): a divisao fica 1,7fr / 1fr como no mock em qualquer largura; as colunas empilham abaixo de ~778px de conteudo (mock: viewport 1100px). */
+.indent-page .indent-coluna:first-child { flex: 1.7 1 480px; }
+.indent-page .indent-coluna:last-child { flex: 1 1 282px; }
+.indent-page .indent-pilha {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.indent-page .indent-pilha--curta { gap: 8px; }
+.indent-page .indent-pilha--curta .indent-tag { align-self: flex-start; }
+.indent-page .indent-restricao__motivo { font-size: 13px; }
+.indent-page .indent-painel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface);
+}
+.indent-page .indent-painel__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+.indent-page .indent-painel__cabeca h2 {
+  margin: 0;
+  font-family: var(--rf-font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.indent-page .indent-painel__nota { margin: 0; }
+.indent-page .indent-painel .indent-tabela { min-width: 0; }
+.indent-page .indent-dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+.indent-page .indent-dl dt {
+  font-weight: 600;
+  color: var(--rf-ink-soft);
+}
+.indent-page .indent-dl dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.indent-page .indent-dl__mono { font-family: var(--rf-font-mono); }
+.indent-page .indent-itemrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rf-divider);
+}
+.indent-page .indent-itemrow:last-child { border-bottom: 0; }
+.indent-page .indent-itemrow strong { font-weight: 700; }
+.indent-page .indent-itemrow__qtd { align-self: center; }
+.indent-page .indent-nota {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+  color: var(--rf-ink);
+  font-family: var(--rf-font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ======================= Seletor de fornecedores, excecao e caixa "gerar" ======================= */
+.indent-page .indent-sup {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface);
+}
+.indent-page .indent-sup.is-on {
+  border-color: var(--rf-primary-700);
+  background: var(--rf-primary-50);
+}
+.indent-page .indent-sup.is-blocked { background: var(--rf-surface-alt); }
+.indent-page .indent-sup.is-exc {
+  border: 2.5px solid var(--rf-danger);
+  background: var(--rf-tone-danger-bg);
+}
+.indent-page .indent-sup input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--rf-action);
+}
+.indent-page .indent-sup label { cursor: pointer; }
+.indent-page .indent-sup.is-blocked label { cursor: default; }
+.indent-page .indent-sup__nome {
+  font-size: 14px;
+  font-weight: 700;
+}
+.indent-page .indent-sup.is-blocked .indent-sup__nome { color: var(--rf-ink-soft); }
+.indent-page .indent-sup__direita {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.indent-page .indent-sup__nota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  grid-column: 2 / -1;
+  gap: 6px 10px;
+  font-size: 12px;
+  color: var(--rf-ink-soft);
+}
+.indent-page .indent-sup__motivo {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.indent-page .indent-sup__motivo .input {
+  flex: 1 1 200px;
+  max-width: 340px;
+  height: 36px;
+  min-height: 36px;
+}
+.indent-page .indent-sup__motivo .ghost-button {
+  border: 1.5px solid var(--rf-action);
+}
+.indent-page .indent-sup__motivo .field-error { margin: 0; }
+.indent-page .indent-linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rf-primary-700);
+  font-family: var(--rf-font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.indent-page .indent-excbanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-danger);
+  color: var(--rf-on-danger);
+}
+.indent-page .indent-excbanner > svg { flex: none; }
+.indent-page .indent-excbanner > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.indent-page .indent-excbanner strong {
+  font-family: var(--rf-font-display);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: normal;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.indent-page .indent-tag--exc {
+  align-self: flex-start;
+  background: var(--rf-danger);
+  color: var(--rf-on-danger);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.indent-page .indent-tabela .indent-linha-exc td { background: var(--rf-tone-danger-bg); }
+.indent-page .indent-tabela .indent-linha-exc td:first-child { box-shadow: inset 5px 0 0 var(--rf-danger); }
+.indent-page .indent-gerar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 16px 18px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-action-hover-bg);
+}
+.indent-page .indent-gerar .primary-button { padding: 0 18px; }
+.indent-page .indent-gerar__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ======================= Modal "Nova solicitacao" ======================= */
+.indent-page .indent-leitura {
+  display: flex;
+  align-items: center;
+  background: var(--rf-surface-alt);
+  color: var(--rf-ink-soft);
+}
+.indent-page .indent-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.indent-page .indent-item-linha {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.indent-page .indent-item-linha .indent-campos { flex: 1 1 auto; }
+.indent-page .indent-input-mono { font-family: var(--rf-font-mono); }
+.indent-page .indent-form select.input { font-weight: 500; }
+.indent-page dialog.modal-dialog { color: var(--rf-ink); }
+
+/* Alertas da pagina com o cadeado do mock (sq-alert: 14px 16px, gap 12). O icone e o <svg> filho direto: o icone por mascara do .alert some (:has(> svg)). */
+.indent-page .indent-alerta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  line-height: normal;
+}
+.indent-page .indent-alerta > svg { flex: none; }
 /* <<< tela F14 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar

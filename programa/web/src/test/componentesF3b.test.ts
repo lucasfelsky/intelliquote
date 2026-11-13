@@ -396,7 +396,7 @@ describe('F3b: alerta que ja traz o proprio icone', () => {
     expect(limpo.indexOf('.alert:has(> svg)')).toBeGreaterThan(limpo.indexOf('.alert--error::before'));
   });
 
-  it('so a aba Itens e a Nova cotacao tem .alert/.banner com icone filho no TSX (contagem por arquivo)', () => {
+  it('so a aba Itens, a Nova cotacao e os 2 avisos de cliente pendente do Indent (cadeado do mock) tem .alert/.banner com icone filho no TSX (contagem por arquivo)', () => {
     const fontes = import.meta.glob(['../**/*.tsx', '!../**/*.test.tsx'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
     const porArquivo: Record<string, number> = {};
     for (const [arquivo, texto] of Object.entries(fontes)) {
@@ -410,7 +410,12 @@ describe('F3b: alerta que ja traz o proprio icone', () => {
         }
       });
     }
-    expect(porArquivo).toEqual({ 'pages/CotacaoNova.tsx': 1, 'pages/CotacaoTabs/ItensTab.tsx': 1 });
+    expect(porArquivo).toEqual({
+      'pages/CotacaoNova.tsx': 1,
+      'pages/CotacaoTabs/ItensTab.tsx': 1,
+      'pages/Indent/IndentSolicitacaoDetalhe.tsx': 1,
+      'pages/Indent/IndentSolicitacoes.tsx': 1,
+    });
   });
 });
 

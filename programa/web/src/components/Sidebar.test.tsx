@@ -224,20 +224,21 @@ describe('Sidebar - variante Indent', () => {
     expect(link.hasAttribute('aria-current')).toBe(false);
   });
 
-  it('titulo de secao "Indent" e navegacao principal rotulada "Indent" com so os 3 links do INDENT_NAV', () => {
+  it('titulo de secao "Indent" e navegacao principal rotulada "Indent" com so os 4 links do INDENT_NAV', () => {
     const { container } = renderIndent();
     const nav = container.querySelector('#sidebar-nav');
     expect(nav?.getAttribute('aria-label')).toBe('Indent');
     expect(nav?.querySelector('.sidebar__group > .sidebar__group-title')?.textContent).toBe('Indent');
     const links = Array.from(nav?.querySelectorAll('a') ?? []);
     expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['Solicitações', '/indent/solicitacoes'],
       ['Catálogo', '/indent/catalogo'],
       ['Fornecedores', '/indent/fornecedores'],
       ['Clientes', '/indent/clientes'],
     ]);
     const todos = screen.getAllByRole('link').map((l) => l.getAttribute('href'));
-    expect(todos).toHaveLength(4);
-    expect(todos.some((h) => /solicitacoes|cotacoes|integracao/.test(h ?? ''))).toBe(false);
+    expect(todos).toHaveLength(5);
+    expect(todos.some((h) => /cotacoes|integracao/.test(h ?? ''))).toBe(false);
     expect(container.querySelector('.sidebar__badge')).toBeNull();
     expect(screen.queryByText(/Administração/)).toBeNull();
   });
@@ -271,6 +272,28 @@ describe('Sidebar - variante Indent', () => {
     fireEvent.mouseEnter(link.closest('li') as HTMLElement);
     expect(container.querySelector('.sidebar__dica')?.textContent).toBe('Voltar ao IntelliQuote');
     expect(container.querySelector('.sidebar--colapsada.sidebar--indent')).not.toBeNull();
+  });
+
+  it('recolhida: pilula ambar "IND" sob o icone (decorativa) e dica "IntelliQuote Indent" na marca', () => {
+    const { container } = renderIndent('/indent/catalogo', { colapsada: true });
+    const pilula = container.querySelector('.sidebar__brand > .sidebar__brand-pill');
+    expect(pilula?.textContent).toBe('IND');
+    expect(pilula?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.querySelector('.sidebar__brand')?.getAttribute('title')).toBe('IntelliQuote Indent');
+    expect(container.querySelector('.sidebar__brand .brand-mark')).not.toBeNull();
+  });
+
+  it('aberta: so o selo completo "Indent" (sem a pilula e sem dica na marca)', () => {
+    const { container } = renderIndent('/indent/catalogo');
+    expect(container.querySelector('.sidebar__brand-pill')).toBeNull();
+    expect(container.querySelectorAll('.sidebar__brand-tag')).toHaveLength(1);
+    expect(container.querySelector('.sidebar__brand')?.hasAttribute('title')).toBe(false);
+  });
+
+  it('sidebar padrao do IQ (aberta ou recolhida): sem pilula nem dica na marca', () => {
+    const aberta = renderAt('admin', '/cotacoes');
+    expect(aberta.container.querySelector('.sidebar__brand-pill')).toBeNull();
+    expect(aberta.container.querySelector('.sidebar__brand')?.hasAttribute('title')).toBe(false);
   });
 
   it('sidebar padrao (sem as props): sem selo, sem navegacao "Voltar", sem classe da variante, rotulo "Navegação principal" e 15 links', () => {

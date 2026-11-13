@@ -19,7 +19,7 @@ interface SidebarProps {
   onAlternar?: () => void;
   /** Variante do IQ Indent (selo "Indent" na marca, "Voltar ao IntelliQuote" e titulo de secao). Sem estas props o markup e o do IQ, byte a byte. */
   variant?: 'indent';
-  /** Selo curto abaixo do nome da marca (ex.: "Indent"). */
+  /** Selo curto abaixo do nome da marca (ex.: "Indent"). Recolhida, vira a pilula das 3 primeiras letras ("IND") sob o icone. */
   brandTag?: string;
   /** Link "Voltar" numa navegacao propria acima da principal (renderizado como os demais links). */
   backLink?: NavItem;
@@ -99,7 +99,7 @@ export default function Sidebar({
 
   return (
     <aside className={`sidebar${colapsada ? ' sidebar--colapsada' : ''}${variant === 'indent' ? ' sidebar--indent' : ''}`}>
-      <div className="sidebar__brand">
+      <div className="sidebar__brand" title={brandTag && colapsada ? `IntelliQuote ${brandTag}` : undefined}>
         <BrandMark tone="dark" size={40} />
         {brandTag ? (
           <span className="sidebar__brand-text">
@@ -108,6 +108,11 @@ export default function Sidebar({
           </span>
         ) : (
           <span className="sidebar__brand-name">IntelliQuote</span>
+        )}
+        {brandTag && colapsada && (
+          <span className="sidebar__brand-pill" aria-hidden="true">
+            {brandTag.slice(0, 3).toUpperCase()}
+          </span>
         )}
         {onAlternar && (
           <button

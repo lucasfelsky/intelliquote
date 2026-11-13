@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppShell, { CHAVE_SIDEBAR_COLAPSADA } from './AppShell';
+import { getIndentRequestsNewCount } from '@/services/indentRequests';
 import { ADMIN_NAV, PRIMARY_NAV } from './navConfig';
 
 const logout = vi.fn(async () => undefined);
@@ -11,6 +12,9 @@ vi.mock('@/auth/AuthProvider', () => ({
 }));
 vi.mock('@/services/commercialRequests', () => ({
   getCommercialRequestsPendingCount: vi.fn(async () => ({ count: 3 })),
+}));
+vi.mock('@/services/indentRequests', () => ({
+  getIndentRequestsNewCount: vi.fn(async () => ({ count: 2 })),
 }));
 
 function renderShell() {
@@ -35,6 +39,7 @@ function tabbables(root: HTMLElement): HTMLElement[] {
 
 beforeEach(() => {
   logout.mockClear();
+  vi.mocked(getIndentRequestsNewCount).mockClear();
   localStorage.clear();
 });
 
@@ -178,18 +183,26 @@ function renderShellEm(path: string) {
 }
 
 describe('AppShell: variante Indent (sidebar por rota)', () => {
-  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, so os 3 links), classe app-shell--indent, sem Administracao nem contador', async () => {
+  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, Solicitacoes + 3 links), classe app-shell--indent, sem Administracao e com o contador de novas so em Solicitacoes', async () => {
     const { container } = renderShellEm('/indent/catalogo');
     expect(container.querySelector('.app-shell.app-shell--indent > .sidebar.sidebar--indent')).not.toBeNull();
     expect(container.querySelector('.sidebar__brand-tag')?.textContent).toBe('Indent');
     expect(screen.getByRole('link', { name: 'Voltar ao IntelliQuote' }).getAttribute('href')).toBe('/');
     const principal = container.querySelector('#sidebar-nav');
     expect(principal?.getAttribute('aria-label')).toBe('Indent');
-    expect(Array.from(principal?.querySelectorAll('a') ?? []).map((a) => a.textContent)).toEqual(['Catálogo', 'Fornecedores', 'Clientes']);
+    expect(Array.from(principal?.querySelectorAll('a') ?? []).map((a) => (a.textContent ?? '').replace(/(Solicitações)\d+$/, '$1'))).toEqual([
+      'Solicitações',
+      'Catálogo',
+      'Fornecedores',
+      'Clientes',
+    ]);
     expect(container.querySelectorAll('.sidebar__group-title')).toHaveLength(1);
     expect(screen.queryByText('Administração')).toBeNull();
-    expect(container.querySelector('.sidebar__badge')).toBeNull();
-    expect(screen.queryByLabelText(/pendentes/)).toBeNull();
+    // contador de solicitacoes NOVAS do Indent (so no link Solicitacoes); o de pendentes do IQ nao aparece
+    expect(await screen.findByLabelText('2 pendentes')).toBeTruthy();
+    expect(container.querySelectorAll('.sidebar__badge')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: /^Solicitações/ }).querySelector('.sidebar__badge')).not.toBeNull();
+    expect(screen.queryByLabelText('3 pendentes')).toBeNull();
     // topbar e a do IQ (sem mudanca) e a pagina continua filha direta do main
     expect(container.querySelector('.app-shell__main > .topbar')).not.toBeNull();
     expect(screen.getByTestId('pagina').parentElement).toBe(container.querySelector('main.app-shell__content'));
@@ -204,6 +217,8 @@ describe('AppShell: variante Indent (sidebar por rota)', () => {
     expect(container.querySelector('nav[aria-label="Voltar"]')).toBeNull();
     expect(container.querySelector('#sidebar-nav')?.getAttribute('aria-label')).toBe('Navegação principal');
     expect(screen.getByRole('link', { name: 'Indent' }).getAttribute('href')).toBe('/indent');
+    // fora do Indent o contador de novas nem e consultado
+    expect(getIndentRequestsNewCount).not.toHaveBeenCalled();
   });
 
   it('a escolha de recolher vale para as duas variantes (mesma chave)', () => {

@@ -288,7 +288,7 @@ function RestricaoModal({ cliente, onClose, onSaved }: RestricaoModalProps) {
   }
 
   return (
-    <Modal isOpen onClose={onClose} title={cliente.name} eyebrow="Restrição de fornecedores">
+    <Modal isOpen restoreFocus onClose={onClose} title={cliente.name} eyebrow="Restrição de fornecedores">
       <form onSubmit={enviar} noValidate className="indent-form">
         {erroForm && (
           <div role="alert" className="alert alert--error">
@@ -422,7 +422,7 @@ function NovoClienteModal({ onClose, onSaved }: NovoClienteModalProps) {
   }
 
   return (
-    <Modal isOpen onClose={onClose} title="Novo cliente">
+    <Modal isOpen restoreFocus onClose={onClose} title="Novo cliente">
       <form onSubmit={enviar} noValidate className="indent-form">
         {erroForm && (
           <div role="alert" className="alert alert--error">

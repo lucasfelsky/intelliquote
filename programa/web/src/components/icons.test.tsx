@@ -68,11 +68,12 @@ const MOCK: Record<string, string> = {
   'file-x': 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13l4 5M13 13l-4 5',
   printer: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z',
   clipboard: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M10 3h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM9 12h6M9 16h4',
+  send: 'M22 2 11 13M22 2l-7 20-4-9-9-4z',
 };
 
 describe('icons', () => {
-  it('tem os 63 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5, os 10 da F6/F7, os 3 da F8/F9 os 10 da F10/F11, os 4 da F13-C e a prancheta das notas do Painel)', () => {
-    expect(ICON_NAMES).toHaveLength(63);
+  it('tem os 64 icones do mock (14 de navegacao, logout, theme-half, sun, moon, shield, user, x, star, os 12 da F5, os 10 da F6/F7, os 3 da F8/F9 os 10 da F10/F11, os 4 da F13-C, a prancheta das notas do Painel e o aviao de papel do "Gerar cotacoes" do Indent)', () => {
+    expect(ICON_NAMES).toHaveLength(64);
     expect([...ICON_NAMES].sort()).toEqual(Object.keys(MOCK).sort());
     for (const name of [
       'overview', 'cotacoes', 'solicitacoes', 'itens', 'fornecedores', 'forecast', 'forwarders', 'familias',
@@ -99,7 +100,7 @@ describe('icons', () => {
     expect(ICONS).not.toHaveProperty('monitor');
   });
 
-  it('so o theme-half tem camada preenchida (currentColor); os demais 60 so tem traco', () => {
+  it('so o theme-half tem camada preenchida (currentColor); os demais 63 so tem traco', () => {
     expect(Object.keys(ICON_FILLS)).toEqual(['theme-half']);
     const meio = render(<Icon name="theme-half" />).container.querySelectorAll('svg path');
     expect(meio).toHaveLength(2);
@@ -114,7 +115,7 @@ describe('icons', () => {
   });
 
   it('nenhum icone repete o path de outro', () => {
-    expect(new Set(Object.values(ICONS)).size).toBe(63);
+    expect(new Set(Object.values(ICONS)).size).toBe(64);
   });
 
   it.each(ICON_NAMES)('<Icon name="%s"> renderiza svg decorativo de traco com currentColor', (name) => {

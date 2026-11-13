@@ -148,7 +148,7 @@ export default function IndentFornecedorModal({ supplier, onClose, onSaved }: Pr
   const mudouParceria = !novo && parceria !== supplier.hasPartnership;
 
   return (
-    <Modal isOpen onClose={onClose} title={supplier ? supplier.name : 'Cadastro'} eyebrow={novo ? 'Novo fornecedor' : 'Editar fornecedor'}>
+    <Modal isOpen restoreFocus onClose={onClose} title={supplier ? supplier.name : 'Cadastro'} eyebrow={novo ? 'Novo fornecedor' : 'Editar fornecedor'}>
       <form onSubmit={enviar} noValidate className="indent-form">
         {erroForm && (
           <div role="alert" className="alert alert--error">

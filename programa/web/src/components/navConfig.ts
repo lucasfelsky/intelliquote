@@ -32,8 +32,9 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/manual',    label: 'Manual',             icon: 'ajuda',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
 ];
 
-// Navegacao do IQ Indent (variante da sidebar em /indent/*): so as 3 paginas de cadastro do PR 1. Solicitacoes, Cotacoes e Integracao entram nos PRs seguintes.
+// Navegacao do IQ Indent (variante da sidebar em /indent/*): Solicitacoes (PR 2) e as 3 paginas de cadastro do PR 1. Cotacoes e Integracao entram nos PRs seguintes.
 export const INDENT_NAV: NavItem[] = [
+  { to: '/indent/solicitacoes', label: 'Solicitações', icon: 'solicitacoes', group: 'main', roles: COMEX_ROLES },
   { to: '/indent/catalogo',     label: 'Catálogo',     icon: 'itens',        group: 'main', roles: COMEX_ROLES },
   { to: '/indent/fornecedores', label: 'Fornecedores', icon: 'fornecedores', group: 'main', roles: COMEX_ROLES },
   { to: '/indent/clientes',     label: 'Clientes',     icon: 'usuarios',     group: 'main', roles: COMEX_ROLES },
