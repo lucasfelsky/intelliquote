@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "id": 900101,
+    "name": "Cliente Exemplo Ltda",
+    "owner_id": { "id": 900301, "name": "Vendedora Exemplo", "value": 900301 },
+    "add_time": "2026-01-10 12:00:00",
+    "update_time": "2026-10-01 12:00:00",
+    "active_flag": true,
+    "address": "Rua Exemplo, 100, Santos, SP",
+    "address_locality": "Santos",
+    "address_admin_area_level_1": "SP",
+    "address_country": "Brasil",
+    "0123456789abcdef0123456789abcdef01234567": "11.222.333/0001-81"
+  }
+}

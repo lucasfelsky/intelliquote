@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "data": {
+    "id": 900001,
+    "title": "R2 - 263/26 INDENT CLIENTE EXEMPLO",
+    "pipeline_id": 9010,
+    "stage_id": 9020,
+    "status": "open",
+    "creator_user_id": {
+      "id": 900301,
+      "name": "Vendedora Exemplo",
+      "email": "vendedora@exemplo.com.br",
+      "value": 900301
+    },
+    "user_id": {
+      "id": 900301,
+      "name": "Vendedora Exemplo",
+      "email": "vendedora@exemplo.com.br",
+      "value": 900301
+    },
+    "person_id": {
+      "name": "Contato Exemplo",
+      "email": [{ "label": "work", "value": "contato@exemplo.com.br", "primary": true }],
+      "phone": [{ "label": "work", "value": "", "primary": true }],
+      "value": 900201
+    },
+    "org_id": {
+      "name": "Cliente Exemplo Ltda",
+      "people_count": 1,
+      "owner_id": 900301,
+      "address": "Rua Exemplo, 100, Santos, SP",
+      "cc_email": "cliente-exemplo@exemplo.com.br",
+      "value": 900101
+    },
+    "add_time": "2026-11-05 13:20:00",
+    "update_time": "2026-11-10 14:05:30",
+    "stage_change_time": null,
+    "close_time": null,
+    "active": true,
+    "deleted": false,
+    "visible_to": "1",
+    "notes_count": 2,
+    "abcdef0123456789abcdef0123456789abcdef01": "9261",
+    "ffffffffffffffffffffffffffffffffffffffff": null
+  }
+}

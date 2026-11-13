@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "data": {
+    "id": 900101,
+    "name": "Cliente Exemplo Ltda",
+    "owner_id": 900301,
+    "add_time": "2026-01-10T12:00:00Z",
+    "update_time": "2026-10-01T12:00:00Z",
+    "is_deleted": false,
+    "visible_to": 1,
+    "address": {
+      "value": "Rua Exemplo, 100, Santos, SP",
+      "street_number": "100",
+      "route": "Rua Exemplo",
+      "sublocality": "Centro Exemplo",
+      "locality": "Santos",
+      "admin_area_level_1": "SP",
+      "admin_area_level_2": "Baixada Exemplo",
+      "country": "Brasil",
+      "postal_code": "CEP-EXEMPLO",
+      "formatted_address": "Rua Exemplo, 100, Santos, SP"
+    },
+    "custom_fields": {
+      "0123456789abcdef0123456789abcdef01234567": "11.222.333/0001-81"
+    }
+  }
+}
