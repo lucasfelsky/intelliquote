@@ -104,6 +104,11 @@ describe('noteHtmlToText', () => {
     expect(performance.now() - started).toBeLessThan(500);
   });
 
+  it('fechamento de script: tag em maiusculas e </script> solto antes do <script>', () => {
+    expect(noteHtmlToText('<SCRIPT>alert(1)</SCRIPT><div>ok</div>')).toBe('ok');
+    expect(noteHtmlToText('a</script><script>alert(1)</script>b')).toBe('ab');
+  });
+
   it('o fim de <script> e achado sem desalinhar indices (U+0130 muda o comprimento em toLowerCase)', () => {
     const dotted = String.fromCharCode(0x130).repeat(30);
     expect(noteHtmlToText(`<script>${dotted}</script><div>visivel</div><div>fim</div>`)).toBe('visivel\nfim');
@@ -241,6 +246,13 @@ describe('parseDealNote: linhas de texto', () => {
       const started = performance.now();
       parseDealNote(input);
       expect(performance.now() - started).toBeLessThan(500);
+    }
+  });
+
+  it('separador antes da quantidade (hifen, meia-risca, dois-pontos) sai do nome', () => {
+    for (const line of ['PRODUTO EXEMPLO - 2.000 kg', 'PRODUTO EXEMPLO – 2.000', 'PRODUTO EXEMPLO : 2.000', 'PRODUTO EXEMPLO;  2.000', 'PRODUTO EXEMPLO, 2.000']) {
+      const parsed = parseDealNote(line);
+      expect(parsed.items, line).toEqual([{ text: 'PRODUTO EXEMPLO', quantityKg: 2000, productId: null, line: 1 }]);
     }
   });
 
