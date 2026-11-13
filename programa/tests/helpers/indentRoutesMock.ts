@@ -39,6 +39,16 @@ const readOnlySource = (): SourceMock => ({
   upsert: vi.fn(),
 });
 
+// Delegates da integracao Pipedrive (PR 5a.2): a varredura le/escreve pelo `prisma` e pelo `tx`; os dois usam o mesmo conjunto.
+function pipedriveDelegates() {
+  return {
+    indentPipedriveDeal: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    indentPipedriveEvent: { create: vi.fn(), findFirst: vi.fn() },
+    indentPendingOrg: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
+    indentIntegrationConfig: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  };
+}
+
 const tx = {
   indentClient: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   indentClientSupplierRule: { deleteMany: vi.fn(), createMany: vi.fn() },
@@ -68,7 +78,8 @@ const tx = {
     create: vi.fn(),
     update: vi.fn(),
   },
-  indentRequestItem: { updateMany: vi.fn(), aggregate: vi.fn(), create: vi.fn() },
+  ...pipedriveDelegates(),
+  indentRequestItem: { updateMany: vi.fn(), aggregate: vi.fn(), create: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
   indentQuote: {
     create: vi.fn(),
     createMany: vi.fn(),
@@ -99,6 +110,7 @@ const prisma = {
   indentProduct: { findMany: vi.fn(), count: vi.fn() },
   indentClientSupplierRule: { findMany: vi.fn() },
   indentRequest: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+  ...pipedriveDelegates(),
   indentQuote: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
   supplier: readOnlySource(),
   supplierContact: readOnlySource(),
@@ -119,6 +131,10 @@ export const prismaMock = prisma as unknown as {
   indentProduct: { findMany: Mock; count: Mock };
   indentClientSupplierRule: { findMany: Mock };
   indentRequest: { findUnique: Mock; findMany: Mock; count: Mock };
+  indentPipedriveDeal: { findUnique: Mock; findMany: Mock; create: Mock; update: Mock; updateMany: Mock };
+  indentPipedriveEvent: { create: Mock; findFirst: Mock };
+  indentPendingOrg: { findFirst: Mock; create: Mock; count: Mock };
+  indentIntegrationConfig: { findUnique: Mock; findUniqueOrThrow: Mock; upsert: Mock; update: Mock; updateMany: Mock };
   indentQuote: { findMany: Mock; findUnique: Mock; findFirst: Mock };
   supplier: SourceMock;
   supplierContact: SourceMock;
@@ -313,6 +329,7 @@ export function resetIndentMocks() {
   prismaMock.indentProduct.findMany.mockResolvedValue([]);
   prismaMock.indentProduct.count.mockResolvedValue(0);
   prismaMock.indentClientSupplierRule.findMany.mockResolvedValue([]);
+  prismaMock.indentIntegrationConfig.findUnique.mockResolvedValue(null); // sem configuracao = prazo interno 2
   prismaMock.supplier.findMany.mockResolvedValue([]);
   prismaMock.supplier.count.mockResolvedValue(0);
   prismaMock.catalogItem.findMany.mockResolvedValue([]);
@@ -333,6 +350,8 @@ export function itemRow(id: number, productId: number | null, overrides: Record<
     productId,
     quantityKg: '25000',
     confirmed: true,
+    source: 'MANUAL',
+    noteLine: null as number | null,
     product:
       productId === null
         ? null
@@ -360,6 +379,14 @@ export function requestRow(overrides: Record<string, unknown> = {}) {
     createdAt: now,
     stageEnteredAt: now,
     statusChangedAt: now,
+    referenceAlert: null as string | null,
+    revisionAlertAt: null as Date | null,
+    noteChangedAt: null as Date | null,
+    noteIncoterm: null as string | null,
+    noteDestination: null as string | null,
+    noteSupplierHint: null as string | null,
+    pipedriveDeals: [] as Array<{ currentRevision: number | null }>,
+    pendingOrgs: [] as Array<{ id: number; candidates: unknown }>,
     client: {
       id: 3,
       name: 'Cliente Exemplo Ltda',
@@ -603,4 +630,196 @@ export function expectNoQuoteWrites() {
   expect(tx.indentRequestItem.create).not.toHaveBeenCalled();
   expect(tx.indentRequest.update).not.toHaveBeenCalled();
   expect(tx.indentProduct.create).not.toHaveBeenCalled();
+}
+
+// ---- Banco em memoria da integracao Pipedrive (PR 5a.2): os testes da sincronizacao usam estado de verdade (idempotencia, revisao) ----
+/* eslint-disable @typescript-eslint/no-explicit-any */
+type Row = Record<string, any>;
+type Where = Record<string, any>;
+
+export const fake = {
+  requests: [] as Row[],
+  items: [] as Row[],
+  mirrors: [] as Row[],
+  events: [] as Row[],
+  pendings: [] as Row[],
+  clients: [] as Row[],
+  products: [] as Row[],
+  config: null as Row | null,
+  sequence: new Map<number, number>(),
+  claimTaken: false,
+  ids: { request: 1, item: 1, mirror: 1, pending: 1, event: 1 },
+};
+
+export function resetFakeDb() {
+  Object.assign(fake, {
+    requests: [],
+    items: [],
+    mirrors: [],
+    events: [],
+    pendings: [],
+    clients: [],
+    products: [],
+    config: null,
+    sequence: new Map<number, number>(),
+    claimTaken: false,
+    ids: { request: 1, item: 1, mirror: 1, pending: 1, event: 1 },
+  });
+}
+
+function matches(row: Row, where: Where = {}): boolean {
+  return Object.entries(where).every(([key, cond]) => {
+    if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
+      if ('in' in cond) return (cond.in as unknown[]).includes(row[key]);
+      if ('notIn' in cond) return !(cond.notIn as unknown[]).includes(row[key]);
+      if ('not' in cond) return row[key] !== cond.not;
+    }
+    return row[key] === cond;
+  });
+}
+
+const requestOut = (row: Row | undefined) =>
+  row ? { ...row, items: fake.items.filter((item) => item.requestId === row.id).map((item) => ({ ...item })) } : null;
+const mirrorOut = (row: Row) => ({
+  ...row,
+  request: row.requestId ? requestOut(fake.requests.find((request) => request.id === row.requestId)) : null,
+});
+
+/** Liga os delegates do `prisma` e do `tx` (mesmo estado) ao banco em memoria. Chamar depois de `resetIndentMocks`. */
+export function installFakeDb() {
+  const impl: Record<string, Record<string, (args: any) => Promise<unknown>>> = {
+    indentPipedriveDeal: {
+      findUnique: async ({ where }) => {
+        const row = fake.mirrors.find((mirror) => mirror.dealId === where.dealId);
+        return row ? mirrorOut(row) : null;
+      },
+      findMany: async ({ where, take }) =>
+        fake.mirrors
+          .filter((mirror) => matches(mirror, where))
+          .slice(0, take ?? 1000)
+          .map(mirrorOut),
+      create: async ({ data }) => {
+        const row = { id: fake.ids.mirror++, orgIds: [], leftStageAt: null, notFoundAt: null, ...data };
+        fake.mirrors.push(row);
+        return { ...row };
+      },
+      update: async ({ where, data }) => Object.assign(fake.mirrors.find((mirror) => mirror.dealId === where.dealId) as Row, data),
+      updateMany: async ({ where, data }) => {
+        const found = fake.mirrors.filter((mirror) => matches(mirror, where));
+        found.forEach((mirror) => Object.assign(mirror, data));
+        return { count: found.length };
+      },
+    },
+    indentRequest: {
+      findUnique: async ({ where }) =>
+        requestOut(
+          fake.requests.find(
+            (row) =>
+              (where.id !== undefined && row.id === where.id) ||
+              (where.processNumber !== undefined && row.processNumber === where.processNumber) ||
+              (where.pipedriveDealId !== undefined && row.pipedriveDealId === where.pipedriveDealId),
+          ),
+        ),
+      create: async ({ data }) => {
+        const { items, ...scalars } = data;
+        if (scalars.processNumber && fake.requests.some((row) => row.processNumber === scalars.processNumber)) {
+          throw uniqueError(['processNumber']);
+        }
+        if (scalars.pipedriveDealId && fake.requests.some((row) => row.pipedriveDealId === scalars.pipedriveDealId)) {
+          throw uniqueError(['pipedriveDealId']);
+        }
+        const row = { id: fake.ids.request++, status: 'NOVA', referenceAlert: null, noteHash: null, ...scalars };
+        fake.requests.push(row);
+        for (const item of items?.create ?? []) fake.items.push({ id: fake.ids.item++, requestId: row.id, ...item });
+        return { ...row };
+      },
+      update: async ({ where, data }) => Object.assign(fake.requests.find((row) => row.id === where.id) as Row, data),
+    },
+    indentRequestItem: {
+      deleteMany: async ({ where }) => {
+        const gone = fake.items.filter((item) => matches(item, where));
+        fake.items = fake.items.filter((item) => !gone.includes(item));
+        return { count: gone.length };
+      },
+      createMany: async ({ data }) => {
+        for (const item of data) fake.items.push({ id: fake.ids.item++, ...item });
+        return { count: data.length };
+      },
+    },
+    indentClient: {
+      findUnique: async ({ where }) => fake.clients.find((row) => row.pipedriveOrgId === where.pipedriveOrgId) ?? null,
+      findFirst: async ({ where }) => fake.clients.find((row) => matches(row, where)) ?? null,
+      update: async ({ where, data }) => Object.assign(fake.clients.find((row) => row.id === where.id) as Row, data),
+    },
+    indentPendingOrg: {
+      findFirst: async ({ where }) => fake.pendings.find((row) => matches(row, where)) ?? null,
+      create: async ({ data }) => {
+        const row = { id: fake.ids.pending++, status: 'OPEN', ...data };
+        fake.pendings.push(row);
+        return { ...row };
+      },
+      count: async ({ where }) => fake.pendings.filter((row) => matches(row, where)).length,
+    },
+    indentPipedriveEvent: {
+      create: async ({ data }) => {
+        fake.events.push({ id: fake.ids.event++, ...data });
+        return {};
+      },
+      findFirst: async ({ where }) => fake.events.find((row) => matches(row, where)) ?? null,
+    },
+    indentProduct: { findMany: async () => fake.products.map((row) => ({ ...row })) },
+    indentIntegrationConfig: {
+      findUnique: async () => (fake.config ? { ...fake.config } : null),
+      findUniqueOrThrow: async () => ({ ...(fake.config as Row) }),
+      upsert: async ({ create }) => {
+        fake.config ??= {
+          slaBusinessDays: 2,
+          connectionStatus: 'not_configured',
+          lastSyncNewDeals: 0,
+          lastSyncErrors: 0,
+          lastSyncMissed: 0,
+          pipelineName: null,
+          ...create,
+        };
+        return { ...fake.config };
+      },
+      update: async ({ data }) => Object.assign(fake.config as Row, data),
+      updateMany: async ({ data }) => {
+        Object.assign(fake.config ?? {}, data);
+        return { count: fake.config ? 1 : 0 };
+      },
+    },
+  };
+
+  for (const [delegate, methods] of Object.entries(impl)) {
+    for (const [method, fn] of Object.entries(methods)) {
+      for (const target of [tx, prisma] as any[]) {
+        target[delegate] ??= {};
+        target[delegate][method] ??= vi.fn();
+        target[delegate][method].mockImplementation(fn);
+      }
+    }
+  }
+
+  const execute = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const sql = strings.join('?');
+    if (sql.includes('INSERT INTO "IndentSequence"')) {
+      fake.sequence.set(values[0] as number, fake.sequence.get(values[0] as number) ?? 0);
+    } else if (sql.includes('UPDATE "IndentSequence"')) {
+      fake.sequence.set(values[1] as number, Math.max(fake.sequence.get(values[1] as number) ?? 0, values[0] as number));
+    } else if (sql.includes('"sweepLockedUntil" = now()')) {
+      if (fake.claimTaken) return 0;
+      fake.claimTaken = true;
+    } else if (sql.includes('"sweepLockedUntil" = NULL')) {
+      fake.claimTaken = false;
+    }
+    return 1;
+  };
+  const query = async (strings: TemplateStringsArray, ...values: unknown[]) =>
+    strings.join('?').includes('"IndentSequence"') ? [{ lastNumber: fake.sequence.get(values[0] as number) ?? 0 }] : [{ id: 1 }];
+
+  for (const target of [tx, prisma] as any[]) {
+    target.$executeRaw.mockImplementation(execute);
+    target.$queryRaw.mockImplementation(query);
+  }
 }

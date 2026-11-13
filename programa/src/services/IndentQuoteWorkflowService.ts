@@ -76,7 +76,7 @@ export async function lockIndentQuote(tx: Prisma.TransactionClient, quoteId: num
  */
 export async function applyRequestStatusAfterResponse(
   tx: Prisma.TransactionClient,
-  request: { id: number; processNumber: string; status: string },
+  request: { id: number; processNumber: string | null; status: string },
   user: IndentActor,
   now: Date = new Date(),
 ): Promise<void> {
@@ -199,7 +199,7 @@ export class IndentQuoteWorkflowService {
       const { productId } = await IndentRequestService.resolveItemProduct(
         tx,
         input.description,
-        quote.request.processNumber,
+        quote.request.processNumber ?? '',
         user.id,
       );
       const last = await tx.indentRequestItem.aggregate({

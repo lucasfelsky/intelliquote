@@ -1446,6 +1446,7 @@ model IndentClient {
   updatedAt        DateTime                   @updatedAt
   supplierRules    IndentClientSupplierRule[]
   requests         IndentRequest[]
+  pendingOrgsResolved IndentPendingOrg[]
 
   @@index([isActive])
   @@index([name])
@@ -1554,9 +1555,9 @@ model IndentSequence {
 
 model IndentRequest {
   id              Int                 @id @default(autoincrement())
-  processNumber   String              @unique // NNN/AA
-  processYear     Int
-  processSeq      Int
+  processNumber   String?             @unique // NNN/AA; null = "Referencia pendente" (negocio do Pipedrive sem numero no titulo)
+  processYear     Int?
+  processSeq      Int?
   origin          IndentRequestOrigin
   pipedriveDealId Int?                @unique
   dealTitle       String?
@@ -1569,11 +1570,21 @@ model IndentRequest {
   dealType        String?
   createdById     Int? // sem FK para User
   createdByName   String?
+  // PR 5 (Pipedrive): alertas e dados lidos da nota do negocio.
+  referenceAlert   String?
+  noteHash         String?
+  noteChangedAt    DateTime?
+  noteIncoterm     String?
+  noteDestination  String?
+  noteSupplierHint String?
+  revisionAlertAt  DateTime?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   client          IndentClient?       @relation(fields: [clientId], references: [id], onDelete: Restrict)
   items           IndentRequestItem[]
   quotes          IndentQuote[]
+  pipedriveDeals  IndentPipedriveDeal[]
+  pendingOrgs     IndentPendingOrg[]
 
   @@unique([processYear, processSeq])
   @@index([status])
@@ -1589,6 +1600,8 @@ model IndentRequestItem {
   description String
   quantityKg  Decimal           @db.Decimal(14, 3)
   confirmed   Boolean           @default(false)
+  source      String            @default("MANUAL") // MANUAL | NOTE (proposto a partir da nota do Pipedrive)
+  noteLine    Int? // linha da nota de onde o item veio
   position    Int
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
@@ -1652,4 +1665,107 @@ model IndentQuoteItem {
 
   @@unique([quoteId, requestItemId])
   @@index([requestItemId])
+}
+
+// IQ Indent PR 5 (Pipedrive): integracao SO LEITURA. Prefixo Indent; sem FK para tabelas do IQ principal;
+// usuario = Int? sem FK. Eventos sem payload (so ids, resultado e duracao).
+enum IndentPipedriveEventSource {
+  WEBHOOK
+  SWEEP
+  MANUAL
+}
+
+enum IndentPendingOrgStatus {
+  OPEN
+  RESOLVED
+}
+
+// Linha unica (id = 1): funil/coluna escolhidos, prazo interno, estado da ultima varredura e claim da varredura.
+model IndentIntegrationConfig {
+  id                   Int                         @id @default(1)
+  pipelineId           Int?
+  pipelineName         String?
+  stageId              Int?
+  stageName            String?
+  slaBusinessDays      Int                         @default(2)
+  connectionStatus     String                      @default("not_configured")
+  connectionCheckedAt  DateTime?
+  lastSyncAt           DateTime?
+  lastSyncSource       IndentPipedriveEventSource?
+  lastSyncNewDeals     Int                         @default(0)
+  lastSyncErrors       Int                         @default(0)
+  lastSyncMissed       Int                         @default(0)
+  lastWebhookAt        DateTime?
+  dailyTokensRemaining Int?
+  dailyTokensLimit     Int?
+  sweepLockedUntil     DateTime?
+  updatedById          Int?
+  updatedAt            DateTime                    @updatedAt
+}
+
+// Espelho do negocio do Pipedrive; identidade = dealId. Titulo, revisao e estado de coluna ficam aqui.
+model IndentPipedriveDeal {
+  id              Int            @id @default(autoincrement())
+  dealId          Int            @unique
+  requestId       Int?
+  title           String
+  parsedNumber    String?
+  currentRevision Int?
+  revisionHistory Json           @default("[]")
+  pipelineId      Int?
+  stageId         Int?
+  inSourceStage   Boolean        @default(false)
+  stageEnteredAt  DateTime?
+  dealUpdateTime  DateTime?
+  orgIds          Int[]          @default([])
+  ownerId         Int?
+  noteId          Int?
+  noteHash        String?
+  noteCheckedAt   DateTime?
+  leftStageAt     DateTime?
+  notFoundAt      DateTime?
+  lastSeenAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  request         IndentRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([inSourceStage])
+}
+
+// 1 linha por negocio com resultado relevante + 1 por execucao. Sem payload do Pipedrive.
+model IndentPipedriveEvent {
+  id          Int                        @id @default(autoincrement())
+  source      IndentPipedriveEventSource
+  deliveryKey String?                    @unique
+  dealId      Int?
+  requestId   Int?
+  result      String
+  errorCode   String?
+  durationMs  Int?
+  receivedAt  DateTime                   @default(now())
+
+  @@index([dealId, receivedAt])
+  @@index([receivedAt])
+  @@index([result])
+}
+
+// Fila de vinculo: organizacao do Pipedrive sem cliente do Indent. Uma ABERTA por solicitacao.
+model IndentPendingOrg {
+  id               Int                    @id @default(autoincrement())
+  requestId        Int
+  dealId           Int
+  candidates       Json // [{ orgId, name, cnpj, city }]
+  status           IndentPendingOrgStatus @default(OPEN)
+  resolvedClientId Int?
+  resolvedOrgId    Int?
+  resolvedById     Int?
+  resolvedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  request          IndentRequest          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  resolvedClient   IndentClient?          @relation(fields: [resolvedClientId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([requestId])
 }

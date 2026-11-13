@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { IndentClientController } from '../controllers/IndentClientController';
 import { IndentImportController } from '../controllers/IndentImportController';
+import { IndentPipedriveController } from '../controllers/IndentPipedriveController';
 import { IndentProductController } from '../controllers/IndentProductController';
 import { IndentQuoteController } from '../controllers/IndentQuoteController';
 import { IndentRequestController } from '../controllers/IndentRequestController';
@@ -15,6 +16,7 @@ const indentRoutes = Router();
 
 const canRead = allowRoles(COMEX_ROLES);
 const canWrite = allowRoles(['admin', 'comprador', 'gestor']);
+const adminOnly = allowRoles(['admin']);
 
 indentRoutes.get('/clients', requireAuth, canRead, IndentClientController.list);
 indentRoutes.post('/clients', requireAuth, canWrite, IndentClientController.create);
@@ -52,6 +54,13 @@ indentRoutes.post('/quotes/:id/response', requireAuth, canWrite, IndentQuoteCont
 indentRoutes.post('/quotes/:id/accept', requireAuth, canWrite, IndentQuoteController.accept);
 indentRoutes.post('/quotes/:id/refuse', requireAuth, canWrite, IndentQuoteController.refuse);
 indentRoutes.post('/quotes/:id/revision', requireAuth, canWrite, IndentQuoteController.requestRevision);
+
+// Integracao Pipedrive (PR 5a.2; SO LEITURA no CRM). Estado = leitura COMEX; sincronizar = admin/comprador/gestor; opcoes e configuracao = so admin.
+// Rotas estaticas (nunca colidem com /requests/:id). Sem DELETE.
+indentRoutes.get('/pipedrive/status', requireAuth, canRead, IndentPipedriveController.status);
+indentRoutes.get('/pipedrive/options', requireAuth, adminOnly, IndentPipedriveController.options);
+indentRoutes.put('/pipedrive/config', requireAuth, adminOnly, IndentPipedriveController.updateConfig);
+indentRoutes.post('/pipedrive/sync', requireAuth, canWrite, IndentPipedriveController.sync);
 
 indentRoutes.get('/import/suppliers', requireAuth, canWrite, IndentImportController.supplierCandidates);
 indentRoutes.post('/import/suppliers', requireAuth, canWrite, IndentImportController.importSuppliers);

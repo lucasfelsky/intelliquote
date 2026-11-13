@@ -66,6 +66,12 @@ describe('Na fila ha (dias uteis em Sao Paulo)', () => {
     expect(queueLevel(3)).toBe('danger');
     expect(queueLevel(9)).toBe('danger');
   });
+
+  it('queueLevel com prazo interno de 1 a 3 dias uteis (o padrao continua 2)', () => {
+    expect([0, 1, 2].map((days) => queueLevel(days, 1))).toEqual(['neutral', 'warning', 'danger']);
+    expect([0, 2, 3, 4].map((days) => queueLevel(days, 3))).toEqual(['neutral', 'neutral', 'warning', 'danger']);
+    expect(queueLevel(2, 2)).toBe(queueLevel(2));
+  });
 });
 
 describe('restricao de fornecedores do cliente', () => {

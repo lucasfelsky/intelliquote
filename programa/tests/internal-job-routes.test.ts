@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   runReminderSweep: vi.fn(),
   runExpiryAlertSweep: vi.fn(),
+  runIndentSweep: vi.fn(),
   jobsEnv: {
     audience: 'intelliquote-internal-jobs' as string | undefined,
     invokerEmail: 'iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com' as string | undefined,
@@ -52,6 +53,10 @@ vi.mock('../src/services/SupplierDocumentAlertService', () => ({
   SupplierDocumentAlertService: { runExpiryAlertSweep: mocks.runExpiryAlertSweep },
 }));
 
+vi.mock('../src/services/IndentPipedriveSyncService', () => ({
+  IndentPipedriveSyncService: { runSweep: mocks.runIndentSweep },
+}));
+
 import { app } from '../src/app';
 
 const INVOKER = 'iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com';
@@ -67,6 +72,7 @@ beforeEach(() => {
   mocks.refresh.mockReset();
   mocks.runReminderSweep.mockReset();
   mocks.runExpiryAlertSweep.mockReset();
+  mocks.runIndentSweep.mockReset();
   mocks.reminder.enabled = true;
   mocks.jobsEnv.audience = 'intelliquote-internal-jobs';
   mocks.jobsEnv.invokerEmail = INVOKER;
@@ -331,5 +337,73 @@ describe('POST /api/internal/jobs/supplier-document-alerts', () => {
     const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ message: 'Falha no job de avisos de documentos.' });
+  });
+});
+
+describe('POST /api/internal/jobs/indent-pipedrive-sweep', () => {
+  const URL = '/api/internal/jobs/indent-pipedrive-sweep';
+  const SUMMARY = { processed: 4, created: 1, errors: 0, skipped: 1, missed: 0, stoppedBy: null, durationMs: 900 };
+
+  it('401 sem Bearer e 503 sem audience, sem chamar a varredura', async () => {
+    expect((await request(app).post(URL)).status).toBe(401);
+    mocks.jobsEnv.audience = undefined;
+    expect((await request(app).post(URL).set('Authorization', 'Bearer token-valido')).status).toBe(503);
+    expect(mocks.runIndentSweep).not.toHaveBeenCalled();
+  });
+
+  it('401 quando o e-mail do token e de outra conta', async () => {
+    mocks.verifyIdToken.mockResolvedValue({
+      getPayload: () => ({ email: 'outra@sq-comex-updates-3d22f.iam.gserviceaccount.com', email_verified: true }),
+    });
+    expect((await request(app).post(URL).set('Authorization', 'Bearer token-valido')).status).toBe(401);
+    expect(mocks.runIndentSweep).not.toHaveBeenCalled();
+  });
+
+  it('200 com OIDC valido: roda 1x com origem SWEEP e orcamento de 240 s e devolve o resumo (erros somam os malformados)', async () => {
+    authorizeOidc();
+    mocks.runIndentSweep.mockResolvedValue({ outcome: 'run_ok', ...SUMMARY });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ outcome: 'run_ok', processed: 4, created: 1, errors: 1, missed: 0, durationMs: 900 });
+    expect(mocks.runIndentSweep).toHaveBeenCalledTimes(1);
+    expect(mocks.runIndentSweep).toHaveBeenCalledWith({ source: 'SWEEP', budgetMs: 240_000 });
+  });
+
+  it('200 { skipped: not_configured } quando a integracao nao esta configurada', async () => {
+    authorizeOidc();
+    mocks.runIndentSweep.mockResolvedValue({ outcome: 'not_configured', ...SUMMARY });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ skipped: 'not_configured' });
+  });
+
+  it.each(['rate_limited', 'config_mismatch', 'budget_low', 'auth_failed'])('200 em %s (repetir nao resolve)', async (outcome) => {
+    authorizeOidc();
+    mocks.runIndentSweep.mockResolvedValue({ outcome, ...SUMMARY });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(200);
+    expect(res.body.outcome).toBe(outcome);
+  });
+
+  it('503 quando outra execucao segura o claim (in_progress)', async () => {
+    authorizeOidc();
+    mocks.runIndentSweep.mockResolvedValue({ outcome: 'in_progress', ...SUMMARY });
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ message: 'Outra execucao em andamento; tente de novo.', outcome: 'in_progress' });
+  });
+
+  it('503 quando o Pipedrive esta fora (error), para o Scheduler repetir', async () => {
+    authorizeOidc();
+    mocks.runIndentSweep.mockResolvedValue({ outcome: 'error', ...SUMMARY });
+    expect((await request(app).post(URL).set('Authorization', 'Bearer token-valido')).status).toBe(503);
+  });
+
+  it('500 quando a varredura lanca, sem vazar a mensagem', async () => {
+    authorizeOidc();
+    mocks.runIndentSweep.mockRejectedValue(new Error('senha-do-banco'));
+    const res = await request(app).post(URL).set('Authorization', 'Bearer token-valido');
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: 'Falha na varredura do Pipedrive.' });
   });
 });

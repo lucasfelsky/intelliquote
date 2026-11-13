@@ -7,6 +7,8 @@ import { AuditLogService } from './AuditLogService';
 import type { IndentActor } from './IndentRequestService';
 
 const SUPPLIER_LIST_LIMIT = 500;
+// Negocio do Pipedrive sem numero NNN/AA no titulo: sem referencia nao ha cotacao (o numero e a referencia das cotacoes).
+const REFERENCE_PENDING_MESSAGE = 'Digite a referência da solicitação antes de gerar cotações.';
 
 function ruleSupplierIds(rules: Array<{ supplierId: number }>): Set<number> {
   return new Set(rules.map((rule) => rule.supplierId));
@@ -21,6 +23,7 @@ export class IndentQuoteGenerationService {
       select: {
         id: true,
         clientId: true,
+        processNumber: true,
         items: { select: { productId: true } },
         client: {
           select: {
@@ -36,6 +39,9 @@ export class IndentQuoteGenerationService {
     }
     if (request.clientId === null || !request.client) {
       throw new HttpError(409, 'Vincule o cliente antes de escolher fornecedores.');
+    }
+    if (request.processNumber === null) {
+      throw new HttpError(409, REFERENCE_PENDING_MESSAGE);
     }
 
     const mode = request.client.supplierRuleMode as IndentRuleMode;
@@ -128,6 +134,9 @@ export class IndentQuoteGenerationService {
         }
         if (request.clientId === null || !request.client) {
           throw new HttpError(409, 'Vincule o cliente antes de gerar cotações.');
+        }
+        if (request.processNumber === null) {
+          throw new HttpError(409, REFERENCE_PENDING_MESSAGE);
         }
         if (request.status !== 'NOVA' || request.quotes.length > 0) {
           throw new HttpError(409, 'As cotações desta solicitação já foram geradas.');

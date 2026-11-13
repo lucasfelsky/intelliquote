@@ -364,6 +364,23 @@ describe('cliente: paginacao por cursor', () => {
     expect(calls[1]?.searchParams.get('cursor')).toBe('cursor-pagina-2-exemplo');
   });
 
+  it('negocio sem id ou add_time nao derruba a pagina: e pulado e contado (skipped), nas duas listagens', async () => {
+    const page = fixture('deals-stage-p1') as { data: Array<Record<string, unknown>> };
+    const broken = {
+      ...page,
+      data: [...page.data, { title: 'sem id' }, { id: 900099, title: 'sem add_time' }, 'texto solto'],
+    };
+    const fetchImpl = vi.fn(async () => jsonResponse({ ...broken, additional_data: {} })) as unknown as typeof fetch;
+
+    const onePage = await makeClient(fetchImpl).listDealsPage({ pipelineId: 9010, stageId: 9020 });
+    expect(onePage.deals.map((deal) => deal.id)).toEqual([900001, 900002]);
+    expect(onePage.skipped).toBe(3);
+
+    const inStage = await makeClient(fetchImpl).listDealsInStage({ pipelineId: 9010, stageId: 9020 });
+    expect(inStage).toMatchObject({ truncated: false, skipped: 3 });
+    expect(inStage.deals).toHaveLength(2);
+  });
+
   it(`para no teto de ${MAX_DEAL_PAGES} paginas e avisa que cortou`, async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(fixture('deals-stage-p1'))) as unknown as typeof fetch;
     const result = await makeClient(fetchImpl).listDealsInStage({ pipelineId: 9010, stageId: 9020 });

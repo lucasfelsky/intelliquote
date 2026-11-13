@@ -4,6 +4,7 @@ import { reminderEnv } from '../config/env';
 import { logger } from '../lib/logger';
 import { requireGoogleOidc } from '../middlewares/googleOidc';
 import { ExchangeRateService } from '../services/ExchangeRateService';
+import { IndentPipedriveSyncService } from '../services/IndentPipedriveSyncService';
 import { SupplierDocumentAlertService } from '../services/SupplierDocumentAlertService';
 import { SupplierPortalReminderService } from '../services/SupplierPortalReminderService';
 
@@ -15,7 +16,8 @@ const router = Router();
 // Os jobs sao idempotentes (upsert por moeda+data; claim unico por
 // cotacao/contato/dia em SupplierPortalReminder; claim unico por documento/ciclo/marco
 // em SupplierDocumentAlert),
-// entao 5xx -> retry do Scheduler e seguro.
+// entao 5xx -> retry do Scheduler e seguro. A varredura do Pipedrive (IQ Indent) tem claim de execucao unica
+// (IndentIntegrationConfig.sweepLockedUntil) e upsert por negocio (pipedriveDealId).
 router.use('/api/internal/jobs', requireGoogleOidc(), express.json({ limit: '16kb' }));
 
 const BRT_TIME_ZONE = 'America/Sao_Paulo';
@@ -124,6 +126,40 @@ router.post('/api/internal/jobs/supplier-document-alerts', async (_req, res) => 
     const message = error instanceof Error ? error.message : String(error);
     logger.error({ error: message }, 'Falha no job interno de avisos de documentos de fornecedor.');
     res.status(500).json({ message: 'Falha no job de avisos de documentos.' });
+  }
+});
+
+// Varredura do Pipedrive (IQ Indent, SO LEITURA no CRM): Scheduler a cada 10 min, 7h-19h, seg-sex (America/Sao_Paulo).
+// Orcamento de 240 s (o attempt-deadline do Scheduler e 280 s). 200 em tudo que e "estado" (nao configurado, limite, coluna que
+// nao confere, token recusado): repetir nao resolve; 503 so quando outra execucao segura o claim ou o Pipedrive esta fora.
+router.post('/api/internal/jobs/indent-pipedrive-sweep', async (_req, res) => {
+  try {
+    const result = await IndentPipedriveSyncService.runSweep({ source: 'SWEEP', budgetMs: 240_000 });
+
+    if (result.outcome === 'not_configured') {
+      res.status(200).json({ skipped: 'not_configured' });
+      return;
+    }
+    if (result.outcome === 'in_progress') {
+      res.status(503).json({ message: 'Outra execucao em andamento; tente de novo.', outcome: result.outcome });
+      return;
+    }
+    if (result.outcome === 'error') {
+      res.status(503).json({ message: 'Pipedrive indisponivel; tente de novo.', outcome: result.outcome });
+      return;
+    }
+    res.status(200).json({
+      outcome: result.outcome,
+      processed: result.processed,
+      created: result.created,
+      errors: result.errors + result.skipped,
+      missed: result.missed,
+      durationMs: result.durationMs,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.name : 'unexpected';
+    logger.error({ error: message }, 'Falha no job interno da varredura do Pipedrive.');
+    res.status(500).json({ message: 'Falha na varredura do Pipedrive.' });
   }
 });
 

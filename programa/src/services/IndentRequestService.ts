@@ -12,6 +12,7 @@ import type {
   IndentRequestListQuery,
 } from '../validators/indentRequest';
 import { AuditLogService } from './AuditLogService';
+import { IndentIntegrationConfigService } from './IndentIntegrationConfigService';
 
 const ENTITY_TYPE = 'indent_request';
 
@@ -42,6 +43,14 @@ const detailInclude = {
   items: {
     orderBy: { position: 'asc' as const },
     include: { product: { select: { id: true, name: true, cas: true, origin: true } } },
+  },
+  // PR 5 (Pipedrive): revisao do negocio e fila de vinculo (uma pendencia ABERTA por solicitacao).
+  pipedriveDeals: { select: { currentRevision: true }, orderBy: { id: 'asc' as const }, take: 1 },
+  pendingOrgs: {
+    where: { status: 'OPEN' as const },
+    select: { id: true, candidates: true },
+    orderBy: { id: 'asc' as const },
+    take: 1,
   },
   quotes: {
     orderBy: { id: 'asc' as const },
@@ -86,7 +95,9 @@ function toNumber(value: unknown): number {
   return Number(String(value));
 }
 
-function serializeDetail(row: DetailRow, now: Date) {
+function serializeDetail(row: DetailRow, now: Date, slaBusinessDays: number) {
+  const pendingOrg = row.pendingOrgs[0];
+
   return {
     id: row.id,
     processNumber: row.processNumber,
@@ -102,6 +113,15 @@ function serializeDetail(row: DetailRow, now: Date) {
     createdAt: row.createdAt,
     stageEnteredAt: row.stageEnteredAt,
     queueBusinessDays: queueDaysFor(row, now),
+    slaBusinessDays,
+    referenceAlert: row.referenceAlert,
+    currentRevision: row.pipedriveDeals[0]?.currentRevision ?? null,
+    revisionAlertAt: row.revisionAlertAt,
+    noteChangedAt: row.noteChangedAt,
+    noteIncoterm: row.noteIncoterm,
+    noteDestination: row.noteDestination,
+    noteSupplierHint: row.noteSupplierHint,
+    pendingOrg: pendingOrg ? { id: pendingOrg.id, candidates: pendingOrg.candidates } : null,
     client: row.client
       ? {
           id: row.client.id,
@@ -124,6 +144,8 @@ function serializeDetail(row: DetailRow, now: Date) {
       name: item.product?.name ?? item.description,
       quantityKg: toNumber(item.quantityKg),
       confirmed: item.confirmed,
+      source: item.source,
+      noteLine: item.noteLine,
       productId: item.productId,
       product: item.product
         ? { id: item.product.id, name: item.product.name, cas: item.product.cas, origin: item.product.origin }
@@ -156,6 +178,7 @@ function serializeListRow(row: ListRow, now: Date) {
   return {
     id: row.id,
     processNumber: row.processNumber,
+    referencePending: row.processNumber === null,
     createdAt: row.createdAt,
     origin: row.origin,
     pipedriveDealId: row.pipedriveDealId,
@@ -234,7 +257,7 @@ export class IndentRequestService {
       take: query.pageSize,
     };
 
-    const [rows, total, todas, pipedrive, iq, nova, pendente, emCotacao, respondidas, convertidasNoMes] =
+    const [rows, total, todas, pipedrive, iq, nova, pendente, emCotacao, respondidas, convertidasNoMes, slaBusinessDays] =
       await Promise.all([
         prisma.indentRequest.findMany({
           where,
@@ -254,6 +277,7 @@ export class IndentRequestService {
         prisma.indentRequest.count({
           where: { status: 'CONVERTIDA', statusChangedAt: { gte: monthStartInSaoPaulo(now) } },
         }),
+        IndentIntegrationConfigService.getSlaBusinessDays(),
       ]);
 
     return {
@@ -264,6 +288,7 @@ export class IndentRequestService {
       ),
       counts: { todas, pipedrive, iq, nova, pendente },
       kpis: { novas: nova, emCotacao, respondidas, convertidasNoMes },
+      slaBusinessDays,
     };
   }
 
@@ -288,14 +313,16 @@ export class IndentRequestService {
       throw new HttpError(404, 'Solicitação não encontrada.');
     }
 
-    return serializeDetail(row, now);
+    return serializeDetail(row, now, await IndentIntegrationConfigService.getSlaBusinessDays());
   }
 
   // Solicitacao lancada no IQ Indent: responsavel e autoria vem do usuario logado; itens nascem confirmados.
   static async create(input: IndentRequestCreateInput, user: IndentActor, now: Date = new Date()) {
+    const slaBusinessDays = await IndentIntegrationConfigService.getSlaBusinessDays();
+
     for (let attempt = 1; ; attempt += 1) {
       try {
-        return await prisma.$transaction((tx) => IndentRequestService.createOnce(tx, input, user, now));
+        return await prisma.$transaction((tx) => IndentRequestService.createOnce(tx, input, user, now, slaBusinessDays));
       } catch (error) {
         if (!isRetryableCreateConflict(error)) {
           throw error;
@@ -312,6 +339,7 @@ export class IndentRequestService {
     input: IndentRequestCreateInput,
     user: IndentActor,
     now: Date,
+    slaBusinessDays: number,
   ) {
     const client = await tx.indentClient.findUnique({
       where: { id: input.clientId },
@@ -422,7 +450,7 @@ export class IndentRequestService {
       tx,
     );
 
-    return serializeDetail(created, now);
+    return serializeDetail(created, now, slaBusinessDays);
   }
 
   // Produto de itens digitados a mao: reaproveita o de mesmo nameKey (qualquer origem/estado) ou cria LIVRE. Compartilhado com a
@@ -481,6 +509,8 @@ export class IndentRequestService {
 
   // Confirmar itens: so no backend neste PR (sem UI). Nada mudou = sem escrita e sem log.
   static async confirmItems(id: number, input: IndentConfirmItemsInput, user: IndentActor, now: Date = new Date()) {
+    const slaBusinessDays = await IndentIntegrationConfigService.getSlaBusinessDays();
+
     return prisma.$transaction(async (tx) => {
       const request = await tx.indentRequest.findUnique({
         where: { id },
@@ -538,7 +568,7 @@ export class IndentRequestService {
         throw new HttpError(404, 'Solicitação não encontrada.');
       }
 
-      return serializeDetail(row, now);
+      return serializeDetail(row, now, slaBusinessDays);
     });
   }
 }

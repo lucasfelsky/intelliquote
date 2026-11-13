@@ -358,3 +358,23 @@ describe('selectItemsNote', () => {
     expect(selectItemsNote([a, b], { comexUserId: COMEX_ID })?.note.id).toBe(2);
   });
 });
+
+// Cobertura do 5a.2 para pendencias do reviewer do 5a.1: separador antes da quantidade e fechamento de script em maiusculas.
+describe('parseDealNote: separador antes da quantidade (nao entra no nome do item)', () => {
+  it.each(['ACIDO EXEMPLO - 2.000 kg', 'ACIDO EXEMPLO – 2.000', 'ACIDO EXEMPLO: 2.000', 'ACIDO EXEMPLO -- 2.000 kg', 'ACIDO EXEMPLO  -  2.000'])(
+    '%s',
+    (line) => {
+      const [item] = parseDealNote(line).items;
+      expect(item?.text).toBe('ACIDO EXEMPLO');
+      expect(item?.quantityKg).toBe(2000);
+    },
+  );
+});
+
+describe('noteHtmlToText: script e style em qualquer caixa', () => {
+  it('fecha <SCRIPT> com </SCRIPT> e ignora </script> solto antes do <script>', () => {
+    expect(noteHtmlToText('<SCRIPT>x</SCRIPT>a<script>y</script>b')).toBe('ab');
+    expect(noteHtmlToText('</script>a<script>x</script>b')).toBe('ab');
+    expect(noteHtmlToText('<script>x</SCRIPT >b')).toBe('b');
+  });
+});

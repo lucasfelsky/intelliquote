@@ -35,10 +35,10 @@ export function businessDaysSince(stageEnteredAt: Date, now: Date): number {
 
 export type QueueLevel = 'neutral' | 'warning' | 'danger';
 
-/** <= 1 dia: neutro; 2: "no limite"; > 2: "atrasada". */
-export function queueLevel(days: number): QueueLevel {
-  if (days > 2) {
+/** Abaixo do prazo: neutro; no prazo: "no limite"; acima: "atrasada". `sla` = prazo interno em dias uteis (padrao 2). */
+export function queueLevel(days: number, sla = 2): QueueLevel {
+  if (days > sla) {
     return 'danger';
   }
-  return days === 2 ? 'warning' : 'neutral';
+  return days === sla ? 'warning' : 'neutral';
 }

@@ -45,8 +45,10 @@ export function isOpenQuote(status: string): boolean {
 }
 
 /** `revision = 1` -> `NNN/AA`; `revision = n > 1` -> `R<n> - NNN/AA`. */
-export function formatQuoteRef(processNumber: string, revision: number): string {
-  return revision > 1 ? `R${revision} - ${processNumber}` : processNumber;
+export function formatQuoteRef(processNumber: string | null, revision: number): string {
+  // Cotacao so existe com numero (a geracao barra "Referencia pendente"); o null so satisfaz o tipo anulavel.
+  const number = processNumber ?? '';
+  return revision > 1 ? `R${revision} - ${number}` : number;
 }
 
 /**
