@@ -549,6 +549,7 @@
       "/indent/clientes",
       "/indent/cotacoes",
       "/indent/fornecedores",
+      "/indent/integracao",
       "/indent/solicitacoes",
       "/indent/solicitacoes/:id",
       "/itens",

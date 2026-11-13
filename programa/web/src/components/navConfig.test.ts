@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ADMIN_NAV,
   COMEX_ROLES,
+  INDENT_ADMIN_NAV,
   INDENT_NAV,
   PRIMARY_NAV,
   filterNavByRole,
@@ -157,5 +158,22 @@ describe('navConfig: IQ Indent', () => {
     }
     expect(INDENT_NAV.some((item) => /integracao/.test(item.to))).toBe(false);
     for (const role of COMEX_ROLES) expect(filterNavByRole(INDENT_NAV, role), role).toHaveLength(5);
+  });
+
+  it('INDENT_ADMIN_NAV: so a Integracao Pipedrive (icone plug, grupo admin), para a equipe COMEX; comercial nao ve', () => {
+    expect(INDENT_ADMIN_NAV).toEqual([
+      { to: '/indent/integracao', label: 'Integração Pipedrive', icon: 'plug', group: 'admin', roles: COMEX_ROLES },
+    ]);
+    expect(Object.keys(ICONS)).toContain('plug');
+    for (const role of COMEX_ROLES) expect(filterNavByRole(INDENT_ADMIN_NAV, role).map((item) => item.to), role).toEqual(['/indent/integracao']);
+    expect(filterNavByRole(INDENT_ADMIN_NAV, 'comercial')).toEqual([]);
+    expect(filterNavByRole(INDENT_ADMIN_NAV, undefined)).toEqual([]);
+  });
+
+  it('o plug e so da Integracao: nenhum outro item de navegacao o usa e a administracao do IQ nao ganha o link', () => {
+    const outros = [...PRIMARY_NAV, ...ADMIN_NAV, ...INDENT_NAV];
+    expect(outros.filter((item) => item.icon === 'plug')).toEqual([]);
+    expect(ADMIN_NAV.some((item) => /integracao/.test(item.to))).toBe(false);
+    expect(visiblePaths('comercial')).toEqual(['/solicitacoes', '/manual']);
   });
 });

@@ -7,6 +7,7 @@ import type { SVGAttributes } from 'react';
 // F8/F9-0: +3 (alert-circle, upload, file); "Baixar" reusa `download`, o envelope de "Responder" e "Enviar e-mail" reusa `templates`, "Anexar" e "Solicitar uma cotacao" reusam `plus`.
 // F10/F11-0: +10 (minus, file-plus, ship, dollar, package, clock, code, maximize, table, image); lupa e "i" reusam `search`/`info`, "Doc. vencido" reusa `file`, o cadeado do e-mail travado `lock`, "Ver" `eye`, "+" `plus`, o X de etiqueta `x`, o envelope dos cartoes `templates`. F3-0: `x` (fechar do Modal, F3c) e `star` (StarRating, F3d) entram ja, sem uso ate la, para as frentes
 // paralelas nao editarem este objeto. F13-C: +4 do menu "Mais" e do cabecalho do Forecast (globe, layers, ellipsis, file-x); "Fontes e lead time" reusa `clock`, "Excluir quinzena" `trash`, "Importar" `upload`. Unica excecao ao "sem preenchimento": o meio-disco do icone automatico (ICON_FILLS).
+// Indent 5a.4: +1 (plug, "Integracao Pipedrive" do menu de administracao do Indent; path do mock v14).
 export const ICONS = {
   overview: 'M3 4h7v8H3zM14 4h7v5h-7zM14 13h7v7h-7zM3 16h7v4H3z',
   cotacoes: 'M9 3h6v3H9zM6 4.5H5v16.5h14V4.5h-1M9 11h6M9 15h6M9 19h3',
@@ -72,6 +73,7 @@ export const ICONS = {
   printer: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M6 14h12v7H6z',
   clipboard: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M10 3h4a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM9 12h6M9 16h4',
   send: 'M22 2 11 13M22 2l-7 20-4-9-9-4z',
+  plug: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
 } as const;
 
 // Camada preenchida (currentColor) por cima do traco: so o meio-disco do icone "automatico" do botao de tema.

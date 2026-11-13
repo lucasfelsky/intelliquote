@@ -30,6 +30,7 @@ import IndentSolicitacaoDetalhe from '@/pages/Indent/IndentSolicitacaoDetalhe';
 import IndentCatalogo from '@/pages/Indent/IndentCatalogo';
 import IndentFornecedores from '@/pages/Indent/IndentFornecedores';
 import IndentClientes from '@/pages/Indent/IndentClientes';
+import IndentIntegracao from '@/pages/Indent/IndentIntegracao';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,6 +103,7 @@ export default function App() {
                   <Route path="/indent/catalogo" element={<IndentCatalogo />} />
                   <Route path="/indent/fornecedores" element={<IndentFornecedores />} />
                   <Route path="/indent/clientes" element={<IndentClientes />} />
+                  <Route path="/indent/integracao" element={<IndentIntegracao />} />
                   <Route path="/manual" element={<Manual />} />
                   <Route path="/ajuda" element={<Navigate to="/manual" replace />} />
                   <Route path="/auditoria" element={<Auditoria />} />

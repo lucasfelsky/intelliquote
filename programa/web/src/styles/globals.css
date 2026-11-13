@@ -13988,6 +13988,114 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 }
 /* Tag dentro de coluna (ex.: "Item livre" na celula do item): nao estica na largura da celula. */
 .indent-page .indent-cell-main > .indent-tag { align-self: flex-start; }
+/* ======================= Integracao Pipedrive (PR 5a.4): conexao, campos, mapeamento e fila de vinculo ======================= */
+/* Metricas do mock v14 (.conn, .fields, .arrow, .setting, .orgs, .orgopt). Cada token do mock virou o --rf-* mais proximo que ja existe
+   (primary -> --rf-primary, primary-a24 -> --rf-focus-halo). As colunas reutilizam .indent-cols (flex-wrap); sem media query e sem keyframes.
+   Botoes secundarios = o .ghost-button padrao do sistema: so medidas aqui, sem borda/sombra/fundo proprios. */
+.indent-page .indent-conn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.indent-page .indent-conn__ponto {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rf-primary);
+  box-shadow: 0 0 0 4px var(--rf-focus-halo);
+}
+.indent-page .indent-conn__ponto--aviso {
+  background: var(--rf-tone-warning-solid);
+  box-shadow: 0 0 0 4px var(--rf-aviso-borda);
+}
+.indent-page .indent-conn__ponto--erro {
+  background: var(--rf-tone-danger-solid);
+  box-shadow: none;
+}
+.indent-page .indent-conn__ponto--neutro {
+  background: var(--rf-tone-neutral-solid);
+  box-shadow: none;
+}
+.indent-page .indent-conn__tag { margin-left: auto; }
+.indent-page .indent-campos-config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+}
+.indent-page .indent-campos-config .field {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.indent-page .indent-mapa td:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.indent-page .indent-seta { color: var(--rf-ink-soft); }
+.indent-page .indent-painel__cabeca h2:focus-visible {
+  outline: 2px solid var(--rf-action);
+  outline-offset: 4px;
+  border-radius: var(--rf-radius-xs);
+}
+.indent-page .indent-fila-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rf-divider);
+}
+.indent-page .indent-fila-item:last-of-type { border-bottom: 0; }
+.indent-page .indent-fila-item__texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.indent-page .indent-fila-item small {
+  color: var(--rf-ink-soft);
+  font-size: 12px;
+}
+.indent-page .indent-fila-item__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.indent-page .indent-fila-item__acoes .ghost-button {
+  min-height: 36px;
+  font-size: 13px;
+}
+.indent-page .indent-orgs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-xs);
+}
+.indent-page .indent-orgs legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.indent-page .indent-orgopt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.indent-page .indent-orgopt:focus-within {
+  outline: 2px solid var(--rf-action);
+  outline-offset: 2px;
+}
+.indent-page .indent-orgopt input { accent-color: var(--rf-primary-700); }
 /* <<< tela F14 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar
