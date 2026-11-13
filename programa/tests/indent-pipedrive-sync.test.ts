@@ -20,6 +20,7 @@ import {
   auditActions,
   fake,
   installFakeDb,
+  prismaMock,
   resetFakeDb,
   resetIndentMocks,
   tx,
@@ -290,6 +291,16 @@ describe('varredura: funil e coluna (config_mismatch)', () => {
     expect(fake.requests).toHaveLength(0);
   });
 
+  it('config_mismatch: coluna APAGADA no Pipedrive (404 em GET /stages/{id}) nao e erro de servico, e nao confere', async () => {
+    const client = makeClient({ deals: [makeDeal(900001, '274/26 INDENT - A')], failStage: new PipedriveNotFoundError(404) });
+    const result = await sweep(client);
+
+    expect(result.outcome).toBe('config_mismatch');
+    expect(client.spies.listDealsInStage).not.toHaveBeenCalled();
+    expect(fake.config).toMatchObject({ connectionStatus: 'config_mismatch' });
+    expect(fake.requests).toHaveLength(0);
+  });
+
   it('o nome da coluna e comparado sem acento, caixa e espacos extras', async () => {
     const client = makeClient({ deals: [], stage: { name: '  PROPOSTA   exemplo a ENVIAR ', pipelineId: 9010 } });
     expect((await sweep(client)).outcome).toBe('run_ok');
@@ -481,6 +492,42 @@ describe('varredura: negocio que sai da coluna, volta ou some', () => {
     expect(fake.requests[1]).toMatchObject({ status: 'COTACAO', stageEnteredAt: back.stageChangeTime });
     expect(eventsOf('stage_reentered')).toHaveLength(1);
     expect(fake.requests).toHaveLength(2);
+  });
+
+  it('saiu e voltou com o MESMO stage_change_time (ou add_time): ainda e stage_reentered', async () => {
+    const { a, b } = await seedTwo();
+    await sweep(makeClient({ deals: [a], dealById: { 900002: { ...b, stageId: 9021, updateTime: new Date('2026-11-12T10:00:00.000Z') } } }), { now: later });
+    expect(fake.mirrors[1]).toMatchObject({ inSourceStage: false });
+
+    const back = { ...b, updateTime: new Date('2026-11-14T09:00:01.000Z') }; // mesma entrada na coluna
+    await sweep(makeClient({ deals: [a, back] }), { now: new Date(later.getTime() + 600_000) });
+
+    expect(fake.mirrors[1]).toMatchObject({ inSourceStage: true, leftStageAt: null });
+    expect(eventsOf('stage_reentered')).toHaveLength(1);
+    expect(fake.requests).toHaveLength(2);
+  });
+
+  const resultsOf = (mock: typeof tx.indentPipedriveEvent.create) =>
+    mock.mock.calls.map((call) => (call[0] as { data: { result: string } }).data.result);
+
+  it('left_stage grava o evento DENTRO da transacao (tx), nao por uma 2a conexao', async () => {
+    const { a, b } = await seedTwo();
+    prismaMock.indentPipedriveEvent.create.mockClear();
+    tx.indentPipedriveEvent.create.mockClear();
+    await sweep(makeClient({ deals: [a], dealById: { 900002: { ...b, stageId: 9021, updateTime: new Date('2026-11-12T10:00:00.000Z') } } }), { now: later });
+
+    expect(resultsOf(tx.indentPipedriveEvent.create)).toContain('left_stage');
+    expect(resultsOf(prismaMock.indentPipedriveEvent.create)).not.toContain('left_stage');
+  });
+
+  it('not_found grava o evento DENTRO da transacao (tx), nao por uma 2a conexao', async () => {
+    const { a } = await seedTwo();
+    prismaMock.indentPipedriveEvent.create.mockClear();
+    tx.indentPipedriveEvent.create.mockClear();
+    await sweep(makeClient({ deals: [a], dealById: { 900002: 'not_found' } }), { now: later });
+
+    expect(resultsOf(tx.indentPipedriveEvent.create)).toContain('not_found');
+    expect(resultsOf(prismaMock.indentPipedriveEvent.create)).not.toContain('not_found');
   });
 
   it('ordem trocada: negocio com update_time anterior ao do espelho vira ignored_stale e nao reverte nada', async () => {

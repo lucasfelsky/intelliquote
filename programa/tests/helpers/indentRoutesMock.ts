@@ -806,7 +806,9 @@ export function installFakeDb() {
     if (sql.includes('INSERT INTO "IndentSequence"')) {
       fake.sequence.set(values[0] as number, fake.sequence.get(values[0] as number) ?? 0);
     } else if (sql.includes('UPDATE "IndentSequence"')) {
-      fake.sequence.set(values[1] as number, Math.max(fake.sequence.get(values[1] as number) ?? 0, values[0] as number));
+      // Le o SQL: so GREATEST(...) nunca desce o contador; atribuicao simples (regressao) sobrescreve.
+      const previous = fake.sequence.get(values[1] as number) ?? 0;
+      fake.sequence.set(values[1] as number, sql.includes('GREATEST(') ? Math.max(previous, values[0] as number) : (values[0] as number));
     } else if (sql.includes('"sweepLockedUntil" = now()')) {
       if (fake.claimTaken) return 0;
       fake.claimTaken = true;

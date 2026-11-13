@@ -216,6 +216,35 @@ describe('GET /pipedrive/status', () => {
     expect(prismaMock.indentIntegrationConfig.findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 1 } });
   });
 
+  it('linha semeada ANTES do env: campos ainda vazios sao completados a partir do env valido e o conectado volta a ok', async () => {
+    const empty = { ...CONFIG, pipelineId: null, pipelineName: null, stageId: null, stageName: null, connectionStatus: 'not_configured' };
+    prismaMock.indentIntegrationConfig.findUnique.mockResolvedValue(empty);
+    prismaMock.indentIntegrationConfig.update.mockResolvedValue({ ...empty, pipelineId: 9010, stageId: 9020, stageName: 'Proposta Exemplo a Enviar', connectionStatus: 'ok' });
+    const res = await call('get', '/pipedrive/status', await loginAs('admin'));
+
+    expect(prismaMock.indentIntegrationConfig.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { pipelineId: 9010, stageId: 9020, stageName: 'Proposta Exemplo a Enviar', connectionStatus: 'ok' },
+    });
+    expect(res.body).toMatchObject({ configured: true, connection: 'ok', pipelineId: 9010, stageId: 9020 });
+  });
+
+  it('o que ja esta no banco (salvo pelo admin) NUNCA e sobrescrito pelo env', async () => {
+    prismaMock.indentIntegrationConfig.findUnique.mockResolvedValue({ ...CONFIG, pipelineId: 9011, stageId: 9030, stageName: 'Outra Coluna Exemplo' });
+    const res = await call('get', '/pipedrive/status', await loginAs('admin'));
+
+    expect(prismaMock.indentIntegrationConfig.update).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ pipelineId: 9011, stageId: 9030, stageName: 'Outra Coluna Exemplo' });
+  });
+
+  it('env invalido (configured=false) nao semeia nada', async () => {
+    mocks.env.configured = false;
+    prismaMock.indentIntegrationConfig.findUnique.mockResolvedValue({ ...CONFIG, pipelineId: null, stageId: null, stageName: null });
+    await call('get', '/pipedrive/status', await loginAs('admin'));
+
+    expect(prismaMock.indentIntegrationConfig.update).not.toHaveBeenCalled();
+  });
+
   it('cria a linha de configuracao na 1a leitura com os valores do env', async () => {
     prismaMock.indentIntegrationConfig.findUnique.mockResolvedValue(null);
     await call('get', '/pipedrive/status', await loginAs('admin'));

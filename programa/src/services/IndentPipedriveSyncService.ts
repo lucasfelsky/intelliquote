@@ -621,9 +621,10 @@ export class IndentPipedriveSyncService {
     result: string,
     requestId: number | null,
     record: boolean,
+    db: Prisma.TransactionClient | typeof prisma = prisma,
   ): Promise<DealOutcome> {
     if (record) {
-      await IndentPipedriveSyncService.recordEvent(prisma, { source: ctx.source, dealId, requestId, result });
+      await IndentPipedriveSyncService.recordEvent(db, { source: ctx.source, dealId, requestId, result });
     }
     logger.info({ dealId, result }, 'Pipedrive: negocio processado.');
     return { dealId, result, results: [result], created: false, requestId };
@@ -639,10 +640,10 @@ export class IndentPipedriveSyncService {
       });
 
       if (!mirror) {
-        return IndentPipedriveSyncService.simple(ctx, deal.id, 'ignored_stage', null, true);
+        return IndentPipedriveSyncService.simple(ctx, deal.id, 'ignored_stage', null, true, tx);
       }
       if (mirror.dealUpdateTime && deal.updateTime.getTime() < mirror.dealUpdateTime.getTime()) {
-        return IndentPipedriveSyncService.simple(ctx, deal.id, 'ignored_stale', mirror.requestId, true);
+        return IndentPipedriveSyncService.simple(ctx, deal.id, 'ignored_stale', mirror.requestId, true, tx);
       }
 
       await tx.indentPipedriveDeal.update({
@@ -664,6 +665,7 @@ export class IndentPipedriveSyncService {
         mirror.inSourceStage ? 'left_stage' : 'ignored_stage',
         mirror.requestId,
         mirror.inSourceStage,
+        tx,
       );
     });
   }
@@ -675,7 +677,7 @@ export class IndentPipedriveSyncService {
       const mirror = await tx.indentPipedriveDeal.findUnique({ where: { dealId }, select: { requestId: true, notFoundAt: true } });
 
       if (!mirror) {
-        return IndentPipedriveSyncService.simple(ctx, dealId, 'not_found', null, false);
+        return IndentPipedriveSyncService.simple(ctx, dealId, 'not_found', null, false, tx);
       }
 
       await tx.indentPipedriveDeal.update({
@@ -683,7 +685,7 @@ export class IndentPipedriveSyncService {
         data: { notFoundAt: ctx.now, inSourceStage: false, lastSeenAt: ctx.now },
       });
 
-      return IndentPipedriveSyncService.simple(ctx, dealId, 'not_found', mirror.requestId, mirror.notFoundAt === null);
+      return IndentPipedriveSyncService.simple(ctx, dealId, 'not_found', mirror.requestId, mirror.notFoundAt === null, tx);
     });
   }
 
@@ -864,7 +866,7 @@ export class IndentPipedriveSyncService {
     if (title.revision !== null) {
       referenceAlert = number
         ? `Revisão R${title.revision} sem solicitação base no IQ Indent (título: ${number}).`
-        : `Revisão R${title.revision} sem solicitação base no IQ Indent (sem número no título).`;
+        : (problemAlert(title) ?? `Revisão R${title.revision} sem solicitação base no IQ Indent (sem número no título).`);
     } else if (number && title.year !== null && title.seq !== null) {
       const holder = await IndentPipedriveSyncService.lockYearAndBump(tx, title.year, title.seq);
 

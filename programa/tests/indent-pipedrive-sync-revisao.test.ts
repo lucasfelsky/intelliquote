@@ -203,6 +203,15 @@ describe('revisao: o MESMO negocio e renomeado com "R<n> -"', () => {
     expect(fake.sequence.has(2026)).toBe(false);
   });
 
+  it('"R2 - 263/26 e 270/26" (dois numeros) mantem o alerta de multiple_numbers, nao o de "sem numero"', async () => {
+    await sweep(makeClient([makeDeal('R2 - 263/26 e 270/26 INDENT CLIENTE EXEMPLO')]));
+
+    expect(fake.requests[0]).toMatchObject({
+      processNumber: null,
+      referenceAlert: 'O título do negócio tem mais de um número NNN/AA.',
+    });
+  });
+
   it('"R2 - INDENT CLIENTE" sem numero: referencia pendente com alerta "sem numero no titulo"', async () => {
     await sweep(makeClient([makeDeal('R2 - INDENT CLIENTE EXEMPLO')]));
     expect(fake.requests[0]).toMatchObject({
@@ -346,6 +355,14 @@ describe('cliente: organizacao do negocio e da pessoa de contato (nunca por nome
     expect(line).toMatchObject({ clientId: 3, orgId: 900101, dealId: 900001 });
     expect(Object.keys(line).sort()).toEqual(['clientId', 'dealId', 'level', 'msg', 'orgId', 'time']);
     expect(JSON.stringify(line)).not.toContain('11222333000181');
+  });
+
+  it('cliente INATIVO com o pipedriveOrgId da organizacao NAO casa: vai para a fila de vinculo', async () => {
+    fake.clients.push({ id: 3, name: 'Qualquer Nome', cnpj: null, pipedriveOrgId: 900101, isActive: false });
+    await sweep(makeClient([makeDeal('274/26 INDENT - A')]));
+
+    expect(fake.requests[0]).toMatchObject({ clientId: null });
+    expect(fake.pendings).toHaveLength(1);
   });
 
   it('cliente inativo nao casa: vai para a fila de vinculo', async () => {

@@ -83,7 +83,7 @@ export class IndentIntegrationConfigService {
     const existing = await prisma.indentIntegrationConfig.findUnique({ where: { id: CONFIG_ID } });
 
     if (existing) {
-      return existing;
+      return IndentIntegrationConfigService.fillEmptyFromEnv(existing, env);
     }
 
     try {
@@ -99,6 +99,34 @@ export class IndentIntegrationConfigService {
       }
       throw error;
     }
+  }
+
+  /**
+   * A linha pode ter nascido antes de o env estar no deploy (funil/coluna nulos): campos AINDA VAZIOS sao completados a partir
+   * do env valido. O que ja esta no banco (inclusive o que o admin salvou na tela) nunca e sobrescrito.
+   */
+  private static async fillEmptyFromEnv<T extends { pipelineId: number | null; stageId: number | null; stageName: string | null; connectionStatus: string }>(
+    row: T,
+    env: PipedriveEnv,
+  ): Promise<T> {
+    if (!env.configured) {
+      return row;
+    }
+
+    const patch: { pipelineId?: number; stageId?: number; stageName?: string; connectionStatus?: string } = {};
+
+    if (row.pipelineId === null && env.pipelineId !== undefined) patch.pipelineId = env.pipelineId;
+    if (row.stageId === null && env.stageId !== undefined) patch.stageId = env.stageId;
+    if (row.stageName === null && env.stageName !== undefined) patch.stageName = env.stageName;
+
+    if (Object.keys(patch).length === 0) {
+      return row;
+    }
+    if (row.connectionStatus === 'not_configured') {
+      patch.connectionStatus = 'ok';
+    }
+
+    return { ...row, ...(await prisma.indentIntegrationConfig.update({ where: { id: CONFIG_ID }, data: patch })) };
   }
 
   /** Prazo interno (1-3 dias uteis) para as telas de Solicitacoes; sem configuracao = 2. Nao cria a linha. */
@@ -144,7 +172,16 @@ export class IndentIntegrationConfigService {
     client: PipedriveClient,
     expected: { pipelineId: number; stageId: number; stageName: string | null },
   ): Promise<{ matches: boolean; stageName: string }> {
-    const stage = await client.getStage(expected.stageId);
+    let stage: Awaited<ReturnType<PipedriveClient['getStage']>>;
+    try {
+      stage = await client.getStage(expected.stageId);
+    } catch (error) {
+      // Coluna apagada no Pipedrive (404/410): nao confere, nada e processado.
+      if (error instanceof PipedriveNotFoundError) {
+        return { matches: false, stageName: '' };
+      }
+      throw error;
+    }
     const sameName =
       expected.stageName !== null && normalizeStageName(stage.name) === normalizeStageName(expected.stageName);
     return { matches: stage.pipelineId === expected.pipelineId && sameName, stageName: stage.name };

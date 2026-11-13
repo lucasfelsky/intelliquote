@@ -229,6 +229,17 @@ describe('IQ Indent - sincronizacao Pipedrive (DB)', () => {
     expect(Number(next.processNumber?.split('/')[0])).toBeGreaterThan(target);
   });
 
+  testDbSkip('numero MENOR depois de um maior nao faz a sequencia descer (GREATEST)', async () => {
+    const base = (await prisma.indentSequence.findUnique({ where: { year: YEAR } }))?.lastNumber ?? 0;
+    const high = makeDeal(`${base + 80}/${YY} INDENT - ALTO`);
+    const low = makeDeal(`${base + 20}/${YY} INDENT - BAIXO`);
+    await IndentPipedriveSyncService.processDeal(high, contextFor(makeClient([high])));
+    await IndentPipedriveSyncService.processDeal(low, contextFor(makeClient([low])));
+
+    expect((await prisma.indentSequence.findUniqueOrThrow({ where: { year: YEAR } })).lastNumber).toBeGreaterThanOrEqual(base + 80);
+    expect(await prisma.indentRequest.count({ where: { pipedriveDealId: { in: [high.id, low.id] }, processNumber: { not: null } } })).toBe(2);
+  });
+
   testDbSkip('varreduras concorrentes: o claim real deixa 1 rodar e a outra recebe in_progress; o claim e liberado', async () => {
     const deal = makeDeal(`8840/${YY} INDENT - CLAIM`);
     const client = makeClient([deal]);
