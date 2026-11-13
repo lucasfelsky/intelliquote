@@ -32,4 +32,9 @@ describe('IQ Indent - CNPJ (copia do backend)', () => {
     expect(maskCnpjInput('11.222.333/0001-81999')).toBe('11.222.333/0001-81');
     expect(maskCnpjInput('')).toBe('');
   });
+
+  it('formatCnpj(null) (CNPJ pendente) devolve vazio, sem quebrar', () => {
+    expect(formatCnpj(null)).toBe('');
+    expect(formatCnpj('')).toBe('');
+  });
 });

@@ -107,4 +107,19 @@ describe('services/indent', () => {
     await updateIndentSupplier(5, { hasPartnership: true, productIds: [] });
     expect(api.put).toHaveBeenCalledWith('/api/v1/indent/suppliers/5', { hasPartnership: true, productIds: [] });
   });
+
+  it('listIndentClients: semCnpj vira semCnpj=1 so quando ligado (H0)', async () => {
+    await listIndentClients({ page: 2, pageSize: 100, semCnpj: true });
+    await listIndentClients({ page: 1 });
+    expect(vi.mocked(api.get).mock.calls[0]).toEqual([
+      '/api/v1/indent/clients',
+      { q: undefined, page: 2, pageSize: 100, inativos: undefined, semCnpj: 1 },
+    ]);
+    expect((vi.mocked(api.get).mock.calls[1]?.[1] as { semCnpj?: number }).semCnpj).toBeUndefined();
+  });
+
+  it('createIndentClient aceita CNPJ nulo (CNPJ pendente) e envia como esta', async () => {
+    await createIndentClient({ name: 'A', cnpj: null });
+    expect(vi.mocked(api.post)).toHaveBeenCalledWith('/api/v1/indent/clients', { name: 'A', cnpj: null });
+  });
 });

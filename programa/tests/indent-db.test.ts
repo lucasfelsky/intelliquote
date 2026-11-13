@@ -5,7 +5,7 @@ import { prisma } from '../src/lib/prisma';
 import { hashPassword } from '../src/utils/password';
 
 // Banco real descartavel (scripts/test-critical-local.mjs aplica as migrations, inclusive
-// 20261112120000_indent_cadastros). Sem RUN_DB_TESTS=true os testes sao pulados.
+// 20261112120000_indent_cadastros e 20261113140000_indent_cliente_cnpj_opcional). Sem RUN_DB_TESTS=true os testes sao pulados.
 const testDbSkip = process.env.RUN_DB_TESTS !== 'true' ? it.skip : it;
 const runId = `indent-db-${Date.now()}`;
 
@@ -173,6 +173,82 @@ describe('IQ Indent - cadastros (DB)', () => {
     const suppliers = await api('get', `/suppliers?q=${encodeURIComponent(`Forn C ${runId}`)}`);
     expect(suppliers.status).toBe(200);
     expect(suppliers.body.data[0]).toMatchObject({ id: c.body.id, approvedBy: 0, blockedBy: 1 });
+  });
+
+  testDbSkip('cliente sem CNPJ (H0): varios cnpj null convivem, nome repetido entre eles -> 409, CNPJ preenchido segue unico e completar tira do chip', async () => {
+    const a = await api('post', '/clients', { name: `Pendente A ${runId}` });
+    const b = await api('post', '/clients', { name: `Pendente B ${runId}`, cnpj: '' });
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+    clientIds.push(a.body.id, b.body.id);
+    expect(a.body.cnpj).toBeNull();
+    expect(b.body.cnpj).toBeNull();
+    expect(await prisma.indentClient.count({ where: { id: { in: [a.body.id, b.body.id] }, cnpj: null } })).toBe(2);
+
+    const repetido = await api('post', '/clients', { name: `PENDENTE   a ${runId}` });
+    expect(repetido.status).toBe(409);
+    expect(repetido.body.message).toBe('Já existe um cliente sem CNPJ com este nome.');
+
+    const lista = await api('get', '/clients?semCnpj=1&pageSize=100');
+    expect(lista.status).toBe(200);
+    const ids = (lista.body.data as Array<{ id: number; cnpj: string | null }>).map((row) => row.id);
+    expect(ids).toEqual(expect.arrayContaining([a.body.id, b.body.id]));
+    expect((lista.body.data as Array<{ cnpj: string | null }>).every((row) => row.cnpj === null)).toBe(true);
+    expect(lista.body.counts.semCnpj).toBeGreaterThanOrEqual(2);
+    expect(lista.body.counts.todos).toBeGreaterThanOrEqual(lista.body.counts.semCnpj);
+
+    const removido = await api('put', `/clients/${a.body.id}`, { cnpj: null });
+    expect(removido.status).toBe(200);
+
+    const cnpj = cnpjFrom('987654320001');
+    const completo = await api('put', `/clients/${a.body.id}`, { cnpj });
+    expect(completo.status).toBe(200);
+    expect(completo.body.cnpj).toBe(cnpj);
+
+    const semRemover = await api('put', `/clients/${a.body.id}`, { cnpj: null });
+    expect(semRemover.status).toBe(400);
+    expect(semRemover.body.message).toBe('O CNPJ não pode ser removido.');
+
+    const duplicado = await api('put', `/clients/${b.body.id}`, { cnpj });
+    expect(duplicado.status).toBe(409);
+    expect(duplicado.body.message).toBe('Já existe um cliente com este CNPJ.');
+
+    const depois = await api('get', '/clients?semCnpj=1&pageSize=100');
+    expect((depois.body.data as Array<{ id: number }>).map((row) => row.id)).not.toContain(a.body.id);
+  });
+
+  testDbSkip('cliente sem CNPJ (H0): 8 POST simultaneos com o mesmo nome -> exatamente 1 criado (201) e 7 conflitos (409); idem 8 renomeacoes simultaneas', async () => {
+    const mensagem = 'Já existe um cliente sem CNPJ com este nome.';
+
+    // 3 rodadas (a corrida sem trava aparecia em 4 de 5): nomes distintos por rodada.
+    for (let rodada = 0; rodada < 3; rodada += 1) {
+      const nome = `Corrida criar ${rodada} ${runId}`;
+      const respostas = await Promise.all(Array.from({ length: 8 }, () => api('post', '/clients', { name: nome })));
+      for (const r of respostas) if (r.status === 201) clientIds.push(r.body.id);
+
+      expect(respostas.filter((r) => r.status === 201)).toHaveLength(1);
+      const conflitos = respostas.filter((r) => r.status === 409);
+      expect(conflitos).toHaveLength(7);
+      for (const r of conflitos) expect(r.body.message).toBe(mensagem);
+      expect(await prisma.indentClient.count({ where: { name: nome } })).toBe(1);
+    }
+
+    // Renomeacao: 8 clientes sem CNPJ, nomes distintos, todos renomeados ao mesmo tempo para o mesmo nome.
+    const ids: number[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      const criado = await api('post', '/clients', { name: `Para renomear ${i} ${runId}` });
+      expect(criado.status).toBe(201);
+      ids.push(criado.body.id);
+      clientIds.push(criado.body.id);
+    }
+    const alvo = `Nome renomeado ${runId}`;
+    const renomeios = await Promise.all(ids.map((id) => api('put', `/clients/${id}`, { name: alvo })));
+
+    expect(renomeios.filter((r) => r.status === 200)).toHaveLength(1);
+    const rejeitados = renomeios.filter((r) => r.status === 409);
+    expect(rejeitados).toHaveLength(7);
+    for (const r of rejeitados) expect(r.body.message).toBe(mensagem);
+    expect(await prisma.indentClient.count({ where: { name: alvo } })).toBe(1);
   });
 
   testDbSkip('nome repetido so por acento/caixa/espaco -> 409 (fornecedor e produto)', async () => {

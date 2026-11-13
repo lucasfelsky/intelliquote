@@ -40,7 +40,7 @@ const readOnlySource = (): SourceMock => ({
 });
 
 const tx = {
-  indentClient: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+  indentClient: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   indentClientSupplierRule: { deleteMany: vi.fn(), createMany: vi.fn() },
   indentSupplier: {
     findUnique: vi.fn(),
@@ -274,6 +274,7 @@ export function resetIndentMocks() {
 
   tx.auditLog.create.mockResolvedValue({});
   tx.indentClient.findUnique.mockResolvedValue(clientRow());
+  tx.indentClient.findMany.mockResolvedValue([]);
   tx.indentClient.create.mockResolvedValue(clientRow());
   tx.indentClient.update.mockResolvedValue(clientRow());
   tx.indentClientSupplierRule.deleteMany.mockResolvedValue({ count: 0 });

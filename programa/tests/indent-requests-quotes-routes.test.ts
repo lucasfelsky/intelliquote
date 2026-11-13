@@ -164,6 +164,23 @@ describe('/api/v1/indent/requests - gerar cotacoes', () => {
     });
   });
 
+  it('cliente sem CNPJ (H0): gerar cotacoes funciona normalmente (a restricao e por clientId, nao por CNPJ)', async () => {
+    tx.indentRequest.findUnique.mockResolvedValue(
+      requestRow({ client: { ...restrictedClient('APROVADOS', [5, 6]), id: 8, name: 'Cliente Pendente Ltda', cnpj: null } }),
+    );
+    const cookie = await loginAs('comprador');
+
+    const res = await call('post', '/requests/11/quotes', cookie, BODY);
+
+    expect(res.status).toBe(201);
+    expect(res.body.quotes).toHaveLength(2);
+    expect(tx.indentQuote.create).toHaveBeenCalledTimes(2);
+    expect(tx.indentRequest.update).toHaveBeenCalledWith({
+      where: { id: 11 },
+      data: { status: 'COTACAO', statusChangedAt: expect.any(Date) },
+    });
+  });
+
   it('fornecedores repetidos no corpo viram uma cotacao so (o 1o vence) e 51 fornecedores -> 400', async () => {
     tx.indentSupplier.findMany.mockResolvedValue([genSupplier(5, 'Acme Chemicals')]);
     const cookie = await loginAs('comprador');

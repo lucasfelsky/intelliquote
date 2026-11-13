@@ -3,15 +3,15 @@ import { IndentClientService } from '../services/IndentClientService';
 import { handleControllerError, parseId } from '../utils/http';
 import {
   indentClientCreateSchema,
+  indentClientListQuerySchema,
   indentClientRuleSchema,
   indentClientUpdateSchema,
-  indentListQuerySchema,
 } from '../validators/indent';
 
 export class IndentClientController {
   static async list(req: Request, res: Response): Promise<Response> {
     try {
-      const query = indentListQuerySchema.parse(req.query);
+      const query = indentClientListQuerySchema.parse(req.query);
       return res.status(200).json(await IndentClientService.list(query));
     } catch (error) {
       const handled = handleControllerError(error);

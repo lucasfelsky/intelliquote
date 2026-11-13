@@ -2,11 +2,12 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { buildPaginatedResponse, HttpError } from '../utils/http';
 import { normalizeCnpj } from '../utils/cnpj';
+import { normalizeItemNameKey } from '../utils/commercialItemName';
 import type {
   IndentClientCreateInput,
+  IndentClientListQuery,
   IndentClientRuleInput,
   IndentClientUpdateInput,
-  IndentListQuery,
 } from '../validators/indent';
 import { AuditLogService } from './AuditLogService';
 
@@ -74,11 +75,32 @@ function translateConflict(error: unknown): never {
   throw error;
 }
 
+// Sem CNPJ nao ha indice que barre nome duplicado. A trava advisory (por nome normalizado, ate o fim da transacao)
+// serializa criacoes/renomeacoes concorrentes do mesmo nome; a checagem roda DEPOIS dela, ja vendo o que a outra
+// transacao gravou (READ COMMITTED). A consulta carrega todos os `cnpj null` (centenas, aceitavel) e compara a chave
+// normalizada em memoria. `excludeId` deixa o proprio cliente fora da comparacao (renomeacao).
+async function assertNoDuplicateNameWithoutCnpj(tx: Prisma.TransactionClient, name: string, excludeId?: number) {
+  const key = normalizeItemNameKey(name);
+
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`indent_client_sem_cnpj:${key}`}))`;
+
+  const others = await tx.indentClient.findMany({
+    where: { cnpj: null, ...(excludeId !== undefined ? { id: { not: excludeId } } : {}) },
+    select: { name: true },
+  });
+
+  if (others.some((other) => normalizeItemNameKey(other.name) === key)) {
+    throw new HttpError(409, 'Já existe um cliente sem CNPJ com este nome.');
+  }
+}
+
 export class IndentClientService {
-  static async list(query: IndentListQuery) {
+  static async list(query: IndentClientListQuery) {
     const digits = query.q ? normalizeCnpj(query.q) : '';
+    const scope: Prisma.IndentClientWhereInput = query.inativos ? {} : { isActive: true };
     const where: Prisma.IndentClientWhereInput = {
-      ...(query.inativos ? {} : { isActive: true }),
+      ...scope,
+      ...(query.semCnpj ? { cnpj: null } : {}),
       ...(query.q
         ? {
             OR: [
@@ -96,7 +118,8 @@ export class IndentClientService {
       take: query.pageSize,
     };
 
-    const [rows, total] = await Promise.all([
+    // Contagens dos chips (Todos / Sem CNPJ): respeitam "inativos", ignoram busca e chip ativo.
+    const [rows, total, todos, semCnpj] = await Promise.all([
       prisma.indentClient.findMany({
         where,
         include: clientInclude,
@@ -105,18 +128,27 @@ export class IndentClientService {
         take: pagination.take,
       }),
       prisma.indentClient.count({ where }),
+      prisma.indentClient.count({ where: scope }),
+      prisma.indentClient.count({ where: { ...scope, cnpj: null } }),
     ]);
 
-    return buildPaginatedResponse(rows, total, pagination);
+    return { ...buildPaginatedResponse(rows, total, pagination), counts: { todos, semCnpj } };
   }
 
   static async create(input: IndentClientCreateInput, userId: number | null) {
     try {
       return await prisma.$transaction(async (tx) => {
+        const cnpj = input.cnpj ?? null;
+
+        // 1a instrucao da transacao quando nao ha CNPJ: trava + checagem do nome entre os sem CNPJ.
+        if (cnpj === null) {
+          await assertNoDuplicateNameWithoutCnpj(tx, input.name);
+        }
+
         const created = await tx.indentClient.create({
           data: {
             name: input.name,
-            cnpj: input.cnpj,
+            cnpj,
             city: input.city ?? null,
             ownerName: input.ownerName ?? null,
             pipedriveOrgId: input.pipedriveOrgId ?? null,
@@ -151,11 +183,21 @@ export class IndentClientService {
           throw new HttpError(404, 'Cliente não encontrado.');
         }
 
+        // CNPJ gravado nao pode ser removido; completar (null -> valor) e trocar por outro valido seguem permitidos.
+        if (input.cnpj === null && before.cnpj !== null) {
+          throw new HttpError(400, 'O CNPJ não pode ser removido.');
+        }
+
+        // Renomear cliente que continua sem CNPJ: mesma regra do create (o modal de edicao cria esse caminho).
+        if (input.name !== undefined && before.cnpj === null && !input.cnpj) {
+          await assertNoDuplicateNameWithoutCnpj(tx, input.name, id);
+        }
+
         const updated = await tx.indentClient.update({
           where: { id },
           data: {
             ...(input.name !== undefined ? { name: input.name } : {}),
-            ...(input.cnpj !== undefined ? { cnpj: input.cnpj } : {}),
+            ...(input.cnpj ? { cnpj: input.cnpj } : {}),
             ...(input.city !== undefined ? { city: input.city } : {}),
             ...(input.ownerName !== undefined ? { ownerName: input.ownerName } : {}),
             ...(input.pipedriveOrgId !== undefined ? { pipedriveOrgId: input.pipedriveOrgId } : {}),

@@ -19,8 +19,8 @@ export interface Paginated<T> {
 export interface IndentClient {
   id: number;
   name: string;
-  /** So digitos. */
-  cnpj: string;
+  /** So digitos; null = "CNPJ pendente". */
+  cnpj: string | null;
   city: string | null;
   ownerName: string | null;
   pipedriveOrgId: number | null;
@@ -113,6 +113,11 @@ export interface IndentImportResult {
   skipped: Array<{ sourceId: number; reason: 'duplicado' | 'nao_encontrado' }>;
 }
 
+export interface IndentClientList extends Paginated<IndentClient> {
+  /** Chips da tela de Clientes (respeitam "inativos"; ignoram busca e filtro). */
+  counts: { todos: number; semCnpj: number };
+}
+
 export interface IndentListParams {
   q?: string;
   page?: number;
@@ -130,13 +135,14 @@ function listQuery(params: IndentListParams = {}) {
 }
 
 // ---- Clientes ----
-export function listIndentClients(params?: IndentListParams): Promise<Paginated<IndentClient>> {
-  return api.get<Paginated<IndentClient>>(`${BASE}/clients`, listQuery(params));
+export function listIndentClients(params?: IndentListParams & { semCnpj?: boolean }): Promise<IndentClientList> {
+  return api.get<IndentClientList>(`${BASE}/clients`, { ...listQuery(params), semCnpj: params?.semCnpj ? 1 : undefined });
 }
 
 export interface IndentClientInput {
   name: string;
-  cnpj: string;
+  /** Opcional: ausente/null = CNPJ pendente. Nao e possivel remover um CNPJ ja gravado (400). */
+  cnpj?: string | null;
   city?: string | null;
   ownerName?: string | null;
   pipedriveOrgId?: number | null;

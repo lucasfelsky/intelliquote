@@ -65,9 +65,15 @@ const OPCOES = [
 ];
 
 function mockApi(rows: unknown[] = CLIENTES) {
-  vi.mocked(api.get).mockImplementation((async (url: string) => {
+  vi.mocked(api.get).mockImplementation((async (url: string, params?: { semCnpj?: number }) => {
     if (url === '/api/v1/indent/clients') {
-      return { data: rows, pagination: { page: 1, pageSize: 100, totalItems: rows.length, totalPages: 1 } };
+      const pendentes = rows.filter((row) => (row as { cnpj: string | null }).cnpj === null);
+      const lista = params?.semCnpj ? pendentes : rows;
+      return {
+        data: lista,
+        pagination: { page: 1, pageSize: 100, totalItems: lista.length, totalPages: 1 },
+        counts: { todos: rows.length, semCnpj: pendentes.length },
+      };
     }
     if (url === '/api/v1/indent/suppliers/options') return OPCOES;
     return [];
@@ -360,4 +366,204 @@ describe('IndentClientes', () => {
     expect(document.activeElement).toBe(novo);
   });
 
+  describe('CNPJ pendente (H0)', () => {
+    const PENDENTE = cliente(7, 'Cliente Sem Cnpj Ltda', { cnpj: null, city: 'Joinville, SC', pipedriveOrgId: null });
+    const COM_PENDENTE = [...CLIENTES, PENDENTE];
+
+    it('linha sem CNPJ mostra a etiqueta "CNPJ pendente" (indent-tag--manual) e a cidade; com CNPJ continua mascarado', async () => {
+      mockApi(COM_PENDENTE);
+      const { container } = renderPage();
+      await screen.findByText('Cliente Sem Cnpj Ltda');
+      const linhas = Array.from(container.querySelectorAll('tbody tr')) as HTMLElement[];
+      const pendente = linhas[3] as HTMLElement;
+
+      const etiqueta = within(pendente).getByText('CNPJ pendente');
+      expect(etiqueta.className).toContain('indent-tag--manual');
+      expect(etiqueta.parentElement?.className).toContain('indent-cell-sub');
+      expect(etiqueta.parentElement?.textContent).toContain('· Joinville, SC');
+      expect(within(linhas[0] as HTMLElement).queryByText('CNPJ pendente')).toBeNull();
+      expect(within(linhas[0] as HTMLElement).getByText('11.222.333/0001-81 · Itajaí, SC')).toBeTruthy();
+    });
+
+    it('chips "Todos" / "Sem CNPJ" com contagem e aria-pressed; "Sem CNPJ" filtra no servidor e mostra o aviso do Pipedrive', async () => {
+      mockApi(COM_PENDENTE);
+      const { container } = renderPage();
+      await screen.findByText('Cliente Sem Cnpj Ltda');
+
+      const grupo = screen.getByRole('group', { name: 'Filtrar por CNPJ' });
+      const todos = within(grupo).getByRole('button', { name: /^Todos/ });
+      const sem = within(grupo).getByRole('button', { name: /^Sem CNPJ/ });
+      expect(todos.textContent).toBe('Todos 4');
+      expect(sem.textContent).toBe('Sem CNPJ 1');
+      expect(todos.getAttribute('aria-pressed')).toBe('true');
+      expect(sem.getAttribute('aria-pressed')).toBe('false');
+      expect(container.querySelector('.indent-chip-conta')).not.toBeNull();
+      expect(screen.queryByText(/não casam automaticamente com o Pipedrive/)).toBeNull();
+
+      fireEvent.click(sem);
+      await waitFor(() => expect(container.querySelectorAll('tbody tr')).toHaveLength(1));
+      expect(vi.mocked(api.get)).toHaveBeenCalledWith('/api/v1/indent/clients', expect.objectContaining({ semCnpj: 1 }));
+      expect(sem.getAttribute('aria-pressed')).toBe('true');
+      expect(todos.getAttribute('aria-pressed')).toBe('false');
+      const aviso = screen.getByText(
+        'Clientes sem CNPJ não casam automaticamente com o Pipedrive. Preencha o CNPJ ou informe a organização do Pipedrive (Org #).',
+      );
+      expect(aviso.className).toContain('alert--info');
+
+      fireEvent.click(todos);
+      await waitFor(() => expect(container.querySelectorAll('tbody tr')).toHaveLength(4));
+      expect(screen.queryByText(/não casam automaticamente com o Pipedrive/)).toBeNull();
+    });
+
+    it('Novo cliente sem CNPJ: dica "Opcional...", nao bloqueia e envia cnpj null', async () => {
+      mockApi();
+      vi.mocked(api.post).mockResolvedValue(cliente(9, 'Resinas Boreal Ltda', { cnpj: null }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Novo cliente' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Novo cliente' });
+      expect(within(dialog).getByText('Opcional. Sem CNPJ o cliente fica como CNPJ pendente.')).toBeTruthy();
+      expect(within(dialog).queryByLabelText('Org # do Pipedrive')).toBeNull();
+
+      fireEvent.change(within(dialog).getByLabelText('Razão social'), { target: { value: 'Resinas Boreal Ltda' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith('/api/v1/indent/clients', { name: 'Resinas Boreal Ltda', cnpj: null, city: null }),
+      );
+      expect((await screen.findByTestId('fc-toast')).textContent).toContain('Cliente Resinas Boreal Ltda cadastrado');
+    });
+
+    it('Novo cliente: CNPJ preenchido e invalido continua bloqueando; nome repetido sem CNPJ (409) aparece no modal', async () => {
+      mockApi();
+      vi.mocked(api.post).mockRejectedValue(new ApiError(409, { message: 'Já existe um cliente sem CNPJ com este nome.' }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Novo cliente' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Novo cliente' });
+      fireEvent.change(within(dialog).getByLabelText('Razão social'), { target: { value: 'Repetido' } });
+      fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '123' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      expect(within(dialog).getByRole('alert').textContent).toBe('CNPJ inválido.');
+      expect(api.post).not.toHaveBeenCalled();
+
+      fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      expect((await within(dialog).findByText('Já existe um cliente sem CNPJ com este nome.')).getAttribute('role')).toBe('alert');
+    });
+
+    it('"Completar CNPJ" abre o modal em edicao (nao a restricao), com os dados atuais, e faz PUT com so digitos, cidade e Org #', async () => {
+      mockApi(COM_PENDENTE);
+      vi.mocked(api.put).mockResolvedValue({ ...PENDENTE, cnpj: '11222333000181' });
+      renderPage();
+      const celula = await screen.findByText('Cliente Sem Cnpj Ltda');
+      fireEvent.click(within(celula.closest('tr') as HTMLElement).getByRole('button', { name: 'Completar CNPJ' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      expect(screen.queryByText('Restrição de fornecedores')).toBeNull();
+      expect((within(dialog).getByLabelText('Razão social') as HTMLInputElement).value).toBe('Cliente Sem Cnpj Ltda');
+      expect((within(dialog).getByLabelText('CNPJ') as HTMLInputElement).value).toBe('');
+      expect((within(dialog).getByLabelText('Cidade') as HTMLInputElement).value).toBe('Joinville, SC');
+      expect((within(dialog).getByLabelText('Org # do Pipedrive') as HTMLInputElement).value).toBe('');
+      expect(document.activeElement).toBe(within(dialog).getByLabelText('Razão social'));
+
+      fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '11222333000182' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      expect(within(dialog).getByRole('alert').textContent).toBe('CNPJ inválido.');
+
+      fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '11.222.333/0001-81' } });
+      fireEvent.change(within(dialog).getByLabelText('Org # do Pipedrive'), { target: { value: '12x' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      expect(within(dialog).getByRole('alert').textContent).toBe('Informe um número inteiro positivo.');
+      expect(api.put).not.toHaveBeenCalled();
+
+      fireEvent.change(within(dialog).getByLabelText('Org # do Pipedrive'), { target: { value: '5521' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      expect(api.put).toHaveBeenCalledWith('/api/v1/indent/clients/7', {
+        name: 'Cliente Sem Cnpj Ltda',
+        cnpj: '11222333000181',
+        city: 'Joinville, SC',
+        pipedriveOrgId: 5521,
+      });
+      expect((await screen.findByTestId('fc-toast')).textContent).toContain('Cliente Cliente Sem Cnpj Ltda atualizado');
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it('edicao so com Org #: CNPJ em branco nao envia a chave cnpj (continua pendente); 409 do servidor aparece no modal', async () => {
+      mockApi(COM_PENDENTE);
+      vi.mocked(api.put).mockRejectedValueOnce(new ApiError(409, { message: 'Organização do Pipedrive já vinculada a outro cliente.' }));
+      renderPage();
+      const celula = await screen.findByText('Cliente Sem Cnpj Ltda');
+      fireEvent.click(within(celula.closest('tr') as HTMLElement).getByRole('button', { name: 'Completar CNPJ' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+
+      fireEvent.change(within(dialog).getByLabelText('Org # do Pipedrive'), { target: { value: '77' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      expect((await within(dialog).findByText('Organização do Pipedrive já vinculada a outro cliente.')).getAttribute('role')).toBe('alert');
+      expect(api.put).toHaveBeenCalledWith('/api/v1/indent/clients/7', {
+        name: 'Cliente Sem Cnpj Ltda',
+        city: 'Joinville, SC',
+        pipedriveOrgId: 77,
+      });
+    });
+
+    it('Completar CNPJ nao abre a restricao (clique e Enter no botao ficam no botao); a linha continua abrindo a restricao', async () => {
+      mockApi(COM_PENDENTE);
+      renderPage();
+      const celula = await screen.findByText('Cliente Sem Cnpj Ltda');
+      const linha = celula.closest('tr') as HTMLElement;
+
+      fireEvent.keyDown(within(linha).getByRole('button', { name: 'Completar CNPJ' }), { key: 'Enter' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      fireEvent.click(linha);
+      expect(await screen.findByRole('dialog', { name: 'Cliente Sem Cnpj Ltda' })).toBeTruthy();
+    });
+
+    it('restoreFocus: fechar o modal de edicao (Cancelar, Esc e Salvar) devolve o foco ao botao "Completar CNPJ"', async () => {
+      mockApi(COM_PENDENTE);
+      vi.mocked(api.put).mockResolvedValue({ ...PENDENTE, name: 'Cliente Sem Cnpj Ltda' });
+      renderPage();
+      const celula = await screen.findByText('Cliente Sem Cnpj Ltda');
+      const botao = within(celula.closest('tr') as HTMLElement).getByRole('button', { name: 'Completar CNPJ' });
+
+      botao.focus();
+      fireEvent.click(botao);
+      const cancelar = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent.click(within(cancelar).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+
+      botao.focus();
+      fireEvent.click(botao);
+      const esc = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent(esc, new Event('cancel', { cancelable: true })); // Esc no <dialog> dispara 'cancel'
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+
+      botao.focus();
+      fireEvent.click(botao);
+      const salvar = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent.click(within(salvar).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+    });
+
+    it('viewer ve a etiqueta mas nao o botao "Completar CNPJ"', async () => {
+      mockRole = 'viewer';
+      mockApi(COM_PENDENTE);
+      renderPage();
+      await screen.findByText('Cliente Sem Cnpj Ltda');
+      expect(screen.getByText('CNPJ pendente')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Completar CNPJ' })).toBeNull();
+    });
+
+    it('lista vazia com o chip "Sem CNPJ" diz "Nenhum cliente sem CNPJ."', async () => {
+      mockApi();
+      renderPage();
+      await screen.findByText('Tintas Serra Gaúcha S.A.');
+      fireEvent.click(screen.getByRole('button', { name: /^Sem CNPJ/ }));
+      expect(await screen.findByText('Nenhum cliente sem CNPJ.')).toBeTruthy();
+    });
+  });
 });
