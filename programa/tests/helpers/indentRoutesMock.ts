@@ -44,13 +44,13 @@ function pipedriveDelegates() {
   return {
     indentPipedriveDeal: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     indentPipedriveEvent: { create: vi.fn(), findFirst: vi.fn() },
-    indentPendingOrg: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn() },
+    indentPendingOrg: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
     indentIntegrationConfig: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   };
 }
 
 const tx = {
-  indentClient: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+  indentClient: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   indentClientSupplierRule: { deleteMany: vi.fn(), createMany: vi.fn() },
   indentSupplier: {
     findUnique: vi.fn(),
@@ -79,7 +79,7 @@ const tx = {
     update: vi.fn(),
   },
   ...pipedriveDelegates(),
-  indentRequestItem: { updateMany: vi.fn(), aggregate: vi.fn(), create: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
+  indentRequestItem: { update: vi.fn(), updateMany: vi.fn(), aggregate: vi.fn(), create: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
   indentQuote: {
     create: vi.fn(),
     createMany: vi.fn(),
@@ -133,7 +133,7 @@ export const prismaMock = prisma as unknown as {
   indentRequest: { findUnique: Mock; findMany: Mock; count: Mock };
   indentPipedriveDeal: { findUnique: Mock; findMany: Mock; create: Mock; update: Mock; updateMany: Mock };
   indentPipedriveEvent: { create: Mock; findFirst: Mock };
-  indentPendingOrg: { findFirst: Mock; create: Mock; count: Mock };
+  indentPendingOrg: { findFirst: Mock; findMany: Mock; findUnique: Mock; create: Mock; update: Mock; count: Mock };
   indentIntegrationConfig: { findUnique: Mock; findUniqueOrThrow: Mock; upsert: Mock; update: Mock; updateMany: Mock };
   indentQuote: { findMany: Mock; findUnique: Mock; findFirst: Mock };
   supplier: SourceMock;

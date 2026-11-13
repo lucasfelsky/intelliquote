@@ -19,11 +19,14 @@ import {
 import { prisma } from '../lib/prisma';
 import { isValidCnpj, normalizeCnpj } from '../utils/cnpj';
 import { cleanProposedName } from '../utils/commercialItemName';
-import { formatProcessNumber } from '../utils/indentProcessNumber';
+import { HttpError } from '../utils/http';
+import { formatProcessNumber, parseProcessNumber } from '../utils/indentProcessNumber';
 import { NOTE_MAX_ITEMS, selectItemsNote, type NoteCatalogProduct, type ParsedDealNote } from '../utils/indentPipedriveNote';
 import { parseDealTitle, type ParsedDealTitle } from '../utils/indentPipedriveTitle';
+import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import { AuditLogService } from './AuditLogService';
 import { IndentIntegrationConfigService } from './IndentIntegrationConfigService';
+import type { IndentActor } from './IndentRequestService';
 
 // Sincronizacao Pipedrive -> IQ Indent (PR 5a.2). SO LEITURA no CRM (o cliente so faz GET); aqui so se escreve em tabelas Indent*.
 // Ordem de travas: advisory do negocio -> sequencia do ano (`lockYearAndBump`, mesmo padrao do PR 2). Logs: so ids e contadores.
@@ -177,7 +180,8 @@ function problemAlert(title: ParsedDealTitle): string | null {
   }
 }
 
-function lockDeal(tx: Prisma.TransactionClient, dealId: number): Promise<unknown> {
+/** Trava advisory do negocio: serializa sincronizacao, digitacao da referencia e confirmacao dos itens da MESMA solicitacao. */
+export function lockDeal(tx: Prisma.TransactionClient, dealId: number): Promise<unknown> {
   return tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`indent_pipedrive_deal:${dealId}`}))`;
 }
 
@@ -199,6 +203,84 @@ export class IndentPipedriveSyncService {
       where: { processNumber: formatProcessNumber(year, seq) },
       select: { id: true, processNumber: true },
     });
+  }
+
+  /**
+   * "Referencia pendente": a pessoa digita o NNN/AA que o titulo do negocio nao trouxe. Mesma trava do numero vindo do Pipedrive
+   * (advisory do negocio -> linha da solicitacao -> sequencia do ano); numero usado por outra solicitacao -> 409; so com numero nulo.
+   */
+  static async setReference(id: number, processNumber: string, user: IndentActor, now: Date = new Date()) {
+    const parsed = parseProcessNumber(processNumber);
+
+    if (!parsed || parsed.seq < 1) {
+      throw new HttpError(400, 'Informe a referência no formato NNN/AA (ex.: 274/26).');
+    }
+
+    const year = 2000 + parsed.yearShort;
+    const currentYear = Number(todayKeyInSaoPaulo(now).slice(0, 4));
+
+    // Mesma faixa do titulo do negocio: evita gravar "263/62" por engano de digitacao.
+    if (year < currentYear - 1 || year > currentYear + 1) {
+      throw new HttpError(400, 'O ano da referência deve ser o atual, o anterior ou o próximo.');
+    }
+
+    const normalized = formatProcessNumber(year, parsed.seq);
+
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const found = await tx.indentRequest.findUnique({ where: { id }, select: { id: true, pipedriveDealId: true } });
+
+          if (!found) {
+            throw new HttpError(404, 'Solicitação não encontrada.');
+          }
+          if (found.pipedriveDealId !== null) {
+            await lockDeal(tx, found.pipedriveDealId);
+          }
+
+          await tx.$queryRaw`SELECT id FROM "IndentRequest" WHERE id = ${id} FOR NO KEY UPDATE`;
+          const request = await tx.indentRequest.findUnique({ where: { id }, select: { id: true, processNumber: true } });
+
+          if (!request) {
+            throw new HttpError(404, 'Solicitação não encontrada.');
+          }
+          if (request.processNumber !== null) {
+            throw new HttpError(409, 'A solicitação já tem referência.');
+          }
+
+          const holder = await IndentPipedriveSyncService.lockYearAndBump(tx, year, parsed.seq);
+
+          if (holder) {
+            throw new HttpError(409, 'Já existe uma solicitação com este número.');
+          }
+
+          await tx.indentRequest.update({
+            where: { id },
+            data: { processNumber: normalized, processYear: year, processSeq: parsed.seq, referenceAlert: null },
+          });
+          await AuditLogService.log(
+            {
+              entityType: ENTITY_TYPE,
+              entityId: id,
+              action: 'indent_request.reference_set',
+              performedById: user.id,
+              afterData: { processNumber: normalized },
+              metadata: found.pipedriveDealId !== null ? { dealId: found.pipedriveDealId } : undefined,
+            },
+            tx,
+          );
+
+          return { id, processNumber: normalized };
+        },
+        { timeout: TX_TIMEOUT_MS },
+      );
+    } catch (error) {
+      // Corrida com outra criacao do mesmo numero que passou pela checagem (indice unico e a ultima barreira).
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new HttpError(409, 'Já existe uma solicitação com este número.');
+      }
+      throw error;
+    }
   }
 
   // ------------------------------------------------------------------------------------------------------------

@@ -120,6 +120,20 @@ describe('rotas novas: papeis', () => {
     expect(methods).not.toContain('delete');
   });
 
+  it('a tabela de papeis tambem cobre as 5 rotas do 5a.3 (fila de vinculo, referencia e itens da nota)', () => {
+    const paths = NEW_ROUTES.map((route) => `${route.method} ${route.path}`);
+
+    for (const route of [
+      'get /pending-orgs',
+      'post /pending-orgs/11/create-client',
+      'post /pending-orgs/11/link',
+      'put /requests/11/reference',
+      'put /requests/11/note-items',
+    ]) {
+      expect(paths).toContain(route);
+    }
+  });
+
   it('sem login retorna 401 em todas as rotas novas', async () => {
     const app = await getApp();
 

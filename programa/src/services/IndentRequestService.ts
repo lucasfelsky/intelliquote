@@ -6,6 +6,7 @@ import { formatProcessNumber } from '../utils/indentProcessNumber';
 import { businessDaysSince } from '../utils/indentQueue';
 import { computeQuoteTotal, formatQuoteRef } from '../utils/indentQuote';
 import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
+import type { NoteItemsInput } from '../validators/indentPipedrive';
 import type {
   IndentConfirmItemsInput,
   IndentRequestCreateInput,
@@ -13,6 +14,7 @@ import type {
 } from '../validators/indentRequest';
 import { AuditLogService } from './AuditLogService';
 import { IndentIntegrationConfigService } from './IndentIntegrationConfigService';
+import { lockDeal } from './IndentPipedriveSyncService';
 
 const ENTITY_TYPE = 'indent_request';
 
@@ -455,7 +457,7 @@ export class IndentRequestService {
 
   // Produto de itens digitados a mao: reaproveita o de mesmo nameKey (qualquer origem/estado) ou cria LIVRE. Compartilhado com a
   // criacao da solicitacao (varios itens de uma vez) e com o item livre da cotacao (PR 3, um item).
-  static async resolveFreeProducts(tx: Prisma.TransactionClient, descriptions: string[], processNumber: string) {
+  static async resolveFreeProducts(tx: Prisma.TransactionClient, descriptions: string[], processNumber: string | null) {
     const freeKeys = Array.from(new Set(descriptions.map((description) => normalizeItemNameKey(description))));
     const productIdByKey = new Map<string, number>();
     const created: Array<{ id: number; name: string }> = [];
@@ -561,6 +563,168 @@ export class IndentRequestService {
           tx,
         );
       }
+
+      const row = await tx.indentRequest.findUnique({ where: { id }, include: detailInclude });
+
+      if (!row) {
+        throw new HttpError(404, 'Solicitação não encontrada.');
+      }
+
+      return serializeDetail(row, now, slaBusinessDays);
+    });
+  }
+
+  // Revisao humana dos itens lidos da nota do Pipedrive (decisao 22): edita, remove e inclui; TODOS os itens ficam confirmados.
+  // A lista precisa cobrir todos os itens atuais (por id): a sincronizacao pode ter trocado os itens da nota enquanto a tela estava
+  // aberta, e confirmar item que a pessoa nao viu quebraria a regra de confirmacao humana. So NOVA e sem cotacao.
+  static async updateNoteItems(id: number, input: NoteItemsInput, user: IndentActor, now: Date = new Date()) {
+    const slaBusinessDays = await IndentIntegrationConfigService.getSlaBusinessDays();
+
+    return prisma.$transaction(async (tx) => {
+      const head = await tx.indentRequest.findUnique({ where: { id }, select: { id: true, pipedriveDealId: true } });
+
+      if (!head) {
+        throw new HttpError(404, 'Solicitação não encontrada.');
+      }
+      // Mesma ordem de travas da sincronizacao: advisory do negocio -> linha da solicitacao.
+      if (head.pipedriveDealId !== null) {
+        await lockDeal(tx, head.pipedriveDealId);
+      }
+      await tx.$queryRaw`SELECT id FROM "IndentRequest" WHERE id = ${id} FOR NO KEY UPDATE`;
+
+      const request = await tx.indentRequest.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          processNumber: true,
+          status: true,
+          items: { select: { id: true, position: true } },
+          quotes: { select: { id: true } },
+        },
+      });
+
+      if (!request) {
+        throw new HttpError(404, 'Solicitação não encontrada.');
+      }
+      if (request.status !== 'NOVA' || request.quotes.length > 0) {
+        throw new HttpError(409, 'Os itens desta solicitação já foram cotados.');
+      }
+
+      const currentIds = new Set(request.items.map((item) => item.id));
+      const seenIds = new Set<number>();
+
+      for (const entry of input.items) {
+        if (entry.id === undefined) {
+          continue;
+        }
+        if (!currentIds.has(entry.id)) {
+          throw new HttpError(400, 'Item inexistente nesta solicitação.');
+        }
+        if (seenIds.has(entry.id)) {
+          throw new HttpError(400, 'Item repetido na lista.');
+        }
+        seenIds.add(entry.id);
+      }
+      if (seenIds.size !== currentIds.size) {
+        throw new HttpError(400, 'Os itens da solicitação mudaram. Recarregue e revise de novo.');
+      }
+
+      const kept = input.items.filter((entry) => entry.remove !== true);
+      const removedIds = input.items.flatMap((entry) => (entry.remove === true && entry.id !== undefined ? [entry.id] : []));
+
+      if (kept.length === 0) {
+        throw new HttpError(400, 'Mantenha ao menos um item.');
+      }
+
+      // Produto pelo id: precisa existir e estar ativo; sem produto = item livre (reaproveita o de mesmo nameKey ou cria LIVRE).
+      const explicitIds = Array.from(new Set(kept.flatMap((entry) => (entry.productId !== undefined ? [entry.productId] : []))));
+
+      if (explicitIds.length > 0) {
+        const found = await tx.indentProduct.findMany({
+          where: { id: { in: explicitIds } },
+          select: { id: true, isActive: true },
+        });
+        const byId = new Map(found.map((product) => [product.id, product]));
+
+        for (const productId of explicitIds) {
+          const product = byId.get(productId);
+          if (!product) {
+            throw new HttpError(400, 'Produto inexistente.');
+          }
+          if (!product.isActive) {
+            throw new HttpError(400, 'Produto inativo no catálogo do Indent.');
+          }
+        }
+      }
+
+      const { productIdByKey, created } = await IndentRequestService.resolveFreeProducts(
+        tx,
+        kept.filter((entry) => entry.productId === undefined).map((entry) => entry.description as string),
+        request.processNumber,
+      );
+
+      for (const product of created) {
+        await AuditLogService.log(
+          {
+            entityType: 'indent_product',
+            entityId: product.id,
+            action: 'indent_product.created_from_request',
+            performedById: user.id,
+            afterData: { name: product.name, origin: 'LIVRE', sourceRequestNumber: request.processNumber },
+            metadata: { processNumber: request.processNumber },
+          },
+          tx,
+        );
+      }
+
+      if (removedIds.length > 0) {
+        await tx.indentRequestItem.deleteMany({ where: { requestId: id, id: { in: removedIds } } });
+      }
+
+      let nextPosition = request.items.reduce((max, item) => Math.max(max, item.position), -1) + 1;
+      const finalIds: number[] = [];
+      let added = 0;
+
+      for (const entry of kept) {
+        const description = cleanProposedName(entry.description as string);
+        const productId = entry.productId ?? productIdByKey.get(normalizeItemNameKey(description)) ?? null;
+
+        if (entry.id !== undefined) {
+          await tx.indentRequestItem.update({
+            where: { id: entry.id },
+            data: { productId, description, quantityKg: entry.quantityKg as number, confirmed: true },
+          });
+          finalIds.push(entry.id);
+        } else {
+          const createdItem = await tx.indentRequestItem.create({
+            data: {
+              requestId: id,
+              productId,
+              description,
+              quantityKg: entry.quantityKg as number,
+              confirmed: true,
+              source: 'MANUAL',
+              position: nextPosition,
+            },
+            select: { id: true },
+          });
+          nextPosition += 1;
+          added += 1;
+          finalIds.push(createdItem.id);
+        }
+      }
+
+      await tx.indentRequest.update({ where: { id }, data: { noteChangedAt: null } });
+      await AuditLogService.log(
+        {
+          entityType: ENTITY_TYPE,
+          entityId: id,
+          action: 'indent_request.note_items_confirmed',
+          performedById: user.id,
+          metadata: { processNumber: request.processNumber, itemIds: finalIds, added, removed: removedIds.length },
+        },
+        tx,
+      );
 
       const row = await tx.indentRequest.findUnique({ where: { id }, include: detailInclude });
 

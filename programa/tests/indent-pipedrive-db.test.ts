@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PipedriveEnv } from '../src/config/env';
 import { normalizeNote, PipedriveNotFoundError, type PdDeal, type PipedriveClient } from '../src/lib/pipedriveClient';
 import { prisma } from '../src/lib/prisma';
+import { IndentPendingOrgService } from '../src/services/IndentPendingOrgService';
 import { IndentPipedriveSyncService, type ProcessContext } from '../src/services/IndentPipedriveSyncService';
 import { IndentRequestService } from '../src/services/IndentRequestService';
 import { formatProcessNumber } from '../src/utils/indentProcessNumber';
@@ -57,7 +58,14 @@ function makeDeal(title: string, overrides: Partial<PdDeal> = {}): PdDeal {
   };
 }
 
-function makeClient(deals: PdDeal[]): PipedriveClient {
+interface FakeOrg {
+  id: number;
+  name: string;
+  cnpjRaw: string | null;
+  city: string | null;
+}
+
+function makeClient(deals: PdDeal[], orgs: FakeOrg[] = []): PipedriveClient {
   const notes = (JSON.parse(readFileSync(join(__dirname, 'fixtures', 'pipedrive', 'notes-v1.json'), 'utf8')) as { data: unknown[] }).data.map(
     normalizeNote,
   );
@@ -68,7 +76,7 @@ function makeClient(deals: PdDeal[]): PipedriveClient {
     getDeal: vi.fn(async () => {
       throw new PipedriveNotFoundError(404);
     }),
-    getOrganization: vi.fn(async () => ({ id: 900101, name: `Cliente Exemplo ${runId}`, cnpjRaw: '11.222.333/0001-81', city: 'Santos, SP' })),
+    getOrganization: vi.fn(async (id: number) => orgs.find((org) => org.id === id) ?? { id: 900101, name: `Cliente Exemplo ${runId}`, cnpjRaw: '11.222.333/0001-81', city: 'Santos, SP' }),
     getPerson: vi.fn(async () => ({ id: 900201, orgId: null })),
     getUser: vi.fn(async () => ({ id: 900301, name: 'Vendedora Exemplo' })),
     listDealNotes: vi.fn(async () => notes),
@@ -128,7 +136,8 @@ describe('IQ Indent - sincronizacao Pipedrive (DB)', () => {
     await prisma.indentRequest.deleteMany({ where: { id: { in: ids } } });
     await prisma.indentIntegrationConfig.deleteMany({});
     await prisma.auditLog.deleteMany({ where: { performedById: userId } });
-    await prisma.indentClient.deleteMany({ where: { id: iqClientId } });
+    await prisma.indentClient.deleteMany({ where: { OR: [{ id: iqClientId }, { name: { contains: runId } }] } });
+    await prisma.indentProduct.deleteMany({ where: { nameKey: { contains: runId } } });
     await prisma.user.delete({ where: { id: userId } });
     await prisma.$disconnect();
   });
@@ -262,6 +271,152 @@ describe('IQ Indent - sincronizacao Pipedrive (DB)', () => {
     expect(pendings).toHaveLength(1);
     expect(pendings[0]).toMatchObject({ status: 'OPEN', dealId: deal.id });
     expect(pendings[0]?.candidates).toEqual([{ orgId: 900101, name: `Cliente Exemplo ${runId}`, cnpj: '11222333000181', city: 'Santos, SP' }]);
+  });
+
+  // ---- PR 5a.3: fila de vinculo, referencia pendente e itens da nota ----
+  const org = (id: number, cnpjRaw: string | null, label: string): FakeOrg => ({ id, name: `Cliente Exemplo ${label} ${runId}`, cnpjRaw, city: 'Itajai, SC' });
+  const actor = () => ({ id: userId, name: `Dono ${runId}` });
+  const pendingOf = async (dealId: number) => prisma.indentPendingOrg.findFirstOrThrow({ where: { dealId } });
+  const asDeal = (title: string, orgId: number) => makeDeal(title, { orgId });
+
+  testDbSkip('fila: criar cliente liga a solicitacao, grava a organizacao e resolve as pendencias irmas (so as da mesma organizacao)', async () => {
+    const orgB = org(900150, '11.444.777/0001-61', 'B');
+    const orgC = org(900151, null, 'C');
+    const [d1, d2, d3] = [asDeal(`9400/${YY} INDENT - FILA B1`, 900150), asDeal(`9401/${YY} INDENT - FILA B2`, 900150), asDeal(`9402/${YY} INDENT - FILA C`, 900151)];
+    const client = makeClient([d1, d2, d3], [orgB, orgC]);
+
+    for (const deal of [d1, d2, d3]) await IndentPipedriveSyncService.processDeal(deal, contextFor(client));
+    const first = await pendingOf(d1.id);
+    const result = await IndentPendingOrgService.createClient(first.id, { orgId: 900150 }, actor());
+
+    expect(result.client).toMatchObject({ name: orgB.name, cnpj: '11444777000161', pipedriveOrgId: 900150 });
+    expect(result.resolved).toHaveLength(2);
+    const created = await prisma.indentClient.findUniqueOrThrow({ where: { id: result.client.id } });
+    expect(created).toMatchObject({ supplierRuleMode: 'LIVRE', isActive: true, pipedriveOrgId: 900150 });
+    const requests = await prisma.indentRequest.findMany({ where: { pipedriveDealId: { in: [d1.id, d2.id, d3.id] } }, orderBy: { pipedriveDealId: 'asc' } });
+    expect(requests.map((request) => request.clientId)).toEqual([created.id, created.id, null]);
+    expect((await pendingOf(d1.id)).status).toBe('RESOLVED');
+    expect(await pendingOf(d2.id)).toMatchObject({ status: 'RESOLVED', resolvedClientId: created.id, resolvedOrgId: 900150, resolvedById: userId });
+    expect((await pendingOf(d3.id)).status).toBe('OPEN');
+
+    // A pendencia ja resolvida nao resolve de novo; e a proxima varredura casa pelo pipedriveOrgId (sem pendencia nova).
+    await expect(IndentPendingOrgService.createClient(first.id, { orgId: 900150 }, actor())).rejects.toMatchObject({ status: 409 });
+    const d4 = asDeal(`9403/${YY} INDENT - FILA B3`, 900150);
+    await IndentPipedriveSyncService.processDeal(d4, contextFor(makeClient([d4], [orgB])));
+    expect((await prisma.indentRequest.findFirstOrThrow({ where: { pipedriveDealId: d4.id } })).clientId).toBe(created.id);
+    expect(await prisma.indentPendingOrg.count({ where: { dealId: d4.id } })).toBe(0);
+  });
+
+  testDbSkip('fila: duas pessoas resolvendo a MESMA pendencia ao mesmo tempo -> 1 cliente criado, a outra recebe 409', async () => {
+    const orgD = org(900160, null, 'D');
+    const deal = asDeal(`9410/${YY} INDENT - FILA CONCORRENTE`, 900160);
+    await IndentPipedriveSyncService.processDeal(deal, contextFor(makeClient([deal], [orgD])));
+    const pending = await pendingOf(deal.id);
+
+    const results = await Promise.allSettled([1, 2, 3].map(() => IndentPendingOrgService.createClient(pending.id, { orgId: 900160 }, actor())));
+
+    expect(results.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((entry) => entry.status === 'rejected')).toHaveLength(2);
+    expect(await prisma.indentClient.count({ where: { pipedriveOrgId: 900160 } })).toBe(1);
+    // Sem CNPJ na organizacao nem no corpo: nasce "CNPJ pendente".
+    expect((await prisma.indentClient.findFirstOrThrow({ where: { pipedriveOrgId: 900160 } })).cnpj).toBeNull();
+  });
+
+  testDbSkip('fila: vincular a cliente SEM CNPJ completa o CNPJ (P5); CNPJ ja usado por outro cliente nao completa', async () => {
+    const orgE = org(900170, '11.222.333/0001-81', 'E');
+    const orgF = org(900171, '11.222.333/0001-81', 'F');
+    const [dE, dF] = [asDeal(`9420/${YY} INDENT - LINK E`, 900170), asDeal(`9421/${YY} INDENT - LINK F`, 900171)];
+    const client = makeClient([dE, dF], [orgE, orgF]);
+    await IndentPipedriveSyncService.processDeal(dE, contextFor(client));
+    await IndentPipedriveSyncService.processDeal(dF, contextFor(client));
+    const withoutCnpj = await prisma.indentClient.create({ data: { name: `Cliente Sem CNPJ E ${runId}` } });
+    const other = await prisma.indentClient.create({ data: { name: `Cliente Sem CNPJ F ${runId}` } });
+
+    const linked = await IndentPendingOrgService.link((await pendingOf(dE.id)).id, { orgId: 900170, clientId: withoutCnpj.id }, actor());
+    expect(linked.cnpjCompleted).toBe(true);
+    expect(await prisma.indentClient.findUniqueOrThrow({ where: { id: withoutCnpj.id } })).toMatchObject({ cnpj: '11222333000181', pipedriveOrgId: 900170 });
+
+    // A organizacao F tem o mesmo CNPJ, agora de outro cliente: o vinculo segue, o CNPJ nao e copiado.
+    const second = await IndentPendingOrgService.link((await pendingOf(dF.id)).id, { orgId: 900171, clientId: other.id }, actor());
+    expect(second.cnpjCompleted).toBe(false);
+    expect(await prisma.indentClient.findUniqueOrThrow({ where: { id: other.id } })).toMatchObject({ cnpj: null, pipedriveOrgId: 900171 });
+    expect((await prisma.indentRequest.findFirstOrThrow({ where: { pipedriveDealId: dF.id } })).clientId).toBe(other.id);
+
+    const log = await prisma.auditLog.findFirstOrThrow({ where: { entityType: 'indent_client', entityId: String(withoutCnpj.id), action: 'indent_client.cnpj_from_pipedrive' } });
+    expect(log.performedById).toBe(userId);
+    expect(JSON.stringify(log)).not.toContain('11222333000181');
+  });
+
+  testDbSkip('referencia: digitar o numero grava e sobe a sequencia; numero usado -> 409; duas digitacoes do mesmo numero -> 1 vence', async () => {
+    const [a, b] = [makeDeal('INDENT - SEM NUMERO A'), makeDeal('INDENT - SEM NUMERO B')];
+    const client = makeClient([a, b]);
+    await IndentPipedriveSyncService.processDeal(a, contextFor(client));
+    await IndentPipedriveSyncService.processDeal(b, contextFor(client));
+    const [ra, rb] = await Promise.all([a, b].map((deal) => prisma.indentRequest.findFirstOrThrow({ where: { pipedriveDealId: deal.id } })));
+    expect([ra.processNumber, rb.processNumber]).toEqual([null, null]);
+
+    const results = await Promise.allSettled([
+      IndentPipedriveSyncService.setReference(ra.id, `9500/${YY}`, actor()),
+      IndentPipedriveSyncService.setReference(rb.id, `9500/${YY}`, actor()),
+    ]);
+    expect(results.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((entry) => entry.status === 'rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ status: 409, message: 'Já existe uma solicitação com este número.' });
+    expect(await prisma.indentRequest.count({ where: { processNumber: `9500/${YY}` } })).toBe(1);
+    expect((await prisma.indentSequence.findUniqueOrThrow({ where: { year: YEAR } })).lastNumber).toBeGreaterThanOrEqual(9500);
+
+    const winner = [ra, rb].find((_, index) => results[index]?.status === 'fulfilled') as typeof ra;
+    const loser = winner === ra ? rb : ra;
+    const done = await prisma.indentRequest.findUniqueOrThrow({ where: { id: winner.id } });
+    expect(done).toMatchObject({ processNumber: `9500/${YY}`, processYear: YEAR, processSeq: 9500, referenceAlert: null });
+    await expect(IndentPipedriveSyncService.setReference(winner.id, `9501/${YY}`, actor())).rejects.toMatchObject({ status: 409, message: 'A solicitação já tem referência.' });
+    expect((await prisma.indentRequest.findUniqueOrThrow({ where: { id: loser.id } })).processNumber).toBeNull();
+
+    // Numero MENOR depois de um maior: a sequencia nao desce.
+    await IndentPipedriveSyncService.setReference(loser.id, `9490/${YY}`, actor());
+    expect((await prisma.indentSequence.findUniqueOrThrow({ where: { year: YEAR } })).lastNumber).toBeGreaterThanOrEqual(9500);
+  });
+
+  testDbSkip('itens da nota: a confirmacao humana vira item LIVRE (sem numero de origem na referencia pendente) e libera a nota alterada', async () => {
+    const deal = makeDeal('INDENT - ITENS DA NOTA');
+    await IndentPipedriveSyncService.processDeal(deal, contextFor(makeClient([deal])));
+    const request = await prisma.indentRequest.findFirstOrThrow({ where: { pipedriveDealId: deal.id }, include: { items: { orderBy: { position: 'asc' } } } });
+    expect(request.processNumber).toBeNull();
+    expect(request.items.map((item) => item.confirmed)).toEqual([false, false]);
+    await prisma.indentRequest.update({ where: { id: request.id }, data: { noteChangedAt: new Date() } });
+
+    const description = `Item revisado ${runId}`;
+    const [first, second] = request.items;
+    const detail = await IndentRequestService.updateNoteItems(
+      request.id,
+      {
+        items: [
+          { id: first?.id, description, quantityKg: 2500.5 },
+          { id: second?.id, remove: true },
+          { description: `Item novo ${runId}`, quantityKg: 10 },
+        ],
+      },
+      actor(),
+    );
+
+    expect(detail.items.map((item) => [item.confirmed, item.source, item.isFree])).toEqual([
+      [true, 'NOTE', true],
+      [true, 'MANUAL', true],
+    ]);
+    expect(detail.noteChangedAt).toBeNull();
+    const product = await prisma.indentProduct.findFirstOrThrow({ where: { nameKey: description.toLowerCase() } });
+    expect(product).toMatchObject({ origin: 'LIVRE', sourceRequestNumber: null });
+    expect(await prisma.indentRequestItem.count({ where: { requestId: request.id } })).toBe(2);
+
+    // Nota que muda depois da confirmacao: itens intactos, so o alerta (decisao 21).
+    const changed = { ...deal, updateTime: new Date(deal.updateTime.getTime() + 3_600_000) };
+    const notes = await makeClient([deal]).listDealNotes(deal.id);
+    const edited = makeClient([changed]);
+    (edited.listDealNotes as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(notes.map((note) => ({ ...note, html: `${note.html}<div>${runId} acrescentado</div>` })));
+    await IndentPipedriveSyncService.processDeal(changed, contextFor(edited));
+    const after = await prisma.indentRequest.findUniqueOrThrow({ where: { id: request.id } });
+    expect(after.noteChangedAt).not.toBeNull();
+    expect(await prisma.indentRequestItem.count({ where: { requestId: request.id, confirmed: true } })).toBe(2);
   });
 
   testDbSkip('so escreve em tabelas Indent* (e AuditLog sem usuario): o IQ principal fica intacto', async () => {

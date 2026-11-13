@@ -135,40 +135,56 @@ export class IndentClientService {
     return { ...buildPaginatedResponse(rows, total, pagination), counts: { todos, semCnpj } };
   }
 
+  // Traduz o P2002 de CNPJ / pipedriveOrgId em 409 (quem abre a transacao chama no catch: o Postgres aborta a transacao no erro).
+  static translateConflict(error: unknown): never {
+    return translateConflict(error);
+  }
+
+  // Corpo do `create` dentro de uma transacao ja aberta (a fila de vinculo do Pipedrive cria o cliente e liga a solicitacao
+  // na MESMA transacao). Mesma trava de nome sem CNPJ; quem chama traduz o P2002 (`translateConflict`).
+  // `audit` troca a acao/metadata do historico (origem Pipedrive); o padrao e `indent_client.created`.
+  static async createInTx(
+    tx: Prisma.TransactionClient,
+    input: IndentClientCreateInput,
+    userId: number | null,
+    audit?: { action: string; metadata?: unknown },
+  ) {
+    const cnpj = input.cnpj ?? null;
+
+    // 1a instrucao da transacao quando nao ha CNPJ: trava + checagem do nome entre os sem CNPJ.
+    if (cnpj === null) {
+      await assertNoDuplicateNameWithoutCnpj(tx, input.name);
+    }
+
+    const created = await tx.indentClient.create({
+      data: {
+        name: input.name,
+        cnpj,
+        city: input.city ?? null,
+        ownerName: input.ownerName ?? null,
+        pipedriveOrgId: input.pipedriveOrgId ?? null,
+      },
+      include: clientInclude,
+    });
+
+    await AuditLogService.log(
+      {
+        entityType: ENTITY_TYPE,
+        entityId: created.id,
+        action: audit?.action ?? 'indent_client.created',
+        performedById: userId,
+        afterData: clientSnapshot(created),
+        ...(audit?.metadata !== undefined ? { metadata: audit.metadata } : {}),
+      },
+      tx,
+    );
+
+    return created;
+  }
+
   static async create(input: IndentClientCreateInput, userId: number | null) {
     try {
-      return await prisma.$transaction(async (tx) => {
-        const cnpj = input.cnpj ?? null;
-
-        // 1a instrucao da transacao quando nao ha CNPJ: trava + checagem do nome entre os sem CNPJ.
-        if (cnpj === null) {
-          await assertNoDuplicateNameWithoutCnpj(tx, input.name);
-        }
-
-        const created = await tx.indentClient.create({
-          data: {
-            name: input.name,
-            cnpj,
-            city: input.city ?? null,
-            ownerName: input.ownerName ?? null,
-            pipedriveOrgId: input.pipedriveOrgId ?? null,
-          },
-          include: clientInclude,
-        });
-
-        await AuditLogService.log(
-          {
-            entityType: ENTITY_TYPE,
-            entityId: created.id,
-            action: 'indent_client.created',
-            performedById: userId,
-            afterData: clientSnapshot(created),
-          },
-          tx,
-        );
-
-        return created;
-      });
+      return await prisma.$transaction((tx) => IndentClientService.createInTx(tx, input, userId));
     } catch (error) {
       return translateConflict(error);
     }
