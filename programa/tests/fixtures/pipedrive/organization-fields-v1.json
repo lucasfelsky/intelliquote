@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "data": [
+    { "id": 9101, "key": "name", "name": "Nome", "field_type": "varchar" },
+    { "id": 9102, "key": "0123456789abcdef0123456789abcdef01234567", "name": "CNPJ", "field_type": "varchar" }
+  ],
+  "additional_data": { "pagination": { "start": 0, "limit": 100, "more_items_in_collection": false } }
+}

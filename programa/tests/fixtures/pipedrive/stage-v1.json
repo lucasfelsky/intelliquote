@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "data": {
+    "id": 9020,
+    "order_nr": 2,
+    "name": "Proposta Exemplo a Enviar",
+    "active_flag": true,
+    "pipeline_id": 9010,
+    "pipeline_name": "Funil Exemplo de Indent",
+    "deal_probability": 100
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 900003,
+      "title": "INDENT 270/26 - CLIENTE EXEMPLO",
+      "pipeline_id": 9010,
+      "stage_id": 9020,
+      "status": "open",
+      "org_id": 900101,
+      "person_id": 900201,
+      "owner_id": 900301,
+      "add_time": "2026-11-07T09:00:00Z",
+      "update_time": "2026-11-07T09:10:00Z",
+      "stage_change_time": null,
+      "is_deleted": false,
+      "visible_to": 1,
+      "custom_fields": {}
+    }
+  ],
+  "additional_data": {}
+}

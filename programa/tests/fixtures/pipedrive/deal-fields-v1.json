@@ -1,0 +1,18 @@
+{
+  "success": true,
+  "data": [
+    { "id": 9001, "key": "title", "name": "Título", "field_type": "varchar" },
+    {
+      "id": 9002,
+      "key": "abcdef0123456789abcdef0123456789abcdef01",
+      "name": "Tipo de Negócio",
+      "field_type": "enum",
+      "options": [
+        { "id": 9260, "label": "Regular Exemplo" },
+        { "id": 9261, "label": "Contratipo Exemplo" },
+        { "id": 9262, "label": "Spot Exemplo" }
+      ]
+    }
+  ],
+  "additional_data": { "pagination": { "start": 0, "limit": 100, "more_items_in_collection": false } }
+}

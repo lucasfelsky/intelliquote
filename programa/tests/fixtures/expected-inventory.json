@@ -107,6 +107,7 @@
     ],
     "lib": [
       "logger.ts",
+      "pipedriveClient.ts",
       "prisma.ts",
       "scheduler.ts",
       "traceContext.ts"

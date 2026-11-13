@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "data": {
+    "id": 900201,
+    "name": "Contato Exemplo",
+    "first_name": "Contato",
+    "last_name": "Exemplo",
+    "org_id": 900102,
+    "owner_id": 900301,
+    "add_time": "2026-01-10T12:00:00Z",
+    "update_time": "2026-10-01T12:00:00Z",
+    "is_deleted": false,
+    "visible_to": 1,
+    "emails": [{ "value": "contato@exemplo.com.br", "primary": true, "label": "work" }],
+    "phones": [],
+    "label_ids": [],
+    "custom_fields": {}
+  }
+}

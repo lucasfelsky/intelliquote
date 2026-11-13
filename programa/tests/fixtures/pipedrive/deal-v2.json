@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "data": {
+    "id": 900001,
+    "title": "R2 - 263/26 INDENT CLIENTE EXEMPLO",
+    "pipeline_id": 9010,
+    "stage_id": 9020,
+    "status": "open",
+    "org_id": 900101,
+    "person_id": 900201,
+    "owner_id": 900301,
+    "creator_user_id": 900301,
+    "add_time": "2026-11-05T13:20:00Z",
+    "update_time": "2026-11-10T14:05:30Z",
+    "stage_change_time": null,
+    "close_time": null,
+    "won_time": null,
+    "lost_time": null,
+    "is_deleted": false,
+    "is_archived": false,
+    "visible_to": 1,
+    "value": 0,
+    "currency": "BRL",
+    "custom_fields": {
+      "abcdef0123456789abcdef0123456789abcdef01": 9261,
+      "ffffffffffffffffffffffffffffffffffffffff": null
+    }
+  },
+  "additional_data": {
+    "related_objects": {}
+  }
+}
