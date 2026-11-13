@@ -143,9 +143,10 @@ describe('navConfig: IQ Indent', () => {
     expect([...PRIMARY_NAV, ...ADMIN_NAV].filter((item) => item.icon === 'globe')).toHaveLength(1);
   });
 
-  it('INDENT_NAV: Solicitacoes, Catalogo, Fornecedores e Clientes (nessa ordem), so equipe COMEX, icones validos e sem link para Cotacoes/Integracao', () => {
+  it('INDENT_NAV: Solicitacoes, Cotacoes, Catalogo, Fornecedores e Clientes (nessa ordem), so equipe COMEX, icones validos e sem link para Integracao', () => {
     expect(INDENT_NAV.map((item) => [item.to, item.label, item.icon])).toEqual([
       ['/indent/solicitacoes', 'Solicitações', 'solicitacoes'],
+      ['/indent/cotacoes', 'Cotações', 'cotacoes'],
       ['/indent/catalogo', 'Catálogo', 'itens'],
       ['/indent/fornecedores', 'Fornecedores', 'fornecedores'],
       ['/indent/clientes', 'Clientes', 'usuarios'],
@@ -154,7 +155,7 @@ describe('navConfig: IQ Indent', () => {
       expect(item.roles, item.to).toEqual(COMEX_ROLES);
       expect(Object.keys(ICONS), item.to).toContain(item.icon);
     }
-    expect(INDENT_NAV.some((item) => /cotacoes|integracao/.test(item.to))).toBe(false);
-    for (const role of COMEX_ROLES) expect(filterNavByRole(INDENT_NAV, role), role).toHaveLength(4);
+    expect(INDENT_NAV.some((item) => /integracao/.test(item.to))).toBe(false);
+    for (const role of COMEX_ROLES) expect(filterNavByRole(INDENT_NAV, role), role).toHaveLength(5);
   });
 });

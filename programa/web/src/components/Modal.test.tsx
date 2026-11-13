@@ -437,3 +437,32 @@ describe('Modal', () => {
     expect(document.activeElement).toBe(getByLabelText('campo'));
   });
 });
+
+describe('Modal - headerAside (opt-in)', () => {
+  it('sem a prop, o cabecalho tem so o titulo e o Fechar (markup de sempre)', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo" subtitle="Apoio">
+        <p>Conteudo</p>
+      </Modal>
+    );
+    const header = container.querySelector('header.modal-header');
+    expect(Array.from(header?.children ?? []).map((el) => el.tagName + '.' + el.className)).toEqual([
+      'DIV.modal-header__titles',
+      'BUTTON.btn-close',
+    ]);
+  });
+
+  it('com a prop, o no entra no cabecalho ANTES do Fechar', () => {
+    const { container, getByTestId } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo" headerAside={<span data-testid="aside">Respondida</span>}>
+        <p>Conteudo</p>
+      </Modal>
+    );
+    const header = container.querySelector('header.modal-header');
+    const aside = getByTestId('aside');
+    const fechar = container.querySelector('.btn-close');
+    expect(aside.parentElement).toBe(header);
+    expect(aside.nextElementSibling).toBe(fechar);
+    expect(header?.lastElementChild).toBe(fechar);
+  });
+});

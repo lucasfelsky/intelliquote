@@ -13750,6 +13750,234 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   line-height: normal;
 }
 .indent-page .indent-alerta > svg { flex: none; }
+/* ======================= Cotacoes (PR 3): agrupar por, grupos recolhiveis e gaveta ======================= */
+/* Metricas do mock (.seg, .group, .drawer, .processbox, .priceinp, .totalrow). Cada token do mock virou o --rf-* mais proximo que ja existe
+   (navy -> --rf-sidebar-bg, shadow-sm -> --rf-shadow-rest, shadow-xl -> --rf-shadow-modal, radius-md -> --rf-radius-card). A gaveta e um <Modal>
+   (dialog) a direita; a animacao de abertura e a do modal existente (divergencia aceita). Sem at-rule: nada de @media nem @keyframes. */
+.indent-page .indent-seg-rotulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--rf-ink-soft);
+}
+.indent-page .indent-seg {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-surface-alt);
+}
+.indent-page .indent-seg button {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--rf-ink-soft);
+  font-family: var(--rf-font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.indent-page .indent-seg button[aria-pressed='true'] {
+  background: var(--rf-surface);
+  color: var(--rf-ink);
+  box-shadow: var(--rf-shadow-rest);
+}
+.indent-page .indent-seg button:focus-visible {
+  outline: 2px solid var(--rf-action);
+  outline-offset: 2px;
+}
+.indent-page .indent-grupos {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.indent-page .indent-grupo {
+  overflow: hidden;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-card);
+  background: var(--rf-surface);
+  box-shadow: var(--rf-shadow-rest);
+}
+.indent-page .indent-grupo > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 16px 20px;
+  list-style: none;
+  cursor: pointer;
+}
+.indent-page .indent-grupo > summary::-webkit-details-marker { display: none; }
+.indent-page .indent-grupo > summary:focus-visible {
+  outline: 2px solid var(--rf-action);
+  outline-offset: -2px;
+}
+.indent-page .indent-grupo__avatar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-sidebar-bg);
+  color: var(--rf-sidebar-ink);
+  font-family: var(--rf-font-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+.indent-page .indent-grupo__titulo {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.indent-page .indent-grupo__titulo strong {
+  font-family: var(--rf-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.indent-page .indent-grupo__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--rf-ink-soft);
+  font-size: 13px;
+}
+.indent-page .indent-grupo__seta {
+  display: flex;
+  color: var(--rf-ink-soft);
+  transition: transform var(--rf-dur-base) var(--rf-ease-out);
+}
+.indent-page .indent-grupo[open] .indent-grupo__seta { transform: rotate(180deg); }
+.indent-page .indent-grupo .indent-tabela-caixa {
+  border: 0;
+  border-top: 1px solid var(--rf-divider);
+  border-radius: 0;
+}
+
+/* Gaveta: o <dialog> do Modal encostado a direita, altura total, sem raio; cabecalho e rodape ja sao fixos (D1). */
+.indent-page dialog.modal-dialog.indent-gaveta {
+  width: min(640px, 100%);
+  max-width: 640px;
+  height: 100%;
+  max-height: 100%;
+  margin: 0 0 0 auto;
+}
+.indent-page .indent-gaveta .modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  box-shadow: var(--rf-shadow-modal);
+}
+.indent-page .indent-gaveta .modal-header { flex: none; }
+.indent-page .indent-gaveta .modal-header > .badge { align-self: center; margin-left: auto; }
+.indent-page .indent-gaveta .modal-header__titles { gap: 6px; min-width: 0; }
+.indent-page .indent-gaveta .modal-header h2 {
+  font-family: var(--rf-font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--rf-primary-700);
+}
+.indent-page .indent-gaveta .modal-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.indent-page .indent-gaveta .indent-gaveta__form {
+  flex: 1 1 auto;
+  gap: 20px;
+}
+.indent-page .indent-gaveta .indent-gaveta__form > .modal-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: auto;
+}
+.indent-page .indent-processo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 14px 16px;
+  border-radius: var(--rf-radius-button);
+  background: var(--rf-primary-50);
+  color: var(--rf-tone-success-fg);
+}
+.indent-page .indent-processo .eyebrow { color: inherit; }
+.indent-page .indent-processo .indent-ref {
+  color: inherit;
+  font-size: 16px;
+}
+.indent-page .indent-processo__estado {
+  font-size: 13px;
+  font-weight: 700;
+}
+.indent-page .indent-condicoes {
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+}
+.indent-page .indent-condicoes legend {
+  padding: 0 6px;
+  font-family: var(--rf-font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+.indent-page .indent-itens-precos {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.indent-page .indent-itens-precos .indent-painel__cabeca h2 { font-size: 15px; }
+.indent-page .indent-itens-precos .indent-tabela { min-width: 0; }
+.indent-page .indent-itens-precos .field-error { margin: 4px 0 0; text-align: right; }
+.indent-page .indent-preco {
+  width: 112px;
+  height: 36px;
+  padding: 0 10px;
+  font-family: var(--rf-font-mono);
+  text-align: right;
+}
+.indent-page .indent-desc {
+  height: 36px;
+  min-width: 120px;
+}
+.indent-page .indent-mono { font-family: var(--rf-font-mono); }
+.indent-page .indent-item-novo td { vertical-align: top; }
+.indent-page .indent-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rf-divider);
+  font-weight: 700;
+}
+.indent-page .indent-enviada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-right: auto;
+}
+.indent-page .indent-enviada .field-label { margin: 0; }
+.indent-page .indent-enviada .field-error { flex-basis: 100%; margin: 0; }
+.indent-page .indent-data {
+  width: 160px;
+  height: 36px;
+}
 /* <<< tela F14 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar

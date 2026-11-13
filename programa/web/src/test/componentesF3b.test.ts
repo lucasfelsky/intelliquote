@@ -413,6 +413,7 @@ describe('F3b: alerta que ja traz o proprio icone', () => {
     expect(porArquivo).toEqual({
       'pages/CotacaoNova.tsx': 1,
       'pages/CotacaoTabs/ItensTab.tsx': 1,
+      'pages/Indent/IndentCotacaoGaveta.tsx': 3, // PR 3: avisos da gaveta da cotacao (cadeado/info do mock)
       'pages/Indent/IndentSolicitacaoDetalhe.tsx': 1,
       'pages/Indent/IndentSolicitacoes.tsx': 1,
     });

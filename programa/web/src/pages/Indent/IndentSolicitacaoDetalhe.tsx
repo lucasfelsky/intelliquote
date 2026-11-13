@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '@/api/client';
@@ -7,6 +7,8 @@ import { Icon } from '@/components/icons';
 import { ForecastToast, useToastForecast } from '@/pages/Forecast/ForecastToast';
 import { getIndentRequest, type IndentRequestDetail, type IndentRequestQuote } from '@/services/indentRequests';
 import { formatCnpj } from './cnpj';
+import { QUOTE_STATUS, formatMoney } from './indentCotacao';
+import IndentCotacaoGaveta from './IndentCotacaoGaveta';
 import {
   filaFrase,
   formatarDataHora,
@@ -19,18 +21,9 @@ import {
 import IndentSupplierPicker from './IndentSupplierPicker';
 
 // IQ Indent: detalhe da solicitacao (mock viewSolDetail). Coluna da esquerda: escolha de fornecedores (NOVA), aviso de cliente pendente ou as
-// cotacoes ja geradas; coluna da direita: nota (so com rawNote), itens e cliente. A linha da cotacao nao abre gaveta neste PR (PR 3).
+// cotacoes ja geradas (cada linha abre a gaveta da cotacao, PR 3); coluna da direita: nota (so com rawNote), itens e cliente.
 
 const ESCRITA = ['admin', 'comprador', 'gestor'];
-
-const COTACAO_STATUS: Record<IndentRequestQuote['status'], { rotulo: string; classe: string }> = {
-  RASCUNHO: { rotulo: 'Rascunho', classe: 'badge badge--dot badge--muted' },
-  ENVIADA: { rotulo: 'Enviada', classe: 'badge badge--dot badge--info' },
-  RESPONDIDA: { rotulo: 'Respondida', classe: 'badge badge--dot badge--warning' },
-  ACEITA: { rotulo: 'Aceita', classe: 'badge badge--dot badge--success' },
-  RECUSADA: { rotulo: 'Recusada', classe: 'badge badge--dot badge--danger' },
-  REVISADA: { rotulo: 'Revisada', classe: 'badge badge--dot badge--muted' },
-};
 
 function eyebrowDe(solicitacao: IndentRequestDetail): string {
   if (solicitacao.origin !== 'PIPEDRIVE') return 'Lançada no IQ Indent';
@@ -39,8 +32,16 @@ function eyebrowDe(solicitacao: IndentRequestDetail): string {
   return `Pipedrive${negocio}${titulo}`;
 }
 
-function CotacoesPanel({ solicitacao }: { solicitacao: IndentRequestDetail }) {
+function CotacoesPanel({ solicitacao, onAbrir }: { solicitacao: IndentRequestDetail; onAbrir: (cotacao: IndentRequestQuote) => void }) {
   const total = solicitacao.quotes.length;
+
+  function aoTeclar(event: KeyboardEvent<HTMLTableRowElement>, cotacao: IndentRequestQuote) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onAbrir(cotacao);
+    }
+  }
+
   return (
     <section className="indent-painel">
       <div className="indent-painel__cabeca">
@@ -62,12 +63,18 @@ function CotacoesPanel({ solicitacao }: { solicitacao: IndentRequestDetail }) {
             </thead>
             <tbody>
               {solicitacao.quotes.map((cotacao) => {
-                const status = COTACAO_STATUS[cotacao.status];
+                const status = QUOTE_STATUS[cotacao.status];
                 return (
-                  <tr key={cotacao.id} className={cotacao.exception ? 'indent-linha-exc' : undefined}>
+                  <tr
+                    key={cotacao.id}
+                    className={`indent-linha-clicavel${cotacao.exception ? ' indent-linha-exc' : ''}`}
+                    tabIndex={0}
+                    onClick={() => onAbrir(cotacao)}
+                    onKeyDown={(event) => aoTeclar(event, cotacao)}
+                  >
                     <td>
                       <div className="indent-cell-main">
-                        <span className="indent-ref indent-ref--indent">{solicitacao.processNumber}</span>
+                        <span className="indent-ref indent-ref--indent">{cotacao.ref}</span>
                         {cotacao.exception && (
                           <span className="indent-tag indent-tag--exc">
                             <Icon name="lock" size={11} strokeWidth={2.4} />
@@ -80,7 +87,7 @@ function CotacoesPanel({ solicitacao }: { solicitacao: IndentRequestDetail }) {
                     <td>
                       <span className={status.classe}>{status.rotulo}</span>
                     </td>
-                    <td className="indent-num">—</td>
+                    <td className="indent-num">{formatMoney(cotacao.total, cotacao.currency)}</td>
                   </tr>
                 );
               })}
@@ -118,6 +125,8 @@ export default function IndentSolicitacaoDetalhe() {
   const location = useLocation();
   const canWrite = ESCRITA.includes(user?.role ?? '');
   const { toast, mostrar, fechar } = useToastForecast();
+  // Gaveta da cotacao aberta a partir da linha de "Cotacoes desta solicitacao" (so por estado: sem link proprio nesta tela).
+  const [cotacaoAberta, setCotacaoAberta] = useState<number | null>(null);
 
   const numero = Number(id);
   const idValido = Number.isInteger(numero) && numero > 0;
@@ -221,7 +230,7 @@ export default function IndentSolicitacaoDetalhe() {
       </section>
     );
   } else {
-    painelFornecedores = <CotacoesPanel solicitacao={solicitacao} />;
+    painelFornecedores = <CotacoesPanel solicitacao={solicitacao} onAbrir={(cotacao) => setCotacaoAberta(cotacao.id)} />;
   }
 
   return (
@@ -316,6 +325,16 @@ export default function IndentSolicitacaoDetalhe() {
           )}
         </div>
       </div>
+
+      {cotacaoAberta !== null && (
+        <IndentCotacaoGaveta
+          quoteId={cotacaoAberta}
+          onClose={(mensagem) => {
+            setCotacaoAberta(null);
+            if (mensagem) mostrar('salvo', mensagem, '');
+          }}
+        />
+      )}
 
       {toast && <ForecastToast key={toast.id} dados={toast} onFechar={fechar} />}
     </div>

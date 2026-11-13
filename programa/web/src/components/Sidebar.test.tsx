@@ -224,7 +224,7 @@ describe('Sidebar - variante Indent', () => {
     expect(link.hasAttribute('aria-current')).toBe(false);
   });
 
-  it('titulo de secao "Indent" e navegacao principal rotulada "Indent" com so os 4 links do INDENT_NAV', () => {
+  it('titulo de secao "Indent" e navegacao principal rotulada "Indent" com so os 5 links do INDENT_NAV', () => {
     const { container } = renderIndent();
     const nav = container.querySelector('#sidebar-nav');
     expect(nav?.getAttribute('aria-label')).toBe('Indent');
@@ -232,13 +232,14 @@ describe('Sidebar - variante Indent', () => {
     const links = Array.from(nav?.querySelectorAll('a') ?? []);
     expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
       ['Solicitações', '/indent/solicitacoes'],
+      ['Cotações', '/indent/cotacoes'],
       ['Catálogo', '/indent/catalogo'],
       ['Fornecedores', '/indent/fornecedores'],
       ['Clientes', '/indent/clientes'],
     ]);
     const todos = screen.getAllByRole('link').map((l) => l.getAttribute('href'));
-    expect(todos).toHaveLength(5);
-    expect(todos.some((h) => /cotacoes|integracao/.test(h ?? ''))).toBe(false);
+    expect(todos).toHaveLength(6);
+    expect(todos.some((h) => /integracao/.test(h ?? ''))).toBe(false);
     expect(container.querySelector('.sidebar__badge')).toBeNull();
     expect(screen.queryByText(/Administração/)).toBeNull();
   });

@@ -150,7 +150,8 @@ const css = readSource('../styles/globals.css').replace(/\r\n/g, '\n');
 const regiao = regioes(css).find((r) => r.nome === 'tela F14');
 // So as regras do PR 2: a parte da regiao depois do marcador "Solicitacoes (PR 2)" (as do PR 1 sao conferidas no Indent.visual.test.tsx).
 const MARCADOR_PR2 = '/* ======================= Solicitacoes (PR 2)';
-const brutoPr2 = (regiao?.bruto ?? '').split(MARCADOR_PR2)[1] ?? '';
+// Corta no marcador 'Cotacoes (PR 3)': as regras dali em diante sao conferidas no IndentCotacoes.visual.test.tsx.
+const brutoPr2 = ((regiao?.bruto ?? '').split(MARCADOR_PR2)[1] ?? '').split('/* ======================= Cotacoes (PR 3)')[0] ?? '';
 const classesDoCss = new Set(
   parseRules(stripComments(brutoPr2))
     .flatMap((r) => r.prelude.split(',').flatMap((sel) => classesDoSeletor(sel)))
@@ -274,7 +275,7 @@ describe('Solicitacoes do Indent: marcacao x regiao `tela F14`', () => {
     corpoDetalhe = detalhe({
       status: 'COTACAO',
       quotes: [
-        { id: 100, status: 'RASCUNHO', revision: 1, supplier: { id: 3, name: 'Nordic Solvents AB' }, exception: { reason: 'x', byName: 'Ana', at: null } },
+        { id: 100, status: 'RASCUNHO', revision: 1, ref: '275/26', currency: 'EUR', total: null, supplier: { id: 3, name: 'Nordic Solvents AB' }, exception: { reason: 'x', byName: 'Ana', at: null } },
       ],
     });
     const cotacoes = renderTela('/indent/solicitacoes/11');
@@ -340,7 +341,7 @@ describe('Solicitacoes do Indent: marcacao x regiao `tela F14`', () => {
 
     corpoDetalhe = detalhe({
       status: 'COTACAO',
-      quotes: [{ id: 100, status: 'RASCUNHO', revision: 1, supplier: { id: 3, name: 'Nordic Solvents AB' }, exception: { reason: 'x', byName: 'Ana', at: null } }],
+      quotes: [{ id: 100, status: 'RASCUNHO', revision: 1, ref: '275/26', currency: 'EUR', total: null, supplier: { id: 3, name: 'Nordic Solvents AB' }, exception: { reason: 'x', byName: 'Ana', at: null } }],
     });
     const cotacoes = renderTela('/indent/solicitacoes/11');
     await screen.findByText('Nordic Solvents AB');

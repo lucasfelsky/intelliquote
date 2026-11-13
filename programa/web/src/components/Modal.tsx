@@ -15,9 +15,11 @@ interface ModalProps {
   className?: string;
   /** Opt-in: devolve o foco a quem o tinha antes de abrir (botao ou linha) quando o modal fecha ou desmonta. Padrao false: nada muda. */
   restoreFocus?: boolean;
+  /** Opt-in: no cabecalho, ANTES do botao Fechar (ex.: badge de status da gaveta de cotacao). Sem ela o cabecalho segue como antes. */
+  headerAside?: React.ReactNode;
 }
 
-export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, size, className: extra, restoreFocus = false }: ModalProps) {
+export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, size, className: extra, restoreFocus = false, headerAside }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const restoreFocusRef = useRef(restoreFocus);
   restoreFocusRef.current = restoreFocus;
@@ -113,6 +115,7 @@ export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, siz
           ) : (
             <h2 id={tituloId}>{title}</h2>
           )}
+          {headerAside}
           <button type="button" onClick={onClose} className="btn-close" aria-label="Fechar">
             <Icon name="x" size={16} strokeWidth={2} />
           </button>

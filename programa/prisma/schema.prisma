@@ -1614,21 +1614,38 @@ model IndentQuote {
   exceptionByName String?
   exceptionAt     DateTime?
   createdById     Int?
+  // PR 3: oferta do fornecedor e datas do ciclo. baseQuoteId = raiz da cadeia de revisoes (a cotacao revision 1); null na R1.
+  baseQuoteId            Int?
+  sentAt                 DateTime?
+  respondedAt            DateTime?
+  decidedAt              DateTime? // ACEITA ou RECUSADA
+  validUntil             DateTime? @db.Date
+  productionLeadTimeDays Int?
+  paymentTerms           String?
+  manufacturer           String?
+  notes                  String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   request         IndentRequest     @relation(fields: [requestId], references: [id], onDelete: Restrict)
   supplier        IndentSupplier    @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   items           IndentQuoteItem[]
+  baseQuote       IndentQuote?      @relation("IndentQuoteRevisions", fields: [baseQuoteId], references: [id], onDelete: Restrict)
+  revisions       IndentQuote[]     @relation("IndentQuoteRevisions")
 
   @@unique([requestId, supplierId, revision])
   @@index([supplierId])
   @@index([status])
+  @@index([baseQuoteId])
+  @@index([requestId, status])
 }
 
 model IndentQuoteItem {
   id            Int               @id @default(autoincrement())
   quoteId       Int
   requestItemId Int
+  packaging     String?
+  fobPricePerKg Decimal?          @db.Decimal(14, 4)
+  cfrPricePerKg Decimal?          @db.Decimal(14, 4)
   createdAt     DateTime          @default(now())
   quote         IndentQuote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   requestItem   IndentRequestItem @relation(fields: [requestItemId], references: [id], onDelete: Restrict)
