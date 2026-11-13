@@ -397,6 +397,33 @@ describe('POST /pending-orgs/:id/link', () => {
     expect(tx.indentClient.update).toHaveBeenLastCalledWith(expect.objectContaining({ data: { pipedriveOrgId: 900101 } }));
   });
 
+  it('aviso (nao bloqueia): cliente com OUTRO CNPJ que o da organizacao -> cnpjDivergente true, no metadata sem digitos', async () => {
+    clients({ ...EXISTING, cnpj: '11444777000161' });
+    const res = await call('post', '/pending-orgs/4/link', await loginAs('admin'), { orgId: 900101, clientId: 3 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cnpjDivergente).toBe(true);
+    expect(auditCall('indent_pending_org.resolved_link')).toMatchObject({ metadata: { requestId: 11, propagated: false, cnpjDivergente: true } });
+    const logged = JSON.stringify(tx.auditLog.create.mock.calls);
+    expect(logged).not.toContain('11444777000161');
+    expect(logged).not.toContain('11222333000181');
+  });
+
+  it('cnpjDivergente e false quando os CNPJs batem, quando o cliente nao tem CNPJ ou quando a organizacao nao tem', async () => {
+    const cookie = await loginAs('admin');
+
+    clients({ ...EXISTING }); // mesmo CNPJ
+    expect((await call('post', '/pending-orgs/4/link', cookie, { orgId: 900101, clientId: 3 })).body.cnpjDivergente).toBe(false);
+    expect(auditCall('indent_pending_org.resolved_link')?.metadata).not.toHaveProperty('cnpjDivergente');
+
+    clients({ ...EXISTING, cnpj: null }); // completado a partir da organizacao
+    expect((await call('post', '/pending-orgs/4/link', cookie, { orgId: 900101, clientId: 3 })).body.cnpjDivergente).toBe(false);
+
+    clients({ ...EXISTING, cnpj: '11444777000161' });
+    tx.indentPendingOrg.findUnique.mockResolvedValue(pending({ candidates: [{ ...ORG_A, cnpj: null }] }));
+    expect((await call('post', '/pending-orgs/4/link', cookie, { orgId: 900101, clientId: 3 })).body.cnpjDivergente).toBe(false);
+  });
+
   it('cliente que ja tem esta organizacao: so liga a solicitacao (nenhuma escrita no cliente)', async () => {
     clients({ ...EXISTING, pipedriveOrgId: 900101 });
     const res = await call('post', '/pending-orgs/4/link', await loginAs('admin'), { orgId: 900101, clientId: 3 });

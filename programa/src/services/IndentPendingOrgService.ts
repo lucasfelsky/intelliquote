@@ -229,9 +229,11 @@ export class IndentPendingOrgService {
             }
           }
 
-          const resolved = await IndentPendingOrgService.resolve(tx, pending, client.id, orgId, user, 'link', now);
+          // Aviso (nao bloqueia): o cliente escolhido ja tem OUTRO CNPJ que o da organizacao (provavel clique errado ou filial).
+          const cnpjDivergente = client.cnpj !== null && candidate?.cnpj != null && client.cnpj !== candidate.cnpj;
+          const resolved = await IndentPendingOrgService.resolve(tx, pending, client.id, orgId, user, 'link', now, cnpjDivergente);
 
-          return { client: clientOut(linked), cnpjCompleted: data.cnpj !== undefined, resolved };
+          return { client: clientOut(linked), cnpjCompleted: data.cnpj !== undefined, cnpjDivergente, resolved };
         },
         { timeout: TX_TIMEOUT_MS },
       );
@@ -279,6 +281,7 @@ export class IndentPendingOrgService {
     user: IndentActor,
     kind: 'create' | 'link',
     now: Date,
+    cnpjDivergente = false,
   ): Promise<Array<{ id: number; requestId: number }>> {
     const targets: Array<{ id: number; requestId: number; propagated: boolean }> = [
       { id: pending.id, requestId: pending.requestId, propagated: false },
@@ -315,7 +318,11 @@ export class IndentPendingOrgService {
           action: kind === 'create' ? 'indent_pending_org.resolved_create' : 'indent_pending_org.resolved_link',
           performedById: user.id,
           afterData: { clientId, orgId },
-          metadata: { requestId: target.requestId, propagated: target.propagated },
+          metadata: {
+            requestId: target.requestId,
+            propagated: target.propagated,
+            ...(cnpjDivergente && !target.propagated ? { cnpjDivergente: true } : {}),
+          },
         },
         tx,
       );

@@ -212,7 +212,7 @@ export class IndentPipedriveSyncService {
   static async setReference(id: number, processNumber: string, user: IndentActor, now: Date = new Date()) {
     const parsed = parseProcessNumber(processNumber);
 
-    if (!parsed || parsed.seq < 1) {
+    if (!parsed || parsed.seq < 1 || parsed.seq > 9999) {
       throw new HttpError(400, 'Informe a referência no formato NNN/AA (ex.: 274/26).');
     }
 

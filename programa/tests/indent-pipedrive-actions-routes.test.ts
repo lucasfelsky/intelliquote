@@ -130,6 +130,9 @@ describe('PUT /requests/:id/reference', () => {
     ['ano com 4 digitos', '274/2026'],
     ['sequencia zero', '000/26'],
     ['com sufixo', '274/26 INDENT'],
+    ['sequencia 10000 (acima do teto de 4 digitos)', '10000/26'],
+    ['sequencia 274000 (subiria a IndentSequence sem volta)', '274000/26'],
+    ['sequencia gigante (estouraria o integer)', '99999999999/26'],
   ])('formato invalido (%s) -> 400 e nada e gravado', async (_name, processNumber) => {
     const res = await call('put', '/requests/11/reference', await loginAs('admin'), { processNumber });
 
@@ -137,6 +140,13 @@ describe('PUT /requests/:id/reference', () => {
     expect(res.body.message).toBe(REFERENCE_MESSAGE);
     expect(tx.indentRequest.update).not.toHaveBeenCalled();
     expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('sequencia 9999 (teto) continua aceita', async () => {
+    const res = await call('put', '/requests/11/reference', await loginAs('admin'), { processNumber: `9999/${YY}` });
+
+    expect(res.status).toBe(200);
+    expect(tx.indentRequest.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ processSeq: 9999 }) }));
   });
 
   it('ano fora da faixa (atual-1 a atual+1) -> 400; os 3 anos da faixa passam', async () => {
@@ -218,6 +228,27 @@ describe('PUT /requests/:id/note-items', () => {
   };
 
   beforeEach(() => setup());
+
+  it('ordem de travas: advisory do negocio -> linha da solicitacao, ANTES de ler status e cotacoes', async () => {
+    const order: string[] = [];
+    tx.$executeRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+      order.push(strings.join('?').includes('pg_advisory_xact_lock') ? 'advisory' : 'other');
+      return 1;
+    });
+    tx.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) => {
+      order.push(strings.join('?').includes('FOR NO KEY UPDATE') ? 'request-row' : 'other');
+      return [];
+    });
+    const detail = tx.indentRequest.findUnique.getMockImplementation() as (args: { include?: unknown; select?: { quotes?: unknown } }) => Promise<unknown>;
+    tx.indentRequest.findUnique.mockImplementation(async (args: { include?: unknown; select?: { quotes?: unknown } }) => {
+      if (args.select?.quotes) order.push('read-status');
+      return detail(args);
+    });
+    await call('put', '/requests/11/note-items', await loginAs('admin'), BODY);
+
+    expect(order.slice(0, 3)).toEqual(['advisory', 'request-row', 'read-status']);
+    expect(lockValues()).toContain('indent_pipedrive_deal:900001');
+  });
 
   it('confirma: edita item existente, cria produto LIVRE sem numero de origem, confirma tudo, limpa o alerta e audita', async () => {
     const res = await call('put', '/requests/11/note-items', await loginAs('comprador'), BODY);

@@ -63,6 +63,7 @@ export const pendingOrgLinkSchema = z.strictObject({
   clientId: idField('Escolha o cliente.'),
 });
 
+// Mesmo teto do titulo do negocio (1 a 4 digitos): sequencia maior subiria IndentSequence sem volta.
 const REFERENCE_MESSAGE = 'Informe a referência no formato NNN/AA (ex.: 274/26).';
 
 /** `PUT /requests/:id/reference`: numero NNN/AA digitado (o servico normaliza e confere ano, duplicidade e sequencia). */
@@ -72,7 +73,7 @@ export const requestReferenceSchema = z.strictObject({
     .trim()
     .refine((value) => {
       const parsed = parseProcessNumber(value);
-      return parsed !== null && parsed.seq >= 1;
+      return parsed !== null && parsed.seq >= 1 && parsed.seq <= 9999;
     }, REFERENCE_MESSAGE),
 });
 
