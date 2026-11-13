@@ -328,3 +328,262 @@ describe('/api/v1/indent - regra de restricao do cliente', () => {
     expect(tx.indentClientSupplierRule.deleteMany).not.toHaveBeenCalled();
   });
 });
+
+// ---- IQ Indent H0: CNPJ do cliente anulavel ("CNPJ pendente") ----
+describe('IQ Indent H0 - CNPJ pendente (rotas de clientes)', () => {
+  beforeEach(() => {
+    tx.indentClient.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => Promise.resolve(clientRow(data)));
+    tx.indentClient.update.mockImplementation(({ data }: { data: Record<string, unknown> }) => Promise.resolve(clientRow(data)));
+  });
+
+  describe('IQ Indent H0 - criar cliente sem CNPJ', () => {
+    it.each([
+      ['sem a chave', { name: 'Cliente Pendente' }],
+      ['string vazia', { name: 'Cliente Pendente', cnpj: '' }],
+      ['so espacos', { name: 'Cliente Pendente', cnpj: '   ' }],
+      ['null', { name: 'Cliente Pendente', cnpj: null }],
+    ])('POST /clients %s -> 201 com cnpj null, audita e confere duplicidade entre os sem CNPJ', async (_caso, body) => {
+      const cookie = await loginAs('comprador');
+
+      const res = await call('post', '/clients', cookie, body);
+
+      expect(res.status).toBe(201);
+      expect(res.body.cnpj).toBeNull();
+      expect(tx.indentClient.create.mock.calls[0][0].data).toMatchObject({ name: 'Cliente Pendente', cnpj: null });
+      expect(tx.indentClient.findMany).toHaveBeenCalledWith({ where: { cnpj: null }, select: { name: true } });
+      const audit = tx.auditLog.create.mock.calls[0][0].data;
+      expect(audit.action).toBe('indent_client.created');
+      expect(audit.afterData).toMatchObject({ cnpj: null });
+    });
+
+    it('dois clientes sem CNPJ com nomes diferentes convivem (201)', async () => {
+      const cookie = await loginAs('comprador');
+      tx.indentClient.findMany.mockResolvedValue([{ name: 'Outro Cliente' }]);
+
+      const res = await call('post', '/clients', cookie, { name: 'Cliente Pendente' });
+
+      expect(res.status).toBe(201);
+      expect(tx.indentClient.create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['Cliente Pendente', '  CLIENTE   pendente ', 'Cliente Pêndente'])(
+      'mesmo nome (%s, ignorando caixa, acento e espacos) entre os sem CNPJ -> 409 sem gravar',
+      async (nome) => {
+        const cookie = await loginAs('gestor');
+        tx.indentClient.findMany.mockResolvedValue([{ name: 'Cliente Pendente' }]);
+
+        const res = await call('post', '/clients', cookie, { name: nome });
+
+        expect(res.status).toBe(409);
+        expect(res.body.message).toBe('Já existe um cliente sem CNPJ com este nome.');
+        expect(tx.indentClient.create).not.toHaveBeenCalled();
+        expect(tx.auditLog.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it('com CNPJ informado a consulta por nome nao roda; o mesmo nome de um cliente com CNPJ nao conta', async () => {
+      const cookie = await loginAs('comprador');
+
+      const res = await call('post', '/clients', cookie, { name: 'Cliente Pendente', cnpj: VALID_CNPJ });
+
+      expect(res.status).toBe(201);
+      expect(res.body.cnpj).toBe('11222333000181');
+      expect(tx.indentClient.findMany).not.toHaveBeenCalled();
+    });
+
+    it('CNPJ informado duplicado -> 409 (indice unico) e CNPJ invalido -> 400', async () => {
+      const cookie = await loginAs('comprador');
+
+      tx.indentClient.create.mockRejectedValueOnce(uniqueError(['cnpj']));
+      const duplicado = await call('post', '/clients', cookie, { name: 'X', cnpj: VALID_CNPJ });
+      expect(duplicado.status).toBe(409);
+      expect(duplicado.body.message).toBe('Já existe um cliente com este CNPJ.');
+
+      for (const cnpj of ['11.222.333/0001-82', 'abc', 1122233300018, '1122']) {
+        const res = await call('post', '/clients', cookie, { name: 'X', cnpj });
+        expect(res.status, String(cnpj)).toBe(400);
+        expect(res.body.message).toBe('CNPJ inválido.');
+      }
+      expect(tx.indentClient.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('comercial continua 403 e viewer nao escreve', async () => {
+      const comercial = await loginAs('comercial');
+      expect((await call('post', '/clients', comercial, { name: 'X' })).status).toBe(403);
+      expect((await call('get', '/clients?semCnpj=1', comercial)).status).toBe(403);
+
+      const viewer = await loginAs('viewer');
+      expect((await call('post', '/clients', viewer, { name: 'X' })).status).toBe(403);
+      expect(tx.indentClient.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('IQ Indent H0 - listar (semCnpj e counts)', () => {
+    it('padrao: sem filtro de CNPJ e counts { todos, semCnpj } so de ativos', async () => {
+      prismaMock.indentClient.count.mockResolvedValueOnce(9).mockResolvedValueOnce(9).mockResolvedValueOnce(4);
+      const cookie = await loginAs('viewer');
+
+      const res = await call('get', '/clients', cookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.counts).toEqual({ todos: 9, semCnpj: 4 });
+      expect(prismaMock.indentClient.findMany.mock.calls[0][0].where).toEqual({ isActive: true });
+      const wheres = prismaMock.indentClient.count.mock.calls.map((c) => c[0].where);
+      expect(wheres).toEqual([{ isActive: true }, { isActive: true }, { isActive: true, cnpj: null }]);
+    });
+
+    it.each(['1', 'true'])('semCnpj=%s filtra cnpj null; as contagens ignoram o chip e a busca', async (valor) => {
+      const cookie = await loginAs('viewer');
+
+      const res = await call('get', `/clients?semCnpj=${valor}&q=ana`, cookie);
+
+      expect(res.status).toBe(200);
+      const where = prismaMock.indentClient.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({ isActive: true, cnpj: null });
+      expect(where.OR).toBeDefined();
+      const wheres = prismaMock.indentClient.count.mock.calls.map((c) => c[0].where);
+      expect(wheres[1]).toEqual({ isActive: true });
+      expect(wheres[2]).toEqual({ isActive: true, cnpj: null });
+    });
+
+    it('semCnpj=0 nao filtra e inativos=1 remove isActive das contagens', async () => {
+      const cookie = await loginAs('viewer');
+
+      await call('get', '/clients?semCnpj=0&inativos=1', cookie);
+
+      expect(prismaMock.indentClient.findMany.mock.calls[0][0].where).toEqual({});
+      const wheres = prismaMock.indentClient.count.mock.calls.map((c) => c[0].where);
+      expect(wheres).toEqual([{}, {}, { cnpj: null }]);
+    });
+
+    it('cliente sem CNPJ volta na lista com cnpj null', async () => {
+      prismaMock.indentClient.findMany.mockResolvedValue([clientRow({ cnpj: null })]);
+      const cookie = await loginAs('viewer');
+
+      const res = await call('get', '/clients', cookie);
+
+      expect(res.body.data[0].cnpj).toBeNull();
+    });
+  });
+
+  describe('IQ Indent H0 - atualizar CNPJ', () => {
+    it.each([null, '', '   '])('remover CNPJ gravado (%j) -> 400 sem gravar', async (cnpj) => {
+      const cookie = await loginAs('comprador');
+
+      const res = await call('put', '/clients/3', cookie, { cnpj });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('O CNPJ não pode ser removido.');
+      expect(tx.indentClient.update).not.toHaveBeenCalled();
+      expect(tx.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('completar o CNPJ de cliente pendente -> 200 grava so digitos e audita antes/depois', async () => {
+      const cookie = await loginAs('gestor');
+      tx.indentClient.findUnique.mockResolvedValue(clientRow({ cnpj: null }));
+
+      const res = await call('put', '/clients/3', cookie, { cnpj: VALID_CNPJ, city: 'Itajaí' });
+
+      expect(res.status).toBe(200);
+      expect(tx.indentClient.update.mock.calls[0][0].data).toEqual({ cnpj: '11222333000181', city: 'Itajaí' });
+      const audit = tx.auditLog.create.mock.calls[0][0].data;
+      expect(audit.beforeData).toMatchObject({ cnpj: null });
+      expect(audit.afterData).toMatchObject({ cnpj: '11222333000181' });
+    });
+
+    it('cnpj null em cliente que ja esta pendente nao e erro e nao escreve a coluna', async () => {
+      const cookie = await loginAs('comprador');
+      tx.indentClient.findUnique.mockResolvedValue(clientRow({ cnpj: null }));
+
+      const res = await call('put', '/clients/3', cookie, { cnpj: null, city: 'Joinville' });
+
+      expect(res.status).toBe(200);
+      expect(tx.indentClient.update.mock.calls[0][0].data).toEqual({ city: 'Joinville' });
+    });
+
+    it('sem a chave cnpj o CNPJ gravado fica intacto; CNPJ novo duplicado -> 409; invalido -> 400', async () => {
+      const cookie = await loginAs('comprador');
+
+      await call('put', '/clients/3', cookie, { city: 'Y' });
+      expect(tx.indentClient.update.mock.calls[0][0].data).toEqual({ city: 'Y' });
+
+      tx.indentClient.update.mockRejectedValueOnce(uniqueError(['cnpj']));
+      const dup = await call('put', '/clients/3', cookie, { cnpj: '45.997.418/0001-53' });
+      expect(dup.status).toBe(409);
+      expect(dup.body.message).toBe('Já existe um cliente com este CNPJ.');
+
+      const invalido = await call('put', '/clients/3', cookie, { cnpj: '11.222.333/0001-82' });
+      expect(invalido.status).toBe(400);
+      expect(invalido.body.message).toBe('CNPJ inválido.');
+    });
+  });
+
+  describe('trava e checagem de nome (create e renomeacao sem CNPJ)', () => {
+    const lockKey = (call: unknown[]) => call[1];
+
+    it('create sem CNPJ: a trava advisory (chave = nome normalizado) e a 1a instrucao, antes da consulta e do insert', async () => {
+      const cookie = await loginAs('comprador');
+
+      const res = await call('post', '/clients', cookie, { name: '  Cliente   PÊNDENTE ' });
+
+      expect(res.status).toBe(201);
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+      const [strings, key] = tx.$executeRaw.mock.calls[0] as [string[], string];
+      expect(strings.join('?')).toContain('pg_advisory_xact_lock(hashtext(');
+      expect(key).toBe('indent_client_sem_cnpj:cliente pendente');
+      const ordem = (fn: ReturnType<typeof vi.fn>) => fn.mock.invocationCallOrder[0] as number;
+      expect(ordem(tx.$executeRaw)).toBeLessThan(ordem(tx.indentClient.findMany));
+      expect(ordem(tx.indentClient.findMany)).toBeLessThan(ordem(tx.indentClient.create));
+    });
+
+    it('create com CNPJ nao toma a trava nem consulta nomes', async () => {
+      const cookie = await loginAs('comprador');
+
+      await call('post', '/clients', cookie, { name: 'Cliente Pendente', cnpj: VALID_CNPJ });
+
+      expect(tx.$executeRaw).not.toHaveBeenCalled();
+      expect(tx.indentClient.findMany).not.toHaveBeenCalled();
+    });
+
+    it('renomear cliente sem CNPJ para o nome de OUTRO sem CNPJ -> 409 (compara fora o proprio id), sem gravar', async () => {
+      const cookie = await loginAs('comprador');
+      tx.indentClient.findUnique.mockResolvedValue(clientRow({ cnpj: null }));
+      tx.indentClient.findMany.mockResolvedValue([{ name: 'Outro Pendente' }]);
+
+      const res = await call('put', '/clients/3', cookie, { name: ' OUTRO  pêndente ' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toBe('Já existe um cliente sem CNPJ com este nome.');
+      expect(tx.indentClient.findMany).toHaveBeenCalledWith({ where: { cnpj: null, id: { not: 3 } }, select: { name: true } });
+      expect(lockKey(tx.$executeRaw.mock.calls[0] as unknown[])).toBe('indent_client_sem_cnpj:outro pendente');
+      expect(tx.indentClient.update).not.toHaveBeenCalled();
+      expect(tx.auditLog.create).not.toHaveBeenCalled();
+    });
+
+    it('renomear cliente sem CNPJ para nome livre -> 200 e toma a trava', async () => {
+      const cookie = await loginAs('gestor');
+      tx.indentClient.findUnique.mockResolvedValue(clientRow({ cnpj: null }));
+
+      const res = await call('put', '/clients/3', cookie, { name: 'Nome Novo' });
+
+      expect(res.status).toBe(200);
+      expect(tx.indentClient.update.mock.calls[0][0].data).toEqual({ name: 'Nome Novo' });
+      expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['cliente que ja tem CNPJ', { cnpj: '11222333000181' }, { name: 'Nome Novo' }],
+      ['renomear e completar o CNPJ no mesmo PUT', { cnpj: null }, { name: 'Nome Novo', cnpj: VALID_CNPJ }],
+      ['PUT sem nome', { cnpj: null }, { city: 'Joinville' }],
+    ])('%s: sem trava e sem consulta de nome', async (_caso, before, body) => {
+      const cookie = await loginAs('gestor');
+      tx.indentClient.findUnique.mockResolvedValue(clientRow(before));
+
+      const res = await call('put', '/clients/3', cookie, body);
+
+      expect(res.status).toBe(200);
+      expect(tx.$executeRaw).not.toHaveBeenCalled();
+      expect(tx.indentClient.findMany).not.toHaveBeenCalled();
+    });
+  });
+});

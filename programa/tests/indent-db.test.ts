@@ -217,6 +217,40 @@ describe('IQ Indent - cadastros (DB)', () => {
     expect((depois.body.data as Array<{ id: number }>).map((row) => row.id)).not.toContain(a.body.id);
   });
 
+  testDbSkip('cliente sem CNPJ (H0): 8 POST simultaneos com o mesmo nome -> exatamente 1 criado (201) e 7 conflitos (409); idem 8 renomeacoes simultaneas', async () => {
+    const mensagem = 'Já existe um cliente sem CNPJ com este nome.';
+
+    // 3 rodadas (a corrida sem trava aparecia em 4 de 5): nomes distintos por rodada.
+    for (let rodada = 0; rodada < 3; rodada += 1) {
+      const nome = `Corrida criar ${rodada} ${runId}`;
+      const respostas = await Promise.all(Array.from({ length: 8 }, () => api('post', '/clients', { name: nome })));
+      for (const r of respostas) if (r.status === 201) clientIds.push(r.body.id);
+
+      expect(respostas.filter((r) => r.status === 201)).toHaveLength(1);
+      const conflitos = respostas.filter((r) => r.status === 409);
+      expect(conflitos).toHaveLength(7);
+      for (const r of conflitos) expect(r.body.message).toBe(mensagem);
+      expect(await prisma.indentClient.count({ where: { name: nome } })).toBe(1);
+    }
+
+    // Renomeacao: 8 clientes sem CNPJ, nomes distintos, todos renomeados ao mesmo tempo para o mesmo nome.
+    const ids: number[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      const criado = await api('post', '/clients', { name: `Para renomear ${i} ${runId}` });
+      expect(criado.status).toBe(201);
+      ids.push(criado.body.id);
+      clientIds.push(criado.body.id);
+    }
+    const alvo = `Nome renomeado ${runId}`;
+    const renomeios = await Promise.all(ids.map((id) => api('put', `/clients/${id}`, { name: alvo })));
+
+    expect(renomeios.filter((r) => r.status === 200)).toHaveLength(1);
+    const rejeitados = renomeios.filter((r) => r.status === 409);
+    expect(rejeitados).toHaveLength(7);
+    for (const r of rejeitados) expect(r.body.message).toBe(mensagem);
+    expect(await prisma.indentClient.count({ where: { name: alvo } })).toBe(1);
+  });
+
   testDbSkip('nome repetido so por acento/caixa/espaco -> 409 (fornecedor e produto)', async () => {
     const first = await createProduct(`Ácido  Cítrico ${runId}`);
     expect(first.status).toBe(201);

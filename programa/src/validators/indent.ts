@@ -40,7 +40,6 @@ function dedupe<T>(values: T[]): T[] {
 const cnpjField = z.preprocess(
   (value) => {
     if (value === undefined) return undefined;
-    if (value === null) return null;
     if (typeof value === 'string' && value.trim() === '') return null;
     return value;
   },

@@ -98,7 +98,8 @@ export interface IndentRequestDetail {
   client: {
     id: number;
     name: string;
-    cnpj: string;
+    /** So digitos; null = "CNPJ pendente". */
+    cnpj: string | null;
     city: string | null;
     pipedriveOrgId: number | null;
     supplierRuleMode: IndentRuleMode;

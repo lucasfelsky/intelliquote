@@ -301,6 +301,19 @@ describe('IndentSolicitacaoDetalhe', () => {
     expect(screen.getByText('Sem restrição de fornecedor').className).toBe('indent-tag');
   });
 
+  it('painel Cliente sem CNPJ (H0): etiqueta "CNPJ pendente" no lugar do CNPJ (nao fica em branco)', async () => {
+    mockApi(solicitacao({ client: cliente({ cnpj: null }) }));
+    const { container } = renderPage();
+    await screen.findByText('Ureia técnica');
+
+    const dl = container.querySelector('dl.indent-dl') as HTMLElement;
+    const etiqueta = within(dl).getByText('CNPJ pendente');
+    expect(etiqueta.className).toBe('indent-tag indent-tag--manual');
+    expect(etiqueta.parentElement?.tagName).toBe('DD');
+    expect(dl.querySelector('dd.indent-dl__mono')).toBeNull();
+    expect(Array.from(dl.querySelectorAll('dt')).map((dt) => dt.textContent)).toEqual(['CNPJ', 'Cidade', 'Pipedrive']);
+  });
+
   it('painel Cliente sem organizacao do Pipedrive mostra "—" e sem tipo de negocio', async () => {
     mockApi(solicitacao({ client: cliente({ pipedriveOrgId: null, city: null }) }));
     const { container } = renderPage();

@@ -75,6 +75,25 @@ function translateConflict(error: unknown): never {
   throw error;
 }
 
+// Sem CNPJ nao ha indice que barre nome duplicado. A trava advisory (por nome normalizado, ate o fim da transacao)
+// serializa criacoes/renomeacoes concorrentes do mesmo nome; a checagem roda DEPOIS dela, ja vendo o que a outra
+// transacao gravou (READ COMMITTED). A consulta carrega todos os `cnpj null` (centenas, aceitavel) e compara a chave
+// normalizada em memoria. `excludeId` deixa o proprio cliente fora da comparacao (renomeacao).
+async function assertNoDuplicateNameWithoutCnpj(tx: Prisma.TransactionClient, name: string, excludeId?: number) {
+  const key = normalizeItemNameKey(name);
+
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`indent_client_sem_cnpj:${key}`}))`;
+
+  const others = await tx.indentClient.findMany({
+    where: { cnpj: null, ...(excludeId !== undefined ? { id: { not: excludeId } } : {}) },
+    select: { name: true },
+  });
+
+  if (others.some((other) => normalizeItemNameKey(other.name) === key)) {
+    throw new HttpError(409, 'Já existe um cliente sem CNPJ com este nome.');
+  }
+}
+
 export class IndentClientService {
   static async list(query: IndentClientListQuery) {
     const digits = query.q ? normalizeCnpj(query.q) : '';
@@ -121,14 +140,9 @@ export class IndentClientService {
       return await prisma.$transaction(async (tx) => {
         const cnpj = input.cnpj ?? null;
 
-        // Sem CNPJ nao ha indice que barre duplicidade: confere o mesmo nome (sem acento/caixa) entre os sem CNPJ.
+        // 1a instrucao da transacao quando nao ha CNPJ: trava + checagem do nome entre os sem CNPJ.
         if (cnpj === null) {
-          const key = normalizeItemNameKey(input.name);
-          const semCnpj = await tx.indentClient.findMany({ where: { cnpj: null }, select: { name: true } });
-
-          if (semCnpj.some((other) => normalizeItemNameKey(other.name) === key)) {
-            throw new HttpError(409, 'Já existe um cliente sem CNPJ com este nome.');
-          }
+          await assertNoDuplicateNameWithoutCnpj(tx, input.name);
         }
 
         const created = await tx.indentClient.create({
@@ -172,6 +186,11 @@ export class IndentClientService {
         // CNPJ gravado nao pode ser removido; completar (null -> valor) e trocar por outro valido seguem permitidos.
         if (input.cnpj === null && before.cnpj !== null) {
           throw new HttpError(400, 'O CNPJ não pode ser removido.');
+        }
+
+        // Renomear cliente que continua sem CNPJ: mesma regra do create (o modal de edicao cria esse caminho).
+        if (input.name !== undefined && before.cnpj === null && !input.cnpj) {
+          await assertNoDuplicateNameWithoutCnpj(tx, input.name, id);
         }
 
         const updated = await tx.indentClient.update({

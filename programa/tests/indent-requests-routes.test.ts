@@ -424,6 +424,31 @@ describe('/api/v1/indent/requests - listar, detalhar e contar', () => {
     );
   });
 
+  it('cliente sem CNPJ (H0): client-options lista o cliente e o filtro nao exige CNPJ', async () => {
+    prismaMock.indentClient.findMany.mockResolvedValue([{ id: 8, name: 'Cliente Pendente Ltda', city: null }]);
+    const cookie = await loginAs('viewer');
+
+    const res = await call('get', '/requests/client-options', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ id: 8, name: 'Cliente Pendente Ltda', city: null }]);
+    const { where } = prismaMock.indentClient.findMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(where).toEqual({ isActive: true });
+    expect(where).not.toHaveProperty('cnpj');
+  });
+
+  it('cliente sem CNPJ (H0): GET /requests/:id devolve client.cnpj null (200), sem exigir CNPJ', async () => {
+    prismaMock.indentRequest.findUnique.mockResolvedValue(
+      requestRow({ client: { ...restrictedClient('APROVADOS', [5]), id: 8, name: 'Cliente Pendente Ltda', cnpj: null } }),
+    );
+    const cookie = await loginAs('viewer');
+
+    const res = await call('get', '/requests/11', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.client).toMatchObject({ id: 8, name: 'Cliente Pendente Ltda', cnpj: null });
+  });
+
   it('GET /requests/:id devolve cliente, itens (com item livre), cotacoes e excecao', async () => {
     prismaMock.indentRequest.findUnique.mockResolvedValue(
       requestRow({

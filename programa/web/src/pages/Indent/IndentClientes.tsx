@@ -511,15 +511,15 @@ function ClienteModal({ cliente, onClose, onSaved }: ClienteModalProps) {
     setErroForm(null);
     const semNome = nome.trim().length === 0;
     const preenchido = normalizeCnpj(cnpj) !== '';
-    // CNPJ e opcional (vazio = CNPJ pendente); preenchido, tem de ser valido. Gravado, nao pode voltar a vazio.
-    const removendo = !preenchido && cliente?.cnpj != null;
+    // CNPJ e opcional (vazio = CNPJ pendente); preenchido, tem de ser valido. A edicao so abre para cliente pendente
+    // (o backend barra, com 400, remover um CNPJ ja gravado).
     const cnpjInvalido = preenchido && !isValidCnpj(cnpj);
     const org = orgId.trim();
     const orgInvalido = org !== '' && !/^[1-9]\d*$/.test(org);
     setErroNome(semNome ? 'Informe a razão social.' : null);
-    setErroCnpj(removendo ? 'O CNPJ não pode ser removido.' : cnpjInvalido ? 'CNPJ inválido.' : null);
+    setErroCnpj(cnpjInvalido ? 'CNPJ inválido.' : null);
     setErroOrg(orgInvalido ? 'Informe um número inteiro positivo.' : null);
-    if (semNome || removendo || cnpjInvalido || orgInvalido) return;
+    if (semNome || cnpjInvalido || orgInvalido) return;
     salvar.mutate();
   }
 

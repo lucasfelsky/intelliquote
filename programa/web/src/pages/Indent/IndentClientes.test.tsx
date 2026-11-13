@@ -519,6 +519,36 @@ describe('IndentClientes', () => {
       expect(await screen.findByRole('dialog', { name: 'Cliente Sem Cnpj Ltda' })).toBeTruthy();
     });
 
+    it('restoreFocus: fechar o modal de edicao (Cancelar, Esc e Salvar) devolve o foco ao botao "Completar CNPJ"', async () => {
+      mockApi(COM_PENDENTE);
+      vi.mocked(api.put).mockResolvedValue({ ...PENDENTE, name: 'Cliente Sem Cnpj Ltda' });
+      renderPage();
+      const celula = await screen.findByText('Cliente Sem Cnpj Ltda');
+      const botao = within(celula.closest('tr') as HTMLElement).getByRole('button', { name: 'Completar CNPJ' });
+
+      botao.focus();
+      fireEvent.click(botao);
+      const cancelar = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent.click(within(cancelar).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+
+      botao.focus();
+      fireEvent.click(botao);
+      const esc = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent(esc, new Event('cancel', { cancelable: true })); // Esc no <dialog> dispara 'cancel'
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+
+      botao.focus();
+      fireEvent.click(botao);
+      const salvar = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent.click(within(salvar).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+    });
+
     it('viewer ve a etiqueta mas nao o botao "Completar CNPJ"', async () => {
       mockRole = 'viewer';
       mockApi(COM_PENDENTE);

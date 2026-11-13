@@ -293,7 +293,13 @@ export default function IndentSolicitacaoDetalhe() {
               </div>
               <dl className="indent-dl">
                 <dt>CNPJ</dt>
-                <dd className="indent-dl__mono">{formatCnpj(client.cnpj)}</dd>
+                {client.cnpj === null ? (
+                  <dd>
+                    <span className="indent-tag indent-tag--manual">CNPJ pendente</span>
+                  </dd>
+                ) : (
+                  <dd className="indent-dl__mono">{formatCnpj(client.cnpj)}</dd>
+                )}
                 <dt>Cidade</dt>
                 <dd>{client.city ?? '—'}</dd>
                 <dt>Pipedrive</dt>
