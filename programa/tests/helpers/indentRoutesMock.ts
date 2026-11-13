@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { expect, vi } from 'vitest';
 import { hashPassword } from '../../src/utils/password';
-import { todayKeyInSaoPaulo } from '../../src/utils/supplierDocumentDates';
+import { addDaysToKey, todayKeyInSaoPaulo } from '../../src/utils/supplierDocumentDates';
 
 // Mock compartilhado dos testes de rota do IQ Indent (clientes, fornecedores, produtos, importacao e solicitacoes).
 // Cada arquivo de teste declara, no topo:
@@ -68,9 +68,16 @@ const tx = {
     create: vi.fn(),
     update: vi.fn(),
   },
-  indentRequestItem: { updateMany: vi.fn() },
-  indentQuote: { create: vi.fn(), createMany: vi.fn() },
-  indentQuoteItem: { createMany: vi.fn() },
+  indentRequestItem: { updateMany: vi.fn(), aggregate: vi.fn(), create: vi.fn() },
+  indentQuote: {
+    create: vi.fn(),
+    createMany: vi.fn(),
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    update: vi.fn(),
+    aggregate: vi.fn(),
+  },
+  indentQuoteItem: { createMany: vi.fn(), update: vi.fn(), create: vi.fn() },
   supplier: readOnlySource(),
   supplierContact: readOnlySource(),
   catalogItem: readOnlySource(),
@@ -92,6 +99,7 @@ const prisma = {
   indentProduct: { findMany: vi.fn(), count: vi.fn() },
   indentClientSupplierRule: { findMany: vi.fn() },
   indentRequest: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
+  indentQuote: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
   supplier: readOnlySource(),
   supplierContact: readOnlySource(),
   catalogItem: readOnlySource(),
@@ -111,6 +119,7 @@ export const prismaMock = prisma as unknown as {
   indentProduct: { findMany: Mock; count: Mock };
   indentClientSupplierRule: { findMany: Mock };
   indentRequest: { findUnique: Mock; findMany: Mock; count: Mock };
+  indentQuote: { findMany: Mock; findUnique: Mock; findFirst: Mock };
   supplier: SourceMock;
   supplierContact: SourceMock;
   catalogItem: SourceMock;
@@ -473,5 +482,125 @@ export function expectNoRequestWrites() {
   expect(tx.indentRequest.update).not.toHaveBeenCalled();
   expect(tx.indentRequestItem.updateMany).not.toHaveBeenCalled();
   expect(tx.indentQuote.create).not.toHaveBeenCalled();
+  expect(tx.indentProduct.create).not.toHaveBeenCalled();
+}
+
+// ---- Cotacoes do Indent (PR 3): fixtures e defaults ----
+// Datas relativas ao relogio REAL (os servicos usam `new Date()`): os testes nao dependem do dia em que rodam.
+export function dayKey(offsetDays: number): string {
+  return addDaysToKey(todayKeyInSaoPaulo(new Date()), offsetDays);
+}
+
+export function quoteItemRow(id: number, requestItemId: number, overrides: Record<string, unknown> = {}) {
+  const request = itemRow(requestItemId, requestItemId === 22 ? 4 : 2);
+  return {
+    id,
+    quoteId: 100,
+    requestItemId,
+    packaging: null as string | null,
+    fobPricePerKg: null as string | null,
+    cfrPricePerKg: null as string | null,
+    requestItem: {
+      id: request.id,
+      description: request.description,
+      quantityKg: request.quantityKg,
+      position: request.position,
+      productId: request.productId,
+      product: request.product,
+    },
+    ...overrides,
+  };
+}
+
+export function quoteRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 100,
+    requestId: 11,
+    supplierId: 5,
+    status: 'RASCUNHO',
+    revision: 1,
+    currency: 'USD',
+    incoterm: 'CFR',
+    destination: null as string | null,
+    exceptionReason: null as string | null,
+    exceptionById: null as number | null,
+    exceptionByName: null as string | null,
+    exceptionAt: null as Date | null,
+    createdById: 7,
+    baseQuoteId: null as number | null,
+    sentAt: null as Date | null,
+    respondedAt: null as Date | null,
+    decidedAt: null as Date | null,
+    validUntil: null as Date | null,
+    productionLeadTimeDays: null as number | null,
+    paymentTerms: null as string | null,
+    manufacturer: null as string | null,
+    notes: null as string | null,
+    createdAt: new Date(Date.now() - 3 * 24 * 3600 * 1000),
+    updatedAt: now,
+    request: {
+      id: 11,
+      processNumber: NUMBER_277,
+      status: 'COTACAO',
+      client: { id: 3, name: 'Cliente Exemplo Ltda', city: 'Itajaí', supplierRuleMode: 'LIVRE' },
+    },
+    supplier: { id: 5, name: 'Acme Chemicals', country: 'China', contactName: null, hasPartnership: false, type: 'TRADING' },
+    items: [quoteItemRow(201, 21), quoteItemRow(202, 22)],
+    ...overrides,
+  };
+}
+
+/** Cotacao ENVIADA ha 2 dias (a que recebe o registro de resposta). */
+export function sentQuote(overrides: Record<string, unknown> = {}) {
+  return quoteRow({ status: 'ENVIADA', sentAt: new Date(Date.now() - 2 * 24 * 3600 * 1000), ...overrides });
+}
+
+/** A cotacao ACEITA de outra solicitacao-irma (formato do select do aceite unico). */
+export function acceptedRow(overrides: Record<string, unknown> = {}) {
+  return { id: 150, revision: 1, supplier: { name: 'Beta Corp' }, request: { processNumber: NUMBER_277 }, ...overrides };
+}
+
+/** `beforeEach` dos testes de cotacao: os defaults do Indent + os dos delegates de cotacao. */
+export function resetQuoteMocks() {
+  resetIndentMocks();
+
+  prismaMock.indentQuote.findMany.mockResolvedValue([]);
+  prismaMock.indentQuote.findUnique.mockResolvedValue(quoteRow());
+  prismaMock.indentQuote.findFirst.mockResolvedValue(null);
+
+  tx.$queryRaw.mockResolvedValue([{ requestId: 11 }]);
+  tx.indentQuote.findUnique.mockResolvedValue(quoteRow());
+  tx.indentQuote.findFirst.mockResolvedValue(null);
+  tx.indentQuote.update.mockResolvedValue({});
+  tx.indentQuote.aggregate.mockResolvedValue({ _max: { revision: 1 } });
+  tx.indentQuote.create.mockResolvedValue({ id: 150 });
+  tx.indentQuoteItem.update.mockResolvedValue({});
+  tx.indentQuoteItem.create.mockResolvedValue({ id: 203 });
+  tx.indentRequestItem.aggregate.mockResolvedValue({ _max: { position: 1 } });
+  tx.indentRequestItem.create.mockResolvedValue({ id: 23 });
+  tx.indentRequest.update.mockResolvedValue({});
+  tx.indentProduct.findMany.mockResolvedValue([]);
+  tx.indentProduct.create.mockResolvedValue(productRow({ id: 31, origin: 'LIVRE' }));
+}
+
+export const QUOTE_ROUTES: Array<{ method: Method; path: string; body?: unknown; leitura: boolean }> = [
+  { method: 'get', path: '/quotes', leitura: true },
+  { method: 'get', path: '/quotes/100', leitura: true },
+  { method: 'post', path: '/quotes/100/mark-sent', body: { sentOn: '2026-11-13' }, leitura: false },
+  { method: 'post', path: '/quotes/100/items', body: { description: 'Item X', quantityKg: 10 }, leitura: false },
+  { method: 'post', path: '/quotes/100/response', body: {}, leitura: false },
+  { method: 'post', path: '/quotes/100/accept', leitura: false },
+  { method: 'post', path: '/quotes/100/refuse', leitura: false },
+  { method: 'post', path: '/quotes/100/revision', leitura: false },
+];
+
+export function expectNoQuoteWrites() {
+  expect(tx.auditLog.create).not.toHaveBeenCalled();
+  expect(tx.indentQuote.update).not.toHaveBeenCalled();
+  expect(tx.indentQuote.create).not.toHaveBeenCalled();
+  expect(tx.indentQuoteItem.update).not.toHaveBeenCalled();
+  expect(tx.indentQuoteItem.create).not.toHaveBeenCalled();
+  expect(tx.indentRequestItem.create).not.toHaveBeenCalled();
+  expect(tx.indentRequest.update).not.toHaveBeenCalled();
   expect(tx.indentProduct.create).not.toHaveBeenCalled();
 }

@@ -4,6 +4,7 @@ import { cleanProposedName, normalizeItemNameKey } from '../utils/commercialItem
 import { buildPaginatedResponse, HttpError } from '../utils/http';
 import { formatProcessNumber } from '../utils/indentProcessNumber';
 import { businessDaysSince } from '../utils/indentQueue';
+import { computeQuoteTotal, formatQuoteRef } from '../utils/indentQuote';
 import { todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import type {
   IndentConfirmItemsInput,
@@ -51,7 +52,9 @@ const detailInclude = {
       exceptionReason: true,
       exceptionByName: true,
       exceptionAt: true,
+      currency: true,
       supplier: { select: { id: true, name: true } },
+      items: { select: { cfrPricePerKg: true, requestItem: { select: { quantityKg: true } } } },
     },
   },
 } satisfies Prisma.IndentRequestInclude;
@@ -129,8 +132,13 @@ function serializeDetail(row: DetailRow, now: Date) {
     })),
     quotes: row.quotes.map((quote) => ({
       id: quote.id,
+      ref: formatQuoteRef(row.processNumber, quote.revision),
       status: quote.status,
       revision: quote.revision,
+      currency: quote.currency,
+      total: computeQuoteTotal(
+        quote.items.map((item) => ({ quantityKg: item.requestItem.quantityKg, cfrPricePerKg: item.cfrPricePerKg })),
+      ),
       supplier: { id: quote.supplier.id, name: quote.supplier.name },
       exception: quote.exceptionReason
         ? { reason: quote.exceptionReason, byName: quote.exceptionByName, at: quote.exceptionAt }
@@ -141,7 +149,9 @@ function serializeDetail(row: DetailRow, now: Date) {
 
 function serializeListRow(row: ListRow, now: Date) {
   const first = row.items[0];
-  const answered = row.quotes.filter((quote) => ANSWERED_QUOTE_STATUSES.includes(quote.status)).length;
+  // Cotacao REVISADA foi substituida pela revisao: nao conta no total nem nas respondidas.
+  const current = row.quotes.filter((quote) => quote.status !== 'REVISADA');
+  const answered = current.filter((quote) => ANSWERED_QUOTE_STATUSES.includes(quote.status)).length;
 
   return {
     id: row.id,
@@ -165,7 +175,7 @@ function serializeListRow(row: ListRow, now: Date) {
       count: row.items.length,
       totalKg: row.items.reduce((sum, item) => sum + toNumber(item.quantityKg), 0),
     },
-    quotes: { total: row.quotes.length, answered },
+    quotes: { total: current.length, answered },
     queueBusinessDays: queueDaysFor(row, now),
   };
 }
@@ -348,40 +358,11 @@ export class IndentRequestService {
     const processNumber = formatProcessNumber(year, seq);
 
     // Itens digitados a mao: reaproveita o produto de mesmo nameKey (qualquer origem/estado) ou cria LIVRE.
-    const freeKeys = Array.from(
-      new Set(
-        input.items
-          .filter((item) => item.productId === undefined)
-          .map((item) => normalizeItemNameKey(item.description)),
-      ),
+    const { productIdByKey: freeProductIdByKey, created: createdFree } = await IndentRequestService.resolveFreeProducts(
+      tx,
+      input.items.filter((item) => item.productId === undefined).map((item) => item.description),
+      processNumber,
     );
-    const freeProductIdByKey = new Map<string, number>();
-    const createdFree: Array<{ id: number; name: string }> = [];
-
-    if (freeKeys.length > 0) {
-      const existing = await tx.indentProduct.findMany({
-        where: { nameKey: { in: freeKeys } },
-        select: { id: true, nameKey: true },
-      });
-      for (const product of existing) {
-        freeProductIdByKey.set(product.nameKey, product.id);
-      }
-
-      for (const key of freeKeys) {
-        if (freeProductIdByKey.has(key)) {
-          continue;
-        }
-        const source = input.items.find(
-          (item) => item.productId === undefined && normalizeItemNameKey(item.description) === key,
-        );
-        const name = cleanProposedName(source?.description ?? key);
-        const created = await tx.indentProduct.create({
-          data: { name, nameKey: key, unit: 'kg', origin: 'LIVRE', sourceRequestNumber: processNumber },
-        });
-        freeProductIdByKey.set(key, created.id);
-        createdFree.push({ id: created.id, name });
-      }
-    }
 
     const created = await tx.indentRequest.create({
       data: {
@@ -442,6 +423,60 @@ export class IndentRequestService {
     );
 
     return serializeDetail(created, now);
+  }
+
+  // Produto de itens digitados a mao: reaproveita o de mesmo nameKey (qualquer origem/estado) ou cria LIVRE. Compartilhado com a
+  // criacao da solicitacao (varios itens de uma vez) e com o item livre da cotacao (PR 3, um item).
+  static async resolveFreeProducts(tx: Prisma.TransactionClient, descriptions: string[], processNumber: string) {
+    const freeKeys = Array.from(new Set(descriptions.map((description) => normalizeItemNameKey(description))));
+    const productIdByKey = new Map<string, number>();
+    const created: Array<{ id: number; name: string }> = [];
+
+    if (freeKeys.length > 0) {
+      const existing = await tx.indentProduct.findMany({
+        where: { nameKey: { in: freeKeys } },
+        select: { id: true, nameKey: true },
+      });
+      for (const product of existing) {
+        productIdByKey.set(product.nameKey, product.id);
+      }
+
+      for (const key of freeKeys) {
+        if (productIdByKey.has(key)) {
+          continue;
+        }
+        const source = descriptions.find((description) => normalizeItemNameKey(description) === key);
+        const name = cleanProposedName(source ?? key);
+        const createdProduct = await tx.indentProduct.create({
+          data: { name, nameKey: key, unit: 'kg', origin: 'LIVRE', sourceRequestNumber: processNumber },
+        });
+        productIdByKey.set(key, createdProduct.id);
+        created.push({ id: createdProduct.id, name });
+      }
+    }
+
+    return { productIdByKey, created };
+  }
+
+  // Regra de produto do item livre (Decisao 6 do PR 2) para UM item: devolve o id do produto e grava o AuditLog quando cria o produto.
+  static async resolveItemProduct(tx: Prisma.TransactionClient, description: string, processNumber: string, userId: number) {
+    const { productIdByKey, created } = await IndentRequestService.resolveFreeProducts(tx, [description], processNumber);
+
+    for (const product of created) {
+      await AuditLogService.log(
+        {
+          entityType: 'indent_product',
+          entityId: product.id,
+          action: 'indent_product.created_from_request',
+          performedById: userId,
+          afterData: { name: product.name, origin: 'LIVRE', sourceRequestNumber: processNumber },
+          metadata: { processNumber },
+        },
+        tx,
+      );
+    }
+
+    return { productId: productIdByKey.get(normalizeItemNameKey(description)) ?? null, created: created.length > 0 };
   }
 
   // Confirmar itens: so no backend neste PR (sem UI). Nada mudou = sem escrita e sem log.

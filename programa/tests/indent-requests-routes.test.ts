@@ -294,7 +294,7 @@ describe('/api/v1/indent/requests - listar, detalhar e contar', () => {
       listRow({
         id: 12,
         status: 'RESPONDIDA',
-        quotes: [{ status: 'RESPONDIDA' }, { status: 'ACEITA' }, { status: 'RASCUNHO' }],
+        quotes: [{ status: 'RESPONDIDA' }, { status: 'ACEITA' }, { status: 'RASCUNHO' }, { status: 'REVISADA' }],
       }),
     ]);
     prismaMock.indentRequest.count.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
@@ -326,6 +326,7 @@ describe('/api/v1/indent/requests - listar, detalhar e contar', () => {
       itemsSummary: { firstName: 'Zinco', count: 2, totalKg: 25500.5 },
       quotes: { total: 0, answered: 0 },
     });
+    // REVISADA foi substituida pela revisao: fora do total e das respondidas.
     expect(res.body.data[1].quotes).toEqual({ total: 3, answered: 2 });
 
     const convertidas = prismaMock.indentRequest.count.mock.calls.find(
@@ -463,7 +464,9 @@ describe('/api/v1/indent/requests - listar, detalhar e contar', () => {
             exceptionReason: 'Cliente autorizou',
             exceptionByName: 'comprador',
             exceptionAt: now,
+            currency: 'EUR',
             supplier: { id: 6, name: 'Beta Corp' },
+            items: [{ cfrPricePerKg: '0.7950', requestItem: { quantityKg: '25000' } }, { cfrPricePerKg: null, requestItem: { quantityKg: '500' } }],
           },
           {
             id: 101,
@@ -472,7 +475,20 @@ describe('/api/v1/indent/requests - listar, detalhar e contar', () => {
             exceptionReason: null,
             exceptionByName: null,
             exceptionAt: null,
+            currency: 'USD',
             supplier: { id: 5, name: 'Acme Chemicals' },
+            items: [{ cfrPricePerKg: null, requestItem: { quantityKg: '25000' } }],
+          },
+          {
+            id: 102,
+            status: 'RESPONDIDA',
+            revision: 2,
+            exceptionReason: null,
+            exceptionByName: null,
+            exceptionAt: null,
+            currency: 'USD',
+            supplier: { id: 5, name: 'Acme Chemicals' },
+            items: [{ cfrPricePerKg: '1.1', requestItem: { quantityKg: '1000' } }],
           },
         ],
       }),
@@ -491,6 +507,10 @@ describe('/api/v1/indent/requests - listar, detalhar e contar', () => {
     expect(res.body.items[1]).toMatchObject({ isFree: true, name: 'Novo' });
     expect(res.body.quotes[0].exception).toMatchObject({ reason: 'Cliente autorizou', byName: 'comprador' });
     expect(res.body.quotes[1].exception).toBeNull();
+    // PR 3: referencia (R1 = numero; R2 = "R2 - numero"), moeda e total (Decimal; null sem CFR).
+    expect(res.body.quotes[0]).toMatchObject({ ref: NUMBER_277, currency: 'EUR', total: '19875.00' });
+    expect(res.body.quotes[1]).toMatchObject({ ref: NUMBER_277, currency: 'USD', total: null });
+    expect(res.body.quotes[2]).toMatchObject({ ref: `R2 - ${NUMBER_277}`, revision: 2, total: '1100.00' });
     expect(res.body.queueBusinessDays).toEqual(expect.any(Number));
   });
 

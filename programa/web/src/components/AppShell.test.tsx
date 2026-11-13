@@ -183,7 +183,7 @@ function renderShellEm(path: string) {
 }
 
 describe('AppShell: variante Indent (sidebar por rota)', () => {
-  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, Solicitacoes + 3 links), classe app-shell--indent, sem Administracao e com o contador de novas so em Solicitacoes', async () => {
+  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, Solicitacoes + 4 links), classe app-shell--indent, sem Administracao e com o contador de novas so em Solicitacoes', async () => {
     const { container } = renderShellEm('/indent/catalogo');
     expect(container.querySelector('.app-shell.app-shell--indent > .sidebar.sidebar--indent')).not.toBeNull();
     expect(container.querySelector('.sidebar__brand-tag')?.textContent).toBe('Indent');
@@ -192,6 +192,7 @@ describe('AppShell: variante Indent (sidebar por rota)', () => {
     expect(principal?.getAttribute('aria-label')).toBe('Indent');
     expect(Array.from(principal?.querySelectorAll('a') ?? []).map((a) => (a.textContent ?? '').replace(/(Solicitações)\d+$/, '$1'))).toEqual([
       'Solicitações',
+      'Cotações',
       'Catálogo',
       'Fornecedores',
       'Clientes',

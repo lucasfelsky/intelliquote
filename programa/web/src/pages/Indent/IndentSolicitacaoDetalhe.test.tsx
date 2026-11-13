@@ -212,17 +212,20 @@ describe('IndentSolicitacaoDetalhe', () => {
     expect(vi.mocked(api.get).mock.calls.some((c) => String(c[0]).endsWith('/supplier-options'))).toBe(false);
   });
 
-  it('em cotacao: tabela "Cotacoes desta solicitacao" com excecao em destaque, status Rascunho e Total "—"', async () => {
+  it('em cotacao: tabela "Cotacoes desta solicitacao" com excecao em destaque, referencia, status e Total reais', async () => {
     mockApi(
       solicitacao({
         status: 'COTACAO',
         queueBusinessDays: 1,
         quotes: [
-          { id: 100, status: 'RASCUNHO', revision: 1, supplier: { id: 1, name: 'Shandong Haohua Chemical Co.' }, exception: null },
+          { id: 100, ref: '275/26', currency: 'USD', total: null, status: 'RASCUNHO', revision: 1, supplier: { id: 1, name: 'Shandong Haohua Chemical Co.' }, exception: null },
           {
             id: 101,
-            status: 'RASCUNHO',
-            revision: 1,
+            ref: 'R2 - 275/26',
+            currency: 'EUR',
+            total: '19875.00',
+            status: 'RESPONDIDA',
+            revision: 2,
             supplier: { id: 3, name: 'Nordic Solvents AB' },
             exception: { reason: 'Cliente autorizou', byName: 'Ana Souza', at: '2026-11-12T15:10:00.000Z' },
           },
@@ -239,23 +242,74 @@ describe('IndentSolicitacaoDetalhe', () => {
 
     const linhas = Array.from(container.querySelectorAll('tbody tr')) as HTMLElement[];
     expect(linhas).toHaveLength(2);
-    expect(linhas[0]?.className).toBe('');
-    expect(linhas[1]?.className).toBe('indent-linha-exc');
+    expect(linhas[0]?.className).toBe('indent-linha-clicavel');
+    expect(linhas[1]?.className).toBe('indent-linha-clicavel indent-linha-exc');
     expect(within(linhas[1] as HTMLElement).getByText('Exceção').closest('.indent-tag')?.className).toContain('indent-tag--exc');
     expect(within(linhas[0] as HTMLElement).queryByText('Exceção')).toBeNull();
     expect(within(linhas[0] as HTMLElement).getByText('275/26').className).toContain('indent-ref--indent');
     expect(within(linhas[0] as HTMLElement).getByText('Rascunho').className).toContain('badge--muted');
     expect(linhas[0]?.querySelectorAll('td')[3]?.textContent).toBe('—');
-    // a gaveta de cotacao e do PR 3: linha nao clicavel
-    expect((linhas[0] as HTMLElement).tabIndex).toBe(-1);
-    expect(container.querySelector('tbody .indent-linha-clicavel')).toBeNull();
+    // PR 3: referencia R2, status e total (moeda propria) vindos do backend
+    expect(within(linhas[1] as HTMLElement).getByText('R2 - 275/26').className).toContain('indent-ref--indent');
+    expect(within(linhas[1] as HTMLElement).getByText('Respondida').className).toContain('badge--warning');
+    expect(linhas[1]?.querySelectorAll('td')[3]?.textContent).toBe('€ 19.875,00');
+    // cada linha abre a gaveta da cotacao (clicavel e focavel)
+    expect((linhas[0] as HTMLElement).tabIndex).toBe(0);
+    expect(container.querySelectorAll('tbody tr.indent-linha-clicavel')).toHaveLength(2);
     expect(screen.getByText('na fila há 1 dia', { exact: false })).toBeTruthy();
   });
 
   it('cotacao unica usa "1 fornecedor"', async () => {
-    mockApi(solicitacao({ status: 'COTACAO', quotes: [{ id: 100, status: 'RASCUNHO', revision: 1, supplier: { id: 1, name: 'Acme' }, exception: null }] }));
+    mockApi(solicitacao({ status: 'COTACAO', quotes: [{ id: 100, ref: '275/26', currency: 'USD', total: null, status: 'RASCUNHO', revision: 1, supplier: { id: 1, name: 'Acme' }, exception: null }] }));
     renderPage();
     expect(await screen.findByText('1 fornecedor')).toBeTruthy();
+  });
+
+  it('clicar (ou Enter) numa cotacao abre a gaveta; fechar volta para a solicitacao', async () => {
+    const cotacaoDetalhe = {
+      id: 100,
+      ref: '275/26',
+      revision: 1,
+      status: 'RASCUNHO',
+      requestId: 11,
+      processNumber: '275/26',
+      requestStatus: 'COTACAO',
+      client: { id: 3, name: 'Cliente Alfa Ltda', city: 'Itajaí', supplierRuleMode: 'LIVRE' },
+      supplier: { id: 1, name: 'Acme', country: 'China', contactName: null, hasPartnership: true, type: 'TRADING' },
+      itemsSummary: { firstName: 'Ácido cítrico anidro', count: 1 },
+      currency: 'USD',
+      total: null,
+      validUntil: null,
+      exception: null,
+      createdAt: '2026-11-12T15:05:00.000Z',
+      destination: null,
+      incoterm: 'CFR',
+      sentAt: null,
+      respondedAt: null,
+      decidedAt: null,
+      productionLeadTimeDays: null,
+      paymentTerms: null,
+      manufacturer: null,
+      notes: null,
+      base: null,
+      acceptedQuote: null,
+      items: [],
+      allowedActions: [],
+    };
+    mockApi(solicitacao({ status: 'COTACAO', quotes: [{ id: 100, ref: '275/26', currency: 'USD', total: null, status: 'RASCUNHO', revision: 1, supplier: { id: 1, name: 'Acme' }, exception: null }] }));
+    const base = vi.mocked(api.get).getMockImplementation() as (url: string) => Promise<unknown>;
+    vi.mocked(api.get).mockImplementation(((url: string) => (url === '/api/v1/indent/quotes/100' ? Promise.resolve(cotacaoDetalhe) : base(url))) as typeof api.get);
+    const { container } = renderPage();
+    const linha = (await screen.findByText('Acme')).closest('tr') as HTMLElement;
+
+    fireEvent.keyDown(linha, { key: 'Enter' });
+
+    await screen.findByText('Referência de processo indent');
+    expect(document.querySelector('dialog.indent-gaveta')).not.toBeNull();
+    expect(document.querySelector('header.modal-header h2')?.textContent).toBe('275/26');
+    fireEvent.click(within(document.querySelector('.modal-actions') as HTMLElement).getByRole('button', { name: 'Fechar' }));
+    await waitFor(() => expect(document.querySelector('dialog.indent-gaveta')).toBeNull());
+    expect(container.querySelector('tbody tr.indent-linha-clicavel')).not.toBeNull();
   });
 
   it('itens pedidos: "CAS x", "sem CAS", "Item livre" e quantidade em kg; sem a tag "Lidos da nota" quando nao ha nota', async () => {

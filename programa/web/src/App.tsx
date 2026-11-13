@@ -25,6 +25,7 @@ import MinhaConta from '@/pages/MinhaConta';
 import Solicitacoes from '@/pages/Solicitacoes';
 import Forecast from '@/pages/Forecast';
 import IndentSolicitacoes from '@/pages/Indent/IndentSolicitacoes';
+import IndentCotacoes from '@/pages/Indent/IndentCotacoes';
 import IndentSolicitacaoDetalhe from '@/pages/Indent/IndentSolicitacaoDetalhe';
 import IndentCatalogo from '@/pages/Indent/IndentCatalogo';
 import IndentFornecedores from '@/pages/Indent/IndentFornecedores';
@@ -97,6 +98,7 @@ export default function App() {
                   <Route path="/indent" element={<Navigate to="/indent/solicitacoes" replace />} />
                   <Route path="/indent/solicitacoes" element={<IndentSolicitacoes />} />
                   <Route path="/indent/solicitacoes/:id" element={<IndentSolicitacaoDetalhe />} />
+                  <Route path="/indent/cotacoes" element={<IndentCotacoes />} />
                   <Route path="/indent/catalogo" element={<IndentCatalogo />} />
                   <Route path="/indent/fornecedores" element={<IndentFornecedores />} />
                   <Route path="/indent/clientes" element={<IndentClientes />} />

@@ -74,8 +74,13 @@ export interface IndentRequestItem {
 
 export interface IndentRequestQuote {
   id: number;
+  /** Referencia de processo: numero da solicitacao (R1) ou "R<n> - numero". */
+  ref: string;
   status: 'RASCUNHO' | 'ENVIADA' | 'RESPONDIDA' | 'ACEITA' | 'RECUSADA' | 'REVISADA';
   revision: number;
+  currency: string;
+  /** Decimal em string (2 casas); null sem CFR em nenhum item. */
+  total: string | null;
   supplier: { id: number; name: string };
   exception: { reason: string; byName: string | null; at: string | null } | null;
 }

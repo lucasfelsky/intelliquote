@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { IndentClientController } from '../controllers/IndentClientController';
 import { IndentImportController } from '../controllers/IndentImportController';
 import { IndentProductController } from '../controllers/IndentProductController';
+import { IndentQuoteController } from '../controllers/IndentQuoteController';
 import { IndentRequestController } from '../controllers/IndentRequestController';
 import { IndentSupplierController } from '../controllers/IndentSupplierController';
 import { COMEX_ROLES } from '../constants/roles';
@@ -41,6 +42,16 @@ indentRoutes.get('/requests/:id/supplier-options', requireAuth, canRead, IndentR
 indentRoutes.post('/requests/:id/items/confirm', requireAuth, canWrite, IndentRequestController.confirmItems);
 indentRoutes.post('/requests/:id/quotes', requireAuth, canWrite, IndentRequestController.generateQuotes);
 indentRoutes.get('/requests/:id', requireAuth, canRead, IndentRequestController.getById);
+
+// Cotacoes (PR 3). Leitura = equipe COMEX; as 6 acoes = admin/comprador/gestor (viewer le sem agir; comercial 403 em tudo). Sem DELETE.
+indentRoutes.get('/quotes', requireAuth, canRead, IndentQuoteController.list);
+indentRoutes.get('/quotes/:id', requireAuth, canRead, IndentQuoteController.getById);
+indentRoutes.post('/quotes/:id/mark-sent', requireAuth, canWrite, IndentQuoteController.markSent);
+indentRoutes.post('/quotes/:id/items', requireAuth, canWrite, IndentQuoteController.addFreeItem);
+indentRoutes.post('/quotes/:id/response', requireAuth, canWrite, IndentQuoteController.recordResponse);
+indentRoutes.post('/quotes/:id/accept', requireAuth, canWrite, IndentQuoteController.accept);
+indentRoutes.post('/quotes/:id/refuse', requireAuth, canWrite, IndentQuoteController.refuse);
+indentRoutes.post('/quotes/:id/revision', requireAuth, canWrite, IndentQuoteController.requestRevision);
 
 indentRoutes.get('/import/suppliers', requireAuth, canWrite, IndentImportController.supplierCandidates);
 indentRoutes.post('/import/suppliers', requireAuth, canWrite, IndentImportController.importSuppliers);
