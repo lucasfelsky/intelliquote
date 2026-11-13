@@ -331,7 +331,7 @@ function NovoProdutoModal({ onClose, onSaved }: NovoProdutoModalProps) {
             <input
               id="ip-nome"
               className="input"
-              autoFocus
+              data-autofocus
               value={nome}
               aria-invalid={erroNome ? true : undefined}
               onChange={(event) => setNome(event.target.value)}

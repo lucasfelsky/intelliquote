@@ -111,6 +111,7 @@ export default function IndentImportModal({ kind, onClose, onImported }: Props) 
           <input
             className="indent-busca__campo"
             type="search"
+            data-autofocus
             placeholder={produtos ? 'Buscar por nome' : 'Buscar por razão social'}
             value={busca}
             onChange={(event) => setBusca(event.target.value)}

@@ -117,6 +117,12 @@ describe('IndentFornecedorModal', () => {
     expect(within(dialog).getByRole('button', { name: 'Salvar' })).toBeTruthy();
   });
 
+  it('o foco inicial cai na Razao social (nao no botao Fechar)', async () => {
+    renderModal(null);
+    const dialog = await dialogo('Cadastro');
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Razão social'));
+  });
+
   it('editar: eyebrow "Editar fornecedor", titulo com o nome, campos preenchidos e a secao de produtos tambem aparece', async () => {
     const { container } = renderModal(EXISTENTE);
     const dialog = await dialogo('Shandong Haohua Chemical Co.');

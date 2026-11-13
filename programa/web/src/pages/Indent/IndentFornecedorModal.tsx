@@ -164,7 +164,7 @@ export default function IndentFornecedorModal({ supplier, onClose, onSaved }: Pr
             <input
               id="if-nome"
               className="input"
-              autoFocus
+              data-autofocus
               value={nome}
               aria-invalid={erroNome ? true : undefined}
               onChange={(event) => setNome(event.target.value)}

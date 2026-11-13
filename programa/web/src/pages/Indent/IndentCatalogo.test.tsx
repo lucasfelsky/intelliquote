@@ -200,6 +200,7 @@ describe('IndentCatalogo', () => {
     for (const rotulo of ['Nome do produto', 'CAS (opcional)', 'Unidade', 'Sigla', 'Fabricante', 'Sinônimos (separados por vírgula)']) {
       expect(within(dialog).getByLabelText(rotulo), rotulo).toBeTruthy();
     }
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Nome do produto'));
     expect((within(dialog).getByLabelText('Unidade') as HTMLInputElement).value).toBe('kg');
     expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeTruthy();
 

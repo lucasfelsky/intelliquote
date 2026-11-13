@@ -71,6 +71,7 @@ describe('IndentImportModal', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Importar produtos do IntelliQuote' });
     expect(within(dialog).getByText('Os dados são copiados. Depois de importar, o cadastro do Indent não acompanha mais o do IntelliQuote.')).toBeTruthy();
     await within(dialog).findByText('Ácido fosfórico 85%');
+    expect(document.activeElement).toBe(within(dialog).getByPlaceholderText('Buscar por nome'));
     expect(within(dialog).getByText('Phosphoric acid 85%')).toBeTruthy();
     expect(within(dialog).queryByText(/Lista de exemplo do mock-up/)).toBeNull();
     expect(within(dialog).getByRole('button', { name: 'Cancelar' })).toBeTruthy();

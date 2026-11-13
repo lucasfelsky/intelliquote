@@ -159,6 +159,7 @@ describe('IndentClientes', () => {
     expect(within(grupo).getByText('Todos, exceto bloqueados')).toBeTruthy();
     expect(within(grupo).getByText('Qualquer fornecedor, menos os da lista abaixo.')).toBeTruthy();
     expect((radios[1] as HTMLInputElement).checked).toBe(true);
+    expect(document.activeElement).toBe(radios[1]); // foco inicial no modo marcado (mock)
     expect(radios[1]?.closest('label')?.classList.contains('is-selected')).toBe(true);
     expect(radios[0]?.closest('label')?.classList.contains('is-selected')).toBe(false);
     expect(radios[1]?.closest('label')?.hasAttribute('aria-checked')).toBe(false);
@@ -278,6 +279,7 @@ describe('IndentClientes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Novo cliente' }));
     const dialog = await screen.findByRole('dialog', { name: 'Novo cliente' });
     for (const rotulo of ['Razão social', 'CNPJ', 'Cidade']) expect(within(dialog).getByLabelText(rotulo), rotulo).toBeTruthy();
+    expect(document.activeElement).toBe(within(dialog).getByLabelText('Razão social'));
 
     const cnpj = within(dialog).getByLabelText('CNPJ') as HTMLInputElement;
     fireEvent.change(cnpj, { target: { value: '11222333000182' } });

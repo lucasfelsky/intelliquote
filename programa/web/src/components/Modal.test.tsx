@@ -308,4 +308,29 @@ describe('Modal', () => {
     expect(soSubtitle.container.querySelector('.modal-eyebrow')).toBeNull();
     expect(Array.from(soSubtitle.container.querySelector('.modal-header__titles')?.children ?? []).map((el) => el.tagName)).toEqual(['H2', 'P']);
   });
+
+  it('23. data-autofocus: depois do showModal() o foco vai para o elemento marcado (o autoFocus do React age com o dialog fechado)', () => {
+    const { container } = render(
+      <Modal isOpen={true} onClose={vi.fn()} title="Titulo">
+        <input aria-label="primeiro" />
+        <input aria-label="segundo" data-autofocus />
+      </Modal>,
+    );
+    expect(getDialog(container).open).toBe(true);
+    expect(document.activeElement).toBe(container.querySelector('input[aria-label="segundo"]'));
+  });
+
+  it('24. sem data-autofocus nada e focado pelo Modal (comportamento dos demais modais do IQ inalterado)', () => {
+    const foco = vi.spyOn(HTMLElement.prototype, 'focus');
+    try {
+      render(
+        <Modal isOpen={true} onClose={vi.fn()} title="Titulo">
+          <input aria-label="primeiro" />
+        </Modal>,
+      );
+      expect(foco).not.toHaveBeenCalled();
+    } finally {
+      foco.mockRestore();
+    }
+  });
 });

@@ -299,7 +299,14 @@ function RestricaoModal({ cliente, onClose, onSaved }: RestricaoModalProps) {
         <div className="indent-opcoes" role="radiogroup" aria-label="Modo de restrição">
           {MODOS.map((opcao) => (
             <label key={opcao.valor} className={`indent-opcao${modo === opcao.valor ? ' is-selected' : ''}`}>
-              <input type="radio" name="modo" value={opcao.valor} checked={modo === opcao.valor} onChange={() => setModo(opcao.valor)} />
+              <input
+                type="radio"
+                name="modo"
+                value={opcao.valor}
+                checked={modo === opcao.valor}
+                data-autofocus={modo === opcao.valor ? '' : undefined}
+                onChange={() => setModo(opcao.valor)}
+              />
               <strong>{opcao.titulo}</strong>
               <span>{opcao.texto}</span>
             </label>
@@ -430,7 +437,7 @@ function NovoClienteModal({ onClose, onSaved }: NovoClienteModalProps) {
             <input
               id="nc-nome"
               className="input"
-              autoFocus
+              data-autofocus
               value={nome}
               aria-invalid={erroNome ? true : undefined}
               onChange={(event) => setNome(event.target.value)}

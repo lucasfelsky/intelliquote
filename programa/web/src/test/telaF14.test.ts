@@ -126,8 +126,32 @@ describe('F14: regiao `tela F14` (IQ Indent)', () => {
     expect(regra?.body).toMatch(/max-height:\s*190px/);
     expect(regra?.body).toMatch(/overflow:\s*auto/);
     expect(regra?.body).toMatch(/border:\s*1px solid var\(--rf-border\)/);
-    expect(regra?.body).toMatch(/border-radius:\s*var\(--rf-radius-control\)/);
+    expect(regra?.body).toMatch(/border-radius:\s*var\(--rf-radius-button\)/); // 12px, como as caixas internas do mock
     expect(regra?.body).toMatch(/padding:\s*4px/);
+  });
+
+  it('modais: cabecalho e faixa de acoes ficam fixos (sticky) e so o corpo rola; titulo 18px; dica de campo 11px/400/soft (mais forte que .field > span)', () => {
+    const corpo = (sel: string) => topo.find((r) => listaDeSeletores(r.prelude).includes(sel))?.body ?? '';
+    expect(corpo(`${PREFIXO} .modal-content`)).toMatch(/scroll-padding:\s*108px 0/);
+    expect(corpo(`${PREFIXO} .modal-header`)).toMatch(/position:\s*sticky/);
+    expect(corpo(`${PREFIXO} .modal-header`)).toMatch(/top:\s*0/);
+    expect(corpo(`${PREFIXO} .modal-header`)).toContain('background: var(--rf-surface)');
+    expect(corpo(`${PREFIXO} .indent-form > .modal-actions`)).toMatch(/position:\s*sticky/);
+    expect(corpo(`${PREFIXO} .indent-form > .modal-actions`)).toMatch(/bottom:\s*0/);
+    expect(corpo(`${PREFIXO} .modal-header h2`)).toMatch(/font-size:\s*18px/);
+    const dica = corpo(`${PREFIXO} .field > .field-hint`);
+    expect(dica).toMatch(/font-size:\s*11px/);
+    expect(dica).toMatch(/font-weight:\s*400/);
+    expect(dica).toContain('color: var(--rf-ink-soft)');
+  });
+
+  it('tabela: colunas numericas em mono/nowrap e densidade do mock (10px 14px); cabecalho da pagina com subtitulo 14px/62ch', () => {
+    const corpo = (sel: string) => topo.find((r) => listaDeSeletores(r.prelude).includes(sel))?.body ?? '';
+    expect(corpo(`${PREFIXO} .indent-num`)).toContain('font-family: var(--rf-font-mono)');
+    expect(corpo(`${PREFIXO} .indent-num`)).toMatch(/white-space:\s*nowrap/);
+    expect(corpo(`${PREFIXO} .indent-tabela td`)).toMatch(/padding:\s*10px 14px/);
+    expect(corpo(`${PREFIXO} > .page-header .page-subtitle`)).toMatch(/font-size:\s*14px/);
+    expect(corpo(`${PREFIXO} > .page-header .page-subtitle`)).toMatch(/max-width:\s*62ch/);
   });
 
   it('o eyebrow da pagina usa o ambar 700 e o do modal (.modal-eyebrow) existe so sob a raiz', () => {

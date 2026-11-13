@@ -26,6 +26,9 @@ export function Modal({ isOpen, onClose, title, subtitle, eyebrow, children, siz
 
     if (isOpen && !dialog.open) {
       dialog.showModal();
+      // O autoFocus do React age com o <dialog> ainda fechado e o showModal() depois foca o 1o focavel (o Fechar): quem quer o foco
+      // inicial num campo marca o elemento com data-autofocus. Sem o atributo nada muda.
+      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     } else if (!isOpen && dialog.open) {
       dialog.close();
     }

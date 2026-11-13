@@ -1158,8 +1158,14 @@ h3 {
 }
 .sidebar__brand-text .sidebar__brand-name {
   top: 0;
-  line-height: 1.15;
+  color: var(--rf-sidebar-ink);
+  line-height: 1.2;
 }
+.sidebar--indent:not(.sidebar--colapsada) .sidebar__brand {
+  height: auto;
+  padding: 0 6px;
+}
+.sidebar--indent .sidebar__group-title { line-height: 1.3; }
 .sidebar__brand-tag {
   align-self: flex-start;
   display: inline-block;
@@ -1169,6 +1175,7 @@ h3 {
   background: var(--rf-indent-acc);
   color: var(--rf-on-primary);
   font: 700 10.5px var(--rf-font-mono);
+  line-height: 14px;
   letter-spacing: 1.4px;
   text-transform: uppercase;
 }
@@ -13059,13 +13066,13 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   display: flex;
   flex: 1 1 240px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   height: 44px;
-  padding: 0 12px;
-  border: 1.5px solid var(--rf-input-border);
-  border-radius: var(--rf-radius-control);
-  background: var(--rf-input-bg);
+  padding: 0 8px 0 16px;
+  border: 1.5px solid var(--rf-border);
+  border-radius: var(--rf-radius-alert);
+  background: var(--rf-surface-alt);
   color: var(--rf-ink-soft);
   box-sizing: border-box;
   transition: border-color var(--rf-dur-base), box-shadow var(--rf-dur-base);
@@ -13091,15 +13098,22 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   font-weight: 500;
 }
 .indent-page .indent-busca__campo::placeholder { color: var(--rf-ink-soft); }
-.indent-page .indent-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.indent-page .indent-chips .chip { gap: 6px; }
+.indent-page .indent-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.indent-page .indent-chips .chip { gap: 8px; min-height: 36px; }
+.indent-page .indent-chips .chip--active {
+  border: 1px solid var(--rf-action);
+  font-weight: 600;
+}
 .indent-page .indent-chip-conta {
-  padding: 1px 7px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 2px 7px;
   border-radius: var(--rf-radius-pill);
   background: var(--rf-count-chip);
   font-family: var(--rf-font-mono);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .indent-page .chip--active .indent-chip-conta { background: var(--rf-on-action-tinta); }
 
@@ -13112,8 +13126,16 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 }
 .indent-page .indent-tabela { min-width: 760px; }
 .indent-page .indent-tabela th,
-.indent-page .indent-tabela td { vertical-align: middle; }
-.indent-page .indent-num { text-align: right; font-variant-numeric: tabular-nums; }
+.indent-page .indent-tabela td {
+  padding: 10px 14px;
+  vertical-align: middle;
+}
+.indent-page .indent-num {
+  text-align: right;
+  font-family: var(--rf-font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .indent-page .indent-linha-clicavel { cursor: pointer; }
 .indent-page .indent-linha-clicavel:focus-visible {
   outline: 2px solid var(--rf-action);
@@ -13131,7 +13153,8 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 }
 .indent-page .indent-acao { text-align: right; }
 .indent-page .table .indent-promover {
-  border: 1.5px solid var(--rf-input-border);
+  border: 0;
+  box-shadow: inset 0 0 0 1.5px var(--rf-action);
   background: var(--rf-surface);
   color: var(--rf-action);
 }
@@ -13200,7 +13223,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   gap: 2px 12px;
   padding: 12px 14px;
   border: 1.5px solid var(--rf-border);
-  border-radius: var(--rf-radius-control);
+  border-radius: var(--rf-radius-button);
   cursor: pointer;
 }
 .indent-page .indent-opcao.is-selected {
@@ -13212,7 +13235,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   outline-offset: 2px;
 }
 .indent-page .indent-opcao input {
-  margin: 3px 0 0;
+  margin-top: 3px;
   accent-color: var(--rf-action);
 }
 .indent-page .indent-opcao strong { font-size: 14px; }
@@ -13232,14 +13255,14 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   max-height: 320px;
   overflow: auto;
   border: 1px solid var(--rf-border);
-  border-radius: var(--rf-radius-control);
+  border-radius: var(--rf-radius-button);
   padding: 4px;
 }
 .indent-page .indent-produtos-caixa {
   max-height: 190px;
   overflow: auto;
   border: 1px solid var(--rf-border);
-  border-radius: var(--rf-radius-control);
+  border-radius: var(--rf-radius-button);
   padding: 4px;
 }
 .indent-page .indent-check {
@@ -13281,7 +13304,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   gap: 16px;
   padding: 14px 16px;
   border: 1.5px solid var(--rf-border);
-  border-radius: var(--rf-radius-control);
+  border-radius: var(--rf-radius-button);
 }
 .indent-page .indent-parceria > div {
   display: flex;
@@ -13334,6 +13357,77 @@ html:has(.manual-page) { scroll-behavior: smooth; }
 .indent-page .indent-switch input:focus-visible + i {
   outline: 2px solid var(--rf-action);
   outline-offset: 2px;
+}
+
+/* ======================= Cabecalho da pagina (D6) ======================= */
+.indent-page > .page-header .page-subtitle {
+  font-size: 14px;
+  line-height: normal;
+  max-width: 62ch;
+}
+.indent-page .page-header .primary-button,
+.indent-page .page-header .ghost-button { padding: 0 18px; }
+.indent-page .page-header .ghost-button {
+  border: 0;
+  box-shadow: inset 0 0 0 1.5px var(--rf-action);
+}
+
+/* ======================= Modais: cabecalho e rodape fixos, so o corpo rola (D1) ======================= */
+/* O scroll continua em .modal-content (max-height 90vh); o cabecalho cola no topo e a faixa de acoes cola embaixo. O corpo rola entre os dois e o raio do
+   modal segue cortando o conteudo (overflow do .modal-content). */
+/* scroll-padding: o que entra em foco ou rola para a vista nao fica escondido atras do cabecalho/rodape fixos. */
+.indent-page .modal-content { scroll-padding: 108px 0; }
+.indent-page .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  gap: 12px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--rf-divider);
+  background: var(--rf-surface);
+}
+.indent-page .modal-header h2 {
+  font-size: 18px;
+  letter-spacing: normal;
+  line-height: normal;
+}
+.indent-page .modal-header > h2 { padding-top: 0; }
+.indent-page .modal-body { padding: 20px 24px; }
+.indent-page .indent-form > .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  gap: 10px;
+}
+.indent-page .modal-actions .ghost-button { padding: 0 18px; }
+
+/* ======================= Modais: acabamento (D8, D9) ======================= */
+.indent-page .btn-close {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+}
+.indent-page .btn-close:hover { background: var(--rf-surface-alt); }
+.indent-page .indent-form select.input {
+  padding-right: 14px;
+  background-image: none;
+  appearance: auto;
+}
+.indent-page .indent-form textarea.input {
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+.indent-page .indent-form .alert {
+  padding: 14px 16px;
+  font-weight: 500;
+  line-height: normal;
+}
+.indent-page .indent-form .alert::before { display: none; }
+.indent-page .field > .field-hint {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: normal;
+  color: var(--rf-ink-soft);
 }
 /* <<< tela F14 <<< */
 
