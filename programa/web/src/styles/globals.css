@@ -14033,6 +14033,8 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   overflow-wrap: anywhere;
 }
 .indent-page .indent-seta { color: var(--rf-ink-soft); }
+/* Mapeamento no celular: a tabela guarda uma largura minima e rola dentro da caixa (como o .tablewrap do mock), em vez de quebrar palavra a palavra. */
+.indent-page .indent-painel .indent-mapa { min-width: 520px; }
 .indent-page .indent-painel__cabeca h2:focus-visible {
   outline: 2px solid var(--rf-action);
   outline-offset: 4px;

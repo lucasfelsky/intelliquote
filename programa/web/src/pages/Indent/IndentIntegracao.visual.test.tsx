@@ -152,6 +152,8 @@ describe('Integracao Pipedrive: marcacao x regiao `tela F14` (PR 5a.4)', () => {
     expect(opcao).toContain('font-weight: 600');
     expect(corpo('.indent-page .indent-orgopt input')).toContain('accent-color: var(--rf-primary-700)');
     expect(corpo('.indent-page .indent-seta')).toContain('color: var(--rf-ink-soft)');
+    // D89: no celular o mapeamento guarda largura minima e rola dentro da caixa (sem at-rule), em vez de quebrar palavra a palavra
+    expect(corpo('.indent-page .indent-painel .indent-mapa')).toMatch(/min-width: (?:[4-9]\d\d|\d{4,})px/);
   });
 
   it('acabamento (contrato de CSS): botoes secundarios so com medidas, sem borda/sombra/fundo proprios; ponto de cada estado so com token', () => {

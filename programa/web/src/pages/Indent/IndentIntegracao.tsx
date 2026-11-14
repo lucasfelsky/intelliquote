@@ -5,6 +5,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { Icon } from '@/components/icons';
 import { ForecastToast, useToastForecast } from '@/pages/Forecast/ForecastToast';
 import {
+  CHAVES_APOS_ACAO,
   getIndentPipedriveOptions,
   getIndentPipedriveStatus,
   saveIndentPipedriveConfig,
@@ -27,6 +28,10 @@ const PRAZOS = [1, 2, 3];
 const CHAVE_STATUS = ['indent', 'pipedrive', 'status'] as const;
 
 const SEM_CONFIGURACAO = 'Integração não configurada';
+
+// Estados em que as opcoes ao vivo nem sao pedidas (a propria linha da conexao ja explica) e, com rate_limited, em que uma falha delas so mostra o estado.
+const ESTADOS_QUE_EXPLICAM: ReadonlyArray<IndentPipedriveStatus['connection']> = ['not_configured', 'auth_failed'];
+const ESTADOS_SEM_ALERTA_DE_OPCOES: ReadonlyArray<IndentPipedriveStatus['connection']> = [...ESTADOS_QUE_EXPLICAM, 'rate_limited'];
 
 type TomConexao = 'ok' | 'aviso' | 'erro' | 'neutro';
 
@@ -100,7 +105,8 @@ export default function IndentIntegracao() {
   const opcoes = useQuery({
     queryKey: ['indent', 'pipedrive', 'options', funilRascunho],
     queryFn: () => getIndentPipedriveOptions(funilRascunho ?? undefined),
-    enabled: isAdmin,
+    // Sem o estado carregado, ou com o estado ja explicando a falha (nao configurado / token recusado), a chamada ao vivo nem sai.
+    enabled: isAdmin && status !== undefined && !ESTADOS_QUE_EXPLICAM.includes(status.connection),
     retry: false,
     // Trocar o funil busca as colunas do novo: os selects nao piscam vazios enquanto isso.
     placeholderData: keepPreviousData,
@@ -114,9 +120,10 @@ export default function IndentIntegracao() {
 
   const salvar = useMutation({
     mutationFn: (input: IndentPipedriveConfigInput) => saveIndentPipedriveConfig(input),
-    onSuccess: (novoEstado) => {
+    onSuccess: (novoEstado, enviado) => {
       qc.setQueryData(CHAVE_STATUS, novoEstado);
-      setFunilRascunho(null);
+      // Salvar so o prazo (usa o funil/coluna ja gravados) nao descarta um funil novo ainda sem coluna.
+      if (enviado.slaBusinessDays === undefined) setFunilRascunho(null);
       setErroConfig(null);
       void qc.invalidateQueries({ queryKey: ['indent', 'pipedrive', 'options'] });
       mostrar('salvo', 'Configuração da integração salva', '');
@@ -192,7 +199,7 @@ export default function IndentIntegracao() {
       }
     } finally {
       setSincronizando(false);
-      void qc.invalidateQueries({ queryKey: ['indent'] });
+      for (const queryKey of CHAVES_APOS_ACAO) void qc.invalidateQueries({ queryKey });
     }
   }
 
@@ -312,7 +319,7 @@ export default function IndentIntegracao() {
               <h2 id="ii-vira-solicitacao">O que vira solicitação</h2>
             </div>
 
-            {isAdmin && opcoes.isError && (
+            {isAdmin && opcoes.isError && status !== undefined && !ESTADOS_SEM_ALERTA_DE_OPCOES.includes(status.connection) && (
               <div role="alert" className="alert alert--error">
                 Não foi possível carregar as opções do Pipedrive: {mensagemDoErro(opcoes.error)}
               </div>

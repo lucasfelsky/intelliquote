@@ -226,6 +226,7 @@ describe('IndentVincularModal: avisos de CNPJ (nao bloqueiam)', () => {
     fireEvent.click(await screen.findByRole('radio', { name: /Sem CNPJ/ }));
     const info = await screen.findByText(/será preenchido no cadastro dele/);
     expect(info.textContent).toContain('11.222.333/0001-81');
+    expect(info.textContent).toContain('se ainda não estiver em outro cadastro');
     expect(info.className).toContain('alert--info');
   });
 

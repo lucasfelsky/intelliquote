@@ -69,10 +69,8 @@ export default function IndentVincularModal({ pendenciaId, titulo, candidato, on
     // aria-disabled (e nao disabled) enquanto envia: o foco fica no botao.
     if (vincular.isPending) return;
     setErro(null);
-    if (!escolhido) {
-      setErro('Escolha o cliente que deve receber esta organização.');
-      return;
-    }
+    // O botao fica desabilitado sem escolha; a guarda so protege o tipo.
+    if (!escolhido) return;
     vincular.mutate(escolhido);
   }
 
@@ -160,7 +158,7 @@ export default function IndentVincularModal({ pendenciaId, titulo, candidato, on
         )}
         {completaCnpj && (
           <div role="status" className="alert alert--info">
-            Este cliente não tem CNPJ: ao vincular, o CNPJ da organização ({formatCnpj(cnpjDaOrg)}) será preenchido no cadastro dele.
+            Este cliente não tem CNPJ: ao vincular, o CNPJ da organização ({formatCnpj(cnpjDaOrg)}) será preenchido no cadastro dele, se ainda não estiver em outro cadastro.
           </div>
         )}
 

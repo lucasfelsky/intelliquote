@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import type { DadosToast } from '@/pages/Forecast/ForecastToast';
 import {
+  CHAVES_APOS_ACAO,
   createIndentPendingOrgClient,
   listIndentPendingOrgs,
   type IndentPendingOrg,
@@ -69,7 +70,7 @@ export default function IndentIntegracaoFila({ canWrite, mostrar }: IndentIntegr
     setNovoCliente(null);
     setErro(null);
     setDevolverFoco((n) => n + 1);
-    void qc.invalidateQueries({ queryKey: ['indent'] });
+    for (const queryKey of CHAVES_APOS_ACAO) void qc.invalidateQueries({ queryKey });
   }
 
   function aoCriar(resultado: IndentPendingOrgCreateClientResult) {
@@ -93,7 +94,11 @@ export default function IndentIntegracaoFila({ canWrite, mostrar }: IndentIntegr
     mutationFn: ({ pendencia, candidato }: { pendencia: IndentPendingOrg; candidato: IndentPendingOrgCandidate }) =>
       createIndentPendingOrgClient(pendencia.id, { orgId: candidato.orgId }),
     onSuccess: (resultado) => aoCriar(resultado),
-    onError: (err) => setErro(mensagemDoErro(err)),
+    onError: (err) => {
+      setErro(mensagemDoErro(err));
+      // Ex.: 409 "Pendência já resolvida." (outra pessoa resolveu): a fila e relida.
+      void qc.invalidateQueries({ queryKey: ['indent', 'pending-orgs'] });
+    },
     onSettled: () => setEmCurso(null),
   });
 

@@ -6,6 +6,14 @@ import { api } from '@/api/client';
 
 const BASE = '/api/v1/indent';
 
+// Chaves do que muda depois de sincronizar ou vincular. NUNCA ['indent'] inteiro: as opcoes (['indent','pipedrive','options']) sao chamada AO VIVO ao Pipedrive.
+export const CHAVES_APOS_ACAO = [
+  ['indent', 'pipedrive', 'status'],
+  ['indent', 'pending-orgs'],
+  ['indent', 'requests'],
+  ['indent', 'clients'],
+] as const;
+
 export type IndentPipedriveConnection =
   | 'not_configured'
   | 'ok'
