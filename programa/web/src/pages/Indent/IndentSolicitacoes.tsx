@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthProvider';
 import { Icon } from '@/components/icons';
+import { ForecastToast, useToastForecast } from '@/pages/Forecast/ForecastToast';
 import { listIndentRequests, type IndentRequestFilter, type IndentRequestRow } from '@/services/indentRequests';
 import {
   filaRotulo,
@@ -13,9 +14,11 @@ import {
   statusRotulo,
 } from './indentFila';
 import IndentNovaSolicitacaoModal from './IndentNovaSolicitacaoModal';
+import { useSincronizarPipedrive } from './IndentSolicitacoesPipedrive';
 
-// IQ Indent: Solicitacoes (mock viewSolicitacoes). Neste PR so entram as lancadas aqui (IQ_INDENT); o Pipedrive e a fila de vinculo sao do PR 5.
-// "Na fila ha", KPIs e contagens dos chips vem do BACKEND (dias uteis em Sao Paulo).
+// IQ Indent: Solicitacoes (mock viewSolicitacoes): as lancadas aqui (IQ_INDENT) e as do Pipedrive (botao "Pipedrive · funil · ha N min", alerta com
+// "Abrir fila de vinculo" e "Referencia pendente" quando o titulo do negocio nao tem numero).
+// "Na fila ha", KPIs e contagens dos chips vem do BACKEND (dias uteis em Sao Paulo; o prazo interno 'slaBusinessDays' tambem).
 
 const ESCRITA = ['admin', 'comprador', 'gestor'];
 const PAGE_SIZE = 20;
@@ -44,6 +47,9 @@ export default function IndentSolicitacoes() {
   const [filtro, setFiltro] = useState<IndentRequestFilter>('todas');
   const [page, setPage] = useState(1);
   const [novaAberta, setNovaAberta] = useState(false);
+  const { toast, mostrar, fechar } = useToastForecast();
+  // Viewer le a lista mas nao sincroniza: sem botao (e sem consulta do estado).
+  const pipedrive = useSincronizarPipedrive(canWrite, mostrar);
 
   // A busca vai ao servidor; o atraso evita uma chamada por tecla.
   useEffect(() => {
@@ -65,6 +71,7 @@ export default function IndentSolicitacoes() {
   const kpis = solicitacoes.data?.kpis;
   const totalPaginas = solicitacoes.data?.pagination.totalPages ?? 1;
   const pendentes = contas?.pendente ?? 0;
+  const prazoInterno = solicitacoes.data?.slaBusinessDays ?? 2;
 
   const cartoes: ReadonlyArray<{ rotulo: string; valor: number; sub: string }> = [
     { rotulo: 'Novas', valor: kpis?.novas ?? 0, sub: 'Aguardando escolha de fornecedores' },
@@ -96,6 +103,17 @@ export default function IndentSolicitacoes() {
         </div>
         {canWrite && (
           <div className="page-header__actions">
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={!pipedrive.configurado}
+              aria-disabled={pipedrive.sincronizando ? true : undefined}
+              aria-busy={pipedrive.sincronizando ? true : undefined}
+              onClick={() => void pipedrive.sincronizar()}
+            >
+              <Icon name="refresh" size={16} />
+              {pipedrive.sincronizando ? 'Sincronizando…' : pipedrive.rotulo}
+            </button>
             <button type="button" className="primary-button" onClick={() => setNovaAberta(true)}>
               <Icon name="plus" size={18} strokeWidth={2.4} />
               Nova solicitação
@@ -104,12 +122,24 @@ export default function IndentSolicitacoes() {
         )}
       </header>
 
+      {pipedrive.aviso && (
+        <div
+          role={pipedrive.aviso.tom === 'info' ? 'status' : 'alert'}
+          className={`alert alert--${pipedrive.aviso.tom === 'erro' ? 'error' : pipedrive.aviso.tom === 'aviso' ? 'warning' : 'info'}`}
+        >
+          {pipedrive.aviso.texto}
+        </div>
+      )}
+
       {pendentes > 0 && (
         <div className="alert alert--warning indent-alerta">
           <Icon name="lock" size={18} />
-          <span>
+          <span className="indent-alerta__texto">
             {pendentes} {pendentes === 1 ? 'solicitação aguarda' : 'solicitações aguardam'} vínculo de cliente antes de cotar.
           </span>
+          <button type="button" className="ghost-button" onClick={() => navigate('/indent/integracao')}>
+            Abrir fila de vínculo
+          </button>
         </div>
       )}
 
@@ -179,7 +209,7 @@ export default function IndentSolicitacoes() {
             </thead>
             <tbody>
               {linhas.map((linha) => {
-                const fila = filaRotulo(linha.queueBusinessDays);
+                const fila = filaRotulo(linha.queueBusinessDays, prazoInterno);
                 const status = statusRotulo(linha.status, linha.clientPending);
                 const regra = linha.client ? rotuloRegra(linha.client.supplierRuleMode) : null;
                 return (
@@ -192,7 +222,11 @@ export default function IndentSolicitacoes() {
                   >
                     <td>
                       <div className="indent-cell-main">
-                        <span className="indent-ref">{linha.processNumber}</span>
+                        {linha.processNumber === null ? (
+                          <span className="badge badge--warning">Referência pendente</span>
+                        ) : (
+                          <span className="indent-ref">{linha.processNumber}</span>
+                        )}
                         <span className="indent-cell-sub">{formatarDataHora(linha.createdAt)}</span>
                       </div>
                     </td>
@@ -219,8 +253,16 @@ export default function IndentSolicitacoes() {
                     </td>
                     <td>
                       <div className="indent-cell-main">
-                        <span>{linha.itemsSummary.firstName ?? '—'}</span>
-                        <span className="indent-cell-sub">{resumoDosItens(linha)}</span>
+                        {linha.itemsSummary.count === 0 ? (
+                          <span className="indent-cell-sub">
+                            <span className="indent-tag indent-tag--manual">Itens a digitar</span>
+                          </span>
+                        ) : (
+                          <>
+                            <span>{linha.itemsSummary.firstName ?? '—'}</span>
+                            <span className="indent-cell-sub">{resumoDosItens(linha)}</span>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -280,6 +322,8 @@ export default function IndentSolicitacoes() {
       )}
 
       {novaAberta && <IndentNovaSolicitacaoModal onClose={() => setNovaAberta(false)} />}
+
+      {toast && <ForecastToast key={toast.id} dados={toast} onFechar={fechar} />}
     </div>
   );
 }

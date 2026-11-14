@@ -30,6 +30,7 @@ function linha(id: number, extra: Linha = {}): Linha {
   return {
     id,
     processNumber: `${id}/26`,
+    referencePending: false,
     createdAt: '2026-11-12T15:05:00.000Z',
     origin: 'IQ_INDENT',
     pipedriveDealId: null,
@@ -70,6 +71,25 @@ const CONVERTIDA = linha(262, { status: 'CONVERTIDA', queueBusinessDays: null, q
 const TODAS = [NOVA, COTACAO, PENDENTE, CONVERTIDA];
 const COUNTS = { todas: 4, pipedrive: 2, iq: 2, nova: 1, pendente: 1 };
 const KPIS = { novas: 1, emCotacao: 1, respondidas: 0, convertidasNoMes: 1 };
+const STATUS = {
+  configured: true,
+  connection: 'ok',
+  mode: 'polling',
+  webhook: 'not_configured',
+  connectionCheckedAt: null,
+  lastSyncAt: null,
+  lastSyncNewDeals: 0,
+  lastSyncErrors: 0,
+  pipelineId: 900001,
+  pipelineName: 'Funil Exemplo',
+  stageId: 900011,
+  stageName: 'Coluna Exemplo A',
+  slaBusinessDays: 2,
+  pendingCount: 1,
+  dailyTokensRemaining: null,
+  dailyTokensLimit: null,
+  intervalMinutes: 10,
+};
 
 function mockApi(overrides: { rows?: Linha[]; totalPages?: number } = {}) {
   vi.mocked(api.get).mockImplementation((async (url: string, query?: { filter?: string; q?: string }) => {
@@ -87,8 +107,10 @@ function mockApi(overrides: { rows?: Linha[]; totalPages?: number } = {}) {
         pagination: { page: 1, pageSize: 20, totalItems: rows.length, totalPages: overrides.totalPages ?? 1 },
         counts: COUNTS,
         kpis: KPIS,
+        slaBusinessDays: 2,
       };
     }
+    if (url === '/api/v1/indent/pipedrive/status') return STATUS;
     return [];
   }) as typeof api.get);
 }
@@ -114,7 +136,7 @@ describe('IndentSolicitacoes', () => {
     mockRole = 'comprador';
   });
 
-  it('textos do mock: eyebrow, titulo, subtitulo, acao, alerta de pendentes e os 4 KPIs (sem Pipedrive nem fila de vinculo)', async () => {
+  it('textos do mock: eyebrow, titulo, subtitulo, acoes (botao Pipedrive e Nova solicitacao), alerta de pendentes e os 4 KPIs', async () => {
     mockApi();
     const { container } = renderPage();
     await screen.findByText('275/26');
@@ -130,9 +152,10 @@ describe('IndentSolicitacoes', () => {
     expect(aviso?.firstElementChild?.tagName.toLowerCase()).toBe('svg');
     expect(aviso?.firstElementChild?.getAttribute('width')).toBe('18');
 
-    expect(screen.queryByText(/Funil de Vendas Indent · há/)).toBeNull();
-    expect(screen.queryByRole('button', { name: /Funil de Vendas Indent/ })).toBeNull();
-    expect(screen.queryByText('Abrir fila de vínculo')).toBeNull();
+    // D10 e D12 do PR 2: o botao Pipedrive (antes de "Nova solicitacao") e "Abrir fila de vinculo" no alerta (detalhes no teste do Pipedrive)
+    const acoes = Array.from(container.querySelectorAll('.page-header__actions > button')).map((el) => el.textContent);
+    expect(acoes).toEqual(['Pipedrive · Funil Exemplo · sem sincronização', 'Nova solicitação']);
+    expect(aviso?.querySelector('button')?.textContent).toBe('Abrir fila de vínculo');
 
     const kpis = Array.from(container.querySelectorAll('.indent-kpis > .indent-kpi')).map((el) => [
       el.querySelector('.eyebrow')?.textContent,
@@ -154,6 +177,7 @@ describe('IndentSolicitacoes', () => {
       pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 1 },
       counts: { ...COUNTS, pendente: 2 },
       kpis: KPIS,
+      slaBusinessDays: 2,
     })) as typeof api.get);
     renderPage();
     expect(await screen.findByText('2 solicitações aguardam vínculo de cliente antes de cotar.')).toBeTruthy();

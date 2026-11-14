@@ -415,6 +415,7 @@ describe('F3b: alerta que ja traz o proprio icone', () => {
       'pages/CotacaoTabs/ItensTab.tsx': 1,
       'pages/Indent/IndentCotacaoGaveta.tsx': 3, // PR 3: avisos da gaveta da cotacao (cadeado/info do mock)
       'pages/Indent/IndentSolicitacaoDetalhe.tsx': 1,
+      'pages/Indent/IndentSolicitacaoDetalhePipedrive.tsx': 5, // PR 5a.5: aviso de cliente pendente, referencia pendente, referenceAlert, revisao R<n> e nota alterada (todos com .indent-alerta)
       'pages/Indent/IndentSolicitacoes.tsx': 1,
     });
   });

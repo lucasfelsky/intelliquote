@@ -13750,6 +13750,28 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   line-height: normal;
 }
 .indent-page .indent-alerta > svg { flex: none; }
+/* Pipedrive nas Solicitacoes (PR 5a.5): o texto do alerta ocupa a linha e empurra o botao secundario "Abrir fila de vinculo" para a direita
+   (mock: <span style="flex:1">). Secundario padrao do sistema (.ghost-button, sem --sm): so medidas, o contorno vem dos tokens do sistema. */
+.indent-page .indent-alerta__texto {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.indent-page .indent-alerta .ghost-button {
+  min-height: 36px;
+  font-size: 13px;
+}
+/* "Referencia pendente" do detalhe: campo e botao na mesma linha, quebrando em telas estreitas (sem media query). */
+.indent-page .indent-referencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.indent-page .indent-referencia .field {
+  flex: 1 1 200px;
+  max-width: 280px;
+  margin: 0;
+}
 /* ======================= Cotacoes (PR 3): agrupar por, grupos recolhiveis e gaveta ======================= */
 /* Metricas do mock (.seg, .group, .drawer, .processbox, .priceinp, .totalrow). Cada token do mock virou o --rf-* mais proximo que ja existe
    (navy -> --rf-sidebar-bg, shadow-sm -> --rf-shadow-rest, shadow-xl -> --rf-shadow-modal, radius-md -> --rf-radius-card). A gaveta e um <Modal>
