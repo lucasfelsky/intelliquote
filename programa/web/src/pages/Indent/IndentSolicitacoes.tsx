@@ -107,6 +107,7 @@ export default function IndentSolicitacoes() {
               type="button"
               className="ghost-button"
               disabled={!pipedrive.configurado}
+              title={pipedrive.configurado ? undefined : 'Integração não configurada'}
               aria-disabled={pipedrive.sincronizando ? true : undefined}
               aria-busy={pipedrive.sincronizando ? true : undefined}
               onClick={() => void pipedrive.sincronizar()}

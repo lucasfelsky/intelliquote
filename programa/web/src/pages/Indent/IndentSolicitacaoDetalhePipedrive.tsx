@@ -81,7 +81,7 @@ export function PainelClientePendente({ pendencia, dealType }: { pendencia: Pend
         <h2>Cliente</h2>
         <span className="indent-tag indent-tag--manual">Cliente pendente</span>
       </div>
-      {candidatos.map((candidato) => (
+      {candidatos.map((candidato, indice) => (
         <dl key={candidato.orgId} className="indent-dl">
           {candidatos.length > 1 && (
             <>
@@ -95,14 +95,14 @@ export function PainelClientePendente({ pendencia, dealType }: { pendencia: Pend
           <dd>{candidato.city ?? '—'}</dd>
           <dt>Pipedrive</dt>
           <dd>Org #{candidato.orgId}</dd>
+          {dealType && indice === candidatos.length - 1 && (
+            <>
+              <dt>Tipo de negócio</dt>
+              <dd>{dealType}</dd>
+            </>
+          )}
         </dl>
       ))}
-      {dealType && (
-        <dl className="indent-dl">
-          <dt>Tipo de negócio</dt>
-          <dd>{dealType}</dd>
-        </dl>
-      )}
     </section>
   );
 }
@@ -217,7 +217,7 @@ export function ReferenciaPendente({ solicitacao, canWrite, onSalva }: Referenci
             <input
               id="ref-pendente"
               className="input indent-input-mono"
-              inputMode="numeric"
+              inputMode="text"
               autoComplete="off"
               placeholder="274/26"
               value={valor}

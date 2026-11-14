@@ -18,7 +18,7 @@ import {
   rotuloRegra,
   statusRotulo,
 } from './indentFila';
-import IndentNotaItensModal from './IndentNotaItensModal';
+import IndentNotaItensModal, { type EdicoesDoModal } from './IndentNotaItensModal';
 import {
   AlertasDaSincronizacao,
   AvisoClientePendente,
@@ -138,7 +138,7 @@ export default function IndentSolicitacaoDetalhe() {
   // Gaveta da cotacao aberta a partir da linha de "Cotacoes desta solicitacao" (so por estado: sem link proprio nesta tela).
   const [cotacaoAberta, setCotacaoAberta] = useState<number | null>(null);
   // Modal "Revisar itens da nota": `chave` remonta o modal com a lista nova quando os itens mudaram no servidor com ele aberto.
-  const [notaItens, setNotaItens] = useState<{ chave: number; aviso: string | null } | null>(null);
+  const [notaItens, setNotaItens] = useState<{ chave: number; aviso: string | null; edicoes?: EdicoesDoModal } | null>(null);
   // Salvar a referencia ou confirmar os itens tira o botao/formulario que abriu a acao do DOM: o foco vai para o titulo da area afetada.
   const tituloRef = useRef<HTMLHeadingElement>(null);
   const itensTituloRef = useRef<HTMLHeadingElement>(null);
@@ -287,7 +287,7 @@ export default function IndentSolicitacaoDetalhe() {
         <div>
           <p className="eyebrow">{eyebrowDe(solicitacao)}</p>
           <h1 ref={tituloRef} tabIndex={-1}>
-            <span className="indent-ref">{solicitacao.processNumber ?? 'Referência pendente'}</span> · {nomeNoTitulo}
+            {solicitacao.processNumber !== null ? <span className="indent-ref">{solicitacao.processNumber}</span> : 'Referência pendente'} · {nomeNoTitulo}
           </h1>
           <p className="page-subtitle">
             Criada em {formatarDataHora(solicitacao.createdAt)} · responsável {solicitacao.ownerName}
@@ -412,13 +412,14 @@ export default function IndentSolicitacaoDetalhe() {
           key={notaItens.chave}
           solicitacao={solicitacao}
           avisoInicial={notaItens.aviso}
+          edicoesIniciais={notaItens.edicoes}
           onClose={() => setNotaItens(null)}
           onConfirmed={() => {
             setNotaItens(null);
             mostrar('salvo', 'Itens confirmados', '');
             setDevolverFoco((atual) => ({ alvo: 'itens', n: (atual?.n ?? 0) + 1 }));
           }}
-          onStale={(mensagem) => setNotaItens((atual) => (atual ? { chave: atual.chave + 1, aviso: mensagem } : atual))}
+          onStale={(mensagem, edicoes) => setNotaItens((atual) => (atual ? { chave: atual.chave + 1, aviso: mensagem, edicoes } : atual))}
         />
       )}
 

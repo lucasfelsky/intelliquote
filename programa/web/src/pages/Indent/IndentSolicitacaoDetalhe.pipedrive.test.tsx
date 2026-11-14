@@ -170,10 +170,11 @@ describe('cliente pendente com a organizacao da fila de vinculo (D13 e D22)', ()
     const painel = (await screen.findByRole('heading', { level: 2, name: 'Cliente' })).closest('section') as HTMLElement;
     expect(within(painel).getByText('Cliente pendente').className).toContain('indent-tag--manual');
     const dls = Array.from(painel.querySelectorAll('dl.indent-dl'));
-    expect(Array.from(dls[0]?.querySelectorAll('dt') ?? []).map((dt) => dt.textContent)).toEqual(['CNPJ', 'Cidade', 'Pipedrive']);
-    expect(Array.from(dls[0]?.querySelectorAll('dd') ?? []).map((dd) => dd.textContent)).toEqual(['11.222.333/0001-81', 'Itajaí, SC', 'Org #900201']);
+    // um unico dl (colunas de rotulo e valor alinhadas, como no mock): o tipo de negocio entra na mesma grade
+    expect(dls).toHaveLength(1);
+    expect(Array.from(dls[0]?.querySelectorAll('dt') ?? []).map((dt) => dt.textContent)).toEqual(['CNPJ', 'Cidade', 'Pipedrive', 'Tipo de negócio']);
+    expect(Array.from(dls[0]?.querySelectorAll('dd') ?? []).map((dd) => dd.textContent)).toEqual(['11.222.333/0001-81', 'Itajaí, SC', 'Org #900201', 'Regular']);
     expect(dls[0]?.querySelector('dd.indent-dl__mono')?.textContent).toBe('11.222.333/0001-81');
-    expect(dls[1]?.textContent).toBe('Tipo de negócioRegular');
   });
 
   it('organizacao sem CNPJ valido nem cidade: "—" nos dois e sem a classe monoespacada', async () => {
@@ -203,8 +204,10 @@ describe('cliente pendente com a organizacao da fila de vinculo (D13 e D22)', ()
     );
     const painel = screen.getByRole('heading', { level: 2, name: 'Cliente' }).closest('section') as HTMLElement;
     const dls = Array.from(painel.querySelectorAll('dl.indent-dl'));
-    expect(dls.map((dl) => dl.querySelector('dt')?.textContent)).toEqual(['Organização', 'Organização', 'Tipo de negócio']);
+    expect(dls.map((dl) => dl.querySelector('dt')?.textContent)).toEqual(['Organização', 'Organização']);
     expect(Array.from(dls[0]?.querySelectorAll('dd') ?? []).map((dd) => dd.textContent)).toEqual(['Cliente Exemplo Alfa Ltda', '11.222.333/0001-81', 'Itajaí, SC', 'Org #900201']);
+    // o tipo de negocio fica no ultimo bloco, na mesma grade
+    expect(Array.from(dls[1]?.querySelectorAll('dt') ?? []).map((dt) => dt.textContent)).toEqual(['Organização', 'CNPJ', 'Cidade', 'Pipedrive', 'Tipo de negócio']);
   });
 
   it('negocio sem organizacao: aviso generico, botao da fila e nenhum painel Cliente', async () => {
@@ -232,6 +235,10 @@ describe('"Referência pendente"', () => {
     await screen.findByLabelText('Referência (NNN/AA)');
 
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Referência pendente · Cliente Exemplo Alfa Ltda');
+    // so NNN/AA reais usam o span monoespacado; "Referência pendente" e texto do h1 normal (uma fonte so)
+    expect(screen.getByRole('heading', { level: 1 }).querySelector('.indent-ref')).toBeNull();
+    // NB3: o formato tem "/", que o teclado numerico nao tem
+    expect(screen.getByLabelText('Referência (NNN/AA)').getAttribute('inputmode')).toBe('text');
     expect(screen.getByText('Título do negócio sem número NNN/AA. Digite a referência para seguir.').closest('.alert')?.className).toBe(
       'alert alert--warning indent-alerta',
     );
@@ -288,6 +295,8 @@ describe('"Referência pendente"', () => {
     const alerta = await screen.findByRole('alert');
     expect(alerta.textContent).toBe(mensagem);
     expect(campo.getAttribute('aria-invalid')).toBe('true');
+    expect(campo.getAttribute('aria-describedby')).toBe('ref-pendente-erro');
+    expect(alerta.id).toBe('ref-pendente-erro');
     expect(api.put).not.toHaveBeenCalled();
     // digitar de novo limpa o erro
     fireEvent.change(campo, { target: { value: `274/${AA}` } });
@@ -305,6 +314,8 @@ describe('"Referência pendente"', () => {
     fireEvent.click(salvar);
     const aviso = await screen.findByText(/A sequência 2\.026 é muito maior que o normal/);
     expect(aviso.textContent).toContain('parece o ano no lugar do número');
+    expect(campo.getAttribute('aria-describedby')).toBe('ref-pendente-aviso');
+    expect(aviso.closest('[role="alert"]')?.id).toBe('ref-pendente-aviso');
     expect(aviso.textContent).toContain(`Se 2026/${AA} estiver certo, clique em “Salvar referência” de novo para confirmar.`);
     expect(api.put).not.toHaveBeenCalled();
 
@@ -338,7 +349,10 @@ describe('"Referência pendente"', () => {
     const antes = chamadas('/api/v1/indent/requests/11');
     fireEvent.change(campo, { target: { value: `274/${AA}` } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar referência' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('Já existe uma solicitação com este número.');
+    const erro409 = await screen.findByRole('alert');
+    expect(erro409.textContent).toBe('Já existe uma solicitação com este número.');
+    expect(campo.getAttribute('aria-describedby')).toBe(erro409.id);
+    expect(erro409.id).toBe('ref-pendente-erro');
     await waitFor(() => expect(chamadas('/api/v1/indent/requests/11')).toBeGreaterThan(antes));
     // o formulario continua (ainda sem referencia) e o foco fica no campo/botao
     expect(screen.getByLabelText('Referência (NNN/AA)')).toBeTruthy();
@@ -573,5 +587,33 @@ describe('itens da nota: confirmar, digitar e quantidade', () => {
     expect(within(novo).getByRole('alert').textContent).toBe('Os itens da solicitação mudaram. Recarregue e revise de novo.');
     expect(within(novo).queryByDisplayValue('RESINA EXEMPLO 223 (RXE)')).toBeNull();
     expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('os itens mudaram (400 "mudaram"): as edicoes do usuario dos itens que continuam existindo (por id) sobrevivem ao reabrir; removidos e novos nao', async () => {
+    corpo = solicitacao({ items: [item(21), item(22, { name: 'SOLVENTE TESTE 99%', description: 'SOLVENTE TESTE 99%', quantityKg: 0, noteLine: null })] });
+    vi.mocked(api.put).mockImplementation((async () => {
+      // a sincronizacao manteve o item 21, trocou o 22 pelo 33 e acrescentou o 34
+      corpo = solicitacao({
+        items: [item(21), item(33, { name: 'ACETONA EXEMPLO', description: 'ACETONA EXEMPLO', quantityKg: 0, noteLine: null }), item(34, { name: 'ETANOL EXEMPLO', description: 'ETANOL EXEMPLO', quantityKg: 900, noteLine: null })],
+      });
+      throw new ApiError(400, { message: 'Os itens da solicitação mudaram. Recarregue e revise de novo.' });
+    }) as typeof api.put);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Revisar e confirmar itens' }));
+    const dialogo = await screen.findByRole('dialog', { name: 'Revisar itens da nota' });
+    await waitFor(() => expect(within(dialogo).getByRole('button', { name: 'Confirmar itens' }).getAttribute('aria-disabled')).toBeNull());
+    // o usuario digitou: quantidade do item 21 e produto + quantidade do item 22
+    fireEvent.change(within(dialogo).getAllByLabelText('Quantidade (kg)')[0] as HTMLElement, { target: { value: '777' } });
+    fireEvent.change(within(dialogo).getAllByLabelText('Produto')[0] as HTMLElement, { target: { value: 'RESINA EXEMPLO 223 (EDITADA)' } });
+    fireEvent.change(within(dialogo).getAllByLabelText('Quantidade (kg)')[1] as HTMLElement, { target: { value: '55' } });
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Confirmar itens' }));
+
+    await waitFor(() => expect(within(screen.getByRole('dialog')).getByDisplayValue('ACETONA EXEMPLO')).toBeTruthy());
+    const novo = screen.getByRole('dialog', { name: 'Revisar itens da nota' });
+    const produtos = (within(novo).getAllByLabelText('Produto') as HTMLInputElement[]).map((el) => el.value);
+    const quantidades = (within(novo).getAllByLabelText('Quantidade (kg)') as HTMLInputElement[]).map((el) => el.value);
+    // 21 continua com a edicao; 33 (novo id) e 34 vem do servidor, sem herdar nada do 22 removido
+    expect(produtos).toEqual(['RESINA EXEMPLO 223 (EDITADA)', 'ACETONA EXEMPLO', 'ETANOL EXEMPLO']);
+    expect(quantidades).toEqual(['777', '', '900']);
   });
 });

@@ -340,6 +340,20 @@ describe('payload do PUT note-items', () => {
     expect(adicionar.disabled).toBe(true);
   });
 
+  it('o limite de 50 conta tambem os itens removidos (remove:true entra na lista enviada): remover um nao libera outro', async () => {
+    const itens = Array.from({ length: 50 }, (_, i) => item(100 + i, `ITEM ${i}`));
+    const { dialogo } = await abrir(solicitacao(itens));
+    const adicionar = within(dialogo).getByRole('button', { name: 'Adicionar outro item' }) as HTMLButtonElement;
+    expect(adicionar.disabled).toBe(true);
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Remover item 1' }));
+    expect(produtos(dialogo)).toHaveLength(49);
+    expect(adicionar.disabled).toBe(true);
+    await prontoParaConfirmar(dialogo);
+    confirmar(dialogo);
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect((vi.mocked(api.put).mock.calls[0]?.[1] as { items: unknown[] }).items).toHaveLength(50);
+  });
+
   it('clique duplo em "Confirmar itens" durante a chamada envia uma vez', async () => {
     vi.mocked(api.put).mockImplementation((() => new Promise(() => undefined)) as typeof api.put);
     const { dialogo } = await abrir(solicitacao([item(21, 'A')]));
@@ -374,7 +388,7 @@ describe('erros do servidor', () => {
     const recarregar = vi.spyOn(qc, 'refetchQueries');
     await prontoParaConfirmar(dialogo);
     confirmar(dialogo);
-    await waitFor(() => expect(onStale).toHaveBeenCalledWith('Os itens da solicitação mudaram. Recarregue e revise de novo.'));
+    await waitFor(() => expect(onStale).toHaveBeenCalledWith('Os itens da solicitação mudaram. Recarregue e revise de novo.', { 21: { produto: 'A', quantidade: '2.000' } }));
     expect(recarregar).toHaveBeenCalledWith({ queryKey: ['indent', 'requests', 11] });
     expect(within(dialogo).queryByRole('alert')).toBeNull();
   });

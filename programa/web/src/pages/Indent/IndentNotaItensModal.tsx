@@ -32,25 +32,30 @@ interface ErroLinha {
   quantidade?: string;
 }
 
+/** Edicoes do usuario por id do item (produto e quantidade digitados), preservadas quando o modal reabre com a lista recarregada. */
+export type EdicoesDoModal = Record<number, { produto: string; quantidade: string }>;
+
 interface Props {
   solicitacao: IndentRequestDetail;
   /** Aviso mostrado ao abrir (ex.: depois de recarregar porque os itens mudaram). */
   avisoInicial?: string | null;
+  /** Edicoes da abertura anterior: valem para os itens que continuam existindo (por id). */
+  edicoesIniciais?: EdicoesDoModal;
   onClose: () => void;
   /** Chamado depois de confirmar (a tela mostra o toast "Itens confirmados" e devolve o foco). */
   onConfirmed: () => void;
   /** Os itens mudaram no servidor enquanto o modal estava aberto: a tela recarrega e reabre com a lista nova. */
-  onStale: (mensagem: string) => void;
+  onStale: (mensagem: string, edicoes: EdicoesDoModal) => void;
 }
 
-function linhasIniciais(solicitacao: IndentRequestDetail): LinhaItem[] {
+function linhasIniciais(solicitacao: IndentRequestDetail, edicoes: EdicoesDoModal = {}): LinhaItem[] {
   if (solicitacao.items.length === 0) return [{ chave: 1, produto: '', quantidade: '', linhaOriginal: null, removida: false }];
   return solicitacao.items.map((item, indice) => ({
     chave: indice + 1,
     id: item.id,
-    produto: item.name,
+    produto: edicoes[item.id]?.produto ?? item.name,
     // Quantidade nao lida da nota vem 0: o campo abre vazio (a tela mostra "— kg").
-    quantidade: item.quantityKg > 0 ? formatarKg(item.quantityKg) : '',
+    quantidade: edicoes[item.id]?.quantidade ?? (item.quantityKg > 0 ? formatarKg(item.quantityKg) : ''),
     linhaOriginal: item.noteLine,
     removida: false,
   }));
@@ -61,11 +66,11 @@ function quantidadeValida(quantidade: number | null): quantidade is number {
   return quantidade !== null && quantidade > 0 && quantidade <= LIMITE_KG && Math.abs(quantidade * 1000 - Math.round(quantidade * 1000)) < 1e-6;
 }
 
-export default function IndentNotaItensModal({ solicitacao, avisoInicial = null, onClose, onConfirmed, onStale }: Props) {
+export default function IndentNotaItensModal({ solicitacao, avisoInicial = null, edicoesIniciais, onClose, onConfirmed, onStale }: Props) {
   const qc = useQueryClient();
   const produtos = useQuery({ queryKey: ['indent', 'products', 'options'], queryFn: listIndentProductOptions });
 
-  const [linhas, setLinhas] = useState<LinhaItem[]>(() => linhasIniciais(solicitacao));
+  const [linhas, setLinhas] = useState<LinhaItem[]>(() => linhasIniciais(solicitacao, edicoesIniciais));
   const [proxima, setProxima] = useState(() => Math.max(solicitacao.items.length, 1) + 1);
   const [errosLinhas, setErrosLinhas] = useState<Record<number, ErroLinha>>({});
   const [erroForm, setErroForm] = useState<string | null>(avisoInicial);
@@ -86,7 +91,7 @@ export default function IndentNotaItensModal({ solicitacao, avisoInicial = null,
       const mensagem = mensagemDoErro(err);
       if (err instanceof ApiError && err.status === 400 && ERRO_MUDARAM.test(mensagem)) {
         // A sincronizacao trocou os itens da nota com o modal aberto: confirmar uma lista que a pessoa nao viu quebraria a confirmacao humana.
-        void qc.refetchQueries({ queryKey: ['indent', 'requests', solicitacao.id] }).then(() => onStale(mensagem));
+        void qc.refetchQueries({ queryKey: ['indent', 'requests', solicitacao.id] }).then(() => onStale(mensagem, edicoesDoUsuario()));
         return;
       }
       setErroForm(mensagem);
@@ -94,6 +99,15 @@ export default function IndentNotaItensModal({ solicitacao, avisoInicial = null,
       void qc.invalidateQueries({ queryKey: ['indent', 'requests'] });
     },
   });
+
+  // So itens que ja existem (por id) e nao foram removidos: sao os que continuam valendo depois de recarregar.
+  function edicoesDoUsuario(): EdicoesDoModal {
+    const edicoes: EdicoesDoModal = {};
+    for (const linha of linhas) {
+      if (linha.id !== undefined && !linha.removida) edicoes[linha.id] = { produto: linha.produto, quantidade: linha.quantidade };
+    }
+    return edicoes;
+  }
 
   function atualizar(chave: number, campo: 'produto' | 'quantidade', valor: string) {
     setLinhas((atuais) => atuais.map((linha) => (linha.chave === chave ? { ...linha, [campo]: valor } : linha)));
@@ -129,7 +143,8 @@ export default function IndentNotaItensModal({ solicitacao, avisoInicial = null,
       setErroForm('Mantenha ao menos um item.');
       return;
     }
-    if (visiveis.length > LIMITE_ITENS) {
+    // O limite do backend vale para a lista enviada: itens removidos (remove:true) tambem contam.
+    if (linhas.length > LIMITE_ITENS) {
       setErroForm(`Informe no máximo ${LIMITE_ITENS} itens.`);
       return;
     }
@@ -273,7 +288,7 @@ export default function IndentNotaItensModal({ solicitacao, avisoInicial = null,
             </span>
           </div>
           <div>
-            <button type="button" className="ghost-button ghost-button--sm" onClick={adicionar} disabled={visiveis.length >= LIMITE_ITENS}>
+            <button type="button" className="ghost-button ghost-button--sm" onClick={adicionar} disabled={linhas.length >= LIMITE_ITENS}>
               <Icon name="plus" size={15} strokeWidth={2.4} />
               Adicionar outro item
             </button>

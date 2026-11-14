@@ -164,6 +164,7 @@ describe('botao Pipedrive na lista (D10)', () => {
     const acoes = Array.from(container.querySelectorAll('.page-header__actions > button'));
     expect(acoes.map((el) => el.textContent)).toEqual(['Pipedrive · Funil Exemplo · há 3 min', 'Nova solicitação']);
     expect(botao.className).toBe('ghost-button');
+    expect(botao.hasAttribute('title')).toBe(false);
     expect(botao.querySelector('svg')).not.toBeNull();
     expect((botao as HTMLButtonElement).disabled).toBe(false);
   });
@@ -174,6 +175,8 @@ describe('botao Pipedrive na lista (D10)', () => {
     const botao = (await screen.findByRole('button', { name: 'Pipedrive' })) as HTMLButtonElement;
     await waitFor(() => expect(chamadasDe('/api/v1/indent/pipedrive/status')).toBe(1));
     expect(botao.disabled).toBe(true);
+    // NB4: o botao desabilitado explica o porque
+    expect(botao.getAttribute('title')).toBe('Integração não configurada');
     fireEvent.click(botao);
     expect(api.post).not.toHaveBeenCalled();
     expect(vi.mocked(api.get).mock.calls.every((c) => String(c[0]).startsWith('/api/v1/indent/'))).toBe(true);
