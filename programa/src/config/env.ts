@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { logger } from '../lib/logger';
+
 const authEnvSchema = z.object({
   NODE_ENV: z.string().optional(),
   JWT_ACCESS_SECRET: z.string().min(16).optional(),
@@ -208,3 +210,112 @@ export const internalJobsEnv = {
   audience: parsedInternalJobsEnv.INTERNAL_JOBS_OIDC_AUDIENCE?.trim() || undefined,
   invokerEmail: parsedInternalJobsEnv.INTERNAL_JOBS_INVOKER_EMAIL?.trim().toLowerCase() || undefined,
 } as const;
+
+// Integracao Pipedrive (IQ Indent): SO LEITURA (o cliente HTTP so faz GET). O token e pessoal e vem do Secret Manager.
+// Formato invalido NAO derruba o boot: `configured=false` e `configErrors` guarda so os NOMES das envs (nunca valores);
+// o erro e logado uma vez aqui. Nenhuma chamada ao Pipedrive acontece no boot nem em /health*.
+// Funil, coluna e prazo "oficiais" ficam no banco (IndentIntegrationConfig); estas envs sao o valor inicial.
+const PIPEDRIVE_TOKEN_ENV = 'PIPEDRIVE_API_TOKEN';
+const PIPEDRIVE_ENV_NAMES = [
+  PIPEDRIVE_TOKEN_ENV,
+  'PIPEDRIVE_DOMAIN',
+  'PIPEDRIVE_PIPELINE_ID',
+  'PIPEDRIVE_STAGE_ID',
+  'PIPEDRIVE_STAGE_NAME',
+  'PIPEDRIVE_ORG_CNPJ_FIELD_KEY',
+  'PIPEDRIVE_DEAL_TYPE_FIELD_KEY',
+  'PIPEDRIVE_COMEX_USER_ID',
+  'PIPEDRIVE_SYNC_SINCE',
+] as const;
+
+export interface PipedriveEnv {
+  configured: boolean;
+  /** Nomes das envs ausentes (com outras definidas) ou em formato invalido. Nunca valores. */
+  configErrors: readonly string[];
+  apiToken: string | undefined;
+  domain: string | undefined;
+  pipelineId: number | undefined;
+  stageId: number | undefined;
+  stageName: string | undefined;
+  orgCnpjFieldKey: string | undefined;
+  dealTypeFieldKey: string | undefined;
+  comexUserId: number | undefined;
+  /** `YYYY-MM-DD`: negocios que entraram na coluna antes disso e sem espelho nao viram solicitacao. */
+  syncSince: string | undefined;
+}
+
+function isRealCalendarDate(value: string): boolean {
+  const [year, month, day] = value.split('-').map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+export function parsePipedriveEnv(source: Record<string, string | undefined>): PipedriveEnv {
+  const read = (name: string): string | undefined => source[name]?.trim() || undefined;
+  const anySet = PIPEDRIVE_ENV_NAMES.some((name) => read(name) !== undefined);
+  const errors: string[] = [];
+
+  const required = <T>(name: string, parse: (raw: string) => T | undefined): T | undefined => {
+    const raw = read(name);
+    if (raw === undefined) {
+      if (anySet) errors.push(name);
+      return undefined;
+    }
+    const value = parse(raw);
+    if (value === undefined) errors.push(name);
+    return value;
+  };
+  const optional = <T>(name: string, parse: (raw: string) => T | undefined): T | undefined => {
+    const raw = read(name);
+    if (raw === undefined) return undefined;
+    const value = parse(raw);
+    if (value === undefined) errors.push(name);
+    return value;
+  };
+  const positiveInt = (raw: string): number | undefined => (/^\d{1,9}$/.test(raw) && Number(raw) > 0 ? Number(raw) : undefined);
+  const hexKey = (raw: string): string | undefined => (/^[0-9a-f]{40}$/.test(raw) ? raw : undefined);
+
+  const apiToken = required(PIPEDRIVE_TOKEN_ENV, (raw) => (/^\S+$/.test(raw) ? raw : undefined));
+  const domain = required('PIPEDRIVE_DOMAIN', (raw) => (/^[a-z0-9-]{1,63}$/.test(raw) ? raw : undefined));
+  const pipelineId = required('PIPEDRIVE_PIPELINE_ID', positiveInt);
+  const stageId = required('PIPEDRIVE_STAGE_ID', positiveInt);
+  const stageName = required('PIPEDRIVE_STAGE_NAME', (raw) => (raw.length <= 200 ? raw : undefined));
+  const orgCnpjFieldKey = required('PIPEDRIVE_ORG_CNPJ_FIELD_KEY', hexKey);
+  const dealTypeFieldKey = optional('PIPEDRIVE_DEAL_TYPE_FIELD_KEY', hexKey);
+  const comexUserId = optional('PIPEDRIVE_COMEX_USER_ID', positiveInt);
+  const syncSince = optional('PIPEDRIVE_SYNC_SINCE', (raw) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(raw) && isRealCalendarDate(raw) ? raw : undefined,
+  );
+
+  const configured =
+    errors.length === 0 &&
+    apiToken !== undefined &&
+    domain !== undefined &&
+    pipelineId !== undefined &&
+    stageId !== undefined &&
+    stageName !== undefined &&
+    orgCnpjFieldKey !== undefined;
+
+  return {
+    configured,
+    configErrors: errors,
+    apiToken,
+    domain,
+    pipelineId,
+    stageId,
+    stageName,
+    orgCnpjFieldKey,
+    dealTypeFieldKey,
+    comexUserId,
+    syncSince,
+  };
+}
+
+export const pipedriveEnv: PipedriveEnv = parsePipedriveEnv(process.env);
+
+if (pipedriveEnv.configErrors.length > 0) {
+  logger.error(
+    { envs: pipedriveEnv.configErrors },
+    'Configuracao do Pipedrive invalida ou incompleta: integracao desligada (configured=false).',
+  );
+}

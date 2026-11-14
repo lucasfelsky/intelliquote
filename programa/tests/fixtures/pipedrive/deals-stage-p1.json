@@ -1,0 +1,40 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 900001,
+      "title": "R2 - 263/26 INDENT CLIENTE EXEMPLO",
+      "pipeline_id": 9010,
+      "stage_id": 9020,
+      "status": "open",
+      "org_id": 900101,
+      "person_id": 900201,
+      "owner_id": 900301,
+      "add_time": "2026-11-05T13:20:00Z",
+      "update_time": "2026-11-10T14:05:30Z",
+      "stage_change_time": null,
+      "is_deleted": false,
+      "visible_to": 1,
+      "custom_fields": { "abcdef0123456789abcdef0123456789abcdef01": 9261 }
+    },
+    {
+      "id": 900002,
+      "title": "274/26 INDENT - CLIENTE EXEMPLO",
+      "pipeline_id": 9010,
+      "stage_id": 9020,
+      "status": "open",
+      "org_id": 900102,
+      "person_id": null,
+      "owner_id": 900301,
+      "add_time": "2026-11-06T10:00:00Z",
+      "update_time": "2026-11-06T10:30:00Z",
+      "stage_change_time": "2026-11-06T10:30:00Z",
+      "is_deleted": false,
+      "visible_to": 1,
+      "custom_fields": {}
+    }
+  ],
+  "additional_data": {
+    "next_cursor": "cursor-pagina-2-exemplo"
+  }
+}

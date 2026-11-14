@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "data": {
+    "id": 900301,
+    "name": "Vendedora Exemplo",
+    "email": "vendedora@exemplo.com.br",
+    "active_flag": true,
+    "is_admin": 0
+  }
+}

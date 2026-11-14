@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "data": [
+    { "id": 9019, "name": "Qualificacao Exemplo", "pipeline_id": 9010, "order_nr": 1 },
+    { "id": 9020, "name": "Proposta Exemplo a Enviar", "pipeline_id": 9010, "order_nr": 2 },
+    { "id": 9021, "name": "Proposta Exemplo Enviada", "pipeline_id": 9010, "order_nr": 3 }
+  ]
+}

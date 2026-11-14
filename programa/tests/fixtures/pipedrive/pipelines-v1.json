@@ -1,0 +1,7 @@
+{
+  "success": true,
+  "data": [
+    { "id": 9010, "name": "Funil Exemplo de Indent", "active": true, "order_nr": 1 },
+    { "id": 9011, "name": "Funil Exemplo de Spot", "active": true, "order_nr": 2 }
+  ]
+}

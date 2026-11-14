@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": 900401,
+      "user_id": 900301,
+      "deal_id": 900001,
+      "person_id": 900201,
+      "org_id": 900101,
+      "add_time": "2026-11-05 13:25:10",
+      "update_time": "2026-11-05 13:25:10",
+      "active_flag": true,
+      "pinned_to_deal_flag": false,
+      "last_update_user_id": null,
+      "content": "<div><a href=\"https://exemplo.pipedrive.com/users/900302\" data-mentions=\"900301:900302\">@Equipe Compras</a>&nbsp;</div><div>Bom dia, podem cotar para o cliente?</div><div><br></div><table><colgroup><col><col></colgroup><tbody><tr><td><div>RESINA EXEMPLO 223 (RXE)</div></td><td><div>2.000</div></td></tr><tr><td><div>SOLVENTE TESTE 99%</div></td><td><div>25.000</div></td></tr></tbody></table><div><br></div><div>CFR Santos - Fabricante Exemplo</div>"
+    },
+    {
+      "id": 900402,
+      "user_id": 900302,
+      "deal_id": 900001,
+      "person_id": null,
+      "org_id": 900101,
+      "add_time": "2026-11-05 15:40:00",
+      "update_time": "2026-11-05 15:40:00",
+      "active_flag": true,
+      "pinned_to_deal_flag": false,
+      "last_update_user_id": null,
+      "content": "<div><a href=\"https://exemplo.pipedrive.com/users/900301\" data-mentions=\"900302:900301\">@Vendedora Exemplo</a>&nbsp;recebido, retornamos com os precos amanha.</div>"
+    }
+  ],
+  "additional_data": {
+    "pagination": { "start": 0, "limit": 100, "more_items_in_collection": false }
+  }
+}
