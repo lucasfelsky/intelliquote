@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { IndentClientController } from '../controllers/IndentClientController';
 import { IndentImportController } from '../controllers/IndentImportController';
+import { IndentPendingOrgController } from '../controllers/IndentPendingOrgController';
+import { IndentPipedriveController } from '../controllers/IndentPipedriveController';
 import { IndentProductController } from '../controllers/IndentProductController';
 import { IndentQuoteController } from '../controllers/IndentQuoteController';
 import { IndentRequestController } from '../controllers/IndentRequestController';
@@ -15,6 +17,7 @@ const indentRoutes = Router();
 
 const canRead = allowRoles(COMEX_ROLES);
 const canWrite = allowRoles(['admin', 'comprador', 'gestor']);
+const adminOnly = allowRoles(['admin']);
 
 indentRoutes.get('/clients', requireAuth, canRead, IndentClientController.list);
 indentRoutes.post('/clients', requireAuth, canWrite, IndentClientController.create);
@@ -41,6 +44,9 @@ indentRoutes.post('/requests', requireAuth, canWrite, IndentRequestController.cr
 indentRoutes.get('/requests/:id/supplier-options', requireAuth, canRead, IndentRequestController.supplierOptions);
 indentRoutes.post('/requests/:id/items/confirm', requireAuth, canWrite, IndentRequestController.confirmItems);
 indentRoutes.post('/requests/:id/quotes', requireAuth, canWrite, IndentRequestController.generateQuotes);
+// PR 5a.3 (Pipedrive): referencia pendente e confirmacao humana dos itens da nota (admin/comprador/gestor).
+indentRoutes.put('/requests/:id/reference', requireAuth, canWrite, IndentRequestController.setReference);
+indentRoutes.put('/requests/:id/note-items', requireAuth, canWrite, IndentRequestController.updateNoteItems);
 indentRoutes.get('/requests/:id', requireAuth, canRead, IndentRequestController.getById);
 
 // Cotacoes (PR 3). Leitura = equipe COMEX; as 6 acoes = admin/comprador/gestor (viewer le sem agir; comercial 403 em tudo). Sem DELETE.
@@ -52,6 +58,18 @@ indentRoutes.post('/quotes/:id/response', requireAuth, canWrite, IndentQuoteCont
 indentRoutes.post('/quotes/:id/accept', requireAuth, canWrite, IndentQuoteController.accept);
 indentRoutes.post('/quotes/:id/refuse', requireAuth, canWrite, IndentQuoteController.refuse);
 indentRoutes.post('/quotes/:id/revision', requireAuth, canWrite, IndentQuoteController.requestRevision);
+
+// Integracao Pipedrive (PR 5a.2; SO LEITURA no CRM). Estado = leitura COMEX; sincronizar = admin/comprador/gestor; opcoes e configuracao = so admin.
+// Rotas estaticas (nunca colidem com /requests/:id). Sem DELETE.
+indentRoutes.get('/pipedrive/status', requireAuth, canRead, IndentPipedriveController.status);
+indentRoutes.get('/pipedrive/options', requireAuth, adminOnly, IndentPipedriveController.options);
+indentRoutes.put('/pipedrive/config', requireAuth, adminOnly, IndentPipedriveController.updateConfig);
+indentRoutes.post('/pipedrive/sync', requireAuth, canWrite, IndentPipedriveController.sync);
+
+// Fila de vinculo (PR 5a.3): organizacao do Pipedrive sem cliente. Leitura = equipe COMEX; criar cliente e vincular = admin/comprador/gestor.
+indentRoutes.get('/pending-orgs', requireAuth, canRead, IndentPendingOrgController.list);
+indentRoutes.post('/pending-orgs/:id/create-client', requireAuth, canWrite, IndentPendingOrgController.createClient);
+indentRoutes.post('/pending-orgs/:id/link', requireAuth, canWrite, IndentPendingOrgController.link);
 
 indentRoutes.get('/import/suppliers', requireAuth, canWrite, IndentImportController.supplierCandidates);
 indentRoutes.post('/import/suppliers', requireAuth, canWrite, IndentImportController.importSuppliers);

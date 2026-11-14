@@ -6,7 +6,7 @@ import Topbar from './Topbar';
 import { useAuth } from '@/auth/AuthProvider';
 import { getCommercialRequestsPendingCount } from '@/services/commercialRequests';
 import { getIndentRequestsNewCount } from '@/services/indentRequests';
-import { COMEX_ROLES, filterNavByRole, INDENT_NAV, PRIMARY_NAV, ADMIN_NAV, type NavItem } from './navConfig';
+import { COMEX_ROLES, filterNavByRole, INDENT_ADMIN_NAV, INDENT_NAV, PRIMARY_NAV, ADMIN_NAV, type NavItem } from './navConfig';
 
 // Sidebar recolhida (so icones): a escolha fica no navegador. Storage pode falhar (modo privado, bloqueio): nunca quebra a tela.
 export const CHAVE_SIDEBAR_COLAPSADA = 'iq-sidebar-colapsada';
@@ -58,7 +58,7 @@ export default function AppShell() {
     ? { '/indent/solicitacoes': novasIndent.data?.count ?? 0 }
     : { '/solicitacoes': pending.data?.count ?? 0 };
   const mainNav = indent ? filterNavByRole(INDENT_NAV, role) : filterNavByRole(PRIMARY_NAV, role);
-  const adminNav = indent ? [] : filterNavByRole(ADMIN_NAV, role);
+  const adminNav = filterNavByRole(indent ? INDENT_ADMIN_NAV : ADMIN_NAV, role);
   const adminHeader = adminNav.length > 0;
 
   return (

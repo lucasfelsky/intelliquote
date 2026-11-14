@@ -337,14 +337,17 @@ export interface PipedriveClient {
     status?: string;
     limit?: number;
     cursor?: string | null;
-  }): Promise<{ deals: PdDeal[]; nextCursor: string | null }>;
-  /** Todos os negocios da coluna, por cursor, com teto de 20 paginas (`truncated` quando o teto cortou). */
+  }): Promise<{ deals: PdDeal[]; nextCursor: string | null; skipped: number }>;
+  /**
+   * Todos os negocios da coluna, por cursor, com teto de 20 paginas (`truncated` quando o teto cortou).
+   * Item sem `id`/`add_time` NAO derruba a pagina: e pulado e contado em `skipped`.
+   */
   listDealsInStage(params: {
     pipelineId: number;
     stageId: number;
     status?: string;
     limit?: number;
-  }): Promise<{ deals: PdDeal[]; truncated: boolean }>;
+  }): Promise<{ deals: PdDeal[]; truncated: boolean; skipped: number }>;
   getOrganization(orgId: number, cnpjFieldKey?: string | null): Promise<PdOrganization>;
   getPerson(personId: number): Promise<PdPerson>;
   listDealNotes(dealId: number): Promise<PdNote[]>;
@@ -487,7 +490,7 @@ export function createPipedriveHttpClient(options: PipedriveHttpClientOptions): 
     status?: string;
     limit?: number;
     cursor?: string | null;
-  }): Promise<{ deals: PdDeal[]; nextCursor: string | null }> {
+  }): Promise<{ deals: PdDeal[]; nextCursor: string | null; skipped: number }> {
     const body = (await request(PATH_DEALS_V2, {
       pipeline_id: params.pipelineId,
       stage_id: params.stageId,
@@ -497,9 +500,20 @@ export function createPipedriveHttpClient(options: PipedriveHttpClientOptions): 
     })) as Dict;
     const rawDeals = Array.isArray(body.data) ? body.data : [];
     const cursor = isDict(body.additional_data) ? body.additional_data.next_cursor : null;
+    const deals: PdDeal[] = [];
+    let skipped = 0;
+    for (const rawDeal of rawDeals) {
+      try {
+        deals.push(normalizeDeal(rawDeal));
+      } catch {
+        // Um negocio malformado nao derruba a pagina: pula e conta (o chamador soma em "erros").
+        skipped += 1;
+      }
+    }
     return {
-      deals: rawDeals.map(normalizeDeal),
+      deals,
       nextCursor: typeof cursor === 'string' && cursor !== '' ? cursor : null,
+      skipped,
     };
   }
 
@@ -510,16 +524,21 @@ export function createPipedriveHttpClient(options: PipedriveHttpClientOptions): 
 
     async listDealsInStage(params) {
       const deals: PdDeal[] = [];
+      let skipped = 0;
       let cursor: string | null = null;
       for (let page = 0; page < MAX_DEAL_PAGES; page += 1) {
-        const result: { deals: PdDeal[]; nextCursor: string | null } = await listDealsPage({ ...params, cursor });
+        const result: { deals: PdDeal[]; nextCursor: string | null; skipped: number } = await listDealsPage({
+          ...params,
+          cursor,
+        });
         deals.push(...result.deals);
+        skipped += result.skipped;
         if (result.nextCursor === null) {
-          return { deals, truncated: false };
+          return { deals, truncated: false, skipped };
         }
         cursor = result.nextCursor;
       }
-      return { deals, truncated: true };
+      return { deals, truncated: true, skipped };
     },
 
     async getOrganization(orgId, cnpjFieldKey = null) {

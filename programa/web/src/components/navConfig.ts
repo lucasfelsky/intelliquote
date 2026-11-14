@@ -32,13 +32,18 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/manual',    label: 'Manual',             icon: 'ajuda',             group: 'main', roles: [...COMEX_ROLES, 'comercial'] },
 ];
 
-// Navegacao do IQ Indent (variante da sidebar em /indent/*): Solicitacoes (PR 2), Cotacoes (PR 3) e as 3 paginas de cadastro do PR 1. Integracao entra num PR seguinte.
+// Navegacao do IQ Indent (variante da sidebar em /indent/*): Solicitacoes (PR 2), Cotacoes (PR 3) e as 3 paginas de cadastro do PR 1. A Integracao fica no grupo admin (INDENT_ADMIN_NAV).
 export const INDENT_NAV: NavItem[] = [
   { to: '/indent/solicitacoes', label: 'Solicitações', icon: 'solicitacoes', group: 'main', roles: COMEX_ROLES },
   { to: '/indent/cotacoes',     label: 'Cotações',     icon: 'cotacoes',     group: 'main', roles: COMEX_ROLES },
   { to: '/indent/catalogo',     label: 'Catálogo',     icon: 'itens',        group: 'main', roles: COMEX_ROLES },
   { to: '/indent/fornecedores', label: 'Fornecedores', icon: 'fornecedores', group: 'main', roles: COMEX_ROLES },
   { to: '/indent/clientes',     label: 'Clientes',     icon: 'usuarios',     group: 'main', roles: COMEX_ROLES },
+];
+
+// Administracao do IQ Indent (grupo admin da sidebar em /indent/*): Integracao Pipedrive (PR 5a.4). Equipe COMEX; o viewer so le. `comercial` fica de fora.
+export const INDENT_ADMIN_NAV: NavItem[] = [
+  { to: '/indent/integracao', label: 'Integração Pipedrive', icon: 'plug', group: 'admin', roles: COMEX_ROLES },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

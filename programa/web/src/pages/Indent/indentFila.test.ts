@@ -4,6 +4,8 @@ import {
   filaFrase,
   filaRotulo,
   formatarDataHora,
+  formatarHora,
+  formatarQuando,
   formatarKg,
   mensagemDoErro,
   parseQuantidadePtBr,
@@ -19,6 +21,40 @@ describe('indentFila', () => {
     expect(filaRotulo(2)).toEqual({ texto: '2 dias · no limite', classe: 'badge badge--warning' });
     expect(filaRotulo(3)).toEqual({ texto: '3 dias · atrasada', classe: 'badge badge--danger' });
     expect(filaRotulo(null)).toBeNull();
+  });
+
+  it('filaRotulo com o prazo interno configurado (sla 1, 2 ou 3 dias uteis): no prazo = no limite, acima = atrasada', () => {
+    // sla 1: 1 dia ja e o limite e 2 dias e atraso
+    expect(filaRotulo(0, 1)).toEqual({ texto: 'hoje', classe: 'badge badge--muted' });
+    expect(filaRotulo(1, 1)).toEqual({ texto: '1 dia · no limite', classe: 'badge badge--warning' });
+    expect(filaRotulo(2, 1)).toEqual({ texto: '2 dias · atrasada', classe: 'badge badge--danger' });
+    // sla 2 (padrao): igual a chamada sem o parametro
+    for (const dias of [0, 1, 2, 3, 4]) expect(filaRotulo(dias, 2)).toEqual(filaRotulo(dias));
+    // sla 3: 2 dias ainda esta no prazo e 3 e o limite
+    expect(filaRotulo(2, 3)).toEqual({ texto: '2 dias', classe: 'badge badge--muted' });
+    expect(filaRotulo(3, 3)).toEqual({ texto: '3 dias · no limite', classe: 'badge badge--warning' });
+    expect(filaRotulo(4, 3)).toEqual({ texto: '4 dias · atrasada', classe: 'badge badge--danger' });
+    expect(filaRotulo(null, 3)).toBeNull();
+  });
+
+  it('formatarHora: HH:mm no fuso de Sao Paulo; vazio e data invalida viram "—"', () => {
+    expect(formatarHora('2026-11-12T12:42:00.000Z')).toBe('09:42');
+    expect(formatarHora('2026-11-13T03:00:00.000Z')).toBe('00:00');
+    expect(formatarHora(null)).toBe('—');
+    expect(formatarHora(undefined)).toBe('—');
+    expect(formatarHora('lixo')).toBe('—');
+  });
+
+  it('formatarQuando: "hoje às HH:mm" no mesmo dia de Sao Paulo e "dd/MM às HH:mm" nos demais', () => {
+    const agora = new Date('2026-11-12T20:00:00.000Z'); // 17:00 em Sao Paulo
+    expect(formatarQuando('2026-11-12T12:42:00.000Z', agora)).toBe('hoje às 09:42');
+    expect(formatarQuando('2026-11-11T12:42:00.000Z', agora)).toBe('11/11 às 09:42');
+    // 01:30 UTC de 13/11 ainda e 22:30 de 12/11 em Sao Paulo: mesmo dia de "agora"
+    expect(formatarQuando('2026-11-13T01:30:00.000Z', agora)).toBe('hoje às 22:30');
+    // virada de ano nao confunde dia/mes iguais de anos diferentes
+    expect(formatarQuando('2025-11-12T12:42:00.000Z', agora)).toBe('12/11 às 09:42');
+    expect(formatarQuando(null, agora)).toBe('—');
+    expect(formatarQuando('lixo', agora)).toBe('—');
   });
 
   it('filaFrase do subtitulo do detalhe', () => {

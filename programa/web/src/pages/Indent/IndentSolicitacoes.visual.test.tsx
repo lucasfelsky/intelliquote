@@ -22,6 +22,7 @@ import { api } from '@/api/client';
 const linhaLista = (id: number, extra: Record<string, unknown> = {}) => ({
   id,
   processNumber: `${id}/26`,
+  referencePending: false,
   createdAt: '2026-11-12T15:05:00.000Z',
   origin: 'PIPEDRIVE',
   pipedriveDealId: 4412,
@@ -42,11 +43,33 @@ const item = (id: number, extra: Record<string, unknown> = {}) => ({
   name: 'Ácido cítrico anidro',
   quantityKg: 25000,
   confirmed: true,
+  source: 'MANUAL',
+  noteLine: null,
   productId: 1,
   product: { id: 1, name: 'Ácido cítrico anidro', cas: '77-92-9', origin: 'CADASTRADO' },
   isFree: false,
   ...extra,
 });
+
+const STATUS = {
+  configured: true,
+  connection: 'ok',
+  mode: 'polling',
+  webhook: 'not_configured',
+  connectionCheckedAt: '2026-11-12T12:42:00.000Z',
+  lastSyncAt: '2026-11-12T12:42:00.000Z',
+  lastSyncNewDeals: 2,
+  lastSyncErrors: 0,
+  pipelineId: 900001,
+  pipelineName: 'Funil Exemplo',
+  stageId: 900011,
+  stageName: 'Coluna Exemplo A',
+  slaBusinessDays: 2,
+  pendingCount: 1,
+  dailyTokensRemaining: null,
+  dailyTokensLimit: null,
+  intervalMinutes: 10,
+};
 
 const detalhe = (extra: Record<string, unknown> = {}) => ({
   id: 11,
@@ -63,6 +86,15 @@ const detalhe = (extra: Record<string, unknown> = {}) => ({
   createdAt: '2026-11-12T15:05:00.000Z',
   stageEnteredAt: '2026-11-12T15:05:00.000Z',
   queueBusinessDays: 1,
+  slaBusinessDays: 2,
+  referenceAlert: null,
+  currentRevision: null,
+  revisionAlertAt: null,
+  noteChangedAt: null,
+  noteIncoterm: null,
+  noteDestination: null,
+  noteSupplierHint: null,
+  pendingOrg: null,
   client: {
     id: 3,
     name: 'Cliente Alfa Ltda',
@@ -120,8 +152,10 @@ function mockApi() {
         pagination: { page: 1, pageSize: 20, totalItems: 2, totalPages: 2 },
         counts: { todas: 2, pipedrive: 2, iq: 0, nova: 1, pendente: 1 },
         kpis: { novas: 1, emCotacao: 0, respondidas: 0, convertidasNoMes: 0 },
+        slaBusinessDays: 2,
       };
     }
+    if (url === '/api/v1/indent/pipedrive/status') return STATUS;
     if (url === '/api/v1/indent/requests/11') return corpoDetalhe;
     if (url === '/api/v1/indent/requests/11/supplier-options') return OPCOES;
     if (url === '/api/v1/indent/requests/client-options') return [{ id: 3, name: 'Cliente Alfa Ltda', city: 'Itajaí' }];
@@ -191,6 +225,7 @@ describe('Solicitacoes do Indent: marcacao x regiao `tela F14`', () => {
       'indent-tag--pd',
       'indent-tag--lock',
       'indent-paginacao',
+      'indent-alerta__texto',
     ]) {
       expect(classes.has(c), c).toBe(true);
     }
@@ -316,6 +351,18 @@ describe('Solicitacoes do Indent: marcacao x regiao `tela F14`', () => {
     expect(alerta).toContain('gap: 12px');
     expect(alerta).toContain('line-height: normal');
     expect(corpo('.indent-page .indent-alerta > svg')).toContain('flex: none');
+    // PR 5a.5: o texto do alerta ocupa a linha e empurra o botao; o secundario do alerta e o .ghost-button padrao (so medidas, sem borda/sombra/fundo)
+    expect(corpo('.indent-page .indent-alerta__texto')).toContain('flex: 1 1 auto');
+    const abrirFila = corpo('.indent-page .indent-alerta .ghost-button');
+    expect(abrirFila).toContain('min-height: 36px');
+    expect(abrirFila).toContain('font-size: 13px');
+    expect(abrirFila).not.toMatch(/border|box-shadow|background/);
+    const referencia = corpo('.indent-page .indent-referencia');
+    expect(referencia).toContain('flex-wrap: wrap');
+    expect(referencia).toContain('align-items: flex-end');
+    expect(corpo('.indent-page .indent-referencia .field')).toContain('flex: 1 1 200px');
+    // campo da referencia = .input padrao do sistema (44px), sem altura propria nesta secao
+    expect(stripComments(brutoPr2)).not.toMatch(/\.indent-referencia[^{]*\{[^}]*height/);
   });
 
   it('toda classe indent-* do PR 2 existe na regiao e toda regra desta tela e usada no DOM', async () => {
@@ -346,8 +393,24 @@ describe('Solicitacoes do Indent: marcacao x regiao `tela F14`', () => {
     const cotacoes = renderTela('/indent/solicitacoes/11');
     await screen.findByText('Nordic Solvents AB');
     add(cotacoes.container);
+    cotacoes.unmount();
+
+    // Pipedrive (PR 5a.5): referencia pendente (alerta + campo + botao), itens da nota a confirmar e o modal "Revisar itens da nota"
+    corpoDetalhe = detalhe({
+      processNumber: null,
+      referenceAlert: 'O número 275/26 já pertence à solicitação 275/26.',
+      items: [item(21, { confirmed: false, source: 'NOTE', quantityKg: 0, noteLine: 'ÁCIDO CÍTRICO ANIDRO' })],
+    });
+    const pendente = renderTela('/indent/solicitacoes/11');
+    await screen.findByLabelText('Referência (NNN/AA)');
+    add(pendente.container);
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar e confirmar itens' }));
+    await screen.findByRole('dialog', { name: 'Revisar itens da nota' });
+    add(document.body);
 
     expect(classesDoCss.size).toBeGreaterThan(30);
+    expect(classesDoCss.has('indent-referencia')).toBe(true);
+    expect(classesDoCss.has('indent-alerta__texto')).toBe(true);
     expect(classesDoCss.has('indent-sup')).toBe(true);
     const semUso = Array.from(classesDoCss).filter((c) => !todas.has(c));
     expect(semUso).toEqual([]);

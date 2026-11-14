@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ApiError } from '@/api/client';
@@ -18,10 +18,20 @@ import {
   rotuloRegra,
   statusRotulo,
 } from './indentFila';
+import IndentNotaItensModal, { type EdicoesDoModal } from './IndentNotaItensModal';
+import {
+  AlertasDaSincronizacao,
+  AvisoClientePendente,
+  DetalhesDaNota,
+  PainelClientePendente,
+  ReferenciaPendente,
+  nomeDoClientePendente,
+} from './IndentSolicitacaoDetalhePipedrive';
 import IndentSupplierPicker from './IndentSupplierPicker';
 
-// IQ Indent: detalhe da solicitacao (mock viewSolDetail). Coluna da esquerda: escolha de fornecedores (NOVA), aviso de cliente pendente ou as
-// cotacoes ja geradas (cada linha abre a gaveta da cotacao, PR 3); coluna da direita: nota (so com rawNote), itens e cliente.
+// IQ Indent: detalhe da solicitacao (mock viewSolDetail). Coluna da esquerda: escolha de fornecedores (NOVA), os avisos que a barram (cliente
+// pendente, referencia pendente, itens da nota a confirmar) ou as cotacoes ja geradas (cada linha abre a gaveta da cotacao, PR 3); coluna da
+// direita: nota (so com rawNote), itens e cliente (ou a organizacao da fila de vinculo enquanto o cliente esta pendente).
 
 const ESCRITA = ['admin', 'comprador', 'gestor'];
 
@@ -127,6 +137,16 @@ export default function IndentSolicitacaoDetalhe() {
   const { toast, mostrar, fechar } = useToastForecast();
   // Gaveta da cotacao aberta a partir da linha de "Cotacoes desta solicitacao" (so por estado: sem link proprio nesta tela).
   const [cotacaoAberta, setCotacaoAberta] = useState<number | null>(null);
+  // Modal "Revisar itens da nota": `chave` remonta o modal com a lista nova quando os itens mudaram no servidor com ele aberto.
+  const [notaItens, setNotaItens] = useState<{ chave: number; aviso: string | null; edicoes?: EdicoesDoModal } | null>(null);
+  // Salvar a referencia ou confirmar os itens tira o botao/formulario que abriu a acao do DOM: o foco vai para o titulo da area afetada.
+  const tituloRef = useRef<HTMLHeadingElement>(null);
+  const itensTituloRef = useRef<HTMLHeadingElement>(null);
+  const [devolverFoco, setDevolverFoco] = useState<{ alvo: 'titulo' | 'itens'; n: number } | null>(null);
+  useEffect(() => {
+    if (!devolverFoco) return;
+    (devolverFoco.alvo === 'titulo' ? tituloRef : itensTituloRef).current?.focus();
+  }, [devolverFoco]);
 
   const numero = Number(id);
   const idValido = Number.isInteger(numero) && numero > 0;
@@ -197,20 +217,46 @@ export default function IndentSolicitacaoDetalhe() {
   const status = statusRotulo(solicitacao.status, solicitacao.clientPending);
   const fila = filaFrase(solicitacao.queueBusinessDays);
   const temNota = solicitacao.rawNote !== null && solicitacao.rawNote !== '';
+  const pendencia = solicitacao.pendingOrg;
+  const referenciaPendente = solicitacao.processNumber === null;
+  const semItens = solicitacao.items.length === 0;
+  const itensNaoConfirmados = solicitacao.items.some((item) => !item.confirmed);
+  // Itens ainda sem confirmacao humana (ou sem item nenhum) barram a geracao: o backend responde 400 "Confirme os itens antes de gerar cotacoes.".
+  const itensPendentes = solicitacao.status === 'NOVA' && (semItens || itensNaoConfirmados);
+  // So NOVA e sem cotacao edita os itens (senao 409); depois do alerta "a nota mudou" a pessoa pode revisar de novo.
+  const podeRevisarItens =
+    canWrite && solicitacao.status === 'NOVA' && solicitacao.quotes.length === 0 && (itensPendentes || solicitacao.noteChangedAt !== null);
+  const nomeNoTitulo = client ? client.name : nomeDoClientePendente(pendencia);
 
   let painelFornecedores;
-  if (solicitacao.clientPending) {
+  if (solicitacao.clientPending || referenciaPendente || itensPendentes) {
     painelFornecedores = (
       <section className="indent-painel">
         <div className="indent-painel__cabeca">
           <h2>Fornecedores para cotar</h2>
         </div>
-        <div className="alert alert--warning indent-alerta">
-          <Icon name="lock" size={18} />
-          <span>
-            A organização do negócio não tem cliente cadastrado. Vincule antes de escolher fornecedores, para a restrição do cliente valer.
-          </span>
-        </div>
+        {solicitacao.clientPending && <AvisoClientePendente pendencia={pendencia} onAbrirFila={() => navigate('/indent/integracao')} />}
+        {referenciaPendente && (
+          <ReferenciaPendente
+            solicitacao={solicitacao}
+            canWrite={canWrite}
+            onSalva={(numero) => {
+              mostrar('salvo', `Referência ${numero} salva`, '');
+              setDevolverFoco((atual) => ({ alvo: 'titulo', n: (atual?.n ?? 0) + 1 }));
+            }}
+          />
+        )}
+        {itensPendentes && (
+          <div className="alert alert--warning indent-alerta">
+            <Icon name="lock" size={18} />
+            <span className="indent-alerta__texto">
+              {semItens ? 'Esta solicitação ainda não tem itens.' : 'Os itens lidos da nota ainda não foram confirmados.'}{' '}
+              {canWrite
+                ? `Use “${semItens ? 'Digitar itens' : 'Revisar e confirmar itens'}” antes de escolher fornecedores.`
+                : 'Quem cota precisa confirmá-los antes de escolher fornecedores.'}
+            </span>
+          </div>
+        )}
       </section>
     );
   } else if (solicitacao.status === 'NOVA') {
@@ -240,8 +286,8 @@ export default function IndentSolicitacaoDetalhe() {
       <header className="page-header">
         <div>
           <p className="eyebrow">{eyebrowDe(solicitacao)}</p>
-          <h1>
-            <span className="indent-ref">{solicitacao.processNumber}</span> · {client ? client.name : 'Cliente pendente'}
+          <h1 ref={tituloRef} tabIndex={-1}>
+            {solicitacao.processNumber !== null ? <span className="indent-ref">{solicitacao.processNumber}</span> : 'Referência pendente'} · {nomeNoTitulo}
           </h1>
           <p className="page-subtitle">
             Criada em {formatarDataHora(solicitacao.createdAt)} · responsável {solicitacao.ownerName}
@@ -249,9 +295,16 @@ export default function IndentSolicitacaoDetalhe() {
           </p>
         </div>
         <div className="page-header__actions">
+          {solicitacao.currentRevision !== null && (
+            <span className="indent-tag indent-tag--pd" title={`Revisão ${solicitacao.currentRevision} recebida do Pipedrive`}>
+              R{solicitacao.currentRevision}
+            </span>
+          )}
           <span className={status.classe}>{status.rotulo}</span>
         </div>
       </header>
+
+      <AlertasDaSincronizacao solicitacao={solicitacao} />
 
       <div className="indent-cols">
         <div className="indent-coluna">{painelFornecedores}</div>
@@ -263,6 +316,7 @@ export default function IndentSolicitacaoDetalhe() {
                 <span className="indent-tag indent-tag--pd">Texto original</span>
               </div>
               <pre className="indent-nota">{solicitacao.rawNote}</pre>
+              <DetalhesDaNota solicitacao={solicitacao} />
               <p className="indent-cell-sub indent-painel__nota">
                 O pedido chega como texto livre. O IQ Indent propõe os itens ao lado e você confirma antes de cotar.
               </p>
@@ -271,8 +325,16 @@ export default function IndentSolicitacaoDetalhe() {
 
           <section className="indent-painel">
             <div className="indent-painel__cabeca">
-              <h2>Itens pedidos</h2>
-              {temNota && <span className="indent-tag indent-tag--manual">Lidos da nota · confirmar</span>}
+              <h2 ref={itensTituloRef} tabIndex={-1}>
+                Itens pedidos
+              </h2>
+              {semItens ? (
+                <span className="indent-tag indent-tag--manual">Itens a digitar</span>
+              ) : itensNaoConfirmados ? (
+                <span className="indent-tag indent-tag--manual">Lidos da nota · confirmar</span>
+              ) : (
+                temNota && <span className="indent-tag indent-tag--ok">Itens confirmados</span>
+              )}
             </div>
             <div>
               {solicitacao.items.map((item) => (
@@ -289,11 +351,20 @@ export default function IndentSolicitacaoDetalhe() {
                       )}
                     </span>
                   </div>
-                  <span className="indent-ref indent-itemrow__qtd">{formatarKg(item.quantityKg)} kg</span>
+                  <span className="indent-ref indent-itemrow__qtd">{item.quantityKg > 0 ? `${formatarKg(item.quantityKg)} kg` : '— kg'}</span>
                 </div>
               ))}
             </div>
+            {podeRevisarItens && (
+              <div>
+                <button type="button" className="ghost-button" onClick={() => setNotaItens({ chave: 1, aviso: null })}>
+                  {semItens ? 'Digitar itens' : 'Revisar e confirmar itens'}
+                </button>
+              </div>
+            )}
           </section>
+
+          {!client && pendencia && <PainelClientePendente pendencia={pendencia} dealType={solicitacao.dealType} />}
 
           {client && (
             <section className="indent-painel">
@@ -333,6 +404,22 @@ export default function IndentSolicitacaoDetalhe() {
             setCotacaoAberta(null);
             if (mensagem) mostrar('salvo', mensagem, '');
           }}
+        />
+      )}
+
+      {notaItens && (
+        <IndentNotaItensModal
+          key={notaItens.chave}
+          solicitacao={solicitacao}
+          avisoInicial={notaItens.aviso}
+          edicoesIniciais={notaItens.edicoes}
+          onClose={() => setNotaItens(null)}
+          onConfirmed={() => {
+            setNotaItens(null);
+            mostrar('salvo', 'Itens confirmados', '');
+            setDevolverFoco((atual) => ({ alvo: 'itens', n: (atual?.n ?? 0) + 1 }));
+          }}
+          onStale={(mensagem, edicoes) => setNotaItens((atual) => (atual ? { chave: atual.chave + 1, aviso: mensagem, edicoes } : atual))}
         />
       )}
 

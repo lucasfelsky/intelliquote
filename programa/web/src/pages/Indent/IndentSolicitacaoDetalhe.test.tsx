@@ -48,6 +48,8 @@ const ITENS = [
     name: 'Ácido cítrico anidro',
     quantityKg: 25000,
     confirmed: true,
+    source: 'MANUAL',
+    noteLine: null,
     productId: 1,
     product: { id: 1, name: 'Ácido cítrico anidro', cas: '77-92-9', origin: 'CADASTRADO' },
     isFree: false,
@@ -59,6 +61,8 @@ const ITENS = [
     name: 'Ureia técnica',
     quantityKg: 1500.5,
     confirmed: true,
+    source: 'MANUAL',
+    noteLine: null,
     productId: 2,
     product: { id: 2, name: 'Ureia técnica', cas: null, origin: 'CADASTRADO' },
     isFree: false,
@@ -70,6 +74,8 @@ const ITENS = [
     name: 'Produto livre X',
     quantityKg: 100,
     confirmed: true,
+    source: 'MANUAL',
+    noteLine: null,
     productId: 3,
     product: { id: 3, name: 'Produto livre X', cas: null, origin: 'LIVRE' },
     isFree: true,
@@ -92,6 +98,15 @@ function solicitacao(extra: Obj = {}) {
     createdAt: '2026-11-12T15:05:00.000Z',
     stageEnteredAt: '2026-11-12T15:05:00.000Z',
     queueBusinessDays: 0,
+    slaBusinessDays: 2,
+    referenceAlert: null,
+    currentRevision: null,
+    revisionAlertAt: null,
+    noteChangedAt: null,
+    noteIncoterm: null,
+    noteDestination: null,
+    noteSupplierHint: null,
+    pendingOrg: null,
     client: cliente(),
     items: ITENS,
     quotes: [],
@@ -194,7 +209,7 @@ describe('IndentSolicitacaoDetalhe', () => {
     expect(screen.getByText('Restrição do cliente aplicada').closest('.indent-tag')?.className).toContain('indent-tag--lock');
   });
 
-  it('cliente pendente: aviso sem botao, sem seletor e "Cliente pendente" no titulo e no status', async () => {
+  it('cliente pendente (sem a organizacao da fila): aviso generico com "Abrir fila de vinculo", sem seletor e "Cliente pendente" no titulo e no status', async () => {
     mockApi(solicitacao({ clientPending: true, client: null }));
     const { container } = renderPage();
     await screen.findByRole('heading', { level: 1 });
@@ -206,7 +221,7 @@ describe('IndentSolicitacaoDetalhe', () => {
     const aviso = container.querySelector('.alert.alert--warning.indent-alerta');
     expect(aviso?.firstElementChild?.tagName.toLowerCase()).toBe('svg');
     expect(aviso?.firstElementChild?.getAttribute('width')).toBe('18');
-    expect(screen.queryByRole('button', { name: 'Abrir fila de vínculo' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Abrir fila de vínculo' }).className).toBe('primary-button');
     expect(container.querySelector('.indent-sup')).toBeNull();
     expect(screen.queryByRole('heading', { level: 2, name: 'Cliente' })).toBeNull();
     expect(vi.mocked(api.get).mock.calls.some((c) => String(c[0]).endsWith('/supplier-options'))).toBe(false);
@@ -331,8 +346,8 @@ describe('IndentSolicitacaoDetalhe', () => {
     expect(container.querySelector('.indent-nota')).toBeNull();
   });
 
-  it('com rawNote: painel da nota (texto original) e a tag "Lidos da nota · confirmar" nos itens', async () => {
-    mockApi(solicitacao({ rawNote: 'CFR Itajaí - Shandong\n25 t ácido cítrico' }));
+  it('com rawNote: painel da nota (texto original) e a tag "Lidos da nota · confirmar" nos itens ainda nao confirmados', async () => {
+    mockApi(solicitacao({ rawNote: 'CFR Itajaí - Shandong\n25 t ácido cítrico', items: ITENS.map((item) => ({ ...item, confirmed: false, source: 'NOTE' })) }));
     const { container } = renderPage();
     await screen.findByText('Nota do negócio no Pipedrive');
 

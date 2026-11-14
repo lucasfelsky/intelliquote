@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
+import { IndentPipedriveSyncService } from '../services/IndentPipedriveSyncService';
 import { IndentQuoteGenerationService } from '../services/IndentQuoteGenerationService';
 import { IndentRequestService, type IndentActor } from '../services/IndentRequestService';
 import { handleControllerError, parseId } from '../utils/http';
+import { noteItemsSchema, requestReferenceSchema } from '../validators/indentPipedrive';
 import {
   indentConfirmItemsSchema,
   indentGenerateQuotesSchema,
@@ -129,6 +131,53 @@ export class IndentRequestController {
 
       const payload = indentGenerateQuotesSchema.parse(req.body);
       return res.status(201).json(await IndentQuoteGenerationService.generate(id, payload, actor));
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // "Referencia pendente" (PR 5a.3): digita o NNN/AA que o titulo do negocio nao trouxe.
+  static async setReference(req: Request, res: Response): Promise<Response> {
+    try {
+      const actor = actorOf(req);
+
+      if (!actor) {
+        return res.status(401).json({ message: 'Não autenticado.' });
+      }
+
+      const id = parseId(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({ message: INVALID_ID });
+      }
+
+      const payload = requestReferenceSchema.parse(req.body);
+      await IndentPipedriveSyncService.setReference(id, payload.processNumber, actor);
+      return res.status(200).json(await IndentRequestService.getById(id));
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // Confirmacao humana dos itens lidos da nota (PR 5a.3).
+  static async updateNoteItems(req: Request, res: Response): Promise<Response> {
+    try {
+      const actor = actorOf(req);
+
+      if (!actor) {
+        return res.status(401).json({ message: 'Não autenticado.' });
+      }
+
+      const id = parseId(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({ message: INVALID_ID });
+      }
+
+      const payload = noteItemsSchema.parse(req.body);
+      return res.status(200).json(await IndentRequestService.updateNoteItems(id, payload, actor));
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

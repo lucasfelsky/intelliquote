@@ -1,5 +1,6 @@
 import { api } from '@/api/client';
 import type { IndentRuleMode, IndentSupplierType, Paginated } from '@/services/indent';
+import type { IndentPendingOrgCandidate } from '@/services/indentPipedrive';
 
 // IQ Indent (PR 2: solicitacoes). Todas as chamadas vao por api/client.ts, no caminho COMPLETO /api/v1/indent/requests...
 // A restricao do cliente, a cobertura e o "Na fila ha" sao calculados no BACKEND: aqui so se exibe.
@@ -12,7 +13,9 @@ export type IndentRequestFilter = 'todas' | 'pipedrive' | 'iq' | 'nova' | 'pende
 
 export interface IndentRequestRow {
   id: number;
-  processNumber: string;
+  /** null = "Referencia pendente" (titulo do negocio do Pipedrive sem numero NNN/AA). */
+  processNumber: string | null;
+  referencePending: boolean;
   createdAt: string;
   origin: IndentRequestOrigin;
   pipedriveDealId: number | null;
@@ -44,6 +47,8 @@ export interface IndentRequestKpis {
 export interface IndentRequestList extends Paginated<IndentRequestRow> {
   counts: IndentRequestCounts;
   kpis: IndentRequestKpis;
+  /** Prazo interno de resposta em dias uteis (1 a 3, configurado na Integracao; padrao 2): decide "no limite" x "atrasada". */
+  slaBusinessDays: number;
 }
 
 export interface IndentRequestListParams {
@@ -65,7 +70,12 @@ export interface IndentRequestItem {
   description: string;
   name: string;
   quantityKg: number;
+  /** Item lido da nota do Pipedrive nasce NAO confirmado; so a pessoa confirma (modal "Revisar itens da nota"). */
   confirmed: boolean;
+  /** 'NOTE' = lido da nota do Pipedrive; 'MANUAL' = digitado. */
+  source: string;
+  /** Linha original da nota (so para itens 'NOTE'). */
+  noteLine: string | null;
   productId: number | null;
   product: { id: number; name: string; cas: string | null; origin: 'CADASTRADO' | 'LIVRE' } | null;
   /** Item livre = sem produto ou produto LIVRE. */
@@ -87,7 +97,8 @@ export interface IndentRequestQuote {
 
 export interface IndentRequestDetail {
   id: number;
-  processNumber: string;
+  /** null = "Referencia pendente": nao gera cotacoes (409) ate alguem digitar o numero. */
+  processNumber: string | null;
   origin: IndentRequestOrigin;
   pipedriveDealId: number | null;
   dealTitle: string | null;
@@ -100,6 +111,20 @@ export interface IndentRequestDetail {
   createdAt: string;
   stageEnteredAt: string;
   queueBusinessDays: number | null;
+  slaBusinessDays: number;
+  /** Aviso da sincronizacao sobre o numero (ex.: "O numero NNN/AA ja pertence a solicitacao NNN/AA."); some quando a referencia e resolvida. */
+  referenceAlert: string | null;
+  /** Revisao `R<n>` do negocio (mesmo negocio renomeado); null = sem revisao. */
+  currentRevision: number | null;
+  revisionAlertAt: string | null;
+  /** A nota mudou no Pipedrive depois da confirmacao dos itens. */
+  noteChangedAt: string | null;
+  /** Incoterm, destino e fornecedor citados na nota (so informativos: nada vem pre-marcado). */
+  noteIncoterm: string | null;
+  noteDestination: string | null;
+  noteSupplierHint: string | null;
+  /** Fila de vinculo: organizacoes candidatas enquanto o cliente esta pendente. */
+  pendingOrg: { id: number; candidates: IndentPendingOrgCandidate[] } | null;
   client: {
     id: number;
     name: string;
@@ -184,6 +209,28 @@ export function createIndentRequest(input: IndentRequestCreateInput): Promise<In
 
 export function confirmIndentRequestItems(id: number, itemIds: number[]): Promise<IndentRequestDetail> {
   return api.post<IndentRequestDetail>(`${BASE}/${id}/items/confirm`, { itemIds });
+}
+
+/** `processNumber` ja normalizado (`NNN/AA`). Devolve o detalhe atualizado; 409 = numero usado ou solicitacao que ja tem referencia. */
+export function setIndentRequestReference(id: number, processNumber: string): Promise<IndentRequestDetail> {
+  return api.put<IndentRequestDetail>(`${BASE}/${id}/reference`, { processNumber });
+}
+
+/** Uma entrada do `PUT note-items`: item atual (`id`, editado ou `remove`) ou item novo (sem `id`). */
+export interface IndentNoteItemInput {
+  id?: number;
+  productId?: number;
+  description?: string;
+  quantityKg?: number;
+  remove?: boolean;
+}
+
+/**
+ * Confirmacao humana dos itens lidos da nota. A lista tem de cobrir TODOS os itens atuais (por `id`); 400 "Os itens da solicitacao mudaram.
+ * Recarregue e revise de novo." = a sincronizacao trocou os itens enquanto a tela estava aberta. So NOVA (senao 409).
+ */
+export function updateIndentNoteItems(id: number, items: IndentNoteItemInput[]): Promise<IndentRequestDetail> {
+  return api.put<IndentRequestDetail>(`${BASE}/${id}/note-items`, { items } as unknown as Record<string, unknown>);
 }
 
 export function generateIndentQuotes(id: number, input: IndentGenerateInput): Promise<IndentGenerateResult> {

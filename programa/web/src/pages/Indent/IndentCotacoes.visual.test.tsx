@@ -22,8 +22,10 @@ import { api } from '@/api/client';
 const css = readSource('../styles/globals.css').replace(/\r\n/g, '\n');
 const regiao = regioes(css).find((r) => r.nome === 'tela F14');
 const MARCADOR_PR3 = '/* ======================= Cotacoes (PR 3)';
+// Corta no marcador 'Integracao Pipedrive (PR 5a.4)': as regras dali em diante sao conferidas no IndentIntegracao.visual.test.tsx.
+const MARCADOR_PR5A4 = '/* ======================= Integracao Pipedrive (PR 5a.4)';
 // O marcador volta para o inicio do trecho: sem ele o resto do comentario do titulo viraria "seletor".
-const depoisDoMarcador = (regiao?.bruto ?? '').split(MARCADOR_PR3)[1];
+const depoisDoMarcador = (regiao?.bruto ?? '').split(MARCADOR_PR3)[1]?.split(MARCADOR_PR5A4)[0];
 const brutoPr3 = depoisDoMarcador === undefined ? '' : `${MARCADOR_PR3}${depoisDoMarcador}`;
 const regrasPr3 = parseRules(stripComments(brutoPr3));
 const classesDoCss = new Set(

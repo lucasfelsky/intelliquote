@@ -5,7 +5,8 @@
 #   2. Artifact Registry ja criado (nome: intelliquote, regiao: southamerica-east1)
 #   3. Cloud SQL ja criado (instancia: intelliquote-db, db: intelliquote, regiao: southamerica-east1)
 #   4. Secrets ja criados no Secret Manager: SMTP_PASS, DATABASE_URL, DIRECT_URL,
-#      JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
+#      JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, PIPEDRIVE_API_TOKEN, PIPEDRIVE_WEBHOOK_USER,
+#      PIPEDRIVE_WEBHOOK_PASSWORD (integracao Pipedrive do IQ Indent)
 #
 # Conexao com o banco: IP publico (host=35.247.254.177) - configurado no DATABASE_URL/DIRECT_URL
 #
@@ -84,7 +85,7 @@ Write-Host ">>> Deploy no Cloud Run" -ForegroundColor Cyan
   --timeout 60 `
   --concurrency 80 `
   --update-env-vars "BACKEND_BUILD_TAG=$BACKEND_BUILD_TAG" `
-  --set-secrets "SMTP_PASS=SMTP_PASS:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_USER=SMTP_USER:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_FROM=SMTP_FROM:latest,DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_ACCESS_SECRET=JWT_ACCESS_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest" `
+  --set-secrets "SMTP_PASS=SMTP_PASS:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_USER=SMTP_USER:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_FROM=SMTP_FROM:latest,DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_ACCESS_SECRET=JWT_ACCESS_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest,PIPEDRIVE_API_TOKEN=PIPEDRIVE_API_TOKEN:latest,PIPEDRIVE_WEBHOOK_USER=PIPEDRIVE_WEBHOOK_USER:latest,PIPEDRIVE_WEBHOOK_PASSWORD=PIPEDRIVE_WEBHOOK_PASSWORD:latest" `
   --project $PROJECT_ID 2>&1 | Tee-Object -FilePath "$env:TEMP\cloudrun-deploy.log" -Append
 
 if ($LASTEXITCODE -ne 0) { Write-Host "ERRO no deploy do Cloud Run (exit=$LASTEXITCODE)" -ForegroundColor Red; exit 1 }

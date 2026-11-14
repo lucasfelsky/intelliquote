@@ -7,8 +7,9 @@ import { getIndentRequestsNewCount } from '@/services/indentRequests';
 import { ADMIN_NAV, PRIMARY_NAV } from './navConfig';
 
 const logout = vi.fn(async () => undefined);
+let mockRole = 'admin';
 vi.mock('@/auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 1, name: 'Admin Demo', email: 'a@exemplo.test', role: 'admin' }, logout }),
+  useAuth: () => ({ user: { id: 1, name: 'Admin Demo', email: 'a@exemplo.test', role: mockRole }, logout }),
 }));
 vi.mock('@/services/commercialRequests', () => ({
   getCommercialRequestsPendingCount: vi.fn(async () => ({ count: 3 })),
@@ -38,6 +39,7 @@ function tabbables(root: HTMLElement): HTMLElement[] {
 }
 
 beforeEach(() => {
+  mockRole = 'admin';
   logout.mockClear();
   vi.mocked(getIndentRequestsNewCount).mockClear();
   localStorage.clear();
@@ -175,6 +177,7 @@ function renderShellEm(path: string) {
           <Route element={<AppShell />}>
             <Route path="/cotacoes" element={<section data-testid="pagina">pagina-cotacoes</section>} />
             <Route path="/indent/catalogo" element={<section data-testid="pagina">pagina-indent</section>} />
+            <Route path="/indent/integracao" element={<section data-testid="pagina">pagina-integracao</section>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -183,22 +186,28 @@ function renderShellEm(path: string) {
 }
 
 describe('AppShell: variante Indent (sidebar por rota)', () => {
-  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, Solicitacoes + 4 links), classe app-shell--indent, sem Administracao e com o contador de novas so em Solicitacoes', async () => {
+  it('em /indent/catalogo: sidebar do Indent (selo, Voltar, Solicitacoes + 4 links), classe app-shell--indent, grupo Administracao so com Integracao Pipedrive e o contador de novas so em Solicitacoes', async () => {
     const { container } = renderShellEm('/indent/catalogo');
     expect(container.querySelector('.app-shell.app-shell--indent > .sidebar.sidebar--indent')).not.toBeNull();
     expect(container.querySelector('.sidebar__brand-tag')?.textContent).toBe('Indent');
     expect(screen.getByRole('link', { name: 'Voltar ao IntelliQuote' }).getAttribute('href')).toBe('/');
     const principal = container.querySelector('#sidebar-nav');
     expect(principal?.getAttribute('aria-label')).toBe('Indent');
-    expect(Array.from(principal?.querySelectorAll('a') ?? []).map((a) => (a.textContent ?? '').replace(/(Solicitações)\d+$/, '$1'))).toEqual([
+    expect(Array.from(principal?.querySelectorAll('.sidebar__group')[0]?.querySelectorAll('a') ?? []).map((a) => (a.textContent ?? '').replace(/(Solicitações)\d+$/, '$1'))).toEqual([
       'Solicitações',
       'Cotações',
       'Catálogo',
       'Fornecedores',
       'Clientes',
     ]);
-    expect(container.querySelectorAll('.sidebar__group-title')).toHaveLength(1);
-    expect(screen.queryByText('Administração')).toBeNull();
+    // grupo de administracao do Indent: so a Integracao Pipedrive (icone plug), sem os itens de administracao do IQ
+    expect(Array.from(container.querySelectorAll('.sidebar__group-title')).map((el) => el.textContent)).toEqual(['Indent', 'Administração']);
+    const integracao = screen.getByRole('link', { name: 'Integração Pipedrive' });
+    expect(integracao.getAttribute('href')).toBe('/indent/integracao');
+    expect(integracao.closest('.sidebar__group')?.querySelector('.sidebar__group-title')?.textContent).toBe('Administração');
+    expect(container.querySelectorAll('.sidebar__group')[1]?.querySelectorAll('a')).toHaveLength(1);
+    expect(container.querySelector('.app-shell--with-admin.app-shell--indent')).not.toBeNull();
+    expect(screen.queryByRole('link', { name: 'Usuários' })).toBeNull();
     // contador de solicitacoes NOVAS do Indent (so no link Solicitacoes); o de pendentes do IQ nao aparece
     expect(await screen.findByLabelText('2 pendentes')).toBeTruthy();
     expect(container.querySelectorAll('.sidebar__badge')).toHaveLength(1);
@@ -209,6 +218,30 @@ describe('AppShell: variante Indent (sidebar por rota)', () => {
     expect(screen.getByTestId('pagina').parentElement).toBe(container.querySelector('main.app-shell__content'));
   });
 
+  it('em /indent/integracao o link da Integracao fica ativo (aria-current) e a pagina entra no main', async () => {
+    const { container } = renderShellEm('/indent/integracao');
+    const link = screen.getByRole('link', { name: 'Integração Pipedrive' });
+    expect(link.getAttribute('aria-current')).toBe('page');
+    expect(link.className).toContain('sidebar__link--active');
+    expect(screen.getByTestId('pagina').parentElement).toBe(container.querySelector('main.app-shell__content'));
+    await screen.findByLabelText('2 pendentes');
+  });
+
+  it.each(['admin', 'comprador', 'gestor', 'viewer'])('%s (COMEX) ve a Integracao Pipedrive no Indent', async (role) => {
+    mockRole = role;
+    renderShellEm('/indent/catalogo');
+    expect(screen.getByRole('link', { name: 'Integração Pipedrive' })).toBeTruthy();
+    await screen.findByLabelText('2 pendentes');
+  });
+
+  it('comercial nao ve a Integracao Pipedrive (nem o grupo Administracao) no Indent', () => {
+    mockRole = 'comercial';
+    const { container } = renderShellEm('/indent/catalogo');
+    expect(screen.queryByRole('link', { name: 'Integração Pipedrive' })).toBeNull();
+    expect(screen.queryByText('Administração')).toBeNull();
+    expect(container.querySelector('.app-shell--with-admin')).toBeNull();
+  });
+
   it('em /cotacoes nada muda: sidebar padrao do IQ, sem classes nem selo do Indent', async () => {
     const { container } = renderShellEm('/cotacoes');
     await screen.findByLabelText('3 pendentes');
@@ -216,6 +249,7 @@ describe('AppShell: variante Indent (sidebar por rota)', () => {
     expect(container.querySelector('.sidebar--indent')).toBeNull();
     expect(container.querySelector('.sidebar__brand-tag')).toBeNull();
     expect(container.querySelector('nav[aria-label="Voltar"]')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Integração Pipedrive' })).toBeNull();
     expect(container.querySelector('#sidebar-nav')?.getAttribute('aria-label')).toBe('Navegação principal');
     expect(screen.getByRole('link', { name: 'Indent' }).getAttribute('href')).toBe('/indent');
     // fora do Indent o contador de novas nem e consultado

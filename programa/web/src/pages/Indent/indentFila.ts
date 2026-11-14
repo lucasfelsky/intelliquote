@@ -11,12 +11,15 @@ export interface FilaRotulo {
   classe: string;
 }
 
-/** `null` = status fora da fila (Respondida/Convertida/Perdida): a tela mostra "—". */
-export function filaRotulo(dias: number | null): FilaRotulo | null {
+/**
+ * `null` = status fora da fila (Respondida/Convertida/Perdida): a tela mostra "—".
+ * `sla` = prazo interno de resposta em dias uteis (1 a 3, configurado na Integracao; padrao 2): no prazo = "no limite", acima = "atrasada".
+ */
+export function filaRotulo(dias: number | null, sla = 2): FilaRotulo | null {
   if (dias === null) return null;
   const base = dias === 0 ? 'hoje' : `${dias} ${dias === 1 ? 'dia' : 'dias'}`;
-  if (dias > 2) return { texto: `${base} · atrasada`, classe: 'badge badge--danger' };
-  if (dias === 2) return { texto: `${base} · no limite`, classe: 'badge badge--warning' };
+  if (dias > sla) return { texto: `${base} · atrasada`, classe: 'badge badge--danger' };
+  if (dias === sla) return { texto: `${base} · no limite`, classe: 'badge badge--warning' };
   return { texto: base, classe: 'badge badge--muted' };
 }
 
@@ -65,6 +68,45 @@ export function formatarDataHora(valor: Date | string | null | undefined): strin
   const pega = (tipo: string) => partes.find((parte) => parte.type === tipo)?.value ?? '';
   const hora = pega('hour') === '24' ? '00' : pega('hour');
   return `${pega('day')}/${pega('month')} ${hora}:${pega('minute')}`;
+}
+
+const partesData = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+function partesEmSaoPaulo(data: Date) {
+  const partes = partesData.formatToParts(data);
+  const pega = (tipo: string) => partes.find((parte) => parte.type === tipo)?.value ?? '';
+  return { ano: pega('year'), mes: pega('month'), dia: pega('day'), hora: pega('hour') === '24' ? '00' : pega('hour'), minuto: pega('minute') };
+}
+
+/** `HH:mm` no fuso de Sao Paulo (nunca o do navegador); vazio/invalido = "—". */
+export function formatarHora(valor: Date | string | null | undefined): string {
+  if (!valor) return '—';
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return '—';
+  const p = partesEmSaoPaulo(data);
+  return `${p.hora}:${p.minuto}`;
+}
+
+/**
+ * "hoje às 09:42" (mesmo dia em Sao Paulo) ou "12/11 às 09:42" (mock v14, linha da conexao do Pipedrive).
+ * `agora` e injetavel para os testes.
+ */
+export function formatarQuando(valor: Date | string | null | undefined, agora: Date = new Date()): string {
+  if (!valor) return '—';
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return '—';
+  const p = partesEmSaoPaulo(data);
+  const hoje = partesEmSaoPaulo(agora);
+  const mesmoDia = p.ano === hoje.ano && p.mes === hoje.mes && p.dia === hoje.dia;
+  return `${mesmoDia ? 'hoje' : `${p.dia}/${p.mes}`} às ${p.hora}:${p.minuto}`;
 }
 
 /** Numero no padrao pt-BR (25000 -> "25.000"; 1,5 -> "1,5"). */
