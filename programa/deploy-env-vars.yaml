@@ -17,3 +17,16 @@ BACKEND_BUILD_TAG: "placeholder"
 # todas as envs a cada deploy, entao estes valores precisam estar aqui.
 INTERNAL_JOBS_OIDC_AUDIENCE: "intelliquote-internal-jobs"
 INTERNAL_JOBS_INVOKER_EMAIL: "iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserviceaccount.com"
+
+# Integracao Pipedrive do IQ Indent (SO LEITURA; runbook: docs/OPERATIONS_RUNBOOK.md). Dominio, funil e coluna de
+# origem sao configuracao de rotina e ficam aqui; funil/coluna/prazo "oficiais" passam a viver no banco (tela
+# Integracao Pipedrive) depois da 1a leitura, estes valores so semeiam a linha inicial.
+# NAO ficam neste arquivo (repo publico): o token PIPEDRIVE_API_TOKEN e as credenciais PIPEDRIVE_WEBHOOK_* (Secret
+# Manager, via --set-secrets do deploy) e os ids que identificam campos/usuario do CRM (PIPEDRIVE_ORG_CNPJ_FIELD_KEY,
+# PIPEDRIVE_DEAL_TYPE_FIELD_KEY, PIPEDRIVE_COMEX_USER_ID, PIPEDRIVE_SYNC_SINCE), que o workflow
+# deploy-intelliquote-api.yml anexa a partir de GitHub Variables de mesmo nome. Sem eles a integracao fica
+# configured=false e o backend sobe normalmente.
+PIPEDRIVE_DOMAIN: "sqquimica"
+PIPEDRIVE_PIPELINE_ID: "10"
+PIPEDRIVE_STAGE_ID: "149"
+PIPEDRIVE_STAGE_NAME: "Proposta Regulares a Enviar"
