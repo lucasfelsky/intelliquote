@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import IndentIntegracao from './IndentIntegracao';
 
@@ -569,7 +569,6 @@ describe('Integracao Pipedrive: fila de vinculo', () => {
     fireEvent.click(delta);
     expect(delta.checked).toBe(true);
     expect(gama.checked).toBe(false);
-    expect(api.post).not.toHaveBeenCalled();
     expect(container.querySelectorAll('.indent-orgopt')).toHaveLength(2);
   });
 
@@ -687,5 +686,148 @@ describe('Integracao Pipedrive: fila de vinculo', () => {
     expect(botoesDe('Vincular a existente')).toHaveLength(4);
     const urls = [api.get, api.post, api.put].flatMap((fn) => vi.mocked(fn).mock.calls.map((c) => String(c[0])));
     expect(urls.every((url) => url.startsWith('/api/v1/indent/'))).toBe(true);
+  });
+});
+
+const CLIENTE_X = {
+  id: 7001,
+  name: 'Cliente Exemplo X',
+  cnpj: '11444777000161',
+  city: 'Itajaí, SC',
+  ownerName: null,
+  pipedriveOrgId: null,
+  supplierRuleMode: 'LIVRE',
+  ruleReason: null,
+  isActive: true,
+  createdAt: '2026-11-12T12:00:00.000Z',
+  updatedAt: '2026-11-12T12:00:00.000Z',
+  supplierRules: [],
+};
+const aguardar = () => act(async () => new Promise((resolve) => setTimeout(resolve, 60)));
+const chamadasDaFila = () => vi.mocked(api.get).mock.calls.filter((c) => c[0] === '/api/v1/indent/pending-orgs').length;
+
+// Fluxo "Vincular a existente" -> fila (modal REAL, sem Host): toast, aviso de CNPJ divergente, foco e releitura da fila.
+describe('Integracao Pipedrive: fila de vinculo (vincular a existente)', () => {
+  beforeEach(() => {
+    const base = vi.mocked(api.get).getMockImplementation() as (url: string, query?: Record<string, unknown>) => Promise<unknown>;
+    vi.mocked(api.get).mockImplementation((async (url: string, query?: Record<string, unknown>) =>
+      url === '/api/v1/indent/clients'
+        ? { data: [CLIENTE_X], pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 }, counts: { todos: 1, semCnpj: 0 } }
+        : base(url, query)) as typeof api.get);
+  });
+
+  async function vincularAoClienteX() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Vincular a existente' }));
+    await screen.findByRole('dialog', { name: 'Cliente Exemplo Alfa Ltda' });
+    fireEvent.click(await screen.findByRole('radio', { name: /Cliente Exemplo X/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vincular' }));
+  }
+
+  it('vincular: POST do link com a organizacao e o cliente, toast, aviso persistente de CNPJ divergente com "Entendi" e foco no titulo da fila', async () => {
+    fila = [FILA[0]];
+    vi.mocked(api.post).mockResolvedValueOnce({ client: { id: 7001, name: 'Cliente Exemplo X', cnpj: '11444777000161', city: null, pipedriveOrgId: 900201 }, cnpjCompleted: false, cnpjDivergente: true, resolved: [{ id: 501, requestId: 11 }] });
+    renderTela();
+    await screen.findByText('1 pendente');
+    fila = [];
+    await vincularAoClienteX();
+    expect(await screen.findByText('Organização vinculada a Cliente Exemplo X')).toBeTruthy();
+    expect(api.post).toHaveBeenCalledWith('/api/v1/indent/pending-orgs/501/link', { orgId: 900201, clientId: 7001 });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const aviso = await screen.findByText(/é diferente do CNPJ da organização do Pipedrive/);
+    expect(aviso.getAttribute('role')).toBe('status');
+    expect(aviso.className).toContain('alert--warning');
+    expect(aviso.textContent).toContain('Cliente Exemplo X');
+    expect(await screen.findByText('Nenhuma pendência.')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Fila de vínculo' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }));
+    expect(screen.queryByText(/é diferente do CNPJ da organização do Pipedrive/)).toBeNull();
+  });
+
+  it('vincular com CNPJ completado (P5): o toast traz o detalhe e NAO aparece aviso de divergencia', async () => {
+    fila = [FILA[0]];
+    vi.mocked(api.post).mockResolvedValueOnce({ client: { id: 7001, name: 'Cliente Exemplo X', cnpj: '11222333000181', city: null, pipedriveOrgId: 900201 }, cnpjCompleted: true, cnpjDivergente: false, resolved: [{ id: 501, requestId: 11 }] });
+    renderTela();
+    await screen.findByText('1 pendente');
+    fila = [];
+    await vincularAoClienteX();
+    expect(await screen.findByText('Organização vinculada a Cliente Exemplo X')).toBeTruthy();
+    expect(screen.getByText('CNPJ de Cliente Exemplo Alfa Ltda preenchido no cadastro do cliente.')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByText('Nenhuma pendência.')).toBeTruthy();
+    expect(screen.queryByText(/é diferente do CNPJ/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Entendi' })).toBeNull();
+  });
+
+  it('vincular sem CNPJ completado: o toast nao traz o detalhe do CNPJ', async () => {
+    fila = [FILA[0]];
+    vi.mocked(api.post).mockResolvedValueOnce({ client: { id: 7001, name: 'Cliente Exemplo X', cnpj: '11222333000181', city: null, pipedriveOrgId: 900201 }, cnpjCompleted: false, cnpjDivergente: false, resolved: [] });
+    renderTela();
+    await screen.findByText('1 pendente');
+    fila = [];
+    await vincularAoClienteX();
+    expect(await screen.findByText('Organização vinculada a Cliente Exemplo X')).toBeTruthy();
+    expect(screen.queryByText(/preenchido no cadastro do cliente/)).toBeNull();
+  });
+
+  it('Cancelar: a fila e relida (outra pessoa pode ter resolvido a pendencia)', async () => {
+    fila = [FILA[0]];
+    renderTela();
+    fireEvent.click(await screen.findByRole('button', { name: 'Vincular a existente' }));
+    await screen.findByRole('dialog', { name: 'Cliente Exemplo Alfa Ltda' });
+    await aguardar();
+    const antes = chamadasDaFila();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(chamadasDaFila()).toBeGreaterThan(antes));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('409 "Pendência já resolvida.": o erro fica no modal e, ao fechar, a fila e relida', async () => {
+    fila = [FILA[0]];
+    vi.mocked(api.post).mockRejectedValueOnce(new ApiError(409, { message: 'Pendência já resolvida.' }, 'x'));
+    renderTela();
+    await screen.findByText('1 pendente');
+    await vincularAoClienteX();
+    expect((await screen.findByRole('alert')).textContent).toBe('Pendência já resolvida.');
+    await aguardar();
+    const antes = chamadasDaFila();
+    fila = [];
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() => expect(chamadasDaFila()).toBeGreaterThan(antes));
+    expect(await screen.findByText('Nenhuma pendência.')).toBeTruthy();
+  });
+
+  it('radios nunca vinculam nem criam sozinhos (espera o assincrono do mutate): organizacao COM CNPJ e SEM CNPJ', async () => {
+    fila = [FILA[2]];
+    renderTela();
+    const gama = (await screen.findByRole('radio', { name: /Cliente Exemplo Gama/ })) as HTMLInputElement;
+    const delta = screen.getByRole('radio', { name: /Cliente Exemplo Delta/ }) as HTMLInputElement;
+    fireEvent.click(delta); // sem CNPJ
+    await aguardar();
+    expect(delta.checked).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.click(gama); // com CNPJ: o caminho que criaria direto
+    await aguardar();
+    expect(gama.checked).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('criar cliente: segundo clique com a chamada pendente e ignorado (aria-disabled, uma unica chamada)', async () => {
+    fila = [FILA[0]];
+    let terminar: (valor: unknown) => void = () => undefined;
+    vi.mocked(api.post).mockImplementationOnce(() => new Promise((resolve) => (terminar = resolve)));
+    renderTela();
+    const botao = await screen.findByRole('button', { name: 'Criar cliente' });
+    botao.focus();
+    fireEvent.click(botao);
+    await waitFor(() => expect(botao.getAttribute('aria-disabled')).toBe('true'));
+    expect(botao.hasAttribute('disabled')).toBe(false);
+    expect(document.activeElement).toBe(botao);
+    fireEvent.click(botao);
+    fireEvent.click(botao);
+    await aguardar();
+    expect(api.post).toHaveBeenCalledTimes(1);
+    terminar({ client: { id: 7001, name: 'Cliente Exemplo Alfa Ltda', cnpj: '11222333000181', city: null, pipedriveOrgId: 900201 }, resolved: [] });
+    expect(await screen.findByText(/^Cliente “Cliente Exemplo Alfa Ltda” criado/)).toBeTruthy();
   });
 });
