@@ -14,16 +14,16 @@
 #     github-actions-deployer@PROJECT.iam.gserviceaccount.com)
 # Variaveis (Settings > Variables):
 #   - GCP_PROJECT_ID, GCP_REGION, GCP_ARTIFACT_REPO, GCP_CLOUD_RUN_SERVICE.
-# Nenhum segredo de aplicacao fica no GitHub: os valores sao lidos direto do
+# Nenhum segredo de aplicacao (tokens, senhas) fica no GitHub: os valores sao lidos direto do
 # GCP Secret Manager via `--set-secrets` (mesmo modelo do deploy manual via
 # `deploy-cloudrun.ps1`). Os secrets precisam existir no projeto com estes nomes
 # exatos: DATABASE_URL, DIRECT_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER,
 # PIPEDRIVE_API_TOKEN, PIPEDRIVE_WEBHOOK_USER, PIPEDRIVE_WEBHOOK_PASSWORD (integracao Pipedrive do IQ Indent; a SA do
 # Cloud Run precisa de secretAccessor nos tres; runbook em programa/docs/OPERATIONS_RUNBOOK.md).
 # Ids do CRM que nao entram no repo publico (PIPEDRIVE_ORG_CNPJ_FIELD_KEY, PIPEDRIVE_DEAL_TYPE_FIELD_KEY,
-# PIPEDRIVE_COMEX_USER_ID, PIPEDRIVE_SYNC_SINCE) vem de GitHub Variables de mesmo nome e sao anexados ao arquivo de
-# envs sem aparecer no log. Variavel ausente/invalida: a env fica de fora, a integracao fica desligada
-# (configured=false) e o deploy segue; o smoke test nunca depende do Pipedrive.
+# PIPEDRIVE_COMEX_USER_ID, PIPEDRIVE_SYNC_SINCE) vem de GitHub SECRETS de mesmo nome (so `secrets.*` sai mascarado no
+# log publico; `vars.*` NAO) e sao anexados ao arquivo de envs. Secret ausente/invalido: a env fica de fora, a
+# integracao fica desligada (configured=false) e o deploy segue; o smoke test nunca depende do Pipedrive.
 #
 # Pre-requisitos no GCP:
 #   - Cloud Run API habilitada
@@ -236,10 +236,10 @@ jobs:
         id: deploy
         shell: bash
         env:
-          PIPEDRIVE_ORG_CNPJ_FIELD_KEY: ${{ vars.PIPEDRIVE_ORG_CNPJ_FIELD_KEY }}
-          PIPEDRIVE_DEAL_TYPE_FIELD_KEY: ${{ vars.PIPEDRIVE_DEAL_TYPE_FIELD_KEY }}
-          PIPEDRIVE_COMEX_USER_ID: ${{ vars.PIPEDRIVE_COMEX_USER_ID }}
-          PIPEDRIVE_SYNC_SINCE: ${{ vars.PIPEDRIVE_SYNC_SINCE }}
+          PIPEDRIVE_ORG_CNPJ_FIELD_KEY: ${{ secrets.PIPEDRIVE_ORG_CNPJ_FIELD_KEY }}
+          PIPEDRIVE_DEAL_TYPE_FIELD_KEY: ${{ secrets.PIPEDRIVE_DEAL_TYPE_FIELD_KEY }}
+          PIPEDRIVE_COMEX_USER_ID: ${{ secrets.PIPEDRIVE_COMEX_USER_ID }}
+          PIPEDRIVE_SYNC_SINCE: ${{ secrets.PIPEDRIVE_SYNC_SINCE }}
         run: |
           set -euo pipefail
           IMAGE="${{ steps.build.outputs.image }}"
@@ -268,18 +268,23 @@ jobs:
           echo "Env vars file:"
           cat "${ENV_VARS_FILE}"
 
-          # Integracao Pipedrive: ids do CRM vindos de GitHub Variables, anexados DEPOIS do cat acima (o log de
-          # Actions de repo publico e publico: nunca imprimir o valor). Ausente ou fora do formato: fica de fora.
+          # Integracao Pipedrive: ids do CRM vindos de GitHub Secrets (mascarados no cabecalho do passo), anexados DEPOIS
+          # do cat acima (o log de Actions de repo publico e publico: nunca imprimir o valor). Ausente, duplicado ou
+          # fora do formato: fica de fora.
           if [ -n "$(tail -c1 "${ENV_VARS_FILE}")" ]; then echo >> "${ENV_VARS_FILE}"; fi
           append_pipedrive_env() {
             local name="$1" pattern="$2" value
             value="$(printf '%s' "${!name:-}" | tr -d '[:space:]')"
             if [ -z "${value}" ]; then
-              echo "Pipedrive: ${name} nao definida (GitHub Variables); omitida do deploy."
+              echo "Pipedrive: ${name} nao definida (GitHub Secrets); omitida do deploy."
+              return 0
+            fi
+            if grep -Eq "^${name}:" "${ENV_VARS_FILE}"; then
+              echo "::warning::Pipedrive: ${name} ja existe no arquivo de envs; secret ignorado."
               return 0
             fi
             if ! printf '%s' "${value}" | grep -Eq "${pattern}"; then
-              echo "::warning::Pipedrive: ${name} (GitHub Variables) fora do formato esperado; omitida do deploy."
+              echo "::warning::Pipedrive: ${name} (GitHub Secrets) fora do formato esperado; omitida do deploy."
               return 0
             fi
             printf '%s: "%s"\n' "${name}" "${value}" >> "${ENV_VARS_FILE}"
@@ -287,8 +292,8 @@ jobs:
           }
           append_pipedrive_env PIPEDRIVE_ORG_CNPJ_FIELD_KEY '^[0-9a-f]{40}$'
           append_pipedrive_env PIPEDRIVE_DEAL_TYPE_FIELD_KEY '^[0-9a-f]{40}$'
-          append_pipedrive_env PIPEDRIVE_COMEX_USER_ID '^[0-9]{1,9}$'
-          append_pipedrive_env PIPEDRIVE_SYNC_SINCE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          append_pipedrive_env PIPEDRIVE_COMEX_USER_ID '^[1-9][0-9]{0,8}$'
+          append_pipedrive_env PIPEDRIVE_SYNC_SINCE '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$'
 
           SECRET_REFS="SMTP_PASS=SMTP_PASS:latest"
           SECRET_REFS="${SECRET_REFS},SMTP_HOST=SMTP_HOST:latest"

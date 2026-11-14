@@ -5,7 +5,8 @@
 #   2. Artifact Registry ja criado (nome: intelliquote, regiao: southamerica-east1)
 #   3. Cloud SQL ja criado (instancia: intelliquote-db, db: intelliquote, regiao: southamerica-east1)
 #   4. Secrets ja criados no Secret Manager: SMTP_PASS, DATABASE_URL, DIRECT_URL,
-#      JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
+#      JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, PIPEDRIVE_API_TOKEN, PIPEDRIVE_WEBHOOK_USER,
+#      PIPEDRIVE_WEBHOOK_PASSWORD (integracao Pipedrive do IQ Indent)
 #
 # Conexao com o banco: IP publico (host=35.247.254.177) - configurado no DATABASE_URL/DIRECT_URL
 #

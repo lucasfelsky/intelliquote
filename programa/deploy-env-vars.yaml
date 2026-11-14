@@ -24,7 +24,7 @@ INTERNAL_JOBS_INVOKER_EMAIL: "iq-jobs-scheduler@sq-comex-updates-3d22f.iam.gserv
 # NAO ficam neste arquivo (repo publico): o token PIPEDRIVE_API_TOKEN e as credenciais PIPEDRIVE_WEBHOOK_* (Secret
 # Manager, via --set-secrets do deploy) e os ids que identificam campos/usuario do CRM (PIPEDRIVE_ORG_CNPJ_FIELD_KEY,
 # PIPEDRIVE_DEAL_TYPE_FIELD_KEY, PIPEDRIVE_COMEX_USER_ID, PIPEDRIVE_SYNC_SINCE), que o workflow
-# deploy-intelliquote-api.yml anexa a partir de GitHub Variables de mesmo nome. Sem eles a integracao fica
+# deploy-intelliquote-api.yml anexa a partir de GitHub Secrets de mesmo nome. Sem eles a integracao fica
 # configured=false e o backend sobe normalmente.
 PIPEDRIVE_DOMAIN: "sqquimica"
 PIPEDRIVE_PIPELINE_ID: "10"
