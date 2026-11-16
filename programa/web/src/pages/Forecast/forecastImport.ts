@@ -203,6 +203,7 @@ const MOTIVOS: Record<string, string> = {
   'sem codigo': 'sem código',
   'quantidade nao numerica': 'quantidade não numérica',
   'outra empresa': 'outra empresa',
+  'saldo abaixo de 1 kg': 'saldo abaixo de 1 kg',
   'deposito excluido': 'depósito excluído',
   'status concluido': 'status concluído',
   'atracada aguardando liberacao': 'atracada aguardando liberação',

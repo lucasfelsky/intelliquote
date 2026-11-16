@@ -70,6 +70,11 @@ export const FORECAST_ORIGIN_DBCORP = 'dbcorp';
 // Estoque = SALDO desta empresa.
 export const FORECAST_DBCORP_SALDO_EMPRESA = 'SQ QUIMICA';
 
+// SALDO: so entra linha (item + deposito) com "Saldo Final" >= N kg, comparado por linha ANTES de somar; abaixo disso
+// (0, fracao, negativo) vira ignorada "saldo abaixo de N kg" e nao entra em estoque, porDeposito, outrasEmpresas, A1
+// nem Saldo Ped. Venda. Decisao do usuario 2026-11.
+export const FORECAST_DBCORP_SALDO_MINIMO_KG = 1;
+
 // Estoque do SALDO (DS9004) via DBCorp: SO estes depositos entram (decisao do Comex compras, 2026-10-28).
 // Grafia JA normalizada (normalizeDbcorpText: sem acento, maiusculas, espacos colapsados, trim).
 // Qualquer outro deposito, inclusive vazio, fica FORA e aparece no preview. EM TRANSITO = transito INTERNO

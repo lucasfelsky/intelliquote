@@ -1,6 +1,10 @@
 import exceljs from 'exceljs';
 import { describe, expect, it } from 'vitest';
-import { FORECAST_DBCORP_DEPOSITOS_PERMITIDOS, FORECAST_DBCORP_SEM_DEPOSITO } from '../src/constants/forecast';
+import {
+  FORECAST_DBCORP_DEPOSITOS_PERMITIDOS,
+  FORECAST_DBCORP_SALDO_MINIMO_KG,
+  FORECAST_DBCORP_SEM_DEPOSITO,
+} from '../src/constants/forecast';
 import { normalizeDbcorpText, parseSaldo, type ResumoRelatorio } from '../src/utils/forecastDbcorp';
 
 // Fronteiras do estoque do SALDO (DS9004): SO a coluna "Saldo Final" e SO os depositos da allowlist.
@@ -298,5 +302,100 @@ describe('SALDO: estoque = "Saldo Final" dos depositos da allowlist', () => {
       { codigo: 'TST0001', qtd: 11 },
       { codigo: 'TST0002', qtd: 5 },
     ]);
+  });
+});
+
+describe('SALDO: linha com Saldo Final abaixo de 1 kg fica fora', () => {
+  const MOTIVO = 'saldo abaixo de 1 kg';
+
+  it('constante vale 1', () => {
+    expect(FORECAST_DBCORP_SALDO_MINIMO_KG).toBe(1);
+  });
+
+  it('borda: 1 e 1.5 entram; 0.999999, 0 e -5 saem; 0.9999999999 entra (round6)', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([
+        linha('TST0001', 'DEPOSITO ITAJAI', 1),
+        linha('TST0002', 'DEPOSITO ITAJAI', 1.5),
+        linha('TST0003', 'DEPOSITO ITAJAI', 0.999999),
+        linha('TST0004', 'DEPOSITO ITAJAI', 0),
+        linha('TST0005', 'DEPOSITO ITAJAI', -5),
+        linha('TST0006', 'DEPOSITO ITAJAI', 0.9999999999),
+      ]),
+    );
+    expect(r.linhas.map((l) => l.codigo)).toEqual(['TST0001', 'TST0002', 'TST0006']);
+    expect(r.usadas).toBe(3);
+    expect(r.total).toBeCloseTo(3.5, 6);
+    expect(r.ignoradas[MOTIVO]).toBe(3);
+    expect(r.lidas).toBe(r.usadas + ignoradasTotal(r));
+  });
+
+  it('quantidade nao numerica continua com motivo proprio', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([linha('TST0001', 'DEPOSITO ITAJAI', 'abc' as unknown as number), linha('TST0002', 'VS SQ', 5)]),
+    );
+    expect(r.ignoradas['quantidade nao numerica']).toBe(1);
+    expect(r.ignoradas[MOTIVO]).toBeUndefined();
+  });
+
+  it('corte e POR LINHA: mesmo codigo com 0.5 e 10 em depositos distintos -> so 10', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([linha('TST0001', 'DEPOSITO ITAJAI', 0.5), linha('TST0001', 'VS SQ', 10)]),
+    );
+    expect(r.linhas).toEqual([{ codigo: 'TST0001', qtd: 10 }]);
+    expect(r.total).toBe(10);
+  });
+
+  it('porDeposito nao conta linhas < 1 kg (inclusive deposito fora da allowlist)', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([
+        linha('TST0001', 'DEPOSITO ITAJAI', 10),
+        linha('TST0002', 'DEPOSITO ITAJAI', 0.5),
+        linha('TST0003', 'VS SQ', -3),
+        linha('TST0004', 'QUALIDADE', 0.5),
+        linha('TST0005', 'QUALIDADE', -7),
+      ]),
+    );
+    expect(r.porDeposito).toEqual([{ deposito: 'DEPOSITO ITAJAI', incluido: true, linhas: 1, saldo: 10 }]);
+    expect(r.ignoradas[MOTIVO]).toBe(4);
+    expect(r.ignoradas['deposito excluido']).toBeUndefined();
+  });
+
+  it('outra empresa com saldo < 1 kg: fora de outrasEmpresas, sem aviso A1, conta como abaixo de 1 kg', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([
+        ...todosOsDepositos(1),
+        linha('TST0101', 'DEPOSITO ITAJAI', 0, { empresa: 'OUTRA EMPRESA' }),
+      ]),
+    );
+    expect(r.outrasEmpresas).toEqual([]);
+    expect(r.avisos).toEqual([]);
+    expect(r.ignoradas[MOTIVO]).toBe(1);
+    expect(r.ignoradas['outra empresa']).toBeUndefined();
+  });
+
+  it('saldoPedVenda: linha < 1 kg nao aparece; linha >= 1 kg aparece', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([
+        linha('TST0001', 'DEPOSITO ITAJAI', 0.5, { pedVenda: 50 }),
+        linha('TST0002', 'DEPOSITO ITAJAI', 10, { pedVenda: 7 }),
+      ]),
+    );
+    expect(r.saldoPedVenda).toEqual([{ codigo: 'TST0002', qtd: 7 }]);
+  });
+
+  it('arquivo so com linhas < 1 kg: 0 usadas e aviso de sem saldo valido', async () => {
+    const r = await parseSaldo(
+      await saldoXlsx([linha('TST0001', 'DEPOSITO ITAJAI', 0), linha('TST0002', 'VS SQ', -1)]),
+    );
+    expect(r.usadas).toBe(0);
+    expect(r.linhas).toEqual([]);
+    expect(r.avisos).toEqual(['Relatorio SALDO sem saldo valido da empresa SQ QUIMICA.']);
+  });
+
+  it('Saldo Físico (sentinela +1000) continua irrelevante: Final 0,5 / Físico 1000,5 fica fora', async () => {
+    const r = await parseSaldo(await saldoXlsx([linha('TST0001', 'DEPOSITO ITAJAI', 0.5)]));
+    expect(r.linhas).toEqual([]);
+    expect(r.ignoradas[MOTIVO]).toBe(1);
   });
 });

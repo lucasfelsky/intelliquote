@@ -245,6 +245,7 @@ describe('leitura do resumo', () => {
     expect(rotuloDoMotivo('sem data de faturamento valida')).toBe('sem data de faturamento válida');
     expect(rotuloDoMotivo('fora da janela (antes do mes base)')).toBe('fora da janela (antes do mês base)');
     expect(rotuloDoMotivo('outra empresa')).toBe('outra empresa');
+    expect(rotuloDoMotivo('saldo abaixo de 1 kg')).toBe('saldo abaixo de 1 kg');
     expect(rotuloDoMotivo('atracada aguardando liberacao')).toBe('atracada aguardando liberação');
     expect(rotuloDoMotivo('eta final preenchida')).toBe('ETA FINAL preenchida (já chegou)');
     expect(rotuloDoMotivo('prontidao nao reconhecida')).toBe('DATA PRONTIDÃO não reconhecida');
