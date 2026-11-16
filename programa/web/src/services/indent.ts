@@ -235,6 +235,10 @@ export function promoteIndentProduct(id: number): Promise<IndentProduct> {
   return api.post<IndentProduct>(`${BASE}/products/${id}/promote`);
 }
 
+export function deleteIndentProduct(id: number): Promise<void> {
+  return api.del<void>(`${BASE}/products/${id}`);
+}
+
 // ---- Importacao do IntelliQuote (somente leitura na origem) ----
 export function listIndentSupplierCandidates(params?: { q?: string; page?: number }): Promise<Paginated<IndentSupplierCandidate>> {
   return api.get<Paginated<IndentSupplierCandidate>>(`${BASE}/import/suppliers`, {

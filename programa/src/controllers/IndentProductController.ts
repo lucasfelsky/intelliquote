@@ -55,6 +55,22 @@ export class IndentProductController {
     }
   }
 
+  static async remove(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+
+      if (!id) {
+        return res.status(400).json({ message: 'ID do produto inválido.' });
+      }
+
+      await IndentProductService.remove(id, req.user?.id ?? null);
+      return res.status(204).send();
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
   static async promote(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseId(req.params.id);

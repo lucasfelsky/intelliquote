@@ -9,6 +9,7 @@ import {
   createIndentClient,
   createIndentProduct,
   createIndentSupplier,
+  deleteIndentProduct,
   importIndentProducts,
   importIndentSuppliers,
   listIndentClients,
@@ -55,13 +56,14 @@ describe('services/indent', () => {
     await createIndentProduct({ name: 'A' });
     await updateIndentProduct(2, { notes: 'x' });
     await promoteIndentProduct(2);
+    await deleteIndentProduct(2);
     await listIndentSupplierCandidates();
     await listIndentProductCandidates();
     await importIndentSuppliers([1]);
     await importIndentProducts([1]);
 
     const todas = urls();
-    expect(todas).toHaveLength(18);
+    expect(todas).toHaveLength(19);
     for (const url of todas) expect(url.startsWith(PREFIXO), url).toBe(true);
     expect(todas).toContain('/api/v1/indent/suppliers/5/products');
     expect(todas).toContain('/api/v1/indent/suppliers/options');
@@ -77,6 +79,8 @@ describe('services/indent', () => {
     expect(api.put).toHaveBeenCalledWith('/api/v1/indent/clients/3/supplier-rule', { mode: 'BLOQUEIO', supplierIds: [5], reason: 'x' });
     await promoteIndentProduct(2);
     expect(api.post).toHaveBeenCalledWith('/api/v1/indent/products/2/promote');
+    await deleteIndentProduct(2);
+    expect(api.del).toHaveBeenCalledWith('/api/v1/indent/products/2');
     await importIndentProducts([4, 5]);
     expect(api.post).toHaveBeenCalledWith('/api/v1/indent/import/products', { ids: [4, 5] });
     await importIndentSuppliers([7]);

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/lib/prisma', async () => (await import('./helpers/indentRoutesMock')).createIndentPrismaModule());
@@ -33,6 +34,9 @@ describe('/api/v1/indent - produtos do catalogo', () => {
     expect(res.body.counts).toEqual({ total: 5, cadastrado: 4, livre: 1 });
     const args = prismaMock.indentProduct.findMany.mock.calls[0][0];
     expect(args.where).toMatchObject({ isActive: true, origin: 'LIVRE' });
+    const countWheres = prismaMock.indentProduct.count.mock.calls.map((c) => c[0].where);
+    expect(countWheres).toContainEqual({ isActive: true, origin: 'CADASTRADO' });
+    expect(countWheres).toContainEqual({ isActive: true, origin: 'LIVRE' });
     expect(args.select._count).toEqual({
       select: { suppliers: { where: { supplier: { isActive: true } } } },
     });
@@ -137,6 +141,169 @@ describe('/api/v1/indent - produtos do catalogo', () => {
 
     tx.indentProduct.findUnique.mockResolvedValue(null);
     expect((await call('post', '/products/99/promote', cookie)).status).toBe(404);
+  });
+
+  it('GET /products?inativos=1 inclui inativos no where e nas contagens dos chips', async () => {
+    prismaMock.indentProduct.findMany.mockResolvedValue([]);
+    prismaMock.indentProduct.count.mockResolvedValue(0);
+    const cookie = await loginAs('viewer');
+
+    const res = await call('get', '/products?inativos=1', cookie);
+
+    expect(res.status).toBe(200);
+    const where = prismaMock.indentProduct.findMany.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('isActive');
+    const countWheres = prismaMock.indentProduct.count.mock.calls.map((c) => c[0].where);
+    expect(countWheres).toContainEqual({ origin: 'CADASTRADO' });
+    expect(countWheres).toContainEqual({ origin: 'LIVRE' });
+    expect(countWheres.some((w) => 'isActive' in w)).toBe(false);
+  });
+
+  it('PUT /products/:id mantendo o mesmo nome -> 200 com name e nameKey', async () => {
+    const cookie = await loginAs('gestor');
+
+    const res = await call('put', '/products/2', cookie, { name: 'Zinco' });
+
+    expect(res.status).toBe(200);
+    expect(tx.indentProduct.update.mock.calls[0][0].data).toMatchObject({ name: 'Zinco', nameKey: 'zinco' });
+    expect(res.body).toMatchObject({ name: 'Zinco', nameKey: 'zinco' });
+  });
+
+  it('PUT /products/:id com o nome de outro produto (P2002) -> 409', async () => {
+    const cookie = await loginAs('gestor');
+    tx.indentProduct.update.mockRejectedValueOnce(uniqueError(['nameKey']));
+
+    const res = await call('put', '/products/2', cookie, { name: 'Ureia técnica' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('Já existe um produto com este nome no Indent.');
+  });
+
+  it('PUT /products/:id inativa e reativa so com isActive e audita', async () => {
+    const cookie = await loginAs('comprador');
+
+    tx.indentProduct.update.mockResolvedValueOnce(productRow({ isActive: false }));
+    const inativa = await call('put', '/products/2', cookie, { isActive: false });
+    expect(inativa.status).toBe(200);
+    expect(tx.indentProduct.update.mock.calls[0][0].data).toEqual({ isActive: false });
+
+    tx.indentProduct.update.mockResolvedValueOnce(productRow({ isActive: true }));
+    const reativa = await call('put', '/products/2', cookie, { isActive: true });
+    expect(reativa.status).toBe(200);
+    expect(tx.indentProduct.update.mock.calls[1][0].data).toEqual({ isActive: true });
+
+    expect(auditActions()).toEqual(['indent_product.updated', 'indent_product.updated']);
+  });
+});
+
+describe('/api/v1/indent - exclusao de produto (so sem vinculo)', () => {
+  const FIM = 'Inative o produto para tirá-lo das listas de escolha.';
+  const MSG_CORRIDA = `Não é possível excluir: o produto passou a ser usado por um fornecedor ou item de solicitação. ${FIM}`;
+
+  function expectNotDeleted() {
+    expect(tx.indentProduct.delete).not.toHaveBeenCalled();
+    expect(auditActions()).toEqual([]);
+  }
+
+  it('DELETE /products/:id sem vinculo -> 204, apaga e audita com beforeData', async () => {
+    const cookie = await loginAs('comprador');
+
+    const res = await call('delete', '/products/2', cookie);
+
+    expect(res.status).toBe(204);
+    expect(res.text).toBe('');
+    expect(tx.indentProduct.delete).toHaveBeenCalledWith({ where: { id: 2 } });
+    expect(tx.indentSupplierProduct.count).toHaveBeenCalledWith({ where: { productId: 2 } });
+    expect(tx.indentRequestItem.count).toHaveBeenCalledWith({ where: { productId: 2 } });
+    expect(auditActions()).toEqual(['indent_product.deleted']);
+    const audit = auditCall('indent_product.deleted');
+    expect(audit).toMatchObject({
+      entityType: 'indent_product',
+      entityId: '2',
+      performedById: 7,
+      beforeData: expect.objectContaining({ name: 'Zinco', origin: 'LIVRE' }),
+    });
+    expect(audit?.afterData).toBeUndefined();
+  });
+
+  it('DELETE inexistente -> 404, sem delete e sem audit', async () => {
+    const cookie = await loginAs('comprador');
+    tx.indentProduct.findUnique.mockResolvedValue(null);
+
+    const res = await call('delete', '/products/99', cookie);
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Produto não encontrado.');
+    expectNotDeleted();
+  });
+
+  it('DELETE com vinculo de fornecedor -> 409 com a contagem', async () => {
+    const cookie = await loginAs('comprador');
+    tx.indentSupplierProduct.count.mockResolvedValue(2);
+
+    const res = await call('delete', '/products/2', cookie);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(`Não é possível excluir: o produto está vinculado a 2 fornecedores. ${FIM}`);
+    expectNotDeleted();
+  });
+
+  it('DELETE com vinculo de item de solicitacao -> 409 no singular', async () => {
+    const cookie = await loginAs('comprador');
+    tx.indentRequestItem.count.mockResolvedValue(1);
+
+    const res = await call('delete', '/products/2', cookie);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(`Não é possível excluir: o produto está vinculado a 1 item de solicitação. ${FIM}`);
+    expectNotDeleted();
+  });
+
+  it('DELETE com os dois vinculos -> 409 juntando as partes', async () => {
+    const cookie = await loginAs('comprador');
+    tx.indentSupplierProduct.count.mockResolvedValue(1);
+    tx.indentRequestItem.count.mockResolvedValue(3);
+
+    const res = await call('delete', '/products/2', cookie);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(
+      `Não é possível excluir: o produto está vinculado a 1 fornecedor e 3 itens de solicitação. ${FIM}`,
+    );
+    expectNotDeleted();
+  });
+
+  it.each(['P2003', 'P2014'] as const)('DELETE com corrida barrada pela FK (%s) -> 409 e nenhum audit', async (code) => {
+    const cookie = await loginAs('comprador');
+    tx.indentProduct.delete.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed', { code, clientVersion: 'test' }),
+    );
+
+    const res = await call('delete', '/products/2', cookie);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(MSG_CORRIDA);
+    expect(auditActions()).toEqual([]);
+  });
+
+  it('DELETE com erro inesperado (nao Prisma, nao HttpError) -> 500, sem 409 e sem audit', async () => {
+    const cookie = await loginAs('comprador');
+    tx.indentProduct.delete.mockRejectedValueOnce(new Error('falha qualquer'));
+
+    const res = await call('delete', '/products/2', cookie);
+
+    expect(res.status).toBe(500);
+    expect(auditActions()).toEqual([]);
+  });
+
+  it('DELETE com id invalido -> 400', async () => {
+    const cookie = await loginAs('comprador');
+
+    const res = await call('delete', '/products/abc', cookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('ID do produto inválido.');
+    expect(tx.indentProduct.findUnique).not.toHaveBeenCalled();
   });
 });
 

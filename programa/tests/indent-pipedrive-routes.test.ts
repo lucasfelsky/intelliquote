@@ -112,12 +112,12 @@ beforeEach(() => {
 });
 
 describe('rotas novas: papeis', () => {
-  it('a tabela cobre as 4 rotas de /pipedrive e nenhuma rota DELETE existe no router do Indent', () => {
+  it('a tabela cobre as 4 rotas de /pipedrive e a unica rota DELETE do router do Indent e a exclusao de produto', () => {
     expect(NEW_ROUTES.filter((route) => route.path.startsWith('/pipedrive/'))).toHaveLength(4);
-    const methods = (indentRoutes.stack as Array<{ route?: { methods: Record<string, boolean> } }>).flatMap((layer) =>
-      layer.route ? Object.keys(layer.route.methods) : [],
+    const deletes = (indentRoutes.stack as Array<{ route?: { path: string; methods: Record<string, boolean> } }>).flatMap((layer) =>
+      layer.route?.methods.delete ? [layer.route.path] : [],
     );
-    expect(methods).not.toContain('delete');
+    expect(deletes).toEqual(['/products/:id']);
   });
 
   it('a tabela de papeis tambem cobre as 5 rotas do 5a.3 (fila de vinculo, referencia e itens da nota)', () => {
