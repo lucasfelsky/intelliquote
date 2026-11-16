@@ -17,6 +17,11 @@ vi.mock('@/api/client', () => ({
   ApiError: class ApiError extends Error {},
 }));
 
+vi.mock('@/components/useConfirm', () => ({
+  useConfirm: () => async () => true,
+  ConfirmProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 import { api } from '@/api/client';
 
 const OPCOES_PRODUTO = [
@@ -158,6 +163,8 @@ describe('Indent: marcacao x regiao `tela F14`', () => {
       expect(classes.has(c), c).toBe(true);
     }
     expect(container.querySelector('.chip.chip--active')).not.toBeNull();
+    expect(container.querySelector('td.indent-acao > .row-actions > .ghost-button.ghost-button--sm.danger-button')).not.toBeNull();
+    expect(container.querySelector('.indent-tag-row > .indent-tag')).not.toBeNull();
     expect(container.querySelector('.table-wrapper > table.table.indent-tabela')).not.toBeNull();
     expect(container.querySelector('[style]')).toBeNull();
   });

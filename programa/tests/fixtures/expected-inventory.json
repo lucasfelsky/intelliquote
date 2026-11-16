@@ -265,6 +265,7 @@
     "DELETE /forecast/snapshots/:id",
     "DELETE /forecast/snapshots/:id/rascunho-cotacao",
     "DELETE /forwarders/:id",
+    "DELETE /products/:id",
     "DELETE /quote-request-items/:id",
     "DELETE /quote-request-purchase-orders/:id",
     "DELETE /quote-requests/:id",

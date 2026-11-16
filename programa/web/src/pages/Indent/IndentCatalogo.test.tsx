@@ -21,6 +21,8 @@ vi.mock('@/api/client', () => ({
   },
 }));
 
+vi.mock('@/components/useConfirm', () => ({ useConfirm: () => async () => true }));
+
 import { api, ApiError } from '@/api/client';
 
 function produto(id: number, name: string, extra: Record<string, unknown> = {}) {
@@ -121,7 +123,10 @@ describe('IndentCatalogo', () => {
     expect(within(primeira).getByText('77-92-9')).toBeTruthy();
     expect(within(primeira).getByText('Cadastrado')).toBeTruthy();
     expect(primeira.querySelectorAll('td')[4]?.textContent).toBe('3');
-    expect(primeira.querySelector('button')).toBeNull();
+    expect(within(primeira).queryByRole('button', { name: 'Promover ao catálogo' })).toBeNull();
+    for (const acao of ['Editar', 'Inativar', 'Excluir']) {
+      expect(within(primeira).getByRole('button', { name: `${acao} Ácido cítrico anidro` }), acao).toBeTruthy();
+    }
 
     const livre = linhas[1] as HTMLElement;
     expect(within(livre).getByText('Digitado na solicitação 270/26')).toBeTruthy();
@@ -185,6 +190,7 @@ describe('IndentCatalogo', () => {
     expect(screen.queryByRole('button', { name: 'Importar do IntelliQuote' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Novo produto' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Promover ao catálogo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^(Editar|Inativar|Reativar|Excluir) / })).toBeNull();
     // a coluna de acoes continua (vazia) e a consulta segue completa
     expect(screen.getByText('Digitado à mão')).toBeTruthy();
   });

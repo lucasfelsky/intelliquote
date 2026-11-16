@@ -1,15 +1,19 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
+import { useConfirm } from '@/components/useConfirm';
 import { ForecastToast, useToastForecast } from '@/pages/Forecast/ForecastToast';
 import {
   createIndentProduct,
+  deleteIndentProduct,
   listIndentProducts,
   promoteIndentProduct,
+  updateIndentProduct,
   type IndentProduct,
+  type IndentProductInput,
   type IndentProductOrigin,
 } from '@/services/indent';
 import IndentImportModal from './IndentImportModal';
@@ -54,12 +58,15 @@ export default function IndentCatalogo() {
   const qc = useQueryClient();
   const canWrite = ESCRITA.includes(user?.role ?? '');
   const { toast, mostrar, fechar } = useToastForecast();
+  const confirm = useConfirm();
+  const tituloRef = useRef<HTMLHeadingElement>(null);
 
   const [busca, setBusca] = useState('');
   const [q, setQ] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [page, setPage] = useState(1);
   const [novoAberto, setNovoAberto] = useState(false);
+  const [edicao, setEdicao] = useState<IndentProduct | null>(null);
   const [importAberto, setImportAberto] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
 
@@ -75,7 +82,13 @@ export default function IndentCatalogo() {
   const produtos = useQuery({
     queryKey: ['indent', 'products', { q, filtro, page }],
     queryFn: () =>
-      listIndentProducts({ q, origin: filtro === 'todos' ? undefined : filtro, page, pageSize: PAGE_SIZE }),
+      listIndentProducts({
+        q,
+        origin: filtro === 'todos' ? undefined : filtro,
+        page,
+        pageSize: PAGE_SIZE,
+        inativos: true,
+      }),
     placeholderData: keepPreviousData,
   });
 
@@ -89,6 +102,51 @@ export default function IndentCatalogo() {
     onError: (err) => setErroAcao(messageOf(err)),
   });
 
+  // Reversivel, por isso sem confirmacao. O botao e o mesmo elemento nos dois estados (o foco nao se perde).
+  // Os botoes de linha usam aria-disabled (nao `disabled`) durante a mutacao: `disabled` tira o foco do botao e `focus()` nele e no-op.
+  const alternarAtivo = useMutation({
+    mutationFn: (produto: IndentProduct) => updateIndentProduct(produto.id, { isActive: !produto.isActive }),
+    onSuccess: (salvo, produto) => {
+      setErroAcao(null);
+      void qc.invalidateQueries({ queryKey: ['indent'] });
+      mostrar('salvo', `Produto ${salvo.name} ${produto.isActive ? 'inativado' : 'reativado'}`, '');
+    },
+    onError: (err) => setErroAcao(messageOf(err)),
+  });
+
+  const excluir = useMutation({
+    mutationFn: (produto: IndentProduct) => deleteIndentProduct(produto.id),
+    onSuccess: (_resultado, produto) => {
+      setErroAcao(null);
+      void qc.invalidateQueries({ queryKey: ['indent'] });
+      // A linha some do DOM: o foco vai para o titulo da pagina.
+      tituloRef.current?.focus();
+      mostrar('salvo', `Produto ${produto.name} excluído`, '');
+    },
+    onError: (err) => setErroAcao(messageOf(err)),
+  });
+
+  // O useConfirm nao devolve o foco ao fechar: ele volta a mao ao botao de origem.
+  async function pedirExclusao(produto: IndentProduct, origem: HTMLButtonElement) {
+    const ok = await confirm({
+      title: 'Excluir produto',
+      message: `Excluir “${produto.name}”? Esta ação não pode ser desfeita.`,
+      confirmText: 'Excluir',
+      tone: 'danger',
+    });
+    if (!ok) {
+      origem.focus();
+      return;
+    }
+    excluir.mutate(produto, {
+      onError: () => {
+        if (origem.isConnected) origem.focus();
+      },
+    });
+  }
+
+  const ocupado = promover.isPending || alternarAtivo.isPending || excluir.isPending;
+
   const linhas = produtos.data?.data ?? [];
   const contas = produtos.data?.counts;
   const totalPaginas = produtos.data?.pagination.totalPages ?? 1;
@@ -98,7 +156,9 @@ export default function IndentCatalogo() {
       <header className="page-header">
         <div>
           <p className="eyebrow">Indent</p>
-          <h1>Catálogo</h1>
+          <h1 ref={tituloRef} tabIndex={-1}>
+            Catálogo
+          </h1>
           <p className="page-subtitle">
             Catálogo próprio do Indent, separado do IntelliQuote. Aceita item digitado à mão, sem cadastro.
           </p>
@@ -189,23 +249,57 @@ export default function IndentCatalogo() {
                   <td className="indent-num">{produto.cas ?? <span className="indent-cell-sub">sem CAS</span>}</td>
                   <td>{produto.unit}</td>
                   <td>
-                    {produto.origin === 'LIVRE' ? (
-                      <span className="indent-tag indent-tag--manual">Digitado à mão</span>
-                    ) : (
-                      <span className="indent-tag indent-tag--ok">Cadastrado</span>
-                    )}
+                    <div className="indent-tag-row">
+                      {produto.origin === 'LIVRE' ? (
+                        <span className="indent-tag indent-tag--manual">Digitado à mão</span>
+                      ) : (
+                        <span className="indent-tag indent-tag--ok">Cadastrado</span>
+                      )}
+                      {!produto.isActive && <span className="indent-tag">Inativo</span>}
+                    </div>
                   </td>
                   <td className="indent-num">{produto.supplierCount.toLocaleString('pt-BR')}</td>
                   <td className="indent-acao">
-                    {produto.origin === 'LIVRE' && canWrite && (
-                      <button
-                        type="button"
-                        className="ghost-button ghost-button--sm indent-promover"
-                        disabled={promover.isPending}
-                        onClick={() => promover.mutate(produto.id)}
-                      >
-                        Promover ao catálogo
-                      </button>
+                    {canWrite && (
+                      <div className="row-actions">
+                        {produto.origin === 'LIVRE' && (
+                          <button
+                            type="button"
+                            className="ghost-button ghost-button--sm indent-promover"
+                            aria-disabled={ocupado || undefined}
+                            onClick={() => { if (!ocupado) promover.mutate(produto.id); }}
+                          >
+                            Promover ao catálogo
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--sm"
+                          aria-label={`Editar ${produto.name}`}
+                          aria-disabled={ocupado || undefined}
+                          onClick={() => { if (!ocupado) setEdicao(produto); }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--sm"
+                          aria-label={`${produto.isActive ? 'Inativar' : 'Reativar'} ${produto.name}`}
+                          aria-disabled={ocupado || undefined}
+                          onClick={() => { if (!ocupado) alternarAtivo.mutate(produto); }}
+                        >
+                          {produto.isActive ? 'Inativar' : 'Reativar'}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--sm danger-button"
+                          aria-label={`Excluir ${produto.name}`}
+                          aria-disabled={ocupado || undefined}
+                          onClick={(event) => { if (!ocupado) void pedirExclusao(produto, event.currentTarget); }}
+                        >
+                          Excluir
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -243,12 +337,24 @@ export default function IndentCatalogo() {
       )}
 
       {novoAberto && (
-        <NovoProdutoModal
+        <ProdutoModal
           onClose={() => setNovoAberto(false)}
           onSaved={(nome) => {
             setNovoAberto(false);
             void qc.invalidateQueries({ queryKey: ['indent'] });
             mostrar('salvo', `Produto ${nome} cadastrado`, '');
+          }}
+        />
+      )}
+
+      {edicao && (
+        <ProdutoModal
+          produto={edicao}
+          onClose={() => setEdicao(null)}
+          onSaved={(nome) => {
+            setEdicao(null);
+            void qc.invalidateQueries({ queryKey: ['indent'] });
+            mostrar('salvo', `Produto ${nome} atualizado`, '');
           }}
         />
       )}
@@ -270,26 +376,28 @@ export default function IndentCatalogo() {
   );
 }
 
-interface NovoProdutoModalProps {
+interface ProdutoModalProps {
+  /** Ausente = Novo produto; presente = edicao (o PUT leva so o que mudou). */
+  produto?: IndentProduct;
   onClose: () => void;
   onSaved: (nome: string) => void;
 }
 
 // Mock: Nome do produto, CAS (opcional) e Unidade. "Ou melhor": Sigla, Fabricante e Sinonimos opcionais (decisao registrada no plano).
-function NovoProdutoModal({ onClose, onSaved }: NovoProdutoModalProps) {
-  const [nome, setNome] = useState('');
-  const [cas, setCas] = useState('');
-  const [unidade, setUnidade] = useState('kg');
-  const [sigla, setSigla] = useState('');
-  const [fabricante, setFabricante] = useState('');
-  const [sinonimos, setSinonimos] = useState('');
+function ProdutoModal({ produto, onClose, onSaved }: ProdutoModalProps) {
+  const [nome, setNome] = useState(produto?.name ?? '');
+  const [cas, setCas] = useState(produto?.cas ?? '');
+  const [unidade, setUnidade] = useState(produto?.unit ?? 'kg');
+  const [sigla, setSigla] = useState(produto?.acronym ?? '');
+  const [fabricante, setFabricante] = useState(produto?.manufacturer ?? '');
+  const [sinonimos, setSinonimos] = useState(produto?.synonyms.join(', ') ?? '');
   const [erroNome, setErroNome] = useState<string | null>(null);
   const [erroCas, setErroCas] = useState<string | null>(null);
   const [erroForm, setErroForm] = useState<string | null>(null);
 
   const salvar = useMutation({
-    mutationFn: () =>
-      createIndentProduct({
+    mutationFn: async (): Promise<IndentProduct | null> => {
+      const atual = {
         name: nome.trim(),
         cas: toNullable(cas),
         unit: unidade.trim() || 'kg',
@@ -299,9 +407,27 @@ function NovoProdutoModal({ onClose, onSaved }: NovoProdutoModalProps) {
           .split(',')
           .map((item) => item.trim())
           .filter((item) => item.length > 0),
-      }),
-    onSuccess: (produto) => onSaved(produto.name),
-    onError: (err) => setErroForm(messageOf(err)),
+      };
+      if (!produto) return createIndentProduct(atual);
+
+      const payload: Partial<IndentProductInput> = {};
+      if (atual.name !== produto.name) payload.name = atual.name;
+      if (atual.cas !== produto.cas) payload.cas = atual.cas;
+      if (atual.unit !== produto.unit) payload.unit = atual.unit;
+      if (atual.acronym !== produto.acronym) payload.acronym = atual.acronym;
+      if (atual.manufacturer !== produto.manufacturer) payload.manufacturer = atual.manufacturer;
+      if (atual.synonyms.join('\n') !== produto.synonyms.join('\n')) payload.synonyms = atual.synonyms;
+      if (Object.keys(payload).length === 0) return null;
+      return updateIndentProduct(produto.id, payload);
+    },
+    onSuccess: (salvo) => {
+      if (salvo === null) onClose();
+      else onSaved(salvo.name);
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) setErroNome(messageOf(err));
+      else setErroForm(messageOf(err));
+    },
   });
 
   function enviar(event: FormEvent) {
@@ -316,7 +442,7 @@ function NovoProdutoModal({ onClose, onSaved }: NovoProdutoModalProps) {
   }
 
   return (
-    <Modal isOpen restoreFocus onClose={onClose} title="Novo produto">
+    <Modal isOpen restoreFocus onClose={onClose} title={produto ? 'Editar produto' : 'Novo produto'}>
       <form onSubmit={enviar} noValidate className="indent-form">
         {erroForm && (
           <div role="alert" className="alert alert--error">

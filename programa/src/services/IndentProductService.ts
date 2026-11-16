@@ -71,10 +71,40 @@ function translateConflict(error: unknown): never {
   throw error;
 }
 
+const MSG_CORRIDA =
+  'Não é possível excluir: o produto passou a ser usado por um fornecedor ou item de solicitação. Inative o produto para tirá-lo das listas de escolha.';
+
+function usageMessage(suppliers: number, items: number): string {
+  const partes: string[] = [];
+
+  if (suppliers > 0) {
+    partes.push(suppliers === 1 ? `${suppliers} fornecedor` : `${suppliers} fornecedores`);
+  }
+
+  if (items > 0) {
+    partes.push(items === 1 ? `${items} item de solicitação` : `${items} itens de solicitação`);
+  }
+
+  return `Não é possível excluir: o produto está vinculado a ${partes.join(' e ')}. Inative o produto para tirá-lo das listas de escolha.`;
+}
+
+// Vinculo criado depois da contagem: a FK (onDelete Restrict) barra e vira 409.
+function translateDeleteError(error: unknown): never {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    (error.code === 'P2003' || error.code === 'P2014')
+  ) {
+    throw new HttpError(409, MSG_CORRIDA);
+  }
+
+  throw error;
+}
+
 export class IndentProductService {
   static async list(query: IndentProductListQuery) {
+    const scope: Prisma.IndentProductWhereInput = query.inativos ? {} : { isActive: true };
     const where: Prisma.IndentProductWhereInput = {
-      ...(query.inativos ? {} : { isActive: true }),
+      ...scope,
       ...(query.origin ? { origin: query.origin } : {}),
       ...(query.q
         ? {
@@ -103,8 +133,8 @@ export class IndentProductService {
         take: pagination.take,
       }),
       prisma.indentProduct.count({ where }),
-      prisma.indentProduct.count({ where: { isActive: true, origin: 'CADASTRADO' } }),
-      prisma.indentProduct.count({ where: { isActive: true, origin: 'LIVRE' } }),
+      prisma.indentProduct.count({ where: { ...scope, origin: 'CADASTRADO' } }),
+      prisma.indentProduct.count({ where: { ...scope, origin: 'LIVRE' } }),
     ]);
 
     return {
@@ -200,6 +230,41 @@ export class IndentProductService {
       });
     } catch (error) {
       return translateConflict(error);
+    }
+  }
+
+  // Exclusao fisica, so de produto sem vinculo (fornecedor ou item de solicitacao).
+  static async remove(id: number, userId: number | null): Promise<void> {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const before = await tx.indentProduct.findUnique({ where: { id } });
+
+        if (!before) {
+          throw new HttpError(404, 'Produto não encontrado.');
+        }
+
+        const suppliers = await tx.indentSupplierProduct.count({ where: { productId: id } });
+        const items = await tx.indentRequestItem.count({ where: { productId: id } });
+
+        if (suppliers > 0 || items > 0) {
+          throw new HttpError(409, usageMessage(suppliers, items));
+        }
+
+        await tx.indentProduct.delete({ where: { id } });
+
+        await AuditLogService.log(
+          {
+            entityType: ENTITY_TYPE,
+            entityId: id,
+            action: 'indent_product.deleted',
+            performedById: userId,
+            beforeData: productSnapshot(before),
+          },
+          tx,
+        );
+      });
+    } catch (error) {
+      translateDeleteError(error);
     }
   }
 

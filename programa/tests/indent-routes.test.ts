@@ -20,7 +20,7 @@ import {
 
 const VALID_CNPJ = '11.222.333/0001-81';
 
-// Os 18 endpoints do PR 1. `leitura` = GET de cadastro (inclusive options); os GET de importacao
+// Os 19 endpoints do PR 1. `leitura` = GET de cadastro (inclusive options); os GET de importacao
 // sao restritos a quem escreve.
 const ENDPOINTS: Array<{ method: Method; path: string; body?: unknown; leitura: boolean }> = [
   { method: 'get', path: '/clients', leitura: true },
@@ -42,6 +42,7 @@ const ENDPOINTS: Array<{ method: Method; path: string; body?: unknown; leitura: 
   { method: 'post', path: '/products', body: { name: 'X' }, leitura: false },
   { method: 'put', path: '/products/2', body: { notes: 'Y' }, leitura: false },
   { method: 'post', path: '/products/2/promote', leitura: false },
+  { method: 'delete', path: '/products/2', leitura: false },
   { method: 'get', path: '/import/suppliers', leitura: false },
   { method: 'post', path: '/import/suppliers', body: { ids: [1] }, leitura: false },
   { method: 'get', path: '/import/products', leitura: false },
@@ -51,7 +52,7 @@ const ENDPOINTS: Array<{ method: Method; path: string; body?: unknown; leitura: 
 beforeEach(resetIndentMocks);
 
 describe('/api/v1/indent - autenticacao e papeis', () => {
-  it('sem login retorna 401 em todos os 18 endpoints', async () => {
+  it('sem login retorna 401 em todos os 19 endpoints', async () => {
     for (const endpoint of ENDPOINTS) {
       const req = request(app)[endpoint.method](`/api/v1/indent${endpoint.path}`);
       const res = endpoint.method === 'get' ? await req : await req.send((endpoint.body ?? {}) as object);
@@ -84,6 +85,7 @@ describe('/api/v1/indent - autenticacao e papeis', () => {
 
     expect((await call('post', '/clients', cookie, { name: 'X', cnpj: VALID_CNPJ })).status).toBe(201);
     expect((await call('post', '/products', cookie, { name: 'Produto X' })).status).toBe(201);
+    expect((await call('delete', '/products/2', cookie)).status).toBe(204);
     expect((await call('get', '/import/suppliers', cookie)).status).toBe(200);
     expect((await call('get', '/import/products', cookie)).status).toBe(200);
   });

@@ -35,6 +35,7 @@ indentRoutes.get('/products', requireAuth, canRead, IndentProductController.list
 indentRoutes.post('/products', requireAuth, canWrite, IndentProductController.create);
 indentRoutes.post('/products/:id/promote', requireAuth, canWrite, IndentProductController.promote);
 indentRoutes.put('/products/:id', requireAuth, canWrite, IndentProductController.update);
+indentRoutes.delete('/products/:id', requireAuth, canWrite, IndentProductController.remove);
 
 // Solicitacoes (PR 2). As rotas estaticas vem antes de /requests/:id.
 indentRoutes.get('/requests/new-count', requireAuth, canRead, IndentRequestController.newCount);

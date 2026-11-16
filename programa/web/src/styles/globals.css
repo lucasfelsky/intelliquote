@@ -13171,6 +13171,7 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   color: var(--rf-ink-soft);
 }
 .indent-page .indent-acao { text-align: right; }
+.indent-page .indent-acao .row-actions { justify-content: flex-end; }
 .indent-page .table .indent-promover {
   border: 0;
   box-shadow: inset 0 0 0 1.5px var(--rf-action);

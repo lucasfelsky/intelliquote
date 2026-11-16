@@ -66,9 +66,10 @@ const tx = {
     count: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
     createManyAndReturn: vi.fn(),
   },
-  indentSupplierProduct: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
+  indentSupplierProduct: { findMany: vi.fn(), count: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   indentSequence: { findUnique: vi.fn() },
   indentRequest: {
     findUnique: vi.fn(),
@@ -79,7 +80,7 @@ const tx = {
     update: vi.fn(),
   },
   ...pipedriveDelegates(),
-  indentRequestItem: { update: vi.fn(), updateMany: vi.fn(), aggregate: vi.fn(), create: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
+  indentRequestItem: { update: vi.fn(), updateMany: vi.fn(), aggregate: vi.fn(), count: vi.fn(), create: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
   indentQuote: {
     create: vi.fn(),
     createMany: vi.fn(),
@@ -252,7 +253,7 @@ export async function loginAs(role: string): Promise<string> {
   return cookie;
 }
 
-export type Method = 'get' | 'post' | 'put';
+export type Method = 'get' | 'post' | 'put' | 'delete';
 
 export async function call(method: Method, path: string, cookie: string, body?: unknown) {
   const app = await getApp();
@@ -289,6 +290,7 @@ export function expectNoWrites() {
   expect(tx.indentSupplier.update).not.toHaveBeenCalled();
   expect(tx.indentProduct.create).not.toHaveBeenCalled();
   expect(tx.indentProduct.update).not.toHaveBeenCalled();
+  expect(tx.indentProduct.delete).not.toHaveBeenCalled();
   expect(tx.indentClientSupplierRule.deleteMany).not.toHaveBeenCalled();
   expect(tx.indentSupplierProduct.deleteMany).not.toHaveBeenCalled();
 }
@@ -315,8 +317,11 @@ export function resetIndentMocks() {
   tx.indentProduct.count.mockResolvedValue(0);
   tx.indentProduct.create.mockResolvedValue(productRow({ origin: 'CADASTRADO' }));
   tx.indentProduct.update.mockResolvedValue(productRow());
+  tx.indentProduct.delete.mockResolvedValue(productRow());
   tx.indentProduct.createManyAndReturn.mockResolvedValue([]);
   tx.indentSupplierProduct.findMany.mockResolvedValue([]);
+  tx.indentSupplierProduct.count.mockResolvedValue(0);
+  tx.indentRequestItem.count.mockResolvedValue(0);
   tx.indentSupplierProduct.deleteMany.mockResolvedValue({ count: 0 });
   tx.indentSupplierProduct.createMany.mockResolvedValue({ count: 0 });
   tx.supplier.findMany.mockResolvedValue([]);
