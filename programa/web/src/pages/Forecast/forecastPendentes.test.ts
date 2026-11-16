@@ -142,10 +142,10 @@ describe('textos', () => {
   it('criterioTexto: meses da regra, compra em aberto do FUP; sem regra (backend antigo) nao afirma nada', () => {
     const regra = { mesesVenda: ['2026-07', '2026-08', '2026-09'], historicoAusente: [], compras: 'fup_em_aberto' as const };
     expect(criterioTexto(regra)).toBe(
-      'Entram na lista: venda em jul/2026, ago/2026 ou set/2026, programação pendente ou compra em aberto no FUP.',
+      'Entram na lista: venda em jul/2026, ago/2026 ou set/2026, programação (pendente ou aprovada) ou compra em aberto no FUP.',
     );
     expect(criterioTexto({ ...regra, compras: 'chegadas' })).toBe(
-      'Entram na lista: venda em jul/2026, ago/2026 ou set/2026, programação pendente ou chegada prevista no FUP.',
+      'Entram na lista: venda em jul/2026, ago/2026 ou set/2026, programação (pendente ou aprovada) ou chegada prevista no FUP.',
     );
     expect(criterioTexto({ ...regra, mesesVenda: ['2026-12'] })).toContain('venda em dez/2026, programação');
     expect(criterioTexto(undefined)).toBeNull();

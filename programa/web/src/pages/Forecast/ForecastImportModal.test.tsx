@@ -1013,7 +1013,7 @@ describe('ForecastImportModal - pendentes de cadastro (PR 3B-2)', () => {
     ]);
     // O criterio da regra e a contagem do que ficou fora da lista aparecem sob a tabela.
     expect(
-      regiao().getByText('Entram na lista: venda em out/2026, nov/2026 ou dez/2026, programação pendente ou compra em aberto no FUP.'),
+      regiao().getByText('Entram na lista: venda em out/2026, nov/2026 ou dez/2026, programação (pendente ou aprovada) ou compra em aberto no FUP.'),
     ).toBeTruthy();
     expect(regiao().getByText('Sem venda nos últimos 3 meses (não listados): 3 códigos · 900 kg de venda anual')).toBeTruthy();
     expect(regiao().getAllByRole('button', { name: /Completar cadastro do código/ })).toHaveLength(1);

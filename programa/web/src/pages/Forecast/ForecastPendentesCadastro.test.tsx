@@ -242,7 +242,7 @@ describe('ForecastPendentesCadastro - lista', () => {
     renderPainel();
     await screen.findByText(/Pendentes de cadastro \(2\)/);
     expect(
-      screen.getByText('Entram na lista: venda em ago/2026, set/2026 ou out/2026, programação pendente ou compra em aberto no FUP.'),
+      screen.getByText('Entram na lista: venda em ago/2026, set/2026 ou out/2026, programação (pendente ou aprovada) ou compra em aberto no FUP.'),
     ).toBeTruthy();
     expect(screen.getByText('Sem venda nos últimos 3 meses (não listados): 7 códigos · 3.400 kg de venda anual')).toBeTruthy();
     expect(screen.getByText('Sem histórico de vendas gravado em ago/2026: a lista pode estar incompleta.')).toBeTruthy();

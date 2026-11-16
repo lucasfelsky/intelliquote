@@ -143,7 +143,7 @@ async function reports(options: { vendasMes?: Cell[][]; withVendasAtual?: boolea
         progRow('Pendente', d('2033-06-20'), CODE_A1, 100),
         progRow('Pendente', d('2034-06-20'), CODE_A1, 777), // 12 meses a frente (mesmo MM): nao entra
         progRow('Pendente', d('2033-05-10'), CODE_A1, 888), // antes do mes base: nao entra
-        progRow('Aprovado', d('2033-06-21'), CODE_A1, 555),
+        progRow('Aprovado', d('2033-06-21'), CODE_A1, 555), // Aprovado entra (decisao 2026-11-16)
       ]),
     ),
     fup: file(
@@ -420,8 +420,8 @@ describe('Forecast - quinzena a partir dos relatorios DBCorp (DB)', () => {
     expect(a.P).toBe(15);
     // Chegadas V..Z = 06..10: a ETA vencida cai no mes base; ETD 2033-06-30 + 35 = 2033-08-04; sem data e CONCLUIDO fora.
     expect(a.chegadas).toEqual([800, 0, 400, 0, 0]);
-    // Programacao AC..AF = 06..09: so a pendente de 2033-06; 12 meses a frente e antes do mes base nao somam.
-    expect(a.programacoes).toEqual([100, 0, 0, 0]);
+    // Programacao AC..AF = 06..09: so a pendente (100) e a aprovada (555) de 2033-06; 12 meses a frente e antes do mes base nao somam.
+    expect(a.programacoes).toEqual([655, 0, 0, 0]);
   });
 
   testDbSkip('mesmo rotulo de novo -> 409 e o historico do mes nao muda', async () => {

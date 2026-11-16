@@ -213,7 +213,7 @@ const MOTIVOS: Record<string, string> = {
   'sem data de faturamento valida': 'sem data de faturamento válida',
   'fora da janela (antes do mes base)': 'fora da janela (antes do mês base)',
   'fora da janela (depois dos 4 meses)': 'fora da janela (depois dos 4 meses)',
-  'status diferente de Pendente': 'status diferente de Pendente',
+  'status diferente de Pendente ou Aprovado': 'status diferente de Pendente ou Aprovado',
 };
 
 /** Motivo de linha ignorada com acento; motivo desconhecido aparece cru. */

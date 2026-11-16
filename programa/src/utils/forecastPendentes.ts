@@ -6,7 +6,7 @@
 // como linha SEM produto e SEM fonte (sem lead time, sem sugestao de compra; FZ4) somente se tiver
 //   - venda nos ULTIMOS 3 MESES (base-3 + base-2 do historico mensal + o mes anterior das `Entradas`: a mesma base da
 //     media trimestral Q do motor), OU
-//   - PROGRAMACAO pendente, OU
+//   - PROGRAMACAO pendente ou aprovada, OU
 //   - COMPRA em aberto no FUP (qualquer linha nao CONCLUIDA, congelada em `Entradas.comprasEmAberto`).
 // Venda so no acumulado anual (ou so no mes atual) e codigo so com saldo ficam FORA da lista; os dois sao apenas contados.
 // Excecao: codigo SEM cadastro de AMOSTRA (prefixo + digito, `ehCodigoDeAmostra`) que seria listado tambem fica FORA e e

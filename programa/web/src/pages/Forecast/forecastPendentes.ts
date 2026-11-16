@@ -159,7 +159,7 @@ export function criterioTexto(regra: ForecastPendentesRegra | undefined): string
   const venda =
     meses.length === 1 ? meses[0] : `${meses.slice(0, -1).join(', ')} ou ${meses[meses.length - 1]}`;
   const compra = regra.compras === 'chegadas' ? 'chegada prevista no FUP' : 'compra em aberto no FUP';
-  return `Entram na lista: venda em ${venda}, programação pendente ou ${compra}.`;
+  return `Entram na lista: venda em ${venda}, programação (pendente ou aprovada) ou ${compra}.`;
 }
 
 /** Codigos fora da lista por falta de venda recente (so no mes atual ou no acumulado anual). */
