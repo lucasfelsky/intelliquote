@@ -1,5 +1,5 @@
 // Parsers dos relatorios DBCorp (.xlsx) que alimentam uma quinzena do Forecast (estoque = coluna "Saldo Final"
-// dos depositos da allowlist, decidido em 2026-10-28; FUP regra F3, decidida em 2026-10-22). Recebem Buffer (+ data base quando a janela
+// dos depositos da allowlist, so linhas >= 1 kg, decidido em 2026-10-28; FUP regra F3, decidida em 2026-10-22). Recebem Buffer (+ data base quando a janela
 // de meses importa), nao tocam em banco e devolvem avisos/erros em vez de abortar. Colunas sempre
 // localizadas pelo cabecalho. As regras do FUP (F3, prontidao) vivem em forecastDbcorpRegras.ts (puro).
 import exceljs from 'exceljs';
@@ -11,6 +11,7 @@ import {
   FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES,
   FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS,
   FORECAST_DBCORP_SALDO_EMPRESA,
+  FORECAST_DBCORP_SALDO_MINIMO_KG,
   FORECAST_DBCORP_SEM_DEPOSITO,
   FORECAST_DBCORP_SLOTS,
   FORECAST_MAX_SHEET_ROWS,
@@ -159,6 +160,7 @@ const DEPOSITOS_PERMITIDOS = new Set(FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.map(no
 const PROGRAMACAO_STATUS_ACEITOS = new Set(FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS.map(normalizeDbcorpText));
 const MOTIVO_STATUS_PROGRAMACAO = `status diferente de ${FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS.join(' ou ')}`;
 const EMPRESA_SALDO = normalizeDbcorpText(FORECAST_DBCORP_SALDO_EMPRESA);
+const MOTIVO_SALDO_ABAIXO_MINIMO = `saldo abaixo de ${FORECAST_DBCORP_SALDO_MINIMO_KG} kg`;
 const [HEADER_SALDO_PED_VENDA] = FORECAST_DBCORP_HEADERS_OPCIONAIS.saldo;
 
 // "Saldo Final" e obrigatoria e SEM fallback: "Saldo Físico Disponível" desconta pedido de venda e, usada em silencio,
@@ -206,6 +208,11 @@ export async function parseSaldo(buffer: Buffer): Promise<ParsedSaldo> {
     }
     if (!isQtd(bSaldo)) {
       acc.ignorar('quantidade nao numerica');
+      continue;
+    }
+    // Corte por linha, antes de empresa/deposito/soma: round6 absorve artefato de ponto flutuante (0,9999999999 = 1).
+    if (round6(bSaldo) < FORECAST_DBCORP_SALDO_MINIMO_KG) {
+      acc.ignorar(MOTIVO_SALDO_ABAIXO_MINIMO);
       continue;
     }
     const empresa = normalizeDbcorpText(txt(bEmpresa));
