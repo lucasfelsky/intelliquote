@@ -9,7 +9,7 @@ import {
   FORECAST_DBCORP_HEADERS_OPCIONAIS,
   FORECAST_DBCORP_HEADER_SCAN_ROWS,
   FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES,
-  FORECAST_DBCORP_PROGRAMACAO_STATUS,
+  FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS,
   FORECAST_DBCORP_SALDO_EMPRESA,
   FORECAST_DBCORP_SEM_DEPOSITO,
   FORECAST_DBCORP_SLOTS,
@@ -156,6 +156,8 @@ function semLinhas(erros: string[]): ResumoRelatorio {
 // --- SALDO (DS9004) --------------------------------------------------------------------------------
 
 const DEPOSITOS_PERMITIDOS = new Set(FORECAST_DBCORP_DEPOSITOS_PERMITIDOS.map(normalizeDbcorpText));
+const PROGRAMACAO_STATUS_ACEITOS = new Set(FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS.map(normalizeDbcorpText));
+const MOTIVO_STATUS_PROGRAMACAO = `status diferente de ${FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS.join(' ou ')}`;
 const EMPRESA_SALDO = normalizeDbcorpText(FORECAST_DBCORP_SALDO_EMPRESA);
 const [HEADER_SALDO_PED_VENDA] = FORECAST_DBCORP_HEADERS_OPCIONAIS.saldo;
 
@@ -361,7 +363,6 @@ export async function parseProgramacao(buffer: Buffer, baseDate: string): Promis
   const [cStatus, cData, cCodigo, cQtd] = cab.colunas;
 
   const janela = yearMonthsDaJanela(baseDate, FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES);
-  const statusAceito = normalizeDbcorpText(FORECAST_DBCORP_PROGRAMACAO_STATUS);
   const acc = new Acumulador();
   const linhas: LancamentoMensal[] = [];
   const foraDaJanela = { antes: 0, depois: 0 };
@@ -385,13 +386,13 @@ export async function parseProgramacao(buffer: Buffer, baseDate: string): Promis
       continue;
     }
     const nomeStatus = normalizeDbcorpText(txt(bStatus)) || '(sem status)';
-    const incluido = nomeStatus === statusAceito;
+    const incluido = PROGRAMACAO_STATUS_ACEITOS.has(nomeStatus);
     const entry = status.get(nomeStatus) ?? { status: nomeStatus, incluido, linhas: 0, qtd: 0 };
     entry.linhas++;
     entry.qtd += bQtd;
     status.set(nomeStatus, entry);
     if (!incluido) {
-      acc.ignorar(`status diferente de ${FORECAST_DBCORP_PROGRAMACAO_STATUS}`);
+      acc.ignorar(MOTIVO_STATUS_PROGRAMACAO);
       continue;
     }
 
@@ -419,12 +420,12 @@ export async function parseProgramacao(buffer: Buffer, baseDate: string): Promis
   const avisos: string[] = [];
   if (foraDaJanela.antes > 0 || foraDaJanela.depois > 0) {
     avisos.push(
-      `PROGRAMACAO: ${foraDaJanela.antes} ${plural(foraDaJanela.antes, 'linha pendente', 'linhas pendentes')} com faturamento antes do mes base e ${foraDaJanela.depois} depois da janela de ${FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES} meses foram ignoradas.`,
+      `PROGRAMACAO: ${foraDaJanela.antes} ${plural(foraDaJanela.antes, 'linha', 'linhas')} com faturamento antes do mes base e ${foraDaJanela.depois} depois da janela de ${FORECAST_DBCORP_JANELA_PROGRAMACAO_MESES} meses foram ignoradas.`,
     );
   }
   const semData = acc.ignoradas['sem data de faturamento valida'] ?? 0;
   if (semData > 0) {
-    avisos.push(`PROGRAMACAO: ${semData} ${plural(semData, 'linha pendente', 'linhas pendentes')} sem Data Faturamento valida foram ignoradas.`);
+    avisos.push(`PROGRAMACAO: ${semData} ${plural(semData, 'linha', 'linhas')} sem Data Faturamento valida foram ignoradas.`);
   }
   const porStatus = [...status.values()]
     .map((s) => ({ ...s, qtd: round6(s.qtd) }))

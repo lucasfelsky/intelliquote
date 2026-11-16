@@ -228,7 +228,7 @@ describe('parseProgramacao', () => {
   const HEADERS = ['Orçamento', 'Cliente/Prospect', 'Status', 'Data Faturamento', 'Cód. Item', 'Qtde.'];
   const row = (status: string, data: Cell, codigo: string, qtd: number): Cell[] => [1, 'Cliente teste', status, data, codigo, qtd];
 
-  it('so Pendente, com a janela de 4 meses por YYYY-MM', async () => {
+  it('Pendente ou Aprovado (caixa/acento/espacos normalizados); Reprovado, outro status e vazio fora; janela de 4 meses por YYYY-MM', async () => {
     const r = await parseProgramacao(
       await xlsx(HEADERS, [
         row('Pendente', d('2026-11-20'), 'tst0001', 10), // mes base
@@ -238,6 +238,10 @@ describe('parseProgramacao', () => {
         row('Pendente', d('2027-11-20'), 'TST0001', 50), // 12 meses a frente: mesmo MM do mes base
         row('Aprovado', d('2026-11-20'), 'TST0001', 60),
         row('Reprovado', d('2026-11-21'), 'TST0001', 70),
+        row('APROVADO', d('2026-12-05'), 'TST0001', 61),
+        row('  aprovado ', d('2027-01-15'), 'TST0001', 62),
+        row('', d('2026-11-20'), 'TST0001', 71), // sem status
+        row('Cancelado', d('2026-11-20'), 'TST0001', 72),
         row('Pendente', null, 'TST0001', 80), // sem data
         row('Pendente', 'sem previsao', 'TST0001', 90), // texto invalido
       ]),
@@ -247,18 +251,26 @@ describe('parseProgramacao', () => {
     expect(r.linhas).toEqual([
       { codigo: 'TST0001', qtd: 10, mes: '11' },
       { codigo: 'TST0001', qtd: 20, mes: '02' },
+      { codigo: 'TST0001', qtd: 60, mes: '11' },
+      { codigo: 'TST0001', qtd: 61, mes: '12' },
+      { codigo: 'TST0001', qtd: 62, mes: '01' },
     ]);
     expect(r.foraDaJanela).toEqual({ antes: 1, depois: 2 });
     expect(r.ignoradas).toEqual({
-      'status diferente de Pendente': 2,
+      'status diferente de Pendente ou Aprovado': 3,
       'fora da janela (antes do mes base)': 1,
       'fora da janela (depois dos 4 meses)': 2,
       'sem data de faturamento valida': 2,
     });
     expect(r.lidas).toBe(r.usadas + ignoradasTotal(r));
-    expect(r.porStatus.find((s) => s.status === 'APROVADO')).toMatchObject({ incluido: false, linhas: 1, qtd: 60 });
+    expect(r.porStatus.find((s) => s.status === 'APROVADO')).toMatchObject({ incluido: true, linhas: 3, qtd: 183 });
     expect(r.porStatus.find((s) => s.status === 'PENDENTE')).toMatchObject({ incluido: true, linhas: 7 });
+    expect(r.porStatus.find((s) => s.status === 'REPROVADO')).toMatchObject({ incluido: false, linhas: 1, qtd: 70 });
+    expect(r.porStatus.find((s) => s.status === '(sem status)')).toMatchObject({ incluido: false, linhas: 1 });
+    expect(r.porStatus.find((s) => s.status === 'CANCELADO')).toMatchObject({ incluido: false, linhas: 1 });
+    expect(r.porStatus.map((s) => s.status)).toEqual(['PENDENTE', 'APROVADO', '(sem status)', 'CANCELADO', 'REPROVADO']);
     expect(r.avisos.join(' ')).toMatch(/antes do mes base/);
+    expect(r.avisos.join(' ')).not.toMatch(/pendente/i);
   });
 
   it('coluna ausente -> erro', async () => {
@@ -561,7 +573,7 @@ describe('parseClientesAtivos / parseMargem', () => {
 
 // Opcional (maquina do Lucas): le os relatorios reais de uma pasta local e afirma SO estrutura.
 const realDir = process.env.FORECAST_DBCORP_DIR;
-// Data base proxima dos relatorios de exemplo (a PROGRAMACAO pendente cai na janela de 4 meses).
+// Data base proxima dos relatorios de exemplo (a PROGRAMACAO pendente/aprovada cai na janela de 4 meses).
 const REAL_BASE = '2026-10-15';
 describe('relatorios reais (opcional, FORECAST_DBCORP_DIR)', () => {
   const ler = (nome: string) => readFileSync(join(realDir ?? '', nome));

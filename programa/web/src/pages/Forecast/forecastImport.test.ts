@@ -244,6 +244,7 @@ describe('leitura do resumo', () => {
     expect(rotuloDoMotivo('status concluido')).toBe('status concluído');
     expect(rotuloDoMotivo('sem data de faturamento valida')).toBe('sem data de faturamento válida');
     expect(rotuloDoMotivo('fora da janela (antes do mes base)')).toBe('fora da janela (antes do mês base)');
+    expect(rotuloDoMotivo('status diferente de Pendente ou Aprovado')).toBe('status diferente de Pendente ou Aprovado');
     expect(rotuloDoMotivo('outra empresa')).toBe('outra empresa');
     expect(rotuloDoMotivo('atracada aguardando liberacao')).toBe('atracada aguardando liberação');
     expect(rotuloDoMotivo('eta final preenchida')).toBe('ETA FINAL preenchida (já chegou)');

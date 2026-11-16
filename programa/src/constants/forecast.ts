@@ -79,8 +79,9 @@ export const FORECAST_DBCORP_DEPOSITOS_PERMITIDOS = ['DEPOSITO ITAJAI', 'VS SQ',
 // Rotulo do preview para saldo sem deposito (no relatorio vem vazio ou so espacos).
 export const FORECAST_DBCORP_SEM_DEPOSITO = '(sem deposito)';
 
-// PROGRAMACAO: so este status entra.
-export const FORECAST_DBCORP_PROGRAMACAO_STATUS = 'Pendente';
+// PROGRAMACAO: so estes status entram (decisao do Lucas, 2026-11-16: Aprovado passa a entrar; Reprovado, outro
+// status ou vazio continuam fora). Comparacao normalizada (normalizeDbcorpText).
+export const FORECAST_DBCORP_PROGRAMACAO_STATUS_ACEITOS = ['Pendente', 'Aprovado'] as const;
 
 // FUP: este status (com ou sem acento) nao entra.
 export const FORECAST_DBCORP_FUP_STATUS_IGNORADO = 'CONCLUÍDO';
