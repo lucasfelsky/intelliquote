@@ -310,7 +310,8 @@ export class ForecastProductService {
         sheetOrder: draft.sheetOrder,
         sourceKey:
           draft.sourceKey !== null && knownSourceKeys.has(draft.sourceKey) ? draft.sourceKey : null,
-        notes: draft.notes,
+        // Observacao (AT) vazia na planilha NAO apaga a do cadastro (editada no painel ou vinda da quinzena anterior).
+        notes: draft.notes ?? found?.notes ?? null,
         fixedPriceFlag: draft.fixedPriceFlag,
         packaging: draft.packaging,
         noFractioning: draft.noFractioning,

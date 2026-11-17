@@ -290,6 +290,8 @@ export class ForecastImportService {
         );
 
         let productIds = new Map<string, number>();
+        // Observacao do cadastro por produto (nome normalizado): herdada pela quinzena quando a AT da planilha vem vazia.
+        let notesDoCadastro = new Map<string, string | null>();
         if (options.atualizarCadastro) {
           await ForecastSourceService.apply(tx, sourcePlan, userId);
           const sources = await tx.forecastSource.findMany({
@@ -301,12 +303,15 @@ export class ForecastImportService {
             new Map(sources.map((s) => [s.normalizedName, s.id])),
             userId,
           );
+          // O plano ja mantem a observacao do cadastro quando a AT esta vazia.
+          notesDoCadastro = new Map(productPlan.items.map((i) => [i.draft.normalizedName, i.desired.notes]));
         } else if (options.criarQuinzena) {
           const known = await tx.forecastProduct.findMany({
             where: { normalizedName: { in: productPlan.items.map((i) => i.draft.normalizedName) } },
-            select: { id: true, normalizedName: true },
+            select: { id: true, normalizedName: true, notes: true },
           });
           productIds = new Map(known.map((p) => [p.normalizedName, p.id]));
+          notesDoCadastro = new Map(known.map((p) => [p.normalizedName, p.notes]));
         }
 
         let snapshotId: number | null = null;
@@ -314,8 +319,11 @@ export class ForecastImportService {
           const quinzena = {
             ...parsed.quinzena,
             produtos: parsed.quinzena.produtos.map((p, index): FrozenProduct => {
-              const productId = productIds.get(productPlan.items[index].draft.normalizedName);
-              return productId === undefined ? p : { ...p, productId };
+              const nome = productPlan.items[index].draft.normalizedName;
+              const productId = productIds.get(nome);
+              // AT vazia herda a observacao do cadastro (a da ultima quinzena); AT preenchida manda.
+              const obs = p.obs.trim() !== '' ? p.obs : (notesDoCadastro.get(nome) ?? '');
+              return productId === undefined ? { ...p, obs } : { ...p, obs, productId };
             }),
           };
           const snapshot = await ForecastSnapshotService.createFromParsed(
