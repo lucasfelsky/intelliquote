@@ -37,6 +37,18 @@ const TX_OPTIONS = { timeout: 15000, maxWait: 10000 };
 const OPEN_STATUSES = ['ENVIADA', 'RESPONDIDA'];
 const FIELD_MAX = 255;
 
+// 410 LINK_EXPIRED com a referencia e a validade do link (a pagina publica mostra "valid until"). Sai so do resolveToken: o token existe,
+// entao nao ha enumeracao; nunca leva cliente, parceria nem e-mail. A rota repassa estes 2 campos ao corpo do erro.
+export class IndentPortalExpiredError extends PortalHttpError {
+  constructor(
+    readonly processRef: string,
+    readonly expiresAt: Date,
+  ) {
+    super(410, INDENT_PORTAL_EXPIRED_MESSAGE, 'LINK_EXPIRED');
+    this.name = 'IndentPortalExpiredError';
+  }
+}
+
 export interface IndentPortalMeta {
   ip: string | null;
   userAgent: string | null;
@@ -260,7 +272,7 @@ export class IndentPortalService {
         expiresAt: true,
         revokedAt: true,
         firstSeenAt: true,
-        quote: { select: { status: true, request: { select: { status: true } } } },
+        quote: { select: { status: true, revision: true, request: { select: { status: true, processNumber: true } } } },
       },
     });
 
@@ -274,7 +286,8 @@ export class IndentPortalService {
     }
     if (token.expiresAt <= now) {
       await IndentPortalService.logAccess(token.id, 'INVALID', 'expired', meta);
-      throw new PortalHttpError(410, INDENT_PORTAL_EXPIRED_MESSAGE, 'LINK_EXPIRED');
+      // So aqui (token que existe e expirou): a tela "Link expired" mostra a referencia e a validade. Mesmo formatador da view; nada do cliente.
+      throw new IndentPortalExpiredError(formatQuoteRef(token.quote.request.processNumber, token.quote.revision), token.expiresAt);
     }
     if (!OPEN_STATUSES.includes(token.quote.status) || token.quote.request.status === 'PERDIDA') {
       await IndentPortalService.logAccess(token.id, 'INVALID', 'closed', meta);

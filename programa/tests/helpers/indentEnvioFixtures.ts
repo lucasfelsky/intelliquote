@@ -152,7 +152,7 @@ export function portalTokenRow(overrides: Record<string, unknown> = {}) {
     expiresAt: FUTURE,
     revokedAt: null as Date | null,
     firstSeenAt: null as Date | null,
-    quote: { status: 'ENVIADA', request: { status: 'COTACAO' } },
+    quote: { status: 'ENVIADA', revision: 1, request: { status: 'COTACAO', processNumber: '277/26' } },
     ...overrides,
   };
 }

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex,nofollow">
+<title>SQ Quimica · Indent request</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='13' fill='%23004153'/%3E%3Ccircle cx='22.5' cy='22.5' r='10' fill='none' stroke='white' stroke-width='4.5'/%3E%3Cpath d='M29.8 29.8 31.2 31.2' stroke='white' stroke-width='4.5' stroke-linecap='round'/%3E%3Ccircle cx='35.4' cy='35.4' r='3.1' fill='%2314dda7'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="/portal/indent/app.css">
+<script src="/portal/indent/app.js" defer></script>
+</head>
+<body>
+<!-- Portal do fornecedor do IQ Indent. Sem script nem estilo inline (CSP). O JS clona os <template> abaixo e preenche SO com textContent/atributos. -->
+<main id="ip-app" data-state="loading" aria-busy="true">
+  <div class="p-body p-body--single p-wrap">
+    <section class="p-card p-center" role="status">
+      <h2>Loading your request&hellip;</h2>
+      <noscript><p>This page needs JavaScript to work.</p></noscript>
+    </section>
+  </div>
+</main>
+
+<template id="t-ico-warn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3 2 20h20zM12 10v5M12 18v.5"/></svg></template>
+<template id="t-ico-warn-big"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3 2 20h20zM12 10v5M12 18v.5"/></svg></template>
+<template id="t-ico-check"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5 9-9"/></svg></template>
+<template id="t-ico-check-sm"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12l5 5 9-9"/></svg></template>
+
+<template id="t-hero">
+  <header class="p-hero">
+    <div class="p-wrap">
+      <div class="p-brand">
+        <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true" focusable="false"><rect width="48" height="48" rx="13" fill="rgba(255,255,255,.12)"/><circle cx="22.5" cy="22.5" r="10" fill="none" stroke="#fff" stroke-width="4.5"/><path d="M29.8 29.8 L31.2 31.2" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/><circle cx="35.4" cy="35.4" r="3.1" fill="#14dda7"/></svg>
+        <b>IntelliQuote</b><span class="p-tag">Indent</span>
+      </div>
+      <div class="p-hero-main">
+        <div>
+          <p class="p-eyebrow">SQ Quimica &middot; Supplier Portal</p>
+          <h1 class="p-h1" tabindex="-1" data-slot="title"></h1>
+          <p class="p-sub" data-slot="sub"></p>
+        </div>
+        <div class="p-num" data-slot="num"><small data-slot="numLabel"></small><b data-slot="numValue"></b></div>
+      </div>
+      <div class="p-steps" data-slot="steps">
+        <div class="p-step"><i data-slot="n"></i><span>Review items</span></div>
+        <div class="p-step"><i data-slot="n"></i><span>Fill in your offer</span></div>
+        <div class="p-step"><i data-slot="n"></i><span>Submit</span></div>
+      </div>
+      <div class="p-hero-spacer" data-slot="spacer"></div>
+    </div>
+  </header>
+</template>
+
+<template id="t-banner">
+  <div class="p-banner"><span class="p-warn-ico" data-slot="icon"></span><div><strong data-slot="title"></strong> <span class="p-banner-text" data-slot="text"></span></div></div>
+</template>
+
+<template id="t-items">
+  <section class="p-card" aria-label="Requested items">
+    <span class="p-lbl">Requested items</span>
+    <dl class="p-meta" data-slot="meta"></dl>
+    <div class="p-scroll">
+      <table class="p-tbl">
+        <caption class="sr-only">Requested items</caption>
+        <thead><tr><th scope="col">PRODUCT</th><th scope="col">CAS</th><th scope="col" class="r">QUANTITY</th></tr></thead>
+        <tbody data-slot="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</template>
+
+<template id="t-pricing">
+  <section class="p-card" aria-label="Item pricing"><h2>Item pricing</h2></section>
+</template>
+
+<template id="t-item">
+  <div class="p-item" role="group">
+    <div class="p-item-head">
+      <div><strong data-slot="name"></strong><div class="p-cas" data-slot="cas"></div></div>
+      <span class="p-qty" data-slot="qty"></span>
+    </div>
+    <div class="p-grid">
+      <div class="p-field"><label data-label="pkg">Packaging</label><select class="p-in" data-input="pkg"><option value="">Select</option></select></div>
+      <div class="p-field"><label data-label="fob">FOB price per kg</label><div class="p-addon"><input class="p-in mono" data-input="fob" inputmode="decimal" placeholder="0.000" autocomplete="off" maxlength="12"><span data-slot="cur"></span></div><small data-help="fob">Origin port price</small></div>
+      <div class="p-field"><label data-label="cfr" data-slot="cfrLabel"></label><div class="p-addon"><input class="p-in mono" data-input="cfr" inputmode="decimal" placeholder="0.000" autocomplete="off" maxlength="12"><span data-slot="cur"></span></div><small data-help="cfr" data-slot="cfrHelp"></small></div>
+    </div>
+    <div class="p-line"><span>Line total, CFR</span><b data-slot="line"></b></div>
+  </div>
+</template>
+
+<template id="t-conditions">
+  <section class="p-card" aria-label="Offer conditions">
+    <h2>Offer conditions</h2>
+    <div class="p-grid">
+      <div class="p-field"><label for="cur">Currency</label><select class="p-in" id="cur"></select></div>
+      <div class="p-field"><label for="lead">Production lead time</label><div class="p-addon"><input class="p-in mono" id="lead" inputmode="numeric" placeholder="20" autocomplete="off" maxlength="3" aria-describedby="lead-h"><span>days</span></div><small id="lead-h">Counted from the order confirmation</small></div>
+      <div class="p-field"><label for="pay">Payment terms</label><select class="p-in" id="pay"><option value="">Select</option></select></div>
+      <div class="p-field"><label for="valid">Offer valid until</label><input class="p-in" id="valid" type="date"></div>
+    </div>
+    <div class="p-grid">
+      <div class="p-field"><label for="maker">Manufacturer</label><input class="p-in" id="maker" placeholder="Producer name and origin" maxlength="200" autocomplete="off" aria-describedby="maker-h"><small id="maker-h">Required if you are a trading company</small></div>
+    </div>
+    <div class="p-field"><label for="notes">Notes to SQ Quimica</label><textarea class="p-in" id="notes" rows="3" maxlength="2000" placeholder="Anything we should know about this offer"></textarea></div>
+    <div class="p-up">
+      <strong id="files-t">Documents (optional)</strong>
+      <span id="files-h" data-slot="filesHelp"></span>
+      <input type="file" id="files" multiple accept=".pdf,application/pdf" aria-labelledby="files-t" aria-describedby="files-h">
+      <ul class="p-files" id="filelist" aria-live="polite"></ul>
+    </div>
+  </section>
+</template>
+
+<template id="t-summary">
+  <aside class="p-col" aria-label="Offer summary">
+    <section class="p-card p-sum">
+      <span class="p-lbl">Your offer</span>
+      <div class="p-total" id="tot"></div>
+      <span class="p-cas" data-slot="totalCaption"></span>
+      <ul class="p-list">
+        <li><span>Items</span><span data-slot="count"></span></li>
+        <li><span>Quantity</span><span data-slot="qty"></span></li>
+        <li><span>Valid until</span><span id="sv"></span></li>
+      </ul>
+      <div class="p-alerts" id="alerts"></div>
+      <button type="submit" class="p-btn" id="submit"></button>
+      <span class="p-cas">You can update your offer later while the link is valid.</span>
+    </section>
+  </aside>
+</template>
+
+<template id="t-sent">
+  <div class="p-body p-body--single p-wrap">
+    <div class="p-col p-col--narrow">
+      <div class="p-alerts" data-slot="banners"></div>
+      <section class="p-card p-center">
+        <span class="p-big p-big--ok" data-slot="icon"></span>
+        <h2>Your offer was sent</h2>
+        <p data-slot="received"></p>
+      </section>
+      <section class="p-card" aria-label="Summary of your offer">
+        <span class="p-lbl">Summary of your offer</span>
+        <div class="p-scroll">
+          <table class="p-tbl">
+            <caption class="sr-only">Summary of your offer</caption>
+            <thead><tr><th scope="col">PRODUCT</th><th scope="col">PACKAGING</th><th scope="col" class="r">QUANTITY</th><th scope="col" class="r">FOB / KG</th><th scope="col" class="r">CFR / KG</th></tr></thead>
+            <tbody data-slot="rows"></tbody>
+          </table>
+        </div>
+        <ul class="p-list" data-slot="list"></ul>
+        <button type="button" class="p-btn sec" id="edit">Edit and send again</button>
+      </section>
+    </div>
+  </div>
+</template>
+
+<template id="t-center">
+  <div class="p-body p-body--single p-wrap">
+    <div class="p-col">
+      <section class="p-card p-center">
+        <span class="p-big" data-slot="icon"></span>
+        <h2 data-slot="heading"></h2>
+        <p data-slot="text"></p>
+        <button type="button" class="p-btn sec" data-slot="action" hidden></button>
+      </section>
+    </div>
+  </div>
+</template>
+
+<template id="t-foot">
+  <p class="p-foot p-wrap"><b>IntelliQuote Indent</b> &middot; Secure portal with a personal link &middot; please do not share this URL with third parties.</p>
+</template>
+</body>
+</html>

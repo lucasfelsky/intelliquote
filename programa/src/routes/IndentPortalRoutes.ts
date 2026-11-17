@@ -11,7 +11,7 @@ import {
 } from '../constants/indentPortal';
 import { logger } from '../lib/logger';
 import { IndentPortalNotificationService } from '../services/IndentPortalNotificationService';
-import { IndentPortalService, type IndentPortalMeta, type ResolvedIndentToken } from '../services/IndentPortalService';
+import { IndentPortalExpiredError, IndentPortalService, type IndentPortalMeta, type ResolvedIndentToken } from '../services/IndentPortalService';
 import { handleControllerError, HttpError } from '../utils/http';
 import { PortalHttpError } from '../utils/portalHttpError';
 import { indentPortalRespondSchema } from '../validators/indentPortal';
@@ -29,10 +29,13 @@ import {
 // 404 unico para formato invalido e inexistente; 410 so para token que existe. Sem /api/v1: rota publica, sem sessao.
 const indentPortalRoutes = Router();
 
-type ErrorBody = { message: string; code?: string; path?: string };
+type ErrorBody = { message: string; code?: string; path?: string; processRef?: string; expiresAt?: string };
 
 // Nenhum texto em portugues chega ao fornecedor: so PortalHttpError (mensagem ja em ingles) repassa `message`; o resto vira texto por status.
 function indentPortalErrorBody(error: HttpError): ErrorBody {
+  if (error instanceof IndentPortalExpiredError) {
+    return { message: error.message, code: 'LINK_EXPIRED', processRef: error.processRef, expiresAt: error.expiresAt.toISOString() };
+  }
   if (error instanceof PortalHttpError) {
     if (!error.code) {
       return { message: error.message };

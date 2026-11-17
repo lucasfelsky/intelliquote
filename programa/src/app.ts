@@ -282,4 +282,31 @@ app.get('/portal/credit', (_req, res) => {
   res.sendFile(path.join(publicPath, 'credit-portal.html'));
 });
 
+// Pagina publica do portal do fornecedor do IQ Indent (link do e-mail: /portal/indent?token=...). CSP so nestas 3 rotas (o helmet global
+// segue com contentSecurityPolicy: false). A API publica e chamada no Cloud Run direto quando a pagina vem do Hosting (mesmo padrao de
+// portal.html/credit-portal.html), por isso a origem do Cloud Run entra no connect-src.
+export const INDENT_PORTAL_API_ORIGIN = 'https://intelliquote-api-705697815580.southamerica-east1.run.app';
+export const INDENT_PORTAL_CSP = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self' https://fonts.googleapis.com",
+  'font-src https://fonts.gstatic.com',
+  "img-src 'self' data:",
+  `connect-src 'self' ${INDENT_PORTAL_API_ORIGIN}`,
+  "form-action 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+function sendIndentPortalFile(res: express.Response, file: string): void {
+  res.setHeader('Content-Security-Policy', INDENT_PORTAL_CSP);
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.sendFile(path.join(publicPath, file));
+}
+
+app.get('/portal/indent', (_req, res) => sendIndentPortalFile(res, 'indent-portal.html'));
+app.get('/portal/indent/app.css', (_req, res) => sendIndentPortalFile(res, 'indent-portal.css'));
+app.get('/portal/indent/app.js', (_req, res) => sendIndentPortalFile(res, 'indent-portal.js'));
+
 export { app };
