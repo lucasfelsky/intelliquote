@@ -1040,11 +1040,12 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       prismaMock.mailLog.findMany.mockResolvedValue([dispatchLog()]);
 
       const call = await send(cookieHeader, 77);
-      expect(call.subject).toBe('Sourcing request QR-2026-005 - Photoiniator');
+      // O MailLog das cotacoes antigas guardou o codigo no assunto: sai sem ele (mantem o resto).
+      expect(call.subject).toBe('Sourcing request - Photoiniator');
       expect(call.subject).not.toMatch(/^Re:/i);
 
       const prev = await preview(cookieHeader, 77);
-      expect(prev.subject).toBe('Sourcing request QR-2026-005 - Photoiniator');
+      expect(prev.subject).toBe('Sourcing request - Photoiniator');
       // (e) paridade preview x envio
       expect(prev.subject).toBe(call.subject);
     });
@@ -1138,7 +1139,8 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       prismaMock.emailTemplate.findUnique.mockResolvedValue(dbReplyTemplate({ subject: 'Banco - {{requestCode}}' }));
 
       const call = await send(cookieHeader, 77);
-      expect(call.subject).toBe('Banco - QR-2026-005');
+      expect(call.subject).not.toContain('QR-2026-005');
+      expect(call.subject).toMatch(/^Banco/);
     });
 
     it('o assunto do envio inicial vence o assunto do template do banco', async () => {
@@ -1147,7 +1149,7 @@ describe('POST /api/v1/quote-responses/:id/reply', () => {
       prismaMock.emailTemplate.findUnique.mockResolvedValue(dbReplyTemplate({ subject: 'Banco - {{requestCode}}' }));
 
       const call = await send(cookieHeader, 77);
-      expect(call.subject).toBe('Sourcing request QR-2026-005 - Photoiniator');
+      expect(call.subject).toBe('Sourcing request - Photoiniator');
     });
 
     // (d) regressao: o assunto digitado vence MailLog E o template do banco

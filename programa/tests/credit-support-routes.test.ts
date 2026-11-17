@@ -481,7 +481,10 @@ describe('Credit Support (rotas autenticadas)', () => {
       expect(first.relatedEntityType).toBe('credit_support_request');
       expect(first.relatedEntityId).toBe('9');
       expect(first.html).toContain('/portal/credit?token=');
-      expect(first.subject).toBe('Credit support request - RFQ-3 - Forn Ltd');
+      expect(first.subject).toBe('Credit support request - Forn Ltd');
+      expect(first.subject).not.toContain('RFQ-3');
+      expect(first.html).not.toContain('RFQ-3');
+      expect(first.text).not.toContain('RFQ-3');
     });
 
     it('copia nao e consumida quando o 1o envio falha', async () => {
@@ -576,7 +579,7 @@ describe('Credit Support (rotas autenticadas)', () => {
         .send({ contactIds: [11, 12] });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
-        subject: 'Credit support request - RFQ-3 - Forn Ltd',
+        subject: 'Credit support request - Forn Ltd',
         partner: { id: 5, name: 'Banco Alfa' },
         items: 2,
       });
@@ -702,7 +705,10 @@ describe('Credit Support (rotas autenticadas)', () => {
       expect(sendMock).toHaveBeenCalledTimes(2);
       expect(sendMock.mock.calls[0][0].to.name).toBe('Ana');
       expect(sendMock.mock.calls[1][0].cc).toEqual([]);
-      expect(sendMock.mock.calls[0][0].subject).toBe('Credit support request - RFQ-3 - Forn Ltd');
+      // Assunto gravado por encaminhamento antigo (com o codigo): sai sem ele no reenvio.
+      expect(sendMock.mock.calls[0][0].subject).toBe('Credit support request - Forn Ltd');
+      expect(sendMock.mock.calls[0][0].html).not.toContain('RFQ-3');
+      expect(sendMock.mock.calls[0][0].text).not.toContain('RFQ-3');
       const audit = JSON.stringify(db.auditLog.create.mock.calls);
       expect(audit).not.toContain(rawToken);
       expect(audit).not.toContain(upd.data.tokenHash);

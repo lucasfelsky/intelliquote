@@ -48,6 +48,7 @@ export interface PurchaseOrderEmailInput {
   quoteRequest: {
     id: number;
     requestCode: string;
+    productName?: string | null;
     destinationPort?: string | null;
     items?: Array<{ destinationPort?: string | null }>;
   };
@@ -161,7 +162,8 @@ export async function sendPurchaseOrderEmail(
     }
   }
 
-  const defaultSubject = `Purchase Order - ${quoteRequest.requestCode}`;
+  // Codigo interno da cotacao nunca vai ao fornecedor/parceiro.
+  const defaultSubject = `Purchase Order - ${quoteRequest.productName?.trim() || 'SQ Quimica'}`;
   const message = payload.message?.trim() ?? '';
   const destinationPort =
     quoteRequest.destinationPort?.trim() ||
@@ -190,7 +192,6 @@ export async function sendPurchaseOrderEmail(
   const rendered = await renderPoFromTemplate(
     {
       subject: subjectOverride || defaultSubject,
-      requestCode: quoteRequest.requestCode,
       supplierContactName: recipient.name,
       forwarderInfo: payload.forwarderInfo?.trim() ?? '',
       destinationPort,

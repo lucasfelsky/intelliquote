@@ -3,6 +3,7 @@ import path from 'path';
 import { EmailTemplateService } from '../services/EmailTemplateService';
 import { logger } from '../lib/logger';
 import { escapeHtml } from './renderQuoteDispatch';
+import { omitRequestCode } from './supplierFacing';
 
 export const REPLY_TEMPLATE_KEY = 'quote_reply';
 export const REPLY_DEFAULT_LOCALE = 'en';
@@ -53,8 +54,6 @@ export interface QuoteReplyItem {
 
 export interface QuoteReplyVars {
   subject: string;
-  quoteRequestId: number;
-  requestCode: string;
   productName: string;
   supplierName: string;
   supplierContactName: string;
@@ -406,9 +405,9 @@ export function renderReplySections(template: string, vars: QuoteReplyVars, plai
   });
 }
 
-export function buildReplyIntro(vars: { targetPrice?: number; hasItemTargets?: boolean; isWinner: boolean; requestCode: string; productName?: string }): string {
-  const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
-  const prefix = `Thank you for your quotation on ${vars.requestCode}${productSuffix}.`;
+export function buildReplyIntro(vars: { targetPrice?: number; hasItemTargets?: boolean; isWinner: boolean; productName?: string }): string {
+  const productSuffix = vars.productName ? ` for ${vars.productName}` : '';
+  const prefix = `Thank you for your quotation${productSuffix}.`;
 
   if ((vars.targetPrice !== undefined && vars.targetPrice !== null) || vars.hasItemTargets) {
     return `${prefix} We are currently evaluating your proposal and, to move forward, we would like to discuss adjusting the price towards our target below.`;
@@ -547,10 +546,12 @@ export interface RenderedQuoteReply {
 // envio inicial, resolvido pelo controller) > assunto do template do banco
 // renderizado > vars.subject.
 export async function renderReplyFromTemplate(
-  vars: QuoteReplyVars,
+  rawVars: QuoteReplyVars,
   locale: string = REPLY_DEFAULT_LOCALE,
   subjectOverride?: string,
 ): Promise<RenderedQuoteReply> {
+  // Codigo interno e id numerico da cotacao nunca vao ao fornecedor (nem via template do banco).
+  const vars = omitRequestCode(rawVars);
   const dbTemplate = await EmailTemplateService.get(REPLY_TEMPLATE_KEY, locale);
   const override = subjectOverride?.trim();
   const subject = override

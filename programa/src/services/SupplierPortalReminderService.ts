@@ -755,11 +755,12 @@ export class SupplierPortalReminderService {
       if (items.length === 1) {
         const { candidate } = items[0].state;
         const closesOn = formatDisplayDate(closesOnDate(items[0].state));
+        // Codigo interno da cotacao nunca vai ao fornecedor.
+        const reminderProduct = candidate.quoteRequest.productName?.trim();
         rendered = await renderReminderFromTemplate({
-          subject: `Reminder: quotation for ${candidate.quoteRequest.requestCode} closes on ${closesOn}`,
+          subject: `Reminder: quotation${reminderProduct ? ` for ${reminderProduct}` : ''} closes on ${closesOn}`,
           contactName: first.supplierContact.name,
           supplierName: candidate.supplier.name,
-          requestCode: candidate.quoteRequest.requestCode,
           productName: candidate.quoteRequest.productName ?? '',
           expiresAt: closesOn,
           portalLink: linkOf(items[0]),
@@ -771,7 +772,6 @@ export class SupplierPortalReminderService {
           contactName: first.supplierContact.name,
           companyName,
           items: items.map((item) => ({
-            requestCode: item.state.candidate.quoteRequest.requestCode,
             productName: item.state.candidate.quoteRequest.productName ?? '',
             supplierName: item.state.candidate.supplier.name,
             closesOn: formatDisplayDate(closesOnDate(item.state)),

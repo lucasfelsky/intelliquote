@@ -5,6 +5,7 @@ import {
   renderReminderDigest,
 } from '../src/mailer/renderQuoteReminderDigest';
 
+// requestCode e' "canario": o digest e' voltado ao fornecedor e nunca pode mostra-lo.
 const baseItems = [
   {
     requestCode: 'QR-2026-042',
@@ -48,10 +49,12 @@ describe('renderReminderDigest', () => {
     expect(html).not.toContain('href="https://portal.example/portal?token=raw-one&v=1"');
   });
 
-  it('html tem os codigos, prazos, saudacao, contagem e rodape; sem marcador residual', () => {
+  it('html tem os produtos (sem o codigo da cotacao), prazos, saudacao, contagem e rodape; sem marcador residual', () => {
     const { html } = render();
-    expect(html).toContain('QR-2026-042');
-    expect(html).toContain('QR-2026-043');
+    expect(html).not.toContain('QR-2026-042');
+    expect(html).not.toContain('QR-2026-043');
+    expect(html).toContain('<strong>PI-TPO</strong>');
+    expect(html).toContain('<strong>Resina</strong>');
     expect(html).toContain('Closes on 10 Nov 2026');
     expect(html).toContain('Closes on 12 Nov 2026');
     expect(html).toContain('Dear Li Wei, this is a friendly reminder that 2 quotations are still pending.');
@@ -63,20 +66,24 @@ describe('renderReminderDigest', () => {
   it('o texto tem uma linha por item com o link cru e usa CRLF', () => {
     const { text } = render();
     const lines = text.split('\r\n');
-    expect(lines.filter((line) => line.startsWith('QR-'))).toHaveLength(2);
-    expect(lines.find((line) => line.startsWith('QR-2026-042'))).toContain('https://portal.example/portal?token=raw-one&v=1');
-    expect(lines.find((line) => line.startsWith('QR-2026-043'))).toContain('https://portal.example/portal?token=raw-two&v=1');
-    expect(lines.find((line) => line.startsWith('QR-2026-042'))).toContain('PI-TPO');
-    expect(lines.find((line) => line.startsWith('QR-2026-042'))).toContain('10 Nov 2026');
+    expect(text).not.toContain('QR-');
+    expect(lines.filter((line) => line.startsWith('PI-TPO') || line.startsWith('Resina'))).toHaveLength(2);
+    expect(lines.find((line) => line.startsWith('PI-TPO'))).toContain('https://portal.example/portal?token=raw-one&v=1');
+    expect(lines.find((line) => line.startsWith('Resina'))).toContain('https://portal.example/portal?token=raw-two&v=1');
+    expect(lines.find((line) => line.startsWith('PI-TPO'))).toContain('10 Nov 2026');
     expect(text).toContain('Dear Li Wei,');
     expect(text.includes('\n') && !text.replace(/\r\n/g, '').includes('\n')).toBe(true);
   });
 
-  it('sem productName nao aparece o separador " — "', () => {
+  it('sem productName o item vira "Quotation" (sem o codigo e sem o separador " — ")', () => {
     const { html, text } = render([{ ...baseItems[0], productName: '' }, { ...baseItems[1], productName: '' }]);
-    const itemLines = text.split('\r\n').filter((line) => line.startsWith('QR-'));
+    const itemLines = text.split('\r\n').filter((line) => line.startsWith('Quotation'));
+    expect(itemLines).toHaveLength(2);
     for (const line of itemLines) expect(line).not.toContain(' — ');
+    expect(html).toContain('<strong>Quotation</strong>');
     expect(html).not.toContain('&mdash;');
+    expect(html).not.toContain('QR-');
+    expect(text).not.toContain('QR-');
   });
 
   it('o nome do fornecedor aparece em cada item (html escapado e texto)', () => {
@@ -85,8 +92,8 @@ describe('renderReminderDigest', () => {
     expect(html).not.toContain('<b>Forn');
     expect(html).toContain('Supplier: Ningbo Resins Ltd');
     const lines = text.split('\r\n');
-    expect(lines.find((line) => line.startsWith('QR-2026-042'))).toContain('supplier: <b>Forn & Co</b>');
-    expect(lines.find((line) => line.startsWith('QR-2026-043'))).toContain('supplier: Ningbo Resins Ltd');
+    expect(lines.find((line) => line.startsWith('PI-TPO'))).toContain('supplier: <b>Forn & Co</b>');
+    expect(lines.find((line) => line.startsWith('Resina'))).toContain('supplier: Ningbo Resins Ltd');
   });
 
   it('o aviso de seguranca diz "each link above" (os links vem antes do aviso)', () => {

@@ -148,7 +148,6 @@ async function buildPortalView(tokenId: number) {
   return {
     quoteRequest: {
       id: token.quoteRequest.id,
-      requestCode: token.quoteRequest.requestCode,
       productName: token.quoteRequest.productName,
       description: token.quoteRequest.description?.trim()
         ? token.quoteRequest.description.trim()

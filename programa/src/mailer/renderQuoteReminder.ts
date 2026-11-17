@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { EmailTemplateService } from '../services/EmailTemplateService';
 import { escapeHtml } from './renderQuoteDispatch';
+import { omitRequestCode } from './supplierFacing';
 
 // F5 (backlog 2026-07-12): lembrete pre-deadline ao FORNECEDOR que ainda nao
 // respondeu. Como o quote_dispatch, e' voltado ao fornecedor estrangeiro ->
@@ -35,7 +36,6 @@ export interface QuoteReminderVars {
   subject: string;
   contactName: string;
   supplierName: string;
-  requestCode: string;
   productName: string;
   expiresAt: string;
   portalLink: string;
@@ -58,11 +58,11 @@ export function renderReminderSections(template: string, vars: QuoteReminderVars
 }
 
 export function renderReminderPlainText(vars: QuoteReminderVars): string {
-  const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
+  const productSuffix = vars.productName ? ` for ${vars.productName}` : '';
   return [
     `Dear ${vars.contactName},`,
     '',
-    `This is a friendly reminder that your quotation for ${vars.requestCode}${productSuffix} has not been submitted yet.`,
+    `This is a friendly reminder that your quotation${productSuffix} has not been submitted yet.`,
     '',
     `The request closes on ${vars.expiresAt}.`,
     '',
@@ -82,9 +82,11 @@ export interface RenderedQuoteReminder {
 }
 
 export async function renderReminderFromTemplate(
-  vars: QuoteReminderVars,
+  rawVars: QuoteReminderVars,
   locale: string = QUOTE_REMINDER_DEFAULT_LOCALE,
 ): Promise<RenderedQuoteReminder> {
+  // Codigo interno da cotacao nunca vai ao fornecedor (nem via template do banco).
+  const vars = omitRequestCode(rawVars);
   const dbTemplate = await EmailTemplateService.get(QUOTE_REMINDER_TEMPLATE_KEY, locale);
   const subject = dbTemplate?.subject
     ? renderReminderSections(dbTemplate.subject, vars)

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { EmailTemplateService } from '../services/EmailTemplateService';
 import { escapeHtml } from './renderQuoteDispatch';
+import { omitRequestCode } from './supplierFacing';
 
 // F8 (backlog 2026-07-12): aviso de "nao selecionado" aos fornecedores
 // perdedores, ao concluir a cotacao. Voltado ao fornecedor estrangeiro -> EN.
@@ -34,7 +35,6 @@ export interface QuoteRegretVars {
   subject: string;
   contactName: string;
   supplierName: string;
-  requestCode: string;
   productName: string;
   companyName: string;
 }
@@ -55,11 +55,11 @@ export function renderRegretSections(template: string, vars: QuoteRegretVars): s
 }
 
 export function renderRegretPlainText(vars: QuoteRegretVars): string {
-  const productSuffix = vars.productName ? ` — ${vars.productName}` : '';
+  const productSuffix = vars.productName ? ` for ${vars.productName}` : '';
   return [
     `Dear ${vars.contactName},`,
     '',
-    `Thank you for the time and effort you put into your quotation for ${vars.requestCode}${productSuffix}.`,
+    `Thank you for the time and effort you put into your quotation${productSuffix}.`,
     '',
     'After careful review, we have selected another proposal for this particular request. This decision does not reflect on the quality of your offer, and we truly value our relationship.',
     '',
@@ -78,9 +78,11 @@ export interface RenderedQuoteRegret {
 }
 
 export async function renderRegretFromTemplate(
-  vars: QuoteRegretVars,
+  rawVars: QuoteRegretVars,
   locale: string = QUOTE_REGRET_DEFAULT_LOCALE,
 ): Promise<RenderedQuoteRegret> {
+  // Codigo interno da cotacao nunca vai ao fornecedor (nem via template do banco).
+  const vars = omitRequestCode(rawVars);
   const dbTemplate = await EmailTemplateService.get(QUOTE_REGRET_TEMPLATE_KEY, locale);
   const subject = dbTemplate?.subject ? renderRegretSections(dbTemplate.subject, vars) : vars.subject;
   const varsForRender = { ...vars, subject };

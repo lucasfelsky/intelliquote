@@ -376,7 +376,11 @@ describe('SupplierPortalReminderService.runReminderSweep', () => {
     const mail = sendAndLogMock.mock.calls[0][0];
     expect(mail.to.email).toBe(CONTACT_EMAIL);
     expect('cc' in mail).toBe(false);
-    expect(mail.subject).toContain('QR-2026-042');
+    // Codigo interno da cotacao nunca vai ao fornecedor: assunto, html e texto.
+    expect(mail.subject).toMatch(/^Reminder: quotation for PI-TPO closes on /);
+    expect(mail.subject).not.toContain('QR-2026-042');
+    expect(mail.html).not.toContain('QR-2026-042');
+    expect(mail.text).not.toContain('QR-2026-042');
     expect(mail.subject.toLowerCase()).toContain('reminder');
     expect(mail.text).toContain(RAW_FRESH);
     expect(mail.html).toContain(RAW_FRESH);
@@ -1286,7 +1290,8 @@ describe('revalidacao pos-claim', () => {
     expect(sendAndLogMock).toHaveBeenCalledTimes(1);
     expect(sendAndLogMock.mock.calls[0][0].templateId).toBe('quote_reminder');
     expect(templateGetMock).toHaveBeenCalledWith('quote_reminder', 'en');
-    expect(sendAndLogMock.mock.calls[0][0].text).toContain('QR-2026-042');
+    expect(sendAndLogMock.mock.calls[0][0].text).not.toContain('QR-2026-042');
+    expect(sendAndLogMock.mock.calls[0][0].text).toContain('PI-TPO');
   });
 });
 
@@ -1322,8 +1327,10 @@ describe('resumo unico por endereco de e-mail', () => {
     expect('cc' in mail).toBe(false);
     expect(mail.to).toEqual({ email: CONTACT_EMAIL, name: CONTACT_NAME });
     for (const body of [mail.html, mail.text]) {
-      expect(body).toContain('QR-2026-042');
-      expect(body).toContain('QR-2026-043');
+      expect(body).not.toContain('QR-2026-042');
+      expect(body).not.toContain('QR-2026-043');
+      expect(body).toContain('PI-TPO');
+      expect(body).toContain('Resina');
       expect(body).toContain('raw-88-token');
       expect(body).toContain('raw-89-token');
     }
@@ -1433,7 +1440,8 @@ describe('resumo unico por endereco de e-mail', () => {
 
     expect(result).toMatchObject({ sent: 1, pairsSent: 1, skippedAlreadyClaimed: 1 });
     expect(sendAndLogMock.mock.calls[0][0].templateId).toBe('quote_reminder');
-    expect(sendAndLogMock.mock.calls[0][0].text).toContain('QR-2026-043');
+    expect(sendAndLogMock.mock.calls[0][0].text).not.toContain('QR-2026-043');
+    expect(sendAndLogMock.mock.calls[0][0].text).toContain('Resina');
   });
 
   it('P2002 nos 2 pares: nenhum envio', async () => {

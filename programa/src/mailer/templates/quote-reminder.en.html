@@ -22,7 +22,7 @@
   </head>
   <body class="body-text" style="margin:0;padding:0;background-color:#F4F8F7;-webkit-text-size-adjust:100%;">
     <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#F4F8F7;">
-      Reminder: quotation for {{requestCode}} closes on {{expiresAt}}.
+      Reminder: quotation{{#productName}} for {{productName}}{{/productName}} closes on {{expiresAt}}.
     </div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F4F8F7" style="background-color:#F4F8F7;">
       <tr>
@@ -34,8 +34,8 @@
                   Reminder: quotation pending
                 </h1>
                 <p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:14px;line-height:21px;color:#4A5560;">
-                  Dear {{contactName}}, this is a friendly reminder that your quotation for
-                  <strong style="color:#1F2933;">{{requestCode}}</strong>{{#productName}} — {{productName}}{{/productName}}
+                  Dear {{contactName}}, this is a friendly reminder that your quotation{{#productName}} for
+                  <strong style="color:#1F2933;">{{productName}}</strong>{{/productName}}
                   has not been submitted yet.
                 </p>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFF7EC" style="background-color:#FFF7EC;border-radius:10px;border:1px solid #F3E3C8;">

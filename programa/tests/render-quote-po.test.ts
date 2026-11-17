@@ -18,8 +18,7 @@ import {
 } from '../src/mailer/renderQuotePo';
 
 const baseVars: QuotePoVars = {
-  subject: 'Purchase Order - QR-1',
-  requestCode: 'QR-1',
+  subject: 'Purchase Order - Produto',
   supplierContactName: 'John Supplier',
   forwarderInfo: 'Global Forwarders Ltda.',
   destinationPort: 'NAVEGANTES, BRAZIL',
@@ -254,11 +253,13 @@ describe('renderQuotePo - e-mail da Ordem de Compra', () => {
     expect(withOverride.html).toContain('<title>PO revisada</title>');
     expect(withOverride.text).toContain('Subj: PO revisada');
 
-    const without = await renderPoFromTemplate(baseVars, 'en');
-    expect(without.subject).toBe('Purchase Order - QR-1');
+    // O renderer descarta o codigo mesmo que o chamador o passe: {{requestCode}} vira ''.
+    const without = await renderPoFromTemplate({ ...baseVars, requestCode: 'QR-1' } as never, 'en');
+    expect(without.subject).not.toContain('QR-1');
+    expect(without.subject).toMatch(/^Purchase Order/);
 
-    const blank = await renderPoFromTemplate(baseVars, 'en', '   ');
-    expect(blank.subject).toBe('Purchase Order - QR-1');
+    const blank = await renderPoFromTemplate({ ...baseVars, requestCode: 'QR-1' } as never, 'en', '   ');
+    expect(blank.subject).not.toContain('QR-1');
   });
 
   it('o arquivo-fallback do template usa os tres placeholders novos e nao tem o slot', () => {

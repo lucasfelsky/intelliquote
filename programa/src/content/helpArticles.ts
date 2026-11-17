@@ -170,7 +170,7 @@ export const helpArticles: HelpArticle[] = [
     content:
       'O Portal do Fornecedor e a area publica que o fornecedor acessa a partir do link magico enviado por e-mail.\n\n' +
       'Como o fornecedor entra:\n' +
-      '1) Recebe um e-mail da sua empresa com o assunto "Sourcing request QR-...".\n' +
+      '1) Recebe um e-mail da sua empresa com o assunto "Sourcing request - <produto>".\n' +
       '2) Clica no botao "View request". Abre uma pagina sem necessidade de login.\n' +
       '3) Visualiza os itens solicitados, preenche preco, incoterm, prazo, mensagem e envia a proposta.\n\n' +
       'Seguranca:\n' +
