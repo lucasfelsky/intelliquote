@@ -1,5 +1,6 @@
 import { expect, vi } from 'vitest';
-import { expectNoQuoteWrites, prismaMock, quoteRow, resetQuoteMocks, sentQuote, tx } from './indentRoutesMock';
+import request from 'supertest';
+import { dayKey, expectNoQuoteWrites, getApp, prismaMock, quoteRow, resetQuoteMocks, sentQuote, tx } from './indentRoutesMock';
 
 // Fixtures e defaults dos testes de ENVIO do IQ Indent (PR 4a). Nomes e CNPJ FICTICIOS (repo publico).
 // Uso, no topo do arquivo de teste:
@@ -115,4 +116,154 @@ export function resetEnvioMocks() {
   prismaMock.indentMailLog.findFirst.mockResolvedValue(null);
   prismaMock.indentPortalResponse.findUnique.mockResolvedValue(null);
   prismaMock.indentPortalAttachment.findMany.mockResolvedValue([]);
+}
+
+// ---- Portal publico do fornecedor (4a-2) ----
+// Token de teste valido (43 chars base64url) e fixtures da view/resposta. Nomes FICTICIOS (repo publico).
+export const RAW_TOKEN = 'Ab1_'.repeat(11).slice(0, 43);
+export const FUTURE = new Date(Date.now() + 10 * 24 * 3600 * 1000);
+
+let uaSeq = 0;
+/** `User-Agent` unico por requisicao: o rate limit (10/min) e o lockout sao por IP + UA e vivem em memoria no processo. */
+export function nextUa(): string {
+  uaSeq += 1;
+  return `indent-portal-test-${uaSeq}`;
+}
+
+export const portalItem = (id: number, requestItemId: number, name: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  requestItemId,
+  packaging: null as string | null,
+  fobPricePerKg: null as string | null,
+  cfrPricePerKg: null as string | null,
+  requestItem: { description: name, quantityKg: '25000', product: { name, cas: '7440-66-6' } },
+  ...overrides,
+});
+
+/** Linha do `indentPortalToken.findUnique` do `resolveToken`. */
+export function portalTokenRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 900,
+    quoteId: 100,
+    supplierId: 5,
+    showClientName: false,
+    destinationPort: 'Santos',
+    message: null as string | null,
+    expiresAt: FUTURE,
+    revokedAt: null as Date | null,
+    firstSeenAt: null as Date | null,
+    quote: { status: 'ENVIADA', request: { status: 'COTACAO' } },
+    ...overrides,
+  };
+}
+
+/** Cotacao no formato do `viewSelect` do portal (o que `getView` le). */
+export function portalQuote(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 100,
+    requestId: 11,
+    supplierId: 5,
+    revision: 1,
+    status: 'ENVIADA',
+    currency: 'USD',
+    incoterm: 'CFR',
+    respondedAt: null as Date | null,
+    validUntil: null as Date | null,
+    productionLeadTimeDays: null as number | null,
+    paymentTerms: null as string | null,
+    manufacturer: null as string | null,
+    request: { processNumber: '277/26', status: 'COTACAO', client: { ...envioClient } },
+    supplier: { name: 'Acme Chemicals', hasPartnership: false, type: 'TRADING' },
+    items: [portalItem(201, 21, 'Zinco'), portalItem(202, 22, 'Acido citrico')],
+    ...overrides,
+  };
+}
+
+export function respondBody(overrides: Record<string, unknown> = {}) {
+  return {
+    currency: 'USD',
+    productionLeadTimeDays: 20,
+    paymentTerms: 'T/T 30 days after B/L date',
+    validUntil: dayKey(20),
+    manufacturer: 'Acme Works',
+    notes: 'Prices ex-works.',
+    items: [
+      { quoteItemId: 201, packaging: '25 kg bag', fobPricePerKg: '0.7000', cfrPricePerKg: '0.7950' },
+      { quoteItemId: 202, packaging: '50 kg bag', fobPricePerKg: '1.2', cfrPricePerKg: '1.35' },
+    ],
+    ...overrides,
+  };
+}
+
+/** Defaults do portal: token valido, cotacao ENVIADA sem resposta, delegates de gravacao prontos. */
+export function resetPortalMocks() {
+  resetEnvioMocks();
+
+  prismaMock.indentPortalToken.findUnique.mockResolvedValue(portalTokenRow());
+  prismaMock.indentPortalToken.update.mockResolvedValue({});
+  prismaMock.indentPortalAccessLog.create.mockResolvedValue({});
+  prismaMock.indentQuote.findUnique.mockResolvedValue(portalQuote());
+  prismaMock.indentQuote.findFirst.mockResolvedValue(null);
+  prismaMock.indentPortalResponse.findUnique.mockResolvedValue(null);
+  prismaMock.indentPortalAttachment.findMany.mockResolvedValue([]);
+  prismaMock.indentPortalAttachment.findFirst.mockResolvedValue(null);
+  prismaMock.user.findUnique.mockResolvedValue(null);
+
+  tx.indentPortalToken.findUnique.mockResolvedValue({ revokedAt: null, expiresAt: FUTURE });
+  tx.indentQuote.findUnique.mockResolvedValue(sentQuote({ _count: { portalTokens: 1 } }));
+  tx.indentPortalResponse.findUnique.mockResolvedValue(null);
+  tx.indentPortalResponse.create.mockResolvedValue({ id: 50 });
+  tx.indentPortalResponse.update.mockResolvedValue({});
+  tx.indentPortalResponseItem.deleteMany.mockResolvedValue({ count: 0 });
+  tx.indentPortalResponseItem.createMany.mockResolvedValue({ count: 2 });
+  tx.indentPortalResponseRevision.create.mockResolvedValue({});
+  tx.indentPortalAttachment.findFirst.mockResolvedValue(null);
+  tx.indentPortalAttachment.count.mockResolvedValue(0);
+  tx.indentPortalAttachment.create.mockImplementation(async ({ data }: { data: { fileName: string; fileSize: number } }) => ({
+    id: 61,
+    fileName: data.fileName,
+    fileSize: data.fileSize,
+  }));
+  tx.indentPortalAttachmentFile.create.mockResolvedValue({});
+  tx.indentRequest.update.mockResolvedValue({});
+  tx.indentQuoteItem.update.mockResolvedValue({});
+}
+
+/** Cada trava `lockIndentQuote` = 3 consultas: le o requestId, trava a SOLICITACAO e so depois a COTACAO. */
+export function expectPortalLockOrder(from = 0) {
+  const sql = tx.$queryRaw.mock.calls.map((c) => (c[0] as string[]).join('?').replace(/\s+/g, ' '));
+
+  expect(sql[from]).toContain('SELECT "requestId" FROM "IndentQuote"');
+  expect(sql[from + 1]).toContain('"IndentRequest"');
+  expect(sql[from + 1]).toContain('FOR NO KEY UPDATE');
+  expect(sql[from + 2]).toContain('"IndentQuote"');
+  expect(sql[from + 2]).toContain('FOR NO KEY UPDATE');
+}
+
+/** Rota publica (sem cookie): GET/POST em `/api/indent-portal/...`, sempre com um User-Agent novo. */
+export async function portal(method: 'get' | 'post', path: string, options: { body?: unknown; ua?: string; type?: string; headers?: Record<string, string> } = {}) {
+  const app = await getApp();
+  const req = request(app)[method](`/api/indent-portal${path}`).set('User-Agent', options.ua ?? nextUa());
+
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    req.set(name, value);
+  }
+  if (method === 'get') {
+    return req;
+  }
+  if (options.type) {
+    return req.set('Content-Type', options.type).send(options.body as Buffer);
+  }
+  return req.send((options.body ?? {}) as object);
+}
+
+/** Todas as gravacoes do portal: nada pode ter sido escrito (cotacao, resposta, itens, anexo, solicitacao, AuditLog). */
+export function expectNoPortalWrites() {
+  expectNoQuoteWrites();
+  expect(tx.indentPortalResponse.create).not.toHaveBeenCalled();
+  expect(tx.indentPortalResponse.update).not.toHaveBeenCalled();
+  expect(tx.indentPortalResponseItem.createMany).not.toHaveBeenCalled();
+  expect(tx.indentPortalResponseRevision.create).not.toHaveBeenCalled();
+  expect(tx.indentPortalAttachment.create).not.toHaveBeenCalled();
+  expect(tx.indentPortalAttachmentFile.create).not.toHaveBeenCalled();
 }

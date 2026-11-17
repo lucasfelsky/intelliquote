@@ -7,7 +7,7 @@ vi.mock('../src/mailer/MailerService', async (original) =>
 import '../src/app'; // carrega o app na coleta, fora do timeout do 1o teste (o helper importa tarde)
 
 import { buildClientTerms, findClientLeak, hasForbiddenBuyerPhrase } from '../src/utils/indentExposure';
-import { call, loginAs, quoteItemRow, tx } from './helpers/indentRoutesMock';
+import { call, loginAs, prismaMock, quoteItemRow, tx } from './helpers/indentRoutesMock';
 import {
   activeToken,
   draftQuote,
@@ -16,7 +16,13 @@ import {
   expectNothingSent,
   mailerMock,
   outroCliente,
+  portal,
+  portalItem,
+  portalQuote,
+  portalTokenRow,
+  RAW_TOKEN,
   resetEnvioMocks,
+  resetPortalMocks,
   sendBody,
   sentMails,
   sentWithTokens,
@@ -24,7 +30,7 @@ import {
 
 // Sigilo do cliente final no envio do IQ Indent (PR 4a), com NOMES FICTICIOS (repo publico): o e-mail (HTML, texto e assunto)
 // de um fornecedor SEM parceria nunca cita o cliente nem frases como "buyer". Usuario logado: id 7.
-// (A parte do portal publico entra no 4a-2.)
+// A segunda parte (4a-2) cobre a view JSON do portal publico.
 
 beforeEach(resetEnvioMocks);
 
@@ -245,5 +251,100 @@ describe('contraprovas: o cliente aparece so quando deve', () => {
 
     expect(res.status).toBe(200);
     expect(String(sentMails()[0].html)).toContain('&lt;b&gt;Bold&lt;/b&gt; &amp; &quot;quotes&quot;');
+  });
+});
+
+// ---- Portal publico (4a-2): a view JSON de um fornecedor SEM parceria nunca cita o cliente nem frases de comprador ----
+describe('sigilo do cliente no portal publico', () => {
+  beforeEach(resetPortalMocks);
+
+  const clients = [envioClient, outroCliente];
+
+  function expectViewClean(body: unknown, client: { name: string; cnpj: string }) {
+    const json = JSON.stringify(body);
+
+    expect(findClientLeak({ json }, buildClientTerms(client))).toBeNull();
+    expect(hasForbiddenBuyerPhrase(json)).toBe(false);
+    expect(json).not.toMatch(FORBIDDEN);
+    expect(json).not.toContain('End customer');
+  }
+
+  const states: Array<[string, Record<string, unknown>]> = [
+    ['open', {}],
+    ['revision', { revision: 2 }],
+    ['sent', { status: 'RESPONDIDA', respondedAt: new Date('2026-11-14T12:00:00Z'), paymentTerms: 'L/C at sight', validUntil: new Date('2026-12-20T00:00:00Z'), productionLeadTimeDays: 12 }],
+  ];
+
+  for (const client of clients) {
+    for (const [state, override] of states) {
+      it(`${state}: sem parceria, a view nao cita ${client.name.split(' ')[0]} nem frases proibidas`, async () => {
+        prismaMock.indentQuote.findUnique.mockResolvedValue(portalQuote({ request: { processNumber: '277/26', status: 'COTACAO', client }, ...override }));
+        prismaMock.indentQuote.findFirst.mockResolvedValue({ currency: 'USD', productionLeadTimeDays: 10, paymentTerms: 'L/C at sight', validUntil: null, manufacturer: null, items: [] });
+
+        const res = await portal('get', `/${RAW_TOKEN}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.state).toBe(state);
+        expect(res.body.endCustomer).toBeNull();
+        expectViewClean(res.body, client);
+      });
+    }
+  }
+
+  it('parceria DESLIGADA depois do envio: o token tinha a opcao, mas a view volta sem cliente e a mensagem que o cita vira null', async () => {
+    prismaMock.indentPortalToken.findUnique.mockResolvedValue(
+      portalTokenRow({ showClientName: true, message: `Special price for ${envioClient.name}, we are the buyer` }),
+    );
+    prismaMock.indentQuote.findUnique.mockResolvedValue(portalQuote({ supplier: { name: 'Acme', hasPartnership: false, type: 'TRADING' } }));
+
+    const res = await portal('get', `/${RAW_TOKEN}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.endCustomer).toBeNull();
+    expect(res.body.message).toBeNull();
+    expectViewClean(res.body, envioClient);
+  });
+
+  it('item com o nome do cliente -> 500 generico em ingles, sem o valor nem o campo no corpo; log so com a CHAVE', async () => {
+    prismaMock.indentQuote.findUnique.mockResolvedValue(
+      portalQuote({ items: [portalItem(201, 21, 'Citric acid for Industria Quimica Vale do Itajai Ltda')] }),
+    );
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => void logged.push(args.map(String).join(' ')));
+
+    const res = await portal('get', `/${RAW_TOKEN}`);
+    spy.mockRestore();
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ message: 'Something went wrong on our side. Please try again in a few minutes.' });
+    expect(res.text).not.toMatch(/vale|itajai|items\[/i);
+    // sentinela barrou ANTES de registrar a visualizacao
+    expect(prismaMock.indentPortalAccessLog.create).not.toHaveBeenCalled();
+    expect(prismaMock.indentPortalToken.update).not.toHaveBeenCalled();
+  });
+
+  it('resposta MANUAL com o cliente num campo digitado pela Compras -> 500 (sentinela cobre a resposta tambem)', async () => {
+    // o cliente deste teste e o "Vale Verde"
+    prismaMock.indentQuote.findUnique.mockResolvedValue(
+      portalQuote({ status: 'RESPONDIDA', respondedAt: new Date(), manufacturer: 'Vale Verde Fertilizantes', request: { processNumber: '277/26', status: 'COTACAO', client: outroCliente } }),
+    );
+
+    const res = await portal('get', `/${RAW_TOKEN}`);
+
+    expect(res.status).toBe(500);
+    expect(res.text).not.toMatch(/vale verde/i);
+  });
+
+  it('contraprova: parceria + opcao -> o nome do cliente aparece; parceria sem opcao -> nao aparece', async () => {
+    prismaMock.indentQuote.findUnique.mockResolvedValue(portalQuote({ supplier: { name: 'Acme', hasPartnership: true, type: 'TRADING' } }));
+    prismaMock.indentPortalToken.findUnique.mockResolvedValue(portalTokenRow({ showClientName: true, message: `Offer for ${envioClient.name}` }));
+
+    const shown = await portal('get', `/${RAW_TOKEN}`);
+    expect(shown.body.endCustomer).toBe(envioClient.name);
+    expect(shown.body.message).toBe(`Offer for ${envioClient.name}`);
+
+    prismaMock.indentPortalToken.findUnique.mockResolvedValue(portalTokenRow({ showClientName: false }));
+    const hidden = await portal('get', `/${RAW_TOKEN}`);
+    expect(hidden.body.endCustomer).toBeNull();
   });
 });
