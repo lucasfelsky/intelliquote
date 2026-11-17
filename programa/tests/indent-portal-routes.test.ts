@@ -123,13 +123,48 @@ describe('token e enumeracao', () => {
       const res = await portal('get', url());
 
       expect(res.status).toBe(410);
-      expect(res.body).toEqual({ message, code });
+      // So o vencido leva referencia e validade (a tela "Link expired"); revogado e fechado seguem so { message, code }.
+      expect(res.body).toEqual(
+        code === 'LINK_EXPIRED' ? { message, code, processRef: '277/26', expiresAt: (override.expiresAt as Date).toISOString() } : { message, code },
+      );
       expectCleanError(res);
       const logged = JSON.stringify(prismaMock.indentPortalAccessLog.create.mock.calls);
       expect(logged).toContain(`"reason":"${reason}"`);
       expect(logged).toContain('"tokenId":900');
       expect(logged).not.toContain(RAW_TOKEN);
       expect(logged).not.toContain(HASH);
+    }
+  });
+
+  it('410 LINK_EXPIRED: referencia da revisao ("R2 - ...") e validade ISO, sem cliente, parceria, token nem hash; o resto do corpo nao muda', async () => {
+    const expiresAt = new Date('2026-11-10T14:00:00.000Z');
+    prismaMock.indentPortalToken.findUnique.mockResolvedValue(
+      portalTokenRow({ expiresAt, showClientName: true, quote: { status: 'ENVIADA', revision: 2, request: { status: 'COTACAO', processNumber: '275/26' } } }),
+    );
+
+    const res = await portal('get', url());
+
+    expect(res.status).toBe(410);
+    expect(res.body).toStrictEqual({ message: INDENT_PORTAL_EXPIRED_MESSAGE, code: 'LINK_EXPIRED', processRef: 'R2 - 275/26', expiresAt: '2026-11-10T14:00:00.000Z' });
+    expectCleanError(res);
+    expect(res.text).not.toMatch(/Itaja|12345678000195|Acme|Santos|partner|hasPartnership|supplier|tokenId|quoteId/i);
+    expect(res.text).not.toContain(RAW_TOKEN);
+    expect(res.text).not.toContain(HASH);
+    // POST com link vencido passa pelo mesmo resolve: mesmo corpo.
+    const post = await portal('post', url('/respond'), { body: respondBody() });
+    expect(post.status).toBe(410);
+    expect(post.body).toStrictEqual(res.body);
+    expectNoPortalWrites();
+  });
+
+  it('404 (formato invalido e inexistente) nao ganha processRef nem expiresAt', async () => {
+    prismaMock.indentPortalToken.findUnique.mockResolvedValue(null);
+
+    for (const path of [`/${'a'.repeat(42)}!`, url()]) {
+      const res = await portal('get', path);
+
+      expect(res.status).toBe(404);
+      expect(res.body).toStrictEqual({ message: INDENT_PORTAL_BAD_LINK_MESSAGE, code: 'LINK_INVALID' });
     }
   });
 
@@ -656,7 +691,7 @@ describe('anexos do fornecedor (POST /attachments)', () => {
 
     for (const res of [wrongType, wrongMagic, empty]) {
       expect(res.status).toBe(400);
-      expect(res.body).toEqual({ message: 'Only PDF files are accepted.', code: 'NOT_PDF' });
+      expect(res.body).toEqual({ message: 'Only PDF files are allowed.', code: 'NOT_PDF' });
     }
     expectNoPortalWrites();
   });
