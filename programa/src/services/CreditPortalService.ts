@@ -171,7 +171,6 @@ export class CreditPortalService {
 
     return {
       request: {
-        requestCode: row.quoteRequest.requestCode,
         currency: s.currency,
         incoterm: s.offeredIncoterm,
         originPort: s.originPort,

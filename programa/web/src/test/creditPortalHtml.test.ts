@@ -206,7 +206,11 @@ describe('credit-portal.html (jsdom)', () => {
     expect(row(11).textContent).toContain('Sodium Hydroxide 99% flakes');
     expect(row(11).textContent).toContain('5 KG');
 
-    expect(document.body.textContent).toContain('QR-5');
+    // O codigo interno da cotacao nao aparece para o parceiro de credito.
+    expect(document.body.textContent).not.toContain('QR-5');
+    expect(Array.from(document.querySelectorAll('.eyebrow')).map((el) => el.textContent)).toContain(
+      'Credit support request',
+    );
     expect(document.body.textContent).toContain('Acme Chem');
     expect(document.body.textContent).toContain('Banco Alfa');
     expect(document.body.textContent).toContain('Shanghai');

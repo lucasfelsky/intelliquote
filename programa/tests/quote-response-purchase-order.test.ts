@@ -177,7 +177,10 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
     expect(sendAndLogMock).toHaveBeenCalledTimes(1);
     const call = sendAndLogMock.mock.calls[0][0];
     expect(call.to).toEqual({ email: 'john@acme.com', name: 'John Supplier' });
-    expect(call.subject).toBe('Purchase Order - QR-2026-005');
+    expect(call.subject).toBe('Purchase Order - Photoiniator');
+    expect(call.subject).not.toContain('QR-2026-005');
+    expect(call.html).not.toContain('QR-2026-005');
+    expect(call.text).not.toContain('QR-2026-005');
     expect(call.html).toContain('Dear all,');
     expect(call.html).toContain('Global Forwarders Ltda.');
     expect(call.html).toContain('maria@globalforwarders.com');
@@ -558,7 +561,8 @@ describe('POST /api/v1/quote-responses/:id/purchase-order', () => {
         .send(basePoBody);
 
       expect(res.status).toBe(200);
-      expect(sendAndLogMock.mock.calls[0][0].subject).toBe('DB subject QR-2026-005');
+      expect(sendAndLogMock.mock.calls[0][0].subject).not.toContain('QR-2026-005');
+      expect(sendAndLogMock.mock.calls[0][0].subject).toMatch(/^DB subject/);
     });
 
     it('com imagem de assinatura: anexos = PDF + logo + assinatura (mime gravado)', async () => {

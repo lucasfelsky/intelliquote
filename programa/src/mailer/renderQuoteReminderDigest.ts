@@ -27,7 +27,6 @@ function resolveTemplatePath(): string {
 const TEMPLATE_PATH = resolveTemplatePath();
 
 export interface ReminderDigestItem {
-  requestCode: string;
   productName: string;
   supplierName: string;
   closesOn: string;
@@ -47,16 +46,13 @@ export interface RenderedReminderDigest {
 }
 
 function renderItemHtml(item: ReminderDigestItem): string {
-  const product = item.productName
-    ? ` <span style="font-weight:normal;color:#4A5560;">&mdash; ${escapeHtml(item.productName)}</span>`
-    : '';
   const supplier = item.supplierName
     ? `<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:13px;color:#4A5560;">Supplier: ${escapeHtml(item.supplierName)}</p>`
     : '';
   return [
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFF7EC" style="background-color:#FFF7EC;border-radius:10px;border:1px solid #F3E3C8;margin-top:12px;">',
     '<tr><td style="padding:14px 18px;">',
-    `<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:14px;color:#1F2933;"><strong>${escapeHtml(item.requestCode)}</strong>${product}</p>`,
+    `<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:14px;color:#1F2933;"><strong>${escapeHtml(item.productName || 'Quotation')}</strong></p>`,
     supplier,
     `<p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:13px;color:#7A5B22;"><strong>Closes on ${escapeHtml(item.closesOn)}</strong></p>`,
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>',
@@ -75,9 +71,9 @@ function renderPlainText(input: ReminderDigestInput): string {
     '',
   ];
   for (const item of input.items) {
-    const product = item.productName ? ` — ${item.productName}` : '';
+    const product = item.productName || 'Quotation';
     const supplier = item.supplierName ? `supplier: ${item.supplierName}; ` : '';
-    lines.push(`${item.requestCode}${product} (${supplier}closes on ${item.closesOn}): ${item.portalLink}`);
+    lines.push(`${product} (${supplier}closes on ${item.closesOn}): ${item.portalLink}`);
   }
   lines.push(
     '',

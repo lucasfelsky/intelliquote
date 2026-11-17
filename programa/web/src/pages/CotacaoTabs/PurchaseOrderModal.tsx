@@ -60,7 +60,7 @@ export function PurchaseOrderModal({
   onSent,
   nonWinner = false,
 }: PurchaseOrderModalProps) {
-  const [poSubject, setPoSubject] = useState(`Purchase Order - ${productName || requestCode}`);
+  const [poSubject, setPoSubject] = useState(`Purchase Order - ${productName || 'SQ Quimica'}`);
   const [poForwarderInfo, setPoForwarderInfo] = useState('');
   const [poMessage, setPoMessage] = useState('');
   const [poFileName, setPoFileName] = useState('');

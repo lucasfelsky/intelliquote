@@ -75,7 +75,11 @@ describe('SupplierRegretNotificationService.notifyLosers', () => {
     expect(emails).toContain('c3@fornecedor.example');
     const first = sendAndLogMock.mock.calls[0][0];
     expect(first.templateId).toBe('quote_regret');
-    expect(first.subject).toContain('QR-2026-042');
+    // Codigo interno da cotacao nunca vai ao fornecedor: assunto, html e texto.
+    expect(first.subject).toBe('Update on your quotation for PI-TPO');
+    expect(first.subject).not.toContain('QR-2026-042');
+    expect(first.html).not.toContain('QR-2026-042');
+    expect(first.text).not.toContain('QR-2026-042');
     // Tom neutro — nao expoe preco vencedor.
     expect(first.text).not.toMatch(/\d+[.,]\d{2}/);
   });

@@ -43,6 +43,7 @@ import { renderReplyFromTemplate, type QuoteReplyItem } from '../mailer/renderQu
 import { logger } from '../lib/logger';
 import { formatIncoterms, mergeManualIncotermPrices } from '../utils/incoterm';
 import { buildPortalLink } from '../utils/portalLink';
+import { stripRequestCode } from '../mailer/supplierFacing';
 import {
   quoteComparisonWeightsSchema,
   quotePurchaseOrderSchema,
@@ -802,13 +803,19 @@ export class QuoteResponseController {
     portalLink?: string,
   ) {
     const { quoteRequest, supplier } = quoteResponse;
-    const itemName = quoteRequest.productName || quoteRequest.requestCode;
+    // Codigo interno da cotacao nunca vai ao fornecedor.
+    const itemName = quoteRequest.productName || 'Quotation';
     const defaultSubject = `${itemName} - SQ QUIMICA - ${supplier.name}`;
     const message = overrides.message?.trim() ?? '';
     const typedSubject = overrides.subject?.trim() ?? '';
+    // Assunto do envio inicial reusado (mantem a conversa no e-mail do fornecedor),
+    // mas sem o codigo interno que cotacoes antigas gravaram nele. O digitado nao e alterado.
+    const dispatchSubject = typedSubject
+      ? null
+      : await QuoteResponseController.findDispatchSubjectForSupplier(quoteRequest.id, quoteResponse.supplierId);
     const subjectOverride =
       typedSubject ||
-      (await QuoteResponseController.findDispatchSubjectForSupplier(quoteRequest.id, quoteResponse.supplierId)) ||
+      (dispatchSubject ? stripRequestCode(dispatchSubject, quoteRequest.requestCode) : '') ||
       undefined;
     // QuoteResponse guarda um preco agregado por fornecedor (nao por item);
     // repetimos o mesmo unitPrice em todas as linhas em vez de mostrar "-",
@@ -877,8 +884,6 @@ export class QuoteResponseController {
     const rendered = await renderReplyFromTemplate(
       {
         subject: defaultSubject,
-        quoteRequestId: quoteRequest.id,
-        requestCode: quoteRequest.requestCode,
         productName: quoteRequest.productName ?? '',
         supplierName: supplier.name,
         supplierContactName: contactName,

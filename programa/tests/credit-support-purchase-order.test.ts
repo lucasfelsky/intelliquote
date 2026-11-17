@@ -203,7 +203,11 @@ describe('POST /api/v1/credit-support-requests/:id/purchase-order (PR4b)', () =>
     expect(call.templateId).toBe('quote-po');
     expect(call.relatedEntityType).toBe('credit_support_request');
     expect(call.relatedEntityId).toBe('5');
-    expect(call.subject).toBe('Purchase Order - QR-2026-003');
+    // Sem productName na cotacao: sem o codigo interno, cai no nome da empresa.
+    expect(call.subject).toBe('Purchase Order - SQ Quimica');
+    expect(call.subject).not.toContain('QR-2026-003');
+    expect(call.html).not.toContain('QR-2026-003');
+    expect(call.text).not.toContain('QR-2026-003');
     expect(call.templateVars).toMatchObject({
       quoteRequestId: 3,
       quoteResponseId: 77,

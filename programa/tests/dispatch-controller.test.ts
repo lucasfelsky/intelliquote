@@ -548,8 +548,9 @@ describe('Dispatch controller', () => {
       .send({ recipientContactIds: [1] });
     expect(res.status).toBe(200);
     expect(res.body.recipientCount).toBe(1);
-    expect(res.body.preview.subject).toContain('QR-2026-003');
-    expect(res.body.preview.subject).toContain('QR-2026-003');
+    expect(res.body.preview.subject).not.toContain('QR-2026-003');
+    expect(res.body.preview.html).not.toContain('QR-2026-003');
+    expect(res.body.preview.text).not.toContain('QR-2026-003');
   });
 
   it('preview agrupa os itens por PO quando a cotacao tem 2+ POs', async () => {
@@ -640,12 +641,13 @@ describe('Dispatch controller', () => {
       expect(res.body.preview.text.startsWith('Linha 1\n<b>x</b>\n\n')).toBe(true);
     });
 
-    it('subject vazio cai no assunto padrao com o requestCode', async () => {
+    it('subject vazio cai no assunto padrao sem o requestCode', async () => {
       const cookieHeader = await loginAndGetCookie();
       mockPreviewData();
       const res = await postPreview(cookieHeader, { recipientContactIds: [1], subject: '' });
       expect(res.status).toBe(200);
-      expect(res.body.preview.subject).toContain('QR-2026-003');
+      expect(res.body.preview.subject).not.toContain('QR-2026-003');
+      expect(res.body.preview.subject).toMatch(/^Sourcing request/);
     });
 
     it('valida os mesmos limites do create (expiresInDays > 60 e subject so com espacos => 400)', async () => {
@@ -1095,7 +1097,6 @@ describe('renderDispatchFromTemplate - subject override do modal', () => {
   const baseVars: QuoteDispatchVars = {
     subject: 'Fallback Subject',
     supplierContactName: 'John Doe',
-    requestCode: 'QR-2026-099',
     productName: 'Acido sulfurico',
     quantity: 10,
     unit: 'UN',
@@ -1136,10 +1137,16 @@ describe('renderDispatchFromTemplate - subject override do modal', () => {
   it('SEM override: mantem o comportamento atual (subject renderizado da template do banco)', async () => {
     mockDbTemplate();
 
-    const result = await renderDispatchFromTemplate(baseVars, 'en');
+    // Mesmo que o chamador passe o codigo, o renderer externo o descarta: {{requestCode}} vira ''.
+    const result = await renderDispatchFromTemplate(
+      { ...baseVars, requestCode: 'QR-2026-099' } as never,
+      'en',
+    );
 
-    expect(result.subject).toBe('Sourcing request QR-2026-099 - Acido sulfurico');
-    expect(result.html).toContain('Sourcing request QR-2026-099 - Acido sulfurico');
+    expect(result.subject).not.toContain('QR-2026-099');
+    expect(result.subject).toContain('Acido sulfurico');
+    expect(result.html).not.toContain('QR-2026-099');
+    expect(result.text).not.toContain('QR-2026-099');
   });
 });
 

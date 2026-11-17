@@ -237,7 +237,9 @@ describe('Portal routes (public, magic-link)', () => {
     const res = await request(app).get(`/api/portal/${rawToken}`);
     if (res.status === 500) console.error('DEBUG 500:', res.body, res.text);
     expect(res.status).toBe(200);
-    expect(res.body.quoteRequest.requestCode).toBe('QR-2026-001');
+    // O codigo interno da cotacao nao faz parte do payload do portal do fornecedor.
+    expect(res.body.quoteRequest).not.toHaveProperty('requestCode');
+    expect(JSON.stringify(res.body)).not.toContain('QR-2026-001');
     expect(res.body.supplier.name).toBe('Acme');
     expect(res.body.readOnly).toBe(false);
   });

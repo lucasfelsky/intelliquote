@@ -9,6 +9,7 @@ import {
   renderCreditSupportFromTemplate,
   type CreditSupportRequestVars,
 } from '../mailer/renderCreditSupportRequest';
+import { stripRequestCode } from '../mailer/supplierFacing';
 import { HttpError } from '../utils/http';
 import { effectiveOriginPort } from '../utils/originPort';
 import type { CreditSupportForwardInput } from '../validators/domain';
@@ -497,7 +498,6 @@ function buildEmailVars(ctx: SendContext, contactName: string): CreditSupportReq
     contactName,
     partnerName: ctx.partnerName,
     companyName: ctx.companyName,
-    requestCode: ctx.requestCode,
     supplierName: ctx.supplierName,
     supplierCountry: ctx.supplierCountry,
     currency: ctx.currency,
@@ -624,7 +624,7 @@ export class CreditSupportService {
           unavailableCount: snapshot.items.filter((i) => i.isUnavailable).length,
           expiresAt,
           portalLink: `${base}/portal/credit?token=PREVIEW&v=${Date.now()}`,
-          subject: subjectCustom || defaultCreditSupportSubject(requestCode, response.supplier.name),
+          subject: subjectCustom || defaultCreditSupportSubject(response.supplier.name),
           subjectIsCustom: subjectCustom.length > 0,
           customMessage: input.message?.trim() ?? '',
         },
@@ -683,10 +683,8 @@ export class CreditSupportService {
         );
       }
 
-      const requestCode = response.quoteRequest.requestCode;
       const subjectCustom = input.subject?.trim() ?? '';
-      const emailSubject =
-        subjectCustom || defaultCreditSupportSubject(requestCode, response.supplier.name);
+      const emailSubject = subjectCustom || defaultCreditSupportSubject(response.supplier.name);
       const recipientEmails = Array.from(
         new Set(contacts.map((contact) => contact.email.trim().toLowerCase())),
       );
@@ -1005,8 +1003,9 @@ export class CreditSupportService {
       unavailableCount: request.items.filter((i) => i.isUnavailable).length,
       expiresAt: updated.expiresAt,
       portalLink: buildCreditPortalLink(token.rawToken),
-      subject: updated.emailSubject,
-      // Assunto gravado no encaminhamento original e sempre reaproveitado.
+      // Assunto gravado no encaminhamento original e sempre reaproveitado; encaminhamentos
+      // antigos gravaram o codigo interno nele, que sai aqui em tempo de envio (banco intacto).
+      subject: stripRequestCode(updated.emailSubject, request.quoteRequest.requestCode),
       subjectIsCustom: true,
       customMessage: updated.emailMessage ?? '',
     };

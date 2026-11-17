@@ -51,7 +51,6 @@ const QUOTE_REQUEST_KEYS = [
   'originPort',
   'productName',
   'purchaseOrders',
-  'requestCode',
 ];
 const ITEM_KEYS = [
   'description',

@@ -3,6 +3,7 @@ import path from 'path';
 import { EmailTemplateService } from '../services/EmailTemplateService';
 import { logger } from '../lib/logger';
 import { escapeHtml } from './renderQuoteDispatch';
+import { omitRequestCode } from './supplierFacing';
 
 export const PO_TEMPLATE_KEY = 'quote_po';
 export const PO_DEFAULT_LOCALE = 'en';
@@ -29,7 +30,6 @@ export function loadFileTemplate(): string {
 
 export interface QuotePoVars {
   subject: string;
-  requestCode: string;
   supplierContactName: string;
   // Contato do despachante/forwarder, digitado na hora no modal "Enviar
   // Ordem de Compra". Texto livre (pode ter varias linhas) -- renderizado no
@@ -452,10 +452,12 @@ export function renderPoTextFromTemplate(textTemplate: string, vars: QuotePoVars
 // Precedencia do assunto: subjectOverride (assunto digitado no modal, usado
 // literalmente) > assunto do template do banco renderizado > vars.subject.
 export async function renderPoFromTemplate(
-  vars: QuotePoVars,
+  rawVars: QuotePoVars,
   locale: string = PO_DEFAULT_LOCALE,
   subjectOverride?: string,
 ): Promise<RenderedQuotePo> {
+  // Codigo interno da cotacao nunca vai ao fornecedor (nem via template do banco).
+  const vars = omitRequestCode(rawVars);
   const dbTemplate = await EmailTemplateService.get(PO_TEMPLATE_KEY, locale);
   const override = subjectOverride?.trim();
   const subject = override

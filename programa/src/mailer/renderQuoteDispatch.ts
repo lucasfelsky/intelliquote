@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { EmailTemplateService } from '../services/EmailTemplateService';
+import { omitRequestCode } from './supplierFacing';
 
 export const DISPATCH_TEMPLATE_KEY = 'quote_dispatch';
 export const DISPATCH_DEFAULT_LOCALE = 'en';
@@ -56,7 +57,6 @@ export interface QuoteDispatchPurchaseOrder {
 export interface QuoteDispatchVars {
   subject: string;
   supplierContactName: string;
-  requestCode: string;
   productName: string;
   quantity: number;
   unit: string;
@@ -263,9 +263,11 @@ export function renderDispatchTemplate(
 }
 
 export function renderQuoteDispatch(
-  vars: QuoteDispatchVars,
+  rawVars: QuoteDispatchVars,
   fallbackHtml?: string,
 ): { html: string; text: string } {
+  // Codigo interno da cotacao nunca vai ao fornecedor.
+  const vars = omitRequestCode(rawVars);
   const html = renderSections(fallbackHtml ?? loadFileTemplate(), vars);
   const originPart = vars.originPort ? `Origin port: ${vars.originPort}` : '';
   const text = [
@@ -273,7 +275,7 @@ export function renderQuoteDispatch(
     '',
     `Dear ${vars.supplierContactName},`,
     '',
-    `We are contacting you on behalf of ${vars.companyName} regarding sourcing request ${vars.requestCode}.`,
+    `We are contacting you on behalf of ${vars.companyName} regarding a sourcing request.`,
     `Incoterm: ${vars.desiredIncoterm}${vars.destinationPort ? ` | Destination port: ${vars.destinationPort}` : ''}${originPart ? ` | ${originPart}` : ''} | Currency: ${vars.currency}`,
     `Response deadline: ${vars.deadlineAt}`,
     `Link expires on: ${vars.expiresAt}`,
@@ -297,10 +299,12 @@ export interface RenderedDispatch {
   source: 'database' | 'fallback';
 }
 export async function renderDispatchFromTemplate(
-  vars: QuoteDispatchVars,
+  rawVars: QuoteDispatchVars,
   locale: string = DISPATCH_DEFAULT_LOCALE,
   subjectOverride?: string,
 ): Promise<RenderedDispatch> {
+  // Vale tambem para templates salvos no banco: {{requestCode}} vira ''.
+  const vars = omitRequestCode(rawVars);
   const dbTemplate = await EmailTemplateService.get(DISPATCH_TEMPLATE_KEY, locale);
   const override = subjectOverride?.trim();
   const subject = override

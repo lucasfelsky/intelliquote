@@ -784,8 +784,10 @@ type DispatchQuoteRequest = Prisma.QuoteRequestGetPayload<{
   };
 }>;
 
-function defaultDispatchSubject(quoteRequest: { requestCode: string; productName: string | null }): string {
-  return `Sourcing request ${quoteRequest.requestCode} - ${quoteRequest.productName}`;
+function defaultDispatchSubject(quoteRequest: { productName: string | null }): string {
+  // Codigo interno da cotacao nunca vai ao fornecedor.
+  const productName = quoteRequest.productName?.trim();
+  return productName ? `Sourcing request - ${productName}` : 'Sourcing request';
 }
 
 /**
@@ -808,7 +810,6 @@ export async function renderDispatchEmail(input: {
   const rendered = await renderDispatchFromTemplate(
     buildTemplateVars({
       subject: subjectBase,
-      requestCode: quoteRequest.requestCode,
       productName: quoteRequest.productName,
       quantity: quoteRequest.quantity,
       desiredIncoterm: formatIncoterms(quoteRequest.desiredIncoterm),
@@ -881,7 +882,6 @@ function injectCustomMessage(html: string, message: string): string {
 
 function buildTemplateVars(input: {
   subject: string;
-  requestCode: string;
   productName: string | null;
   quantity: number | null;
   desiredIncoterm: string;
@@ -921,7 +921,6 @@ function buildTemplateVars(input: {
   return {
     subject: input.subject,
     supplierContactName: input.contact.name,
-    requestCode: input.requestCode,
     productName: summaryName,
     quantity: summaryQty,
     unit: summaryUnit,

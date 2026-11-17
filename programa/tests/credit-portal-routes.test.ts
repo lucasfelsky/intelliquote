@@ -342,7 +342,6 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
       'incoterm',
       'originPort',
       'readOnly',
-      'requestCode',
     ]);
     expect(Object.keys(res.body.supplier).sort()).toEqual(['country', 'name']);
     expect(Object.keys(res.body.partner)).toEqual(['name']);
@@ -351,8 +350,9 @@ describe('Portal do parceiro de credito - /api/credit-portal', () => {
     for (const item of res.body.items) {
       expect(Object.keys(item).sort()).toEqual(ITEM_KEYS);
     }
+    expect(res.body.request).not.toHaveProperty('requestCode');
+    expect(JSON.stringify(res.body)).not.toContain('QR-5');
     expect(res.body.request).toMatchObject({
-      requestCode: 'QR-5',
       currency: 'USD',
       incoterm: 'FOB',
       originPort: 'Shanghai',

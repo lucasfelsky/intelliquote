@@ -12,9 +12,7 @@ import {
 
 function makeVars(overrides: Partial<QuoteReplyVars> = {}): QuoteReplyVars {
   return {
-    subject: 'Sourcing request QR-1 - Produto',
-    quoteRequestId: 1,
-    requestCode: 'QR-1',
+    subject: 'Sourcing request - Produto',
     productName: 'Produto',
     supplierName: 'Acme',
     supplierContactName: 'John',
@@ -207,7 +205,7 @@ describe('renderQuoteReply — {{itemsText}} e {{itemsTextTable}}', () => {
 
   it('o rascunho renderizado produz um texto completo e coerente', () => {
     const text = renderReplyTextFromTemplate(buildReplyTextTemplateDraft(), makeVars({ message: 'Oi' }));
-    expect(text.startsWith('Dear John,\r\n\r\nOi\r\n\r\nThank you for your quotation on QR-1')).toBe(true);
+    expect(text.startsWith('Dear John,\r\n\r\nOi\r\n\r\nThank you for your quotation for Produto.')).toBe(true);
     expect(text).toContain('Please find the items under discussion below:');
     expect(text).toContain('Unit Price\tTarget Price\tTotal');
     expect(text.endsWith('Best regards,')).toBe(true);

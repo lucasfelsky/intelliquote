@@ -97,8 +97,6 @@ const templateUpsertSchema = z.object({
 function renderReplySampleVars(): QuoteReplyVars {
   return {
     subject: 'PHOTOINIATOR - SQ QUIMICA - Acme Chemicals',
-    quoteRequestId: 42,
-    requestCode: 'QR-20260618-DEMO01',
     productName: 'PHOTOINIATOR',
     supplierName: 'Acme Chemicals',
     supplierContactName: 'Joao Fornecedor',
@@ -118,8 +116,7 @@ function renderReplySampleVars(): QuoteReplyVars {
 
 function renderPoSampleVars(): QuotePoVars {
   return {
-    subject: 'Purchase Order - QR-20260618-DEMO01',
-    requestCode: 'QR-20260618-DEMO01',
+    subject: 'Purchase Order - PHOTOINIATOR',
     supplierContactName: 'Joao Fornecedor',
     forwarderInfo: 'Global Forwarders Ltda.\nAttn: Maria Santos\nmaria@globalforwarders.com\n+55 47 99999-1234',
     destinationPort: 'NAVEGANTES, BRAZIL',
@@ -135,9 +132,8 @@ function renderPoSampleVars(): QuotePoVars {
 
 function renderSampleVars(): QuoteDispatchVars {
   return {
-    subject: 'Sourcing request QR-20260618-DEMO01 - PHOTOINIATOR',
+    subject: 'Sourcing request - PHOTOINIATOR',
     supplierContactName: 'Joao Fornecedor',
-    requestCode: 'QR-20260618-DEMO01',
     productName: 'PHOTOINIATOR',
     quantity: 500,
     unit: 'KG',
@@ -200,8 +196,6 @@ emailTemplateRoutes.get(
 
         const replySample = renderReplySampleVars();
         if (latestQuoteRequestForReply) {
-          replySample.quoteRequestId = latestQuoteRequestForReply.id;
-          replySample.requestCode = latestQuoteRequestForReply.requestCode;
           replySample.productName = latestQuoteRequestForReply.productName ?? replySample.productName;
           if (latestQuoteRequestForReply.items.length > 0) {
             replySample.items = latestQuoteRequestForReply.items.map((it) => ({
@@ -259,14 +253,13 @@ emailTemplateRoutes.get(
           EmailTemplateService.get(key, locale),
           prisma.quoteRequest.findFirst({
             orderBy: { createdAt: 'desc' },
-            select: { requestCode: true },
+            select: { productName: true },
           }),
         ]);
 
         const poSample = renderPoSampleVars();
         if (latestQuoteRequestForPo) {
-          poSample.requestCode = latestQuoteRequestForPo.requestCode;
-          poSample.subject = `Purchase Order - ${latestQuoteRequestForPo.requestCode}`;
+          poSample.subject = `Purchase Order - ${latestQuoteRequestForPo.productName?.trim() || 'SQ Quimica'}`;
         }
 
         if (!poTemplate) {
@@ -306,15 +299,14 @@ emailTemplateRoutes.get(
           EmailTemplateService.get(key, locale),
           prisma.quoteRequest.findFirst({
             orderBy: { createdAt: 'desc' },
-            select: { requestCode: true, productName: true },
+            select: { productName: true },
           }),
         ]);
 
         const regretSample: QuoteRegretVars = {
-          subject: 'Update on your quotation for QR-2026-001',
+          subject: 'Update on your quotation for PI-TPO',
           contactName: 'Li Wei',
           supplierName: 'Shanghai Chem Co.',
-          requestCode: latestQuoteRequestForRegret?.requestCode ?? 'QR-2026-001',
           productName: latestQuoteRequestForRegret?.productName ?? 'PI-TPO',
           companyName: 'SQ Quimica',
         };
@@ -348,15 +340,14 @@ emailTemplateRoutes.get(
           EmailTemplateService.get(key, locale),
           prisma.quoteRequest.findFirst({
             orderBy: { createdAt: 'desc' },
-            select: { requestCode: true, productName: true },
+            select: { productName: true },
           }),
         ]);
 
         const reminderSample: QuoteReminderVars = {
-          subject: 'Reminder: quotation for QR-2026-001 closes on 25 Jun 2026',
+          subject: 'Reminder: quotation for PI-TPO closes on 25 Jun 2026',
           contactName: 'Li Wei',
           supplierName: 'Shanghai Chem Co.',
-          requestCode: latestQuoteRequestForReminder?.requestCode ?? 'QR-2026-001',
           productName: latestQuoteRequestForReminder?.productName ?? 'PI-TPO',
           expiresAt: '25 Jun 2026',
           portalLink: 'https://intelliquote.portal-comex.com/portal/preview?token=PREVIEW&v=1',
@@ -543,7 +534,6 @@ emailTemplateRoutes.get(
       sample.purchasingPhone = profileRecord.purchasingPhone ?? undefined;
 
       if (latestQuoteRequest) {
-        sample.requestCode = latestQuoteRequest.requestCode;
         sample.productName = latestQuoteRequest.productName ?? sample.productName;
         sample.quantity = latestQuoteRequest.quantity ?? sample.quantity;
         sample.unit = 'UN';

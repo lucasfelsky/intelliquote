@@ -17,11 +17,10 @@ import {
 
 function vars(overrides: Partial<CreditSupportRequestVars> = {}): CreditSupportRequestVars {
   return {
-    subject: 'Credit support request - RFQ-1 - Forn',
+    subject: 'Credit support request - Forn',
     contactName: 'Ana',
     partnerName: 'Banco Alfa',
     companyName: 'SQ Quimica',
-    requestCode: 'RFQ-1',
     supplierName: 'Forn Ltd',
     supplierCountry: 'China',
     currency: 'USD',
@@ -79,12 +78,10 @@ describe('renderCreditSupportFromTemplate', () => {
   });
 
   it('nao coloca precos no corpo e usa o assunto padrao em ingles', async () => {
-    expect(defaultCreditSupportSubject('RFQ-1', 'Forn')).toBe(
-      'Credit support request - RFQ-1 - Forn',
-    );
+    expect(defaultCreditSupportSubject('Forn')).toBe('Credit support request - Forn');
     const out = await renderCreditSupportFromTemplate(vars());
     expect(out.html).not.toMatch(/unit price|total price/i);
-    expect(out.subject).toBe('Credit support request - RFQ-1 - Forn');
+    expect(out.subject).toBe('Credit support request - Forn');
   });
 
   it('aplica o override do banco; assunto digitado prevalece sobre o do banco', async () => {
@@ -93,9 +90,11 @@ describe('renderCreditSupportFromTemplate', () => {
       htmlBody: '<p>DB body {{partnerName}} {{portalLink}}</p>',
       textBody: null,
     });
-    const fromDb = await renderCreditSupportFromTemplate(vars());
+    // Mesmo que o chamador passe o codigo, o renderer o descarta: {{requestCode}} vira ''.
+    const fromDb = await renderCreditSupportFromTemplate({ ...vars(), requestCode: 'RFQ-1' } as never);
     expect(fromDb.source).toBe('database');
-    expect(fromDb.subject).toBe('DB RFQ-1');
+    expect(fromDb.subject).not.toContain('RFQ-1');
+    expect(fromDb.subject).toMatch(/^DB/);
     expect(fromDb.html).toContain('DB body Banco Alfa');
     expect(fromDb.text).toContain('Open the request:');
 

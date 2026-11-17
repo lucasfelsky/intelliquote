@@ -64,11 +64,12 @@ export class SupplierRegretNotificationService {
             throw new Error(`Fornecedor ${supplierId} sem contato para aviso de nao-selecionado.`);
           }
 
+          // Codigo interno da cotacao nunca vai ao fornecedor (so no templateVars do MailLog).
+          const regretProduct = request.productName?.trim();
           const rendered = await renderRegretFromTemplate({
-            subject: `Update on your quotation for ${request.requestCode}`,
+            subject: `Update on your quotation${regretProduct ? ` for ${regretProduct}` : ''}`,
             contactName: primaryContact.name,
             supplierName,
-            requestCode: request.requestCode,
             productName: request.productName ?? '',
             companyName: profile.companyName,
           });

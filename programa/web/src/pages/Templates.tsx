@@ -72,7 +72,6 @@ const TEMPLATE_CARDS: Array<{
 const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = {
   quote_dispatch: [
     { token: '{{subject}}', label: 'Assunto' },
-    { token: '{{requestCode}}', label: 'Código' },
     { token: '{{productName}}', label: 'Produto' },
     { token: '{{quantity}}', label: 'Quantidade' },
     { token: '{{unit}}', label: 'Unidade' },
@@ -87,7 +86,6 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
   ],
   quote_reply: [
     { token: '{{subject}}', label: 'Assunto' },
-    { token: '{{requestCode}}', label: 'Código' },
     { token: '{{productName}}', label: 'Produto' },
     { token: '{{supplierName}}', label: 'Fornecedor' },
     { token: '{{supplierContactName}}', label: 'Contato' },
@@ -100,7 +98,6 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
   ],
   quote_po: [
     { token: '{{subject}}', label: 'Assunto' },
-    { token: '{{requestCode}}', label: 'Código' },
     { token: '{{supplierContactName}}', label: 'Contato' },
     { token: '{{forwarderInfo}}', label: 'Contato do despachante' },
     { token: '{{destinationPort}}', label: 'Porto de destino' },
@@ -114,7 +111,6 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{subject}}', label: 'Assunto' },
     { token: '{{contactName}}', label: 'Contato' },
     { token: '{{supplierName}}', label: 'Fornecedor' },
-    { token: '{{requestCode}}', label: 'Código' },
     { token: '{{productName}}', label: 'Produto' },
     { token: '{{expiresAt}}', label: 'Prazo final' },
     { token: '{{portalLink}}', label: 'Link do portal' },
@@ -124,7 +120,6 @@ const VARIABLE_CHIPS: Record<string, Array<{ token: string; label: string }>> = 
     { token: '{{subject}}', label: 'Assunto' },
     { token: '{{contactName}}', label: 'Contato' },
     { token: '{{supplierName}}', label: 'Fornecedor' },
-    { token: '{{requestCode}}', label: 'Código' },
     { token: '{{productName}}', label: 'Produto' },
     { token: '{{companyName}}', label: 'Empresa' },
   ],

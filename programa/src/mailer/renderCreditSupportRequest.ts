@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { EmailTemplateService } from '../services/EmailTemplateService';
 import { escapeHtml } from './renderQuoteDispatch';
+import { omitRequestCode } from './supplierFacing';
 
 // Credit Support (PR2a): e-mail ao parceiro de credito com o link do portal dele.
 // Voltado a parceiro externo -> EN. Sem precos no corpo (precos so no portal).
@@ -37,7 +38,6 @@ export interface CreditSupportRequestVars {
   contactName: string;
   partnerName: string;
   companyName: string;
-  requestCode: string;
   supplierName: string;
   supplierCountry: string;
   currency: string;
@@ -49,8 +49,8 @@ export interface CreditSupportRequestVars {
   customMessage: string;
 }
 
-export function defaultCreditSupportSubject(requestCode: string, supplierName: string): string {
-  return `Credit support request - ${requestCode} - ${supplierName}`;
+export function defaultCreditSupportSubject(supplierName: string): string {
+  return `Credit support request - ${supplierName}`;
 }
 
 /** "08 Oct 2026" (en-GB, UTC): mesma data para qualquer fuso do servidor. */
@@ -95,7 +95,7 @@ export function renderCreditSupportPlainText(vars: CreditSupportRequestVars): st
   }
   const country = vars.supplierCountry ? ` (${vars.supplierCountry})` : '';
   lines.push(
-    `${vars.companyName} is evaluating a purchase from ${vars.supplierName}${country} under request ${vars.requestCode}, and would like to know whether ${vars.partnerName} can offer credit support for it.`,
+    `${vars.companyName} is evaluating a purchase from ${vars.supplierName}${country}, and would like to know whether ${vars.partnerName} can offer credit support for it.`,
     '',
     `The request covers ${vars.itemsCount} item(s), quoted in ${vars.currency} under ${vars.incoterm}.` +
       (vars.unavailableCount > 0
@@ -121,9 +121,11 @@ export interface RenderedCreditSupportRequest {
 }
 
 export async function renderCreditSupportFromTemplate(
-  vars: CreditSupportRequestVars,
+  rawVars: CreditSupportRequestVars,
   locale: string = CREDIT_SUPPORT_DEFAULT_LOCALE,
 ): Promise<RenderedCreditSupportRequest> {
+  // Codigo interno da cotacao nunca vai ao parceiro (nem via template do banco).
+  const vars = omitRequestCode(rawVars);
   const dbTemplate = await EmailTemplateService.get(CREDIT_SUPPORT_TEMPLATE_KEY, locale);
   const subject =
     dbTemplate?.subject && !vars.subjectIsCustom

@@ -1597,7 +1597,7 @@
             const items = data.quoteRequest.items || [];
             content.innerHTML = `
               <div class="portal-title-block">
-                <p class="eyebrow">Sourcing request ${data.quoteRequest.requestCode}</p>
+                <p class="eyebrow">Sourcing request</p>
                 <h1>${items.length === 1 ? items[0].productName : `${items.length} items`}</h1>
               </div>
               ${renderSupplierCard(data)}
