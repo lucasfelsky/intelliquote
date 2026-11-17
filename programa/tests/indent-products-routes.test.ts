@@ -367,7 +367,7 @@ describe('/api/v1/indent - importacao do IntelliQuote (somente leitura)', () => 
 
   it('POST /import/suppliers copia (importedFromIq, IMPORTADO, USD, CFR), deduplica por nameKey e audita', async () => {
     tx.supplier.findMany.mockResolvedValue([
-      { id: 1, name: 'Acme Chemicals', country: 'China', contacts: [{ name: 'Wei Zhang' }] },
+      { id: 1, name: 'Acme Chemicals', country: 'China', contacts: [{ name: 'Wei Zhang', email: 'wei@acme.test', isPrimary: true }] },
       { id: 2, name: 'ACME  chemicals', country: null, contacts: [] },
     ]);
     tx.indentSupplier.createManyAndReturn.mockResolvedValue([{ id: 10, nameKey: 'acme chemicals' }]);
@@ -392,6 +392,7 @@ describe('/api/v1/indent - importacao do IntelliQuote (somente leitura)', () => 
           nameKey: 'acme chemicals',
           country: 'China',
           contactName: 'Wei Zhang',
+          contactEmails: ['wei@acme.test'],
           type: 'IMPORTADO',
           defaultCurrency: 'USD',
           defaultIncoterm: 'CFR',
@@ -409,9 +410,55 @@ describe('/api/v1/indent - importacao do IntelliQuote (somente leitura)', () => 
           { sourceId: 2, reason: 'duplicado' },
           { sourceId: 3, reason: 'nao_encontrado' },
         ],
+        emailsCopied: 1,
       },
     });
     expectSourcesUntouched();
+  });
+
+  it('POST /import/suppliers copia os e-mails de TODOS os contatos (principal primeiro), sem invalido nem duplicado', async () => {
+    tx.supplier.findMany.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Acme Chemicals',
+        country: 'China',
+        contacts: [
+          { name: 'Wei Zhang', email: 'Wei@Acme.test', isPrimary: true },
+          { name: 'Li Na', email: 'lina@acme.test', isPrimary: false },
+          { name: 'Sem e-mail valido', email: 'nao-e-email', isPrimary: false },
+          { name: 'Duplicado', email: 'wei@acme.test', isPrimary: false },
+        ],
+      },
+    ]);
+    tx.indentSupplier.createManyAndReturn.mockResolvedValue([{ id: 10, nameKey: 'acme chemicals' }]);
+    const cookie = await loginAs('comprador');
+
+    const res = await call('post', '/import/suppliers', cookie, { ids: [1] });
+
+    expect(res.status).toBe(200);
+    const select = tx.supplier.findMany.mock.calls[0][0].select.contacts;
+    expect(select).toEqual({ orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }], select: { name: true, email: true, isPrimary: true } });
+    expect(tx.indentSupplier.createManyAndReturn.mock.calls[0][0].data[0]).toMatchObject({
+      contactName: 'Wei Zhang',
+      contactEmails: ['wei@acme.test', 'lina@acme.test'],
+    });
+    expect(auditCall('indent_import.suppliers')).toMatchObject({ metadata: { emailsCopied: 2 } });
+    expectSourcesUntouched();
+  });
+
+  it('POST /import/suppliers: contactName vem so do contato principal (sem principal = null)', async () => {
+    tx.supplier.findMany.mockResolvedValue([
+      { id: 1, name: 'Acme Chemicals', country: 'China', contacts: [{ name: 'Li Na', email: 'lina@acme.test', isPrimary: false }] },
+    ]);
+    tx.indentSupplier.createManyAndReturn.mockResolvedValue([{ id: 10, nameKey: 'acme chemicals' }]);
+    const cookie = await loginAs('comprador');
+
+    await call('post', '/import/suppliers', cookie, { ids: [1] });
+
+    expect(tx.indentSupplier.createManyAndReturn.mock.calls[0][0].data[0]).toMatchObject({
+      contactName: null,
+      contactEmails: ['lina@acme.test'],
+    });
   });
 
   it('POST /import/suppliers: ja existente no Indent -> duplicado; corrida (skipDuplicates) -> duplicado', async () => {

@@ -105,7 +105,7 @@ function refOf(quote: QuoteDetailRow): string {
 
 // Nos 400 de data, o 3o argumento do HttpError (code) leva o campo (`path`) para o erro inline da tela.
 // Ordem das checagens: solicitacao perdida -> status da cotacao -> aceite unico (o 404 ja saiu do lockIndentQuote).
-function assertActionAllowed(action: IndentQuoteAction, { quote, accepted }: LockedQuote): void {
+export function assertActionAllowed(action: IndentQuoteAction, { quote, accepted }: LockedQuote): void {
   if (quote.request.status === 'PERDIDA') {
     throw new HttpError(409, `A solicitação ${quote.request.processNumber} foi marcada como perdida.`);
   }

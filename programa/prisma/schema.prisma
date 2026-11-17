@@ -1481,6 +1481,8 @@ model IndentSupplier {
   clientRules     IndentClientSupplierRule[]
   products        IndentSupplierProduct[]
   quotes          IndentQuote[]
+  contactEmails   String[]                   @default([])
+  portalTokens    IndentPortalToken[]
 
   @@index([isActive])
 }
@@ -1644,6 +1646,10 @@ model IndentQuote {
   items           IndentQuoteItem[]
   baseQuote       IndentQuote?      @relation("IndentQuoteRevisions", fields: [baseQuoteId], references: [id], onDelete: Restrict)
   revisions       IndentQuote[]     @relation("IndentQuoteRevisions")
+  portalTokens      IndentPortalToken[]
+  portalResponse    IndentPortalResponse?
+  mailLogs          IndentMailLog[]
+  portalAttachments IndentPortalAttachment[]
 
   @@unique([requestId, supplierId, revision])
   @@index([supplierId])
@@ -1662,9 +1668,160 @@ model IndentQuoteItem {
   createdAt     DateTime          @default(now())
   quote         IndentQuote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   requestItem   IndentRequestItem @relation(fields: [requestItemId], references: [id], onDelete: Restrict)
+  portalResponseItems IndentPortalResponseItem[]
 
   @@unique([quoteId, requestItemId])
   @@index([requestItemId])
+}
+
+// IQ Indent PR 4: envio por e-mail e portal do fornecedor. Prefixo Indent; sem FK para o IQ principal.
+// Usuario (createdById, sentById, attachmentsConfirmedById) = Int sem FK. O token bruto nunca e gravado: so o SHA-256.
+enum IndentMailKind {
+  REQUEST
+  REVISION
+  RESEND
+}
+
+model IndentPortalToken {
+  id              Int                      @id @default(autoincrement())
+  quoteId         Int
+  supplierId      Int
+  recipientEmail  String
+  tokenHash       String                   @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  revokedReason   String? // resend | superseded | send_failed
+  showClientName  Boolean                  @default(false)
+  destinationPort String
+  message         String?
+  firstSeenAt     DateTime?
+  lastSeenAt      DateTime?
+  accessCount     Int                      @default(0)
+  createdById     Int // User.id, sem FK
+  createdAt       DateTime                 @default(now())
+  quote           IndentQuote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  supplier        IndentSupplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  mailLogs        IndentMailLog[]
+  accessLogs      IndentPortalAccessLog[]
+  attachments     IndentPortalAttachment[]
+  lastResponses   IndentPortalResponse[]   @relation("IndentPortalResponseLastToken")
+
+  @@index([quoteId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model IndentPortalResponse {
+  id                     Int                            @id @default(autoincrement())
+  quoteId                Int                            @unique
+  lastTokenId            Int?
+  currency               String
+  productionLeadTimeDays Int
+  paymentTerms           String
+  validUntil             DateTime                       @db.Date
+  manufacturer           String?
+  notes                  String?
+  version                Int                            @default(1)
+  submittedAt            DateTime
+  submitterIp            String?
+  submitterUserAgent     String?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+  quote                  IndentQuote                    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  lastToken              IndentPortalToken?             @relation("IndentPortalResponseLastToken", fields: [lastTokenId], references: [id], onDelete: SetNull)
+  items                  IndentPortalResponseItem[]
+  revisions              IndentPortalResponseRevision[]
+}
+
+model IndentPortalResponseItem {
+  id            Int                  @id @default(autoincrement())
+  responseId    Int
+  quoteItemId   Int
+  packaging     String
+  fobPricePerKg Decimal              @db.Decimal(14, 4)
+  cfrPricePerKg Decimal              @db.Decimal(14, 4)
+  response      IndentPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  quoteItem     IndentQuoteItem      @relation(fields: [quoteItemId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, quoteItemId])
+  @@index([quoteItemId])
+}
+
+model IndentPortalResponseRevision {
+  id           Int                  @id @default(autoincrement())
+  responseId   Int
+  version      Int
+  snapshot     Json
+  submittedAt  DateTime
+  supersededAt DateTime             @default(now())
+  response     IndentPortalResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  @@unique([responseId, version])
+}
+
+model IndentPortalAttachment {
+  id        Int                         @id @default(autoincrement())
+  quoteId   Int
+  tokenId   Int?
+  fileName  String
+  mimeType  String
+  fileSize  Int
+  sha256    String
+  createdAt DateTime                    @default(now())
+  quote     IndentQuote                 @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  token     IndentPortalToken?          @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  file      IndentPortalAttachmentFile?
+
+  @@unique([quoteId, sha256])
+  @@index([tokenId])
+}
+
+model IndentPortalAttachmentFile {
+  attachmentId Int                    @id
+  data         Bytes
+  attachment   IndentPortalAttachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+}
+
+model IndentPortalAccessLog {
+  id         Int                @id @default(autoincrement())
+  tokenId    Int?
+  kind       String // VIEW | SUBMIT | INVALID | UPLOAD
+  reason     String? // not_found | bad_format | revoked | expired | closed
+  ip         String?
+  userAgent  String?
+  occurredAt DateTime           @default(now())
+  token      IndentPortalToken? @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@index([tokenId])
+  @@index([occurredAt])
+  @@index([kind])
+}
+
+model IndentMailLog {
+  id                       Int                @id @default(autoincrement())
+  quoteId                  Int
+  tokenId                  Int?
+  kind                     IndentMailKind
+  toEmail                  String
+  subject                  String
+  templateId               String
+  status                   MailLogStatus      @default(queued)
+  providerMessageId        String?
+  errorMessage             String?
+  hasPartnership           Boolean
+  showClientName           Boolean
+  attachmentNames          String[]           @default([])
+  attachmentsConfirmedAt   DateTime?
+  attachmentsConfirmedById Int?
+  sentById                 Int
+  createdAt                DateTime           @default(now())
+  sentAt                   DateTime?
+  quote                    IndentQuote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  token                    IndentPortalToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId])
+  @@index([toEmail])
+  @@index([status])
 }
 
 // IQ Indent PR 5 (Pipedrive): integracao SO LEITURA. Prefixo Indent; sem FK para tabelas do IQ principal;

@@ -42,6 +42,7 @@ function supplierSnapshot(row: {
   name: string;
   country: string | null;
   contactName: string | null;
+  contactEmails: string[];
   type: string;
   defaultCurrency: string;
   defaultIncoterm: string;
@@ -52,6 +53,7 @@ function supplierSnapshot(row: {
     name: row.name,
     country: row.country,
     contactName: row.contactName,
+    contactEmails: row.contactEmails,
     type: row.type,
     defaultCurrency: row.defaultCurrency,
     defaultIncoterm: row.defaultIncoterm,
@@ -133,6 +135,7 @@ export class IndentSupplierService {
               { name: { contains: query.q, mode: 'insensitive' } },
               { country: { contains: query.q, mode: 'insensitive' } },
               { contactName: { contains: query.q, mode: 'insensitive' } },
+              { contactEmails: { has: query.q.toLowerCase() } },
             ],
           }
         : {}),
@@ -205,6 +208,7 @@ export class IndentSupplierService {
             nameKey: normalizeItemNameKey(name),
             country: input.country ?? null,
             contactName: input.contactName ?? null,
+            contactEmails: input.contactEmails ?? [],
             type: input.type,
             defaultCurrency: input.defaultCurrency,
             defaultIncoterm: input.defaultIncoterm,
@@ -255,6 +259,7 @@ export class IndentSupplierService {
             : {}),
           ...(input.country !== undefined ? { country: input.country } : {}),
           ...(input.contactName !== undefined ? { contactName: input.contactName } : {}),
+          ...(input.contactEmails !== undefined ? { contactEmails: input.contactEmails } : {}),
           ...(input.type !== undefined ? { type: input.type } : {}),
           ...(input.defaultCurrency !== undefined ? { defaultCurrency: input.defaultCurrency } : {}),
           ...(input.defaultIncoterm !== undefined ? { defaultIncoterm: input.defaultIncoterm } : {}),

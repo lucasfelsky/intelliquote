@@ -222,14 +222,40 @@ describe('/api/v1/indent/quotes/:id - detalhe', () => {
     expect(res.body.allowedActions).toEqual([]);
   });
 
-  it('RASCUNHO com escrita oferece marcar como enviada e item livre; solicitacao PERDIDA, nada', async () => {
+  it('RASCUNHO com escrita oferece marcar como enviada, item livre e enviar; solicitacao PERDIDA, nada', async () => {
     const cookie = await loginAs('comprador');
-    expect((await call('get', '/quotes/100', cookie)).body.allowedActions).toEqual(['mark-sent', 'items']);
+    const draft = await call('get', '/quotes/100', cookie);
+    expect(draft.body.allowedActions).toEqual(['mark-sent', 'items', 'send']);
+    expect(draft.body.portal).toEqual({ hasTokens: false });
 
     prismaMock.indentQuote.findUnique.mockResolvedValue(
       quoteRow({ request: { ...quoteRow().request, status: 'PERDIDA' } }),
     );
     expect((await call('get', '/quotes/100', cookie)).body.allowedActions).toEqual([]);
+  });
+});
+
+describe('/api/v1/indent/quotes/:id - estado do portal no detalhe (PR 4)', () => {
+  it('ENVIADA com link ativo oferece reenviar o link e informa portal.hasTokens', async () => {
+    const cookie = await loginAs('comprador');
+    prismaMock.indentQuote.findUnique.mockResolvedValue(
+      quoteRow({ status: 'ENVIADA', sentAt: new Date(), _count: { portalTokens: 2 } }),
+    );
+
+    const res = await call('get', '/quotes/100', cookie);
+
+    expect(res.body.portal).toEqual({ hasTokens: true });
+    expect(res.body.allowedActions).toEqual(['response', 'resend']);
+  });
+
+  it('ENVIADA marcada sem e-mail (sem link ativo) nao oferece reenviar', async () => {
+    const cookie = await loginAs('comprador');
+    prismaMock.indentQuote.findUnique.mockResolvedValue(quoteRow({ status: 'ENVIADA', sentAt: new Date(), _count: { portalTokens: 0 } }));
+
+    const res = await call('get', '/quotes/100', cookie);
+
+    expect(res.body.portal).toEqual({ hasTokens: false });
+    expect(res.body.allowedActions).toEqual(['response']);
   });
 });
 

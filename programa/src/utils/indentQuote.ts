@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 // A maquina de estados mora AQUI (fonte unica): o workflow valida com ela e a tela le `allowedActions` do backend.
 
 export type IndentQuoteStatusName = 'RASCUNHO' | 'ENVIADA' | 'RESPONDIDA' | 'ACEITA' | 'RECUSADA' | 'REVISADA';
-export type IndentQuoteAction = 'mark-sent' | 'items' | 'response' | 'accept' | 'refuse' | 'revision';
+export type IndentQuoteAction = 'mark-sent' | 'items' | 'response' | 'accept' | 'refuse' | 'revision' | 'send' | 'resend';
 
 export const QUOTE_STATUS_LABEL: Record<IndentQuoteStatusName, string> = {
   RASCUNHO: 'Rascunho',
@@ -22,6 +22,8 @@ export const QUOTE_ACTION_LABEL: Record<IndentQuoteAction, string> = {
   accept: 'aceitar',
   refuse: 'recusar',
   revision: 'pedir revisão',
+  send: 'enviar ao fornecedor',
+  resend: 'reenviar o link',
 };
 
 /** Estados em que cada acao e permitida (coluna "De" da maquina de estados). */
@@ -32,12 +34,21 @@ export const QUOTE_TRANSITIONS: Record<IndentQuoteAction, readonly IndentQuoteSt
   accept: ['RESPONDIDA'],
   refuse: ['RESPONDIDA'],
   revision: ['RESPONDIDA'],
+  send: ['RASCUNHO'],
+  resend: ['ENVIADA'],
 };
 
 /** Depois que UMA cotacao da solicitacao foi aceita, estas acoes ficam bloqueadas nas demais (aceite unico). */
-export const ACTIONS_BLOCKED_AFTER_ACCEPT: readonly IndentQuoteAction[] = ['mark-sent', 'items', 'accept', 'revision'];
+export const ACTIONS_BLOCKED_AFTER_ACCEPT: readonly IndentQuoteAction[] = [
+  'mark-sent',
+  'items',
+  'accept',
+  'revision',
+  'send',
+  'resend',
+];
 
-const ALL_ACTIONS: readonly IndentQuoteAction[] = ['mark-sent', 'items', 'response', 'accept', 'refuse', 'revision'];
+const ALL_ACTIONS: readonly IndentQuoteAction[] = ['mark-sent', 'items', 'response', 'accept', 'refuse', 'revision', 'send', 'resend'];
 
 /** RASCUNHO e ENVIADA: cotacao ainda em aberto (sem resposta registrada). */
 export function isOpenQuote(status: string): boolean {
@@ -54,12 +65,14 @@ export function formatQuoteRef(processNumber: string | null, revision: number): 
 /**
  * Acoes que a tela pode oferecer (e que o backend aceita) para a cotacao. Sem escrita (viewer) ou com a solicitacao perdida: nenhuma.
  * `hasAcceptedInRequest`: a solicitacao ja tem uma cotacao ACEITA (qualquer uma, inclusive esta).
+ * `hasPortalTokens`: ha link do portal ativo (so entao `resend` e oferecido).
  */
 export function allowedQuoteActions(
   status: string,
   canWrite: boolean,
   requestStatus: string,
   hasAcceptedInRequest: boolean,
+  hasPortalTokens = false,
 ): IndentQuoteAction[] {
   if (!canWrite || requestStatus === 'PERDIDA') {
     return [];
@@ -67,6 +80,9 @@ export function allowedQuoteActions(
 
   return ALL_ACTIONS.filter((action) => {
     if (!(QUOTE_TRANSITIONS[action] as readonly string[]).includes(status)) {
+      return false;
+    }
+    if (action === 'resend' && !hasPortalTokens) {
       return false;
     }
     return !(hasAcceptedInRequest && ACTIONS_BLOCKED_AFTER_ACCEPT.includes(action));
