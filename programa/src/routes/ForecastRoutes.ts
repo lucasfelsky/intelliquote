@@ -252,6 +252,14 @@ router.put(
   ForecastController.putDecisao,
 );
 
+// Observacao do item no painel (coluna OBS.): gravar = admin/comprador.
+router.put(
+  '/forecast/snapshots/:id/observacoes/:productId',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putObservacao,
+);
+
 // Cotacoes em lote a partir do Forecast (E4a): uma QuoteRequest por fonte, numa transacao, ja vinculadas ao Forecast.
 router.post(
   '/forecast/snapshots/:id/cotacoes',

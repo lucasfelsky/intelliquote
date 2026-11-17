@@ -221,6 +221,71 @@ export class ForecastSnapshotService {
     }
   }
 
+  // Observacao (coluna OBS.) de um item no painel. Grava no produto congelado da quinzena (o painel e o relatorio leem de
+  // la) e, SO quando a quinzena e a mais recente, no cadastro (`ForecastProduct.notes`): e de la que o proximo import
+  // DBCorp puxa a observacao, entao editar uma quinzena antiga nao desfaz a da atual. Nao e entrada do motor (o calculo
+  // nao muda). Lock por quinzena: duas edicoes de itens diferentes nao se atropelam no Json. O AuditLog guarda so o
+  // tamanho do texto, nunca o texto (observacao e texto livre).
+  static async gravarObservacao(id: number, productId: number, observacao: string, userId: number | null) {
+    const texto = observacao.trim();
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`forecast:obs:${id}`}))`;
+
+        const snapshot = await tx.forecastSnapshot.findFirst({
+          where: { id, deletedAt: null },
+          select: { id: true, label: true, products: true },
+        });
+        if (!snapshot) throw new HttpError(404, 'Quinzena nao encontrada.');
+
+        const produtos = snapshot.products as unknown as FrozenProduct[];
+        const indice = produtos.findIndex((p) => p.productId === productId);
+        if (indice < 0) throw new HttpError(404, 'Item fora do cadastro do Forecast nesta quinzena.');
+
+        const antes = produtos[indice].obs ?? '';
+        const atualizados = produtos.map((p, i) => (i === indice ? { ...p, obs: texto } : p));
+        await tx.forecastSnapshot.update({ where: { id }, data: { products: asJson(atualizados) } });
+
+        const maisRecente = await tx.forecastSnapshot.findFirst({
+          where: { deletedAt: null },
+          orderBy: [{ baseDate: 'desc' }, { id: 'desc' }],
+          select: { id: true },
+        });
+        const cadastroAtualizado = maisRecente?.id === id;
+        if (cadastroAtualizado) {
+          const { count } = await tx.forecastProduct.updateMany({
+            where: { id: productId },
+            data: { notes: texto === '' ? null : texto },
+          });
+          if (count === 0) throw new HttpError(404, 'Produto nao encontrado no cadastro do Forecast.');
+        }
+
+        await AuditLogService.log(
+          {
+            entityType: 'forecast_snapshot',
+            entityId: id,
+            action: 'update_obs',
+            performedById: userId,
+            metadata: {
+              label: snapshot.label,
+              productId,
+              caracteresAntes: antes.length,
+              caracteresDepois: texto.length,
+              cadastroAtualizado,
+            },
+          },
+          tx,
+        );
+        return { productId, observacao: texto, cadastroAtualizado };
+      }, CADASTRO_TX_OPTIONS);
+    } catch (error) {
+      if (isCadastroOcupado(error)) {
+        throw new HttpError(503, 'Há uma operação do Forecast em andamento. Tente de novo em instantes.');
+      }
+      throw error;
+    }
+  }
+
   // Lista sem os Json grandes (products/inputs/expected).
   static async list() {
     return prisma.forecastSnapshot.findMany({

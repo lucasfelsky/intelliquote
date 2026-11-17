@@ -18,6 +18,7 @@ import { forecastDecisoesKeys, listForecastDecisoes, type ForecastDecisao } from
 import { forecastPendentesKeys } from '@/services/forecastPendentes';
 import { colunasComDecisoes } from './Forecast/forecastAnaliseDecidida';
 import { colunasComEdicao, type FeedbackCelula } from './Forecast/ForecastPainelAnaliseEditavel';
+import { colunasComObservacao } from './Forecast/ForecastObservacaoEditavel';
 import { APOIO_ANALISE_CANDIDATO, APOIO_ANALISE_PREENCHER } from './Forecast/forecastAnaliseEditavel';
 import ForecastGrid, { chaveDaDivergencia } from './Forecast/ForecastGrid';
 import ForecastExcluirQuinzenaModal from './Forecast/ForecastExcluirQuinzenaModal';
@@ -221,16 +222,18 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
         setErroAnalise(f.texto);
       } else {
         setErroAnalise('');
-        mostrarToast(f.acao, f.acao === 'removido' ? 'Quantidade removida' : 'Quantidade salva', f.texto);
+        mostrarToast(f.acao, f.titulo ?? (f.acao === 'removido' ? 'Quantidade removida' : 'Quantidade salva'), f.texto);
       }
     },
     [mostrarToast],
   );
   const colunas = useMemo(() => {
     const base = colunasComDecisoes(colunasDoPainel(detail.months, { ocultas }), mapaDecisoes);
-    return podeEditarAnalise
-      ? colunasComEdicao(base, { snapshotId: detail.id, mapa: mapaDecisoes, aoFeedback: aoFeedbackAnalise })
-      : base;
+    if (!podeEditarAnalise) return base;
+    return colunasComObservacao(
+      colunasComEdicao(base, { snapshotId: detail.id, mapa: mapaDecisoes, aoFeedback: aoFeedbackAnalise }),
+      { snapshotId: detail.id, aoFeedback: aoFeedbackAnalise },
+    );
   }, [detail.months, detail.id, ocultas, mapaDecisoes, podeEditarAnalise, aoFeedbackAnalise]);
   const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
   const contagem = useMemo(() => contarPorFiltro(base), [base]);

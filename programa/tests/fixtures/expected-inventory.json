@@ -497,6 +497,7 @@
     "PUT /credit-partners/:id",
     "PUT /forecast/products/:id/meses-atipicos",
     "PUT /forecast/snapshots/:id/decisoes/:productId",
+    "PUT /forecast/snapshots/:id/observacoes/:productId",
     "PUT /forecast/snapshots/:id/rascunho-cotacao",
     "PUT /forwarders/:id",
     "PUT /item-families/:id",
