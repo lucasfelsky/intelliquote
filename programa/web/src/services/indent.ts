@@ -43,6 +43,8 @@ export interface IndentSupplier {
   name: string;
   country: string | null;
   contactName: string | null;
+  /** Destinatarios do envio da cotacao (ate 10). Sempre presente na API desde o PR 4a; opcional aqui para tolerar fixtures antigas. */
+  contactEmails?: string[];
   type: IndentSupplierType;
   defaultCurrency: string;
   defaultIncoterm: string;
@@ -179,6 +181,8 @@ export interface IndentSupplierInput {
   name: string;
   country?: string | null;
   contactName?: string | null;
+  /** Ausente = e-mails intocados; presente = lista FINAL (`[]` limpa). */
+  contactEmails?: string[];
   type?: IndentSupplierType;
   defaultCurrency?: IndentCurrency;
   defaultIncoterm?: IndentIncoterm;

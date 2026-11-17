@@ -14,6 +14,7 @@ import {
   requestIndentQuoteRevision,
   type IndentQuoteDetail,
 } from '@/services/indentQuotes';
+import type { IndentSendResponse } from '@/services/indentEnvio';
 import {
   QUOTE_STATUS,
   acceptedNotice,
@@ -29,9 +30,14 @@ import {
 } from './indentCotacao';
 import IndentCotacaoItens, { type FreeItemState, type PriceValues } from './IndentCotacaoItens';
 import { formatarDataHora, mensagemDoErro, parseQuantidadePtBr } from './indentFila';
+import IndentEnviarModal from './IndentEnviarModal';
+import IndentPortalSecao from './IndentPortalSecao';
+import { resumoEnvio, tituloToastEnvio } from './indentPortal';
 
 // IQ Indent: gaveta da cotacao (mock openCot), um <Modal> posicionado a direita pela regiao F14 (classe indent-gaveta). A maquina de estados e as acoes
-// permitidas sao do BACKEND (`allowedActions`): a tela so desenha o que vier la. Sem a secao "Portal do fornecedor" e sem a janela de envio (PR 4).
+// permitidas sao do BACKEND (`allowedActions`): a tela so desenha o que vier la. A secao "Portal do fornecedor" (IndentPortalSecao) e a janela
+// "Enviar cotacao" (IndentEnviarModal, PR 4b) entram aqui; a janela e IRMA do <Modal> da gaveta (nunca descendente: as regras F14 da gaveta usam
+// seletor descendente e um <form> dentro do <form> da gaveta nao e valido).
 
 interface GavetaProps {
   /** `null` = id invalido na URL ("Cotacao nao encontrada."). */
@@ -62,6 +68,13 @@ const MOEDAS = ['USD', 'EUR'];
 
 export default function IndentCotacaoGaveta({ quoteId, onClose }: GavetaProps) {
   const { toast, mostrar, fechar } = useToastForecast();
+  const qc = useQueryClient();
+  const [enviando, setEnviando] = useState(false);
+  // Depois do envio a gaveta remonta (RASCUNHO -> ENVIADA) e o botao de origem some: o foco vai para a secao Portal (alvo estavel), nao para o body.
+  const [focoNoPortal, setFocoNoPortal] = useState(false);
+  useEffect(() => {
+    if (focoNoPortal) setFocoNoPortal(false);
+  }, [focoNoPortal]);
 
   const detalhe = useQuery({
     queryKey: ['indent', 'quotes', quoteId],
@@ -73,6 +86,23 @@ export default function IndentCotacaoGaveta({ quoteId, onClose }: GavetaProps) {
   const quote = detalhe.data;
   const naoEncontrada = quoteId === null || (detalhe.isError && detalhe.error instanceof ApiError && detalhe.error.status === 404);
   const fecharSimples = () => onClose();
+
+  // Envio por e-mail concluido (ao menos um destinatario): fecha a janela, atualiza a cotacao (agora ENVIADA; a gaveta remonta) e avisa por toast.
+  function aoEnviado(resposta: IndentSendResponse, salvouNoCadastro: boolean) {
+    setEnviando(false);
+    setFocoNoPortal(true);
+    qc.setQueryData(['indent', 'quotes', quoteId], resposta.quote);
+    // O send-context nao e refeito: a janela ainda esta montada neste instante e a cotacao ja esta ENVIADA (o GET devolveria 409 inutil).
+    void qc.invalidateQueries({ queryKey: ['indent', 'quotes'], predicate: (consulta) => !consulta.queryKey.includes('send-context') });
+    void qc.invalidateQueries({ queryKey: ['indent', 'requests'] });
+    if (salvouNoCadastro) void qc.invalidateQueries({ queryKey: ['indent', 'suppliers'] });
+    const { entregues, falhas } = resumoEnvio(resposta.results);
+    mostrar(
+      'salvo',
+      tituloToastEnvio(resposta.quote.ref, resposta.quote.supplier.name, entregues.length, !resposta.quote.supplier.hasPartnership),
+      falhas.length > 0 ? `Não entregue para: ${falhas.map((falha) => falha.email).join(', ')}.` : '',
+    );
+  }
 
   let corpo;
   if (naoEncontrada) {
@@ -108,24 +138,36 @@ export default function IndentCotacaoGaveta({ quoteId, onClose }: GavetaProps) {
       </div>
     );
   } else {
-    corpo = <GavetaFormulario key={`${quote.id}:${quote.status}:${quote.items.length}`} quote={quote} onClose={onClose} mostrar={mostrar} />;
+    corpo = (
+      <GavetaFormulario
+        key={`${quote.id}:${quote.status}:${quote.items.length}`}
+        quote={quote}
+        onClose={onClose}
+        mostrar={mostrar}
+        onEnviar={() => setEnviando(true)}
+        focoNoPortal={focoNoPortal}
+      />
+    );
   }
 
   const status = quote ? QUOTE_STATUS[quote.status] : null;
 
   return (
-    <Modal
-      isOpen
-      restoreFocus
-      onClose={fecharSimples}
-      className="indent-gaveta"
-      title={quote?.ref ?? 'Cotação'}
-      subtitle={quote ? `${quote.supplier.name} · ${quote.client?.name ?? 'Cliente pendente'}` : undefined}
-      headerAside={status ? <span className={status.classe}>{status.rotulo}</span> : undefined}
-    >
-      {corpo}
-      {toast && <ForecastToast key={toast.id} dados={toast} onFechar={fechar} />}
-    </Modal>
+    <>
+      <Modal
+        isOpen
+        restoreFocus
+        onClose={fecharSimples}
+        className="indent-gaveta"
+        title={quote?.ref ?? 'Cotação'}
+        subtitle={quote ? `${quote.supplier.name} · ${quote.client?.name ?? 'Cliente pendente'}` : undefined}
+        headerAside={status ? <span className={status.classe}>{status.rotulo}</span> : undefined}
+      >
+        {corpo}
+        {toast && <ForecastToast key={toast.id} dados={toast} onFechar={fechar} />}
+      </Modal>
+      {enviando && quote && <IndentEnviarModal quote={quote} onClose={() => setEnviando(false)} onEnviado={aoEnviado} />}
+    </>
   );
 }
 
@@ -133,10 +175,16 @@ function GavetaFormulario({
   quote,
   onClose,
   mostrar,
+  onEnviar,
+  focoNoPortal,
 }: {
   quote: IndentQuoteDetail;
   onClose: (mensagem?: string) => void;
   mostrar: (tipo: 'salvo' | 'removido', titulo: string, texto: string) => void;
+  /** Abre a janela "Enviar cotacao" (irma da gaveta, hospedada pelo componente externo). */
+  onEnviar: () => void;
+  /** Montada logo apos um envio por e-mail: o foco inicial vai para a secao Portal do fornecedor. */
+  focoNoPortal: boolean;
 }) {
   const qc = useQueryClient();
   const base = useId();
@@ -170,6 +218,10 @@ function GavetaFormulario({
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
+    if (focoNoPortal) {
+      form.querySelector<HTMLElement>('section.indent-portal')?.focus();
+      return;
+    }
     const alvo = form.querySelector<HTMLElement>('[data-autofocus]');
     if (alvo) {
       alvo.focus();
@@ -449,6 +501,8 @@ function GavetaFormulario({
         )}
       </dl>
 
+      <IndentPortalSecao quote={quote} mostrar={mostrar} />
+
       {emResposta && (
         <fieldset className="indent-condicoes">
           <legend>Resposta do fornecedor</legend>
@@ -616,9 +670,24 @@ function GavetaFormulario({
           </div>
         )}
         {acoes.has('mark-sent') && (
-          <button type="submit" className="primary-button" aria-busy={pendente} disabled={pendente}>
-            <Icon name="templates" size={16} />
-            Marcar como enviada
+          <button type="submit" className="ghost-button" aria-busy={pendente} disabled={pendente}>
+            Marcar como enviada (sem e-mail)
+          </button>
+        )}
+        {acoes.has('send') && (
+          <button
+            type="button"
+            className="primary-button"
+            aria-disabled={pendente ? true : undefined}
+            onClick={(event) => {
+              // aria-disabled (e nao disabled): o foco fica no botao. O foco explicito garante a origem do restoreFocus mesmo onde o clique nao foca (Safari).
+              if (pendente) return;
+              event.currentTarget.focus();
+              onEnviar();
+            }}
+          >
+            <Icon name="send" size={16} />
+            Enviar ao fornecedor
           </button>
         )}
         {emResposta && (

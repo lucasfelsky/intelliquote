@@ -7,7 +7,7 @@ import type { IndentRuleMode, IndentSupplierType } from '@/services/indent';
 const BASE = '/api/v1/indent/quotes';
 
 export type IndentQuoteStatus = 'RASCUNHO' | 'ENVIADA' | 'RESPONDIDA' | 'ACEITA' | 'RECUSADA' | 'REVISADA';
-export type IndentQuoteAction = 'mark-sent' | 'items' | 'response' | 'accept' | 'refuse' | 'revision';
+export type IndentQuoteAction = 'mark-sent' | 'items' | 'send' | 'resend' | 'response' | 'accept' | 'refuse' | 'revision';
 
 export interface IndentQuoteRow {
   id: number;
@@ -66,6 +66,8 @@ export interface IndentQuoteDetail extends Omit<IndentQuoteRow, 'exception' | 'c
   exception: { reason: string; byName: string | null; at: string | null } | null;
   items: IndentQuoteItem[];
   allowedActions: IndentQuoteAction[];
+  /** Envio por e-mail (PR 4): `hasTokens` = ha link do portal ATIVO. Opcional para tolerar fixtures antigas. */
+  portal?: { hasTokens: boolean };
 }
 
 export interface IndentQuoteResponseInput {

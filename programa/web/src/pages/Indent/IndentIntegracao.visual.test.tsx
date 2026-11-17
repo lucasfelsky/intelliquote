@@ -22,7 +22,8 @@ const css = readSource('../styles/globals.css').replace(/\r\n/g, '\n');
 const regiao = regioes(css).find((r) => r.nome === 'tela F14');
 const MARCADOR = '/* ======================= Integracao Pipedrive (PR 5a.4)';
 // O marcador volta para o inicio do trecho: sem ele o resto do comentario do titulo viraria "seletor".
-const depoisDoMarcador = (regiao?.bruto ?? '').split(MARCADOR)[1];
+// A secao termina onde comeca a do PR 4b (envio da cotacao, testada em IndentCotacaoGaveta.envio.test.tsx).
+const depoisDoMarcador = (regiao?.bruto ?? '').split(MARCADOR)[1]?.split('/* ======================= Envio da cotacao e secao Portal do fornecedor (PR 4b)')[0];
 const brutoPr5 = depoisDoMarcador === undefined ? '' : `${MARCADOR}${depoisDoMarcador}`;
 const regrasPr5 = parseRules(stripComments(brutoPr5));
 const classesDaSecao = new Set(

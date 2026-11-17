@@ -206,6 +206,7 @@ describe('IndentFornecedorModal', () => {
       name: 'Rotterdam Specialty Trading B.V.',
       country: 'Países Baixos',
       contactName: null,
+      contactEmails: [],
       type: 'TRADING',
       defaultCurrency: 'EUR',
       defaultIncoterm: 'CIF',
@@ -291,5 +292,145 @@ describe('IndentFornecedorModal', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(api.put).not.toHaveBeenCalled();
+  });
+});
+
+// PR 4b: campo "E-mails de contato" (mock v13 openForn), entre a grade de campos e "Produtos que fornece".
+describe('IndentFornecedorModal - E-mails de contato', () => {
+  const COM_EMAILS: IndentSupplier = { ...EXISTENTE, contactEmails: ['a@x.test', 'b@x.test'] };
+
+  beforeEach(() => {
+    vi.mocked(api.get).mockReset().mockImplementation((async (url: string) => (url === '/api/v1/indent/products/options' ? OPCOES : [])) as typeof api.get);
+    vi.mocked(api.post).mockReset().mockResolvedValue({});
+    vi.mocked(api.put).mockReset().mockResolvedValue({});
+  });
+
+  async function emailsDe(supplier: IndentSupplier | null) {
+    const tela = renderModal(supplier);
+    const dialog = await dialogo(supplier ? supplier.name : 'Cadastro');
+    return { ...tela, dialog, campo: within(dialog).getByLabelText('E-mails de contato') as HTMLTextAreaElement };
+  }
+
+  it('rotulo, placeholder, dica e posicao (depois da grade, antes de "Produtos que fornece")', async () => {
+    const { dialog, campo } = await emailsDe(null);
+
+    expect(campo.tagName).toBe('TEXTAREA');
+    expect(campo.id).toBe('if-emails');
+    expect(campo.rows).toBe(2);
+    expect(campo.placeholder).toBe('um@fornecedor.com, outro@fornecedor.com');
+    expect(campo.value).toBe('');
+    const dica = within(dialog).getByText('Separe por vírgula. Estes endereços aparecem na janela de envio da cotação.');
+    expect(dica.id).toBe('if-emails-dica');
+    expect(dica.className).toContain('field-hint');
+    expect(campo.getAttribute('aria-describedby')).toBe('if-emails-dica');
+    expect(campo.getAttribute('aria-invalid')).toBeNull();
+
+    const grade = dialog.querySelector('.indent-campos') as HTMLElement;
+    const produtos = within(dialog).getByText('Produtos que fornece').closest('.field') as HTMLElement;
+    expect(grade.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(campo.compareDocumentPosition(produtos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('editar: o campo vem preenchido com os e-mails do cadastro, separados por ", "', async () => {
+    const { campo } = await emailsDe(COM_EMAILS);
+    expect(campo.value).toBe('a@x.test, b@x.test');
+  });
+
+  it('o payload leva contactEmails normalizado (minusculas, sem duplicados) no POST e no PUT', async () => {
+    const novo = await emailsDe(null);
+    fireEvent.change(within(novo.dialog).getByLabelText('Razão social'), { target: { value: 'Acme' } });
+    fireEvent.change(novo.campo, { target: { value: 'A@X.COM, a@x.com ; b@y.com' } });
+    fireEvent.click(within(novo.dialog).getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.post).mock.calls[0]?.[1]).toMatchObject({ contactEmails: ['a@x.com', 'b@y.com'] });
+    novo.unmount();
+
+    const editar = await emailsDe(COM_EMAILS);
+    fireEvent.change(editar.campo, { target: { value: 'c@x.test' } });
+    fireEvent.click(within(editar.dialog).getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(api.put).toHaveBeenCalledWith('/api/v1/indent/suppliers/7', expect.objectContaining({ contactEmails: ['c@x.test'] }));
+  });
+
+  it('campo vazio envia [] (limpa os e-mails do cadastro)', async () => {
+    const { dialog, campo } = await emailsDe(COM_EMAILS);
+    fireEvent.change(campo, { target: { value: '' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.put).mock.calls[0]?.[1]).toMatchObject({ contactEmails: [] });
+  });
+
+  it('e-mail invalido: erro no campo, foco nele e a API nao e chamada; digitar limpa o erro', async () => {
+    const { dialog, campo } = await emailsDe(null);
+    fireEvent.change(within(dialog).getByLabelText('Razão social'), { target: { value: 'Acme' } });
+    fireEvent.change(campo, { target: { value: 'a@x.test, sem-arroba' } });
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).not.toBe(campo);
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    const erro = within(dialog).getByText('Há um e-mail inválido na lista.');
+    expect(erro.id).toBe('if-emails-erro');
+    expect(erro.getAttribute('role')).toBe('alert');
+    expect(campo.getAttribute('aria-invalid')).toBe('true');
+    expect(campo.getAttribute('aria-describedby')).toBe('if-emails-dica if-emails-erro');
+    expect(document.activeElement).toBe(campo);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.put).not.toHaveBeenCalled();
+
+    fireEvent.change(campo, { target: { value: 'a@x.test' } });
+    expect(within(dialog).queryByText('Há um e-mail inválido na lista.')).toBeNull();
+    expect(campo.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('11 e-mails: erro de maximo no campo, sem chamar a API', async () => {
+    const { dialog, campo } = await emailsDe(COM_EMAILS);
+    fireEvent.change(campo, { target: { value: Array.from({ length: 11 }, (_, i) => `u${i}@x.test`).join(', ') } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    expect(within(dialog).getByText('Informe no máximo 10 e-mails.').id).toBe('if-emails-erro');
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('razao social vazia e e-mail invalido: os dois erros aparecem e o foco NAO vai para o campo de e-mails', async () => {
+    const { dialog, campo } = await emailsDe(null);
+    fireEvent.change(campo, { target: { value: 'ruim' } });
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    expect(within(dialog).getByText('Informe a razão social.')).toBeTruthy();
+    expect(within(dialog).getByText('Há um e-mail inválido na lista.')).toBeTruthy();
+    expect(document.activeElement).not.toBe(campo);
+  });
+
+  it('400 do backend com a mensagem de e-mail marca o CAMPO (nao o alerta do topo) e devolve o foco', async () => {
+    vi.mocked(api.put).mockRejectedValue(new ApiError(400, { message: 'Há um e-mail inválido na lista.' }));
+    const { dialog, campo } = await emailsDe(COM_EMAILS);
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    const erro = await within(dialog).findByText('Há um e-mail inválido na lista.');
+    expect(erro.id).toBe('if-emails-erro');
+    expect(dialog.querySelector('.alert--error')).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(campo));
+  });
+
+  it('400 do backend com a mensagem de maximo tambem marca o campo', async () => {
+    vi.mocked(api.put).mockRejectedValue(new ApiError(400, { message: 'Informe no máximo 10 e-mails.' }));
+    const { dialog } = await emailsDe(COM_EMAILS);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    expect((await within(dialog).findByText('Informe no máximo 10 e-mails.')).id).toBe('if-emails-erro');
+    expect(dialog.querySelector('.alert--error')).toBeNull();
+  });
+
+  it('outro 400 do backend vai ao alerta do topo, sem marcar o campo', async () => {
+    vi.mocked(api.put).mockRejectedValue(new ApiError(400, { message: 'Tipo de fornecedor inválido.' }));
+    const { dialog, campo } = await emailsDe(COM_EMAILS);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    expect((await within(dialog).findByRole('alert')).textContent).toBe('Tipo de fornecedor inválido.');
+    expect(campo.getAttribute('aria-invalid')).toBeNull();
+    expect(dialog.querySelector('#if-emails-erro')).toBeNull();
   });
 });
