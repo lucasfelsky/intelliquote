@@ -169,6 +169,45 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   return (await r.json()) as T;
 }
 
+/**
+ * GET autenticado que devolve o corpo como Blob (PDF binario). Mesmo Authorization e mesma URL (buildUrl) do `request`; 1 retry com refresh em 401.
+ * Refresh que falha propaga o ApiError(401) SEM limpar a sessao nem redirecionar: a proxima chamada JSON faz isso.
+ * 2xx com HTML/JSON (fallback do Hosting) falha: nao e o arquivo.
+ */
+async function requestBlob(path: string, isRetry = false): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  const token = localStorage.getItem('intelliquote.accessToken');
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const r = await fetch(buildUrl(path), { method: 'GET', headers, credentials: 'omit' });
+
+  if (r.status === 401 && !isRetry) {
+    try {
+      await tryRefresh();
+    } catch {
+      throw new ApiError(401, null, 'session expired');
+    }
+    return requestBlob(path, true);
+  }
+
+  const ct = r.headers.get('content-type') ?? '';
+  if (!r.ok) {
+    if (!ct.includes('application/json')) {
+      const txt = await r.text().catch(() => '');
+      throw new ApiError(r.status, { contentType: ct, body: txt.slice(0, 500) }, `Resposta não-JSON (CT=${ct}). Primeiros 200 chars: ${txt.slice(0, 200)}`);
+    }
+    const data = await safeJson(r);
+    const message = (data && typeof data === 'object' && 'message' in (data as Record<string, unknown>))
+      ? String((data as Record<string, unknown>).message)
+      : `HTTP ${r.status}`;
+    throw new ApiError(r.status, data, message);
+  }
+  if (ct.includes('text/html') || ct.includes('application/json')) {
+    throw new ApiError(r.status, { contentType: ct }, 'Resposta inesperada do servidor ao baixar o arquivo.');
+  }
+  return r.blob();
+}
+
 export const api = {
   get: <T>(path: string, query?: RequestOptions['query']) => request<T>(path, { method: 'GET', query }),
   post: <T>(path: string, body?: Json) => request<T>(path, { method: 'POST', body: body ?? {} }),
@@ -177,6 +216,7 @@ export const api = {
   put:  <T>(path: string, body?: Json) => request<T>(path, { method: 'PUT',  body: body ?? {} }),
   patch:<T>(path: string, body?: Json) => request<T>(path, { method: 'PATCH',body: body ?? {} }),
   del:  <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  blob: (path: string) => requestBlob(path),
   raw:  request,
 };
 

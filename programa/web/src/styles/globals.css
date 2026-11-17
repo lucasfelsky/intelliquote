@@ -14121,6 +14121,141 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   outline-offset: 2px;
 }
 .indent-page .indent-orgopt input { accent-color: var(--rf-primary-700); }
+/* ======================= Envio da cotacao e secao Portal do fornecedor (PR 4b) ======================= */
+/* Secao "Portal do fornecedor" da gaveta (mock v13 portalSec: pilha de gap 8, padding 14px 16px, borda de 1px e raio de 12px).
+   Botoes = o .ghost-button / .primary-button padrao do sistema: so medidas (mock sq-btn--sm: 36px, padding 12px, 13px), sem borda, sombra ou fundo proprios. */
+.indent-page .indent-portal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-button);
+}
+.indent-page .indent-portal h2 { font-size: 15px; }
+.indent-page .indent-portal .ghost-button {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.indent-page .indent-portal .primary-button {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+.indent-page .indent-portal__confirma {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--rf-radius-xs);
+  background: var(--rf-surface-alt);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.indent-page .indent-portal__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.indent-page .indent-portal__lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.indent-page .alert .indent-portal__lista { margin-top: 6px; }
+/* Janela "Enviar cotacao" (mock v13 openSend): linhas de e-mail compactas (padding 2px 0), "Mostrar o nome do cliente" sem respiro e o assunto em 13px mono. */
+.indent-page .indent-envio .field .indent-check { padding: 2px 0; }
+.indent-page .indent-envio .indent-envio__cliente .indent-check { padding: 0; }
+.indent-page .indent-envio .indent-dl__mono { font-size: 13px; }
+.indent-page .indent-envio__visivel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--rf-border);
+  border-radius: var(--rf-radius-panel);
+  background: var(--rf-surface);
+}
+.indent-page .indent-envio__visivel strong { font-size: 13px; }
+.indent-page .indent-envio__visivel ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.indent-page .indent-envio__anexos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.indent-page .indent-envio__anexos li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  font-size: 13px;
+}
+.indent-page .indent-envio__anexos li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Campo de arquivo da janela: o .file-input do sistema (botao de selecao de 36px do IQ, nao o nativo); sem a margem inferior de 16px dele (o gap do form ja separa). */
+.indent-page .indent-envio .file-input { margin-bottom: 0; }
+/* Botao com aria-disabled (o foco fica no botao; disabled o tiraria): espelha o :disabled do sistema; ocupado (aria-busy) = cor de repouso e cursor de progresso. */
+.indent-page .primary-button[aria-disabled='true'] {
+  background: var(--rf-disabled-bg);
+  color: var(--rf-disabled-fg);
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+/* O botao aria-disabled continua focavel de proposito: o anel de foco do sistema volta (o box-shadow: none acima empata com o :focus-visible e vem depois). */
+.indent-page .primary-button[aria-disabled='true']:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.indent-page .ghost-button[aria-disabled='true'] {
+  border-color: var(--rf-border);
+  background: var(--rf-surface);
+  color: var(--rf-disabled-fg);
+  transform: none;
+  cursor: not-allowed;
+}
+.indent-page .modal-actions .ghost-button[aria-disabled='true'] { background: transparent; }
+.indent-page .primary-button[aria-disabled='true'][aria-busy='true'] {
+  background: var(--rf-primary);
+  color: var(--rf-on-primary);
+  cursor: progress;
+}
+/* Download do anexo do fornecedor: alvo de clique de 36px (o botao-link tinha 18px). */
+.indent-page .indent-portal__lista .indent-linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+}
+/* Foco programatico (secao Portal e alerta do envio, ambos tabindex -1) e dos checkboxes: o halo do IQ, como nos botoes (anel duplo, sem o anel nativo fino). */
+.indent-page .indent-portal:focus-visible,
+.indent-page .indent-envio .alert[tabindex='-1']:focus-visible,
+.indent-page .indent-check input:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
 /* <<< tela F14 <<< */
 
 /* .page-header__actions nao tinha nenhum display/gap definido em lugar

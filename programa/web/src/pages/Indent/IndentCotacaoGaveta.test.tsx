@@ -270,9 +270,9 @@ describe('IndentCotacaoGaveta - botoes por allowedActions', () => {
   it('RASCUNHO: "Enviada em" + "Marcar como enviada" e "Adicionar item livre"; sem Fechar', async () => {
     mockCotacao(cotacao());
     renderGaveta();
-    await screen.findByRole('button', { name: 'Marcar como enviada' });
+    await screen.findByRole('button', { name: 'Marcar como enviada (sem e-mail)' });
 
-    expect(botoes()).toEqual(['Marcar como enviada']);
+    expect(botoes()).toEqual(['Marcar como enviada (sem e-mail)']);
     const data = screen.getByLabelText('Enviada em') as HTMLInputElement;
     expect(data.type).toBe('date');
     expect(data.value).toBe(todayKeyBr());
@@ -319,7 +319,7 @@ describe('IndentCotacaoGaveta - foco inicial', () => {
     mockCotacao(cotacao());
     resolvePost(cotacao({ status: 'ENVIADA', sentAt: '2026-11-13T15:00:00.000Z', allowedActions: ['response'] }));
     renderGaveta();
-    fireEvent.click(await screen.findByRole('button', { name: 'Marcar como enviada' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Marcar como enviada (sem e-mail)' }));
 
     const campo = await screen.findByLabelText('Data da resposta');
     await waitFor(() => expect(document.activeElement).toBe(campo));
@@ -345,10 +345,10 @@ describe('IndentCotacaoGaveta - marcar como enviada', () => {
     mockCotacao(cotacao());
     resolvePost(cotacao({ status: 'ENVIADA', sentAt: '2026-11-13T15:00:00.000Z', allowedActions: ['response'] }));
     const { onClose } = renderGaveta();
-    await screen.findByRole('button', { name: 'Marcar como enviada' });
+    await screen.findByRole('button', { name: 'Marcar como enviada (sem e-mail)' });
 
     fireEvent.change(screen.getByLabelText('Enviada em'), { target: { value: '2026-11-11' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Marcar como enviada' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como enviada (sem e-mail)' }));
 
     await screen.findByText('Cotação 270/26 marcada como enviada para Shandong Haohua Chemical Co.');
     expect(api.post).toHaveBeenCalledWith('/api/v1/indent/quotes/100/mark-sent', { sentOn: '2026-11-11' });

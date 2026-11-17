@@ -1,4 +1,4 @@
-import { FormEvent, useId, useMemo, useState } from 'react';
+import { FormEvent, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ApiError } from '@/api/client';
 import { Modal } from '@/components/Modal';
@@ -11,8 +11,10 @@ import {
   type IndentSupplier,
   type IndentSupplierType,
 } from '@/services/indent';
+import { ERRO_EMAIL_INVALIDO_LISTA, ERRO_EMAIL_MAXIMO_LISTA, parseEmailList } from './indentPortal';
 
-// IQ Indent: modal de fornecedor (mock openForn). Novo e editar; inclui "Produtos que fornece" (vinculo gravado junto, na mesma transacao).
+// IQ Indent: modal de fornecedor (mock openForn). Novo e editar; inclui "E-mails de contato" (destinatarios do envio da cotacao) e
+// "Produtos que fornece" (vinculo gravado junto, na mesma transacao).
 
 const TIPOS: ReadonlyArray<{ valor: IndentSupplierType; rotulo: string }> = [
   { valor: 'FABRICANTE', rotulo: 'Fabricante' },
@@ -82,8 +84,11 @@ export default function IndentFornecedorModal({ supplier, onClose, onSaved }: Pr
   const [parceria, setParceria] = useState(supplier?.hasPartnership ?? false);
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState<Set<number>>(() => new Set((supplier?.products ?? []).map((p) => p.id)));
+  const [emails, setEmails] = useState((supplier?.contactEmails ?? []).join(', '));
   const [erroNome, setErroNome] = useState<string | null>(null);
+  const [erroEmails, setErroEmails] = useState<string | null>(null);
   const [erroForm, setErroForm] = useState<string | null>(null);
+  const emailsRef = useRef<HTMLTextAreaElement>(null);
 
   const opcoes = useQuery({ queryKey: ['indent', 'products', 'options'], queryFn: listIndentProductOptions });
 
@@ -103,11 +108,12 @@ export default function IndentFornecedorModal({ supplier, onClose, onSaved }: Pr
   const visiveis = termo ? linhas.filter((linha) => normalizar(`${linha.nome} ${linha.cas ?? ''}`).includes(termo)) : linhas;
 
   const salvar = useMutation({
-    mutationFn: () => {
+    mutationFn: (contactEmails: string[]) => {
       const payload = {
         name: nome.trim(),
         country: toNullable(pais),
         contactName: toNullable(contato),
+        contactEmails,
         type: tipo,
         defaultCurrency: moeda,
         defaultIncoterm: incoterm,
@@ -122,18 +128,30 @@ export default function IndentFornecedorModal({ supplier, onClose, onSaved }: Pr
       else if (parceria !== supplier.hasPartnership) onSaved(`Parceria ${parceria ? 'firmada' : 'removida'} para ${nomeFinal}`);
       else onSaved(`Cadastro de ${nomeFinal} atualizado`);
     },
-    onError: (err) => setErroForm(messageOf(err)),
+    onError: (err) => {
+      const mensagem = messageOf(err);
+      // O 400 do cadastro traz so `message` (sem `path`): as 2 mensagens literais de e-mail marcam o campo; as demais vao ao alerta do topo.
+      if (mensagem === ERRO_EMAIL_INVALIDO_LISTA || mensagem === ERRO_EMAIL_MAXIMO_LISTA) {
+        setErroEmails(mensagem);
+        emailsRef.current?.focus();
+        return;
+      }
+      setErroForm(mensagem);
+    },
   });
 
   function enviar(event: FormEvent) {
     event.preventDefault();
     setErroForm(null);
-    if (nome.trim().length === 0) {
-      setErroNome('Informe a razão social.');
+    const nomeVazio = nome.trim().length === 0;
+    const lista = parseEmailList(emails);
+    setErroNome(nomeVazio ? 'Informe a razão social.' : null);
+    setErroEmails('erro' in lista ? lista.erro : null);
+    if (nomeVazio || 'erro' in lista) {
+      if (!nomeVazio) emailsRef.current?.focus();
       return;
     }
-    setErroNome(null);
-    salvar.mutate();
+    salvar.mutate(lista.emails);
   }
 
   function alternar(id: number, marcado: boolean) {
@@ -223,6 +241,34 @@ export default function IndentFornecedorModal({ supplier, onClose, onSaved }: Pr
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label" htmlFor="if-emails">
+            E-mails de contato
+          </label>
+          <textarea
+            id="if-emails"
+            ref={emailsRef}
+            className="input"
+            rows={2}
+            placeholder="um@fornecedor.com, outro@fornecedor.com"
+            value={emails}
+            aria-invalid={erroEmails ? true : undefined}
+            aria-describedby={erroEmails ? 'if-emails-dica if-emails-erro' : 'if-emails-dica'}
+            onChange={(event) => {
+              setEmails(event.target.value);
+              setErroEmails(null);
+            }}
+          />
+          <span className="field-hint" id="if-emails-dica">
+            Separe por vírgula. Estes endereços aparecem na janela de envio da cotação.
+          </span>
+          {erroEmails && (
+            <p className="field-error" id="if-emails-erro" role="alert">
+              {erroEmails}
+            </p>
+          )}
         </div>
 
         <div className="field">

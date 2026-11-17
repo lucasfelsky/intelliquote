@@ -241,4 +241,33 @@ describe('IndentFornecedores', () => {
     expect(document.activeElement).toBe(linha);
   });
 
+  // PR 4b: coluna Contato = nome + "N e-mail(s)" ou a tag "Sem e-mail" (mock v13).
+  it('Contato: "1 e-mail", "3 e-mails" e "Sem e-mail" (tag manual, alinhada ao topo da celula)', async () => {
+    mockApi([
+      fornecedor(1, 'Um Email Ltda', { contactEmails: ['a@x.test'] }),
+      fornecedor(2, 'Tres Emails Ltda', { contactEmails: ['a@x.test', 'b@x.test', 'c@x.test'] }),
+      fornecedor(3, 'Zero Emails Ltda', { contactEmails: [] }),
+    ]);
+    const { container } = renderPage();
+    await screen.findByText('Um Email Ltda');
+    const contato = (linha: number) => container.querySelectorAll('tbody tr')[linha]?.querySelectorAll('td')[2] as HTMLElement;
+
+    expect(contato(0).textContent).toBe('Wei Zhang1 e-mail');
+    expect(contato(0).querySelector('.indent-cell-main > .indent-cell-sub')?.textContent).toBe('1 e-mail');
+    expect(contato(1).textContent).toBe('Wei Zhang3 e-mails');
+    const tag = contato(2).querySelector('.indent-cell-main > .indent-tag') as HTMLElement;
+    expect(tag.textContent).toBe('Sem e-mail');
+    expect(tag.className).toContain('indent-tag--manual');
+    expect(contato(2).querySelector('.indent-cell-sub')).toBeNull();
+  });
+
+  it('fornecedor sem contactEmails na resposta (fixture antiga) = "Sem e-mail"; sem contato nem e-mail = "—" + tag', async () => {
+    mockApi([fornecedor(1, 'Antigo Ltda'), fornecedor(2, 'Sem Contato Ltda', { contactName: null })]);
+    const { container } = renderPage();
+    await screen.findByText('Antigo Ltda');
+    const celulas = Array.from(container.querySelectorAll('tbody tr')).map((tr) => tr.querySelectorAll('td')[2]?.textContent);
+
+    expect(celulas).toEqual(['Wei ZhangSem e-mail', '—Sem e-mail']);
+  });
+
 });

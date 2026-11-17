@@ -113,6 +113,7 @@ export default function IndentFornecedores() {
                 const aprovado = fornecedor.approvedBy ?? 0;
                 const bloqueado = fornecedor.blockedBy ?? 0;
                 const produtos = fornecedor.products;
+                const emails = (fornecedor.contactEmails ?? []).length;
                 return (
                   <tr
                     key={fornecedor.id}
@@ -142,7 +143,16 @@ export default function IndentFornecedores() {
                         </span>
                       )}
                     </td>
-                    <td>{fornecedor.contactName ?? '—'}</td>
+                    <td>
+                      <div className="indent-cell-main">
+                        <span>{fornecedor.contactName ?? '—'}</span>
+                        {emails > 0 ? (
+                          <span className="indent-cell-sub">{emails === 1 ? '1 e-mail' : `${emails} e-mails`}</span>
+                        ) : (
+                          <span className="indent-tag indent-tag--manual">Sem e-mail</span>
+                        )}
+                      </div>
+                    </td>
                     <td>
                       {produtos.length === 0 ? (
                         <span className="indent-cell-sub">—</span>
