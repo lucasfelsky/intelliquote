@@ -114,7 +114,7 @@ function itemName(item: QuoteDetailRow['items'][number]): string {
   return item.requestItem.product?.name ?? item.requestItem.description;
 }
 
-function sanitizeFileName(raw: string): string {
+export function sanitizeFileName(raw: string): string {
   // eslint-disable-next-line no-control-regex
   const cleaned = raw.replace(/[\x00-\x1f\x7f/\\:*?"<>|]/g, '').trim();
   const base = cleaned.replace(/\.pdf$/i, '').trim().slice(0, 116).trim();

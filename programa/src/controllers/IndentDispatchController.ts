@@ -1,11 +1,20 @@
 import type { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { IndentDispatchService } from '../services/IndentDispatchService';
+import { IndentPortalService } from '../services/IndentPortalService';
 import type { IndentActor } from '../services/IndentRequestService';
 import { HttpError, handleControllerError, parseId } from '../utils/http';
 import { indentResendSchema, indentSendSchema } from '../validators/indentPortal';
 
 const INVALID_ID = 'ID da cotação inválido.';
+const INVALID_ATTACHMENT_ID = 'ID do anexo inválido.';
+
+// Content-Disposition RFC 5987: `filename` so com ASCII seguro (fallback) e `filename*` com o nome real em UTF-8 percent-encoded.
+export function buildContentDisposition(fileName: string): string {
+  const ascii = fileName.replace(/[^ -~]/g, '_').replace(/["\\%]/g, '_');
+  const encoded = encodeURIComponent(fileName).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
 
 // Responsavel vem SEMPRE do usuario logado (nunca do corpo).
 function actorOf(req: Request): IndentActor | null {
@@ -85,6 +94,31 @@ export class IndentDispatchController {
 
   static portalState(req: Request, res: Response): Promise<Response> {
     return runRead(req, res, (id, role) => IndentDispatchService.getPortalState(id, role));
+  }
+
+  // Download interno do PDF anexado pelo fornecedor no portal (leitura; so equipe COMEX). O anexo precisa ser DESTA cotacao.
+  static async downloadAttachment(req: Request, res: Response): Promise<Response> {
+    try {
+      const quoteId = parseId(req.params.id);
+      const attachmentId = parseId(req.params.attachmentId);
+
+      if (!quoteId) {
+        return res.status(400).json({ message: INVALID_ID });
+      }
+      if (!attachmentId) {
+        return res.status(400).json({ message: INVALID_ATTACHMENT_ID });
+      }
+
+      const file = await IndentPortalService.getAttachmentForDownload(quoteId, attachmentId);
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Disposition', buildContentDisposition(file.fileName));
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).send(file.data);
+    } catch (error) {
+      return fail(res, error);
+    }
   }
 
   static send(req: Request, res: Response): Promise<Response> {

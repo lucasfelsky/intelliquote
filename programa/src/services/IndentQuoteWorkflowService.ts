@@ -77,7 +77,7 @@ export async function lockIndentQuote(tx: Prisma.TransactionClient, quoteId: num
 export async function applyRequestStatusAfterResponse(
   tx: Prisma.TransactionClient,
   request: { id: number; processNumber: string | null; status: string },
-  user: IndentActor,
+  user: IndentActor | null,
   now: Date = new Date(),
 ): Promise<void> {
   if (request.status !== 'COTACAO') {
@@ -90,7 +90,7 @@ export async function applyRequestStatusAfterResponse(
       entityType: 'indent_request',
       entityId: request.id,
       action: 'indent_request.status_changed',
-      performedById: user.id,
+      performedById: user?.id ?? null,
       beforeData: { status: request.status },
       afterData: { status: 'RESPONDIDA' },
       metadata: { processNumber: request.processNumber, reason: 'first_quote_response' },

@@ -13,7 +13,12 @@ import {
   CR_ATTACHMENT_TOO_LARGE_MESSAGE,
 } from './constants/commercialRequestAttachments';
 import { FORECAST_JSON_BODY_LIMIT_BYTES, FORECAST_TOO_LARGE_MESSAGE } from './constants/forecast';
-import { INDENT_SEND_JSON_BODY_LIMIT_BYTES, INDENT_SEND_TOO_LARGE_MESSAGE } from './constants/indentPortal';
+import {
+  INDENT_PORTAL_BAD_REQUEST_MESSAGE,
+  INDENT_PORTAL_BODY_TOO_LARGE_MESSAGE,
+  INDENT_SEND_JSON_BODY_LIMIT_BYTES,
+  INDENT_SEND_TOO_LARGE_MESSAGE,
+} from './constants/indentPortal';
 import {
   SUPPLIER_DOCUMENT_JSON_BODY_LIMIT_BYTES,
   SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE,
@@ -22,6 +27,7 @@ import { router } from './routes';
 import { HealthService } from './services/HealthService';
 import { portalRoutes } from './routes/PortalRoutes';
 import { creditPortalRoutes } from './routes/CreditPortalRoutes';
+import { indentPortalRoutes } from './routes/IndentPortalRoutes';
 import { exchangeRateRoutes } from './routes/ExchangeRateRoutes';
 import { internalJobRoutes } from './routes/InternalJobRoutes';
 import { requireAuthBeforeBody } from './middlewares/auth';
@@ -194,10 +200,35 @@ app.use(
   },
 );
 
+// Portal PUBLICO do fornecedor do Indent: JSON malformado ou corpo > 1 MB tambem respondem JSON em ingles e `no-store` (sem eco do corpo).
+// Parser proprio so neste prefixo, com o mesmo limite do global; as demais rotas nao mudam.
+app.use(
+  '/api/indent-portal',
+  (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  },
+  express.json({ limit: '1mb' }),
+  (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      res.setHeader('Connection', 'close');
+      res.status(413).json({ message: INDENT_PORTAL_BODY_TOO_LARGE_MESSAGE, code: 'BODY_TOO_LARGE' });
+      return;
+    }
+    if (typeof err?.type === 'string' && err.type.startsWith('entity.')) {
+      res.setHeader('Connection', 'close');
+      res.status(400).json({ message: INDENT_PORTAL_BAD_REQUEST_MESSAGE, code: 'BAD_REQUEST' });
+      return;
+    }
+    next(err);
+  },
+);
+
 // Limite global de payload para os demais endpoints (proteção genérica)
 app.use(express.json({ limit: '1mb' }));
 app.use(portalRoutes);
 app.use(creditPortalRoutes);
+app.use(indentPortalRoutes);
 app.use(exchangeRateRoutes);
 app.use(router);
 app.use(express.static(publicPath));
