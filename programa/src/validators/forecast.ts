@@ -8,6 +8,7 @@ import {
   FORECAST_DBCORP_PRAZO_ESTIMATIVA_MAX_DIAS,
   FORECAST_MAX_CODES_PER_PRODUCT,
   FORECAST_MAX_PALLETS_POR_CODIGO,
+  FORECAST_OBS_MAX_CHARS,
   FORECAST_OCASIAO_DIAS_MAX,
   FORECAST_OCASIAO_DURACAO_MAX_DIAS,
   FORECAST_OCASIAO_EFEITOS,
@@ -660,6 +661,15 @@ export const forecastCandidatosCotacaoQuerySchema = forecastSnapshotQuerySchema.
 });
 
 export type ForecastDecisaoPutInput = z.infer<typeof forecastDecisaoPutSchema>;
+
+// Observacao (coluna OBS.) do item no painel: texto livre de ate FORECAST_OBS_MAX_CHARS; vazio apaga.
+export const forecastObservacaoPutSchema = z.strictObject({
+  observacao: z
+    .string({ error: 'A observação deve ser um texto.' })
+    .trim()
+    .max(FORECAST_OBS_MAX_CHARS, `A observação aceita no máximo ${FORECAST_OBS_MAX_CHARS} caracteres.`),
+});
+export type ForecastObservacaoPutInput = z.infer<typeof forecastObservacaoPutSchema>;
 
 // Rascunho da cotacao do Forecast (E5): PUT com a lista COMPLETA de itens (lista vazia = apagar o rascunho). Cada item:
 // produto da quinzena (conferido no service), kg de 0 a 10.000.000 com ate 3 casas e observacao de ate 300 caracteres (as

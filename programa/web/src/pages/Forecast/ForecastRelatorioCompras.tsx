@@ -15,7 +15,7 @@ import {
   type ForecastUrgencia,
 } from '@/services/forecast';
 import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
-import { ForecastDecisaoLeitura, ProvedorDecisoesCompra } from './ForecastDecisaoCompra';
+import { ForecastDecisaoLeitura, ProvedorDecisoesCompra, useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastCotar from './ForecastCotar';
 import { ProvedorCriarCotacao, useCriarCotacao } from './ForecastCriarCotacao';
@@ -879,7 +879,17 @@ function SecaoSemConsumo({ itens }: { itens: ForecastItemSemConsumo[] }) {
   );
 }
 
-export default function ForecastRelatorioCompras({ snapshotId, podeEditar = false }: Props) {
+// A consulta unica das decisoes (1 GET) fica no provedor que envolve a tela toda: o filtro "so com analise forecast" e as
+// tabelas leem do mesmo mapa.
+export default function ForecastRelatorioCompras(props: Props) {
+  return (
+    <ProvedorDecisoesCompra snapshotId={props.snapshotId}>
+      <RelatorioComprasCorpo {...props} />
+    </ProvedorDecisoesCompra>
+  );
+}
+
+function RelatorioComprasCorpo({ snapshotId, podeEditar = false }: Props) {
   const relatorio = useQuery({
     queryKey: forecastKeys.relatorio(snapshotId),
     queryFn: () => getForecastRelatorioCompras(snapshotId),
@@ -894,6 +904,9 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
   // Estado so desta tela (sem URL); o `key` da quinzena reinicia a visao e o filtro.
   const [visao, setVisao] = useState<VisaoRelatorio>('urgencia');
   const [filtro, setFiltro] = useState<FiltroUrgencia>('todas');
+  // Filtro "so com analise forecast preenchida": itens com quantidade fechada (mesma decisao da coluna ANALISE FORECAST do painel).
+  const [soComAnalise, setSoComAnalise] = useState(false);
+  const decisoes = useDecisoesDaQuinzena();
   // Demanda do comercial (PR 6d): dialogo de lancamento e aviso de status (fica aqui: a secao some com o ultimo pedido).
   const [lancando, setLancando] = useState(false);
   const [avisoDemanda, setAvisoDemanda] = useState('');
@@ -935,8 +948,14 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
     setLancando(false);
     window.setTimeout(() => botaoLancar.current?.focus(), 0);
   };
-  const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro) : [];
-  const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro) : dados.grupos;
+  const idsComAnalise: ReadonlySet<number> = new Set(decisoes?.mapa.keys() ?? []);
+  const comAnaliseNoRelatorio = dados.grupos.reduce(
+    (n, g) => n + g.itens.filter((i) => i.productId != null && idsComAnalise.has(i.productId)).length,
+    0,
+  );
+  const manter = soComAnalise ? (i: ForecastItemRelatorio) => i.productId != null && idsComAnalise.has(i.productId) : undefined;
+  const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro, manter) : [];
+  const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro, manter) : dados.grupos;
   const totalMostrado = visao === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
 
   return (
@@ -1097,6 +1116,17 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
                 Por fonte
               </button>
             </div>
+            <div className="fc-filtros" role="group" aria-label="Filtrar por análise forecast">
+              <button
+                type="button"
+                className="fc-filtro"
+                aria-pressed={soComAnalise}
+                title="Mostra só os itens em que a quantidade fechada (Análise Forecast) foi preenchida"
+                onClick={() => setSoComAnalise((v) => !v)}
+              >
+                Só com análise forecast <span className="fc-filtro__conta">{comAnaliseNoRelatorio}</span>
+              </button>
+            </div>
             <div className="fc-filtros" role="group" aria-label="Filtrar por urgência">
               <button type="button" className="fc-filtro" aria-pressed={filtro === 'todas'} onClick={() => setFiltro('todas')}>
                 Todas <span className="fc-filtro__conta">{totais.itens}</span>
@@ -1118,7 +1148,7 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
         )}
         {comUrgencia && (
           <p className="fcr-mostrando" aria-live="polite">
-            {textoMostrando(totalMostrado, totais.itens, filtro, visao, diasCritico)}
+            {textoMostrando(totalMostrado, totais.itens, filtro, visao, diasCritico, soComAnalise)}
           </p>
         )}
         <button
@@ -1150,33 +1180,33 @@ export default function ForecastRelatorioCompras({ snapshotId, podeEditar = fals
           {dados.ocasioes?.estado === 'ok' && <p className="fcr-resumo__fora fcoc-apoio">{APOIO_OCASIOES}</p>}
         </div>
       </section>
-      <ProvedorDecisoesCompra snapshotId={snapshotId}>
-        <ProvedorCriarCotacao
-          snapshotId={snapshotId}
-          quinzena={quinzena.label}
-          diasCritico={diasCritico}
-          itensDaLista={dados.grupos.flatMap((g) => g.itens.map((item) => ({ item, fonte: g.fonte })))}
-        >
-        {dados.grupos.length === 0 ? (
-          <div className="empty-state">Nenhum item com demanda ≤ 0 nesta quinzena.</div>
-        ) : !comUrgencia ? (
-          dados.grupos.map((grupo) => <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} />)
-        ) : totalMostrado === 0 ? (
-          <div className="empty-state">Nenhum item nesta faixa.</div>
-        ) : visao === 'urgencia' ? (
-          filtrosVisiveis(diasCritico).map((u) => {
-            const itens = itensDaFaixa.filter(({ item }) => item.urgencia === u);
-            return itens.length > 0 ? (
-              <SecaoUrgencia key={u} urgencia={u} itens={itens} diasCritico={diasCritico} podeEditar={podeEditar} />
-            ) : null;
-          })
-        ) : (
-          gruposDaFaixa.map((grupo) => (
-            <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} comUrgencia diasCritico={diasCritico} />
-          ))
-        )}
-        </ProvedorCriarCotacao>
-      </ProvedorDecisoesCompra>
+      <ProvedorCriarCotacao
+        snapshotId={snapshotId}
+        quinzena={quinzena.label}
+        diasCritico={diasCritico}
+        itensDaLista={dados.grupos.flatMap((g) => g.itens.map((item) => ({ item, fonte: g.fonte })))}
+      >
+      {dados.grupos.length === 0 ? (
+        <div className="empty-state">Nenhum item com demanda ≤ 0 nesta quinzena.</div>
+      ) : !comUrgencia ? (
+        dados.grupos.map((grupo) => <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} />)
+      ) : totalMostrado === 0 ? (
+        <div className="empty-state">
+          {soComAnalise ? 'Nenhum item com análise forecast preenchida nesta faixa.' : 'Nenhum item nesta faixa.'}
+        </div>
+      ) : visao === 'urgencia' ? (
+        filtrosVisiveis(diasCritico).map((u) => {
+          const itens = itensDaFaixa.filter(({ item }) => item.urgencia === u);
+          return itens.length > 0 ? (
+            <SecaoUrgencia key={u} urgencia={u} itens={itens} diasCritico={diasCritico} podeEditar={podeEditar} />
+          ) : null;
+        })
+      ) : (
+        gruposDaFaixa.map((grupo) => (
+          <Grupo key={grupo.fonte} grupo={grupo} podeEditar={podeEditar} comUrgencia diasCritico={diasCritico} />
+        ))
+      )}
+      </ProvedorCriarCotacao>
       {demandaComercial && (
         <ForecastRelatorioDemandaComercial
           dados={demandaComercial}

@@ -14565,6 +14565,10 @@ i.fc-status--preco { background: var(--info); }
 .fc-grid .fc-cell--forte { color: var(--primary-700); font-weight: 700; }
 .fc-grid .fc-cell--obs { max-width: 300px; font-size: 12px; color: var(--ink-soft); }
 .fc-grid .fc-vazio { height: 80px; padding-left: 14px; text-align: left; color: var(--ink-soft); }
+/* OBS. editavel: texto a esquerda, "Adicionar" so aparece ao passar o mouse ou focar. */
+.fc-grid .fcoe-botao, .fc-grid .fcoe-campo { text-align: left; font-size: 12px; }
+.fc-grid .fcoe-vazio { opacity: 0; color: var(--ink-faint); }
+.fc-grid .fcoe-botao:hover .fcoe-vazio, .fc-grid .fcoe-botao:focus-visible .fcoe-vazio { opacity: 1; }
 
 .fc-grid .fc-fixa { position: sticky; z-index: 2; background: inherit; }
 .fc-grid thead .fc-fixa { z-index: 6; background: var(--surface-alt); }

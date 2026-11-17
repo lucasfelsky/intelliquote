@@ -93,10 +93,14 @@ export interface ItemComFonte {
 }
 
 /** Itens achatados na ordem global de urgencia (`posicaoUrgencia`), ja filtrados pela faixa. */
-export function itensPorUrgencia(r: ForecastRelatorioCompras, filtro: FiltroUrgencia): ItemComFonte[] {
+export function itensPorUrgencia(
+  r: ForecastRelatorioCompras,
+  filtro: FiltroUrgencia,
+  manter?: (item: ForecastItemRelatorio) => boolean,
+): ItemComFonte[] {
   return r.grupos
     .flatMap((g) => g.itens.map((item) => ({ item, fonte: g.fonte })))
-    .filter(({ item }) => filtro === 'todas' || item.urgencia === filtro)
+    .filter(({ item }) => (filtro === 'todas' || item.urgencia === filtro) && (!manter || manter(item)))
     .sort((a, b) => (a.item.posicaoUrgencia ?? 0) - (b.item.posicaoUrgencia ?? 0));
 }
 
@@ -109,11 +113,15 @@ function contarPorUrgencia(itens: ForecastItemRelatorio[]): Record<ForecastUrgen
 }
 
 /** Grupos por fonte so com os itens da faixa; grupo que fica vazio some. As contagens do grupo acompanham o filtro. */
-export function gruposFiltrados(r: ForecastRelatorioCompras, filtro: FiltroUrgencia): ForecastGrupoRelatorio[] {
-  if (filtro === 'todas') return r.grupos;
+export function gruposFiltrados(
+  r: ForecastRelatorioCompras,
+  filtro: FiltroUrgencia,
+  manter?: (item: ForecastItemRelatorio) => boolean,
+): ForecastGrupoRelatorio[] {
+  if (filtro === 'todas' && !manter) return r.grupos;
   return r.grupos
     .map((g) => {
-      const itens = g.itens.filter((i) => i.urgencia === filtro);
+      const itens = g.itens.filter((i) => (filtro === 'todas' || i.urgencia === filtro) && (!manter || manter(i)));
       return {
         ...g,
         itens,
@@ -135,9 +143,11 @@ export function textoMostrando(
   filtro: FiltroUrgencia,
   visao: VisaoRelatorio,
   diasCritico: number,
+  soComAnalise = false,
 ): string {
   const faixa = filtro === 'todas' ? 'todas as faixas' : rotuloUrgencia(filtro, diasCritico);
-  return `Mostrando ${n} de ${total} ${total === 1 ? 'item' : 'itens'} · ${faixa} · ${visao === 'urgencia' ? 'por urgência' : 'por fonte'}`;
+  const analise = soComAnalise ? ' · só com análise forecast preenchida' : '';
+  return `Mostrando ${n} de ${total} ${total === 1 ? 'item' : 'itens'} · ${faixa}${analise} · ${visao === 'urgencia' ? 'por urgência' : 'por fonte'}`;
 }
 
 /** Faixas que ganham botao de filtro: com N = 0 a faixa "Ruptura em ate N dias" nao existe. */

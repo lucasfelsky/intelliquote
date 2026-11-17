@@ -30,7 +30,7 @@ import { kgBr, type ColunaPainel } from './forecastPainel';
 
 // Retorno da celula para o Painel: "ok" vira o aviso flutuante (toast); "erro" segue como alerta persistente; nulo limpa o alerta.
 export type FeedbackCelula =
-  | { tipo: 'ok'; acao: 'salvo' | 'removido'; texto: string }
+  | { tipo: 'ok'; acao: 'salvo' | 'removido'; texto: string; titulo?: string }
   | { tipo: 'erro'; texto: string }
   | null;
 

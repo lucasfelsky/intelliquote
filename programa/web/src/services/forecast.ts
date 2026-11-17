@@ -879,3 +879,24 @@ export function forecastExcluirErrorMessage(err: unknown, label: string): string
   }
   return 'Sem conexão com o servidor. Tente de novo.';
 }
+
+// ---------- observacao (coluna OBS.) do painel ----------
+
+export interface ForecastObservacaoGravada {
+  productId: number;
+  observacao: string;
+  /** A quinzena e a mais recente: a observacao tambem foi para o cadastro e vem nas proximas importacoes. */
+  cadastroAtualizado: boolean;
+}
+
+export async function putForecastObservacao(
+  snapshotId: number,
+  productId: number,
+  observacao: string,
+): Promise<ForecastObservacaoGravada> {
+  const r = await api.put<{ data: ForecastObservacaoGravada }>(
+    `/v1/forecast/snapshots/${snapshotId}/observacoes/${productId}`,
+    { observacao },
+  );
+  return r.data;
+}

@@ -24,6 +24,7 @@ import {
   forecastCandidatosCotacaoQuerySchema,
   forecastCotacoesLotePostSchema,
   forecastDecisaoPutSchema,
+  forecastObservacaoPutSchema,
   forecastRascunhoCotacaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
@@ -443,6 +444,25 @@ export class ForecastController {
       }
       const input = forecastDecisaoPutSchema.parse(req.body);
       const data = await ForecastDecisaoCompraService.gravar(id, productId, input, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Observacao (coluna OBS.) do item no painel: grava na quinzena e, se for a mais recente, no cadastro. Admin/comprador (rota).
+  static async putObservacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const productId = parseId(req.params.productId);
+      if (productId === null) {
+        throw new HttpError(400, 'Produto inválido.');
+      }
+      const input = forecastObservacaoPutSchema.parse(req.body);
+      const data = await ForecastSnapshotService.gravarObservacao(id, productId, input.observacao, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
