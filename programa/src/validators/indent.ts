@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidCnpj, normalizeCnpj } from '../utils/cnpj';
+import { normalizeEmailList } from '../utils/indentEmails';
 
 // Schemas do IQ Indent (cadastros). Mensagens em pt-BR; erro de campo vira 400 com a 1a mensagem.
 
@@ -121,10 +122,34 @@ const supplierTypeField = z.enum(INDENT_SUPPLIER_TYPES, 'Tipo de fornecedor inv�
 const supplierCurrencyField = z.enum(INDENT_CURRENCIES, 'Moeda inválida.');
 const supplierIncotermField = z.enum(INDENT_INCOTERMS, 'Incoterm inválido.');
 
+// E-mails do fornecedor (destinatarios do envio): texto livre ou lista; null/'' vira []; ausente continua ausente (update parcial).
+const contactEmailsField = z
+  .union([z.string().max(4000), z.array(z.string().max(254)).max(50), z.null()])
+  .optional()
+  .transform((value, ctx) => {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const result = normalizeEmailList(value);
+
+    if ('error' in result) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['contactEmails'],
+        message: result.error === 'invalid' ? 'Há um e-mail inválido na lista.' : 'Informe no máximo 10 e-mails.',
+      });
+      return z.NEVER;
+    }
+
+    return result.emails;
+  });
+
 export const indentSupplierCreateSchema = z.object({
   name: requiredName(200, 'Informe a razão social.'),
   country: optionalText(120),
   contactName: optionalText(200),
+  contactEmails: contactEmailsField,
   type: supplierTypeField.default('TRADING'),
   defaultCurrency: supplierCurrencyField.default('USD'),
   defaultIncoterm: supplierIncotermField.default('CFR'),
@@ -136,6 +161,7 @@ export const indentSupplierUpdateSchema = z.object({
   name: requiredName(200, 'Informe a razão social.').optional(),
   country: optionalText(120),
   contactName: optionalText(200),
+  contactEmails: contactEmailsField,
   type: supplierTypeField.optional(),
   defaultCurrency: supplierCurrencyField.optional(),
   defaultIncoterm: supplierIncotermField.optional(),

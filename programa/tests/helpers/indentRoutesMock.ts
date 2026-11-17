@@ -90,6 +90,11 @@ const tx = {
     aggregate: vi.fn(),
   },
   indentQuoteItem: { createMany: vi.fn(), update: vi.fn(), create: vi.fn() },
+  // PR 4 (envio e portal do fornecedor)
+  indentPortalToken: { create: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
+  indentMailLog: { create: vi.fn(), findMany: vi.fn() },
+  indentPortalResponse: { findUnique: vi.fn() },
+  indentPortalAttachment: { findMany: vi.fn() },
   supplier: readOnlySource(),
   supplierContact: readOnlySource(),
   catalogItem: readOnlySource(),
@@ -107,12 +112,16 @@ const prisma = {
     updateMany: vi.fn(),
   },
   indentClient: { findMany: vi.fn(), count: vi.fn() },
-  indentSupplier: { findMany: vi.fn(), count: vi.fn() },
+  indentSupplier: { findMany: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
   indentProduct: { findMany: vi.fn(), count: vi.fn() },
   indentClientSupplierRule: { findMany: vi.fn() },
   indentRequest: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn() },
   ...pipedriveDelegates(),
   indentQuote: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
+  indentPortalToken: { findMany: vi.fn(), count: vi.fn(), updateMany: vi.fn() },
+  indentMailLog: { update: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
+  indentPortalResponse: { findUnique: vi.fn() },
+  indentPortalAttachment: { findMany: vi.fn() },
   supplier: readOnlySource(),
   supplierContact: readOnlySource(),
   catalogItem: readOnlySource(),
@@ -128,7 +137,7 @@ export const prismaMock = prisma as unknown as {
   user: { findUnique: Mock; findFirst: Mock };
   session: { create: Mock };
   indentClient: { findMany: Mock; count: Mock };
-  indentSupplier: { findMany: Mock; count: Mock };
+  indentSupplier: { findMany: Mock; count: Mock; findUnique: Mock };
   indentProduct: { findMany: Mock; count: Mock };
   indentClientSupplierRule: { findMany: Mock };
   indentRequest: { findUnique: Mock; findMany: Mock; count: Mock };
@@ -137,6 +146,10 @@ export const prismaMock = prisma as unknown as {
   indentPendingOrg: { findFirst: Mock; findMany: Mock; findUnique: Mock; create: Mock; update: Mock; count: Mock };
   indentIntegrationConfig: { findUnique: Mock; findUniqueOrThrow: Mock; upsert: Mock; update: Mock; updateMany: Mock };
   indentQuote: { findMany: Mock; findUnique: Mock; findFirst: Mock };
+  indentPortalToken: { findMany: Mock; count: Mock; updateMany: Mock };
+  indentMailLog: { update: Mock; findMany: Mock; findFirst: Mock };
+  indentPortalResponse: { findUnique: Mock };
+  indentPortalAttachment: { findMany: Mock };
   supplier: SourceMock;
   supplierContact: SourceMock;
   catalogItem: SourceMock;

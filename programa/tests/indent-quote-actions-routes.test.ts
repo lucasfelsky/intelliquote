@@ -47,6 +47,9 @@ function bodyOf(action: IndentQuoteAction): Record<string, unknown> {
   if (action === 'mark-sent') return { sentOn: dayKey(0) };
   if (action === 'items') return { description: 'Item X', quantityKg: 10 };
   if (action === 'response') return responseBody();
+  if (action === 'send') {
+    return { recipients: ['a@fornecedor.test'], destinationPort: 'Santos', showClientName: false, saveToSupplier: false };
+  }
   return {};
 }
 
@@ -437,13 +440,15 @@ describe('/api/v1/indent/quotes/:id - transicao invalida (409, nada gravado)', (
     accept: 'accept',
     refuse: 'refuse',
     revision: 'revision',
+    send: 'send',
+    resend: 'resend',
   };
   const cases = (Object.keys(QUOTE_TRANSITIONS) as IndentQuoteAction[]).flatMap((action) =>
     STATUSES.filter((status) => !(QUOTE_TRANSITIONS[action] as readonly string[]).includes(status)).map((status) => ({ action, status })),
   );
 
-  it('cobre todas as combinacoes proibidas (6 acoes x status fora da coluna "De")', () => {
-    expect(cases).toHaveLength(6 * 6 - 6); // 6 combinacoes permitidas na maquina de estados
+  it('cobre todas as combinacoes proibidas (8 acoes x status fora da coluna "De")', () => {
+    expect(cases).toHaveLength(8 * 6 - 8); // 8 combinacoes permitidas na maquina de estados
   });
 
   it.each(cases)('$action em cotacao $status -> 409', async ({ action, status }) => {
@@ -462,11 +467,13 @@ describe('/api/v1/indent/quotes/:id - transicao invalida (409, nada gravado)', (
     tx.indentQuote.findFirst.mockResolvedValue(acceptedRow());
 
     for (const [status, blocked] of [
-      ['RASCUNHO', ['mark-sent', 'items']],
-      ['ENVIADA', []],
+      ['RASCUNHO', ['mark-sent', 'items', 'send']],
+      ['ENVIADA', ['resend']],
       ['RESPONDIDA', ['accept', 'revision']],
     ] as Array<[string, IndentQuoteAction[]]>) {
-      tx.indentQuote.findUnique.mockResolvedValue(quoteRow({ status, sentAt: new Date(Date.now() - 2 * 24 * 3600 * 1000) }));
+      tx.indentQuote.findUnique.mockResolvedValue(
+        quoteRow({ status, sentAt: new Date(Date.now() - 2 * 24 * 3600 * 1000), _count: { portalTokens: 1 } }),
+      );
       for (const action of blocked) {
         vi.clearAllMocks();
         tx.auditLog.create.mockResolvedValue({});

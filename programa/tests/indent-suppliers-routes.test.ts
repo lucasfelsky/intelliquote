@@ -136,6 +136,80 @@ describe('/api/v1/indent - fornecedores', () => {
   });
 });
 
+describe('/api/v1/indent - e-mails do fornecedor (contactEmails)', () => {
+  it('POST /suppliers normaliza texto livre e lista (minusculas, sem duplicados)', async () => {
+    const cookie = await loginAs('comprador');
+
+    const text = await call('post', '/suppliers', cookie, { name: 'Acme', contactEmails: 'A@X.COM, a@x.com ; b@y.com' });
+    expect(text.status).toBe(201);
+    expect(tx.indentSupplier.create.mock.calls[0][0].data.contactEmails).toEqual(['a@x.com', 'b@y.com']);
+
+    const list = await call('post', '/suppliers', cookie, { name: 'Acme 2', contactEmails: [' C@Z.test ', 'c@z.test'] });
+    expect(list.status).toBe(201);
+    expect(tx.indentSupplier.create.mock.calls[1][0].data.contactEmails).toEqual(['c@z.test']);
+  });
+
+  it('POST /suppliers sem o campo, com null ou vazio grava lista vazia', async () => {
+    const cookie = await loginAs('comprador');
+
+    for (const body of [{ name: 'A1' }, { name: 'A2', contactEmails: null }, { name: 'A3', contactEmails: '' }]) {
+      expect((await call('post', '/suppliers', cookie, body)).status).toBe(201);
+    }
+
+    for (const call_ of tx.indentSupplier.create.mock.calls) {
+      expect(call_[0].data.contactEmails).toEqual([]);
+    }
+  });
+
+  it('e-mail invalido -> 400 com path; 11 e-mails -> 400', async () => {
+    const cookie = await loginAs('comprador');
+
+    const invalid = await call('post', '/suppliers', cookie, { name: 'X', contactEmails: 'ok@x.test, lixo' });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.message).toBe('Há um e-mail inválido na lista.');
+
+    const many = Array.from({ length: 11 }, (_, index) => `u${index}@x.test`);
+    const tooMany = await call('put', '/suppliers/5', cookie, { contactEmails: many });
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.body.message).toBe('Informe no máximo 10 e-mails.');
+    expect(tx.indentSupplier.create).not.toHaveBeenCalled();
+    expect(tx.indentSupplier.update).not.toHaveBeenCalled();
+  });
+
+  it('PUT sem o campo nao envia contactEmails; PUT [] limpa a lista', async () => {
+    const cookie = await loginAs('comprador');
+
+    await call('put', '/suppliers/5', cookie, { country: 'Índia' });
+    expect(tx.indentSupplier.update.mock.calls[0][0].data).not.toHaveProperty('contactEmails');
+
+    await call('put', '/suppliers/5', cookie, { contactEmails: [] });
+    expect(tx.indentSupplier.update.mock.calls[1][0].data).toMatchObject({ contactEmails: [] });
+  });
+
+  it('AuditLog do update leva contactEmails em before e after', async () => {
+    const cookie = await loginAs('comprador');
+    tx.indentSupplier.findUnique.mockResolvedValue(supplierRow({ contactEmails: ['a@x.test'] }));
+    tx.indentSupplier.update.mockResolvedValue(supplierRow({ contactEmails: ['a@x.test', 'b@y.test'] }));
+
+    const res = await call('put', '/suppliers/5', cookie, { contactEmails: 'a@x.test, b@y.test' });
+
+    expect(res.status).toBe(200);
+    expect(auditCall('indent_supplier.updated')).toMatchObject({
+      beforeData: { contactEmails: ['a@x.test'] },
+      afterData: { contactEmails: ['a@x.test', 'b@y.test'] },
+    });
+    expect(res.body.contactEmails).toEqual(['a@x.test', 'b@y.test']);
+  });
+
+  it('GET /suppliers?q= busca tambem por e-mail (minusculas)', async () => {
+    const cookie = await loginAs('viewer');
+
+    await call('get', '/suppliers?q=X@Y.COM', cookie);
+
+    expect(prismaMock.indentSupplier.findMany.mock.calls[0][0].where.OR).toContainEqual({ contactEmails: { has: 'x@y.com' } });
+  });
+});
+
 describe('/api/v1/indent - vinculo fornecedor x produtos', () => {
   it('PUT /suppliers/:id/products substitui o conjunto na mesma transacao e loga before/after ordenados', async () => {
     const cookie = await loginAs('comprador');

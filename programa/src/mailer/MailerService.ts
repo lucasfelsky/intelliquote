@@ -29,6 +29,8 @@ export function getMailer(): Mailer {
 export interface SendAndLogInput {
   to: { email: string; name?: string };
   cc?: Array<{ email: string; name?: string }>;
+  // Reply-To da mensagem (ex.: caixa compartilhada do Indent). Ausente = comportamento atual.
+  replyTo?: { email: string; name?: string };
   subject: string;
   html: string;
   text?: string;
@@ -147,6 +149,7 @@ export async function sendAndLog(input: SendAndLogInput): Promise<MailSendResult
   const msg: MailMessage = {
     to: [finalTo],
     cc: ccList,
+    replyTo: input.replyTo,
     subject: input.subject,
     html: input.html,
     text: input.text,

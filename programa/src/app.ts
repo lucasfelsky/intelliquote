@@ -13,6 +13,7 @@ import {
   CR_ATTACHMENT_TOO_LARGE_MESSAGE,
 } from './constants/commercialRequestAttachments';
 import { FORECAST_JSON_BODY_LIMIT_BYTES, FORECAST_TOO_LARGE_MESSAGE } from './constants/forecast';
+import { INDENT_SEND_JSON_BODY_LIMIT_BYTES, INDENT_SEND_TOO_LARGE_MESSAGE } from './constants/indentPortal';
 import {
   SUPPLIER_DOCUMENT_JSON_BODY_LIMIT_BYTES,
   SUPPLIER_DOCUMENT_TOO_LARGE_MESSAGE,
@@ -169,6 +170,24 @@ app.use(
   (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err?.type === 'entity.too.large') {
       res.status(413).json({ message: FORECAST_TOO_LARGE_MESSAGE });
+      return;
+    }
+    next(err);
+  },
+);
+
+// IQ Indent PR 4: o envio ao fornecedor leva ate 3 PDFs (10MB somados) em base64 no JSON. Mesmo padrao: parser maior so neste
+// caminho, depois da autenticacao (sem login o corpo nem e lido), e 413 em JSON com mensagem amigavel.
+app.use(
+  '/api/v1/indent/quotes/:id/send',
+  requireAuthBeforeBody,
+  express.json({ limit: INDENT_SEND_JSON_BODY_LIMIT_BYTES }),
+);
+app.use(
+  '/api/v1/indent/quotes/:id/send',
+  (err: Error & { type?: string }, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err?.type === 'entity.too.large') {
+      res.status(413).json({ message: INDENT_SEND_TOO_LARGE_MESSAGE });
       return;
     }
     next(err);

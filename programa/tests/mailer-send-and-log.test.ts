@@ -77,3 +77,26 @@ describe('sendAndLog - falha pos-envio no mailLog', () => {
     expect(h.loggerError).not.toHaveBeenCalled();
   });
 });
+
+describe('sendAndLog - replyTo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.create.mockResolvedValue({ id: 7 });
+    h.update.mockResolvedValue({});
+    h.findMany.mockResolvedValue([]);
+    h.send.mockResolvedValue({ providerMessageId: 'm3', status: 'sent' });
+  });
+
+  it('com replyTo, o mailer recebe o Reply-To', async () => {
+    await sendAndLog({ ...input, replyTo: { email: 'indent@example.test', name: 'Indent' } });
+
+    expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.send.mock.calls[0][0].replyTo).toEqual({ email: 'indent@example.test', name: 'Indent' });
+  });
+
+  it('sem replyTo, o mailer recebe replyTo indefinido', async () => {
+    await sendAndLog(input);
+
+    expect(h.send.mock.calls[0][0].replyTo).toBeUndefined();
+  });
+});

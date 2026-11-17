@@ -60,6 +60,8 @@ export const quoteDetailInclude = {
       },
     },
   },
+  // Links do portal ativos (envio por e-mail do PR 4): alimenta `portal.hasTokens` e a acao `resend`.
+  _count: { select: { portalTokens: { where: { revokedAt: null } } } },
 } satisfies Prisma.IndentQuoteInclude;
 
 type ListRow = Prisma.IndentQuoteGetPayload<{ include: typeof listInclude }>;
@@ -126,6 +128,7 @@ export function serializeListRow(row: ListRow) {
 
 export function serializeDetail(row: QuoteDetailRow, accepted: AcceptedQuote | null, canWrite: boolean) {
   const otherAccepted = accepted && accepted.id !== row.id ? accepted : null;
+  const activeTokens = row._count?.portalTokens ?? 0;
 
   return {
     ...serializeBase(row),
@@ -177,12 +180,13 @@ export function serializeDetail(row: QuoteDetailRow, accepted: AcceptedQuote | n
       fobPricePerKg: fixedOrNull(item.fobPricePerKg, 4),
       cfrPricePerKg: fixedOrNull(item.cfrPricePerKg, 4),
     })),
-    allowedActions: allowedQuoteActions(row.status, canWrite, row.request.status, accepted !== null),
+    portal: { hasTokens: activeTokens > 0 },
+    allowedActions: allowedQuoteActions(row.status, canWrite, row.request.status, accepted !== null, activeTokens > 0),
   };
 }
 
-/** Detalhe no formato unico da API (getById e resposta de toda acao). Usa o cliente recebido: dentro da trava, o `tx`. */
-export async function loadQuoteDetail(db: QuoteDb, id: number, canWrite: boolean) {
+/** A cotacao relida (formato do detalhe) com a ACEITA da solicitacao, sem trava. Base do detalhe e do contexto de envio (PR 4). */
+export async function loadQuoteWithAccepted(db: QuoteDb, id: number) {
   const row = await db.indentQuote.findUnique({ where: { id }, include: quoteDetailInclude });
 
   if (!row) {
@@ -193,6 +197,13 @@ export async function loadQuoteDetail(db: QuoteDb, id: number, canWrite: boolean
     where: { requestId: row.requestId, status: 'ACEITA' },
     select: acceptedSelect,
   });
+
+  return { row, accepted };
+}
+
+/** Detalhe no formato unico da API (getById e resposta de toda acao). Usa o cliente recebido: dentro da trava, o `tx`. */
+export async function loadQuoteDetail(db: QuoteDb, id: number, canWrite: boolean) {
+  const { row, accepted } = await loadQuoteWithAccepted(db, id);
 
   return serializeDetail(row, accepted, canWrite);
 }

@@ -29,8 +29,10 @@ describe('QUOTE_TRANSITIONS', () => {
       accept: ['RESPONDIDA'],
       refuse: ['RESPONDIDA'],
       revision: ['RESPONDIDA'],
+      send: ['RASCUNHO'],
+      resend: ['ENVIADA'],
     });
-    expect(ACTIONS_BLOCKED_AFTER_ACCEPT).toEqual(['mark-sent', 'items', 'accept', 'revision']);
+    expect(ACTIONS_BLOCKED_AFTER_ACCEPT).toEqual(['mark-sent', 'items', 'accept', 'revision', 'send', 'resend']);
   });
 
   it('isOpenQuote: so RASCUNHO e ENVIADA', () => {
@@ -41,8 +43,9 @@ describe('QUOTE_TRANSITIONS', () => {
 
 describe('allowedQuoteActions', () => {
   it('por status, com escrita e sem aceite na solicitacao', () => {
-    expect(allowedQuoteActions('RASCUNHO', true, 'COTACAO', false)).toEqual(['mark-sent', 'items']);
+    expect(allowedQuoteActions('RASCUNHO', true, 'COTACAO', false)).toEqual(['mark-sent', 'items', 'send']);
     expect(allowedQuoteActions('ENVIADA', true, 'COTACAO', false)).toEqual(['response']);
+    expect(allowedQuoteActions('ENVIADA', true, 'COTACAO', false, true)).toEqual(['response', 'resend']);
     expect(allowedQuoteActions('RESPONDIDA', true, 'RESPONDIDA', false)).toEqual(['accept', 'refuse', 'revision']);
     expect(allowedQuoteActions('ACEITA', true, 'CONVERTIDA', true)).toEqual([]);
     expect(allowedQuoteActions('RECUSADA', true, 'COTACAO', false)).toEqual([]);
@@ -53,11 +56,14 @@ describe('allowedQuoteActions', () => {
     expect(allowedQuoteActions('RESPONDIDA', false, 'COTACAO', false)).toEqual([]);
     expect(allowedQuoteActions('RESPONDIDA', true, 'PERDIDA', false)).toEqual([]);
     expect(allowedQuoteActions('RASCUNHO', true, 'PERDIDA', false)).toEqual([]);
+    expect(allowedQuoteActions('ENVIADA', false, 'COTACAO', false, true)).toEqual([]);
+    expect(allowedQuoteActions('ENVIADA', true, 'PERDIDA', false, true)).toEqual([]);
   });
 
   it('com ACEITA na solicitacao: RESPONDIDA so recusa, ENVIADA so registra a resposta, RASCUNHO nada', () => {
     expect(allowedQuoteActions('RESPONDIDA', true, 'CONVERTIDA', true)).toEqual(['refuse']);
     expect(allowedQuoteActions('ENVIADA', true, 'CONVERTIDA', true)).toEqual(['response']);
+    expect(allowedQuoteActions('ENVIADA', true, 'CONVERTIDA', true, true)).toEqual(['response']);
     expect(allowedQuoteActions('RASCUNHO', true, 'CONVERTIDA', true)).toEqual([]);
     expect(allowedQuoteActions('ACEITA', true, 'CONVERTIDA', true)).toEqual([]);
   });

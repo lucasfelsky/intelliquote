@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{subject}}</title>
+</head>
+<body style="margin:0;padding:0;background:#EEF2F1;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF2F1;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:100%;background:#FFFFFF;border:1px solid #D5E2DE;font-family:Arial,Helvetica,sans-serif;color:#0B2430;">
+
+<!-- Header: navy + amber bottom border; Indent seal and request number -->
+<tr><td style="background:#004153;padding:24px 32px;border-bottom:4px solid #F5A524;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr>
+<td valign="top" style="font-family:Arial,Helvetica,sans-serif;">
+<p style="margin:0 0 8px;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;color:#F5A524;">SQ Quimica &middot; <span style="background:#F5A524;color:#0B2430;padding:2px 7px;border-radius:4px;letter-spacing:1px;">Indent</span></p>
+<h1 style="margin:0;font-size:21px;line-height:27px;font-weight:bold;color:#FFFFFF;">{{title}}</h1>
+</td>
+<td valign="top" align="right" style="font-family:Arial,Helvetica,sans-serif;white-space:nowrap;">
+<p style="margin:0 0 4px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#CFE3E8;">{{numberLabel}}</p>
+<span style="display:inline-block;background:#F5A524;color:#0B2430;font-family:'Courier New',monospace;font-weight:bold;font-size:22px;padding:6px 12px;border-radius:6px;">{{processNumber}}</span>
+</td>
+</tr>
+</table>
+</td></tr>
+
+<!-- Intro -->
+<tr><td style="padding:24px 32px 8px;font-size:15px;line-height:22px;color:#0B2430;">
+<p style="margin:0 0 12px;">Hello,</p>
+<p style="margin:0 0 12px;">{{intro}}</p>
+<p style="margin:0 0 12px;font-size:13px;line-height:20px;color:#4A6472;"><strong>Please note:</strong> this link is personal and tied to this request. Please do not share it with third parties.</p>
+</td></tr>
+
+<!--IF:message-->
+<tr><td style="padding:0 32px 8px;">
+<div style="padding:14px 16px;background:#FFF4DF;border-left:4px solid #F5A524;font-size:14px;line-height:21px;color:#0B2430;">
+<b style="display:block;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:#8A5200;margin-bottom:4px;">Message from SQ Quimica</b>{{message}}
+</div>
+</td></tr>
+<!--ENDIF:message-->
+
+<!-- Request data -->
+<tr><td style="padding:8px 32px 0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold;color:#8A5200;">Request</td></tr>
+<tr><td style="padding:8px 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-size:13px;">
+<tr><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;color:#4A6472;width:38%;">Requested by</td><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;"><strong>SQ Quimica</strong></td></tr>
+<!--IF:endCustomer-->
+<tr><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;color:#4A6472;">End customer</td><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;"><strong>{{endCustomer}}</strong></td></tr>
+<!--ENDIF:endCustomer-->
+<tr><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;color:#4A6472;">Destination port</td><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;"><strong>{{destinationPort}}</strong></td></tr>
+<tr><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;color:#4A6472;">Incoterm</td><td style="padding:8px 12px;border-bottom:1px solid #D5E2DE;"><strong>{{incoterm}}</strong></td></tr>
+</table>
+</td></tr>
+
+<!-- Items -->
+<tr><td style="padding:8px 32px 0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold;color:#8A5200;">Items</td></tr>
+<tr><td style="padding:8px 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-size:13px;">
+<tr>
+<th align="left" style="text-align:left;padding:10px 12px;background:#F5F8F7;border-bottom:1px solid #D5E2DE;color:#4A6472;font-size:11px;letter-spacing:.5px;">PRODUCT</th>
+<th align="left" style="text-align:left;padding:10px 12px;background:#F5F8F7;border-bottom:1px solid #D5E2DE;color:#4A6472;font-size:11px;letter-spacing:.5px;">CAS</th>
+<th align="right" style="text-align:right;padding:10px 12px;background:#F5F8F7;border-bottom:1px solid #D5E2DE;color:#4A6472;font-size:11px;letter-spacing:.5px;">QUANTITY (KG)</th>
+</tr>
+{{itemsRows}}
+</table>
+</td></tr>
+
+<!-- What we need -->
+<tr><td style="padding:8px 32px 0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold;color:#8A5200;">What we need from you</td></tr>
+<tr><td style="padding:12px 32px 4px;">
+<ul style="margin:0;padding-left:18px;font-size:14px;line-height:22px;color:#0B2430;">
+<li>Packaging for each item</li>
+<li>FOB and CFR price per kg</li>
+<li>Production lead time and payment terms</li>
+<li>Offer validity, and the manufacturer if you are a trading company</li>
+</ul>
+</td></tr>
+
+<!-- Button -->
+<tr><td align="center" style="padding:18px 32px 8px;">
+<a href="{{portalLink}}" style="display:inline-block;background:#F5A524;color:#0B2430;font-weight:bold;font-size:15px;padding:13px 30px;border-radius:6px;text-decoration:none;">Open quotation form</a>
+</td></tr>
+<tr><td align="center" style="padding:4px 32px 4px;font-size:12px;line-height:18px;color:#4A6472;">This link is personal and expires on {{expiresOn}}.</td></tr>
+<tr><td align="center" style="padding:4px 32px 20px;font-size:12px;line-height:18px;color:#4A6472;">Button not working? Copy this address into your browser:<br><span style="word-break:break-all;">{{portalLink}}</span></td></tr>
+
+<!-- Footer -->
+<tr><td style="background:#F5F8F7;border-top:1px solid #D5E2DE;padding:16px 32px;font-size:11px;line-height:17px;color:#4A6472;">
+<b style="color:#004153;">IntelliQuote Indent</b> &middot; SQ Quimica &middot; Reply to this e-mail to reach the SQ Quimica Indent team.
+</td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

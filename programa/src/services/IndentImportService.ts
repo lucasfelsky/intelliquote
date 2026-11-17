@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { cleanProposedName, normalizeItemNameKey } from '../utils/commercialItemName';
 import { buildPaginatedResponse } from '../utils/http';
+import { normalizeEmailListLenient } from '../utils/indentEmails';
 import { AuditLogService } from './AuditLogService';
 
 // Importacao SOMENTE LEITURA do IntelliQuote: copia dados escolhidos para o cadastro do Indent.
@@ -118,7 +119,10 @@ export class IndentImportService {
           id: true,
           name: true,
           country: true,
-          contacts: { where: { isPrimary: true }, select: { name: true }, take: 1 },
+          contacts: {
+            orderBy: [{ isPrimary: 'desc' }, { id: 'asc' }],
+            select: { name: true, email: true, isPrimary: true },
+          },
         },
       });
       const byId = new Map(sources.map((source) => [source.id, source]));
@@ -132,7 +136,12 @@ export class IndentImportService {
       );
 
       const skipped: ImportSkip[] = [];
-      const pending: Array<{ sourceId: number; nameKey: string; data: Prisma.IndentSupplierCreateManyInput }> = [];
+      const pending: Array<{
+        sourceId: number;
+        nameKey: string;
+        emails: string[];
+        data: Prisma.IndentSupplierCreateManyInput;
+      }> = [];
 
       for (const sourceId of ids) {
         const source = byId.get(sourceId);
@@ -150,14 +159,17 @@ export class IndentImportService {
         }
 
         taken.add(nameKey);
+        const emails = normalizeEmailListLenient(source.contacts.map((contact) => contact.email));
         pending.push({
           sourceId,
           nameKey,
+          emails,
           data: {
             name: cleanProposedName(source.name),
             nameKey,
             country: source.country ?? null,
-            contactName: source.contacts[0]?.name ?? null,
+            contactName: source.contacts.find((contact) => contact.isPrimary)?.name ?? null,
+            contactEmails: emails,
             type: 'IMPORTADO',
             defaultCurrency: 'USD',
             defaultIncoterm: 'CFR',
@@ -183,13 +195,17 @@ export class IndentImportService {
         }
       }
 
+      const emailsCopied = pending
+        .filter((entry) => createdKeys.has(entry.nameKey))
+        .reduce((sum, entry) => sum + entry.emails.length, 0);
+
       await AuditLogService.log(
         {
           entityType: ENTITY_TYPE,
           entityId: 'suppliers',
           action: 'indent_import.suppliers',
           performedById: userId,
-          metadata: { sourceIds: ids, createdIds: created.map((row) => row.id), skipped },
+          metadata: { sourceIds: ids, createdIds: created.map((row) => row.id), skipped, emailsCopied },
         },
         tx,
       );
