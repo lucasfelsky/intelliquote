@@ -108,7 +108,7 @@ export const EMAIL_DE_EXEMPLO: readonly LinhaDeEmail[] = [
     nota: 'demais contatos, em todos os e-mails',
   },
   { rotulo: 'Cc', enderecos: [{ endereco: 'comex@sqquimica.example', tipo: 'primeiro' }], nota: 'Equipe COMEX + cópia fixa da empresa, só no 1º e-mail do envio' },
-  { rotulo: 'Assunto', texto: 'Sourcing request COT-2026-0412 - Citric Acid Anhydrous' },
+  { rotulo: 'Assunto', texto: 'Sourcing request - Citric Acid Anhydrous' },
 ];
 
 export interface DiaDaSemana {
@@ -131,7 +131,7 @@ export const SEMANA_DE_LEMBRETES: readonly DiaDaSemana[] = [
 // ---------- Capitulo 10: portal do fornecedor (em ingles, como o fornecedor ve) ----------
 export const PORTAL_DE_EXEMPLO = {
   empresa: 'SQ Quimica · Supplier Portal',
-  cotacao: 'Sourcing request COT-2026-0412',
+  cotacao: 'Sourcing request',
   campos: [
     { rotulo: 'Currency', valor: 'USD' },
     { rotulo: 'Main incoterm', valor: 'FOB' },
@@ -222,7 +222,6 @@ export const CARTOES_RELATORIOS: readonly CartaoDeRelatorio[] = [
 
 // ---------- Capitulo 15: variaveis dos templates de e-mail ----------
 export const VARIAVEIS_DE_TEMPLATE: readonly string[] = [
-  '{{requestCode}}',
   '{{productName}}',
   '{{supplierContactName}}',
   '{{portalLink}}',
