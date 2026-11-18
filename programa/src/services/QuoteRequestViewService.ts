@@ -6,9 +6,14 @@ import { prisma } from '../lib/prisma';
  *
  * Referencia do usuario U para a cotacao Q = QuoteRequestView(U,Q).lastSeenAt ?? User(U).createdAt.
  * Q tem resposta nova se, depois da referencia, houve:
- *  - snapshot de preco (QuoteResponsePriceSnapshot.recordedAt), exceto o manual lancado pelo proprio U; ou
+ *  - snapshot de preco (QuoteResponsePriceSnapshot.recordedAt), exceto o manual lancado pelo proprio U
+ *    (manual com performedById NULL conta: nao e de ninguem); ou
  *  - resposta do portal (SupplierPortalResponse.submittedAt) - cobre revisao que so mudou prazo/validade.
  * `QuoteResponse.updatedAt` NAO entra: muda em vencedor/comparacao/preco-alvo (falso positivo).
+ *
+ * Baseline preguicoso: usuario elegivel sem NENHUMA linha em QuoteRequestView (promovido/novo depois do
+ * backfill da migracao) recebe `lastSeenAt = agora` em todas as cotacoes ativas na primeira listagem com
+ * `withNewResponses` ou na primeira abertura (`markSeen`), para nao acender a lista inteira.
  */
 
 export interface NewResponseSnapshot {
@@ -16,6 +21,31 @@ export interface NewResponseSnapshot {
   recordedAt: Date;
   source: string;
   performedById: number | null;
+}
+
+/**
+ * Predicado unico (funcao pura e filtro SQL): so o snapshot manual lancado pelo proprio usuario
+ * deixa de contar. Manual com performedById NULL conta.
+ */
+export function isCountableSnapshot(
+  snapshot: Pick<NewResponseSnapshot, 'source' | 'performedById'>,
+  userId: number,
+): boolean {
+  return !(snapshot.source === 'manual' && snapshot.performedById === userId);
+}
+
+/** Menor `lastSeenAt ?? userCreatedAt` do lote (lista vazia -> userCreatedAt). */
+export function computeMinReference(
+  quoteRequestIds: number[],
+  lastSeenByQuoteRequestId: Map<number, Date>,
+  userCreatedAt: Date,
+): Date {
+  let min = quoteRequestIds.length === 0 ? userCreatedAt : null;
+  for (const id of quoteRequestIds) {
+    const reference = lastSeenByQuoteRequestId.get(id) ?? userCreatedAt;
+    if (min === null || reference < min) min = reference;
+  }
+  return min ?? userCreatedAt;
 }
 
 /** Funcao pura: devolve os ids de cotacao com resposta nova para o usuario. */
@@ -35,7 +65,7 @@ export function computeNewResponseIds(input: {
 
   for (const snapshot of input.snapshots) {
     if (!wanted.has(snapshot.quoteRequestId) || result.has(snapshot.quoteRequestId)) continue;
-    if (snapshot.source === 'manual' && snapshot.performedById === input.userId) continue;
+    if (!isCountableSnapshot(snapshot, input.userId)) continue;
     if (snapshot.recordedAt.getTime() > referenceOf(snapshot.quoteRequestId)) {
       result.add(snapshot.quoteRequestId);
     }
@@ -50,12 +80,49 @@ export function computeNewResponseIds(input: {
 }
 
 export class QuoteRequestViewService {
-  /** Marca a cotacao como vista agora (upsert pela unique composta). */
+  /**
+   * Baseline preguicoso: se o usuario nao tem NENHUMA linha em QuoteRequestView, grava
+   * `lastSeenAt = agora` para todas as cotacoes ativas (deletedAt null) e devolve true; senao false.
+   *
+   * - Chamado na primeira listagem com `withNewResponses` e no `markSeen` (quem abre uma cotacao por
+   *   link/e-mail antes de ver a lista tambem ganha baseline).
+   * - Idempotente e seguro sob corrida: `createMany ... skipDuplicates` e um unico INSERT ... ON CONFLICT
+   *   DO NOTHING; duas abas simultaneas veem zero linhas, a segunda vira no-op e nenhuma lanca P2002.
+   * - Sem AuditLog: e recibo de leitura, nao dado de negocio (mesma excecao do `markSeen`).
+   * - Residuo: quem ja tinha linhas, perdeu e recuperou o acesso nao recebe baseline novo.
+   */
+  static async ensureBaseline(
+    userId: number,
+    client: PrismaClient | Prisma.TransactionClient = prisma,
+  ): Promise<boolean> {
+    const existing = await client.quoteRequestView.findFirst({ where: { userId }, select: { id: true } });
+    if (existing) return false;
+
+    const quoteRequests = await client.quoteRequest.findMany({
+      where: { deletedAt: null },
+      select: { id: true },
+    });
+    if (quoteRequests.length > 0) {
+      const now = new Date();
+      await client.quoteRequestView.createMany({
+        data: quoteRequests.map((quoteRequest) => ({
+          userId,
+          quoteRequestId: quoteRequest.id,
+          lastSeenAt: now,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    return true;
+  }
+
+  /** Marca a cotacao como vista agora (upsert pela unique composta), garantindo antes o baseline. */
   static async markSeen(
     userId: number,
     quoteRequestId: number,
     client: PrismaClient | Prisma.TransactionClient = prisma,
   ) {
+    await QuoteRequestViewService.ensureBaseline(userId, client);
     const now = new Date();
     return client.quoteRequestView.upsert({
       where: { userId_quoteRequestId: { userId, quoteRequestId } },
@@ -82,14 +149,17 @@ export class QuoteRequestViewService {
     ]);
     if (!user) return new Set();
 
+    // Pagina sem view: so entao vale perguntar se o usuario nao tem nenhuma. Se nao tinha,
+    // o baseline foi gravado agora e nada acende nesta chamada.
+    if (views.length === 0 && (await QuoteRequestViewService.ensureBaseline(userId, client))) {
+      return new Set();
+    }
+
     const lastSeenByQuoteRequestId = new Map(views.map((view) => [view.quoteRequestId, view.lastSeenAt]));
 
-    // Estreita a leitura: nada anterior a menor referencia do lote pode contar.
-    let minReference = user.createdAt;
-    for (const id of quoteRequestIds) {
-      const seen = lastSeenByQuoteRequestId.get(id);
-      if (seen && seen < minReference) minReference = seen;
-    }
+    // Corte global da leitura = menor referencia real do lote; a referencia por cotacao continua em
+    // computeNewResponseIds, entao o resultado nao muda.
+    const minReference = computeMinReference(quoteRequestIds, lastSeenByQuoteRequestId, user.createdAt);
 
     const [snapshotRows, portalRows] = await Promise.all([
       client.quoteResponsePriceSnapshot.findMany({
@@ -100,7 +170,9 @@ export class QuoteRequestViewService {
             quoteRequestId: { in: quoteRequestIds },
             quoteRequest: { deletedAt: null },
           },
-          NOT: { source: 'manual', performedById: userId },
+          // Equivalente SQL de isCountableSnapshot: `performedById <> x` com NULL tambem e NULL,
+          // por isso o ramo `null` explicito (manual sem autor conta).
+          OR: [{ source: { not: 'manual' } }, { performedById: null }, { performedById: { not: userId } }],
         },
         select: {
           recordedAt: true,
