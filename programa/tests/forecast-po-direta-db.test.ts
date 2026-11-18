@@ -174,4 +174,43 @@ describe('ForecastPurchaseOrderService (banco)', () => {
     await expect(ForecastPurchaseOrderService.concluir(r.id, userId, referencia)).rejects.toMatchObject({ status: 409 });
     expect(Number((await decisaoDe(produtoB))?.finalKg)).toBe(1000);
   });
+
+  describe('reservarLote (varios itens de uma vez)', () => {
+    const lote = (produtos: number[], chaves: string[], over: Record<string, unknown> = {}) =>
+      produtos.map((p, i) => base(p, { requestKey: chaves[i], quantityKg: 100 + i, ...over }));
+
+    testDbSkip('reserva todas as POs numa transacao, uma por item, na ordem pedida', async () => {
+      const k = [chave(), chave()];
+      const r = await ForecastPurchaseOrderService.reservarLote(lote([produtoA, produtoB], k));
+      expect(r.jaExistia).toBe(false);
+      expect(r.pos.map((p) => [p.productId, p.status])).toEqual([[produtoA, 'enviando'], [produtoB, 'enviando']]);
+      expect(await prisma.forecastPurchaseOrder.count({ where: { requestKey: { in: k } } })).toBe(2);
+    });
+
+    testDbSkip('tudo ou nada: um item invalido (produto que nao existe) desfaz o lote inteiro', async () => {
+      const k = [chave(), chave()];
+      await expect(ForecastPurchaseOrderService.reservarLote(lote([produtoA, 2_000_000_000], k))).rejects.toMatchObject({ status: 400 });
+      expect(await prisma.forecastPurchaseOrder.count({ where: { requestKey: { in: k } } })).toBe(0);
+    });
+
+    testDbSkip('a mesma lista repetida devolve as POs que ja existem; outra lista com a mesma chave e 409', async () => {
+      const k = [chave(), chave()];
+      const primeira = await ForecastPurchaseOrderService.reservarLote(lote([produtoA, produtoB], k));
+      const repetida = await ForecastPurchaseOrderService.reservarLote(lote([produtoA, produtoB], k));
+      expect(repetida.jaExistia).toBe(true);
+      expect(repetida.pos.map((p) => p.id)).toEqual(primeira.pos.map((p) => p.id));
+      // a chave de A reaparece num lote com C (que e novo): mistura PO nova com antiga, recusado
+      const outra = [k[0] as string, chave()];
+      await expect(ForecastPurchaseOrderService.reservarLote(lote([produtoA, produtoC], outra))).rejects.toMatchObject({ status: 409 });
+      expect(await prisma.forecastPurchaseOrder.count({ where: { requestKey: outra[1] } })).toBe(0);
+    });
+
+    testDbSkip('lista vazia, quantidade invalida e quinzenas diferentes sao recusadas', async () => {
+      await expect(ForecastPurchaseOrderService.reservarLote([])).rejects.toMatchObject({ status: 400 });
+      await expect(ForecastPurchaseOrderService.reservarLote(lote([produtoA], [chave()], { quantityKg: 0 }))).rejects.toMatchObject({ status: 400 });
+      await expect(
+        ForecastPurchaseOrderService.reservarLote([base(produtoA), { ...base(produtoB), snapshotId: otherSnapshotId }]),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+  });
 });

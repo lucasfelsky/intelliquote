@@ -19,7 +19,8 @@ vi.mock('@/api/client', () => ({
   },
 }));
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => vi.fn().mockResolvedValue(true) }));
-const controles = vi.hoisted(() => ({ precos: new Map<number, unknown>() }));
+const controles = vi.hoisted(() => ({ precos: new Map<number, unknown>(), analise: new Map<number, { quantidadeKg: number }>() }));
+vi.mock('./ForecastDecisaoCompra', () => ({ useDecisoesDaQuinzena: () => ({ mapa: controles.analise, carregando: false, erro: false }) }));
 vi.mock('./ForecastCriarCotacao', () => ({ useCriarCotacao: () => ({ precoFechado: (id: number) => controles.precos.get(id) }) }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
@@ -28,7 +29,7 @@ vi.mock('@/services/forwarders', async (importOriginal) => ({
 
 import { api, ApiError } from '@/api/client';
 import { listForwarders } from '@/services/forwarders';
-import ForecastPoDiretaModal, { lerQuantidadePo } from './ForecastPoDiretaModal';
+import ForecastPoDiretaModal, { lerQuantidadePo, referenciaDaPo } from './ForecastPoDiretaModal';
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
@@ -70,6 +71,8 @@ const destinatarios = {
 
 const resultado = {
   purchaseOrderId: 9,
+  purchaseOrderIds: [9],
+  itens: [{ productId: 42, purchaseOrderId: 9, qtdFinalKg: 25000, statusDaDecisao: 'po' }],
   jaEnviada: false,
   registro: 'ok' as const,
   qtdFinalKg: 25000,
@@ -79,13 +82,15 @@ const resultado = {
   copia: ['wang@fornecedor.example'],
 };
 
-function renderModal() {
+const item2 = { ...item, linha: 4, n: 2, productId: 43, item: 'PRODUTO SINTETICO B', quantidadeFinal: 12000 } as unknown as ForecastItemRelatorio;
+
+function renderModal(itens: ForecastItemRelatorio[] = [item], posicao?: { atual: number; total: number }) {
   const onEnviada = vi.fn();
   const onClose = vi.fn();
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={qc}>
-      <ForecastPoDiretaModal snapshotId={7} quinzena="11-1" item={item} onClose={onClose} onEnviada={onEnviada} />
+      <ForecastPoDiretaModal snapshotId={7} quinzena="11-1" itens={itens} posicao={posicao} onClose={onClose} onEnviada={onEnviada} />
     </QueryClientProvider>,
   );
   const dialog = view.container.querySelector('dialog') as HTMLDialogElement;
@@ -111,6 +116,7 @@ async function preparar(s: Scope) {
 beforeEach(() => {
   vi.clearAllMocks();
   controles.precos.clear();
+  controles.analise.clear();
   get.mockResolvedValue({ data: destinatarios });
   post.mockResolvedValue({ data: resultado });
   vi.mocked(listForwarders).mockResolvedValue([forwarder]);
@@ -133,11 +139,37 @@ describe('lerQuantidadePo', () => {
   });
 });
 
+describe('referenciaDaPo', () => {
+  it('usa a quantidade da Analise Forecast quando existe e e positiva; senao, a sugerida (Qtd. final calculada)', () => {
+    expect(referenciaDaPo(item, 5000)).toEqual({ kg: 5000, origem: 'analise' });
+    expect(referenciaDaPo(item, 0)).toEqual({ kg: 25000, origem: 'sugerida' });
+    expect(referenciaDaPo(item, null)).toEqual({ kg: 25000, origem: 'sugerida' });
+    expect(referenciaDaPo(item, undefined)).toEqual({ kg: 25000, origem: 'sugerida' });
+  });
+});
+
 describe('ForecastPoDiretaModal', () => {
+  it('com Analise Forecast preenchida a PO nasce com ELA (nao com a sugerida) e o rotulo diz "Análise Forecast"', async () => {
+    controles.analise.set(42, { quantidadeKg: 5000 });
+    const { scope } = renderModal();
+    await scope.findByText(/FORNECEDOR SINTETICO/);
+    expect(quantidade(scope).value).toBe('5000');
+    expect(scope.getByText('Análise Forecast:')).toBeTruthy();
+    expect(scope.queryByText('Sugerida pelo Forecast:')).toBeNull();
+  });
+
+  it('varios itens: cada um usa a sua analise; quem nao tem usa a sugerida', async () => {
+    controles.analise.set(42, { quantidadeKg: 5000 });
+    const { scope } = renderModal([item, item2]);
+    await scope.findByText(/FORNECEDOR SINTETICO/);
+    expect((scope.getByLabelText('Quantidade da PO de PRODUTO SINTETICO A (kg)') as HTMLInputElement).value).toBe('5000');
+    expect((scope.getByLabelText('Quantidade da PO de PRODUTO SINTETICO B (kg)') as HTMLInputElement).value).toBe('12000');
+  });
+
   it('mostra fornecedor, Para/Cc e a quantidade sugerida como padrao, sem nenhum preco', async () => {
     const { scope } = renderModal();
     expect(await scope.findByText(/Enviar Ordem de Compra — FORNECEDOR SINTETICO/)).toBeTruthy();
-    expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7/po-preco-fechado/destinatarios?productId=42');
+    expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7/po-preco-fechado/destinatarios?productIds=42');
     expect(scope.getByText(/Mei Lin <mei@fornecedor\.example>/)).toBeTruthy();
     expect(scope.getByText(/Wang Fei <wang@fornecedor\.example>/)).toBeTruthy();
     expect(scope.getByText('Equipe COMEX em cópia (2).')).toBeTruthy();
@@ -171,8 +203,7 @@ describe('ForecastPoDiretaModal', () => {
     const [url, corpo] = post.mock.calls[0]! as [string, Record<string, unknown>];
     expect(url).toBe('/v1/forecast/snapshots/7/po-preco-fechado');
     expect(corpo).toMatchObject({
-      productId: 42,
-      quantidadeKg: 1500.5,
+      itens: [{ productId: 42, quantidadeKg: 1500.5 }],
       subject: 'Purchase Order - PRODUTO SINTETICO A',
       message: 'Please confirm.',
       forwarderId: 1,
@@ -213,6 +244,18 @@ describe('ForecastPoDiretaModal', () => {
     fireEvent.click(botaoEnviar(scope));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect((post.mock.calls[1]![1] as { chaveEnvio: string }).chaveEnvio).toBe((post.mock.calls[0]![1] as { chaveEnvio: string }).chaveEnvio);
+  });
+
+  it('durante o envio Cancelar fica desabilitado e fechar nao chama o pai (evita segunda tentativa com chave nova)', async () => {
+    post.mockReturnValue(new Promise(() => {}) as never);
+    const { scope, onClose } = renderModal();
+    await preparar(scope);
+    fireEvent.click(botaoEnviar(scope));
+    await waitFor(() => expect(botaoEnviar(scope).disabled).toBe(true));
+    const cancelar = scope.getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement;
+    expect(cancelar.disabled).toBe(true);
+    fireEvent.click(cancelar);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('fonte sem fornecedor (409 nos destinatarios): mostra o motivo e bloqueia o envio', async () => {
@@ -268,6 +311,124 @@ describe('ForecastPoDiretaModal', () => {
       await scope.findByText(/FORNECEDOR SINTETICO/);
       expect(scope.queryByTestId('po-total')).toBeNull();
       expect(scope.queryByText(/US\$/)).toBeNull();
+    });
+  });
+
+  describe('varios itens num envio (um e-mail, um PDF)', () => {
+    const quantidadeDe = (s: Scope, nome: string) => s.getByLabelText(`Quantidade da PO de ${nome} (kg)`) as HTMLInputElement;
+    const resultadoLote = {
+      ...resultado,
+      purchaseOrderIds: [9, 10],
+      itens: [
+        { productId: 42, purchaseOrderId: 9, qtdFinalKg: 25000, statusDaDecisao: 'po' },
+        { productId: 43, purchaseOrderId: 10, qtdFinalKg: 12000, statusDaDecisao: 'po' },
+      ],
+    };
+
+    it('consulta os destinatarios de todos os itens e lista cada um com a sua quantidade sugerida', async () => {
+      const { scope } = renderModal([item, item2]);
+      expect(await scope.findByText(/Enviar Ordem de Compra — FORNECEDOR SINTETICO/)).toBeTruthy();
+      expect(get).toHaveBeenCalledWith('/v1/forecast/snapshots/7/po-preco-fechado/destinatarios?productIds=42,43');
+      expect(scope.getByText('Itens da PO (2)')).toBeTruthy();
+      expect(quantidadeDe(scope, 'PRODUTO SINTETICO A').value).toBe('25000');
+      expect(quantidadeDe(scope, 'PRODUTO SINTETICO B').value).toBe('12000');
+      expect((scope.getByLabelText('Assunto') as HTMLInputElement).value).toBe('Purchase Order - PRODUTO SINTETICO A, PRODUTO SINTETICO B');
+    });
+
+    it('envia UM corpo com os dois itens e as quantidades editadas, sem preco', async () => {
+      post.mockResolvedValue({ data: resultadoLote });
+      const { scope, onEnviada } = renderModal([item, item2]);
+      await preparar(scope);
+      fireEvent.change(quantidadeDe(scope, 'PRODUTO SINTETICO B'), { target: { value: '5000,5' } });
+      fireEvent.click(botaoEnviar(scope));
+      await waitFor(() => expect(onEnviada).toHaveBeenCalledWith(resultadoLote));
+      expect(post).toHaveBeenCalledTimes(1);
+      const corpo = post.mock.calls[0]![1] as Record<string, unknown>;
+      expect(corpo.itens).toEqual([
+        { productId: 42, quantidadeKg: 25000 },
+        { productId: 43, quantidadeKg: 5000.5 },
+      ]);
+      expect(Object.keys(corpo).some((k) => /preco|price|valor|moeda|incoterm/i.test(k))).toBe(false);
+    });
+
+    it('quantidade invalida em UM item bloqueia o envio e diz qual', async () => {
+      const { scope } = renderModal([item, item2]);
+      await preparar(scope);
+      await waitFor(() => expect(botaoEnviar(scope).disabled).toBe(false));
+      fireEvent.change(quantidadeDe(scope, 'PRODUTO SINTETICO B'), { target: { value: '0' } });
+      expect(botaoEnviar(scope).disabled).toBe(true);
+      expect(scope.getByText('Corrija a quantidade de: PRODUTO SINTETICO B.')).toBeTruthy();
+    });
+
+    it('o total estimado soma por moeda so dos itens com preco valido', async () => {
+      controles.precos.set(42, { productId: 42, estado: 'ok', valorPorKg: 2, moeda: 'USD', incoterm: 'CFR', validoAte: '2026-12-31' });
+      controles.precos.set(43, { productId: 43, estado: 'ok', valorPorKg: 3, moeda: 'EUR', incoterm: 'CFR', validoAte: '2026-12-31' });
+      const { scope } = renderModal([item, item2]);
+      // 25.000 x US$ 2 = US$ 50.000,00 ; 12.000 x € 3 = € 36.000,00 (moedas nunca se misturam)
+      const total = (await scope.findByTestId('po-total')).textContent as string;
+      expect(total).toContain('US$ 50.000,00');
+      expect(total).toContain('€ 36.000,00');
+    });
+
+    it('fornecedores diferentes (409 nos destinatarios) bloqueiam o envio', async () => {
+      get.mockRejectedValue(new ApiError(409, { message: 'Os itens escolhidos são de fornecedores diferentes (A, B).' }, 'Os itens escolhidos são de fornecedores diferentes (A, B).'));
+      const { scope } = renderModal([item, item2]);
+      expect(await scope.findByText(/fornecedores diferentes/)).toBeTruthy();
+      await anexarPdf(scope);
+      expect(botaoEnviar(scope).disabled).toBe(true);
+    });
+
+    it('na fila por fonte o titulo mostra "PO 2 de 3"', async () => {
+      const { scope } = renderModal([item, item2], { atual: 2, total: 3 });
+      expect(await scope.findByText(/\(PO 2 de 3\)/)).toBeTruthy();
+    });
+  });
+
+  describe('arrastar o PDF para o campo de anexo', () => {
+    const arquivos = (files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+    const campo = (s: Scope) => s.getByText('Nenhum arquivo selecionado').closest('label') as HTMLLabelElement;
+    const pdf = (nome = 'po.pdf', tipo = 'application/pdf') => new File(['%PDF-1.4 fake'], nome, { type: tipo });
+
+    it('soltar um PDF no campo anexa, igual a escolher pelo seletor, e habilita o envio', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      expect(campo(scope).textContent).toContain('Arraste o PDF para cá ou clique');
+      fireEvent.drop(campo(scope), arquivos([pdf('PO-0007.pdf')]));
+      expect(await scope.findByText(/Selecionado: PO-0007\.pdf/)).toBeTruthy();
+      await waitFor(() => expect((scope.getByLabelText('Contato do despachante (forwarder)') as HTMLTextAreaElement).value).toContain('Atlas Sintetico'));
+      await waitFor(() => expect(botaoEnviar(scope).disabled).toBe(false));
+    });
+
+    it('o campo ganha o destaque enquanto o arquivo esta sobre ele e perde ao soltar', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      const label = campo(scope);
+      fireEvent.dragEnter(label, arquivos([pdf()]));
+      expect(label.className).toContain('cmp-po__arquivo--arrastando');
+      fireEvent.drop(label, arquivos([pdf()]));
+      await scope.findByText(/Selecionado: po\.pdf/);
+      expect(scope.getByText(/Selecionado:/).closest('div')!.querySelector('label.cmp-po__arquivo')!.className).not.toContain('--arrastando');
+    });
+
+    it('PDF sem tipo informado pelo sistema (so a extensao) tambem anexa', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      fireEvent.drop(campo(scope), arquivos([pdf('PO-0008.pdf', '')]));
+      expect(await scope.findByText(/Selecionado: PO-0008\.pdf/)).toBeTruthy();
+    });
+
+    it('arquivo que nao e PDF, mais de um arquivo e queda fora do campo sao recusados sem anexar', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      fireEvent.drop(campo(scope), arquivos([new File(['x'], 'a.txt', { type: 'text/plain' })]));
+      expect(await scope.findByText('Selecione um arquivo PDF.')).toBeTruthy();
+      fireEvent.drop(campo(scope), arquivos([pdf('um.pdf'), pdf('dois.pdf')]));
+      expect(await scope.findByText('Solte um arquivo PDF por vez.')).toBeTruthy();
+      // queda fora do campo: o navegador nao pode abrir o PDF; nada e anexado
+      const fora = scope.getByLabelText('Assunto');
+      expect(fireEvent.drop(fora, arquivos([pdf()]))).toBe(false);
+      expect(scope.queryByText(/Selecionado:/)).toBeNull();
+      expect(botaoEnviar(scope).disabled).toBe(true);
     });
   });
 });

@@ -60,7 +60,7 @@ describe('ForecastCotar - Enviar PO (preco fechado)', () => {
     const botao = screen.getByRole('button', { name: 'Enviar PO de PRODUTO SINTETICO A' });
     fireEvent.click(botao);
     expect(abrirPoDireta).toHaveBeenCalledTimes(1);
-    expect(abrirPoDireta.mock.calls[0]![0]).toMatchObject({ productId: 42, precoFixo: true });
+    expect(abrirPoDireta.mock.calls[0]![0]).toMatchObject([{ productId: 42, precoFixo: true }]);
     expect(abrirPoDireta.mock.calls[0]![1]).toBe(botao);
     expect(abrir).not.toHaveBeenCalled();
   });

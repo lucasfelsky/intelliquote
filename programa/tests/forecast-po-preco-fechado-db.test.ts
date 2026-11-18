@@ -17,6 +17,7 @@ const U = runId.toUpperCase();
 const FONTE = `FONTE ${U}`;
 const FONTE_SEM_FORNECEDOR = `FONTE ${U} SEM FORNECEDOR`;
 const FONTE_SEM_CONTATO = `FONTE ${U} SEM CONTATO`;
+const FONTE_OUTRO_FORNECEDOR = `FONTE ${U} OUTRO FORNECEDOR`;
 const codigo = (letra: string) => `${U}${letra}1`;
 const nome = (letra: string) => `PRODUTO ${U} ${letra}`;
 const EMAIL_PRINCIPAL = `${runId}-principal@fornecedor.example`;
@@ -48,6 +49,7 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
   let snapshotId = 0;
   let supplierId = 0;
   let supplierSemContatoId = 0;
+  let outroFornecedorId = 0;
   const ids: Record<string, number> = {};
   let seq = 0;
   const chave = () => `${runId}-c${(seq += 1)}-abcdefgh`;
@@ -64,6 +66,10 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     fileSize: 18,
     ...over,
   });
+  const corpoLote = (itens: Array<{ productId: number; quantidadeKg: number }>, over: Record<string, unknown> = {}) => {
+    const { productId: _p, quantidadeKg: _q, ...base } = corpo(0);
+    return { ...base, itens, ...over };
+  };
   const enviar = (body: object, snapshot = snapshotId) =>
     request(app).post(`/api/v1/forecast/snapshots/${snapshot}/po-preco-fechado`).set('Cookie', cookies).send(body);
   const decisao = (productId: number) =>
@@ -87,12 +93,15 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     await prisma.supplierContact.create({ data: { supplierId, name: 'Contato Principal', email: EMAIL_PRINCIPAL, isPrimary: true } });
     await prisma.supplierContact.create({ data: { supplierId, name: 'Contato Copia', email: EMAIL_COPIA } });
     supplierSemContatoId = (await prisma.supplier.create({ data: { name: `FORNECEDOR ${U} SEM CONTATO` } })).id;
+    outroFornecedorId = (await prisma.supplier.create({ data: { name: `FORNECEDOR ${U} OUTRO` } })).id;
+    await prisma.supplierContact.create({ data: { supplierId: outroFornecedorId, name: 'Contato Outro', email: `${runId}-outro@fornecedor.example`, isPrimary: true } });
 
     const fonte = async (n: string, sid: number | null) =>
       (await prisma.forecastSource.create({ data: { name: n, normalizedName: n, leadTimeDays: 30, supplierId: sid } })).id;
     const fonteOk = await fonte(FONTE, supplierId);
     const fonteSemFornecedor = await fonte(FONTE_SEM_FORNECEDOR, null);
     const fonteSemContato = await fonte(FONTE_SEM_CONTATO, supplierSemContatoId);
+    const fonteOutro = await fonte(FONTE_OUTRO_FORNECEDOR, outroFornecedorId);
 
     const criar = async (
       letra: string,
@@ -125,8 +134,11 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     ids.G = await criar('G', fonteOk, true, null); // selo da planilha, preco ainda nao cadastrado
     ids.H = await criar('H', fonteOk, true, 2, { validoAte: '2020-01-31' }); // preco vencido
     ids.I = await criar('I', fonteOk, true, 2, { moeda: null }); // preco incompleto (sem moeda)
+    ids.J = await criar('J', fonteOk, true, 3.5); // elegivel, par do A num envio de varios itens
+    ids.L = await criar('L', fonteOk, true, 0.75); // elegivel, 3o item do envio de varios itens
+    ids.K = await criar('K', fonteOutro, true, 4); // elegivel, mas de OUTRO fornecedor
 
-    const letras = ['A', 'B', 'C', 'D', 'E', 'G', 'H', 'I'];
+    const letras = ['A', 'B', 'C', 'D', 'E', 'G', 'H', 'I', 'J', 'L', 'K'];
     snapshotId = (
       await prisma.forecastSnapshot.create({
         data: {
@@ -163,8 +175,8 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     await prisma.forecastSnapshot.deleteMany({ where: { createdById: adminId } });
     await prisma.forecastProduct.deleteMany({ where: { name: { contains: U } } });
     await prisma.forecastSource.deleteMany({ where: { name: { contains: U } } });
-    await prisma.supplierContact.deleteMany({ where: { supplierId: { in: [supplierId, supplierSemContatoId] } } });
-    await prisma.supplier.deleteMany({ where: { id: { in: [supplierId, supplierSemContatoId] } } });
+    await prisma.supplierContact.deleteMany({ where: { supplierId: { in: [supplierId, supplierSemContatoId, outroFornecedorId] } } });
+    await prisma.supplier.deleteMany({ where: { id: { in: [supplierId, supplierSemContatoId, outroFornecedorId] } } });
     await prisma.auditLog.deleteMany({ where: { performedById: adminId } });
     if (adminId) {
       await prisma.session.deleteMany({ where: { userId: adminId } });
@@ -292,5 +304,100 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
       expect((await url(ids[letra]!)).status, letra).toBe(409);
     }
     expect((await url(ids.F!)).status).toBe(400);
+  });
+
+  describe('varios itens num envio (um e-mail, uma PO por item)', () => {
+    testDbSkip('envia A e J juntos: UM e-mail, duas POs enviadas, cada item soma na propria Qtd. final', async () => {
+      const k = chave();
+      const res = await enviar(corpoLote([{ productId: ids.J!, quantidadeKg: 2000 }, { productId: ids.L!, quantidadeKg: 500.5 }], { chaveEnvio: k }));
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(res.body.data).toMatchObject({ jaEnviada: false, registro: 'ok', para: EMAIL_PRINCIPAL });
+      expect(res.body.data.purchaseOrderIds).toHaveLength(2);
+      expect(res.body.data.itens.map((i: { productId: number; qtdFinalKg: number; statusDaDecisao: string }) => [i.productId, i.qtdFinalKg, i.statusDaDecisao])).toEqual([
+        [ids.J, 2000, 'po'],
+        [ids.L, 500.5, 'po'],
+      ]);
+
+      const [poJ] = await pos(ids.J!);
+      const [poL] = await pos(ids.L!);
+      expect(poJ).toMatchObject({ status: 'enviada', requestKey: `${k}-${ids.J}`, currency: 'USD', incoterm: 'CFR' });
+      expect(Number(poJ!.unitPrice)).toBe(3.5);
+      expect(Number(poL!.quantityKg)).toBe(500.5);
+      expect(Number(poL!.unitPrice)).toBe(0.75);
+      expect(Number((await decisao(ids.J!))!.finalKg)).toBe(2000);
+      expect(Number((await decisao(ids.L!))!.finalKg)).toBe(500.5);
+
+      // UM e-mail para os dois itens (relacionado a primeira PO), com a lista das POs nas variaveis
+      const logs = await emails(poJ!.id);
+      expect(logs).toHaveLength(1);
+      expect(await emails(poL!.id)).toHaveLength(0);
+      expect(logs[0]!.subject).toBe(`Purchase Order - ${U}`);
+      expect(JSON.stringify(logs[0]!.templateVars)).toContain(String(poL!.id));
+    });
+
+    testDbSkip('repetir o mesmo envio (mesma chave e mesma lista): 200, nada enviado nem somado de novo', async () => {
+      const [poJ] = await pos(ids.J!);
+      const chaveBase = poJ!.requestKey.replace(`-${ids.J}`, '');
+      const res = await enviar(corpoLote([{ productId: ids.J!, quantidadeKg: 2000 }, { productId: ids.L!, quantidadeKg: 500.5 }], { chaveEnvio: chaveBase }));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({ jaEnviada: true });
+      expect(res.body.data.itens.map((i: { qtdFinalKg: number }) => i.qtdFinalKg)).toEqual([2000, 500.5]);
+      expect(await pos(ids.J!)).toHaveLength(1);
+      expect(await emails(poJ!.id)).toHaveLength(1);
+    });
+
+    testDbSkip('itens de fornecedores diferentes: 409, nada criado (nem para o item que estava certo)', async () => {
+      const antes = await prisma.forecastPurchaseOrder.count({ where: { snapshotId } });
+      const res = await enviar(corpoLote([{ productId: ids.A!, quantidadeKg: 1 }, { productId: ids.K!, quantidadeKg: 1 }]));
+      expect(res.status).toBe(409);
+      expect(res.body.message).toMatch(/fornecedores diferentes/);
+      expect(await prisma.forecastPurchaseOrder.count({ where: { snapshotId } })).toBe(antes);
+    });
+
+    testDbSkip('um item bloqueado (sem preco) barra o envio inteiro, com o nome do item na mensagem', async () => {
+      const antes = await prisma.forecastPurchaseOrder.count({ where: { snapshotId } });
+      const res = await enviar(corpoLote([{ productId: ids.A!, quantidadeKg: 1 }, { productId: ids.G!, quantidadeKg: 1 }]));
+      expect(res.status).toBe(409);
+      expect(res.body.message).toContain(nome('G'));
+      expect(res.body.message).toMatch(/ainda não foi cadastrado/);
+      expect(await prisma.forecastPurchaseOrder.count({ where: { snapshotId } })).toBe(antes);
+    });
+
+    testDbSkip('item fora da lista de compra no meio do lote: 400 com o nome, nada criado', async () => {
+      const antes = await prisma.forecastPurchaseOrder.count({ where: { snapshotId } });
+      const res = await enviar(corpoLote([{ productId: ids.A!, quantidadeKg: 1 }, { productId: ids.E!, quantidadeKg: 1 }]));
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain(nome('E'));
+      expect(await prisma.forecastPurchaseOrder.count({ where: { snapshotId } })).toBe(antes);
+    });
+
+    testDbSkip('e-mail recusado antes de sair (forwarder inexistente): todas as POs do lote viram falhou e nada soma', async () => {
+      const k = chave();
+      const antesA = Number((await decisao(ids.A!))!.finalKg);
+      const antesJ = Number((await decisao(ids.J!))!.finalKg);
+      const res = await enviar(corpoLote([{ productId: ids.A!, quantidadeKg: 10 }, { productId: ids.J!, quantidadeKg: 20 }], { chaveEnvio: k, forwarderId: 2_000_000_000 }));
+      expect(res.status).toBe(400);
+      for (const id of [ids.A!, ids.J!]) {
+        const falhou = (await pos(id)).find((p) => p.requestKey === `${k}-${id}`)!;
+        expect(falhou, String(id)).toMatchObject({ status: 'falhou', failureCode: 'http_400' });
+      }
+      expect(Number((await decisao(ids.A!))!.finalKg)).toBe(antesA);
+      expect(Number((await decisao(ids.J!))!.finalKg)).toBe(antesJ);
+      // a mesma chave de um lote que falhou nao reenvia: o cliente gera outra
+      const repetida = await enviar(corpoLote([{ productId: ids.A!, quantidadeKg: 10 }, { productId: ids.J!, quantidadeKg: 20 }], { chaveEnvio: k }));
+      expect(repetida.status).toBe(409);
+      expect(repetida.body.message).toMatch(/falhou/);
+    });
+
+    testDbSkip('destinatarios de varios itens: a mesma lista do envio; fornecedores diferentes e item bloqueado avisam antes', async () => {
+      const url = (lista: number[]) =>
+        request(app).get(`/api/v1/forecast/snapshots/${snapshotId}/po-preco-fechado/destinatarios?productIds=${lista.join(',')}`).set('Cookie', cookies);
+      const ok = await url([ids.A!, ids.J!, ids.L!]);
+      expect(ok.status).toBe(200);
+      expect(ok.body.data).toMatchObject({ fornecedor: `FORNECEDOR ${U}`, to: { email: EMAIL_PRINCIPAL } });
+      expect((await url([ids.A!, ids.K!])).status).toBe(409);
+      expect((await url([ids.A!, ids.H!])).status).toBe(409);
+      expect((await url([ids.A!, ids.F!])).status).toBe(400);
+    });
   });
 });
