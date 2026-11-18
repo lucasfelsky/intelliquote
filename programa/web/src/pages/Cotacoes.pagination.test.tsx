@@ -91,7 +91,9 @@ describe('Cotacoes - paginacao com filtros', () => {
       expect.objectContaining({ page: '1', pageSize: '50' }),
     );
     expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 2/);
-    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/60 cotações no total/);
+    expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/70 cotações no total/);
+    // Padrão da lista: só abertas.
+    expect(lastGetParams()).toEqual(expect.objectContaining({ status: 'open' }));
   });
 
   it('Próxima página pede page 2 e mostra as linhas da segunda página', async () => {
@@ -111,20 +113,17 @@ describe('Cotacoes - paginacao com filtros', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
     await waitFor(() => expect(screen.getByText('QR-55')).toBeTruthy());
 
-    fireEvent.change(screen.getByDisplayValue('Todas'), { target: { value: 'abertas' } });
+    fireEvent.change(screen.getByDisplayValue('Abertas'), { target: { value: 'todas' } });
 
-    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/70 cotações no total/));
-    expect(api.get).toHaveBeenCalledWith(
-      '/v1/quote-requests',
-      expect.objectContaining({ status: 'open', page: '1', pageSize: '50' }),
-    );
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/60 cotações no total/));
+    expect(lastGetParams()).toEqual({ page: '1', pageSize: '50' });
     expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 2/);
     expect(screen.getByText('QR-50')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
 
-    await waitFor(() => expect(screen.getByText('QR-70')).toBeTruthy());
-    expect(lastGetParams()).toEqual(expect.objectContaining({ status: 'open', page: '2' }));
+    await waitFor(() => expect(screen.getByText('QR-60')).toBeTruthy());
+    expect(lastGetParams()).toEqual({ page: '2', pageSize: '50' });
     expect(screen.getByText('QR-51')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 2 de 2/);
   });

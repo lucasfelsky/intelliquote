@@ -42,6 +42,9 @@ interface QuoteRequestsPagination {
 type StatusFilter = 'todas' | 'abertas' | 'fechadas';
 type PoFilter = 'todas' | 'enviada' | 'nao-enviada';
 
+// Padrão da lista: só cotações abertas. Não conta como "filtro ativo" (vazio padrão continua o de sempre).
+const DEFAULT_STATUS_FILTER: StatusFilter = 'abertas';
+
 const MONTH_LABELS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
 // Mês atual + 11 anteriores no fuso de São Paulo (valor AAAA-MM, igual ao `month` da API).
@@ -139,7 +142,7 @@ export default function Cotacoes() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(DEFAULT_STATUS_FILTER);
   const [incotermFilter, setIncotermFilter] = useState<Incoterm | 'todos'>('todos');
   const [poFilter, setPoFilter] = useState<PoFilter>('todas');
   const [monthFilter, setMonthFilter] = useState<string>('todos');
@@ -180,7 +183,7 @@ export default function Cotacoes() {
   const rows = list.data?.items ?? [];
   const hasFilters =
     search.trim() !== '' ||
-    statusFilter !== 'todas' ||
+    statusFilter !== DEFAULT_STATUS_FILTER ||
     incotermFilter !== 'todos' ||
     poFilter !== 'todas' ||
     monthFilter !== 'todos';
