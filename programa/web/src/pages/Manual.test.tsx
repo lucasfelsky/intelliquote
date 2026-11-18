@@ -496,7 +496,7 @@ describe('Manual: capitulos 8 a 10 (M3)', () => {
     expect([...email.querySelectorAll('dd')].map((e) => e.querySelectorAll('.manual-email__endereco').length)).toEqual([1, 2, 1, 0]);
     expect(email.querySelector('.manual-email__endereco--principal')?.textContent).toBe('mei.chen@lianyun-chem.example');
     expect(email.querySelector('.manual-email__endereco--primeiro')?.textContent).toBe('comex@sqquimica.example');
-    expect(email.textContent).toContain('Sourcing request COT-2026-0412 - Citric Acid Anhydrous');
+    expect(email.textContent).toContain('Sourcing request - Citric Acid Anhydrous');
     expect(email.textContent).toContain('Equipe COMEX + cópia fixa da empresa, só no 1º e-mail do envio');
     const t = texto(container, 'envio');
     expect(t).toContain('a tela sugere 7');
@@ -519,7 +519,7 @@ describe('Manual: capitulos 8 a 10 (M3)', () => {
     expect(portal.getAttribute('role')).toBe('group');
     expect(portal.getAttribute('aria-label')).toBe('Exemplo da tela do portal do fornecedor');
     expect(portal.querySelector('input, button, select')).toBeNull();
-    expect(portal.querySelector('.manual-portal__barra')?.textContent).toBe('SQ Quimica · Supplier PortalSourcing request COT-2026-0412');
+    expect(portal.querySelector('.manual-portal__barra')?.textContent).toBe('SQ Quimica · Supplier PortalSourcing request');
     expect([...portal.querySelectorAll('.manual-portal__campo')].map((c) => c.querySelector('span')?.textContent)).toEqual([
       'Currency',
       'Main incoterm',
@@ -834,12 +834,11 @@ describe('Manual: capitulos 14 a 17 e rodape (M5)', () => {
     expect(container.querySelectorAll('#relatorios .manual-grade--3')).toHaveLength(1);
   });
 
-  it('Administracao: 5 secoes, avisos de nova solicitacao com a copia automatica, 6 variaveis de template e rotulos reais', () => {
+  it('Administracao: 5 secoes, avisos de nova solicitacao com a copia automatica, 5 variaveis de template e rotulos reais', () => {
     const { container } = renderManual();
     expect([...container.querySelectorAll('#administracao h3')].map((h) => h.textContent)).toEqual(['Empresa', 'Usuários', 'Templates de e-mail', 'Auditoria', 'Minha conta']);
     expect(texto(container, 'administracao')).toContain('Vazio, vai para a equipe COMEX e para a cópia automática.');
     expect([...container.querySelectorAll('#administracao .manual-variaveis code')].map((c) => c.textContent)).toEqual([
-      '{{requestCode}}',
       '{{productName}}',
       '{{supplierContactName}}',
       '{{portalLink}}',
