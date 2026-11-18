@@ -17,6 +17,7 @@ import {
 import { formatForwarderInfo, listForwarders } from '@/services/forwarders';
 import { moedaBr } from '@/services/forecastPrecoFechado';
 import { useCriarCotacao } from './ForecastCriarCotacao';
+import { useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
 import { dataBr, kgBr } from './forecastPainel';
 
 // "Enviar Ordem de Compra" de itens de PRECO FECHADO, direto do Relatorio de compras (sem cotacao). Mesmo desenho do modal da PO
@@ -57,7 +58,15 @@ export function assuntoPadraoDaPo(nomes: readonly string[]): string {
   return `Purchase Order - ${juntos.length > ASSUNTO_NOMES_MAX ? `${juntos.slice(0, ASSUNTO_NOMES_MAX - 1)}…` : juntos}`;
 }
 
-const qtdInicial = (i: ForecastItemRelatorio): string => String(i.quantidadeFinal).replace('.', ',');
+/**
+ * Quantidade de referencia da PO: a da ANALISE FORECAST (a quantidade fechada na decisao de compra do item) quando existe; sem
+ * analise, a sugerida pelo Forecast (Qtd. final calculada). E o valor que o campo traz; pode ser ajustado.
+ */
+export function referenciaDaPo(item: ForecastItemRelatorio, analiseKg: number | null | undefined): { kg: number; origem: 'analise' | 'sugerida' } {
+  return analiseKg != null && analiseKg > 0 ? { kg: analiseKg, origem: 'analise' } : { kg: item.quantidadeFinal, origem: 'sugerida' };
+}
+
+const kgParaCampo = (kg: number): string => String(kg).replace('.', ',');
 
 interface Props {
   snapshotId: number;
@@ -74,8 +83,10 @@ interface Props {
 export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, posicao, onClose, onEnviada }: Props) {
   const unico = itens.length === 1;
   const productIds = itens.map((i) => i.productId as number);
+  const decisoes = useDecisoesDaQuinzena();
+  const referencias = new Map(itens.map((i) => [i.productId as number, referenciaDaPo(i, decisoes?.mapa.get(i.productId as number)?.quantidadeKg)] as const));
   const [quantidades, setQuantidades] = useState<Record<number, string>>(() =>
-    Object.fromEntries(itens.map((i) => [i.productId as number, qtdInicial(i)])),
+    Object.fromEntries(itens.map((i) => [i.productId as number, kgParaCampo((referencias.get(i.productId as number) as { kg: number }).kg)])),
   );
   const [poSubject, setPoSubject] = useState(() => assuntoPadraoDaPo(itens.map((i) => i.item || 'SQ Quimica')));
   const [poForwarderInfo, setPoForwarderInfo] = useState('');
@@ -230,6 +241,11 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
     .filter(Boolean)
     .join(' ');
 
+  // Fechar (Cancelar, Esc, X) durante o envio abriria outra tentativa com chave nova e o e-mail poderia sair em dobro.
+  const fechar = () => {
+    if (!envio.isPending) onClose();
+  };
+
   const bloqueada = destinatariosQuery.isError;
   const podeEnviar =
     !envio.isPending && !bloqueada && destinatarios !== undefined && todasValidas && poSubject.trim() !== '' && poFileBase64 !== '' && poForwarderInfo.trim() !== '' && !forwarderInfoTooLong;
@@ -247,7 +263,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
   return (
     <Modal
       isOpen
-      onClose={onClose}
+      onClose={fechar}
       size="wide"
       title={`${destinatarios ? `Enviar Ordem de Compra — ${destinatarios.fornecedor}` : 'Enviar Ordem de Compra'}${posicao ? ` (PO ${posicao.atual} de ${posicao.total})` : ''}`}
       subtitle={subtitulo}
@@ -269,7 +285,8 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
                 <strong>Item:</strong> {itens[0]?.item}
               </p>
               <p className="cmp-po__linha">
-                <strong>Sugerida pelo Forecast:</strong> <span className="cmp-mono">{kgBr(itens[0]?.quantidadeFinal)}</span> kg
+                <strong>{referencias.get(productIds[0] as number)?.origem === 'analise' ? 'Análise Forecast:' : 'Sugerida pelo Forecast:'}</strong>{' '}
+                <span className="cmp-mono">{kgBr(referencias.get(productIds[0] as number)?.kg)}</span> kg
               </p>
               {itens[0] && precoDe(itens[0])?.estado === 'ok' && (
                 <p className="cmp-po__linha">
@@ -315,7 +332,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
                   <tr>
                     <th scope="col">Item</th>
                     <th scope="col" className="num">
-                      Sugerida (kg)
+                      Análise / sugerida (kg)
                     </th>
                     <th scope="col" className="num">
                       Quantidade da PO (kg)
@@ -332,7 +349,10 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
                     return (
                       <tr key={id}>
                         <th scope="row">{item.item}</th>
-                        <td className="num cmp-mono">{kgBr(item.quantidadeFinal)}</td>
+                        <td className="num cmp-mono">
+                          {kgBr(referencias.get(id)?.kg)}
+                          <span className="cmp-po__dica"> {referencias.get(id)?.origem === 'analise' ? 'análise' : 'sugerida'}</span>
+                        </td>
                         <td className="num">
                           <input
                             className="input cmp-mono"
@@ -518,7 +538,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
       </div>
 
       <div className="modal-actions">
-        <button type="button" className="ghost-button" onClick={onClose}>
+        <button type="button" className="ghost-button" disabled={envio.isPending} onClick={fechar}>
           Cancelar
         </button>
         <button type="button" className="primary-button" disabled={!podeEnviar} aria-busy={envio.isPending} onClick={() => { setErro(null); envio.mutate(); }}>

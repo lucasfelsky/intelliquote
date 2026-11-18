@@ -316,8 +316,8 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
       [...selecionados.values()].filter((s) => {
         const id = s.item.productId;
         if (s.item.precoFixo !== true || id === null || id === undefined) return false;
-        const estado = precoPorProduto.get(id)?.estado;
-        return estado !== 'sem_valor' && estado !== 'vencido';
+        // So com o preco carregado e valido (o servidor valida de novo, mas a barra nao promete o que daria 409).
+        return precoPorProduto.get(id)?.estado === 'ok';
       }),
     [selecionados, precoPorProduto],
   );
@@ -354,6 +354,8 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
   // PO enviada: fecha o modal, mostra o aviso e recarrega as decisoes (Qtd. final e status vem delas).
   const aoEnviarPo = useCallback(
     (resultado: ForecastPoDiretaEnviada) => {
+      // As decisoes recarregam sempre: o e-mail saiu mesmo que o modal ja nao seja o mesmo.
+      void qc.invalidateQueries({ queryKey: forecastDecisoesKeys.lista(snapshotId) });
       const atual = po;
       if (!atual) return;
       setPosEnviadas((lista) => [...lista, { itens: atual.itens.map((i) => i.item), resultado }]);
@@ -364,7 +366,6 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
         for (const id of enviados) if (id !== null && id !== undefined) novo.delete(id);
         return novo;
       });
-      void qc.invalidateQueries({ queryKey: forecastDecisoesKeys.lista(snapshotId) });
       const [proximo, ...resto] = filaPoRef.current.grupos;
       if (proximo) {
         const total = filaPoRef.current.total;

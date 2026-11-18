@@ -146,7 +146,8 @@ export class ForecastPurchaseOrderService {
           pos.push({ id: criada.id, productId: input.productId, status: criada.status });
         }
         return { pos, jaExistia: false };
-      });
+        // Lote de ate 50 itens: ~2 queries por item, mais que os 5 s padrao da transacao interativa.
+      }, { timeout: 20_000 });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const existentes = await prisma.forecastPurchaseOrder.findMany({

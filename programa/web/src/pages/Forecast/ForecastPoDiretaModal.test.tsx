@@ -19,7 +19,8 @@ vi.mock('@/api/client', () => ({
   },
 }));
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => vi.fn().mockResolvedValue(true) }));
-const controles = vi.hoisted(() => ({ precos: new Map<number, unknown>() }));
+const controles = vi.hoisted(() => ({ precos: new Map<number, unknown>(), analise: new Map<number, { quantidadeKg: number }>() }));
+vi.mock('./ForecastDecisaoCompra', () => ({ useDecisoesDaQuinzena: () => ({ mapa: controles.analise, carregando: false, erro: false }) }));
 vi.mock('./ForecastCriarCotacao', () => ({ useCriarCotacao: () => ({ precoFechado: (id: number) => controles.precos.get(id) }) }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
@@ -28,7 +29,7 @@ vi.mock('@/services/forwarders', async (importOriginal) => ({
 
 import { api, ApiError } from '@/api/client';
 import { listForwarders } from '@/services/forwarders';
-import ForecastPoDiretaModal, { lerQuantidadePo } from './ForecastPoDiretaModal';
+import ForecastPoDiretaModal, { lerQuantidadePo, referenciaDaPo } from './ForecastPoDiretaModal';
 
 const get = vi.mocked(api.get);
 const post = vi.mocked(api.post);
@@ -115,6 +116,7 @@ async function preparar(s: Scope) {
 beforeEach(() => {
   vi.clearAllMocks();
   controles.precos.clear();
+  controles.analise.clear();
   get.mockResolvedValue({ data: destinatarios });
   post.mockResolvedValue({ data: resultado });
   vi.mocked(listForwarders).mockResolvedValue([forwarder]);
@@ -137,7 +139,33 @@ describe('lerQuantidadePo', () => {
   });
 });
 
+describe('referenciaDaPo', () => {
+  it('usa a quantidade da Analise Forecast quando existe e e positiva; senao, a sugerida (Qtd. final calculada)', () => {
+    expect(referenciaDaPo(item, 5000)).toEqual({ kg: 5000, origem: 'analise' });
+    expect(referenciaDaPo(item, 0)).toEqual({ kg: 25000, origem: 'sugerida' });
+    expect(referenciaDaPo(item, null)).toEqual({ kg: 25000, origem: 'sugerida' });
+    expect(referenciaDaPo(item, undefined)).toEqual({ kg: 25000, origem: 'sugerida' });
+  });
+});
+
 describe('ForecastPoDiretaModal', () => {
+  it('com Analise Forecast preenchida a PO nasce com ELA (nao com a sugerida) e o rotulo diz "Análise Forecast"', async () => {
+    controles.analise.set(42, { quantidadeKg: 5000 });
+    const { scope } = renderModal();
+    await scope.findByText(/FORNECEDOR SINTETICO/);
+    expect(quantidade(scope).value).toBe('5000');
+    expect(scope.getByText('Análise Forecast:')).toBeTruthy();
+    expect(scope.queryByText('Sugerida pelo Forecast:')).toBeNull();
+  });
+
+  it('varios itens: cada um usa a sua analise; quem nao tem usa a sugerida', async () => {
+    controles.analise.set(42, { quantidadeKg: 5000 });
+    const { scope } = renderModal([item, item2]);
+    await scope.findByText(/FORNECEDOR SINTETICO/);
+    expect((scope.getByLabelText('Quantidade da PO de PRODUTO SINTETICO A (kg)') as HTMLInputElement).value).toBe('5000');
+    expect((scope.getByLabelText('Quantidade da PO de PRODUTO SINTETICO B (kg)') as HTMLInputElement).value).toBe('12000');
+  });
+
   it('mostra fornecedor, Para/Cc e a quantidade sugerida como padrao, sem nenhum preco', async () => {
     const { scope } = renderModal();
     expect(await scope.findByText(/Enviar Ordem de Compra — FORNECEDOR SINTETICO/)).toBeTruthy();
@@ -216,6 +244,18 @@ describe('ForecastPoDiretaModal', () => {
     fireEvent.click(botaoEnviar(scope));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     expect((post.mock.calls[1]![1] as { chaveEnvio: string }).chaveEnvio).toBe((post.mock.calls[0]![1] as { chaveEnvio: string }).chaveEnvio);
+  });
+
+  it('durante o envio Cancelar fica desabilitado e fechar nao chama o pai (evita segunda tentativa com chave nova)', async () => {
+    post.mockReturnValue(new Promise(() => {}) as never);
+    const { scope, onClose } = renderModal();
+    await preparar(scope);
+    fireEvent.click(botaoEnviar(scope));
+    await waitFor(() => expect(botaoEnviar(scope).disabled).toBe(true));
+    const cancelar = scope.getByRole('button', { name: 'Cancelar' }) as HTMLButtonElement;
+    expect(cancelar.disabled).toBe(true);
+    fireEvent.click(cancelar);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('fonte sem fornecedor (409 nos destinatarios): mostra o motivo e bloqueia o envio', async () => {
