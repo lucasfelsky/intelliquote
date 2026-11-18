@@ -331,13 +331,13 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
                 <thead>
                   <tr>
                     <th scope="col">Item</th>
-                    <th scope="col" className="num">
+                    <th scope="col" className="cmp-po__num">
                       Análise / sugerida (kg)
                     </th>
-                    <th scope="col" className="num">
+                    <th scope="col" className="cmp-po__num">
                       Quantidade da PO (kg)
                     </th>
-                    <th scope="col" className="num">
+                    <th scope="col" className="cmp-po__num">
                       Preço
                     </th>
                   </tr>
@@ -349,11 +349,11 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
                     return (
                       <tr key={id}>
                         <th scope="row">{item.item}</th>
-                        <td className="num cmp-mono">
+                        <td className="cmp-po__num cmp-mono">
                           {kgBr(referencias.get(id)?.kg)}
                           <span className="cmp-po__dica"> {referencias.get(id)?.origem === 'analise' ? 'análise' : 'sugerida'}</span>
                         </td>
-                        <td className="num">
+                        <td className="cmp-po__num">
                           <input
                             className="input cmp-mono"
                             inputMode="decimal"
@@ -364,7 +364,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, pos
                           />
                           {!lida.ok && <span className="cmp-po__contador cmp-po__contador--excedido">{lida.erro}</span>}
                         </td>
-                        <td className="num cmp-mono">
+                        <td className="cmp-po__num cmp-mono">
                           {preco?.estado === 'ok' ? `${moedaBr(preco.valorPorKg as number, preco.moeda)}/kg` : '—'}
                         </td>
                       </tr>

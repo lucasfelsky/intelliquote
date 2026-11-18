@@ -6129,12 +6129,12 @@ dialog.modal-dialog[open] {
 }
 /* Arquivo sendo arrastado sobre o campo: borda cheia e fundo de destaque (cobre o estado vazio e o ja anexado). */
 /* PO direta com varios itens: tabela de itens (quantidade editavel por item) com rolagem propria. */
-.cmp-po__itens { max-height: 260px; overflow: auto; border: 1px solid var(--rf-neutral-200, #e2e8f0); border-radius: 10px; }
+.cmp-po__itens { max-height: 260px; overflow: auto; border: 1px solid var(--rf-border); border-radius: var(--rf-radius-card); }
 .cmp-po__itens table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.cmp-po__itens th, .cmp-po__itens td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rf-neutral-100, #f1f5f9); vertical-align: top; }
-.cmp-po__itens thead th { position: sticky; top: 0; background: var(--rf-neutral-50, #f8fafc); font-weight: 600; z-index: 1; }
+.cmp-po__itens th, .cmp-po__itens td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--rf-divider); vertical-align: top; }
+.cmp-po__itens thead th { position: sticky; top: 0; background: var(--rf-surface-alt); font-weight: 600; z-index: 1; }
 .cmp-po__itens tbody th { font-weight: 500; }
-.cmp-po__itens .num { text-align: right; white-space: nowrap; }
+.cmp-po__itens .cmp-po__num { text-align: right; white-space: nowrap; }
 .cmp-po__itens td input.input { width: 128px; text-align: right; }
 .cmp-po__itens tr:last-child th, .cmp-po__itens tr:last-child td { border-bottom: 0; }
 
