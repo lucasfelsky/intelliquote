@@ -252,6 +252,14 @@ router.put(
   ForecastController.putDecisao,
 );
 
+// PO direta de item de preco fechado (sem cotacao): admin/comprador. Corpo com o PDF em base64 (parser proprio no app.ts).
+router.post(
+  '/forecast/snapshots/:id/po-preco-fechado',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.postPoPrecoFechado,
+);
+
 // Observacao do item no painel (coluna OBS.): gravar = admin/comprador.
 router.put(
   '/forecast/snapshots/:id/observacoes/:productId',

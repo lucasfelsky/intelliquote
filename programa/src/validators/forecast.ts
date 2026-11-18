@@ -1,5 +1,7 @@
 import { Incoterm } from '@prisma/client';
 import { z } from 'zod';
+import { chaveDeEnvioValida, quantidadeDaPoValida } from '../utils/forecastPoDireta';
+import { quotePurchaseOrderSchema } from './domain';
 import {
   FORECAST_BASE64_MAX_LENGTH,
   FORECAST_COUNTRY_CODE_PATTERN,
@@ -978,3 +980,19 @@ export const forecastOcasioesQuerySchema = z
 export type ForecastOcasiaoCreateInput = z.infer<typeof forecastOcasiaoCreateSchema>;
 export type ForecastOcasiaoPatchInput = z.infer<typeof forecastOcasiaoPatchSchema>;
 export type ForecastOcasioesQueryInput = z.infer<typeof forecastOcasioesQuerySchema>;
+
+// PO direta de item de PRECO FECHADO (sem cotacao): o mesmo corpo da PO ao fornecedor (assunto, mensagem, forwarder, PDF em base64)
+// sem `nonWinner` (nao ha proposta), mais o item, a quantidade em kg (ate 3 casas) e a `chaveEnvio` de idempotencia gerada pelo cliente
+// a cada tentativa. Chave desconhecida = 400. O preco NUNCA vem do corpo: sai do cadastro do produto.
+export const forecastPoPrecoFechadoSchema = z.strictObject({
+  ...quotePurchaseOrderSchema.omit({ nonWinner: true }).shape,
+  productId: z
+    .number({ error: 'Produto inválido.' })
+    .int('Produto inválido.')
+    .positive('Produto inválido.'),
+  quantidadeKg: z
+    .number({ error: 'Informe a quantidade da PO em kg.' })
+    .refine(quantidadeDaPoValida, 'Informe a quantidade da PO em kg (maior que zero, até 3 casas decimais).'),
+  chaveEnvio: z.string({ error: 'Chave do envio inválida.' }).refine(chaveDeEnvioValida, 'Chave do envio inválida.'),
+});
+export type ForecastPoPrecoFechadoInput = z.infer<typeof forecastPoPrecoFechadoSchema>;

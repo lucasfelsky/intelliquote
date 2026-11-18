@@ -108,6 +108,10 @@ app.use(
   express.json({ limit: '10mb' }),
 );
 
+// PO direta do Forecast (item de preco fechado): mesmo PDF em base64 (ate 10MB) no corpo. So' este path ganha o parser grande;
+// o resto de /forecast segue no global de 1mb. Sem login responde 401 antes de ler o corpo.
+app.use('/api/v1/forecast/snapshots/:id/po-preco-fechado', requireAuthBeforeBody, express.json({ limit: '14mb' }));
+
 // /attachments recebe o arquivo em base64 no JSON (limite de negocio: 5MB).
 // Com o parser global de 1mb, qualquer anexo acima de ~740KB seria rejeitado
 // com 413 em HTML antes de chegar ao controller. Limite derivado do maximo de

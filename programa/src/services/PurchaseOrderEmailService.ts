@@ -45,13 +45,17 @@ export type QuotePurchaseOrderPayload = z.infer<typeof quotePurchaseOrderSchema>
 
 export interface PurchaseOrderEmailInput {
   payload: QuotePurchaseOrderPayload;
+  // `null` = PO DIRETA do Forecast (item de preco fechado, sem cotacao): nao marca `purchaseOrderSentAt` nem avanca decisao
+  // por cotacao (quem registra e o chamador, `ForecastPurchaseOrderService`).
   quoteRequest: {
     id: number;
     requestCode: string;
     productName?: string | null;
     destinationPort?: string | null;
     items?: Array<{ destinationPort?: string | null }>;
-  };
+  } | null;
+  // Nome do produto no assunto padrao quando nao ha cotacao (`quoteRequest: null`).
+  produtoSemCotacao?: string;
   // Proposta que recebe a PO (a do fornecedor, ou a de origem da alternativa via parceiro): delimita os itens do Forecast
   // que passam a 'po'. Opcional.
   quoteResponseId?: number | null;
@@ -163,11 +167,11 @@ export async function sendPurchaseOrderEmail(
   }
 
   // Codigo interno da cotacao nunca vai ao fornecedor/parceiro.
-  const defaultSubject = `Purchase Order - ${quoteRequest.productName?.trim() || 'SQ Quimica'}`;
+  const defaultSubject = `Purchase Order - ${quoteRequest?.productName?.trim() || input.produtoSemCotacao?.trim() || 'SQ Quimica'}`;
   const message = payload.message?.trim() ?? '';
   const destinationPort =
-    quoteRequest.destinationPort?.trim() ||
-    quoteRequest.items?.[0]?.destinationPort?.trim() ||
+    quoteRequest?.destinationPort?.trim() ||
+    quoteRequest?.items?.[0]?.destinationPort?.trim() ||
     'as agreed';
 
   const subjectOverride = payload.subject?.trim() || undefined;
@@ -278,37 +282,40 @@ export async function sendPurchaseOrderEmail(
     throw new HttpError(502, sendResult.error || 'Falha ao enviar a Ordem de Compra.');
   }
 
-  // E-mail ja saiu: falha ao marcar "PO enviada" na cotacao nao vira 5xx.
-  try {
-    await prisma.quoteRequest.update({
-      where: { id: quoteRequest.id },
-      data: { purchaseOrderSentAt: new Date() },
-    });
-  } catch (error) {
-    logger.error(
-      {
-        quoteRequestId: quoteRequest.id,
-        reason: error instanceof Error ? error.message : String(error),
-      },
-      'Falha ao marcar PO enviada; e-mail ja enviado.',
-    );
-  }
+  // PO direta (sem cotacao): nada a marcar aqui; o chamador registra a PO e a decisao.
+  if (quoteRequest) {
+    // E-mail ja saiu: falha ao marcar "PO enviada" na cotacao nao vira 5xx.
+    try {
+      await prisma.quoteRequest.update({
+        where: { id: quoteRequest.id },
+        data: { purchaseOrderSentAt: new Date() },
+      });
+    } catch (error) {
+      logger.error(
+        {
+          quoteRequestId: quoteRequest.id,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        'Falha ao marcar PO enviada; e-mail ja enviado.',
+      );
+    }
 
-  // E4b (relatorio de compras enxuto): leva a decisao do Forecast dos itens vinculados a 'po'. Nunca derruba o envio.
-  try {
-    await ForecastCotacaoVinculoService.registrarPoEnviada(
-      quoteRequest.id,
-      user?.id ?? null,
-      input.quoteResponseId ?? null,
-    );
-  } catch (error) {
-    logger.error(
-      {
-        quoteRequestId: quoteRequest.id,
-        reason: error instanceof Error ? error.message : String(error),
-      },
-      'Falha ao registrar a PO enviada no Forecast; e-mail ja enviado.',
-    );
+    // E4b (relatorio de compras enxuto): leva a decisao do Forecast dos itens vinculados a 'po'. Nunca derruba o envio.
+    try {
+      await ForecastCotacaoVinculoService.registrarPoEnviada(
+        quoteRequest.id,
+        user?.id ?? null,
+        input.quoteResponseId ?? null,
+      );
+    } catch (error) {
+      logger.error(
+        {
+          quoteRequestId: quoteRequest.id,
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        'Falha ao registrar a PO enviada no Forecast; e-mail ja enviado.',
+      );
+    }
   }
 
   return {

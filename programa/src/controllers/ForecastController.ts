@@ -8,6 +8,7 @@ import { ForecastGrupoEquivalenciaService } from '../services/ForecastGrupoEquiv
 import { ForecastImportService } from '../services/ForecastImportService';
 import { ForecastMesesAtipicosService } from '../services/ForecastMesesAtipicosService';
 import { ForecastOcasioesService } from '../services/ForecastOcasioesService';
+import { ForecastPoDiretaService } from '../services/ForecastPoDiretaService';
 import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
 import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
@@ -25,6 +26,7 @@ import {
   forecastCotacoesLotePostSchema,
   forecastDecisaoPutSchema,
   forecastObservacaoPutSchema,
+  forecastPoPrecoFechadoSchema,
   forecastRascunhoCotacaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
@@ -464,6 +466,22 @@ export class ForecastController {
       const input = forecastObservacaoPutSchema.parse(req.body);
       const data = await ForecastSnapshotService.gravarObservacao(id, productId, input.observacao, req.user?.id ?? null);
       return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // PO direta de item de preco fechado (sem cotacao). Admin/comprador (rota). 201 = enviada agora; 200 = a mesma chaveEnvio ja
+  // estava enviada (repeticao: nada foi enviado nem somado de novo).
+  static async postPoPrecoFechado(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const input = forecastPoPrecoFechadoSchema.parse(req.body);
+      const data = await ForecastPoDiretaService.enviar(id, input, req.user ?? null);
+      return res.status(data.jaEnviada ? 200 : 201).json({ data });
     } catch (error) {
       return sendError(res, error);
     }
