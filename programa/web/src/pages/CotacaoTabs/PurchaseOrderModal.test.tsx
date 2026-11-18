@@ -494,3 +494,48 @@ describe('PurchaseOrderModal - destinatarios (Para/Cc)', () => {
     expect(sendButton.disabled).toBe(false);
   });
 });
+
+describe('PurchaseOrderModal - arrastar o PDF para o campo de anexo', () => {
+  const arquivos = (files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+  const campo = (scope: Scope) => scope.getByText('Nenhum arquivo selecionado').closest('label') as HTMLLabelElement;
+  const pdf = (nome = 'po.pdf', tipo = 'application/pdf') => new File(['%PDF-1.4 fake'], nome, { type: tipo });
+
+  beforeEach(() => {
+    controls.confirm.mockReset();
+    mockDefaultRecipients();
+    vi.mocked(listForwarders).mockReset().mockResolvedValue([globalCargo, seaLink]);
+    vi.mocked(sendPurchaseOrder)
+      .mockReset()
+      .mockResolvedValue({ status: 'sent', to: 'x@acme.com', cc: [] });
+  });
+
+  it('soltar um PDF no campo anexa como pelo seletor e o envio leva o arquivo', async () => {
+    const { scope, onSent } = renderModal();
+    await waitFor(() => expect(select(scope).value).toBe('1'));
+    expect(campo(scope).textContent).toContain('Arraste o PDF para cá ou clique');
+
+    const label = campo(scope);
+    fireEvent.dragEnter(label, arquivos([pdf()]));
+    expect(label.className).toContain('cmp-po__arquivo--arrastando');
+    fireEvent.drop(label, arquivos([pdf('PO-0042.pdf')]));
+    await scope.findByText(/Selecionado: PO-0042\.pdf/);
+
+    fireEvent.click(scope.getByRole('button', { name: 'Enviar Ordem de Compra' }));
+    await waitFor(() => expect(onSent).toHaveBeenCalled());
+    expect(vi.mocked(sendPurchaseOrder).mock.calls[0]![1]).toMatchObject({ fileName: 'PO-0042.pdf', fileType: 'application/pdf' });
+  });
+
+  it('PDF sem tipo informado pelo sistema (so a extensao) anexa; texto, 2 arquivos ou queda fora do campo sao recusados', async () => {
+    const { scope } = renderModal();
+    await waitFor(() => expect(select(scope).value).toBe('1'));
+    fireEvent.drop(campo(scope), arquivos([new File(['x'], 'a.txt', { type: 'text/plain' })]));
+    await scope.findByText('Selecione um arquivo PDF.');
+    fireEvent.drop(campo(scope), arquivos([pdf('um.pdf'), pdf('dois.pdf')]));
+    await scope.findByText('Solte um arquivo PDF por vez.');
+    expect(fireEvent.drop(scope.getByLabelText('Assunto'), arquivos([pdf()]))).toBe(false);
+    expect(scope.queryByText(/Selecionado:/)).toBeNull();
+
+    fireEvent.drop(campo(scope), arquivos([pdf('PO-0043.pdf', '')]));
+    await scope.findByText(/Selecionado: PO-0043\.pdf/);
+  });
+});

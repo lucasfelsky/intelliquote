@@ -6127,6 +6127,12 @@ dialog.modal-dialog[open] {
   border: 1.5px solid var(--rf-vencedora-selo-anel);
   background: var(--rf-tone-success-bg);
 }
+/* Arquivo sendo arrastado sobre o campo: borda cheia e fundo de destaque (cobre o estado vazio e o ja anexado). */
+.cmp-po__arquivo--arrastando,
+.cmp-po__arquivo--ok.cmp-po__arquivo--arrastando {
+  border: 1.5px solid var(--rf-primary-700);
+  background: var(--rf-primary-50);
+}
 .cmp-po__arquivo-input:focus-visible + .cmp-po__arquivo {
   outline: 2px solid transparent;
   outline-offset: 2px;

@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Modal } from '@/components/Modal';
 import { Icon } from '@/components/icons';
 import { useConfirm } from '@/components/useConfirm';
+import { ehArquivoPdf, useSoltarArquivo } from '@/components/useSoltarArquivo';
 import type { ForecastItemRelatorio } from '@/services/forecast';
 import {
   forecastPoDiretaErrorMessage,
@@ -161,7 +162,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
       setPoFileSize(0);
       return;
     }
-    if (file.type !== 'application/pdf') {
+    if (!ehArquivoPdf(file)) {
       setErro('Selecione um arquivo PDF.');
       return;
     }
@@ -180,6 +181,23 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
     reader.readAsDataURL(file);
   }
 
+  // Arrastar o PDF direto para o campo (alem de clicar): mais de um arquivo e recusado; um so passa pela mesma validacao do seletor.
+  const soltar = useSoltarArquivo((arquivos) => {
+    if (arquivos.length === 0) return;
+    if (arquivos.length > 1) {
+      setErro('Solte um arquivo PDF por vez.');
+      return;
+    }
+    handlePoFileChange(arquivos[0] ?? null);
+  }, envio.isPending);
+  const classeDoCampo = [
+    'cmp-po__arquivo',
+    poFileName ? 'cmp-po__arquivo--ok' : '',
+    soltar.arrastando ? 'cmp-po__arquivo--arrastando' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   const bloqueada = destinatariosQuery.isError;
   const podeEnviar =
     !envio.isPending && !bloqueada && destinatarios !== undefined && lida.ok && poSubject.trim() !== '' && poFileBase64 !== '' && poForwarderInfo.trim() !== '' && !forwarderInfoTooLong;
@@ -196,7 +214,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
         </>
       }
     >
-      <div className="cmp-po">
+      <div className="cmp-po" {...soltar.recipiente}>
         <p className="cmp-po-aviso cmp-po-aviso--info" role="status">
           <Icon name="info" size={16} strokeWidth={1.9} />
           <span>Item de preço fechado: a PO vai ao fornecedor da fonte sem passar por cotação, e o item fica como “PO enviada”.</span>
@@ -288,7 +306,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
             accept="application/pdf"
             onChange={(e) => handlePoFileChange(e.target.files?.[0] ?? null)}
           />
-          <label htmlFor="poFile" className={poFileName ? 'cmp-po__arquivo cmp-po__arquivo--ok' : 'cmp-po__arquivo'}>
+          <label htmlFor="poFile" className={classeDoCampo} {...soltar.campo}>
             <span className="cmp-po__arquivo-icone" aria-hidden="true">
               <Icon name={poFileName ? 'file-text' : 'upload'} size={poFileName ? 20 : 18} strokeWidth={1.9} />
             </span>
@@ -296,7 +314,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
               <strong className={poFileName ? 'cmp-po__arquivo-nome cmp-mono' : 'cmp-po__arquivo-nome'}>
                 {poFileName || 'Nenhum arquivo selecionado'}
               </strong>
-              <span>Somente PDF, até 10 MB</span>
+              <span>{poFileName ? 'Somente PDF, até 10 MB' : 'Arraste o PDF para cá ou clique. Somente PDF, até 10 MB'}</span>
             </span>
             {poFileName && (
               <span className="cmp-po__arquivo-botao">

@@ -270,4 +270,52 @@ describe('ForecastPoDiretaModal', () => {
       expect(scope.queryByText(/US\$/)).toBeNull();
     });
   });
+
+  describe('arrastar o PDF para o campo de anexo', () => {
+    const arquivos = (files: File[]) => ({ dataTransfer: { files, types: ['Files'] } });
+    const campo = (s: Scope) => s.getByText('Nenhum arquivo selecionado').closest('label') as HTMLLabelElement;
+    const pdf = (nome = 'po.pdf', tipo = 'application/pdf') => new File(['%PDF-1.4 fake'], nome, { type: tipo });
+
+    it('soltar um PDF no campo anexa, igual a escolher pelo seletor, e habilita o envio', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      expect(campo(scope).textContent).toContain('Arraste o PDF para cá ou clique');
+      fireEvent.drop(campo(scope), arquivos([pdf('PO-0007.pdf')]));
+      expect(await scope.findByText(/Selecionado: PO-0007\.pdf/)).toBeTruthy();
+      await waitFor(() => expect((scope.getByLabelText('Contato do despachante (forwarder)') as HTMLTextAreaElement).value).toContain('Atlas Sintetico'));
+      await waitFor(() => expect(botaoEnviar(scope).disabled).toBe(false));
+    });
+
+    it('o campo ganha o destaque enquanto o arquivo esta sobre ele e perde ao soltar', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      const label = campo(scope);
+      fireEvent.dragEnter(label, arquivos([pdf()]));
+      expect(label.className).toContain('cmp-po__arquivo--arrastando');
+      fireEvent.drop(label, arquivos([pdf()]));
+      await scope.findByText(/Selecionado: po\.pdf/);
+      expect(scope.getByText(/Selecionado:/).closest('div')!.querySelector('label.cmp-po__arquivo')!.className).not.toContain('--arrastando');
+    });
+
+    it('PDF sem tipo informado pelo sistema (so a extensao) tambem anexa', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      fireEvent.drop(campo(scope), arquivos([pdf('PO-0008.pdf', '')]));
+      expect(await scope.findByText(/Selecionado: PO-0008\.pdf/)).toBeTruthy();
+    });
+
+    it('arquivo que nao e PDF, mais de um arquivo e queda fora do campo sao recusados sem anexar', async () => {
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      fireEvent.drop(campo(scope), arquivos([new File(['x'], 'a.txt', { type: 'text/plain' })]));
+      expect(await scope.findByText('Selecione um arquivo PDF.')).toBeTruthy();
+      fireEvent.drop(campo(scope), arquivos([pdf('um.pdf'), pdf('dois.pdf')]));
+      expect(await scope.findByText('Solte um arquivo PDF por vez.')).toBeTruthy();
+      // queda fora do campo: o navegador nao pode abrir o PDF; nada e anexado
+      const fora = scope.getByLabelText('Assunto');
+      expect(fireEvent.drop(fora, arquivos([pdf()]))).toBe(false);
+      expect(scope.queryByText(/Selecionado:/)).toBeNull();
+      expect(botaoEnviar(scope).disabled).toBe(true);
+    });
+  });
 });

@@ -14,6 +14,7 @@ import { formatForwarderInfo, listForwarders } from '@/services/forwarders';
 import { Modal } from '@/components/Modal';
 import { Icon } from '@/components/icons';
 import { useConfirm } from '@/components/useConfirm';
+import { ehArquivoPdf, useSoltarArquivo } from '@/components/useSoltarArquivo';
 
 // Espelha o limite do backend (app.ts / QuoteResponseController) -- valida
 // no cliente antes de gastar o upload/base64 num arquivo que sera rejeitado.
@@ -169,7 +170,7 @@ export function PurchaseOrderModal({
       setPoFileSize(0);
       return;
     }
-    if (file.type !== 'application/pdf') {
+    if (!ehArquivoPdf(file)) {
       setPoModalError('Selecione um arquivo PDF.');
       return;
     }
@@ -188,6 +189,23 @@ export function PurchaseOrderModal({
     reader.readAsDataURL(file);
   }
 
+  // Arrastar o PDF direto para o campo (alem de clicar): mais de um arquivo e recusado; um so passa pela mesma validacao do seletor.
+  const soltar = useSoltarArquivo((arquivos) => {
+    if (arquivos.length === 0) return;
+    if (arquivos.length > 1) {
+      setPoModalError('Solte um arquivo PDF por vez.');
+      return;
+    }
+    handlePoFileChange(arquivos[0] ?? null);
+  }, poSendMutation.isPending);
+  const classeDoCampo = [
+    'cmp-po__arquivo',
+    poFileName ? 'cmp-po__arquivo--ok' : '',
+    soltar.arrastando ? 'cmp-po__arquivo--arrastando' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <Modal
       isOpen
@@ -204,7 +222,7 @@ export function PurchaseOrderModal({
         </>
       }
     >
-      <div className="cmp-po">
+      <div className="cmp-po" {...soltar.recipiente}>
         {nonWinner && (
           <p className="cmp-po-aviso cmp-po-aviso--atencao cmp-po-nonwinner-notice" data-testid="po-nonwinner-notice">
             <Icon name="alert-triangle" size={16} strokeWidth={1.9} />
@@ -274,10 +292,7 @@ export function PurchaseOrderModal({
             accept="application/pdf"
             onChange={(e) => handlePoFileChange(e.target.files?.[0] ?? null)}
           />
-          <label
-            htmlFor="poFile"
-            className={poFileName ? 'cmp-po__arquivo cmp-po__arquivo--ok' : 'cmp-po__arquivo'}
-          >
+          <label htmlFor="poFile" className={classeDoCampo} {...soltar.campo}>
             <span className="cmp-po__arquivo-icone" aria-hidden="true">
               <Icon name={poFileName ? 'file-text' : 'upload'} size={poFileName ? 20 : 18} strokeWidth={1.9} />
             </span>
@@ -285,7 +300,7 @@ export function PurchaseOrderModal({
               <strong className={poFileName ? 'cmp-po__arquivo-nome cmp-mono' : 'cmp-po__arquivo-nome'}>
                 {poFileName || 'Nenhum arquivo selecionado'}
               </strong>
-              <span>Somente PDF, até 10 MB</span>
+              <span>{poFileName ? 'Somente PDF, até 10 MB' : 'Arraste o PDF para cá ou clique. Somente PDF, até 10 MB'}</span>
             </span>
             {poFileName && (
               <span className="cmp-po__arquivo-botao">
