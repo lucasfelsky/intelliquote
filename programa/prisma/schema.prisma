@@ -1164,6 +1164,12 @@ model ForecastProduct {
   notes             String?
   fixedPriceFlag    Boolean               @default(false)
   fixedPrice        Decimal?              @db.Decimal(14, 4)
+  // Preco fechado (PO direta): `fixedPrice` por kg + moeda, incoterm e validade. So admin/comprador leem e editam (rota propria);
+  // nenhuma consulta de leitura aberta os devolve (ver `omit` em ForecastProductService.list). O import da planilha NAO toca nestas
+  // colunas (so grava `fixedPriceFlag`, o X da coluna AV).
+  fixedPriceCurrency   String?
+  fixedPriceIncoterm   Incoterm?
+  fixedPriceValidUntil DateTime?             @db.Date
   packaging         String?
   noFractioning     Boolean               @default(false)
   sampleQty         String?

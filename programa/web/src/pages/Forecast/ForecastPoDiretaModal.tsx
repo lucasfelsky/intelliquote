@@ -14,11 +14,14 @@ import {
   type ForecastPoDiretaEnviada,
 } from '@/services/forecastPoDireta';
 import { formatForwarderInfo, listForwarders } from '@/services/forwarders';
-import { kgBr } from './forecastPainel';
+import { moedaBr } from '@/services/forecastPrecoFechado';
+import { useCriarCotacao } from './ForecastCriarCotacao';
+import { dataBr, kgBr } from './forecastPainel';
 
 // "Enviar Ordem de Compra" de um item de PRECO FECHADO, direto do Relatorio de compras (sem cotacao). Mesmo desenho do modal da PO
 // da cotacao (PurchaseOrderModal): destinatarios Para/Cc, assunto, PDF em base64, forwarder e mensagem. Acrescenta a quantidade da
-// PO (soma na Qtd. final do item). O preco nao aparece nem viaja daqui: o backend o le do cadastro. O estado nasce a cada abertura.
+// PO (soma na Qtd. final do item). O preco (so admin/comprador, que sao quem abre este modal) aparece para conferencia e para o total
+// estimado, mas NUNCA viaja daqui: o backend o le do cadastro. O estado nasce a cada abertura.
 
 // Espelham o backend (app.ts / quotePurchaseOrderSchema / forecastPoPrecoFechadoSchema).
 const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -67,6 +70,7 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
   // Uma chave por TENTATIVA: repetir a mesma (rede caiu, duplo clique) nunca envia duas vezes; trocar so depois de uma recusa.
   const chaveRef = useRef(novaChaveDeEnvio());
   const confirm = useConfirm();
+  const preco = useCriarCotacao()?.precoFechado(productId);
 
   const forwardersQuery = useQuery({
     queryKey: ['forwarders', { active: true }],
@@ -205,6 +209,13 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
           <p className="cmp-po__linha">
             <strong>Sugerida pelo Forecast:</strong> <span className="cmp-mono">{kgBr(item.quantidadeFinal)}</span> kg
           </p>
+          {preco?.estado === 'ok' && (
+            <p className="cmp-po__linha">
+              <strong>Preço fechado:</strong>{' '}
+              <span className="cmp-mono">{moedaBr(preco.valorPorKg as number, preco.moeda)}/kg</span> · {preco.incoterm} · válido até{' '}
+              {dataBr(preco.validoAte)}
+            </p>
+          )}
         </div>
 
         <div className="cmp-campo">
@@ -223,6 +234,15 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
           <p id="poQuantidadeDica" className={lida.ok ? 'cmp-po__dica' : 'cmp-po__contador cmp-po__contador--excedido'}>
             {lida.ok ? 'Soma à Qtd. final (sistema) do item. Pode ajustar.' : lida.erro}
           </p>
+          {lida.ok && preco?.estado === 'ok' && (
+            <p className="cmp-po__dica" data-testid="po-total">
+              Valor total estimado:{' '}
+              <strong className="cmp-mono">
+                {moedaBr(Math.round(lida.valor * (preco.valorPorKg as number) * 100) / 100, preco.moeda)}
+              </strong>{' '}
+              ({kgBr(lida.valor)} kg × {moedaBr(preco.valorPorKg as number, preco.moeda)}/kg)
+            </p>
+          )}
         </div>
 
         <div data-testid="po-recipients" className="cmp-po__destinatarios">

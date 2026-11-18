@@ -19,6 +19,8 @@ vi.mock('@/api/client', () => ({
   },
 }));
 vi.mock('@/components/useConfirm', () => ({ useConfirm: () => vi.fn().mockResolvedValue(true) }));
+const controles = vi.hoisted(() => ({ precos: new Map<number, unknown>() }));
+vi.mock('./ForecastCriarCotacao', () => ({ useCriarCotacao: () => ({ precoFechado: (id: number) => controles.precos.get(id) }) }));
 vi.mock('@/services/forwarders', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/forwarders')>()),
   listForwarders: vi.fn(),
@@ -108,6 +110,7 @@ async function preparar(s: Scope) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  controles.precos.clear();
   get.mockResolvedValue({ data: destinatarios });
   post.mockResolvedValue({ data: resultado });
   vi.mocked(listForwarders).mockResolvedValue([forwarder]);
@@ -230,5 +233,41 @@ describe('ForecastPoDiretaModal', () => {
     Object.defineProperty(grande, 'size', { value: 11 * 1024 * 1024 });
     fireEvent.change(scope.getByLabelText('PDF da Ordem de Compra'), { target: { files: [grande] } });
     expect(await scope.findByText('O PDF excede o limite de 10MB.')).toBeTruthy();
+  });
+
+  describe('preco fechado no modal (quem abre e admin/comprador)', () => {
+    const precoOk = { productId: 42, estado: 'ok', valorPorKg: 1.8425, moeda: 'USD', incoterm: 'CFR', validoAte: '2026-12-31' };
+
+    it('mostra o preco, o incoterm e a validade, e o total estimado acompanha a quantidade', async () => {
+      controles.precos.set(42, precoOk);
+      const { scope } = renderModal();
+      expect((await scope.findAllByText(/US\$ 1,8425\/kg/)).length).toBeGreaterThanOrEqual(1);
+      expect(scope.getByText(/Preço fechado:/)).toBeTruthy();
+      expect(scope.getByText(/válido até 31\/12\/2026/)).toBeTruthy();
+      // 25.000 kg x US$ 1,8425 = US$ 46.062,50
+      expect(scope.getByTestId('po-total').textContent).toContain('US$ 46.062,50');
+      fireEvent.change(quantidade(scope), { target: { value: '1000' } });
+      expect(scope.getByTestId('po-total').textContent).toContain('US$ 1.842,50');
+      fireEvent.change(quantidade(scope), { target: { value: '0' } });
+      expect(scope.queryByTestId('po-total')).toBeNull();
+    });
+
+    it('o corpo enviado continua sem preco (o servidor le o cadastro)', async () => {
+      controles.precos.set(42, precoOk);
+      const { scope, onEnviada } = renderModal();
+      await preparar(scope);
+      fireEvent.click(botaoEnviar(scope));
+      await waitFor(() => expect(onEnviada).toHaveBeenCalled());
+      const corpo = post.mock.calls[0]![1] as Record<string, unknown>;
+      expect(Object.keys(corpo).some((k) => /preco|price|valor|moeda|incoterm/i.test(k))).toBe(false);
+    });
+
+    it('preco sem valor ou vencido: o modal nao mostra preco nem total', async () => {
+      controles.precos.set(42, { ...precoOk, estado: 'vencido' });
+      const { scope } = renderModal();
+      await scope.findByText(/FORNECEDOR SINTETICO/);
+      expect(scope.queryByTestId('po-total')).toBeNull();
+      expect(scope.queryByText(/US\$/)).toBeNull();
+    });
   });
 });

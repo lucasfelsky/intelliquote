@@ -18,6 +18,7 @@ import ForecastDemandaComercialModal from './ForecastDemandaComercialModal';
 import { ForecastDecisaoLeitura, ProvedorDecisoesCompra, useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
 import ForecastEmbalagensModal from './ForecastEmbalagensModal';
 import ForecastCotar from './ForecastCotar';
+import { PrecoFechadoNoDetalhe, SeloPrecoFechado } from './ForecastPrecoFechadoSelo';
 import { ProvedorCriarCotacao, useCriarCotacao } from './ForecastCriarCotacao';
 import {
   CabecalhoQtdFinal,
@@ -501,6 +502,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
             <span className="fcr-item__codigos" title={item.codigos.join(' · ')}>
               {item.codigos.join(' · ')}
             </span>
+            <SeloPrecoFechado item={item} />
             {item.grupo && <PrincipalDoGrupo grupo={item.grupo} />}
             <SeloDemanda kg={item.demandaComercialKg} />
             <ForecastOcasiaoSelo ocasioes={item.ocasioes} />
@@ -632,6 +634,7 @@ function Linha({ item, podeEditar, comUrgencia = false, diasCritico = 0, fonte, 
                 <EmAndamento item={item} />
               </CardDetalhe>
             </div>
+            <PrecoFechadoNoDetalhe item={item} />
             <div className={decisao ? 'fcr-dec fcr-dec--tem' : 'fcr-dec'}>
               <span className="fcr-dci" aria-hidden="true">
                 <Icon name="clipboard" size={16} />

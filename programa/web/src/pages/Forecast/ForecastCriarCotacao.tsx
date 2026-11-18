@@ -13,10 +13,12 @@ import {
 import { cotacaoAbertaDaDecisao, forecastDecisoesKeys } from '@/services/forecastDecisoes';
 import type { ForecastItemRelatorio } from '@/services/forecast';
 import type { ForecastPoDiretaEnviada } from '@/services/forecastPoDireta';
+import { forecastPrecosKeys, getForecastPrecosFechados, type PrecoFechadoDoItem } from '@/services/forecastPrecoFechado';
 import { useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
 import { useVinculosDeCotacao } from './ForecastGerarCotacao';
 import PopupCriarCotacao from './ForecastCriarCotacaoPopup';
 import ForecastPoDiretaModal from './ForecastPoDiretaModal';
+import ForecastPrecoFechadoModal from './ForecastPrecoFechadoModal';
 import { MAX_ITENS_DO_LOTE, type ItemSelecionado } from './forecastCriarCotacaoRegras';
 import { kgBr } from './forecastPainel';
 import { textoSalvaEm } from './forecastDecisaoCampos';
@@ -41,6 +43,15 @@ interface Contexto {
   abrir: (itens?: ItemSelecionado[], origem?: HTMLElement | null) => void;
   /** PO direta de item de PRECO FECHADO (sem cotacao): abre o modal de envio. `origem` recebe o foco de volta ao fechar. */
   abrirPoDireta: (item: ForecastItemRelatorio, origem?: HTMLElement | null) => void;
+  /**
+   * Preco fechado do item no cadastro atual (valor, moeda, incoterm, validade e estado). So o provedor de quem edita consulta
+   * (admin/comprador); `undefined` enquanto carrega, se a consulta falhar ou se o item nao tem o selo no cadastro.
+   */
+  precoFechado: (productId: number) => PrecoFechadoDoItem | undefined;
+  /** Data de hoje (AAAA-MM-DD, Sao Paulo) da ultima consulta de precos; vazio antes de carregar. */
+  hojePrecos: string;
+  /** Abre o cadastro do preco fechado do item. `origem` recebe o foco de volta ao fechar. */
+  abrirPreco: (item: ForecastItemRelatorio, origem?: HTMLElement | null) => void;
   /** Item da linha no rascunho (so quando o rascunho ja carregou). */
   noRascunho: (productId: number) => ForecastRascunhoItem | undefined;
   rascunho: ForecastRascunho | null | undefined;
@@ -153,6 +164,21 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
   const [poEnviada, setPoEnviada] = useState<{ item: string; resultado: ForecastPoDiretaEnviada } | null>(null);
   const aberturaRef = useRef<HTMLElement | null>(null);
   const qc = useQueryClient();
+  const [precoItem, setPrecoItem] = useState<ForecastItemRelatorio | null>(null);
+  const [avisoPreco, setAvisoPreco] = useState<string | null>(null);
+  // Precos fechados da quinzena (so o provedor de quem edita chega aqui): o selo da linha mostra o valor e o botao muda por estado.
+  const precos = useQuery({
+    queryKey: forecastPrecosKeys.lista(snapshotId),
+    queryFn: () => getForecastPrecosFechados(snapshotId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const precoPorProduto = useMemo(
+    () => new Map((precos.data?.itens ?? []).map((i) => [i.productId, i] as const)),
+    [precos.data],
+  );
+  const precoFechado = useCallback((productId: number) => precoPorProduto.get(productId), [precoPorProduto]);
+  const hojePrecos = precos.data?.hoje ?? '';
 
   const cotacaoAberta = useCallback(
     (productId: number) => cotacaoAbertaDaDecisao(decisoes?.mapa.get(productId)),
@@ -218,6 +244,33 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
     setCriadas(r);
   }, []);
 
+  const abrirPreco = useCallback((item: ForecastItemRelatorio, origem?: HTMLElement | null) => {
+    aberturaRef.current = origem ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setAvisoPreco(null);
+    setPrecoItem(item);
+  }, []);
+
+  const fecharPreco = useCallback(() => {
+    setPrecoItem(null);
+    const origem = aberturaRef.current;
+    aberturaRef.current = null;
+    window.setTimeout(() => {
+      if (origem?.isConnected) origem.focus();
+    }, 0);
+  }, []);
+
+  const aoSalvarPreco = useCallback(
+    (_preco: PrecoFechadoDoItem, removido: boolean) => {
+      setPrecoItem((atual) => {
+        setAvisoPreco(atual ? `Preço fechado de ${atual.item} ${removido ? 'removido' : 'salvo'}.` : null);
+        return null;
+      });
+      aberturaRef.current = null;
+      void qc.invalidateQueries({ queryKey: forecastPrecosKeys.lista(snapshotId) });
+    },
+    [qc, snapshotId],
+  );
+
   const abrirPoDireta = useCallback((item: ForecastItemRelatorio, origem?: HTMLElement | null) => {
     aberturaRef.current = origem ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     setPoEnviada(null);
@@ -262,16 +315,29 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
       limpar,
       abrir,
       abrirPoDireta,
+      precoFechado,
+      hojePrecos,
+      abrirPreco,
       noRascunho,
       rascunho: rascunho.isSuccess ? rascunho.data : undefined,
     }),
-    [quinzena, selecionados, podeSelecionar, motivoSemSelecao, alternar, marcar, limpar, abrir, abrirPoDireta, noRascunho, rascunho.isSuccess, rascunho.data],
+    [quinzena, selecionados, podeSelecionar, motivoSemSelecao, alternar, marcar, limpar, abrir, abrirPoDireta, precoFechado, hojePrecos, abrirPreco, noRascunho, rascunho.isSuccess, rascunho.data],
   );
 
   return (
     <ContextoCriarCotacao.Provider value={valor}>
       {criadas && <AvisoCriadas criadas={criadas} onDispensar={() => setCriadas(null)} />}
       {poEnviada && <AvisoPoEnviada enviada={poEnviada} onDispensar={() => setPoEnviada(null)} />}
+      {avisoPreco && (
+        <section className="alert alert--success fcl-criadas" role="status" aria-label="Preço fechado">
+          <div className="fcl-criadas__corpo">
+            <strong>{avisoPreco}</strong>
+          </div>
+          <button type="button" className="ghost-button ghost-button--sm" onClick={() => setAvisoPreco(null)}>
+            Dispensar
+          </button>
+        </section>
+      )}
       {children}
       <BarraDeSelecao selecionados={selecionados} onCriar={(origem) => abrir(undefined, origem)} onLimpar={limpar} />
       {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o pop-up. */}
@@ -292,6 +358,17 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
       {po &&
         createPortal(
           <ForecastPoDiretaModal snapshotId={snapshotId} quinzena={quinzena} item={po} onClose={fecharPo} onEnviada={aoEnviarPo} />,
+          document.body,
+        )}
+      {precoItem &&
+        createPortal(
+          <ForecastPrecoFechadoModal
+            item={precoItem}
+            atual={precoItem.productId == null ? undefined : precoPorProduto.get(precoItem.productId)}
+            hoje={hojePrecos}
+            onFechar={fecharPreco}
+            onSalvo={aoSalvarPreco}
+          />,
           document.body,
         )}
     </ContextoCriarCotacao.Provider>

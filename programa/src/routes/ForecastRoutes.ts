@@ -252,6 +252,23 @@ router.put(
   ForecastController.putDecisao,
 );
 
+// Precos fechados dos itens da quinzena (valor, moeda, incoterm, validade e estado): so admin/comprador (o valor nunca sai para os
+// demais perfis; eles veem so o selo `precoFixo` do relatorio).
+router.get(
+  '/forecast/snapshots/:id/precos-fechados',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.getPrecosFechados,
+);
+
+// Define ou remove o preco fechado de um produto (so produto com o selo da planilha): admin/comprador.
+router.put(
+  '/forecast/products/:id/preco-fechado',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putPrecoFechado,
+);
+
 // Destinatarios (Para/Cc) da PO direta: a mesma lista que o envio usa; so leitura, admin/comprador (le o fornecedor e seus contatos).
 router.get(
   '/forecast/snapshots/:id/po-preco-fechado/destinatarios',

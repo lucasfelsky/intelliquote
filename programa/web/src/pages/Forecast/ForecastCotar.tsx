@@ -53,18 +53,34 @@ export default function ForecastCotar({ item, fonte }: Props) {
   const rascunho = ctx.noRascunho(productId) !== undefined;
   // Cotacao vinculada (aberta ou fechada) sem rascunho novo: so o tracking (decisao do E7: o backend recusa cotar de novo enquanto ela
   // esta aberta; depois de fechada, recotar o item e pela selecao + barra).
+  // Item de preco fechado: a acao segue o estado do preco no cadastro (so quem edita consulta). Sem a lista de precos (carregando ou
+  // falhou) mantem "Enviar PO": o backend valida de novo e o modal mostra o motivo.
+  const estadoDoPreco = item.precoFixo === true ? ctx.precoFechado(productId)?.estado : undefined;
   const botaoPo =
     item.precoFixo === true ? (
-      <button
-        type="button"
-        className="ghost-button ghost-button--sm fcq-botao"
-        aria-label={`Enviar PO de ${item.item}`}
-        aria-haspopup="dialog"
-        title="Item de preço fechado: envia a Ordem de Compra ao fornecedor da fonte, sem cotação"
-        onClick={(e) => ctx.abrirPoDireta(item, e.currentTarget)}
-      >
-        Enviar PO
-      </button>
+      estadoDoPreco === 'sem_valor' || estadoDoPreco === 'vencido' ? (
+        <button
+          type="button"
+          className="ghost-button ghost-button--sm fcq-botao"
+          aria-label={`${estadoDoPreco === 'vencido' ? 'Atualizar preço' : 'Definir preço'} de ${item.item}`}
+          aria-haspopup="dialog"
+          title={estadoDoPreco === 'vencido' ? 'O preço fechado venceu: atualize para enviar a PO' : 'Cadastre o preço fechado para enviar a PO'}
+          onClick={(e) => ctx.abrirPreco(item, e.currentTarget)}
+        >
+          {estadoDoPreco === 'vencido' ? 'Atualizar preço' : 'Definir preço'}
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="ghost-button ghost-button--sm fcq-botao"
+          aria-label={`Enviar PO de ${item.item}`}
+          aria-haspopup="dialog"
+          title="Item de preço fechado: envia a Ordem de Compra ao fornecedor da fonte, sem cotação"
+          onClick={(e) => ctx.abrirPoDireta(item, e.currentTarget)}
+        >
+          Enviar PO
+        </button>
+      )
     ) : null;
   if (cotacao && !rascunho) {
     return botaoPo ? (

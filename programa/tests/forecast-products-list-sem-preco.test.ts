@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Dados SINTETICOS (repo publico). A lista do cadastro do Forecast e lida por viewer e gestor: o VALOR do preco fechado
-// (ForecastProduct.fixedPrice) nunca pode sair dela; so o selo `fixedPriceFlag`.
+// (ForecastProduct.fixedPrice) e os termos (moeda, incoterm, validade) nunca podem sair dela; so o selo `fixedPriceFlag`.
 
 const { findMany } = vi.hoisted(() => ({ findMany: vi.fn() }));
 
@@ -15,7 +15,7 @@ describe('ForecastProductService.list - preco fechado', () => {
     findMany.mockResolvedValue([]);
   });
 
-  it('omite fixedPrice da consulta e mantem a ordem da planilha', async () => {
+  it('omite o valor do preco fechado e seus termos da consulta e mantem a ordem da planilha', async () => {
     await ForecastProductService.list();
 
     expect(findMany).toHaveBeenCalledTimes(1);
@@ -25,7 +25,12 @@ describe('ForecastProductService.list - preco fechado', () => {
       orderBy: unknown;
       include: Record<string, unknown>;
     };
-    expect(args.omit).toEqual({ fixedPrice: true });
+    expect(args.omit).toEqual({
+      fixedPrice: true,
+      fixedPriceCurrency: true,
+      fixedPriceIncoterm: true,
+      fixedPriceValidUntil: true,
+    });
     expect(args.select).toBeUndefined();
     expect(args.orderBy).toEqual([{ sheetOrder: 'asc' }, { id: 'asc' }]);
     expect(Object.keys(args.include).sort()).toEqual(['codes', 'family', 'source']);

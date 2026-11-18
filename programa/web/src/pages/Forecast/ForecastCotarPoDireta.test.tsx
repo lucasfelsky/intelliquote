@@ -14,6 +14,8 @@ import ForecastCotar from './ForecastCotar';
 
 const abrir = vi.fn();
 const abrirPoDireta = vi.fn();
+const abrirPreco = vi.fn();
+const precos = new Map<number, unknown>();
 
 const contexto = () => ({
   quinzena: '11-1',
@@ -25,6 +27,9 @@ const contexto = () => ({
   limpar: vi.fn(),
   abrir,
   abrirPoDireta,
+  precoFechado: (id: number) => precos.get(id),
+  hojePrecos: '2026-11-17',
+  abrirPreco,
   noRascunho: () => undefined,
   rascunho: undefined,
 });
@@ -43,6 +48,7 @@ const linha = (over: Partial<ForecastItemRelatorio> = {}) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  precos.clear();
   controles.ctx = contexto();
   controles.decisoes = { mapa: new Map(), carregando: false, erro: false };
 });
@@ -89,5 +95,40 @@ describe('ForecastCotar - Enviar PO (preco fechado)', () => {
     };
     render(<ForecastCotar item={linha({ precoFixo: true })} fonte="FONTE A" />);
     expect(screen.getByRole('button', { name: 'Enviar PO de PRODUTO SINTETICO A' })).toBeTruthy();
+  });
+
+  describe('a acao segue o estado do preco (so quem edita consulta)', () => {
+    const preco = (estado: string) => ({ productId: 42, estado, valorPorKg: estado === 'sem_valor' ? null : 1.8425, moeda: 'USD', incoterm: 'CFR', validoAte: '2026-12-31' });
+
+    it('preco ok: "Enviar PO"', () => {
+      precos.set(42, preco('ok'));
+      render(<ForecastCotar item={linha({ precoFixo: true })} fonte="FONTE A" />);
+      expect(screen.getByRole('button', { name: 'Enviar PO de PRODUTO SINTETICO A' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Definir preço|Atualizar preço/ })).toBeNull();
+    });
+
+    it('sem valor: "Definir preço" no lugar do "Enviar PO", e abre o cadastro do preco', () => {
+      precos.set(42, preco('sem_valor'));
+      render(<ForecastCotar item={linha({ precoFixo: true })} fonte="FONTE A" />);
+      expect(screen.queryByRole('button', { name: /Enviar PO/ })).toBeNull();
+      const botao = screen.getByRole('button', { name: 'Definir preço de PRODUTO SINTETICO A' });
+      fireEvent.click(botao);
+      expect(abrirPreco).toHaveBeenCalledTimes(1);
+      expect(abrirPreco.mock.calls[0]![0]).toMatchObject({ productId: 42 });
+      expect(abrirPreco.mock.calls[0]![1]).toBe(botao);
+      expect(abrirPoDireta).not.toHaveBeenCalled();
+    });
+
+    it('vencido: "Atualizar preço"', () => {
+      precos.set(42, preco('vencido'));
+      render(<ForecastCotar item={linha({ precoFixo: true })} fonte="FONTE A" />);
+      expect(screen.getByRole('button', { name: 'Atualizar preço de PRODUTO SINTETICO A' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Enviar PO/ })).toBeNull();
+    });
+
+    it('lista de precos ainda sem esse item (carregando ou falhou): mantem "Enviar PO" (o backend valida)', () => {
+      render(<ForecastCotar item={linha({ precoFixo: true })} fonte="FONTE A" />);
+      expect(screen.getByRole('button', { name: 'Enviar PO de PRODUTO SINTETICO A' })).toBeTruthy();
+    });
   });
 });
