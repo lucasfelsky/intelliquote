@@ -333,6 +333,7 @@
     "GET /forecast/snapshots/:id/candidatos-cotacao",
     "GET /forecast/snapshots/:id/decisoes",
     "GET /forecast/snapshots/:id/pendentes",
+    "GET /forecast/snapshots/:id/po-preco-fechado/destinatarios",
     "GET /forecast/snapshots/:id/rascunho-cotacao",
     "GET /forecast/snapshots/:id/relatorio-compras",
     "GET /forecast/snapshots/:id/relatorio-compras/xlsx",

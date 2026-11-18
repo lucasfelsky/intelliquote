@@ -95,6 +95,8 @@ export interface LinhaParaRelatorio {
   chegadas: number[];
   programacoes: number[];
   naoFraciona?: boolean;
+  /** Selo de PRECO FECHADO congelado na quinzena (flag X da coluna AV; so o selo, nunca o valor). Ausente = nao. */
+  precoFixo?: boolean;
   /**
    * FZ4: linha de codigo PENDENTE de cadastro do DBCorp (sem produto e sem fonte). Nunca vira sugestao de compra (nem com
    * AN preenchido) e e contada a parte em `fora.semCadastro`; ausente = produto normal (ou quinzena antiga).
@@ -185,6 +187,8 @@ export interface ItemRelatorioCompras {
   quantidadeEmbalagens: number | null;
   quantidadeFinal: number;
   naoFraciona: boolean;
+  /** Selo de PRECO FECHADO congelado na quinzena (so o selo); presente (true) so nos itens marcados. */
+  precoFixo?: boolean;
   /** Observacao da quinzena ('' quando nao ha). */
   obs: string;
   /** Meses de venda atipica fora da media deste item (PR 6c), 'YYYY-MM' cronologico; vazio = media da planilha. */
@@ -756,6 +760,7 @@ export function montarRelatorioCompras(
       quantidadeEmbalagens: arredondado ? arredondado.embalagens : null,
       quantidadeFinal: arredondado ? arredondado.quantidade : quantidadeSugerida,
       naoFraciona: l.naoFraciona === true,
+      ...(l.precoFixo === true ? { precoFixo: true } : {}),
       obs: (l.obs ?? '').trim(),
       mesesForaDaMedia: mesesForaDaMediaDaLinha(l),
       ...comGrupo(l),

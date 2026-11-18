@@ -252,6 +252,14 @@ router.put(
   ForecastController.putDecisao,
 );
 
+// Destinatarios (Para/Cc) da PO direta: a mesma lista que o envio usa; so leitura, admin/comprador (le o fornecedor e seus contatos).
+router.get(
+  '/forecast/snapshots/:id/po-preco-fechado/destinatarios',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.getPoPrecoFechadoDestinatarios,
+);
+
 // PO direta de item de preco fechado (sem cotacao): admin/comprador. Corpo com o PDF em base64 (parser proprio no app.ts).
 router.post(
   '/forecast/snapshots/:id/po-preco-fechado',

@@ -33,14 +33,10 @@ const naoFazParte = () => new HttpError(400, 'O produto não faz parte desta qui
 // valida tudo ANTES de reservar; reserva a PO ('enviando') ANTES do e-mail; so a PO 'enviada' soma na Qtd. final.
 // O preco vem do CADASTRO atual do produto (nunca do corpo) e a flag de preco fechado e revalidada aqui: a quinzena congela so o selo.
 export class ForecastPoDiretaService {
-  static async enviar(
-    snapshotId: number,
-    input: ForecastPoPrecoFechadoInput,
-    user: UsuarioDoEnvio | null,
-  ): Promise<EnvioPoDireta> {
-    const { productId, quantidadeKg, chaveEnvio, ...payload } = input;
-    const userId = user?.id ?? null;
-
+  // Tudo que o item precisa para receber uma PO direta, sem efeito colateral: quinzena viva, produto na quinzena, produto ativo
+  // com a flag de preco fechado do CADASTRO atual, fonte ligada a fornecedor ativo e contato de e-mail. Usada pelo envio e
+  // pela lista de destinatarios do modal (que assim ja avisa o bloqueio antes de o usuario preencher o formulario).
+  private static async elegibilidade(snapshotId: number, productId: number) {
     const snapshot = await prisma.forecastSnapshot.findFirst({
       where: { id: snapshotId, deletedAt: null },
       select: { id: true, products: true },
@@ -75,6 +71,30 @@ export class ForecastPoDiretaService {
     if (!recipients) {
       throw new HttpError(409, 'O fornecedor não tem contato com e-mail para receber a PO.');
     }
+    return { product, supplier, recipients };
+  }
+
+  /** Quem recebe a PO direta (Para/Cc), a MESMA lista que o envio usa. Admin e comprador (rota). So leitura. */
+  static async destinatarios(snapshotId: number, productId: number) {
+    const { supplier, recipients } = await ForecastPoDiretaService.elegibilidade(snapshotId, productId);
+    return {
+      fornecedor: supplier.name,
+      to: { name: recipients.to.name, email: recipients.to.email },
+      contactCc: recipients.contactCc.map((c) => ({ name: c.name, email: c.email })),
+      comexCc: recipients.comexCc.map((c) => c.email),
+      cc: recipients.cc.map((c) => c.email),
+    };
+  }
+
+  static async enviar(
+    snapshotId: number,
+    input: ForecastPoPrecoFechadoInput,
+    user: UsuarioDoEnvio | null,
+  ): Promise<EnvioPoDireta> {
+    const { productId, quantidadeKg, chaveEnvio, ...payload } = input;
+    const userId = user?.id ?? null;
+
+    const { product, supplier, recipients } = await ForecastPoDiretaService.elegibilidade(snapshotId, productId);
 
     // Mesma referencia do PUT da decisao: so item da lista de compra desta quinzena (e o que o relatorio mostra).
     const relatorio = await ForecastSnapshotService.getRelatorioCompras(snapshotId);

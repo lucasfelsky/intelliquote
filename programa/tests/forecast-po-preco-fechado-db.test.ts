@@ -250,4 +250,19 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     expect(ok.status).toBe(201);
     expect(Number((await decisao(ids.A!))!.finalKg)).toBe(antes + 100);
   });
+
+  testDbSkip('destinatarios: a mesma lista do envio; bloqueios (preco fechado, fonte, contato) avisam ANTES do formulario', async () => {
+    const url = (productId: number) =>
+      request(app).get(`/api/v1/forecast/snapshots/${snapshotId}/po-preco-fechado/destinatarios?productId=${productId}`).set('Cookie', cookies);
+    const ok = await url(ids.A!);
+    expect(ok.status).toBe(200);
+    expect(ok.body.data).toMatchObject({ fornecedor: `FORNECEDOR ${U}`, to: { name: 'Contato Principal', email: EMAIL_PRINCIPAL } });
+    expect(ok.body.data.contactCc).toEqual([{ name: 'Contato Copia', email: EMAIL_COPIA }]);
+    expect(ok.body.data.cc).toContain(EMAIL_COPIA);
+    expect(JSON.stringify(ok.body)).not.toContain('1.8425'); // nunca o preco
+    for (const letra of ['B', 'C', 'D']) {
+      expect((await url(ids[letra]!)).status, letra).toBe(409);
+    }
+    expect((await url(ids.F!)).status).toBe(400);
+  });
 });
