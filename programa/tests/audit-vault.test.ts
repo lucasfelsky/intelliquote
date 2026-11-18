@@ -7,10 +7,14 @@
 //
 // O script roda como child process; os testes mexem na fixture e restauram.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+
+// Cada teste spawna `node scripts/audit-vault.cjs`; sob carga (Windows/OneDrive,
+// suite em paralelo) o spawn passa dos 5 s padrao do vitest.
+vi.setConfig({ testTimeout: 30_000 });
 
 const ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'audit-vault.cjs');
