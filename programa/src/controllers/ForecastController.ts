@@ -9,6 +9,7 @@ import { ForecastImportService } from '../services/ForecastImportService';
 import { ForecastMesesAtipicosService } from '../services/ForecastMesesAtipicosService';
 import { ForecastOcasioesService } from '../services/ForecastOcasioesService';
 import { ForecastPoDiretaService } from '../services/ForecastPoDiretaService';
+import { ForecastPrecoFechadoService } from '../services/ForecastPrecoFechadoService';
 import { ForecastProductCadastroService } from '../services/ForecastProductCadastroService';
 import { ForecastProductService } from '../services/ForecastProductService';
 import { ForecastSnapshotService } from '../services/ForecastSnapshotService';
@@ -27,6 +28,7 @@ import {
   forecastDecisaoPutSchema,
   forecastObservacaoPutSchema,
   forecastPoPrecoFechadoSchema,
+  forecastPrecoFechadoPutSchema,
   forecastRascunhoCotacaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
@@ -465,6 +467,35 @@ export class ForecastController {
       }
       const input = forecastObservacaoPutSchema.parse(req.body);
       const data = await ForecastSnapshotService.gravarObservacao(id, productId, input.observacao, req.user?.id ?? null);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Precos fechados dos itens da quinzena (admin/comprador, por rota): o unico GET que devolve o VALOR.
+  static async getPrecosFechados(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const data = await ForecastPrecoFechadoService.listar(id);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Define/remove o preco fechado de um produto (admin/comprador, por rota). Devolve o estado novo do item.
+  static async putPrecoFechado(req: Request, res: Response): Promise<Response> {
+    try {
+      const productId = parseId(req.params.id);
+      if (productId === null) {
+        throw new HttpError(400, 'Produto inválido.');
+      }
+      const input = forecastPrecoFechadoPutSchema.parse(req.body);
+      const data = await ForecastPrecoFechadoService.gravar(productId, input, req.user?.id ?? null);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

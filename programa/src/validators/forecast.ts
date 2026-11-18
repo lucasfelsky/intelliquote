@@ -1,6 +1,7 @@
 import { Incoterm } from '@prisma/client';
 import { z } from 'zod';
 import { chaveDeEnvioValida, quantidadeDaPoValida } from '../utils/forecastPoDireta';
+import { PRECO_FECHADO_MOEDAS, valorPorKgValido } from '../utils/forecastPrecoFechado';
 import { quotePurchaseOrderSchema } from './domain';
 import {
   FORECAST_BASE64_MAX_LENGTH,
@@ -996,3 +997,31 @@ export const forecastPoPrecoFechadoSchema = z.strictObject({
   chaveEnvio: z.string({ error: 'Chave do envio inválida.' }).refine(chaveDeEnvioValida, 'Chave do envio inválida.'),
 });
 export type ForecastPoPrecoFechadoInput = z.infer<typeof forecastPoPrecoFechadoSchema>;
+
+// Preco fechado do produto (PUT): valor por kg (ate 4 casas) + moeda + incoterm + validade, tudo obrigatorio; ou `limpar: true`
+// (sozinho) para remover o preco. Chave desconhecida = 400. So admin e comprador (rota).
+export const forecastPrecoFechadoPutSchema = z
+  .strictObject({
+    limpar: z.literal(true, { error: 'O campo limpar só aceita true.' }).optional(),
+    valorPorKg: z
+      .number({ error: 'Informe o preço por kg.' })
+      .refine(valorPorKgValido, 'Informe o preço por kg (maior que zero, até 4 casas decimais).')
+      .optional(),
+    moeda: z.enum(PRECO_FECHADO_MOEDAS, { error: 'Moeda inválida.' }).optional(),
+    incoterm: z.nativeEnum(Incoterm, { error: 'Incoterm inválido.' }).optional(),
+    validoAte: dateKeyField('Informe até quando o preço vale.').optional(),
+  })
+  .superRefine((v, ctx) => {
+    const termos = [v.valorPorKg, v.moeda, v.incoterm, v.validoAte];
+    if (v.limpar === true) {
+      if (termos.some((t) => t !== undefined)) {
+        ctx.addIssue({ code: 'custom', message: 'Para remover o preço, envie só limpar: true.' });
+      }
+      return;
+    }
+    if (v.valorPorKg === undefined) ctx.addIssue({ code: 'custom', path: ['valorPorKg'], message: 'Informe o preço por kg.' });
+    else if (v.moeda === undefined) ctx.addIssue({ code: 'custom', path: ['moeda'], message: 'Informe a moeda.' });
+    else if (v.incoterm === undefined) ctx.addIssue({ code: 'custom', path: ['incoterm'], message: 'Informe o incoterm.' });
+    else if (v.validoAte === undefined) ctx.addIssue({ code: 'custom', path: ['validoAte'], message: 'Informe até quando o preço vale.' });
+  });
+export type ForecastPrecoFechadoPutInput = z.infer<typeof forecastPrecoFechadoPutSchema>;

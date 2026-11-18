@@ -94,7 +94,13 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     const fonteSemFornecedor = await fonte(FONTE_SEM_FORNECEDOR, null);
     const fonteSemContato = await fonte(FONTE_SEM_CONTATO, supplierSemContatoId);
 
-    const criar = async (letra: string, sourceId: number, fixedPriceFlag: boolean, fixedPrice: number | null) =>
+    const criar = async (
+      letra: string,
+      sourceId: number,
+      fixedPriceFlag: boolean,
+      fixedPrice: number | null,
+      termos: { moeda?: string | null; validoAte?: string | null } = {},
+    ) =>
       (
         await prisma.forecastProduct.create({
           data: {
@@ -103,6 +109,9 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
             sourceId,
             fixedPriceFlag,
             fixedPrice,
+            fixedPriceCurrency: fixedPrice === null ? null : (termos.moeda === undefined ? 'USD' : termos.moeda),
+            fixedPriceIncoterm: fixedPrice === null ? null : 'CFR',
+            fixedPriceValidUntil: fixedPrice === null ? null : dateKeyToDbDate(termos.validoAte === undefined ? '2099-12-31' : (termos.validoAte as string)),
             codes: { create: [{ position: 1, code: codigo(letra) }] },
           },
         })
@@ -113,8 +122,11 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     ids.D = await criar('D', fonteSemContato, true, 2); // fornecedor sem contato
     ids.E = await criar('E', fonteOk, true, 2); // fora da lista de compra (estoque de sobra)
     ids.F = await criar('F', fonteOk, true, 2); // nao faz parte da quinzena
+    ids.G = await criar('G', fonteOk, true, null); // selo da planilha, preco ainda nao cadastrado
+    ids.H = await criar('H', fonteOk, true, 2, { validoAte: '2020-01-31' }); // preco vencido
+    ids.I = await criar('I', fonteOk, true, 2, { moeda: null }); // preco incompleto (sem moeda)
 
-    const letras = ['A', 'B', 'C', 'D', 'E'];
+    const letras = ['A', 'B', 'C', 'D', 'E', 'G', 'H', 'I'];
     snapshotId = (
       await prisma.forecastSnapshot.create({
         data: {
@@ -171,6 +183,7 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     expect(po).toMatchObject({ status: 'enviada', supplierId, createdById: adminId });
     expect(Number(po!.quantityKg)).toBe(25000);
     expect(Number(po!.unitPrice)).toBeCloseTo(1.8425, 4); // copia do cadastro, nunca do corpo
+    expect(po).toMatchObject({ currency: 'USD', incoterm: 'CFR' });
     expect(po!.sentAt).not.toBeNull();
 
     const d = await decisao(ids.A!);
@@ -217,6 +230,21 @@ describe('Forecast - PO direta de item de preco fechado (DB)', () => {
     for (const letra of ['B', 'C', 'D']) {
       const res = await enviar(corpo(ids[letra]!));
       expect(res.status, letra).toBe(409);
+      expect(await pos(ids[letra]!), letra).toHaveLength(0);
+      expect(await decisao(ids[letra]!), letra).toBeNull();
+    }
+  });
+
+  testDbSkip('preco ausente, incompleto ou vencido: 409 no envio e nos destinatarios, e nada e criado', async () => {
+    const esperado: Record<string, RegExp> = { G: /ainda não foi cadastrado/, I: /ainda não foi cadastrado/, H: /venceu em 31\/01\/2020/ };
+    for (const letra of ['G', 'I', 'H']) {
+      const envio = await enviar(corpo(ids[letra]!));
+      expect(envio.status, letra).toBe(409);
+      expect(envio.body.message, letra).toMatch(esperado[letra]!);
+      const dest = await request(app)
+        .get(`/api/v1/forecast/snapshots/${snapshotId}/po-preco-fechado/destinatarios?productId=${ids[letra]}`)
+        .set('Cookie', cookies);
+      expect(dest.status, letra).toBe(409);
       expect(await pos(ids[letra]!), letra).toHaveLength(0);
       expect(await decisao(ids[letra]!), letra).toBeNull();
     }

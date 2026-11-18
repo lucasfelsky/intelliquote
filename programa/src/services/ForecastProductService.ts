@@ -831,9 +831,9 @@ export class ForecastProductService {
   static async list() {
     return prisma.forecastProduct.findMany({
       orderBy: [{ sheetOrder: 'asc' }, { id: 'asc' }],
-      // O valor do preco fechado nunca sai desta lista (leitura aberta a viewer e gestor): so o selo `fixedPriceFlag`.
-      // Quem edita e ve o valor (admin/comprador) usa rota propria.
-      omit: { fixedPrice: true },
+      // O valor do preco fechado e seus termos nunca saem desta lista (leitura aberta a viewer e gestor): so o selo
+      // `fixedPriceFlag`. Quem edita e ve o valor (admin/comprador) usa rota propria (ForecastPrecoFechadoService).
+      omit: { fixedPrice: true, fixedPriceCurrency: true, fixedPriceIncoterm: true, fixedPriceValidUntil: true },
       include: {
         codes: {
           orderBy: { position: 'asc' },

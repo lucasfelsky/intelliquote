@@ -1,7 +1,9 @@
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import { itemDaListaDeCompra } from '../utils/forecastDecisaoCompra';
+import { estadoDoPrecoFechado, motivoDoPrecoBloqueado } from '../utils/forecastPrecoFechado';
 import { HttpError } from '../utils/http';
+import { dbDateToKey, todayKeyInSaoPaulo } from '../utils/supplierDocumentDates';
 import type { ForecastPoPrecoFechadoInput } from '../validators/forecast';
 import { ForecastPurchaseOrderService, type ReferenciaDecisao } from './ForecastPurchaseOrderService';
 import { ForecastSnapshotService, type FrozenProduct } from './ForecastSnapshotService';
@@ -52,6 +54,9 @@ export class ForecastPoDiretaService {
         isActive: true,
         fixedPriceFlag: true,
         fixedPrice: true,
+        fixedPriceCurrency: true,
+        fixedPriceIncoterm: true,
+        fixedPriceValidUntil: true,
         source: { select: { name: true, supplierId: true } },
       },
     });
@@ -60,6 +65,19 @@ export class ForecastPoDiretaService {
     if (!product.fixedPriceFlag) {
       throw new HttpError(409, 'O item não é de preço fechado. Use “Cotar” para pedir cotação.');
     }
+    // So se envia PO com o preco COMPLETO (valor, moeda, incoterm e validade) e dentro da validade (dia da validade ainda vale).
+    const validoAte = product.fixedPriceValidUntil === null ? null : dbDateToKey(product.fixedPriceValidUntil);
+    const estadoDoPreco = estadoDoPrecoFechado(
+      {
+        valorPorKg: product.fixedPrice === null ? null : Number(product.fixedPrice),
+        moeda: product.fixedPriceCurrency,
+        incoterm: product.fixedPriceIncoterm,
+        validoAte,
+      },
+      todayKeyInSaoPaulo(new Date()),
+    );
+    const motivoDoPreco = motivoDoPrecoBloqueado(estadoDoPreco, validoAte);
+    if (motivoDoPreco) throw new HttpError(409, motivoDoPreco);
 
     const supplierId = product.source?.supplierId ?? null;
     if (supplierId === null) {
@@ -109,8 +127,8 @@ export class ForecastPoDiretaService {
       supplierName: supplier.name,
       quantityKg: quantidadeKg,
       unitPrice: product.fixedPrice === null ? null : Number(product.fixedPrice),
-      currency: null,
-      incoterm: null,
+      currency: product.fixedPriceCurrency,
+      incoterm: product.fixedPriceIncoterm,
       requestKey: chaveEnvio,
       userId,
     });
