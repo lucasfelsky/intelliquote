@@ -959,7 +959,10 @@ function RelatorioComprasCorpo({ snapshotId, podeEditar = false }: Props) {
   const manter = soComAnalise ? (i: ForecastItemRelatorio) => i.productId != null && idsComAnalise.has(i.productId) : undefined;
   const itensDaFaixa = comUrgencia ? itensPorUrgencia(dados, filtro, manter) : [];
   const gruposDaFaixa = comUrgencia ? gruposFiltrados(dados, filtro, manter) : dados.grupos;
-  const totalMostrado = visao === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
+  // Com "Só com análise forecast" o relatório fica POR FONTE (e some a opção "Por urgência"): o trabalho com os itens decididos é por
+  // fonte. A escolha anterior volta quando o filtro sai.
+  const visaoEfetiva: VisaoRelatorio = soComAnalise ? 'fonte' : visao;
+  const totalMostrado = visaoEfetiva === 'urgencia' ? itensDaFaixa.length : gruposDaFaixa.reduce((n, g) => n + g.itens.length, 0);
 
   return (
     <>
@@ -1112,10 +1115,12 @@ function RelatorioComprasCorpo({ snapshotId, podeEditar = false }: Props) {
         {comUrgencia && porUrgencia && (
           <div className="fcr-controles">
             <div className="fc-filtros fcr-seg" role="group" aria-label="Organizar relatório">
-              <button type="button" className="fc-filtro" aria-pressed={visao === 'urgencia'} onClick={() => setVisao('urgencia')}>
-                Por urgência
-              </button>
-              <button type="button" className="fc-filtro" aria-pressed={visao === 'fonte'} onClick={() => setVisao('fonte')}>
+              {!soComAnalise && (
+                <button type="button" className="fc-filtro" aria-pressed={visaoEfetiva === 'urgencia'} onClick={() => setVisao('urgencia')}>
+                  Por urgência
+                </button>
+              )}
+              <button type="button" className="fc-filtro" aria-pressed={visaoEfetiva === 'fonte'} onClick={() => setVisao('fonte')}>
                 Por fonte
               </button>
             </div>
@@ -1151,7 +1156,7 @@ function RelatorioComprasCorpo({ snapshotId, podeEditar = false }: Props) {
         )}
         {comUrgencia && (
           <p className="fcr-mostrando" aria-live="polite">
-            {textoMostrando(totalMostrado, totais.itens, filtro, visao, diasCritico, soComAnalise)}
+            {textoMostrando(totalMostrado, totais.itens, filtro, visaoEfetiva, diasCritico, soComAnalise)}
           </p>
         )}
         <button
@@ -1197,7 +1202,7 @@ function RelatorioComprasCorpo({ snapshotId, podeEditar = false }: Props) {
         <div className="empty-state">
           {soComAnalise ? 'Nenhum item com análise forecast preenchida nesta faixa.' : 'Nenhum item nesta faixa.'}
         </div>
-      ) : visao === 'urgencia' ? (
+      ) : visaoEfetiva === 'urgencia' ? (
         filtrosVisiveis(diasCritico).map((u) => {
           const itens = itensDaFaixa.filter(({ item }) => item.urgencia === u);
           return itens.length > 0 ? (

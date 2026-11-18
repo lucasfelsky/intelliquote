@@ -155,6 +155,28 @@ describe('ForecastRelatorioCompras - filtro "so com analise forecast"', () => {
     expect(screen.queryByText(/FONTE 001/)).toBeNull();
   });
 
+  it('com o filtro ligado some o agrupamento "Por urgencia" e a lista fica por fonte; ao desligar volta a escolha anterior', async () => {
+    mockApi([decisao(42)]);
+    renderRelatorio();
+    await screen.findByText('3 itens em 2 fontes');
+    const organizar = within(screen.getByRole('group', { name: 'Organizar relatório' }));
+    expect(organizar.getByRole('button', { name: 'Por urgência' }).getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelectorAll('.fcr-grupo .fcr-caption').length).toBeGreaterThan(0);
+
+    const filtro = await screen.findByRole('button', { name: /Só com análise forecast/ });
+    fireEvent.click(filtro);
+    expect(organizar.queryByRole('button', { name: 'Por urgência' })).toBeNull();
+    expect(organizar.getByRole('button', { name: 'Por fonte' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText(/só com análise forecast preenchida · por fonte/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: /Itens da fonte/ })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: /Itens: / })).toBeNull();
+
+    fireEvent.click(filtro);
+    expect(organizar.getByRole('button', { name: 'Por urgência' }).getAttribute('aria-pressed')).toBe('true');
+    expect(organizar.getByRole('button', { name: 'Por fonte' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('region', { name: /Itens da fonte/ })).toBeNull();
+  });
+
   it('sem nenhuma analise preenchida: avisa em vez de tela vazia', async () => {
     mockApi([]);
     renderRelatorio();
