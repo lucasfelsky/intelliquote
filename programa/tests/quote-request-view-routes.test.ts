@@ -23,6 +23,8 @@ vi.mock('../src/lib/prisma', () => {
     },
     quoteRequestView: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
+      createMany: vi.fn(),
       upsert: vi.fn(),
     },
     quoteResponsePriceSnapshot: {
@@ -48,7 +50,7 @@ const prismaMock = prisma as unknown as {
   user: { findUnique: Fn; findFirst: Fn };
   session: { create: Fn };
   quoteRequest: { findMany: Fn; findFirst: Fn; count: Fn };
-  quoteRequestView: { findMany: Fn; upsert: Fn };
+  quoteRequestView: { findMany: Fn; findFirst: Fn; createMany: Fn; upsert: Fn };
   quoteResponsePriceSnapshot: { findMany: Fn };
   supplierPortalResponse: { groupBy: Fn };
   $transaction: Fn;
@@ -61,6 +63,8 @@ describe('POST /api/v1/quote-requests/:id/seen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prismaMock.quoteRequest.findFirst.mockResolvedValue({ id: 4 });
+    // Usuario que ja tem alguma view: o baseline preguicoso nao dispara.
+    prismaMock.quoteRequestView.findFirst.mockResolvedValue({ id: 99 });
     prismaMock.quoteRequestView.upsert.mockResolvedValue({
       quoteRequestId: 4,
       lastSeenAt: new Date('2026-11-18T12:00:00.000Z'),
@@ -116,6 +120,7 @@ describe('GET /api/v1/quote-requests?withNewResponses=true', () => {
       Array.isArray(arg) ? Promise.all(arg) : (arg as (t: unknown) => unknown)(prismaMock.__tx),
     );
     prismaMock.quoteRequestView.findMany.mockResolvedValue([]);
+    prismaMock.quoteRequestView.findFirst.mockResolvedValue({ id: 99 });
     prismaMock.quoteResponsePriceSnapshot.findMany.mockResolvedValue([]);
     prismaMock.supplierPortalResponse.groupBy.mockResolvedValue([]);
   });
