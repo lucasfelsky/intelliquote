@@ -64,6 +64,7 @@
       "ForecastOcasioesService.ts",
       "ForecastProductCadastroService.ts",
       "ForecastProductService.ts",
+      "ForecastPurchaseOrderService.ts",
       "ForecastRascunhoCotacaoService.ts",
       "ForecastSnapshotService.ts",
       "ForecastSobDemandaService.ts",
@@ -181,6 +182,7 @@
       "ForecastProduct",
       "ForecastProductCode",
       "ForecastPurchaseDecision",
+      "ForecastPurchaseOrder",
       "ForecastQuoteDraft",
       "ForecastSnapshot",
       "ForecastSource",
@@ -254,7 +256,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 81
+    "migrations": 82
   },
   "emailTemplates": [
     "commercial_request_created@pt",
