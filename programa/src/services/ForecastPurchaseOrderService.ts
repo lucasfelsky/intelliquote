@@ -40,6 +40,19 @@ export interface PoReservada {
   jaExistia: boolean;
 }
 
+export interface PoDoLote {
+  id: number;
+  productId: number;
+  status: string;
+}
+
+export interface PoLoteReservado {
+  /** Uma PO por item, na ordem pedida. */
+  pos: PoDoLote[];
+  /** `true` quando a mesma lista de chaves ja tinha reserva (nao se envia o e-mail de novo se estao 'enviada'). */
+  jaExistia: boolean;
+}
+
 export interface PoConcluida {
   /** `true` quando a PO ja estava 'enviada' (chamada repetida: nada foi somado de novo). */
   jaConcluida: boolean;
@@ -60,72 +73,103 @@ const num = (d: Prisma.Decimal | null | undefined): number | null => (d === null
 //  2) o chamador envia o e-mail;
 //  3) `concluir` (e-mail saiu) ou `falhar` (e-mail nao saiu). So a PO 'enviada' soma na Qtd. final e leva o status a 'po'.
 export class ForecastPurchaseOrderService {
+  /** Uma PO (um item). Mesmo contrato de sempre: e o lote de 1 item. */
   static async reservar(input: ReservaPoInput): Promise<PoReservada> {
-    if (!quantidadeDaPoValida(input.quantityKg)) {
-      throw new HttpError(400, 'Informe a quantidade da PO em kg (maior que zero, até 3 casas decimais).');
-    }
-    if (!chaveDeEnvioValida(input.requestKey)) {
-      throw new HttpError(400, 'Chave do envio inválida.');
-    }
-    if (input.unitPrice !== null && (!Number.isFinite(input.unitPrice) || input.unitPrice < 0)) {
-      throw new HttpError(400, 'Preço inválido.');
-    }
-    const supplierName = input.supplierName.trim();
-    if (supplierName === '') throw new HttpError(400, 'Informe o fornecedor da PO.');
+    const lote = await ForecastPurchaseOrderService.reservarLote([input]);
+    const po = lote.pos[0] as PoDoLote;
+    return { id: po.id, status: po.status, jaExistia: lote.jaExistia };
+  }
 
-    const viva = await prisma.forecastSnapshot.findFirst({
-      where: { id: input.snapshotId, deletedAt: null },
-      select: { id: true },
-    });
+  /**
+   * Reserva as POs de VARIOS itens da mesma quinzena de uma vez (um e-mail, uma PO por item), numa transacao: ou todas ou
+   * nenhuma. Cada item tem a propria `requestKey` (unica). A mesma lista repetida devolve as POs que ja existem (`jaExistia`);
+   * uma chave ja usada com OUTRA lista de itens e 409 (nunca mistura PO nova com antiga).
+   */
+  static async reservarLote(inputs: ReservaPoInput[]): Promise<PoLoteReservado> {
+    if (inputs.length === 0) throw new HttpError(400, 'Escolha ao menos um item para a PO.');
+    for (const input of inputs) {
+      if (!quantidadeDaPoValida(input.quantityKg)) {
+        throw new HttpError(400, 'Informe a quantidade da PO em kg (maior que zero, até 3 casas decimais).');
+      }
+      if (!chaveDeEnvioValida(input.requestKey)) {
+        throw new HttpError(400, 'Chave do envio inválida.');
+      }
+      if (input.unitPrice !== null && (!Number.isFinite(input.unitPrice) || input.unitPrice < 0)) {
+        throw new HttpError(400, 'Preço inválido.');
+      }
+      if (input.supplierName.trim() === '') throw new HttpError(400, 'Informe o fornecedor da PO.');
+    }
+    const snapshotId = inputs[0]!.snapshotId;
+    if (inputs.some((i) => i.snapshotId !== snapshotId)) throw new HttpError(400, 'Os itens da PO precisam ser da mesma quinzena.');
+
+    const viva = await prisma.forecastSnapshot.findFirst({ where: { id: snapshotId, deletedAt: null }, select: { id: true } });
     if (!viva) throw naoEncontrada();
 
     try {
       return await prisma.$transaction(async (tx) => {
-        const criada = await tx.forecastPurchaseOrder.create({
-          data: {
-            snapshotId: input.snapshotId,
-            productId: input.productId,
-            supplierId: input.supplierId,
-            supplierName,
-            quantityKg: input.quantityKg,
-            unitPrice: input.unitPrice,
-            currency: input.currency,
-            incoterm: input.incoterm,
-            requestKey: input.requestKey,
-            status: 'enviando',
-            createdById: input.userId,
-          },
-        });
-        await AuditLogService.log(
-          {
-            entityType: ENTITY_PO,
-            entityId: criada.id,
-            action: 'create',
-            performedById: input.userId,
-            // Sem preco, sem fornecedor em texto: so ids, kg e se havia preco.
-            metadata: {
+        const pos: PoDoLote[] = [];
+        for (const input of inputs) {
+          const criada = await tx.forecastPurchaseOrder.create({
+            data: {
               snapshotId: input.snapshotId,
               productId: input.productId,
               supplierId: input.supplierId,
+              supplierName: input.supplierName.trim(),
               quantityKg: input.quantityKg,
-              comPreco: input.unitPrice !== null,
+              unitPrice: input.unitPrice,
+              currency: input.currency,
+              incoterm: input.incoterm,
+              requestKey: input.requestKey,
               status: 'enviando',
+              createdById: input.userId,
             },
-          },
-          tx,
-        );
-        return { id: criada.id, status: criada.status, jaExistia: false };
+          });
+          await AuditLogService.log(
+            {
+              entityType: ENTITY_PO,
+              entityId: criada.id,
+              action: 'create',
+              performedById: input.userId,
+              // Sem preco, sem fornecedor em texto: so ids, kg e se havia preco.
+              metadata: {
+                snapshotId: input.snapshotId,
+                productId: input.productId,
+                supplierId: input.supplierId,
+                quantityKg: input.quantityKg,
+                comPreco: input.unitPrice !== null,
+                status: 'enviando',
+                ...(inputs.length > 1 ? { itensNaPo: inputs.length } : {}),
+              },
+            },
+            tx,
+          );
+          pos.push({ id: criada.id, productId: input.productId, status: criada.status });
+        }
+        return { pos, jaExistia: false };
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const existente = await prisma.forecastPurchaseOrder.findUnique({
-          where: { requestKey: input.requestKey },
-          select: { id: true, status: true, snapshotId: true, productId: true },
+        const existentes = await prisma.forecastPurchaseOrder.findMany({
+          where: { requestKey: { in: inputs.map((i) => i.requestKey) } },
+          select: { id: true, status: true, snapshotId: true, productId: true, requestKey: true },
         });
-        if (existente && existente.snapshotId === input.snapshotId && existente.productId === input.productId) {
-          return { id: existente.id, status: existente.status, jaExistia: true };
+        const porChave = new Map(existentes.map((e) => [e.requestKey, e] as const));
+        const mesmaLista =
+          existentes.length === inputs.length &&
+          inputs.every((i) => {
+            const e = porChave.get(i.requestKey);
+            return e !== undefined && e.snapshotId === i.snapshotId && e.productId === i.productId;
+          });
+        if (mesmaLista) {
+          return {
+            pos: inputs.map((i) => {
+              const e = porChave.get(i.requestKey)!;
+              return { id: e.id, productId: e.productId, status: e.status };
+            }),
+            jaExistia: true,
+          };
         }
-        throw new HttpError(409, 'Esta chave de envio já foi usada em outra PO.');
+        throw new HttpError(409, 'Esta chave de envio já foi usada em outra PO ou com outra lista de itens.');
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
         throw new HttpError(400, 'O produto não faz parte desta quinzena.');

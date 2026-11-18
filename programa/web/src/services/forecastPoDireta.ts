@@ -6,11 +6,14 @@ import { messageOf } from '@/services/quoteResponses';
 // src/services/ForecastPoDiretaService.ts. O backend revalida tudo; o preco nunca viaja daqui (sai do cadastro).
 
 export const forecastPoDiretaKeys = {
-  destinatarios: (snapshotId: number, productId: number) =>
-    ['forecast', 'po-destinatarios', snapshotId, productId] as const,
+  destinatarios: (snapshotId: number, productIds: readonly number[]) =>
+    ['forecast', 'po-destinatarios', snapshotId, [...productIds].sort((a, b) => a - b).join(',')] as const,
 };
 
-/** Quem recebe a PO (a mesma lista que o envio usa). */
+/** Maximo de itens num envio (espelha FORECAST_PO_ITENS_MAX do backend). */
+export const PO_ITENS_MAX = 50;
+
+/** Quem recebe a PO (a mesma lista que o envio usa; todos os itens do envio sao do mesmo fornecedor). */
 export interface ForecastPoDestinatarios {
   fornecedor: string;
   to: { name: string; email: string };
@@ -21,17 +24,19 @@ export interface ForecastPoDestinatarios {
   cc: string[];
 }
 
-export async function getForecastPoDestinatarios(snapshotId: number, productId: number): Promise<ForecastPoDestinatarios> {
+export async function getForecastPoDestinatarios(snapshotId: number, productIds: readonly number[]): Promise<ForecastPoDestinatarios> {
   const r = await api.get<{ data: ForecastPoDestinatarios }>(
-    `/v1/forecast/snapshots/${snapshotId}/po-preco-fechado/destinatarios?productId=${productId}`,
+    `/v1/forecast/snapshots/${snapshotId}/po-preco-fechado/destinatarios?productIds=${productIds.join(',')}`,
   );
   return r.data;
 }
 
-/** Corpo do envio: o mesmo da PO ao fornecedor + o item, a quantidade e a chave de idempotencia (uma por tentativa). */
+/**
+ * Corpo do envio: o mesmo da PO ao fornecedor + os itens (um e-mail e um PDF para todos; mesmo fornecedor) e a chave de
+ * idempotencia (uma por tentativa). Com varios itens a chave fica em ate 50 caracteres (a de cada PO e derivada dela).
+ */
 export type ForecastPoDiretaCorpo = {
-  productId: number;
-  quantidadeKg: number;
+  itens: Array<{ productId: number; quantidadeKg: number }>;
   chaveEnvio: string;
   subject?: string;
   message?: string;
@@ -43,11 +48,21 @@ export type ForecastPoDiretaCorpo = {
   fileSize: number;
 };
 
+export interface ForecastPoDiretaItemEnviado {
+  productId: number;
+  purchaseOrderId: number;
+  qtdFinalKg: number | null;
+  statusDaDecisao: string | null;
+}
+
 export interface ForecastPoDiretaEnviada {
   purchaseOrderId: number;
+  purchaseOrderIds: number[];
+  /** Um item por PO do envio, na ordem pedida. */
+  itens: ForecastPoDiretaItemEnviado[];
   /** `true` quando a mesma chave ja estava enviada: nada foi enviado nem somado de novo. */
   jaEnviada: boolean;
-  /** `pendente` = o e-mail saiu, mas o registro na quinzena falhou (conferir). */
+  /** `pendente` = o e-mail saiu, mas o registro de algum item na quinzena falhou (conferir). */
   registro: 'ok' | 'pendente';
   qtdFinalKg: number | null;
   statusDaDecisao: string | null;

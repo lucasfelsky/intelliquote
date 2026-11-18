@@ -982,20 +982,57 @@ export type ForecastOcasiaoCreateInput = z.infer<typeof forecastOcasiaoCreateSch
 export type ForecastOcasiaoPatchInput = z.infer<typeof forecastOcasiaoPatchSchema>;
 export type ForecastOcasioesQueryInput = z.infer<typeof forecastOcasioesQuerySchema>;
 
-// PO direta de item de PRECO FECHADO (sem cotacao): o mesmo corpo da PO ao fornecedor (assunto, mensagem, forwarder, PDF em base64)
-// sem `nonWinner` (nao ha proposta), mais o item, a quantidade em kg (ate 3 casas) e a `chaveEnvio` de idempotencia gerada pelo cliente
-// a cada tentativa. Chave desconhecida = 400. O preco NUNCA vem do corpo: sai do cadastro do produto.
-export const forecastPoPrecoFechadoSchema = z.strictObject({
-  ...quotePurchaseOrderSchema.omit({ nonWinner: true }).shape,
-  productId: z
-    .number({ error: 'Produto inválido.' })
-    .int('Produto inválido.')
-    .positive('Produto inválido.'),
+// PO direta de itens de PRECO FECHADO (sem cotacao): o mesmo corpo da PO ao fornecedor (assunto, mensagem, forwarder, PDF em base64)
+// sem `nonWinner` (nao ha proposta), mais os itens (produto + quantidade em kg, ate 3 casas) e a `chaveEnvio` de idempotencia gerada
+// pelo cliente a cada tentativa. Um e-mail e um PDF para ate 50 itens do MESMO fornecedor (o servico confere). Forma antiga com
+// `productId` + `quantidadeKg` soltos (um item) continua valendo e vira `itens` de 1. Chave desconhecida = 400. O preco NUNCA vem
+// do corpo: sai do cadastro do produto.
+export const FORECAST_PO_ITENS_MAX = 50;
+/** Com varios itens a chave de cada PO e `${chaveEnvio}-${productId}` (<= 64): a chave do envio fica em ate 50. */
+export const FORECAST_PO_CHAVE_MAX_COM_VARIOS = 50;
+
+const forecastPoItemSchema = z.strictObject({
+  productId: z.number({ error: 'Produto inválido.' }).int('Produto inválido.').positive('Produto inválido.'),
   quantidadeKg: z
     .number({ error: 'Informe a quantidade da PO em kg.' })
     .refine(quantidadeDaPoValida, 'Informe a quantidade da PO em kg (maior que zero, até 3 casas decimais).'),
-  chaveEnvio: z.string({ error: 'Chave do envio inválida.' }).refine(chaveDeEnvioValida, 'Chave do envio inválida.'),
 });
+
+export const forecastPoPrecoFechadoSchema = z
+  .strictObject({
+    ...quotePurchaseOrderSchema.omit({ nonWinner: true }).shape,
+    itens: z
+      .array(forecastPoItemSchema, { error: 'Informe os itens da PO.' })
+      .min(1, 'Escolha ao menos um item para a PO.')
+      .max(FORECAST_PO_ITENS_MAX, `A PO aceita no máximo ${FORECAST_PO_ITENS_MAX} itens.`)
+      .optional(),
+    productId: forecastPoItemSchema.shape.productId.optional(),
+    quantidadeKg: forecastPoItemSchema.shape.quantidadeKg.optional(),
+    chaveEnvio: z.string({ error: 'Chave do envio inválida.' }).refine(chaveDeEnvioValida, 'Chave do envio inválida.'),
+  })
+  .superRefine((v, ctx) => {
+    const solto = v.productId !== undefined || v.quantidadeKg !== undefined;
+    if (v.itens !== undefined && solto) {
+      ctx.addIssue({ code: 'custom', message: 'Envie `itens` ou `productId` com `quantidadeKg`, não os dois.' });
+      return;
+    }
+    if (v.itens === undefined) {
+      if (v.productId === undefined || v.quantidadeKg === undefined) {
+        ctx.addIssue({ code: 'custom', message: 'Escolha ao menos um item para a PO.' });
+      }
+      return;
+    }
+    if (new Set(v.itens.map((i) => i.productId)).size !== v.itens.length) {
+      ctx.addIssue({ code: 'custom', path: ['itens'], message: 'Há itens repetidos na PO.' });
+    }
+    if (v.itens.length > 1 && v.chaveEnvio.length > FORECAST_PO_CHAVE_MAX_COM_VARIOS) {
+      ctx.addIssue({ code: 'custom', path: ['chaveEnvio'], message: 'Chave do envio inválida.' });
+    }
+  })
+  .transform(({ productId, quantidadeKg, itens, ...resto }) => ({
+    ...resto,
+    itens: itens ?? [{ productId: productId as number, quantidadeKg: quantidadeKg as number }],
+  }));
 export type ForecastPoPrecoFechadoInput = z.infer<typeof forecastPoPrecoFechadoSchema>;
 
 // Preco fechado do produto (PUT): valor por kg (ate 4 casas) + moeda + incoterm + validade, tudo obrigatorio; ou `limpar: true`

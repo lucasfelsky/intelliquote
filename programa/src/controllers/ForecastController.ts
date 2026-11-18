@@ -27,6 +27,7 @@ import {
   forecastCotacoesLotePostSchema,
   forecastDecisaoPutSchema,
   forecastObservacaoPutSchema,
+  FORECAST_PO_ITENS_MAX,
   forecastPoPrecoFechadoSchema,
   forecastPrecoFechadoPutSchema,
   forecastRascunhoCotacaoPutSchema,
@@ -509,11 +510,14 @@ export class ForecastController {
       if (id === null) {
         throw new HttpError(400, 'Quinzena invalida.');
       }
-      const productId = parseId(typeof req.query.productId === 'string' ? req.query.productId : undefined);
-      if (productId === null) {
+      // `?productId=1` (um item) ou `?productIds=1,2,3` (varios, ate FORECAST_PO_ITENS_MAX); todos precisam ser do mesmo fornecedor.
+      const bruto = typeof req.query.productIds === 'string' ? req.query.productIds : typeof req.query.productId === 'string' ? req.query.productId : '';
+      const productIds = bruto.split(',').map((t) => parseId(t.trim()));
+      if (productIds.length === 0 || productIds.length > FORECAST_PO_ITENS_MAX || productIds.some((p) => p === null)) {
         throw new HttpError(400, 'Produto inválido.');
       }
-      const data = await ForecastPoDiretaService.destinatarios(id, productId);
+      const unicos = [...new Set(productIds as number[])];
+      const data = await ForecastPoDiretaService.destinatarios(id, unicos);
       return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);

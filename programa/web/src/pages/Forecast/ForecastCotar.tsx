@@ -76,7 +76,7 @@ export default function ForecastCotar({ item, fonte }: Props) {
           aria-label={`Enviar PO de ${item.item}`}
           aria-haspopup="dialog"
           title="Item de preço fechado: envia a Ordem de Compra ao fornecedor da fonte, sem cotação"
-          onClick={(e) => ctx.abrirPoDireta(item, e.currentTarget)}
+          onClick={(e) => ctx.abrirPoDireta([item], e.currentTarget)}
         >
           Enviar PO
         </button>

@@ -97,7 +97,9 @@ describe('POST /forecast/snapshots/:id/po-preco-fechado - papeis', () => {
     expect(enviar).toHaveBeenCalledTimes(1);
     const [snapshotId, input, user] = enviar.mock.calls[0]!;
     expect(snapshotId).toBe(7);
-    expect(input).toMatchObject({ productId: 42, quantidadeKg: 25000, chaveEnvio: 'k-0123456789abcdef' });
+    // a forma antiga (productId + quantidadeKg) vira `itens` de 1
+    expect(input).toMatchObject({ itens: [{ productId: 42, quantidadeKg: 25000 }], chaveEnvio: 'k-0123456789abcdef' });
+    expect(input).not.toHaveProperty('productId');
     expect(user).toMatchObject({ id: 1 });
   });
 });
@@ -179,7 +181,7 @@ describe('GET /forecast/snapshots/:id/po-preco-fechado/destinatarios', () => {
     const res = await request(app).get(URL_DEST).set('Cookie', cookies);
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ fornecedor: 'FORNECEDOR SINTETICO', to: { email: 'mei@fornecedor.example' } });
-    expect(destinatarios).toHaveBeenCalledWith(7, 42);
+    expect(destinatarios).toHaveBeenCalledWith(7, [42]);
   });
 
   it.each([['', 400], ['?productId=abc', 400], ['?productId=0', 400]])('productId %j -> %s sem consultar', async (consulta, status) => {
@@ -195,6 +197,81 @@ describe('GET /forecast/snapshots/:id/po-preco-fechado/destinatarios', () => {
     const res = await request(app).get(URL_DEST).set('Cookie', cookies);
     expect(res.status).toBe(409);
     expect(res.body.message).toMatch(/fornecedor/);
+  });
+});
+
+describe('POST /forecast/snapshots/:id/po-preco-fechado - varios itens num envio', () => {
+  const semItemSolto = () => {
+    const c: Record<string, unknown> = corpo();
+    delete c.productId;
+    delete c.quantidadeKg;
+    return c;
+  };
+  const comItens = (itens: unknown, over: Record<string, unknown> = {}) => ({ ...semItemSolto(), itens, ...over });
+
+  it('aceita `itens` (varios produtos do mesmo envio) e entrega ao servico na ordem pedida', async () => {
+    const cookies = await loginAs('comprador');
+    const res = await request(app)
+      .post(PATH)
+      .set('Cookie', cookies)
+      .send(comItens([{ productId: 42, quantidadeKg: 25000 }, { productId: 43, quantidadeKg: 1500.5 }]));
+    expect(res.status).toBe(201);
+    expect(enviar.mock.calls[0]![1]).toMatchObject({
+      itens: [{ productId: 42, quantidadeKg: 25000 }, { productId: 43, quantidadeKg: 1500.5 }],
+      chaveEnvio: 'k-0123456789abcdef',
+    });
+  });
+
+  it.each([
+    ['lista vazia', comItens([])],
+    ['produto repetido', comItens([{ productId: 42, quantidadeKg: 1 }, { productId: 42, quantidadeKg: 2 }])],
+    ['quantidade invalida num dos itens', comItens([{ productId: 42, quantidadeKg: 1 }, { productId: 43, quantidadeKg: 0 }])],
+    ['produto invalido num dos itens', comItens([{ productId: 0, quantidadeKg: 1 }])],
+    ['chave dos itens com preco no corpo', comItens([{ productId: 42, quantidadeKg: 1, preco: 3 }])],
+    ['itens junto com productId solto', comItens([{ productId: 42, quantidadeKg: 1 }], { productId: 42, quantidadeKg: 1 })],
+    ['sem nenhum item', semItemSolto()],
+    ['so productId, sem quantidade', { ...semItemSolto(), productId: 42 }],
+    ['chave com mais de 50 caracteres e varios itens', comItens([{ productId: 42, quantidadeKg: 1 }, { productId: 43, quantidadeKg: 1 }], { chaveEnvio: 'k'.repeat(51) })],
+  ])('%s -> 400 sem enviar', async (_nome, body) => {
+    const cookies = await loginAs('comprador');
+    const res = await request(app).post(PATH).set('Cookie', cookies).send(body);
+    expect(res.status).toBe(400);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('mais de 50 itens -> 400', async () => {
+    const cookies = await loginAs('comprador');
+    const itens = Array.from({ length: 51 }, (_, i) => ({ productId: i + 1, quantidadeKg: 1 }));
+    expect((await request(app).post(PATH).set('Cookie', cookies).send(comItens(itens))).status).toBe(400);
+    expect(enviar).not.toHaveBeenCalled();
+  });
+
+  it('chave de 64 caracteres vale com UM item (a PO usa a chave como esta)', async () => {
+    const cookies = await loginAs('comprador');
+    expect((await request(app).post(PATH).set('Cookie', cookies).send(corpo({ chaveEnvio: 'k'.repeat(64) }))).status).toBe(201);
+  });
+});
+
+describe('GET /forecast/snapshots/:id/po-preco-fechado/destinatarios - varios itens', () => {
+  it('productIds=42,43,44 consulta os tres (sem repetidos) numa chamada so', async () => {
+    const cookies = await loginAs('comprador');
+    const res = await request(app).get(`${PATH}/destinatarios?productIds=42,43,43,44`).set('Cookie', cookies);
+    expect(res.status).toBe(200);
+    expect(destinatarios).toHaveBeenCalledWith(7, [42, 43, 44]);
+  });
+
+  it.each(['?productIds=42,abc', '?productIds=42,,43', '?productIds=0', `?productIds=${Array.from({ length: 51 }, (_, i) => i + 1).join(',')}`])('%s -> 400 sem consultar', async (consulta) => {
+    const cookies = await loginAs('comprador');
+    expect((await request(app).get(`${PATH}/destinatarios${consulta}`).set('Cookie', cookies)).status).toBe(400);
+    expect(destinatarios).not.toHaveBeenCalled();
+  });
+
+  it('itens de fornecedores diferentes (409 do servico) viram 409 com a mensagem', async () => {
+    destinatarios.mockRejectedValue(new HttpError(409, 'Os itens escolhidos são de fornecedores diferentes (A, B). A PO é por fornecedor: envie uma PO para cada um.'));
+    const cookies = await loginAs('comprador');
+    const res = await request(app).get(`${PATH}/destinatarios?productIds=42,43`).set('Cookie', cookies);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/fornecedores diferentes/);
   });
 });
 

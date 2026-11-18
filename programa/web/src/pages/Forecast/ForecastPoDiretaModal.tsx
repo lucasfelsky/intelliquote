@@ -19,15 +19,17 @@ import { moedaBr } from '@/services/forecastPrecoFechado';
 import { useCriarCotacao } from './ForecastCriarCotacao';
 import { dataBr, kgBr } from './forecastPainel';
 
-// "Enviar Ordem de Compra" de um item de PRECO FECHADO, direto do Relatorio de compras (sem cotacao). Mesmo desenho do modal da PO
+// "Enviar Ordem de Compra" de itens de PRECO FECHADO, direto do Relatorio de compras (sem cotacao). Mesmo desenho do modal da PO
 // da cotacao (PurchaseOrderModal): destinatarios Para/Cc, assunto, PDF em base64, forwarder e mensagem. Acrescenta a quantidade da
-// PO (soma na Qtd. final do item). O preco (so admin/comprador, que sao quem abre este modal) aparece para conferencia e para o total
-// estimado, mas NUNCA viaja daqui: o backend o le do cadastro. O estado nasce a cada abertura.
+// PO de cada item (soma na Qtd. final do item). Um envio leva UM ou VARIOS itens do mesmo fornecedor: um e-mail e um PDF, uma PO por
+// item. O preco (so admin/comprador, que sao quem abre este modal) aparece para conferencia e para o total estimado, mas NUNCA
+// viaja daqui: o backend o le do cadastro. O estado nasce a cada abertura.
 
 // Espelham o backend (app.ts / quotePurchaseOrderSchema / forecastPoPrecoFechadoSchema).
 const MAX_PO_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_FORWARDER_INFO_LENGTH = 2000;
 const MAX_QUANTIDADE_KG = 1_000_000_000;
+const ASSUNTO_NOMES_MAX = 150;
 
 function formatRecipient(contact: { name: string; email: string }): string {
   return contact.name.trim() ? `${contact.name} <${contact.email}>` : contact.email;
@@ -48,19 +50,34 @@ export function lerQuantidadePo(texto: string): { ok: true; valor: number } | { 
   return { ok: true, valor };
 }
 
+/** Assunto padrao: "Purchase Order - <produto>"; com varios itens, os nomes separados por virgula (cortados em 150 caracteres). */
+export function assuntoPadraoDaPo(nomes: readonly string[]): string {
+  const juntos = nomes.map((n) => n.trim()).filter(Boolean).join(', ');
+  if (juntos === '') return 'Purchase Order - SQ Quimica';
+  return `Purchase Order - ${juntos.length > ASSUNTO_NOMES_MAX ? `${juntos.slice(0, ASSUNTO_NOMES_MAX - 1)}…` : juntos}`;
+}
+
+const qtdInicial = (i: ForecastItemRelatorio): string => String(i.quantidadeFinal).replace('.', ',');
+
 interface Props {
   snapshotId: number;
   /** Rotulo da quinzena (ex.: 11-1), para o subtitulo. */
   quinzena: string;
-  item: ForecastItemRelatorio;
+  /** Itens do envio (todos do mesmo fornecedor; o servidor confere). Com `productId` (so quem tem cadastro chega aqui). */
+  itens: ForecastItemRelatorio[];
+  /** Quando a selecao tem varios fornecedores: "PO 2 de 3" (as POs saem uma por vez). */
+  posicao?: { atual: number; total: number };
   onClose: () => void;
   onEnviada: (resultado: ForecastPoDiretaEnviada) => void;
 }
 
-export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onClose, onEnviada }: Props) {
-  const productId = item.productId as number;
-  const [quantidade, setQuantidade] = useState(() => String(item.quantidadeFinal).replace('.', ','));
-  const [poSubject, setPoSubject] = useState(`Purchase Order - ${item.item || 'SQ Quimica'}`);
+export default function ForecastPoDiretaModal({ snapshotId, quinzena, itens, posicao, onClose, onEnviada }: Props) {
+  const unico = itens.length === 1;
+  const productIds = itens.map((i) => i.productId as number);
+  const [quantidades, setQuantidades] = useState<Record<number, string>>(() =>
+    Object.fromEntries(itens.map((i) => [i.productId as number, qtdInicial(i)])),
+  );
+  const [poSubject, setPoSubject] = useState(() => assuntoPadraoDaPo(itens.map((i) => i.item || 'SQ Quimica')));
   const [poForwarderInfo, setPoForwarderInfo] = useState('');
   const [poMessage, setPoMessage] = useState('');
   const [poFileName, setPoFileName] = useState('');
@@ -71,7 +88,8 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
   // Uma chave por TENTATIVA: repetir a mesma (rede caiu, duplo clique) nunca envia duas vezes; trocar so depois de uma recusa.
   const chaveRef = useRef(novaChaveDeEnvio());
   const confirm = useConfirm();
-  const preco = useCriarCotacao()?.precoFechado(productId);
+  const ctx = useCriarCotacao();
+  const precoDe = (i: ForecastItemRelatorio) => ctx?.precoFechado(i.productId as number);
 
   const forwardersQuery = useQuery({
     queryKey: ['forwarders', { active: true }],
@@ -79,10 +97,11 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
   });
   const forwarders = forwardersQuery.data ?? [];
 
-  // O backend valida de novo no envio; esta consulta avisa o bloqueio (fonte sem fornecedor, sem contato...) ANTES do formulario.
+  // O backend valida de novo no envio; esta consulta avisa o bloqueio (fonte sem fornecedor, itens de fornecedores diferentes,
+  // sem contato...) ANTES do formulario.
   const destinatariosQuery = useQuery({
-    queryKey: forecastPoDiretaKeys.destinatarios(snapshotId, productId),
-    queryFn: () => getForecastPoDestinatarios(snapshotId, productId),
+    queryKey: forecastPoDiretaKeys.destinatarios(snapshotId, productIds),
+    queryFn: () => getForecastPoDestinatarios(snapshotId, productIds),
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -129,14 +148,27 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
 
   const forwarderInfoLength = poForwarderInfo.trim().length;
   const forwarderInfoTooLong = forwarderInfoLength > MAX_FORWARDER_INFO_LENGTH;
-  const lida = lerQuantidadePo(quantidade);
+  const lidas = itens.map((i) => ({ item: i, lida: lerQuantidadePo(quantidades[i.productId as number] ?? '') }));
+  const todasValidas = lidas.every((l) => l.lida.ok);
+  const invalidas = lidas.filter((l) => !l.lida.ok).map((l) => l.item.item);
+  const primeiraLida = lidas[0]?.lida as ReturnType<typeof lerQuantidadePo>;
+
+  // Total estimado por moeda: so itens com preco valido no cadastro e quantidade valida (nunca mistura moedas).
+  const totais = new Map<string, number>();
+  for (const { item, lida } of lidas) {
+    const preco = precoDe(item);
+    if (lida.ok && preco?.estado === 'ok') {
+      const moeda = preco.moeda ?? '';
+      totais.set(moeda, (totais.get(moeda) ?? 0) + Math.round(lida.valor * (preco.valorPorKg as number) * 100) / 100);
+    }
+  }
+  const totalEstimado = [...totais.entries()].map(([moeda, v]) => moedaBr(Math.round(v * 100) / 100, moeda)).join(' + ');
 
   const envio = useMutation({
     mutationFn: () => {
-      if (!lida.ok) throw new Error(lida.erro);
+      if (!todasValidas) throw new Error('Corrija as quantidades.');
       return postForecastPoPrecoFechado(snapshotId, {
-        productId,
-        quantidadeKg: lida.valor,
+        itens: lidas.map(({ item, lida }) => ({ productId: item.productId as number, quantidadeKg: lida.ok ? lida.valor : 0 })),
         chaveEnvio: chaveRef.current,
         subject: poSubject,
         message: poMessage,
@@ -200,68 +232,135 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
 
   const bloqueada = destinatariosQuery.isError;
   const podeEnviar =
-    !envio.isPending && !bloqueada && destinatarios !== undefined && lida.ok && poSubject.trim() !== '' && poFileBase64 !== '' && poForwarderInfo.trim() !== '' && !forwarderInfoTooLong;
+    !envio.isPending && !bloqueada && destinatarios !== undefined && todasValidas && poSubject.trim() !== '' && poFileBase64 !== '' && poForwarderInfo.trim() !== '' && !forwarderInfoTooLong;
+
+  const subtitulo = unico ? (
+    <>
+      <span className="cmp-codigo">Quinzena {quinzena}</span> · {itens[0]?.item}
+    </>
+  ) : (
+    <>
+      <span className="cmp-codigo">Quinzena {quinzena}</span> · {itens.length} itens
+    </>
+  );
 
   return (
     <Modal
       isOpen
       onClose={onClose}
       size="wide"
-      title={destinatarios ? `Enviar Ordem de Compra — ${destinatarios.fornecedor}` : 'Enviar Ordem de Compra'}
-      subtitle={
-        <>
-          <span className="cmp-codigo">Quinzena {quinzena}</span> · {item.item}
-        </>
-      }
+      title={`${destinatarios ? `Enviar Ordem de Compra — ${destinatarios.fornecedor}` : 'Enviar Ordem de Compra'}${posicao ? ` (PO ${posicao.atual} de ${posicao.total})` : ''}`}
+      subtitle={subtitulo}
     >
       <div className="cmp-po" {...soltar.recipiente}>
         <p className="cmp-po-aviso cmp-po-aviso--info" role="status">
           <Icon name="info" size={16} strokeWidth={1.9} />
-          <span>Item de preço fechado: a PO vai ao fornecedor da fonte sem passar por cotação, e o item fica como “PO enviada”.</span>
+          <span>
+            {unico
+              ? 'Item de preço fechado: a PO vai ao fornecedor da fonte sem passar por cotação, e o item fica como “PO enviada”.'
+              : `Itens de preço fechado: um e-mail e um PDF para os ${itens.length} itens. Cada item vira uma PO, sem cotação, e fica como “PO enviada”.`}
+          </span>
         </p>
 
-        <div className="cmp-po__destinatarios-caixa">
-          <p className="cmp-po__linha">
-            <strong>Item:</strong> {item.item}
-          </p>
-          <p className="cmp-po__linha">
-            <strong>Sugerida pelo Forecast:</strong> <span className="cmp-mono">{kgBr(item.quantidadeFinal)}</span> kg
-          </p>
-          {preco?.estado === 'ok' && (
-            <p className="cmp-po__linha">
-              <strong>Preço fechado:</strong>{' '}
-              <span className="cmp-mono">{moedaBr(preco.valorPorKg as number, preco.moeda)}/kg</span> · {preco.incoterm} · válido até{' '}
-              {dataBr(preco.validoAte)}
-            </p>
-          )}
-        </div>
+        {unico ? (
+          <>
+            <div className="cmp-po__destinatarios-caixa">
+              <p className="cmp-po__linha">
+                <strong>Item:</strong> {itens[0]?.item}
+              </p>
+              <p className="cmp-po__linha">
+                <strong>Sugerida pelo Forecast:</strong> <span className="cmp-mono">{kgBr(itens[0]?.quantidadeFinal)}</span> kg
+              </p>
+              {itens[0] && precoDe(itens[0])?.estado === 'ok' && (
+                <p className="cmp-po__linha">
+                  <strong>Preço fechado:</strong>{' '}
+                  <span className="cmp-mono">{moedaBr(precoDe(itens[0])?.valorPorKg as number, precoDe(itens[0])?.moeda ?? null)}/kg</span> · {precoDe(itens[0])?.incoterm} · válido até{' '}
+                  {dataBr(precoDe(itens[0])?.validoAte)}
+                </p>
+              )}
+            </div>
 
-        <div className="cmp-campo">
-          <label className="field-label" htmlFor="poQuantidade">
-            Quantidade da PO (kg)
-          </label>
-          <input
-            id="poQuantidade"
-            className="input cmp-mono"
-            inputMode="decimal"
-            value={quantidade}
-            aria-invalid={!lida.ok}
-            aria-describedby="poQuantidadeDica"
-            onChange={(e) => setQuantidade(e.target.value)}
-          />
-          <p id="poQuantidadeDica" className={lida.ok ? 'cmp-po__dica' : 'cmp-po__contador cmp-po__contador--excedido'}>
-            {lida.ok ? 'Soma à Qtd. final (sistema) do item. Pode ajustar.' : lida.erro}
-          </p>
-          {lida.ok && preco?.estado === 'ok' && (
-            <p className="cmp-po__dica" data-testid="po-total">
-              Valor total estimado:{' '}
-              <strong className="cmp-mono">
-                {moedaBr(Math.round(lida.valor * (preco.valorPorKg as number) * 100) / 100, preco.moeda)}
-              </strong>{' '}
-              ({kgBr(lida.valor)} kg × {moedaBr(preco.valorPorKg as number, preco.moeda)}/kg)
-            </p>
-          )}
-        </div>
+            <div className="cmp-campo">
+              <label className="field-label" htmlFor="poQuantidade">
+                Quantidade da PO (kg)
+              </label>
+              <input
+                id="poQuantidade"
+                className="input cmp-mono"
+                inputMode="decimal"
+                value={quantidades[productIds[0] as number] ?? ''}
+                aria-invalid={!primeiraLida.ok}
+                aria-describedby="poQuantidadeDica"
+                onChange={(e) => setQuantidades({ [productIds[0] as number]: e.target.value })}
+              />
+              <p id="poQuantidadeDica" className={primeiraLida.ok ? 'cmp-po__dica' : 'cmp-po__contador cmp-po__contador--excedido'}>
+                {primeiraLida.ok ? 'Soma à Qtd. final (sistema) do item. Pode ajustar.' : primeiraLida.erro}
+              </p>
+              {primeiraLida.ok && itens[0] && precoDe(itens[0])?.estado === 'ok' && (
+                <p className="cmp-po__dica" data-testid="po-total">
+                  Valor total estimado: <strong className="cmp-mono">{totalEstimado}</strong> ({kgBr(primeiraLida.valor)} kg ×{' '}
+                  {moedaBr(precoDe(itens[0])?.valorPorKg as number, precoDe(itens[0])?.moeda ?? null)}/kg)
+                </p>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="cmp-campo">
+            <span className="field-label" id="poItensTitulo">
+              Itens da PO ({itens.length})
+            </span>
+            <div className="cmp-po__itens" role="region" tabIndex={0} aria-labelledby="poItensTitulo">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col" className="num">
+                      Sugerida (kg)
+                    </th>
+                    <th scope="col" className="num">
+                      Quantidade da PO (kg)
+                    </th>
+                    <th scope="col" className="num">
+                      Preço
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lidas.map(({ item, lida }) => {
+                    const id = item.productId as number;
+                    const preco = precoDe(item);
+                    return (
+                      <tr key={id}>
+                        <th scope="row">{item.item}</th>
+                        <td className="num cmp-mono">{kgBr(item.quantidadeFinal)}</td>
+                        <td className="num">
+                          <input
+                            className="input cmp-mono"
+                            inputMode="decimal"
+                            aria-label={`Quantidade da PO de ${item.item} (kg)`}
+                            aria-invalid={!lida.ok}
+                            value={quantidades[id] ?? ''}
+                            onChange={(e) => setQuantidades((q) => ({ ...q, [id]: e.target.value }))}
+                          />
+                          {!lida.ok && <span className="cmp-po__contador cmp-po__contador--excedido">{lida.erro}</span>}
+                        </td>
+                        <td className="num cmp-mono">
+                          {preco?.estado === 'ok' ? `${moedaBr(preco.valorPorKg as number, preco.moeda)}/kg` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="cmp-po__dica">Cada quantidade soma na Qtd. final (sistema) do próprio item. Pode ajustar.</p>
+            {totalEstimado !== '' && (
+              <p className="cmp-po__dica" data-testid="po-total">
+                Valor total estimado: <strong className="cmp-mono">{totalEstimado}</strong>
+              </p>
+            )}
+          </div>
+        )}
 
         <div data-testid="po-recipients" className="cmp-po__destinatarios">
           {destinatariosQuery.isLoading && <p className="cmp-po__destinatarios-estado">Carregando destinatários…</p>}
@@ -405,6 +504,10 @@ export default function ForecastPoDiretaModal({ snapshotId, quinzena, item, onCl
             .
           </p>
         </div>
+
+        {!todasValidas && !unico && (
+          <p className="cmp-po__dica">Corrija a quantidade de: {invalidas.join(', ')}.</p>
+        )}
 
         {erro && (
           <p role="alert" className="cmp-po-aviso cmp-po-aviso--erro cmp-po__erro">
