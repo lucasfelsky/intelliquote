@@ -84,7 +84,7 @@ describe('ItensTab (F6): icones, botoes e aviso', () => {
     const grupo = screen.getByTestId('po-group-1');
     const botoes = within(grupo).getAllByRole('button');
     const nomes = botoes.map((b) => b.getAttribute('aria-label')).filter(Boolean);
-    expect(nomes).toEqual(['Renomear PO A', 'Subir PO A', 'Descer PO A', 'Remover PO PO A', 'Adicionar item em PO A']);
+    expect(nomes).toEqual(['Renomear PO A', 'Subir PO A', 'Descer PO A', 'Remover PO PO A', 'Histórico de preço de Resina A', 'Adicionar item em PO A']);
     const desenhos = botoes.slice(0, 4).map((b) => b.querySelector('svg')?.querySelector('path')?.getAttribute('d'));
     expect(desenhos).toEqual([ICONS.edit, ICONS['chevron-up'], ICONS['chevron-down'], ICONS.trash]);
     for (const svg of Array.from(container.querySelectorAll('svg'))) expect(svg.getAttribute('aria-hidden')).toBe('true');

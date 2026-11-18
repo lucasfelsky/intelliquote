@@ -2840,6 +2840,10 @@ dialog.modal-dialog[open] {
 }
 /* O status volta a ficar a esquerda (board); fora das Cotacoes o .col-status segue centralizado */
 .cotacoes-tabela .col-status { text-align: left; }
+/* Resposta nova de fornecedor desde a ultima abertura (por usuario): linha menta + barra a esquerda; o selo de texto "Nova resposta" nao depende de cor */
+.cotacoes-tabela tr.cotacoes-linha--nova td { background: var(--rf-tone-success-bg); }
+.cotacoes-tabela tr.cotacoes-linha--nova td:first-child { box-shadow: inset 3px 0 0 var(--rf-tone-success-solid); }
+.cotacoes-selo-nova { margin-left: 8px; }
 .cotacoes-tabela .row-actions {
   justify-content: flex-end;
   gap: 4px;

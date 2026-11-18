@@ -25,6 +25,8 @@ interface QuoteRequest {
   purchaseOrderSentAt: string | null;
   createdById: number | null;
   isDevelopment: boolean;
+  // Chegou resposta de fornecedor depois da ultima vez que o usuario logado abriu a cotacao (vem com withNewResponses=true).
+  hasNewResponse: boolean;
   _count?: { quoteResponses?: number; items?: number };
 }
 
@@ -41,6 +43,9 @@ interface QuoteRequestsPagination {
 
 type StatusFilter = 'todas' | 'abertas' | 'fechadas';
 type PoFilter = 'todas' | 'enviada' | 'nao-enviada';
+
+// Padrão da lista: só cotações abertas. Não conta como "filtro ativo" (vazio padrão continua o de sempre).
+const DEFAULT_STATUS_FILTER: StatusFilter = 'abertas';
 
 const MONTH_LABELS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -124,6 +129,7 @@ function normalize(qr: unknown): QuoteRequest {
     purchaseOrderSentAt: (obj.purchaseOrderSentAt as string | null) ?? null,
     createdById: typeof obj.createdById === 'number' ? obj.createdById : null,
     isDevelopment: obj.isDevelopment === true,
+    hasNewResponse: obj.hasNewResponse === true,
     _count: countObj
       ? {
           quoteResponses: typeof countObj.quoteResponses === 'number' ? countObj.quoteResponses : 0,
@@ -139,7 +145,7 @@ export default function Cotacoes() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(DEFAULT_STATUS_FILTER);
   const [incotermFilter, setIncotermFilter] = useState<Incoterm | 'todos'>('todos');
   const [poFilter, setPoFilter] = useState<PoFilter>('todas');
   const [monthFilter, setMonthFilter] = useState<string>('todos');
@@ -165,7 +171,11 @@ export default function Cotacoes() {
     // Volta atualizada (PO enviada no detalhe) sem invalidar de dentro do modal.
     refetchOnMount: 'always',
     queryFn: async () => {
-      const params: Record<string, string> = { page: String(page), pageSize: String(PAGE_SIZE) };
+      const params: Record<string, string> = {
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        withNewResponses: 'true',
+      };
       if (search.trim()) params.search = search.trim();
       if (statusFilter !== 'todas') params.status = statusFilter === 'abertas' ? 'open' : 'closed';
       if (incotermFilter !== 'todos') params.incoterm = incotermFilter;
@@ -180,7 +190,7 @@ export default function Cotacoes() {
   const rows = list.data?.items ?? [];
   const hasFilters =
     search.trim() !== '' ||
-    statusFilter !== 'todas' ||
+    statusFilter !== DEFAULT_STATUS_FILTER ||
     incotermFilter !== 'todos' ||
     poFilter !== 'todas' ||
     monthFilter !== 'todos';
@@ -407,7 +417,7 @@ export default function Cotacoes() {
                   </thead>
                   <tbody>
                     {rows.map((qr) => (
-                      <tr key={qr.id}>
+                      <tr key={qr.id} className={qr.hasNewResponse ? 'cotacoes-linha--nova' : undefined}>
                         <td className="cotacoes-id">{qr.id}</td>
                         <td className="cell-nowrap">
                           <span className="cotacoes-codigo">{qr.requestCode}</span>
@@ -426,7 +436,12 @@ export default function Cotacoes() {
                           </div>
                         </td>
                         <td className="cotacoes-dir cotacoes-num">{formatNumber(qr._count?.items)}</td>
-                        <td className="cotacoes-dir cotacoes-num">{formatNumber(qr._count?.quoteResponses)}</td>
+                        <td className="cotacoes-dir cotacoes-num">
+                          {formatNumber(qr._count?.quoteResponses)}
+                          {qr.hasNewResponse && (
+                            <span className="badge badge--success badge--dot cotacoes-selo-nova">Nova resposta</span>
+                          )}
+                        </td>
                         <td>
                           {qr.purchaseOrderSentAt ? (
                             <span

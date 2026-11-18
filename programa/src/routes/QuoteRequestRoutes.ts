@@ -23,6 +23,12 @@ quoteRequestRoutes.get(
   allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
   QuoteRequestController.getById,
 );
+quoteRequestRoutes.post(
+  '/quote-requests/:id/seen',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  QuoteRequestController.markSeen,
+);
 quoteRequestRoutes.put(
   '/quote-requests/:id',
   requireAuth,

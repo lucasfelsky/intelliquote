@@ -98,6 +98,7 @@ const FORBIDDEN_FOR_COMERCIAL = [
   '/api/v1/quote-requests',
   '/api/v1/quote-requests/1',
   '/api/v1/quote-request-items',
+  '/api/v1/quote-request-items/1/price-history',
   '/api/v1/quote-responses',
   '/api/v1/suppliers',
   '/api/v1/supplier-contacts',

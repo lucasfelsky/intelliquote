@@ -523,7 +523,18 @@ describe('CotacaoDetalhe', () => {
     expect(dialog.open).toBe(true);
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
     expect(dialog.open).toBe(false);
-    expect(api.post).not.toHaveBeenCalled();
+    // O unico POST permitido e o recibo de leitura (/seen), disparado ao abrir o detalhe.
+    const postsAlemDoSeen = vi.mocked(api.post).mock.calls.filter(([url]) => !String(url).endsWith('/seen'));
+    expect(postsAlemDoSeen).toEqual([]);
+  });
+
+  it('abrir o detalhe marca a cotação como vista (POST /v1/quote-requests/:id/seen)', async () => {
+    const { findByRole } = renderPage();
+    await findByRole('heading', { name: 'RFQ-001' });
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/v1/quote-requests/1/seen', {}));
+    const seenCalls = vi.mocked(api.post).mock.calls.filter(([url]) => String(url).endsWith('/seen'));
+    expect(seenCalls).toHaveLength(1);
   });
 
   it('5. Guard do Modal D: #qrCurrency ausente no load, presente após abrir "Editar"', async () => {

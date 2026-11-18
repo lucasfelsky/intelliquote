@@ -1089,3 +1089,16 @@ export const catalogItemForecastLinkSchema = z.discriminatedUnion(
 export const catalogItemForecastFieldSchema = catalogItemForecastLinkSchema.nullish();
 export const catalogItemSemForecastQuerySchema = z.strictObject({});
 export type CatalogItemForecastLink = z.infer<typeof catalogItemForecastLinkSchema>;
+
+// Lista de Cotacoes: com `withNewResponses=true` cada linha ganha `hasNewResponse` (por usuario); ausente = resposta inalterada.
+export const quoteRequestWithNewResponsesQuerySchema = z.enum(['true', 'false']).optional();
+
+// POST /quote-requests/:id/seen
+export const quoteRequestSeenParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+// GET /quote-request-items/:id/price-history
+export const quoteRequestItemPriceHistoryParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});

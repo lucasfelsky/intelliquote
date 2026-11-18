@@ -19,6 +19,7 @@ vi.mock('@/services/purchaseOrders', () => ({
 import {
   createPurchaseOrder, deletePurchaseOrder, moveItemToPurchaseOrder, renamePurchaseOrder, reorderPurchaseOrders,
 } from '@/services/purchaseOrders';
+import { api } from '@/api/client';
 
 const confirmMock = vi.fn(async (_opts?: unknown) => true);
 
@@ -385,5 +386,23 @@ describe('ItensTab', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('ItensTab - histórico de preço do item', () => {
+  it('clicar no nome do item abre o histórico de preço do item', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      item: { id: 1, catalogItemId: null, name: 'Resina A', marketName: null, unit: 'KG' },
+      linkedBy: 'quoteRequestItem',
+      entries: [],
+      truncated: false,
+    });
+    renderTab({ items: [item(1, 'Resina A', null)] });
+    expect(document.querySelector('dialog[open]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Histórico de preço de Resina A' }));
+
+    expect(await screen.findByRole('heading', { name: 'Histórico de preço — Resina A' })).toBeTruthy();
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith('/v1/quote-request-items/1/price-history'));
   });
 });

@@ -73,6 +73,7 @@ model User {
   commercialRequestAttachments CommercialRequestAttachment[] @relation("CommercialRequestAttachmentUploadedBy")
   createdForecastSnapshots ForecastSnapshot[] @relation("ForecastSnapshotCreatedBy")
   forecastQuoteDrafts    ForecastQuoteDraft[]
+  quoteRequestViews      QuoteRequestView[]
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -193,11 +194,26 @@ model QuoteRequest {
   review          SupplierReview?
   creditSupportRequests CreditSupportRequest[]
   commercialRequests CommercialRequest[]
+  views           QuoteRequestView[]
   createdBy       User?                    @relation("QuoteRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([createdById])
   @@index([deletedAt])
   @@index([listedAt])
+}
+
+// Ultima vez que cada usuario abriu o detalhe de uma cotacao (destaque "Nova resposta" na lista, por usuario).
+// Sem linha = vale User.createdAt como referencia. Escrita so por POST /quote-requests/:id/seen.
+model QuoteRequestView {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  quoteRequestId Int
+  lastSeenAt     DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quoteRequest   QuoteRequest @relation(fields: [quoteRequestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, quoteRequestId])
+  @@index([quoteRequestId])
 }
 
 model QuoteRequestItem {

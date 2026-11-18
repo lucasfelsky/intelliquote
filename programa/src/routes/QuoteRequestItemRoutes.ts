@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { QuoteRequestItemController } from '../controllers/QuoteRequestItemController';
+import { QuoteRequestItemPriceHistoryController } from '../controllers/QuoteRequestItemPriceHistoryController';
 import { allowRoles, requireAuth } from '../middlewares/auth';
 
 const quoteRequestItemRoutes = Router();
@@ -15,6 +16,12 @@ quoteRequestItemRoutes.get(
   requireAuth,
   allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
   QuoteRequestItemController.getAll,
+);
+quoteRequestItemRoutes.get(
+  '/quote-request-items/:id/price-history',
+  requireAuth,
+  allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
+  QuoteRequestItemPriceHistoryController.getByQuoteRequestItem,
 );
 quoteRequestItemRoutes.get(
   '/quote-request-items/:id',
