@@ -123,7 +123,7 @@ describe('Cotacoes (lista)', () => {
 
     fireEvent.change(select, { target: { value: 'todas' } });
     await waitFor(() => expect(lastParams()[1]).not.toHaveProperty('poSent'));
-    expect(lastParams()[1]).toEqual({ page: '1', pageSize: '50', status: 'open' });
+    expect(lastParams()[1]).toEqual({ page: '1', pageSize: '50', withNewResponses: 'true', status: 'open' });
   });
 
   it('status padrão é Abertas: envia status=open, Todas remove o parâmetro e o vazio padrão não sugere limpar filtros', async () => {
@@ -134,17 +134,17 @@ describe('Cotacoes (lista)', () => {
     expect(screen.queryByText('Ajuste ou limpe os filtros para ver outras cotações.')).toBeNull();
     const select = screen.getByLabelText('Status') as HTMLSelectElement;
     expect(select.value).toBe('abertas');
-    expect(vi.mocked(api.get).mock.calls[0]?.[1]).toEqual({ page: '1', pageSize: '50', status: 'open' });
+    expect(vi.mocked(api.get).mock.calls[0]?.[1]).toEqual({ page: '1', pageSize: '50', withNewResponses: 'true', status: 'open' });
 
     fireEvent.change(select, { target: { value: 'todas' } });
     await waitFor(() =>
-      expect(vi.mocked(api.get).mock.calls.at(-1)?.[1]).toEqual({ page: '1', pageSize: '50' }),
+      expect(vi.mocked(api.get).mock.calls.at(-1)?.[1]).toEqual({ page: '1', pageSize: '50', withNewResponses: 'true' }),
     );
     expect(await screen.findByText('Ajuste ou limpe os filtros para ver outras cotações.')).toBeTruthy();
 
     fireEvent.change(select, { target: { value: 'fechadas' } });
     await waitFor(() =>
-      expect(vi.mocked(api.get).mock.calls.at(-1)?.[1]).toEqual({ page: '1', pageSize: '50', status: 'closed' }),
+      expect(vi.mocked(api.get).mock.calls.at(-1)?.[1]).toEqual({ page: '1', pageSize: '50', withNewResponses: 'true', status: 'closed' }),
     );
   });
 
@@ -239,6 +239,7 @@ describe('Cotacoes - filtro de mês', () => {
       expect(vi.mocked(api.get)).toHaveBeenLastCalledWith('/v1/quote-requests', {
         page: '1',
         pageSize: '50',
+        withNewResponses: 'true',
         status: 'open',
         month: '2025-12',
       }),

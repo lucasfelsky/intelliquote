@@ -14,8 +14,11 @@ import {
   quoteRequestCreateSchema,
   quoteRequestMonthQuerySchema,
   quoteRequestPoSentQuerySchema,
+  quoteRequestSeenParamsSchema,
   quoteRequestUpdateSchema,
+  quoteRequestWithNewResponsesQuerySchema,
 } from '../validators/domain';
+import { QuoteRequestViewService } from '../services/QuoteRequestViewService';
 import {
   handleControllerError,
   buildPaginatedResponse,
@@ -134,6 +137,19 @@ export class QuoteRequestController {
         quoteResponses: { where: { deletedAt: null } },
       };
       const orderBy: Prisma.QuoteRequestOrderByWithRelationInput[] = [{ listedAt: 'desc' }, { id: 'desc' }];
+      // Opt-in: sem `withNewResponses=true` a resposta fica identica a de sempre (nenhuma consulta extra).
+      const withNewResponses =
+        quoteRequestWithNewResponsesQuerySchema.parse(
+          parseOptionalQueryString(req.query.withNewResponses) ?? undefined,
+        ) === 'true' && Boolean(req.user);
+      const markNewResponses = async <T extends { id: number }>(rows: T[]) => {
+        if (!withNewResponses || !req.user) return rows;
+        const ids = await QuoteRequestViewService.findIdsWithNewResponses(
+          req.user.id,
+          rows.map((row) => row.id),
+        );
+        return rows.map((row) => ({ ...row, hasNewResponse: ids.has(row.id) }));
+      };
 
       if (!hasListQuery(req)) {
         const quoteRequests = await prisma.quoteRequest.findMany({
@@ -142,7 +158,7 @@ export class QuoteRequestController {
           orderBy,
         });
 
-        return res.status(200).json(quoteRequests);
+        return res.status(200).json(await markNewResponses(quoteRequests));
       }
 
       const pagination = parsePagination(req);
@@ -159,7 +175,35 @@ export class QuoteRequestController {
 
       return res
         .status(200)
-        .json(buildPaginatedResponse(quoteRequests, totalItems, pagination));
+        .json(buildPaginatedResponse(await markNewResponses(quoteRequests), totalItems, pagination));
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  /**
+   * POST /quote-requests/:id/seen - marca a cotacao como vista pelo usuario logado (upsert de lastSeenAt).
+   * Sem AuditLog de proposito: e recibo de leitura, nao mudanca de dado de negocio (logar cada abertura
+   * de tela inundaria o AuditLog).
+   */
+  static async markSeen(req: Request, res: Response): Promise<Response> {
+    try {
+      if (!req.user) {
+        throw new HttpError(401, 'Utilizador nao autenticado.');
+      }
+      const { id } = quoteRequestSeenParamsSchema.parse(req.params);
+
+      const quoteRequest = await prisma.quoteRequest.findFirst({
+        where: { id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!quoteRequest) {
+        throw new HttpError(404, 'Cotacao nao encontrada.');
+      }
+
+      const view = await QuoteRequestViewService.markSeen(req.user.id, id);
+      return res.status(200).json({ quoteRequestId: view.quoteRequestId, lastSeenAt: view.lastSeenAt });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

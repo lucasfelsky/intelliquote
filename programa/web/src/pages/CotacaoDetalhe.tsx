@@ -26,6 +26,7 @@ import { ComparacaoTab } from './CotacaoTabs/ComparacaoTab';
 import { ItensTab } from './CotacaoTabs/ItensTab';
 import { SolicitacaoDesenvolvimentoPanel } from './CotacaoTabs/SolicitacaoDesenvolvimentoPanel';
 import type { PurchaseOrder } from '@/services/purchaseOrders';
+import { useMarkQuoteRequestSeen } from '@/services/quoteRequestViews';
 
 type QuoteStatus = 'open' | 'closed';
 type Incoterm = 'EXW' | 'FCA' | 'FAS' | 'FOB' | 'CFR' | 'CIF' | 'CPT' | 'CIP' | 'DAP' | 'DPU' | 'DDP';
@@ -365,6 +366,7 @@ export default function CotacaoDetalhe() {
     },
     enabled: Number.isFinite(id),
   });
+  useMarkQuoteRequestSeen(id, detail.isSuccess);
 
   const closeRequest = useMutation({
     mutationFn: () => api.post<unknown>(`/v1/quote-requests/${id}/close`, {}),

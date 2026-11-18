@@ -116,14 +116,14 @@ describe('Cotacoes - paginacao com filtros', () => {
     fireEvent.change(screen.getByDisplayValue('Abertas'), { target: { value: 'todas' } });
 
     await waitFor(() => expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/60 cotações no total/));
-    expect(lastGetParams()).toEqual({ page: '1', pageSize: '50' });
+    expect(lastGetParams()).toEqual({ page: '1', pageSize: '50', withNewResponses: 'true' });
     expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 1 de 2/);
     expect(screen.getByText('QR-50')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Próxima página' }));
 
     await waitFor(() => expect(screen.getByText('QR-60')).toBeTruthy());
-    expect(lastGetParams()).toEqual({ page: '2', pageSize: '50' });
+    expect(lastGetParams()).toEqual({ page: '2', pageSize: '50', withNewResponses: 'true' });
     expect(screen.getByText('QR-51')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Paginação' }).textContent).toMatch(/Página 2 de 2/);
   });
