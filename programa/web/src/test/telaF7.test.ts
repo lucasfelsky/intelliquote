@@ -489,6 +489,7 @@ const ARQUIVOS = [
   'pages/CotacaoTabs/CreditSupportPanel.tsx',
   'pages/CotacaoTabs/CreditSupportModal.tsx',
   'pages/CotacaoTabs/PriceHistoryModal.tsx',
+  'pages/CotacaoTabs/ItemPriceHistoryModal.tsx',
   'components/SupplierNotes.tsx',
 ] as const;
 const TESTIDS = new Set(['credit-support-removed', 'credit-support-result']);

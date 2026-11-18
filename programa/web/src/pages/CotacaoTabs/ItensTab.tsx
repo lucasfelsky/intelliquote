@@ -11,6 +11,7 @@ import {
 } from '@/services/purchaseOrders';
 import { Icon } from '@/components/icons';
 import { MoveItemModal } from './MoveItemModal';
+import { ItemPriceHistoryModal } from './ItemPriceHistoryModal';
 
 export interface ItensTabItem {
   id: number;
@@ -81,6 +82,7 @@ export function ItensTab(props: ItensTabProps) {
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [movingItem, setMovingItem] = useState<ItensTabItem | null>(null);
+  const [priceHistoryItem, setPriceHistoryItem] = useState<ItensTabItem | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const [pendingFocus, setPendingFocus] = useState<FocusTarget | null>(null);
   const focusRefs = useRef(new Map<string, HTMLElement>());
@@ -340,7 +342,14 @@ export function ItensTab(props: ItensTabProps) {
       >
         <td>
           {draggable && <span className="item-grip"><Icon name="grip" size={16} strokeWidth={3} /></span>}
-          <strong>{itemName(it)}</strong>
+          <button
+            type="button"
+            className="link-button"
+            aria-label={`Histórico de preço de ${itemName(it)}`}
+            onClick={() => setPriceHistoryItem(it)}
+          >
+            <strong>{itemName(it)}</strong>
+          </button>
         </td>
         <td className="po-cell-suave">{it.catalogItem?.marketName ?? '—'}</td>
         <td className="num">{formatNumber(it.quantity)}</td>
@@ -660,6 +669,12 @@ export function ItensTab(props: ItensTabProps) {
             setPendingFocus({ key: `move:${id}` });
           }}
           onConfirm={(poId) => doMove(movingItem, poId, true)}
+        />
+      )}
+      {priceHistoryItem && (
+        <ItemPriceHistoryModal
+          item={{ id: priceHistoryItem.id, name: itemName(priceHistoryItem) }}
+          onClose={() => setPriceHistoryItem(null)}
         />
       )}
       <div role="status" aria-live="polite" className="sr-only">{announcement}</div>

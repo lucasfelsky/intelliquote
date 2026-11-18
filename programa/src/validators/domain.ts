@@ -1089,3 +1089,8 @@ export const catalogItemForecastLinkSchema = z.discriminatedUnion(
 export const catalogItemForecastFieldSchema = catalogItemForecastLinkSchema.nullish();
 export const catalogItemSemForecastQuerySchema = z.strictObject({});
 export type CatalogItemForecastLink = z.infer<typeof catalogItemForecastLinkSchema>;
+
+// GET /quote-request-items/:id/price-history
+export const quoteRequestItemPriceHistoryParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
