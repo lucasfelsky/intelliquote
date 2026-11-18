@@ -311,6 +311,8 @@ export interface ForecastItemRelatorio {
   quantidadeEmbalagens: number | null;
   quantidadeFinal: number;
   naoFraciona: boolean;
+  /** Selo de preco fechado congelado na quinzena (so o selo; o valor nunca sai desta API). Ausente = nao. */
+  precoFixo?: boolean;
   /** PR 5B (opcional: backend antigo nao manda): observacao da quinzena; '' = sem observacao. */
   obs?: string;
   /** PR 6c (opcional: backend antigo nao manda): meses de venda atipica fora da media do item ('AAAA-MM'). */

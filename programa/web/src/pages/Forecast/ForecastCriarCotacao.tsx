@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@/components/icons';
 import {
   forecastCotacaoLoteKeys,
@@ -10,10 +10,13 @@ import {
   type ForecastRascunho,
   type ForecastRascunhoItem,
 } from '@/services/forecastCotacaoLote';
-import { cotacaoAbertaDaDecisao } from '@/services/forecastDecisoes';
+import { cotacaoAbertaDaDecisao, forecastDecisoesKeys } from '@/services/forecastDecisoes';
+import type { ForecastItemRelatorio } from '@/services/forecast';
+import type { ForecastPoDiretaEnviada } from '@/services/forecastPoDireta';
 import { useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
 import { useVinculosDeCotacao } from './ForecastGerarCotacao';
 import PopupCriarCotacao from './ForecastCriarCotacaoPopup';
+import ForecastPoDiretaModal from './ForecastPoDiretaModal';
 import { MAX_ITENS_DO_LOTE, type ItemSelecionado } from './forecastCriarCotacaoRegras';
 import { kgBr } from './forecastPainel';
 import { textoSalvaEm } from './forecastDecisaoCampos';
@@ -36,6 +39,8 @@ interface Contexto {
    * de volta ao fechar (padrao: o que tinha o foco).
    */
   abrir: (itens?: ItemSelecionado[], origem?: HTMLElement | null) => void;
+  /** PO direta de item de PRECO FECHADO (sem cotacao): abre o modal de envio. `origem` recebe o foco de volta ao fechar. */
+  abrirPoDireta: (item: ForecastItemRelatorio, origem?: HTMLElement | null) => void;
   /** Item da linha no rascunho (so quando o rascunho ja carregou). */
   noRascunho: (productId: number) => ForecastRascunhoItem | undefined;
   rascunho: ForecastRascunho | null | undefined;
@@ -144,7 +149,10 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
   const [selecionados, setSelecionados] = useState<ReadonlyMap<number, ItemSelecionado>>(() => new Map());
   const [popup, setPopup] = useState<{ itens: ItemSelecionado[] } | null>(null);
   const [criadas, setCriadas] = useState<ForecastCotacoesCriadas | null>(null);
+  const [po, setPo] = useState<ForecastItemRelatorio | null>(null);
+  const [poEnviada, setPoEnviada] = useState<{ item: string; resultado: ForecastPoDiretaEnviada } | null>(null);
   const aberturaRef = useRef<HTMLElement | null>(null);
+  const qc = useQueryClient();
 
   const cotacaoAberta = useCallback(
     (productId: number) => cotacaoAbertaDaDecisao(decisoes?.mapa.get(productId)),
@@ -210,6 +218,34 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
     setCriadas(r);
   }, []);
 
+  const abrirPoDireta = useCallback((item: ForecastItemRelatorio, origem?: HTMLElement | null) => {
+    aberturaRef.current = origem ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setPoEnviada(null);
+    setPo(item);
+  }, []);
+
+  const fecharPo = useCallback(() => {
+    setPo(null);
+    const origem = aberturaRef.current;
+    aberturaRef.current = null;
+    window.setTimeout(() => {
+      if (origem?.isConnected) origem.focus();
+    }, 0);
+  }, []);
+
+  // PO enviada: fecha o modal, mostra o aviso e recarrega as decisoes (Qtd. final e status vem delas).
+  const aoEnviarPo = useCallback(
+    (resultado: ForecastPoDiretaEnviada) => {
+      setPo((atual) => {
+        if (atual) setPoEnviada({ item: atual.item, resultado });
+        return null;
+      });
+      aberturaRef.current = null;
+      void qc.invalidateQueries({ queryKey: forecastDecisoesKeys.lista(snapshotId) });
+    },
+    [qc, snapshotId],
+  );
+
   const noRascunho = useCallback(
     (productId: number) => rascunho.data?.itens.find((i) => i.productId === productId),
     [rascunho.data],
@@ -225,15 +261,17 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
       marcar,
       limpar,
       abrir,
+      abrirPoDireta,
       noRascunho,
       rascunho: rascunho.isSuccess ? rascunho.data : undefined,
     }),
-    [quinzena, selecionados, podeSelecionar, motivoSemSelecao, alternar, marcar, limpar, abrir, noRascunho, rascunho.isSuccess, rascunho.data],
+    [quinzena, selecionados, podeSelecionar, motivoSemSelecao, alternar, marcar, limpar, abrir, abrirPoDireta, noRascunho, rascunho.isSuccess, rascunho.data],
   );
 
   return (
     <ContextoCriarCotacao.Provider value={valor}>
       {criadas && <AvisoCriadas criadas={criadas} onDispensar={() => setCriadas(null)} />}
+      {poEnviada && <AvisoPoEnviada enviada={poEnviada} onDispensar={() => setPoEnviada(null)} />}
       {children}
       <BarraDeSelecao selecionados={selecionados} onCriar={(origem) => abrir(undefined, origem)} onLimpar={limpar} />
       {/* Fora da tabela (portal): o CSS .fcr-tabela td/th nao pode vazar para o pop-up. */}
@@ -250,7 +288,35 @@ function ProvedorAtivo({ snapshotId, quinzena, diasCritico, itensDaLista, childr
           />,
           document.body,
         )}
+      {/* Fora da tabela (portal), como o pop-up de cotacao. */}
+      {po &&
+        createPortal(
+          <ForecastPoDiretaModal snapshotId={snapshotId} quinzena={quinzena} item={po} onClose={fecharPo} onEnviada={aoEnviarPo} />,
+          document.body,
+        )}
     </ContextoCriarCotacao.Provider>
+  );
+}
+
+function AvisoPoEnviada({ enviada, onDispensar }: { enviada: { item: string; resultado: ForecastPoDiretaEnviada }; onDispensar: () => void }) {
+  const { resultado } = enviada;
+  const pendente = resultado.registro === 'pendente';
+  return (
+    <section className={`alert ${pendente ? 'alert--warning' : 'alert--success'} fcl-criadas`} role="status" aria-label="PO enviada">
+      <div className="fcl-criadas__corpo">
+        <strong>
+          {pendente ? 'PO enviada, mas o registro na quinzena não foi concluído.' : `PO de ${enviada.item} enviada a ${resultado.fornecedor}.`}
+        </strong>
+        <span>
+          {pendente
+            ? 'O e-mail saiu. Confira o status do item antes de enviar outra PO e avise a TI se a Qtd. final não aparecer.'
+            : `Para ${resultado.para}${resultado.copia.length > 0 ? `, com ${resultado.copia.length} em cópia` : ''}. A Qtd. final do item foi atualizada.`}
+        </span>
+      </div>
+      <button type="button" className="ghost-button ghost-button--sm" onClick={onDispensar}>
+        Dispensar
+      </button>
+    </section>
   );
 }
 

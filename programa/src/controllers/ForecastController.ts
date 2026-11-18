@@ -471,6 +471,24 @@ export class ForecastController {
     }
   }
 
+  // Destinatarios da PO direta (Para/Cc). Admin/comprador (rota). `?productId=` obrigatorio.
+  static async getPoPrecoFechadoDestinatarios(req: Request, res: Response): Promise<Response> {
+    try {
+      const id = parseId(req.params.id);
+      if (id === null) {
+        throw new HttpError(400, 'Quinzena invalida.');
+      }
+      const productId = parseId(typeof req.query.productId === 'string' ? req.query.productId : undefined);
+      if (productId === null) {
+        throw new HttpError(400, 'Produto inválido.');
+      }
+      const data = await ForecastPoDiretaService.destinatarios(id, productId);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
   // PO direta de item de preco fechado (sem cotacao). Admin/comprador (rota). 201 = enviada agora; 200 = a mesma chaveEnvio ja
   // estava enviada (repeticao: nada foi enviado nem somado de novo).
   static async postPoPrecoFechado(req: Request, res: Response): Promise<Response> {

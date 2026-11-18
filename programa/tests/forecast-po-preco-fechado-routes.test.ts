@@ -17,7 +17,7 @@ vi.mock('../src/lib/prisma', () => {
   return { prisma };
 });
 
-vi.mock('../src/services/ForecastPoDiretaService', () => ({ ForecastPoDiretaService: { enviar: vi.fn() } }));
+vi.mock('../src/services/ForecastPoDiretaService', () => ({ ForecastPoDiretaService: { enviar: vi.fn(), destinatarios: vi.fn() } }));
 
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
@@ -29,6 +29,7 @@ const prismaMock = prisma as unknown as {
   session: { create: Mock };
 };
 const enviar = ForecastPoDiretaService.enviar as unknown as Mock;
+const destinatarios = ForecastPoDiretaService.destinatarios as unknown as Mock;
 
 type Role = 'admin' | 'comprador' | 'gestor' | 'viewer' | 'comercial';
 
@@ -65,6 +66,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.session.create.mockResolvedValue({ id: 'session-1' });
   enviar.mockResolvedValue(resultado());
+  destinatarios.mockResolvedValue({
+    fornecedor: 'FORNECEDOR SINTETICO',
+    to: { name: 'Mei', email: 'mei@fornecedor.example' },
+    contactCc: [],
+    comexCc: [],
+    cc: [],
+  });
 });
 
 describe('POST /forecast/snapshots/:id/po-preco-fechado - papeis', () => {
@@ -149,6 +157,44 @@ describe('POST /forecast/snapshots/:id/po-preco-fechado - corpo e respostas', ()
       .set('Cookie', cookies)
       .send(corpo({ contentBase64: grande, fileSize: 5 * 1024 * 1024 }));
     expect(res.status).toBe(201);
+  });
+});
+
+describe('GET /forecast/snapshots/:id/po-preco-fechado/destinatarios', () => {
+  const URL_DEST = `${PATH}/destinatarios?productId=42`;
+
+  it('sem login -> 401', async () => {
+    expect((await request(app).get(URL_DEST)).status).toBe(401);
+    expect(destinatarios).not.toHaveBeenCalled();
+  });
+
+  it.each(['gestor', 'viewer', 'comercial'] as Role[])('%s -> 403 (a lista expoe o fornecedor e seus contatos)', async (role) => {
+    const cookies = await loginAs(role);
+    expect((await request(app).get(URL_DEST).set('Cookie', cookies)).status).toBe(403);
+    expect(destinatarios).not.toHaveBeenCalled();
+  });
+
+  it.each(['admin', 'comprador'] as Role[])('%s le os destinatarios', async (role) => {
+    const cookies = await loginAs(role);
+    const res = await request(app).get(URL_DEST).set('Cookie', cookies);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ fornecedor: 'FORNECEDOR SINTETICO', to: { email: 'mei@fornecedor.example' } });
+    expect(destinatarios).toHaveBeenCalledWith(7, 42);
+  });
+
+  it.each([['', 400], ['?productId=abc', 400], ['?productId=0', 400]])('productId %j -> %s sem consultar', async (consulta, status) => {
+    const cookies = await loginAs('comprador');
+    const res = await request(app).get(`${PATH}/destinatarios${consulta}`).set('Cookie', cookies);
+    expect(res.status).toBe(status);
+    expect(destinatarios).not.toHaveBeenCalled();
+  });
+
+  it('bloqueio do servico (409) vira 409 com a mensagem', async () => {
+    destinatarios.mockRejectedValue(new HttpError(409, 'A fonte deste item não está ligada a um fornecedor do IntelliQuote.'));
+    const cookies = await loginAs('comprador');
+    const res = await request(app).get(URL_DEST).set('Cookie', cookies);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/fornecedor/);
   });
 });
 

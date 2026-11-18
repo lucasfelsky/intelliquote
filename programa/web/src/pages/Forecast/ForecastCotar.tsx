@@ -10,6 +10,8 @@ import { MOTIVO_FORA_CADASTRO } from './forecastGerarCotacaoRegras';
 // Acao da linha do relatorio de compras (E2, refeita na E6, tracking na E7): "Cotar" abre o pop-up "Criar cotacao" com este item
 // ja escolhido; "Continuar" aparece quando o item esta no rascunho da pessoa; com cotacao vinculada a linha mostra "Ver cotacao"
 // (e "Ver pedido" com a PO enviada), links que qualquer perfil de leitura ve. Quem so le nunca ve "Cotar"/"Continuar".
+// Item de PRECO FECHADO (selo congelado na quinzena) ganha tambem "Enviar PO": a PO vai ao fornecedor da fonte sem cotacao (modal
+// proprio, ver ForecastPoDiretaModal). Fica disponivel mesmo com PO ja enviada: a segunda PO soma na Qtd. final.
 
 interface Props {
   item: ForecastItemRelatorio;
@@ -51,9 +53,32 @@ export default function ForecastCotar({ item, fonte }: Props) {
   const rascunho = ctx.noRascunho(productId) !== undefined;
   // Cotacao vinculada (aberta ou fechada) sem rascunho novo: so o tracking (decisao do E7: o backend recusa cotar de novo enquanto ela
   // esta aberta; depois de fechada, recotar o item e pela selecao + barra).
-  if (cotacao && !rascunho) return links;
+  const botaoPo =
+    item.precoFixo === true ? (
+      <button
+        type="button"
+        className="ghost-button ghost-button--sm fcq-botao"
+        aria-label={`Enviar PO de ${item.item}`}
+        aria-haspopup="dialog"
+        title="Item de preço fechado: envia a Ordem de Compra ao fornecedor da fonte, sem cotação"
+        onClick={(e) => ctx.abrirPoDireta(item, e.currentTarget)}
+      >
+        Enviar PO
+      </button>
+    ) : null;
+  if (cotacao && !rascunho) {
+    return botaoPo ? (
+      <span className="fcq-acao fcq-acao--pilha">
+        {botaoPo}
+        {links}
+      </span>
+    ) : (
+      links
+    );
+  }
   return (
     <span className="fcq-acao fcq-acao--pilha">
+      {botaoPo}
       <button
         type="button"
         className="ghost-button ghost-button--sm fcq-botao"
