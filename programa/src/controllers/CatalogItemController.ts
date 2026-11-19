@@ -15,7 +15,6 @@ import {
 } from '../validators/domain';
 import {
   handleControllerError,
-  HttpError,
   isNonEmptyString,
   parseId,
   parsePagination,
@@ -375,16 +374,8 @@ export class CatalogItemController {
         return res.status(404).json({ message: 'Item de catalogo nao encontrado.' });
       }
 
-      // Impede soft-delete se ha QuoteRequestItem vinculado.
-      const linkedCount = await prisma.quoteRequestItem.count({
-        where: { catalogItemId: id },
-      });
-      if (linkedCount > 0) {
-        throw new HttpError(
-          409,
-          `Nao e possivel remover: item vinculado a ${linkedCount} cotacao(oes). Inative-o em vez de remover.`,
-        );
-      }
+      // Inativar preserva o historico das cotacoes (catalogItemId permanece) e nao
+      // toca no Forecast (D1); por isso nao ha bloqueio por QuoteRequestItem vinculado.
 
       const item = await prisma.catalogItem.update({
         where: { id },

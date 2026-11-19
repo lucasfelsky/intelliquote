@@ -390,7 +390,7 @@ describe('CatalogItem routes', () => {
   });
 
   describe('DELETE /catalog-items/:id', () => {
-    it('faz soft-delete quando nao ha cotacoes vinculadas', async () => {
+    it('inativa item sem cotacoes vinculadas', async () => {
       const cookies = await loginAs('admin');
       prismaMock.catalogItem.findUnique.mockResolvedValue({
         id: 5,
@@ -402,7 +402,6 @@ describe('CatalogItem routes', () => {
         notes: null,
         isActive: true,
       });
-      prismaMock.quoteRequestItem.count.mockResolvedValue(0);
       prismaMock.catalogItem.update.mockResolvedValue({});
       prismaMock.auditLog.create.mockResolvedValue({ id: 1 });
 
@@ -423,7 +422,7 @@ describe('CatalogItem routes', () => {
       );
     });
 
-    it('bloqueia soft-delete quando ha cotacoes vinculadas', async () => {
+    it('inativa mesmo com cotacoes vinculadas', async () => {
       const cookies = await loginAs('comprador');
       prismaMock.catalogItem.findUnique.mockResolvedValue({
         id: 5,
@@ -435,15 +434,40 @@ describe('CatalogItem routes', () => {
         notes: null,
         isActive: true,
       });
-      prismaMock.quoteRequestItem.count.mockResolvedValue(3);
+      prismaMock.quoteRequestItem.count.mockResolvedValue(4);
+      prismaMock.catalogItem.update.mockResolvedValue({
+        id: 5,
+        commercialName: 'X',
+        marketName: 'X',
+        ncm: null,
+        dbcorpCode: null,
+        isDangerousGood: false,
+        notes: null,
+        isActive: false,
+      });
+      prismaMock.auditLog.create.mockResolvedValue({ id: 1 });
 
       const response = await request(app)
         .delete('/api/v1/catalog-items/5')
         .set('Cookie', cookies);
 
-      expect(response.status).toBe(409);
-      expect(response.body.message).toContain('vinculado');
-      expect(prismaMock.catalogItem.update).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(response.body.isActive).toBe(false);
+      expect(prismaMock.catalogItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 5 },
+          data: { isActive: false },
+        }),
+      );
+      expect(prismaMock.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'soft_delete',
+            entityType: 'catalog_item',
+          }),
+        }),
+      );
+      expect(prismaMock.quoteRequestItem.count).not.toHaveBeenCalled();
     });
   });
 });

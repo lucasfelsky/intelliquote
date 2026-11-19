@@ -500,7 +500,6 @@ describe('DELETE /catalog-items/:id (D1)', () => {
   it('k. inativar item com codigo nao toca em forecastProductCode', async () => {
     const cookies = await loginAs('admin');
     prismaMock.catalogItem.findUnique.mockResolvedValue(itemLegado());
-    prismaMock.quoteRequestItem.count.mockResolvedValue(0);
     const response = await request(app).delete('/api/v1/catalog-items/7').set('Cookie', cookies);
     expect(response.status).toBe(200);
     for (const fn of Object.values(prismaMock.forecastProductCode)) expect(fn).not.toHaveBeenCalled();
