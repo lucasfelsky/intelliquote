@@ -24,6 +24,7 @@ import {
   forecastDecisoesKeys,
   type ForecastDecisao,
 } from '@/services/forecastDecisoes';
+import { ForecastCodigoCotacaoCampo } from './ForecastCodigoCotacaoCampo';
 import { useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
 import { useVinculosDeCotacao } from './ForecastGerarCotacao';
 import {
@@ -236,6 +237,8 @@ function CorpoDoPopup({
   const [busca, setBusca] = useState('');
   const [gerando, setGerando] = useState(false);
   const [erroGerar, setErroGerar] = useState('');
+  // Codigo da cotacao digitado por fonte (chave = `chaveDaFonte`). So vale para fonte que continua no lote; nao vai ao rascunho.
+  const [codigos, setCodigos] = useState<ReadonlyMap<string, string>>(() => new Map());
 
   const itensRef = useRef(itens);
   itensRef.current = itens;
@@ -523,10 +526,15 @@ function CorpoDoPopup({
     setErroGerar('');
     await emVooRef.current;
     try {
+      const codigosCotacao = gruposValidos.flatMap((g) => {
+        const requestCode = (codigos.get(g.chave) ?? '').trim();
+        return requestCode === '' ? [] : [{ fonte: g.fonte, requestCode }];
+      });
       const corpo = {
         itens: analise.map((a) =>
           paraItemDoLote(a.item, a.qtd.kg as number, mapaDecisoes.get(a.item.productId), leuDecisoes),
         ),
+        ...(codigosCotacao.length > 0 ? { codigosCotacao } : {}),
       };
       const criadas = await postForecastCotacoes(snapshotId, corpo);
       // Sem a leitura do rascunho (ou em conflito) o que esta salvo e de quem nao foi visto aqui: nao apaga.
@@ -611,6 +619,14 @@ function CorpoDoPopup({
                   {g.itens.length} {g.itens.length === 1 ? 'item' : 'itens'}
                 </span>
                 <span className="fcl-dica">{g.chave === '' ? 'não vira cotação: tire os itens' : 'vira uma cotação'}</span>
+                {g.chave !== '' && (
+                  <ForecastCodigoCotacaoCampo
+                    fonte={g.fonte}
+                    valor={codigos.get(g.chave) ?? ''}
+                    desabilitado={gerando}
+                    onChange={(valor) => setCodigos((atual) => new Map(atual).set(g.chave, valor))}
+                  />
+                )}
               </div>
               <ul className="fcl-itens">
                 {g.itens.map((i) => {
