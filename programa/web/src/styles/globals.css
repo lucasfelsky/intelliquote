@@ -12330,6 +12330,17 @@ html:has(.manual-page) { scroll-behavior: smooth; }
   .fc-pagina .fc-grid td.fc-status--confirmado { box-shadow: inset 4px 0 0 var(--rf-fc-status-confirmado), var(--rf-shadow-sticky); }
   .fc-pagina .fc-grid td.fc-status--po { box-shadow: inset 4px 0 0 var(--rf-fc-status-po), var(--rf-shadow-sticky); }
   .fc-pagina .fc-grid td.fc-status--preco { box-shadow: inset 4px 0 0 var(--rf-fc-status-preco), var(--rf-shadow-sticky); }
+  /* Celula ITENS tingida com o status da compra (pedido pos-mock v68): tom do proprio --rf-fc-status-* misturado a --rf-surface, OPACO (coluna sticky). Claro 20%, escuro 16%: AA de --rf-ink e --rf-ink-soft (ForecastItemCorStatus.test.tsx). Vence o `background: inherit` legado de .fc-grid .fc-fixa por especificidade. */
+  .fc-pagina .fc-grid td.fc-status--nao { background: color-mix(in srgb, var(--rf-fc-status-pendente) 20%, var(--rf-surface)); }
+  .fc-pagina .fc-grid td.fc-status--cotando { background: color-mix(in srgb, var(--rf-fc-status-cotando) 20%, var(--rf-surface)); }
+  .fc-pagina .fc-grid td.fc-status--confirmado { background: color-mix(in srgb, var(--rf-fc-status-confirmado) 20%, var(--rf-surface)); }
+  .fc-pagina .fc-grid td.fc-status--po { background: color-mix(in srgb, var(--rf-fc-status-po) 20%, var(--rf-surface)); }
+  .fc-pagina .fc-grid td.fc-status--preco { background: color-mix(in srgb, var(--rf-fc-status-preco) 20%, var(--rf-surface)); }
+  :root[data-theme="dark"] .fc-pagina .fc-grid td.fc-status--nao { background: color-mix(in srgb, var(--rf-fc-status-pendente) 16%, var(--rf-surface)); }
+  :root[data-theme="dark"] .fc-pagina .fc-grid td.fc-status--cotando { background: color-mix(in srgb, var(--rf-fc-status-cotando) 16%, var(--rf-surface)); }
+  :root[data-theme="dark"] .fc-pagina .fc-grid td.fc-status--confirmado { background: color-mix(in srgb, var(--rf-fc-status-confirmado) 16%, var(--rf-surface)); }
+  :root[data-theme="dark"] .fc-pagina .fc-grid td.fc-status--po { background: color-mix(in srgb, var(--rf-fc-status-po) 16%, var(--rf-surface)); }
+  :root[data-theme="dark"] .fc-pagina .fc-grid td.fc-status--preco { background: color-mix(in srgb, var(--rf-fc-status-preco) 16%, var(--rf-surface)); }
   .fc-pagina .fc-item { height: 48px; gap: 1px; padding: 0 12px 0 16px; text-decoration: none; }
   .fc-pagina .fc-item__nome { font-size: 13px; font-weight: 700; color: var(--rf-ink); }
   .fc-pagina .fc-item__fonte { font-size: 11px; font-weight: 500; color: var(--rf-ink-soft); }
