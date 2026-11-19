@@ -219,4 +219,65 @@ describe('CatalogItemImportController (DB)', () => {
     expect(catalogItems[0].familyId).toBe(matches[0].id);
     expect(catalogItems[1].familyId).toBe(matches[0].id);
   });
+
+  testDbSkip('import/preview e import/confirm - codigo DBCorp de item ativo vira errorLine; inativo nao conta', async () => {
+    const activeCode = `DUPA${Date.now()}`.toUpperCase();
+    const inactiveCode = `DUPI${Date.now()}`.toUpperCase();
+    const active = await prisma.catalogItem.create({
+      data: {
+        commercialName: 'Import Ativo Dup',
+        marketName: `Market Import ${runId} AtivoDup`,
+        dbcorpCode: activeCode,
+        isActive: true,
+      },
+    });
+    await prisma.catalogItem.create({
+      data: {
+        commercialName: 'Import Inativo Dup',
+        marketName: `Market Import ${runId} InativoDup`,
+        dbcorpCode: inactiveCode,
+        isActive: false,
+      },
+    });
+
+    const workbook = new exceljs.Workbook();
+    const sheet = workbook.addWorksheet('Planilha1');
+    sheet.addRow(['Comercial', 'Mercado', 'NCM', 'DB Code', 'Familia', 'DG', 'Notas']);
+    // Row 2: codigo de item ATIVO (minusculo + espacos) -> erro
+    sheet.addRow(['Import P1', `Market Import ${runId} PrevDup1`, '12345678', ` ${activeCode.toLowerCase()} `, '', '', '']);
+    // Row 3: codigo de item INATIVO -> valida
+    sheet.addRow(['Import P2', `Market Import ${runId} PrevDup2`, '12345678', inactiveCode, '', '', '']);
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const preview = await request(app)
+      .post('/api/v1/catalog-items/import')
+      .set('Cookie', adminCookies)
+      .send({ contentBase64: buffer.toString('base64') });
+
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.errorLines).toHaveLength(1);
+    expect(preview.body.data.errorLines[0].row).toBe(2);
+    expect(preview.body.data.errorLines[0].reason).toContain(activeCode);
+    expect(preview.body.data.errorLines[0].reason).toContain(`#${active.id}`);
+    expect(preview.body.data.validLines).toHaveLength(1);
+    expect(preview.body.data.validLines[0].dbcorpCode).toBe(inactiveCode);
+
+    const confirm = await request(app)
+      .post('/api/v1/catalog-items/import/confirm')
+      .set('Cookie', adminCookies)
+      .send({
+        items: [
+          { commercialName: 'Import C1', marketName: `Market Import ${runId} ConfDup1`, dbcorpCode: activeCode.toLowerCase() },
+        ],
+      });
+
+    expect(confirm.status).toBe(200);
+    expect(confirm.body.data.successLines).toHaveLength(0);
+    expect(confirm.body.data.errorLines).toHaveLength(1);
+    expect(confirm.body.data.errorLines[0].reason).toContain(`#${active.id}`);
+    const created = await prisma.catalogItem.findFirst({
+      where: { marketName: `Market Import ${runId} ConfDup1` },
+    });
+    expect(created).toBeNull();
+  });
 });
