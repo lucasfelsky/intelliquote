@@ -109,6 +109,12 @@ export interface ForecastCotacaoLoteItem {
   atualizadoEm?: string | null;
 }
 
+/** Codigo da cotacao informado para a cotacao de uma fonte (opcional; sem ele o backend gera o codigo). */
+export interface ForecastCotacaoLoteCodigo {
+  fonte: string;
+  requestCode: string;
+}
+
 export interface ForecastCotacaoCriada {
   id: number;
   requestCode: string;
@@ -125,7 +131,7 @@ export interface ForecastCotacoesCriadas {
 /** `POST /forecast/snapshots/:id/cotacoes`: cria UMA cotacao por fonte, tudo ou nada. */
 export async function postForecastCotacoes(
   snapshotId: number,
-  corpo: { itens: ForecastCotacaoLoteItem[] },
+  corpo: { itens: ForecastCotacaoLoteItem[]; codigosCotacao?: ForecastCotacaoLoteCodigo[] },
 ): Promise<ForecastCotacoesCriadas> {
   const r = await api.post<{ data: ForecastCotacoesCriadas }>(`/v1/forecast/snapshots/${snapshotId}/cotacoes`, corpo);
   return r.data;

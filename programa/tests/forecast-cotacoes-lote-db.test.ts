@@ -409,6 +409,76 @@ describe('Forecast - cotacoes em lote e Qtd. final (DB)', () => {
     expect(await prisma.auditLog.count({ where: { performedById: adminId } })).toBe(0);
   });
 
+  testDbSkip('codigo informado: grava em maiusculas na cotacao da fonte e registra codigoInformado no AuditLog', async () => {
+    const codigo = `cmx-001-${runId}`;
+    const res = await postar({
+      itens: [{ productId: ids.A, quantidadeKg: 10 }],
+      codigosCotacao: [{ fonte: ` ${FONTE_1.toLowerCase()} `, requestCode: codigo }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body.data.cotacoes).toHaveLength(1);
+    expect(res.body.data.cotacoes[0].requestCode).toBe(`CMX-001-${runId.toUpperCase()}`);
+    const salvas = await cotacoesDoUsuario();
+    expect(salvas.map((q) => q.requestCode)).toEqual([`CMX-001-${runId.toUpperCase()}`]);
+    const [log] = await logs('quote_request');
+    expect(log.metadata).toMatchObject({ codigoInformado: true });
+    await limpar();
+  });
+
+  testDbSkip('codigo so para a 1a fonte: a 2a segue com o codigo gerado', async () => {
+    const codigo = `CMX-002-${U}`;
+    const res = await postar({
+      itens: [
+        { productId: ids.A, quantidadeKg: 10 },
+        { productId: ids.B, quantidadeKg: 10 },
+      ],
+      codigosCotacao: [{ fonte: FONTE_1, requestCode: codigo }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    const [c1, c2] = res.body.data.cotacoes;
+    expect(c1.fonte).toBe(FONTE_1);
+    expect(c1.requestCode).toBe(codigo);
+    expect(c2.requestCode).toMatch(/^QR-\d{8}-[0-9A-F]{6}$/);
+    const logsQuote = await logs('quote_request');
+    expect(logsQuote.map((l) => (l.metadata as { codigoInformado?: boolean }).codigoInformado)).toEqual([true, false]);
+    await limpar();
+  });
+
+  testDbSkip('codigo igual ao de cotacao excluida: 409 e nada e gravado', async () => {
+    const codigo = `CMX-003-${U}`;
+    const excluida = await prisma.quoteRequest.create({
+      data: { requestCode: codigo, status: 'open', createdById: adminId, deletedAt: new Date() },
+    });
+    const antes = (await cotacoesDoUsuario()).length;
+    const res = await postar({
+      itens: [
+        { productId: ids.A, quantidadeKg: 10 },
+        { productId: ids.B, quantidadeKg: 10 },
+      ],
+      codigosCotacao: [{ fonte: FONTE_2, requestCode: codigo }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(409);
+    expect(res.body.message).toBe(
+      `Já existe uma cotação com o código ${codigo} (inclusive excluída). Informe outro código ou deixe em branco.`,
+    );
+    expect((await cotacoesDoUsuario()).length).toBe(antes);
+    expect(await prisma.forecastPurchaseDecision.count({ where: { snapshotId } })).toBe(0);
+    expect(await prisma.quoteRequestItem.count({ where: { forecastSnapshotId: snapshotId } })).toBe(0);
+    await prisma.quoteRequest.delete({ where: { id: excluida.id } });
+    await limpar();
+  });
+
+  testDbSkip('codigo para fonte fora do lote: 400 e nada e gravado', async () => {
+    const res = await postar({
+      itens: [{ productId: ids.A, quantidadeKg: 10 }],
+      codigosCotacao: [{ fonte: FONTE_2, requestCode: `CMX-004-${U}` }],
+    });
+    expect(res.status, JSON.stringify(res.body)).toBe(400);
+    expect(res.body.message).toBe(`Código informado para fonte que não está no lote: ${FONTE_2}.`);
+    expect(await cotacoesDoUsuario()).toHaveLength(0);
+    expect(await prisma.forecastPurchaseDecision.count({ where: { snapshotId } })).toBe(0);
+  });
+
   testDbSkip('lote inteiro recusado (sem gravar nada): sem vinculo ao catalogo, catalogo inativo, fora da lista, nao candidato', async () => {
     // C: nenhum codigo vinculado; E: item do catalogo inativo. Os dois motivos vem juntos na mensagem.
     const juntos = await postar({

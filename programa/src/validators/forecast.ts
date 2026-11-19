@@ -739,6 +739,19 @@ const cotacaoPortoField = z
   .transform((value) => (value === '' ? null : value))
   .nullable();
 
+const cotacaoLoteCodigoSchema = z.strictObject({
+  fonte: z
+    .string({ error: 'Informe a fonte do código.' })
+    .trim()
+    .min(1, 'Informe a fonte do código.')
+    .max(COTACAO_PORTO_MAX, `A fonte do código aceita no máximo ${COTACAO_PORTO_MAX} caracteres.`),
+  requestCode: z
+    .string({ error: 'Informe o código da cotação.' })
+    .trim()
+    .min(1, 'Informe o código da cotação.')
+    .transform((value) => value.toUpperCase()),
+});
+
 export const forecastCotacoesLotePostSchema = z
   .strictObject({
     itens: z
@@ -758,6 +771,12 @@ export const forecastCotacoesLotePostSchema = z
       .refine((value) => /^[A-Z]{3}$/.test(value), { message: 'Informe um código de moeda válido.' })
       .optional(),
     deadlineAt: z.iso.datetime({ error: 'deadlineAt deve ser uma data ISO 8601.' }).nullable().optional(),
+    // Codigo da cotacao informado por fonte (opcional): mesmas regras do `requestCode` de `domain.ts` (trim + maiusculas,
+    // sem formato). Fonte sem entrada aqui segue com o codigo gerado (`buildRequestCode`).
+    codigosCotacao: z
+      .array(cotacaoLoteCodigoSchema, { error: 'Informe os códigos das cotações em uma lista.' })
+      .max(FORECAST_COTACAO_LOTE_ITENS_MAX, `O lote aceita no máximo ${FORECAST_COTACAO_LOTE_ITENS_MAX} códigos.`)
+      .optional(),
   })
   .superRefine((value, ctx) => {
     const vistos = new Set<number>();
@@ -770,6 +789,27 @@ export const forecastCotacoesLotePostSchema = z
         });
       }
       vistos.add(item.productId);
+    });
+    const fontes = new Set<string>();
+    const codigos = new Set<string>();
+    (value.codigosCotacao ?? []).forEach((entrada, index) => {
+      const chave = entrada.fonte.trim().toUpperCase();
+      if (fontes.has(chave)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['codigosCotacao', index, 'fonte'],
+          message: 'A mesma fonte tem mais de um código.',
+        });
+      }
+      fontes.add(chave);
+      if (codigos.has(entrada.requestCode)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['codigosCotacao', index, 'requestCode'],
+          message: 'O mesmo código foi informado para mais de uma fonte.',
+        });
+      }
+      codigos.add(entrada.requestCode);
     });
   });
 

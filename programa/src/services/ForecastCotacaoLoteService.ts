@@ -11,6 +11,7 @@ import {
 } from '../utils/forecastCotacaoVinculo';
 import { itemDaListaDeCompra } from '../utils/forecastDecisaoCompra';
 import { candidatoDoProduto } from '../utils/forecastCandidatosCotacao';
+import { codigosPorFonte } from '../utils/forecastCotacaoCodigo';
 import { HttpError } from '../utils/http';
 import { buildRequestCode } from '../utils/requestCode';
 import type { ForecastCotacoesLotePostInput } from '../validators/forecast';
@@ -119,6 +120,12 @@ export class ForecastCotacaoLoteService {
       else porFonte.set(chave, { fonte: r.fonte.trim(), itens: [r] });
     }
 
+    // Codigo da cotacao informado por fonte (opcional): fonte fora do lote recusa o lote antes de qualquer gravacao.
+    const { mapa: codigosInformados, foraDoLote } = codigosPorFonte(input.codigosCotacao, new Set(porFonte.keys()));
+    if (foraDoLote.length > 0) {
+      throw new HttpError(400, `Código informado para fonte que não está no lote: ${foraDoLote.join(', ')}.`);
+    }
+
     const incoterms: Incoterm[] = input.desiredIncoterm ?? ['FOB'];
     const prazo = input.deadlineAt ? new Date(input.deadlineAt) : null;
 
@@ -150,6 +157,20 @@ export class ForecastCotacaoLoteService {
             throw new HttpError(409, mensagemDoLote(textos, jaCotados.length));
           }
 
+          // O indice de `requestCode` e GLOBAL (inclui cotacao excluida): por isso a checagem NAO filtra `deletedAt`.
+          if (codigosInformados.size > 0) {
+            const ocupados = await tx.quoteRequest.findMany({
+              where: { requestCode: { in: [...codigosInformados.values()] } },
+              select: { requestCode: true },
+            });
+            if (ocupados.length > 0) {
+              throw new HttpError(
+                409,
+                `Já existe uma cotação com o código ${ocupados[0].requestCode} (inclusive excluída). Informe outro código ou deixe em branco.`,
+              );
+            }
+          }
+
           // Decisoes primeiro (na ordem do lote); a de cada item e criada/atualizada com a mesma regra do PUT de decisao.
           for (const r of resolvidos) {
             await gravarDecisao(tx, snapshotId, label, r, userId);
@@ -159,7 +180,7 @@ export class ForecastCotacaoLoteService {
           for (const grupo of porFonte.values()) {
             const quote = await tx.quoteRequest.create({
               data: {
-                requestCode: buildRequestCode(),
+                requestCode: codigosInformados.get(chaveFonte(grupo.fonte)) ?? buildRequestCode(),
                 description: `Forecast ${label}`,
                 desiredIncoterm: incoterms,
                 destinationPort: input.destinationPort ?? null,
@@ -184,6 +205,7 @@ export class ForecastCotacaoLoteService {
                   fonte: grupo.fonte,
                   totalItens: grupo.itens.length,
                   totalCotacoesDoLote: porFonte.size,
+                  codigoInformado: codigosInformados.has(chaveFonte(grupo.fonte)),
                 },
               },
               tx,
@@ -241,6 +263,9 @@ export class ForecastCotacaoLoteService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const alvo = String((error.meta as { target?: unknown } | undefined)?.target ?? '');
         if (alvo.includes('requestCode')) {
+          if (codigosInformados.size > 0) {
+            throw new HttpError(409, 'Já existe uma cotação com o código informado. Informe outro código ou deixe em branco.');
+          }
           throw new HttpError(409, 'Conflito ao gerar o código da cotação. Tente novamente.');
         }
         throw corrida();

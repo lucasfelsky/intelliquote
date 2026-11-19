@@ -124,6 +124,26 @@ describe('POST /forecast/snapshots/:id/cotacoes', () => {
     });
   });
 
+  it('codigosCotacao valido chega ao service com o codigo em maiusculas e a fonte sem espacos', async () => {
+    const cookies = await loginAs('comprador');
+    const response = await request(app)
+      .post(URL)
+      .set('Cookie', cookies)
+      .send(
+        corpo({
+          codigosCotacao: [
+            { fonte: ' Fonte X ', requestCode: ' cmx-001 ' },
+            { fonte: 'FONTE Y', requestCode: 'cmx-002' },
+          ],
+        }),
+      );
+    expect(response.status).toBe(201);
+    expect(criarMock.mock.calls[0][1].codigosCotacao).toEqual([
+      { fonte: 'Fonte X', requestCode: 'CMX-001' },
+      { fonte: 'FONTE Y', requestCode: 'CMX-002' },
+    ]);
+  });
+
   it.each<[string, Record<string, unknown>, string]>([
     ['itens ausente', { itens: undefined }, 'Informe a lista de itens a cotar.'],
     ['lista vazia', { itens: [] }, 'Informe ao menos um item a cotar.'],
@@ -140,6 +160,19 @@ describe('POST /forecast/snapshots/:id/cotacoes', () => {
     ['Incoterms vazio', { desiredIncoterm: [] }, 'Informe ao menos um Incoterm.'],
     ['moeda invalida', { currency: 'DOLAR' }, 'Informe um código de moeda válido.'],
     ['prazo invalido', { deadlineAt: 'amanha' }, 'deadlineAt deve ser uma data ISO 8601.'],
+    ['codigo em branco', { codigosCotacao: [{ fonte: 'FONTE X', requestCode: '  ' }] }, 'Informe o código da cotação.'],
+    ['codigo sem fonte', { codigosCotacao: [{ fonte: ' ', requestCode: 'CMX-1' }] }, 'Informe a fonte do código.'],
+    [
+      'mesma fonte duas vezes',
+      { codigosCotacao: [{ fonte: 'Fonte X', requestCode: 'A-1' }, { fonte: ' FONTE X ', requestCode: 'A-2' }] },
+      'A mesma fonte tem mais de um código.',
+    ],
+    [
+      'mesmo codigo em duas fontes',
+      { codigosCotacao: [{ fonte: 'FONTE X', requestCode: 'a-1' }, { fonte: 'FONTE Y', requestCode: 'A-1' }] },
+      'O mesmo código foi informado para mais de uma fonte.',
+    ],
+    ['chave desconhecida no codigo', { codigosCotacao: [{ fonte: 'FONTE X', requestCode: 'A-1', extra: true }] }, ''],
     ['atualizadoEm invalido', { itens: [{ productId: 42, quantidadeKg: 1, atualizadoEm: 'ontem' }] }, 'atualizadoEm deve ser uma data ISO 8601.'],
   ])('%s -> 400 sem criar nada', async (_nome, over, mensagem) => {
     const cookies = await loginAs('admin');
