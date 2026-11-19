@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ForecastCotacaoLoteService } from '../services/ForecastCotacaoLoteService';
+import { ForecastCotacaoVinculoService } from '../services/ForecastCotacaoVinculoService';
 import { ForecastDbcorpService } from '../services/ForecastDbcorpService';
 import { ForecastDecisaoCompraService } from '../services/ForecastDecisaoCompraService';
 import { ForecastRascunhoCotacaoService } from '../services/ForecastRascunhoCotacaoService';
@@ -31,6 +32,8 @@ import {
   forecastPoPrecoFechadoSchema,
   forecastPrecoFechadoPutSchema,
   forecastRascunhoCotacaoPutSchema,
+  forecastVinculoCotacaoParamsSchema,
+  forecastVinculoCotacaoPutSchema,
   forecastEmbalagensPatchSchema,
   forecastGrupoEquivalenciaCreateSchema,
   forecastGrupoEquivalenciaPatchSchema,
@@ -550,6 +553,38 @@ export class ForecastController {
       const input = forecastCotacoesLotePostSchema.parse(req.body);
       const data = await ForecastCotacaoLoteService.criar(id, input, rascunhoUserId(req));
       return res.status(201).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  // Vincular cotacao EXISTENTE a um item do Forecast (PR2): admin/comprador (rota). Gestor/viewer leem o resultado pelas decisoes.
+  static async getCotacoesAbertasParaVinculo(req: Request, res: Response): Promise<Response> {
+    try {
+      const { id, productId } = forecastVinculoCotacaoParamsSchema.parse(req.params);
+      const data = await ForecastCotacaoVinculoService.cotacoesAbertasDoProduto(id, productId);
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async putVinculoCotacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const { id, productId } = forecastVinculoCotacaoParamsSchema.parse(req.params);
+      const input = forecastVinculoCotacaoPutSchema.parse(req.body);
+      const data = await ForecastCotacaoVinculoService.vincular(id, productId, input, rascunhoUserId(req));
+      return res.status(200).json({ data });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+
+  static async deleteVinculoCotacao(req: Request, res: Response): Promise<Response> {
+    try {
+      const { id, productId } = forecastVinculoCotacaoParamsSchema.parse(req.params);
+      const data = await ForecastCotacaoVinculoService.desvincular(id, productId, rascunhoUserId(req));
+      return res.status(200).json({ data });
     } catch (error) {
       return sendError(res, error);
     }

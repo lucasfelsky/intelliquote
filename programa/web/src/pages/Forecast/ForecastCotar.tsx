@@ -1,9 +1,12 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { InfoPopover } from '@/components/InfoPopover';
 import { Icon } from '@/components/icons';
 import type { ForecastItemRelatorio } from '@/services/forecast';
+import { cotacaoAbertaDaDecisao } from '@/services/forecastDecisoes';
 import { useCriarCotacao } from './ForecastCriarCotacao';
 import { useDecisoesDaQuinzena } from './ForecastDecisaoCompra';
+import { useVinculosDeCotacao } from './ForecastGerarCotacao';
+import ForecastVincularCotacaoModal from './ForecastVincularCotacaoModal';
 import { LinksDaCotacao } from './ForecastTrackingLinha';
 import { MOTIVO_FORA_CADASTRO } from './forecastGerarCotacaoRegras';
 
@@ -22,6 +25,8 @@ interface Props {
 export default function ForecastCotar({ item, fonte }: Props) {
   const ctx = useCriarCotacao();
   const decisoes = useDecisoesDaQuinzena();
+  const vinculos = useVinculosDeCotacao();
+  const [vinculoAberto, setVinculoAberto] = useState(false);
   const idMotivo = useId();
   const productId = item.productId ?? null;
   const cotacao = productId !== null ? (decisoes?.mapa.get(productId)?.cotacao ?? null) : null;
@@ -82,11 +87,39 @@ export default function ForecastCotar({ item, fonte }: Props) {
         </button>
       )
     ) : null;
+  // Vincular/Trocar cotacao (PR2): liga uma cotacao aberta que ja existe ao item. So quem pode criar cotacao (provedor + papel) e
+  // com produto no cadastro; o modal so e montado aberto (a consulta da lista fica dentro dele).
+  const abertaDaDecisao = cotacaoAbertaDaDecisao(decisoes?.mapa.get(productId));
+  const botaoVinculo =
+    vinculos !== null ? (
+      <button
+        type="button"
+        className="ghost-button ghost-button--sm fcq-botao"
+        aria-label={abertaDaDecisao ? `Trocar cotação de ${item.item}` : `Vincular cotação a ${item.item}`}
+        aria-haspopup="dialog"
+        onClick={() => setVinculoAberto(true)}
+      >
+        {abertaDaDecisao ? 'Trocar cotação' : 'Vincular cotação'}
+      </button>
+    ) : null;
+  const modalVinculo =
+    vinculoAberto && vinculos !== null ? (
+      <ForecastVincularCotacaoModal
+        snapshotId={vinculos.snapshotId}
+        productId={productId}
+        nomeItem={item.item}
+        cotacaoAtual={abertaDaDecisao}
+        onFechar={() => setVinculoAberto(false)}
+      />
+    ) : null;
   if (cotacao && !rascunho) {
-    return botaoPo ? (
+    const botaoTrocar = abertaDaDecisao ? botaoVinculo : null;
+    return botaoPo || botaoTrocar ? (
       <span className="fcq-acao fcq-acao--pilha">
         {botaoPo}
+        {botaoTrocar}
         {links}
+        {modalVinculo}
       </span>
     ) : (
       links
@@ -104,7 +137,9 @@ export default function ForecastCotar({ item, fonte }: Props) {
       >
         {rascunho ? 'Continuar' : 'Cotar'}
       </button>
+      {abertaDaDecisao ? null : botaoVinculo}
       {links}
+      {modalVinculo}
     </span>
   );
 }

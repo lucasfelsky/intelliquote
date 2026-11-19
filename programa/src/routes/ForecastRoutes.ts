@@ -301,6 +301,29 @@ router.post(
   ForecastController.postCotacoesLote,
 );
 
+// Vincular cotacao EXISTENTE a um item do Forecast (PR2): listar cotacoes abertas do produto, ligar/trocar e desligar. Tudo
+// admin/comprador (gestor/viewer leem o resultado pelas decisoes; comercial fica de fora). Desligar so com cotacao aberta.
+router.get(
+  '/forecast/snapshots/:id/cotacoes-abertas/:productId',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.getCotacoesAbertasParaVinculo,
+);
+
+router.put(
+  '/forecast/snapshots/:id/vinculo-cotacao/:productId',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.putVinculoCotacao,
+);
+
+router.delete(
+  '/forecast/snapshots/:id/vinculo-cotacao/:productId',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  ForecastController.deleteVinculoCotacao,
+);
+
 // Rascunho da cotacao do Forecast (E5): privado do dono, so admin/comprador (leitura inclusive).
 router.get(
   '/forecast/snapshots/:id/rascunho-cotacao',
