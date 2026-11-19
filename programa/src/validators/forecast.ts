@@ -815,6 +815,22 @@ export const forecastCotacoesLotePostSchema = z
 
 export type ForecastCotacoesLotePostInput = z.infer<typeof forecastCotacoesLotePostSchema>;
 
+// Vincular cotacao EXISTENTE a um item do Forecast (PR2): params das 3 rotas (quinzena + produto) e corpo do PUT.
+export const forecastVinculoCotacaoParamsSchema = z.object({
+  id: z.coerce.number({ error: 'Quinzena invalida.' }).int('Quinzena invalida.').positive('Quinzena invalida.'),
+  productId: z.coerce.number({ error: 'Produto inválido.' }).int('Produto inválido.').positive('Produto inválido.'),
+});
+
+export const forecastVinculoCotacaoPutSchema = z.strictObject({
+  quoteRequestId: z
+    .number({ error: 'Informe a cotação.' })
+    .int('Informe a cotação.')
+    .positive('Informe a cotação.'),
+  substituir: z.boolean({ error: 'substituir deve ser verdadeiro ou falso.' }).optional(),
+});
+
+export type ForecastVinculoCotacaoPutInput = z.infer<typeof forecastVinculoCotacaoPutSchema>;
+
 // Ocasioes que afetam o lead time (PR 1): feriado, greve, fechamento de porto, safra. Cadastro por admin/comprador; so
 // informa no relatorio (nao muda o motor). Chave desconhecida = 400 (inclusive `coverWithStock`, que existe so na coluna).
 // Escopo: `global` sem pais/fonte; `pais` com `countryCode`; `fonte` com `sourceId` (a fonte ativa e conferida no service).

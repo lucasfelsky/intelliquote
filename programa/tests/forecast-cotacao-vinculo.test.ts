@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   avancarStatus,
+  decidirVinculo,
+  decisaoAoEntrarNaCotacao,
+  decisaoAoSairDaCotacao,
+  ehKg,
+  MOTIVO_NAO_KG,
+  ordemDoStatus,
   quantidadeFinalNoFechamento,
   chaveFonte,
   codigoParaCotacao,
@@ -8,6 +14,7 @@ import {
   statusDaCotacao,
   statusDerivadoDoItem,
   type CotacaoVinculadaData,
+  type EntradaDecidirVinculo,
 } from '../src/utils/forecastCotacaoVinculo';
 import { paraDecisaoCompraData, paraDecisaoCompraLeitura } from '../src/utils/forecastDecisaoCompra';
 
@@ -187,5 +194,241 @@ describe('paraDecisaoCompraLeitura (aditivo)', () => {
       statusDerivado: 'cotando',
       quantidadeKg: 1500.5,
     });
+  });
+});
+
+describe('nenhum outro fluxo regride o status (so desvincular/trocar, em decisaoAoSairDaCotacao)', () => {
+  const todos = ['nao', 'cotando', 'confirmado', 'po', 'preco'] as const;
+
+  it('avancarStatus nunca devolve um status abaixo do atual, para todos os pares (atual, alvo)', () => {
+    for (const a of todos) {
+      for (const b of todos) {
+        expect(ordemDoStatus(avancarStatus(a, b))).toBeGreaterThanOrEqual(ordemDoStatus(a));
+      }
+    }
+  });
+
+  it('decisaoAoEntrarNaCotacao tambem nunca regride, para todos os status', () => {
+    const agora = new Date('2026-11-18T12:00:00Z');
+    for (const status of todos) {
+      const patch = decisaoAoEntrarNaCotacao(
+        { status, finalKg: null, finalAt: null, finalQuoteRequestId: null },
+        { quoteRequestId: 9, enviada: true, quantidadeCotada: 100 },
+        agora,
+      );
+      expect(ordemDoStatus(patch.status ?? status)).toBeGreaterThanOrEqual(ordemDoStatus(status));
+    }
+  });
+});
+
+describe('ehKg / MOTIVO_NAO_KG (D5)', () => {
+  it.each([
+    ['KG', true],
+    ['kg', true],
+    [' Kg ', true],
+    ['UN', false],
+    ['TON', false],
+    ['', false],
+  ])('ehKg(%j) = %s', (unit, esperado) => {
+    expect(ehKg(unit)).toBe(esperado);
+  });
+
+  it('o motivo cita a unidade do item', () => {
+    expect(MOTIVO_NAO_KG('UN')).toBe('O item está em UN; só itens em KG entram no Forecast.');
+  });
+});
+
+describe('decidirVinculo (PR2)', () => {
+  const base = (over: Partial<EntradaDecidirVinculo> = {}): EntradaDecidirVinculo => ({
+    snapshotId: 7,
+    productId: 42,
+    quoteRequestId: 90,
+    requestCode: 'QR-X',
+    cotacaoAberta: true,
+    itensDoProduto: [{ id: 1, unit: 'KG', quantity: 1000, vinculo: null }],
+    outraAbertaLigada: null,
+    substituir: false,
+    ...over,
+  });
+
+  it('cotacao fechada = 409', () => {
+    expect(decidirVinculo(base({ cotacaoAberta: false }))).toEqual({
+      tipo: 'erro',
+      status: 409,
+      motivo: 'A cotação QR-X está fechada.',
+    });
+  });
+
+  it('cotacao sem o item do produto = 400', () => {
+    expect(decidirVinculo(base({ itensDoProduto: [] }))).toEqual({
+      tipo: 'erro',
+      status: 400,
+      motivo: 'A cotação QR-X não tem o item.',
+    });
+  });
+
+  it('so itens em UN = 400 com o motivo da unidade', () => {
+    const r = decidirVinculo(base({ itensDoProduto: [{ id: 1, unit: 'UN', quantity: 5, vinculo: null }] }));
+    expect(r).toEqual({ tipo: 'erro', status: 400, motivo: MOTIVO_NAO_KG('UN') });
+  });
+
+  it('item ligado a OUTRO produto da MESMA quinzena = 409', () => {
+    const r = decidirVinculo(
+      base({ itensDoProduto: [{ id: 1, unit: 'KG', quantity: 10, vinculo: { snapshotId: 7, productId: 43 } }] }),
+    );
+    expect(r).toEqual({
+      tipo: 'erro',
+      status: 409,
+      motivo: 'Um item da cotação já está ligado a outro produto desta quinzena.',
+    });
+  });
+
+  it('tudo ja ligado a este item = nenhuma (idempotente), mesmo com outra aberta ligada', () => {
+    const itensDoProduto = [{ id: 1, unit: 'KG', quantity: 10, vinculo: { snapshotId: 7, productId: 42 } }];
+    expect(decidirVinculo(base({ itensDoProduto }))).toEqual({ tipo: 'nenhuma' });
+    expect(decidirVinculo(base({ itensDoProduto, outraAbertaLigada: { id: 80, requestCode: 'QR-Y' } }))).toEqual({ tipo: 'nenhuma' });
+  });
+
+  it('outra cotacao aberta ligada sem substituir = 409 "Use Trocar"', () => {
+    expect(decidirVinculo(base({ outraAbertaLigada: { id: 80, requestCode: 'QR-Y' } }))).toEqual({
+      tipo: 'erro',
+      status: 409,
+      motivo: 'O item já está na cotação aberta QR-Y. Use Trocar.',
+    });
+  });
+
+  it('outra cotacao aberta ligada com substituir = trocar', () => {
+    expect(decidirVinculo(base({ outraAbertaLigada: { id: 80, requestCode: 'QR-Y' }, substituir: true }))).toEqual({
+      tipo: 'trocar',
+      ligar: [1],
+      mover: [],
+      quantidadeCotada: 1000,
+    });
+  });
+
+  it('caso simples = vincular', () => {
+    expect(decidirVinculo(base())).toEqual({ tipo: 'vincular', ligar: [1], mover: [], quantidadeCotada: 1000 });
+  });
+
+  it('item ligado a OUTRA quinzena entra em `mover` e tambem em `ligar` (D1)', () => {
+    const r = decidirVinculo(
+      base({ itensDoProduto: [{ id: 1, unit: 'KG', quantity: 10, vinculo: { snapshotId: 6, productId: 42 } }] }),
+    );
+    expect(r).toEqual({
+      tipo: 'vincular',
+      ligar: [1],
+      mover: [{ itemId: 1, de: { snapshotId: 6, productId: 42 } }],
+      quantidadeCotada: 10,
+    });
+  });
+
+  it('soma as embalagens em KG e ignora o item em UN', () => {
+    const r = decidirVinculo(
+      base({
+        itensDoProduto: [
+          { id: 1, unit: 'KG', quantity: 600, vinculo: null },
+          { id: 2, unit: 'kg', quantity: 400, vinculo: null },
+          { id: 3, unit: 'UN', quantity: 9, vinculo: null },
+        ],
+      }),
+    );
+    expect(r).toEqual({ tipo: 'vincular', ligar: [1, 2], mover: [], quantidadeCotada: 1000 });
+  });
+
+  it('ja ligado + solto: so liga o que falta, mas a quantidade soma todos os KG', () => {
+    const r = decidirVinculo(
+      base({
+        itensDoProduto: [
+          { id: 1, unit: 'KG', quantity: 600, vinculo: { snapshotId: 7, productId: 42 } },
+          { id: 2, unit: 'KG', quantity: 400, vinculo: null },
+        ],
+      }),
+    );
+    expect(r).toEqual({ tipo: 'vincular', ligar: [2], mover: [], quantidadeCotada: 1000 });
+  });
+
+  it('soma acima do limite do banco = 400', () => {
+    const r = decidirVinculo(
+      base({
+        itensDoProduto: [
+          { id: 1, unit: 'KG', quantity: 2147483647, vinculo: null },
+          { id: 2, unit: 'KG', quantity: 1, vinculo: null },
+        ],
+      }),
+    );
+    expect(r).toEqual({ tipo: 'erro', status: 400, motivo: 'Quantidade acima do limite da cotação.' });
+  });
+});
+
+describe('decisaoAoSairDaCotacao (D2: unica excecao a "nunca regride")', () => {
+  it('REGRESSO: cotando + Qtd. final da cotacao solta + sem outra ativa = volta a "nao" e zera a Qtd. final', () => {
+    expect(decisaoAoSairDaCotacao({ status: 'cotando', finalQuoteRequestId: 9 }, 9, false)).toEqual({
+      status: 'nao',
+      zerarFinal: true,
+    });
+  });
+
+  it('com outra cotacao ativa o status e mantido (a Qtd. final da solta ainda e zerada)', () => {
+    expect(decisaoAoSairDaCotacao({ status: 'cotando', finalQuoteRequestId: 9 }, 9, true)).toEqual({
+      status: 'cotando',
+      zerarFinal: true,
+    });
+  });
+
+  it.each(['confirmado', 'po', 'preco'] as const)('%s nunca regride', (status) => {
+    expect(decisaoAoSairDaCotacao({ status, finalQuoteRequestId: 9 }, 9, false).status).toBe(status);
+  });
+
+  it('Qtd. final de OUTRA cotacao (ou nenhuma) nao e zerada', () => {
+    expect(decisaoAoSairDaCotacao({ status: 'cotando', finalQuoteRequestId: 5 }, 9, false)).toEqual({
+      status: 'nao',
+      zerarFinal: false,
+    });
+    expect(decisaoAoSairDaCotacao({ status: 'nao', finalQuoteRequestId: null }, 9, false)).toEqual({
+      status: 'nao',
+      zerarFinal: false,
+    });
+  });
+});
+
+describe('decisaoAoEntrarNaCotacao (D4)', () => {
+  const agora = new Date('2026-11-18T12:00:00Z');
+  const antes = new Date('2026-11-10T12:00:00Z');
+  const decisao = (over = {}) => ({
+    status: 'nao' as const,
+    finalKg: null,
+    finalAt: null,
+    finalQuoteRequestId: null,
+    ...over,
+  });
+
+  it('cotacao nao enviada = nada a gravar', () => {
+    expect(decisaoAoEntrarNaCotacao(decisao(), { quoteRequestId: 9, enviada: false, quantidadeCotada: 100 }, agora)).toEqual({
+      camposAlterados: [],
+    });
+  });
+
+  it('enviada: Qtd. final = cotada, finalAt agora e nao -> cotando', () => {
+    expect(decisaoAoEntrarNaCotacao(decisao(), { quoteRequestId: 9, enviada: true, quantidadeCotada: 100 }, agora)).toEqual({
+      finalKg: 100,
+      finalAt: agora,
+      finalQuoteRequestId: 9,
+      status: 'cotando',
+      camposAlterados: ['finalKg', 'finalAt', 'finalQuoteRequestId', 'status'],
+    });
+  });
+
+  it('po (e os demais) nao regride', () => {
+    const patch = decisaoAoEntrarNaCotacao(decisao({ status: 'po' }), { quoteRequestId: 9, enviada: true, quantidadeCotada: 100 }, agora);
+    expect(patch.status).toBe('po');
+    expect(patch.camposAlterados).not.toContain('status');
+  });
+
+  it('mesma cotacao ja gravada com a mesma quantidade = sem mudanca; quantidade diferente mantem finalAt', () => {
+    const ja = decisao({ status: 'cotando', finalKg: 100, finalAt: antes, finalQuoteRequestId: 9 });
+    expect(decisaoAoEntrarNaCotacao(ja, { quoteRequestId: 9, enviada: true, quantidadeCotada: 100 }, agora).camposAlterados).toEqual([]);
+    const outra = decisaoAoEntrarNaCotacao(ja, { quoteRequestId: 9, enviada: true, quantidadeCotada: 120 }, agora);
+    expect(outra.finalAt).toBe(antes);
+    expect(outra.camposAlterados).toEqual(['finalKg', 'finalQuoteRequestId']);
   });
 });

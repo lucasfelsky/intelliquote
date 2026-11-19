@@ -302,7 +302,10 @@ describe('acoes e tracking por linha', () => {
       const ver = within(acao).getByRole('link', { name: new RegExp(`^Ver cotação COT-0${id} de ${nome}$`) });
       expect(ver.getAttribute('href')).toBe(`/cotacoes/${id}`);
       expect(within(acao).queryByRole('link', { name: /^Ver pedido/ })).toBeNull();
-      expect(within(acao).queryByRole('button')).toBeNull();
+      // Sem "Cotar"/"Continuar". Cotacao ABERTA (criada/enviada) ganha "Trocar cotacao" (PR2); fechada nao tem botao algum.
+      expect(within(acao).queryByRole('button', { name: /^(Cotar|Continuar)/ })).toBeNull();
+      if (id === 154) expect(within(acao).queryByRole('button')).toBeNull();
+      else expect(within(acao).getByRole('button', { name: `Trocar cotação de ${nome}` })).toBeTruthy();
     }
   });
 
