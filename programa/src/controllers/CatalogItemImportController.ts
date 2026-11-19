@@ -4,6 +4,36 @@ import exceljs from 'exceljs';
 
 const NCM_REGEX = /^\d{8}$/;
 
+type ExistingCatalogItem = { id: number; commercialName: string; marketName: string };
+
+function normalizeDbcorpCode(value: unknown): string | null {
+  return typeof value === 'string' ? value.trim().toUpperCase() || null : null;
+}
+
+// Uma query por request: itens ATIVOS cujo codigo DBCorp (normalizado) esta na lista.
+async function findActiveByDbcorpCodes(codes: string[]): Promise<Map<string, ExistingCatalogItem>> {
+  const result = new Map<string, ExistingCatalogItem>();
+  if (codes.length === 0) return result;
+
+  const found = await prisma.catalogItem.findMany({
+    where: { isActive: true, dbcorpCode: { in: codes, mode: 'insensitive' } },
+    select: { id: true, commercialName: true, marketName: true, dbcorpCode: true },
+    orderBy: { id: 'asc' },
+  });
+
+  for (const item of found) {
+    const code = normalizeDbcorpCode(item.dbcorpCode);
+    if (code && !result.has(code)) {
+      result.set(code, { id: item.id, commercialName: item.commercialName, marketName: item.marketName });
+    }
+  }
+  return result;
+}
+
+function buildDuplicateReason(code: string, existing: ExistingCatalogItem): string {
+  return `Código DBCorp ${code} já existe no item #${existing.id} "${existing.commercialName}" (nome de mercado: ${existing.marketName}). Linha não importada; se for um item distinto (outra marca/fornecedor), cadastre manualmente.`;
+}
+
 export class CatalogItemImportController {
   static async preview(req: Request, res: Response) {
     try {
@@ -29,6 +59,8 @@ export class CatalogItemImportController {
       const familyMap = new Map(families.map((f) => [f.name.toLowerCase(), f.id]));
 
       const validLines: any[] = [];
+      // Numero da linha da planilha de cada validLine (array paralelo: o shape de validLines nao muda).
+      const validRows: number[] = [];
       const errorLines: any[] = [];
       // Coluna 6 (antiga "Dangerous goods") e posicional e foi mantida so para nao deslocar
       // "Notas": o DG agora e informado pelo fornecedor na resposta, entao o valor e ignorado.
@@ -51,7 +83,7 @@ export class CatalogItemImportController {
         const commercialName = row.getCell(1).text?.trim();
         const marketName = row.getCell(2).text?.trim();
         let ncm = row.getCell(3).text?.replace(/\D/g, '').trim() || null;
-        let dbcorpCode = row.getCell(4).text?.trim() || null;
+        const dbcorpCode = normalizeDbcorpCode(row.getCell(4).text);
         const familyName = row.getCell(5).text?.trim();
         const ignoredDangerousGoodText = row.getCell(6).text?.trim().toLowerCase();
         const notes = row.getCell(7).text?.trim() || null;
@@ -64,10 +96,6 @@ export class CatalogItemImportController {
         if (ncm && !NCM_REGEX.test(ncm)) {
           errorLines.push({ row: rowNumber, reason: 'NCM deve ter 8 dígitos numéricos' });
           return;
-        }
-
-        if (dbcorpCode) {
-          dbcorpCode = dbcorpCode.toUpperCase();
         }
 
         let familyId: number | null = null;
@@ -95,7 +123,38 @@ export class CatalogItemImportController {
           familyToCreate,
           notes,
         });
+        validRows.push(rowNumber);
       });
+
+      // Codigo DBCorp ja existente (item ativo) ou repetido na planilha: a linha vira erro.
+      const distinctCodes = [
+        ...new Set(validLines.map((l) => l.dbcorpCode).filter((c): c is string => typeof c === 'string')),
+      ];
+      const existingByCode = await findActiveByDbcorpCodes(distinctCodes);
+      const acceptedLines: any[] = [];
+      const firstRowByCode = new Map<string, number>();
+      validLines.forEach((line, idx) => {
+        const code: string | null = line.dbcorpCode;
+        const rowNumber = validRows[idx];
+        if (code) {
+          const existing = existingByCode.get(code);
+          if (existing) {
+            errorLines.push({ row: rowNumber, reason: buildDuplicateReason(code, existing) });
+            return;
+          }
+          const previousRow = firstRowByCode.get(code);
+          if (previousRow !== undefined) {
+            errorLines.push({
+              row: rowNumber,
+              reason: `Código DBCorp ${code} repetido na planilha (já usado na linha ${previousRow}). Linha não importada.`,
+            });
+            return;
+          }
+          firstRowByCode.set(code, rowNumber);
+        }
+        acceptedLines.push(line);
+      });
+      errorLines.sort((a, b) => a.row - b.row);
 
       const warnings: string[] = [];
       if (ignoredDangerousGoodRows > 0) {
@@ -104,7 +163,7 @@ export class CatalogItemImportController {
         );
       }
 
-      res.json({ data: { validLines, errorLines, warnings } });
+      res.json({ data: { validLines: acceptedLines, errorLines, warnings } });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -121,9 +180,34 @@ export class CatalogItemImportController {
       const errorLines: any[] = [];
       const familyCache = new Map<string, number>();
 
+      // Defesa em profundidade: o confirm pode ser chamado direto, sem passar pelo preview.
+      const normalizedCodes = items.map((it: any) => normalizeDbcorpCode(it?.dbcorpCode));
+      const existingByCode = await findActiveByDbcorpCodes([
+        ...new Set(normalizedCodes.filter((c: string | null): c is string => c !== null)),
+      ]);
+      const createdCodes = new Map<string, number>();
+
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         try {
+          // ANTES da criacao de familia: linha rejeitada nao pode deixar ItemFamily orfa.
+          const code = normalizedCodes[i];
+          if (code) {
+            const existing = existingByCode.get(code);
+            if (existing) {
+              errorLines.push({ row: i + 2, reason: buildDuplicateReason(code, existing) });
+              continue;
+            }
+            const previousRow = createdCodes.get(code);
+            if (previousRow !== undefined) {
+              errorLines.push({
+                row: i + 2,
+                reason: `Código DBCorp ${code} repetido no lote (já usado na linha ${previousRow}). Linha não importada.`,
+              });
+              continue;
+            }
+          }
+
           let familyId: number | null = null;
           const familyName = typeof item.familyName === 'string' ? item.familyName.trim() : '';
           if (familyName) {
@@ -152,12 +236,13 @@ export class CatalogItemImportController {
               commercialName: item.commercialName,
               marketName: item.marketName,
               ncm: item.ncm,
-              dbcorpCode: item.dbcorpCode,
+              dbcorpCode: code,
               familyId,
               notes: item.notes,
               isActive: true,
             }
           });
+          if (code) createdCodes.set(code, i + 2);
           successLines.push({ row: i + 2, commercialName: item.commercialName });
         } catch (error: any) {
           if (error.code === 'P2002' && error.meta?.target?.includes('marketName')) {
