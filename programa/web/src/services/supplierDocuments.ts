@@ -37,6 +37,14 @@ export interface SupplierDocumentSummaryEntry {
 
 export interface SupplierDocumentSummary {
   bySupplier: Record<string, SupplierDocumentSummaryEntry>;
+  /** Ausente em backend antigo: o web trata como "desconhecido". */
+  documentedSupplierIds?: number[];
+}
+
+export interface SupplierDocumentsSummaryView {
+  bySupplier: Record<string, SupplierDocumentSummaryEntry>;
+  /** null = desconhecido (nao mostra o selo "Nao homologado"). */
+  documentedSupplierIds: Set<number> | null;
 }
 
 export interface SupplierDocumentFilePayload {
@@ -102,10 +110,20 @@ export function normalizeSummary(data: unknown): Record<string, SupplierDocument
   return bySupplier as Record<string, SupplierDocumentSummaryEntry>;
 }
 
-export async function getSupplierDocumentsSummary(): Promise<
-  Record<string, SupplierDocumentSummaryEntry>
-> {
-  return normalizeSummary(await api.get<unknown>(`${BASE}/summary`));
+/** null se `documentedSupplierIds` nao for array (backend antigo/formato inesperado). */
+export function normalizeDocumentedSupplierIds(data: unknown): Set<number> | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const ids = (data as { documentedSupplierIds?: unknown }).documentedSupplierIds;
+  if (!Array.isArray(ids)) return null;
+  return new Set(ids.filter((id): id is number => Number.isInteger(id)));
+}
+
+export async function getSupplierDocumentsSummary(): Promise<SupplierDocumentsSummaryView> {
+  const data = await api.get<unknown>(`${BASE}/summary`);
+  return {
+    bySupplier: normalizeSummary(data),
+    documentedSupplierIds: normalizeDocumentedSupplierIds(data),
+  };
 }
 
 /** Le o arquivo como base64 puro (sem prefixo data-URL). */

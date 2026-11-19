@@ -564,9 +564,9 @@ describe('Fornecedores — importação de planilha', () => {
 });
 
 describe('Fornecedores — documentos com vencimento', () => {
-  function mockApi(summary: unknown) {
+  function mockApi(summary: unknown, supplierList: unknown = suppliers) {
     vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === '/api/v1/suppliers') return Promise.resolve(suppliers);
+      if (url === '/api/v1/suppliers') return Promise.resolve(supplierList);
       if (url === '/api/v1/supplier-contacts') {
         return Promise.resolve({ bySupplier: { 10: contacts } });
       }
@@ -609,6 +609,46 @@ describe('Fornecedores — documentos com vencimento', () => {
     const { findByText, queryByText } = renderPage();
     await findByText('ACME Ltda');
     expect(queryByText(/^Doc\. /)).toBeNull();
+  });
+
+  it('p. sem nenhum fornecedor documentado mostra o selo "Não homologado" (warning)', async () => {
+    mockApi({ bySupplier: {}, documentedSupplierIds: [] });
+    const { findByText } = renderPage();
+
+    const badge = await findByText('Não homologado');
+    expect(badge.className).toContain('badge--warning');
+    expect(badge.className).toContain('fornecedores-doc');
+  });
+
+  it('q. fornecedor documentado nao mostra o selo; os demais mostram', async () => {
+    const two = [
+      ...suppliers,
+      { ...suppliers[0], id: 11, name: 'Beta Corp', tags: [], families: [] },
+    ];
+    mockApi({ bySupplier: {}, documentedSupplierIds: [10] }, two);
+    const { findByText, container } = renderPage();
+
+    await findByText('Beta Corp');
+    const row10 = container.querySelector('#supplier-row-10') as HTMLElement;
+    const row11 = container.querySelector('#supplier-row-11') as HTMLElement;
+    expect(within(row10).queryByText('Não homologado')).toBeNull();
+    expect(within(row11).getByText('Não homologado')).toBeTruthy();
+  });
+
+  it('r. backend antigo (sem documentedSupplierIds) nao mostra o selo e mantem "Doc. vencido"', async () => {
+    mockApi({ bySupplier: { 10: { expired: 1, expiring: 0 } } });
+    const { findByText, queryByText } = renderPage();
+
+    await findByText('Doc. vencido');
+    expect(queryByText('Não homologado')).toBeNull();
+  });
+
+  it('s. resumo em formato inesperado (array) nao mostra "Não homologado"', async () => {
+    mockApi([]);
+    const { findByText, queryByText } = renderPage();
+
+    await findByText('ACME Ltda');
+    expect(queryByText('Não homologado')).toBeNull();
   });
 
   it('n. deep link ?supplier=10 abre a linha expandida com a secao Documentos', async () => {
