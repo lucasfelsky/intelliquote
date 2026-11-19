@@ -252,6 +252,47 @@ describe('Supplier document routes', () => {
         supplier: { deletedAt: null },
       });
     });
+
+    it('resumo devolve documentedSupplierIds com documento ativo (vencido, sem vencimento ou em dia)', async () => {
+      const cookies = await loginAs('viewer');
+      prismaMock.supplierDocument.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ supplierId: 10 }, { supplierId: 11 }]);
+
+      const response = await request(app)
+        .get('/api/v1/supplier-documents/summary')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(response.body.documentedSupplierIds).toEqual([10, 11]);
+
+      const args = prismaMock.supplierDocument.findMany.mock.calls[1][0];
+      expect(args.where).toEqual({ deletedAt: null, supplier: { deletedAt: null } });
+      expect(args.distinct).toEqual(['supplierId']);
+      expect(args.select).toEqual({ supplierId: true });
+    });
+
+    it('resumo sem documento nenhum devolve documentedSupplierIds vazio', async () => {
+      const cookies = await loginAs('viewer');
+      prismaMock.supplierDocument.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      const response = await request(app)
+        .get('/api/v1/supplier-documents/summary')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ bySupplier: {}, documentedSupplierIds: [] });
+    });
+
+    it('comercial nao acessa o resumo (403)', async () => {
+      const cookies = await loginAs('comercial');
+
+      const response = await request(app)
+        .get('/api/v1/supplier-documents/summary')
+        .set('Cookie', cookies);
+
+      expect(response.status).toBe(403);
+    });
   });
 
   describe('validacao do upload', () => {
@@ -681,7 +722,7 @@ describe('Supplier document routes', () => {
   });
 });
 
-type Role = 'admin' | 'comprador' | 'gestor' | 'viewer';
+type Role = 'admin' | 'comprador' | 'gestor' | 'viewer' | 'comercial';
 
 // O login tem rate limit: faz 1 login real por papel e reaplica so o mock do usuario nas
 // demais chamadas (o papel e lido do banco a cada request autenticada).

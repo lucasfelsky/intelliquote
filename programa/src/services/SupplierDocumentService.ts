@@ -67,6 +67,8 @@ export interface SupplierDocumentSummaryEntry {
 
 export interface SupplierDocumentSummary {
   bySupplier: Record<string, SupplierDocumentSummaryEntry>;
+  // Ids de fornecedores com pelo menos 1 documento ativo (qualquer status), ordem crescente.
+  documentedSupplierIds: number[];
 }
 
 // Filtro padrao: documento e fornecedor nao excluidos.
@@ -227,7 +229,15 @@ export class SupplierDocumentService {
       bySupplier[key] = entry;
     }
 
-    return { bySupplier };
+    // Fornecedores com algum documento ativo (vencido, sem vencimento ou em dia contam).
+    const documented = await prisma.supplierDocument.findMany({
+      where: activeWhere(),
+      select: { supplierId: true },
+      distinct: ['supplierId'],
+      orderBy: { supplierId: 'asc' },
+    });
+
+    return { bySupplier, documentedSupplierIds: documented.map((row) => row.supplierId) };
   }
 
   static async create(

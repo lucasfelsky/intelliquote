@@ -221,7 +221,9 @@ export default function Fornecedores() {
     queryKey: ['supplier-documents-summary'],
     queryFn: getSupplierDocumentsSummary,
   });
-  const documentsSummaryBySupplier = documentsSummary.data ?? {};
+  const documentsSummaryBySupplier = documentsSummary.data?.bySupplier ?? {};
+  // null = desconhecido (carregando, erro ou backend antigo): nao mostra "Nao homologado".
+  const documentedSupplierIds = documentsSummary.data?.documentedSupplierIds ?? null;
 
   // Deep link `/fornecedores?supplier=<id>` (link do e-mail de aviso): le o parametro uma
   // vez, expande a linha quando a lista traz o id e rola ate ela.
@@ -583,6 +585,7 @@ export default function Fornecedores() {
                 const primary = supplierContacts.find((c) => c.isPrimary);
                 const isExpanded = expandedSupplierId === s.id;
                 const docSummary = documentsSummaryBySupplier[String(s.id)];
+                const naoHomologado = documentedSupplierIds !== null && !documentedSupplierIds.has(s.id);
                 return (
                   <>
                     <tr
@@ -605,6 +608,12 @@ export default function Fornecedores() {
                       <td>
                         <div className="fornecedores-nome">
                         <strong title={s.name}>{s.name}</strong>
+                        {naoHomologado ? (
+                          <span className="badge badge--warning fornecedores-doc">
+                            <Icon name="file-x" size={12} strokeWidth={2.2} />
+                            Não homologado
+                          </span>
+                        ) : null}
                         {docSummary && docSummary.expired > 0 ? (
                             <span className="badge badge--danger fornecedores-doc">
                               <Icon name="file" size={12} strokeWidth={2.2} />
