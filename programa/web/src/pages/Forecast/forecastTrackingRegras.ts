@@ -1,4 +1,4 @@
-import type { ForecastStatus } from '@/services/forecast';
+import type { ForecastLinha, ForecastStatus } from '@/services/forecast';
 import type { ForecastCotacaoVinculada, ForecastDecisao } from '@/services/forecastDecisoes';
 import { dataHoraSp } from './forecastDecisaoCampos';
 import { kgBr, STATUS_ROTULO } from './forecastPainel';
@@ -64,6 +64,36 @@ export function statusDaLinha(
     return { origem: 'cotacao', status, rotulo: rotuloDoStatus(status), tom: TOM_DO_STATUS[status] ?? 'muted' };
   }
   return { origem: 'congelado', status: statusCongelado, rotulo: rotuloDoStatus(statusCongelado), tom: null };
+}
+
+export interface StatusDoPainel {
+  classe: ForecastStatus;
+  rotulo: string;
+}
+
+/**
+ * Status da compra que o Painel mostra: a mesma regra do relatorio de compras (`statusDaLinha`), mapeada para os 5
+ * ForecastStatus da grade. `cotacao_criada` (e `rascunho`, que o Painel nao tem) cai na classe/filtro `nao`: cotacao
+ * criada e ainda nao enviada aos fornecedores (a cor cinza "Cotacao nao enviada" continua verdadeira e o backend nao
+ * grava nada ate o envio), mas o rotulo e o do relatorio ("Cotação criada").
+ */
+export function statusDoPainel(statusCongelado: ForecastStatus, decisao: ForecastDecisao | undefined): StatusDoPainel {
+  const e = statusDaLinha(statusCongelado, decisao, false);
+  const classe: ForecastStatus = e.status === 'cotacao_criada' || e.status === 'rascunho' ? 'nao' : e.status;
+  return { classe, rotulo: e.rotulo };
+}
+
+/** Status do Painel por `linha.linha`; `null` enquanto as decisoes nao chegaram (a grade usa o status congelado). */
+export function statusDoPainelPorLinha(
+  linhas: readonly ForecastLinha[],
+  mapa: ReadonlyMap<number, ForecastDecisao> | null,
+): ReadonlyMap<number, StatusDoPainel> | null {
+  if (mapa === null) return null;
+  const resultado = new Map<number, StatusDoPainel>();
+  for (const l of linhas) {
+    resultado.set(l.linha, statusDoPainel(l.status, l.productId !== null ? mapa.get(l.productId) : undefined));
+  }
+  return resultado;
 }
 
 export const LEGENDA_QTD_FINAL = 'Preenchida ao enviar a cotação; atualizada ao fechar com o fornecedor.';

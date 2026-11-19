@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import type { ForecastDivergencia, ForecastLinha } from '@/services/forecast';
+import type { ForecastDivergencia, ForecastLinha, ForecastStatus } from '@/services/forecast';
+import type { StatusDoPainel } from './forecastTrackingRegras';
 import { descreverDivergencia, GRUPOS, motivoSemSugestao, seloPendenteTexto, STATUS_ROTULO, type ColunaPainel, type GrupoId } from './forecastPainel';
 import { Icon } from '@/components/icons';
 import { semVendaHa6Meses } from './forecastSemVenda';
@@ -18,16 +19,19 @@ interface RowProps {
   divergencias: DivergenciasPorCelula;
   /** Query string (com `?`) do destino do item: quinzena, filtro, busca e colunas ocultas. */
   buscaDoItem: string;
+  /** Classe `fc-status--*` e rotulo do status da compra (derivado da cotacao vinculada, ou o congelado). */
+  statusClasse: ForecastStatus;
+  statusRotulo: string;
 }
 
-const Row = memo(function Row({ linha, colunas, inicios, divergencias, buscaDoItem }: RowProps) {
+const Row = memo(function Row({ linha, colunas, inicios, divergencias, buscaDoItem, statusClasse, statusRotulo }: RowProps) {
   // FZ4: linha sem cadastro nao tem produto/fonte: "Cotacao nao enviada" sugeriria uma acao impossivel, entao o status some (o selo explica).
-  const fonteEStatus = [linha.fonte, linha.pendenteCadastro ? '' : STATUS_ROTULO[linha.status]].filter(Boolean).join(' · ');
+  const fonteEStatus = [linha.fonte, linha.pendenteCadastro ? '' : statusRotulo].filter(Boolean).join(' · ');
   const semVenda = semVendaHa6Meses(linha);
   return (
     <tr className="fc-row">
       <td className="fc-cell fc-fixa fc-fixa--n">{linha.n ?? ''}</td>
-      <td className={`fc-cell fc-fixa fc-fixa--item fc-status--${linha.status}`}>
+      <td className={`fc-cell fc-fixa fc-fixa--item fc-status--${statusClasse}`}>
         <Link
           className="fc-item"
           to={{ pathname: `/forecast/item/${linha.linha}`, search: buscaDoItem }}
@@ -95,6 +99,8 @@ interface Props {
   buscaDoItem: string;
   legenda: string;
   mensagemVazia?: string;
+  /** Status da compra por `linha.linha`; ausente/`null` = status congelado da importacao. */
+  statusPorLinha?: ReadonlyMap<number, StatusDoPainel> | null;
 }
 
 export default function ForecastGrid({
@@ -104,6 +110,7 @@ export default function ForecastGrid({
   buscaDoItem,
   legenda,
   mensagemVazia = 'Nenhum produto com esses filtros.',
+  statusPorLinha,
 }: Props) {
   // Colunas vizinhas do mesmo grupo viram uma faixa so no cabecalho.
   const faixas = useMemo(() => {
@@ -171,16 +178,21 @@ export default function ForecastGrid({
               </td>
             </tr>
           ) : (
-            linhas.map((linha) => (
-              <Row
-                key={linha.linha}
-                linha={linha}
-                colunas={colunas}
-                inicios={inicios}
-                divergencias={divergencias}
-                buscaDoItem={buscaDoItem}
-              />
-            ))
+            linhas.map((linha) => {
+              const status = statusPorLinha?.get(linha.linha);
+              return (
+                <Row
+                  key={linha.linha}
+                  linha={linha}
+                  colunas={colunas}
+                  inicios={inicios}
+                  divergencias={divergencias}
+                  buscaDoItem={buscaDoItem}
+                  statusClasse={status?.classe ?? linha.status}
+                  statusRotulo={status?.rotulo ?? STATUS_ROTULO[linha.status]}
+                />
+              );
+            })
           )}
         </tbody>
       </table>
