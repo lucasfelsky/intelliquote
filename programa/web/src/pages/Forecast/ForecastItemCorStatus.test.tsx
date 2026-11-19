@@ -193,6 +193,27 @@ describe('Forecast Painel: regras CSS da celula ITENS (F13-C)', () => {
     }
   });
 
+  it('marca 4x14 da legenda: 1 regra `.fc-pagina i.fc-status--*` por status com o proprio token (sem regra escura propria) e contraste sobre --rf-surface', () => {
+    for (const status of STATUS_ORDEM) {
+      const s = `.fc-pagina i.fc-status--${status}`;
+      const regrasDoStatus = doSeletor(s);
+      expect(regrasDoStatus, s).toHaveLength(1);
+      expect(declaracao(regrasDoStatus[0]?.body ?? '', 'background'), s).toBe(`var(${TOKEN_DO_STATUS[status]})`);
+    }
+    // O escuro vem do proprio token (mesma fonte da barrinha e da celula): nao existe regra escura para a marca.
+    expect(regras.filter((r) => /:root\[data-theme="dark"\] \.fc-pagina i\.fc-status--/.test(r.prelude))).toHaveLength(0);
+    // Marca 4x14 sobre o fundo do balao (--rf-surface): so as 2 excecoes ja aceitas em KNOWN_EXCEPTIONS (suiteComexTokens) ficam abaixo de 3:1.
+    const abaixoDe3: string[] = [];
+    for (const tema of ['claro', 'escuro'] as const) {
+      const tokens = temas[tema];
+      const surface = opaque(tokens, '--rf-surface');
+      for (const status of STATUS_ORDEM) {
+        if (ratioOf(opaque(tokens, TOKEN_DO_STATUS[status]), surface) < 3) abaixoDe3.push(`${tema} ${status}`);
+      }
+    }
+    expect(abaixoDe3.sort()).toEqual(['claro confirmado', 'claro nao']);
+  });
+
   it('as vizinhas seguem como antes (seguranca e acima da media) e as regras novas nao as citam', () => {
     const seg = doSeletor('.fc-pagina .fc-grid .fc-cell--seg');
     expect(seg.map((r) => declaracao(r.body, 'background'))).toEqual(['var(--rf-fc-current-tint)']);

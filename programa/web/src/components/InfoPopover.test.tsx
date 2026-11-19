@@ -156,4 +156,27 @@ describe('InfoPopover', () => {
     fireEvent.mouseEnter(screen.getByTestId('chip'));
     expect(screen.getByRole('tooltip').className).not.toContain('info-popover--largo');
   });
+
+  it('padrao (sem semPortal): o balao fica em portal direto no body', () => {
+    renderPopover();
+    fireEvent.mouseEnter(screen.getByTestId('chip'));
+    expect(screen.getByRole('tooltip').parentElement).toBe(document.body);
+  });
+
+  it('semPortal: o balao fica dentro do ancestral do botao e Esc fecha', () => {
+    const { container } = render(
+      <div className="escopo-teste">
+        <InfoPopover label="Legenda" trigger={<>i</>} semPortal testId="chip">
+          <p>Conteudo</p>
+        </InfoPopover>
+      </div>,
+    );
+    fireEvent.click(screen.getByTestId('chip'));
+    const tooltip = screen.getByRole('tooltip');
+    expect(container.contains(tooltip)).toBe(true);
+    expect(tooltip.closest('.escopo-teste')).not.toBeNull();
+    expect(tooltip.parentElement).not.toBe(document.body);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
 });

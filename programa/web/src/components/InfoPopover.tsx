@@ -6,6 +6,9 @@ import { createPortal } from 'react-dom';
 // (quando nao fixado). O balao e renderizado em portal no body, com position:fixed, para nao ser
 // cortado por ancestrais com overflow:hidden. Nao usar dentro de <dialog>: o portal no body fica
 // abaixo do top layer do dialog modal.
+// Opt-in `semPortal`: o balao fica no lugar (ainda position:fixed). So usar quando nenhum ancestral
+// cria bloco de contencao para position:fixed (transform, filter, contain, backdrop-filter) e fora de
+// <dialog>; hoje o rf-page-enter do shell usa `backwards` para nao deixar transform residual.
 
 type InfoPopoverProps = {
   /** aria-label do botao; deve COMECAR pelo texto visivel. */
@@ -20,6 +23,11 @@ type InfoPopoverProps = {
   className?: string;
   testId?: string;
   contentTestId?: string;
+  /**
+   * Renderiza o balao no lugar (irmao do botao, ainda position:fixed) em vez de portal no body, para
+   * herdar regras de CSS com escopo de ancestral (ex.: a raiz da pagina do Forecast). Padrao: false.
+   */
+  semPortal?: boolean;
 };
 
 const CLOSE_DELAY_MS = 120;
@@ -35,6 +43,7 @@ export function InfoPopover({
   className,
   testId,
   contentTestId,
+  semPortal = false,
 }: InfoPopoverProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -144,6 +153,28 @@ export function InfoPopover({
     if (!pinned) scheduleClose();
   };
 
+  const balao = (
+    <div
+      ref={popoverRef}
+      id={id}
+      role="tooltip"
+      className={`info-popover info-popover--${tone}${largo ? ' info-popover--largo' : ''}`}
+      data-testid={contentTestId}
+      style={{
+        position: 'fixed',
+        left: pos?.left ?? 0,
+        top: pos?.top ?? 0,
+        visibility: pos ? 'visible' : 'hidden',
+      }}
+      onMouseEnter={openNow}
+      onMouseLeave={handleLeave}
+      // Clicar no balao nao tira o foco do botao (senao o onBlur fecharia).
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      {children}
+    </div>
+  );
+
   return (
     <>
       <button
@@ -164,29 +195,7 @@ export function InfoPopover({
       >
         {trigger}
       </button>
-      {open &&
-        createPortal(
-          <div
-            ref={popoverRef}
-            id={id}
-            role="tooltip"
-            className={`info-popover info-popover--${tone}${largo ? ' info-popover--largo' : ''}`}
-            data-testid={contentTestId}
-            style={{
-              position: 'fixed',
-              left: pos?.left ?? 0,
-              top: pos?.top ?? 0,
-              visibility: pos ? 'visible' : 'hidden',
-            }}
-            onMouseEnter={openNow}
-            onMouseLeave={handleLeave}
-            // Clicar no balao nao tira o foco do botao (senao o onBlur fecharia).
-            onMouseDown={(event) => event.preventDefault()}
-          >
-            {children}
-          </div>,
-          document.body,
-        )}
+      {open && (semPortal ? balao : createPortal(balao, document.body))}
     </>
   );
 }
