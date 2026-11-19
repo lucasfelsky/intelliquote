@@ -447,7 +447,7 @@ describe('Forecast - cotacoes em lote e Qtd. final (DB)', () => {
   testDbSkip('codigo igual ao de cotacao excluida: 409 e nada e gravado', async () => {
     const codigo = `CMX-003-${U}`;
     const excluida = await prisma.quoteRequest.create({
-      data: { requestCode: codigo, status: 'open', createdById: adminId, deletedAt: new Date() },
+      data: { requestCode: codigo, status: 'open', createdById: adminId, deletedAt: new Date(), desiredIncoterm: ['FOB'] },
     });
     const antes = (await cotacoesDoUsuario()).length;
     const res = await postar({
