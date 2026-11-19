@@ -20,6 +20,7 @@ vi.mock('@/services/quoteResponses', async (importOriginal) => ({
   approveAward: vi.fn(),
   closeQuoteRequest: vi.fn(),
   setManualWinner: vi.fn(),
+  listQuoteResponses: vi.fn(),
   messageOf: (e: unknown) => String(e),
 }));
 vi.mock('@/services/dispatch', () => ({
@@ -45,7 +46,7 @@ vi.mock('@/services/forwarders', async (importOriginal) => ({
   listForwarders: vi.fn().mockResolvedValue([]),
 }));
 
-import { executeComparison, previewComparison, setManualWinner } from '@/services/quoteResponses';
+import { executeComparison, listQuoteResponses, previewComparison, setManualWinner } from '@/services/quoteResponses';
 import { previewQuoteResponseReply } from '@/services/dispatch';
 
 const winner = {
@@ -131,6 +132,7 @@ describe('ComparacaoTab: visual (Suite COMEX, F8)', () => {
     controls.role = 'admin';
     controls.confirm.mockReset().mockResolvedValue(true);
     vi.mocked(previewComparison).mockReset().mockResolvedValue(preview);
+    vi.mocked(listQuoteResponses).mockReset().mockResolvedValue([]);
     vi.mocked(setManualWinner).mockReset().mockResolvedValue(undefined);
     vi.mocked(executeComparison)
       .mockReset()
@@ -422,6 +424,31 @@ describe('ComparacaoTab: visual (Suite COMEX, F8)', () => {
     const erro = await findByText(/\[falha no preview\]/);
     expect(erro.className).toContain('alert--error');
     expect(erro.getAttribute('role')).toBe('alert');
+    expect(inlineFora(container)).toEqual([]);
+  });
+
+  it('seletor de visao: grupo nomeado com 2 botoes (aria-pressed, icone aria-hidden), a dica muda e nenhuma visao usa estilo inline', async () => {
+    const { container, findByText, getByRole } = renderTab();
+    await findByText('[Fornecedor Demo 01]');
+    const grupo = getByRole('group', { name: 'Visão da comparação' });
+    expect(grupo.className).toContain('cmp-visao__seg');
+    const [ranking, porItem] = Array.from(grupo.querySelectorAll('button.cmp-visao__opcao')) as HTMLElement[];
+    expect(ranking?.textContent).toBe('Ranking');
+    expect(porItem?.textContent).toBe('Preço por item');
+    expect(ranking?.getAttribute('aria-pressed')).toBe('true');
+    expect(porItem?.getAttribute('aria-pressed')).toBe('false');
+    expect(ranking?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(porItem?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(container.querySelector('.cmp-visao__dica')?.textContent).toBe('Quem vence no total, pelos critérios escolhidos.');
+    expect(inlineFora(container)).toEqual([]);
+
+    fireEvent.click(getByRole('button', { name: 'Preço por item' }));
+    // renderTab nao passa itens: a visao mostra o estado vazio proprio.
+    await findByText('Sem itens nesta cotação.');
+    expect(container.querySelector('.cmp-rows')).toBeNull();
+    expect(porItem?.getAttribute('aria-pressed')).toBe('true');
+    expect(ranking?.getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelector('.cmp-visao__dica')?.textContent).toBe('Quanto cada fornecedor cobra por item, lado a lado.');
     expect(inlineFora(container)).toEqual([]);
   });
 });

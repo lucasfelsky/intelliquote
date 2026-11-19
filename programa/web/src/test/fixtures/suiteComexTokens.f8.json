@@ -102,5 +102,21 @@
     "constante": false,
     "fonte": "mock",
     "ref": "CotacaoComparacaoEscuro"
+  },
+  {
+    "token": "--rf-cmp-seg-sombra",
+    "claro": "0 1px 3px rgba(0, 65, 83, 0.14)",
+    "escuro": "none",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ComparacaoPorItem"
+  },
+  {
+    "token": "--rf-cmp-linha-hover",
+    "claro": "#f0f6f4",
+    "escuro": "#14333f",
+    "constante": false,
+    "fonte": "mock",
+    "ref": "ComparacaoPorItem"
   }
 ]

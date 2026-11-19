@@ -17,6 +17,8 @@ vi.mock('@/services/quoteResponses', async (importOriginal) => ({
   approveAward: vi.fn(),
   closeQuoteRequest: vi.fn(),
   setManualWinner: vi.fn(),
+  // Visao "Preço por item": lista as respostas (precos por item); o Ranking nunca chama.
+  listQuoteResponses: vi.fn(),
   messageOf: (e: unknown) => String(e),
 }));
 vi.mock('@/services/dispatch', () => ({
@@ -49,6 +51,7 @@ import {
   previewComparison,
   setManualWinner,
   closeQuoteRequest,
+  listQuoteResponses,
 } from '@/services/quoteResponses';
 import { previewQuoteResponseReply, sendPurchaseOrder } from '@/services/dispatch';
 
@@ -168,6 +171,7 @@ describe('ComparacaoTab', () => {
     controls.confirm.mockReset().mockResolvedValue(true);
     vi.mocked(approveAward).mockReset().mockResolvedValue(undefined);
     vi.mocked(listComparisons).mockReset();
+    vi.mocked(listQuoteResponses).mockReset().mockResolvedValue([]);
     vi.mocked(previewComparison).mockReset();
     vi.mocked(executeComparison).mockReset();
     vi.mocked(previewQuoteResponseReply).mockReset();
@@ -1758,5 +1762,177 @@ describe('ComparacaoTab - Ordem de Compra para proposta nao vencedora', () => {
     expect(container.querySelector('[data-testid="po-nonwinner"]')).toBeNull();
     // gestor continua podendo definir a vencedora
     expect(container.querySelector('.cmp-rows .cmp-btn--link')?.textContent).toBe('Definir como vencedora');
+  });
+});
+
+describe('ComparacaoTab - seletor de visao (Ranking | Preço por item)', () => {
+  const itens = [
+    { id: 5, itemCode: 'RE-01', productName: 'Resina Epóxi', description: 'Líquida', quantity: 1000, unit: 'KG', targetPrice: 2.5 },
+    { id: 6, itemCode: null, productName: 'Catalisador Y', description: null, quantity: 500, unit: 'KG', targetPrice: null },
+  ];
+  const excludedGamma = {
+    quoteResponseId: 44,
+    supplierId: 9,
+    supplier: { id: 9, name: 'Gamma SA' },
+    reason: 'unavailable' as const,
+    unavailableItems: [{ quoteRequestItemId: 6, productName: 'Catalisador Y' }],
+  };
+  const previewComExcluida = {
+    results: [winner, loser],
+    winnerQuoteResponseId: 42,
+    pendingApproval: false,
+    thresholdValue: null,
+    responseCount: 3,
+    excluded: [excludedGamma],
+  };
+
+  function respostaDe(id: number, unitarios: [number, number]) {
+    return {
+      id,
+      quoteRequestId: 99,
+      supplierId: id - 35,
+      currency: 'USD',
+      offeredIncoterm: 'FOB' as const,
+      paymentTermsDays: 30,
+      leadTimeDays: 21,
+      items: unitarios.map((unitPrice, i) => ({
+        id: id * 10 + i,
+        quoteResponseId: id,
+        quoteRequestItemId: 5 + i,
+        unitPrice,
+        quantity: i === 0 ? 1000 : 500,
+        totalPrice: 0,
+        leadTimeDays: null,
+        notes: null,
+      })),
+    };
+  }
+
+  function renderComItens(preview: typeof previewComExcluida | typeof defaultPreview = previewComExcluida) {
+    vi.mocked(previewComparison).mockResolvedValue(preview);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <ComparacaoTab
+          quoteRequestId={99}
+          quoteRequestStatus="open"
+          productName="Produto X"
+          requestCode="RFQ-001"
+          items={itens}
+          requestCurrency="USD"
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  beforeEach(() => {
+    controls.role = 'admin';
+    controls.confirm.mockReset().mockResolvedValue(true);
+    vi.mocked(previewComparison).mockReset();
+    vi.mocked(listQuoteResponses)
+      .mockReset()
+      .mockResolvedValue([respostaDe(42, [2.4, 8]), respostaDe(43, [2.6, 7.5]), respostaDe(44, [2.5, 0])] as never);
+  });
+
+  it('a visao Ranking e a padrao: "Ranking" pressionado, criterios visiveis e nenhuma chamada de precos por item', async () => {
+    const { container, findByText, getByRole } = renderComItens();
+    await findByText('ACME Ltda');
+    expect(getByRole('button', { name: 'Ranking' }).getAttribute('aria-pressed')).toBe('true');
+    expect(getByRole('button', { name: 'Preço por item' }).getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelector('.cmp-criteria')).not.toBeNull();
+    expect(container.querySelector('.cmp-visao__dica')?.textContent).toBe('Quem vence no total, pelos critérios escolhidos.');
+    expect(listQuoteResponses).not.toHaveBeenCalled();
+  });
+
+  it('"Preço por item" esconde criterios, cards do ranking e "Fora do ranking" e mostra a matriz', async () => {
+    const { container, findByText, getByRole, findByRole } = renderComItens();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('button', { name: 'Preço por item' }));
+    const regiao = await findByRole('region', { name: 'Matriz de preço unitário por item e fornecedor' });
+    expect(regiao.querySelector('table.cmp-pi__matriz')).not.toBeNull();
+    expect(getByRole('button', { name: 'Preço por item' }).getAttribute('aria-pressed')).toBe('true');
+    expect(getByRole('button', { name: 'Ranking' }).getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelector('.cmp-visao__dica')?.textContent).toBe('Quanto cada fornecedor cobra por item, lado a lado.');
+    expect(container.querySelector('.cmp-criteria')).toBeNull();
+    expect(container.querySelector('.cmp-rows')).toBeNull();
+    expect(container.querySelector('.cmp-rankgrid--head')).toBeNull();
+    expect(container.querySelector('.cmp-excluded')).toBeNull();
+    expect(listQuoteResponses).toHaveBeenCalledTimes(1);
+    // nomes das propostas na ordem do ranking, e a fora do ranking por ultimo
+    const nomes = Array.from(regiao.querySelectorAll('thead .cmp-pi__cab-nome')).map((el) => el.textContent);
+    expect(nomes).toEqual(['ACME Ltda', 'Beta Corp', 'Gamma SA']);
+    expect(await findByText('2,40')).toBeTruthy();
+  });
+
+  it('voltar para "Ranking" restaura tudo e mantem o criterio escolhido', async () => {
+    const { container, findByText, getByRole, findByRole } = renderComItens();
+    await findByText('ACME Ltda');
+    fireEvent.click(getByRole('switch', { name: 'Incoterm' }));
+    // Aguarda o novo preview (debounce + refetch) antes de trocar de visao: sem isso o refetch
+    // recria a UI no meio do fluxo e o teste fica dependente de timing.
+    await waitFor(() => expect(previewComparison).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(container.querySelector('.cmp-rows')).not.toBeNull());
+    fireEvent.click(getByRole('button', { name: 'Preço por item' }));
+    await findByRole('region', { name: 'Matriz de preço unitário por item e fornecedor' });
+    fireEvent.click(getByRole('button', { name: 'Ranking' }));
+    await waitFor(() => expect(container.querySelector('.cmp-rows')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('.cmp-excluded')).not.toBeNull());
+    expect(container.querySelector('.cmp-criteria')).not.toBeNull();
+    expect(container.querySelector('.cmp-pi')).toBeNull();
+    expect(getByRole('switch', { name: 'Incoterm' }).getAttribute('aria-checked')).toBe('true');
+    expect(getByRole('switch', { name: 'Preço' }).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('trocar de criterio no Ranking nao desmonta a barra de visao durante o recalculo', async () => {
+    const { container, findByText, getByRole } = renderComItens();
+    await findByText('ACME Ltda');
+    const barra = container.querySelector('.cmp-visao');
+    expect(barra).not.toBeNull();
+
+    // O 2o preview fica pendente: reproduz a janela do refetch (data undefined na queryKey nova).
+    let liberar: (value: typeof previewComExcluida) => void = () => undefined;
+    vi.mocked(previewComparison).mockImplementationOnce(
+      () => new Promise<typeof previewComExcluida>((resolve) => { liberar = resolve; }),
+    );
+    fireEvent.click(getByRole('switch', { name: 'Incoterm' }));
+    await waitFor(() => expect(previewComparison).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(container.querySelector('.cmp-carregando')).not.toBeNull());
+    // Carregando: spinner presente e a MESMA barra continua montada (sem salto do .cmp-criteria).
+    expect(container.querySelector('.cmp-visao')).toBe(barra);
+    expect(container.querySelector('.cmp-criteria')).not.toBeNull();
+
+    liberar(previewComExcluida);
+    await waitFor(() => expect(container.querySelector('.cmp-carregando')).toBeNull());
+    await waitFor(() => expect(container.querySelector('.cmp-rows')).not.toBeNull());
+    expect(container.querySelector('.cmp-visao')).not.toBeNull();
+  });
+
+  it('sem respostas (responseCount 0) nao ha seletor de visao', async () => {
+    const { container, findByText, queryByRole } = renderComItens({ ...defaultPreview, results: [], responseCount: 0 });
+    await findByText('Nenhuma resposta ainda');
+    expect(queryByRole('group', { name: 'Visão da comparação' })).toBeNull();
+    expect(container.querySelector('.cmp-visao')).toBeNull();
+  });
+
+  it('a vencedora manual fora do ranking recebe o selo na coluna (mesmo texto do Ranking)', async () => {
+    vi.mocked(previewComparison).mockResolvedValue({
+      ...previewComExcluida,
+      persistedWinner: { quoteResponseId: 44, creditSupportRequestId: null, manual: true },
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { findByRole, getByRole } = render(
+      <QueryClientProvider client={qc}>
+        <ComparacaoTab quoteRequestId={99} quoteRequestStatus="open" productName="Produto X" requestCode="RFQ-001" items={itens} requestCurrency="USD" />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await findByRole('button', { name: 'Preço por item' }));
+    const regiao = await findByRole('region', { name: 'Matriz de preço unitário por item e fornecedor' });
+    expect(getByRole('button', { name: 'Preço por item' }).getAttribute('aria-pressed')).toBe('true');
+    const cabecalhos = Array.from(regiao.querySelectorAll('thead th.cmp-pi__col-forn'));
+    const gamma = cabecalhos.find((th) => th.textContent?.includes('Gamma SA')) as HTMLElement;
+    expect(gamma.textContent).toContain('Vencedora (escolha manual)');
+    expect(gamma.textContent).toContain('Fora do ranking');
+    const acme = cabecalhos.find((th) => th.textContent?.includes('ACME Ltda')) as HTMLElement;
+    expect(acme.textContent).not.toContain('Vencedora');
   });
 });
