@@ -7,6 +7,10 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 // conferenciaDaQuinzena vive em um service que importa o Prisma; aqui so a funcao pura e usada.
 vi.mock('../src/lib/prisma', () => ({ prisma: {} }));
 
+// Paridade de 9.464 celulas pelas formulas, geracao + reimportacao de xlsx (338 produtos) por teste:
+// ~2,0-2,6 s cada (medido isolado e sob npm test); sob carga maior passa dos 5 s padrao do vitest.
+vi.setConfig({ testTimeout: 30_000 });
+
 import { FORECAST_SHEETS, FORECAST_STATUS_COLORS } from '../src/constants/forecast';
 import { calcular, conferir, type OpcoesCalculo } from '../src/utils/forecastEngine';
 import {

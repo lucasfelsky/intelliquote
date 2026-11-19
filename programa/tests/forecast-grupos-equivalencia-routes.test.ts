@@ -23,6 +23,9 @@ vi.mock('../src/lib/prisma', () => {
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 
+// loginAs faz login real (bcryptjs compare, JS puro) em 22 pontos; o teste de validacao faz 6 logins.
+vi.setConfig({ testTimeout: 20_000 });
+
 type Mock = ReturnType<typeof vi.fn>;
 const prismaMock = prisma as unknown as {
   user: { findUnique: Mock; findFirst: Mock };
@@ -411,8 +414,14 @@ describe('DELETE /forecast/equivalence-groups/:id', () => {
   });
 });
 
+// Mesmo hash para todos os logins: o compare da rota /auth/login continua real a cada login.
+// Depende de a senha do loginAs ser SEMPRE o literal fixo 'ChangeMe123!': se um teste futuro
+// usar outra senha, este hash memoizado seria o da senha antiga.
+let senhaHash: Promise<string> | undefined;
+const hashDaSenha = () => (senhaHash ??= hashPassword('ChangeMe123!'));
+
 async function loginAs(role: Role) {
-  const passwordHash = await hashPassword('ChangeMe123!');
+  const passwordHash = await hashDaSenha();
 
   prismaMock.user.findUnique.mockResolvedValue({
     id: 1,
