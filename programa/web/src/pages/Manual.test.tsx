@@ -678,7 +678,8 @@ describe('Manual: capitulos 11 a 13 (M4)', () => {
     expect(t).toContain('item indisponível, item faltando, quantidade diferente ou alternativa de parceiro desatualizada');
     expect(t).toContain('ou quando falta o câmbio da proposta, só gestor ou admin podem adjudicar');
     expect(t).toContain('Na aba Comparações o ranking começa só com Preço.');
-    expect(container.querySelectorAll('#comparacao h3')).toHaveLength(5);
+    expect(t).toContain('Preço por item');
+    expect(container.querySelectorAll('#comparacao h3')).toHaveLength(6);
     expect(container.querySelectorAll('#comparacao .manual-aviso--info')).toHaveLength(1);
   });
 

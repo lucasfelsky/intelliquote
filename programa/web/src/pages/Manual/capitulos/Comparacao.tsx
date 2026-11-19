@@ -120,6 +120,11 @@ export default function Comparacao() {
         <RotuloUi>Definir como vencedora mesmo assim</RotuloUi>. Para comparar, todas as propostas precisam estar <strong>na mesma moeda</strong>.
       </p>
 
+      <h3 className="manual-secao">Preço por item</h3>
+      <p>
+        O seletor <RotuloUi>Ranking</RotuloUi> | <RotuloUi>Preço por item</RotuloUi> mostra os itens nas linhas e os fornecedores nas colunas, na ordem do ranking. Cada célula traz o preço unitário cotado: o menor da linha fica em verde e os demais mostram a diferença em %. “—” é item não cotado; Indisponível é item temporariamente indisponível. Propostas fora do ranking vêm no fim, em cinza, sem total. A faixa azul mostra quanto custaria comprar o menor preço de cada item; ela é informativa e não muda o ranking nem a vencedora.
+      </p>
+
       <h3 className="manual-secao">Escolher a vencedora</h3>
       <ul className="manual-lista" role="list">
         <li>

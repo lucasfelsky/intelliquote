@@ -28,6 +28,8 @@ import { Icon } from '@/components/icons';
 import { InfoPopover } from '@/components/InfoPopover';
 import { SupplierNotes } from '@/components/SupplierNotes';
 import { PurchaseOrderModal, type PurchaseOrderTarget } from './PurchaseOrderModal';
+import { ComparacaoPorItem } from './ComparacaoPorItem';
+import type { ItemDaCotacao } from './comparacaoPorItemHelpers';
 
 function formatNumber(value: number | undefined | null, fractionDigits = 2): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '—';
@@ -195,11 +197,16 @@ export function ComparacaoTab({
   quoteRequestStatus,
   productName,
   requestCode,
+  items = [],
+  requestCurrency,
 }: {
   quoteRequestId: number;
   quoteRequestStatus: 'open' | 'closed';
   productName: string | null;
   requestCode: string;
+  // Itens e moeda da cotacao (para a visao "Preco por item"); opcionais para nao mudar quem so usa o Ranking.
+  items?: ItemDaCotacao[];
+  requestCurrency?: string;
 }) {
   const confirm = useConfirm();
   const qc = useQueryClient();
@@ -211,6 +218,8 @@ export function ComparacaoTab({
   const canSendPo = role === 'admin' || role === 'comprador';
 
   const [criteria, setCriteria] = useState<Criterion[]>(['price']);
+  // Visao do cartao: Ranking (padrao) ou matriz "Preco por item". Nao persiste.
+  const [view, setView] = useState<'ranking' | 'item'>('ranking');
   const [feedback, setFeedback] = useState<{ kind: 'ok' | 'err' | 'warn'; text: string } | null>(null);
 
   const weights = computeWeights(criteria);
@@ -566,11 +575,7 @@ export function ComparacaoTab({
               {r.isWinner && (
                 <span className="badge badge--success cmp-winner-badge">
                   <Icon name="trophy" size={12} strokeWidth={2.2} />
-                  {manualWinner
-                    ? 'Vencedora (escolha manual)'
-                    : previewPendingApproval
-                      ? 'Recomendada · requer aprovação'
-                      : 'Vencedora'}
+                  {winnerBadgeLabel}
                 </span>
               )}
               {qtyMismatches && (
@@ -734,10 +739,41 @@ export function ComparacaoTab({
   const excludedWinner = manualKey
     ? excludedResponses.find((entry) => candidateKey(entry) === manualKey) ?? null
     : null;
+  // Texto do selo da vencedora (o mesmo no Ranking e na matriz "Preco por item").
+  const winnerBadgeLabel = manualWinner
+    ? 'Vencedora (escolha manual)'
+    : previewPendingApproval
+      ? 'Recomendada · requer aprovação'
+      : 'Vencedora';
   const rankedResults = previewResults.map((r) => ({
     ...r,
     isWinner: manualKey ? candidateKey(r) === manualKey : candidateKey(r) === previewWinnerKey,
   })).sort((a, b) => Number(b.isWinner) - Number(a.isWinner) || b.totalScore - a.totalScore || a.offeredPrice - b.offeredPrice);
+
+  // A queryKey do preview inclui os pesos: ao trocar de criterio `previewQuery.data` fica undefined
+  // durante o refetch. Sem este ref, a barra de visao (e a matriz) desmontariam e o resto do cartao
+  // saltaria ~64 px sob o clique. O ref guarda o ultimo conteudo bom so para manter a barra/matriz
+  // montadas; os estados carregando/erro/vazio continuam derivando de `previewQuery.data`.
+  const hadResponsesRef = useRef<number | null>(null);
+  const itemViewSnapshotRef = useRef<{
+    rankedResults: typeof rankedResults;
+    excludedResponses: typeof excludedResponses;
+    excludedWinnerKey: string | null;
+    winnerBadgeLabel: string;
+  } | null>(null);
+  if (previewQuery.data && responseCount > 0) {
+    hadResponsesRef.current = quoteRequestId;
+    itemViewSnapshotRef.current = {
+      rankedResults,
+      excludedResponses,
+      excludedWinnerKey: excludedWinner ? candidateKey(excludedWinner) : null,
+      winnerBadgeLabel,
+    };
+  }
+  const showViewBar = previewQuery.data
+    ? responseCount > 0
+    : previewQuery.isLoading && hadResponsesRef.current === quoteRequestId;
+  const itemViewProps = itemViewSnapshotRef.current;
 
   // Animação de reordenação (FLIP leve, CSS puro, sem lib): guarda a posição
   // (getBoundingClientRect) de cada linha por key estável e, quando a ordem
@@ -884,6 +920,37 @@ export function ComparacaoTab({
           </div>
         </header>
 
+        {showViewBar && (
+          <div className="cmp-visao">
+            <div className="cmp-visao__seg" role="group" aria-label="Visão da comparação">
+              <button
+                type="button"
+                className="cmp-visao__opcao"
+                aria-pressed={view === 'ranking'}
+                onClick={() => setView('ranking')}
+              >
+                <Icon name="trophy" size={16} strokeWidth={2} />
+                Ranking
+              </button>
+              <button
+                type="button"
+                className="cmp-visao__opcao"
+                aria-pressed={view === 'item'}
+                onClick={() => setView('item')}
+              >
+                <Icon name="grid" size={16} strokeWidth={2} />
+                Preço por item
+              </button>
+            </div>
+            <span className="cmp-visao__dica">
+              {view === 'ranking'
+                ? 'Quem vence no total, pelos critérios escolhidos.'
+                : 'Quanto cada fornecedor cobra por item, lado a lado.'}
+            </span>
+          </div>
+        )}
+
+        {view === 'ranking' && (
         <div className="cmp-criteria">
           <div className="cmp-criteria__head">
             <span className="cmp-criteria__label">Critérios de comparação</span>
@@ -913,6 +980,7 @@ export function ComparacaoTab({
             {' '}Preço considera todos os itens e quantidades na moeda da proposta, sem conversão cambial, frete adicional ou impostos estimados.
           </p>
         </div>
+        )}
 
         <div className="cmp-body">
         {previewQuery.isLoading && (
@@ -944,6 +1012,18 @@ export function ComparacaoTab({
           </div>
         )}
 
+        {view === 'item' && showViewBar && itemViewProps && (
+          <ComparacaoPorItem
+            quoteRequestId={quoteRequestId}
+            items={items}
+            requestCurrency={requestCurrency}
+            rankedResults={itemViewProps.rankedResults}
+            excludedResponses={itemViewProps.excludedResponses}
+            excludedWinnerKey={itemViewProps.excludedWinnerKey}
+            winnerBadgeLabel={itemViewProps.winnerBadgeLabel}
+          />
+        )}
+
         {previewQuery.data && responseCount === 0 && (
           <div className="cmp-empty">
             <div className="cmp-empty__icon" aria-hidden="true">
@@ -959,7 +1039,7 @@ export function ComparacaoTab({
           </div>
         )}
 
-        {previewQuery.data && responseCount > 0 && comparableCount === 0 && (
+        {view === 'ranking' && previewQuery.data && responseCount > 0 && comparableCount === 0 && (
           <div className="cmp-bypass">
             <div className="cmp-bypass-alert" role="status">
               <div className="cmp-bypass-alert__icon" aria-hidden="true">
@@ -975,7 +1055,7 @@ export function ComparacaoTab({
           </div>
         )}
 
-        {previewQuery.data && comparableCount === 1 && (() => {
+        {view === 'ranking' && previewQuery.data && comparableCount === 1 && (() => {
           const only = previewResults[0];
           const bypassName = only?.supplier?.name ?? (only ? `Fornecedor #${only.supplierId}` : '—');
           const bypassViaPartner = !!only && isViaPartner(only);
@@ -1042,7 +1122,7 @@ export function ComparacaoTab({
           );
         })()}
 
-        {previewQuery.data && comparableCount >= 2 && (
+        {view === 'ranking' && previewQuery.data && comparableCount >= 2 && (
           <>
             {previewPendingApproval && !manualWinner && (
               <p className="cmp-alcada" role="status">
@@ -1080,7 +1160,7 @@ export function ComparacaoTab({
           </>
         )}
 
-        {previewQuery.data && excludedResponses.length > 0 && (
+        {view === 'ranking' && previewQuery.data && excludedResponses.length > 0 && (
           <section className="cmp-excluded" aria-labelledby="cmp-excluded-title">
             <h3 id="cmp-excluded-title" className="cmp-excluded__titulo">
               Fora do ranking

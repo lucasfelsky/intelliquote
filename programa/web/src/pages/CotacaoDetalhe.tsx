@@ -228,7 +228,7 @@ function normalize(qr: unknown): QuoteRequest {
     };
   }
 
-function normalizeItem(it: unknown): QuoteRequestItem {
+export function normalizeItem(it: unknown): QuoteRequestItem {
   if (typeof it !== 'object' || it === null) {
     throw new Error('Resposta inesperada do servidor.');
   }
@@ -242,7 +242,13 @@ function normalizeItem(it: unknown): QuoteRequestItem {
     description: (obj.description as string | null) ?? null,
     quantity: Number(obj.quantity ?? 0),
     unit: String(obj.unit ?? ''),
-    targetPrice: typeof obj.targetPrice === 'number' ? obj.targetPrice : null,
+    // Decimal(12,2) chega como string no JSON: converte string ou number finito.
+    targetPrice:
+      (typeof obj.targetPrice === 'number' || typeof obj.targetPrice === 'string') &&
+      obj.targetPrice !== '' &&
+      Number.isFinite(Number(obj.targetPrice))
+        ? Number(obj.targetPrice)
+        : null,
     notes: (obj.notes as string | null) ?? null,
     desiredIncoterm: obj.desiredIncoterm
       ? asIncoterm(obj.desiredIncoterm)
@@ -1321,6 +1327,8 @@ export default function CotacaoDetalhe() {
               quoteRequestStatus={qr.status}
               productName={qr.productName}
               requestCode={qr.requestCode}
+              items={items}
+              requestCurrency={qr.currency}
             />
           </section>
         </TabPanel>

@@ -541,6 +541,188 @@ describe('F8: receitas dos boards (valores exatos)', () => {
   });
 });
 
+describe('F8: Preço por item (mock-up ComparacaoPorItem, valores exatos)', () => {
+  it('seletor de visao: faixa 14/24 com divisoria; segmento de 4/4 em --rf-tone-neutral-bg (raio 14); opcao de 36 (0 16, raio 10, 13/700, 200 ms); ativa em --rf-surface com sombra tokenizada; escuro em --rf-surface-alt', () => {
+    expect(naRegiao('.cmp-visao')).toMatchObject({
+      display: 'flex',
+      'flex-wrap': 'wrap',
+      'align-items': 'center',
+      'justify-content': 'space-between',
+      gap: '12px 20px',
+      padding: '14px 24px',
+      'border-bottom': '1px solid var(--rf-divider)',
+      background: 'var(--rf-surface)',
+    });
+    expect(naRegiao('.cmp-visao__seg')).toMatchObject({
+      display: 'inline-flex',
+      padding: '4px',
+      gap: '4px',
+      'border-radius': 'var(--rf-radius-alert)',
+      background: 'var(--rf-tone-neutral-bg)',
+    });
+    expect(naRegiao('.cmp-visao__opcao')).toMatchObject({
+      display: 'inline-flex',
+      gap: '8px',
+      height: '36px',
+      padding: '0 16px',
+      border: '0',
+      'border-radius': 'var(--rf-radius-control)',
+      background: 'transparent',
+      color: 'var(--rf-tone-neutral-fg)',
+      'font-size': '13px',
+      'font-weight': '700',
+      transition: 'background-color var(--rf-dur-base), color var(--rf-dur-base)',
+    });
+    expect(naRegiao('.cmp-visao__opcao[aria-pressed="true"]')).toEqual({
+      background: 'var(--rf-surface)',
+      color: 'var(--rf-ink)',
+      'box-shadow': 'var(--rf-cmp-seg-sombra)',
+    });
+    expect(naRegiao(':root[data-theme="dark"] .cmp-visao__opcao[aria-pressed="true"]')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(naRegiao('.cmp-visao__opcao:focus-visible')).toMatchObject({ 'box-shadow': '0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action)' });
+    expect(naRegiao('.cmp-visao__dica')).toEqual({ color: 'var(--rf-ink-soft)', 'font-size': '13px' });
+  });
+
+  it('switches: entrada escondida por clip (sem opacity); trilho 38x22 em --rf-tone-neutral-bg com borda de 1 px; botao de 16 em --rf-ink-soft; ligado em --rf-action; foco com anel duplo', () => {
+    expect(naRegiao('.cmp-pi')).toMatchObject({ display: 'flex', 'flex-direction': 'column', gap: '14px' });
+    expect(naRegiao('.cmp-pi__controles')).toMatchObject({ 'flex-wrap': 'wrap', gap: '10px 20px' });
+    expect(naRegiao('.cmp-pi__switch')).toMatchObject({ display: 'inline-flex', gap: '10px', 'font-size': '13px', 'font-weight': '700', cursor: 'pointer', 'user-select': 'none', position: 'relative' });
+    const entrada = naRegiao('.cmp-pi__switch-input');
+    expect(entrada).toMatchObject({ position: 'absolute', width: '1px', height: '1px', margin: '-1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', 'white-space': 'nowrap', border: '0' });
+    expect(entrada).not.toHaveProperty('opacity');
+    expect(naRegiao('.cmp-pi__trilho')).toMatchObject({
+      width: '38px',
+      height: '22px',
+      'border-radius': 'var(--rf-radius-pill)',
+      background: 'var(--rf-tone-neutral-bg)',
+      border: '1px solid var(--rf-border)',
+      flex: 'none',
+      transition: 'background-color var(--rf-dur-base), border-color var(--rf-dur-base)',
+    });
+    expect(naRegiao('.cmp-pi__trilho::after')).toMatchObject({
+      width: '16px',
+      height: '16px',
+      top: '2px',
+      left: '2px',
+      'border-radius': 'var(--rf-radius-pill)',
+      background: 'var(--rf-ink-soft)',
+      transition: 'transform var(--rf-dur-base), background-color var(--rf-dur-base)',
+    });
+    expect(naRegiao('.cmp-pi__switch-input:checked + .cmp-pi__trilho')).toEqual({ background: 'var(--rf-action)', 'border-color': 'var(--rf-action)' });
+    expect(naRegiao('.cmp-pi__switch-input:checked + .cmp-pi__trilho::after')).toEqual({ transform: 'translateX(16px)', background: 'var(--rf-on-action)' });
+    expect(naRegiao('.cmp-pi__switch-input:focus-visible + .cmp-pi__trilho')).toMatchObject({ 'box-shadow': '0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action)' });
+    expect(naRegiao('.cmp-pi__legenda')).toEqual({ 'margin-left': 'auto', color: 'var(--rf-ink-soft)', 'font-size': '12px' });
+  });
+
+  it('faixa informativa: 12/16 em --rf-tone-info-bg/-fg, raio 14, 13/600 com entrelinha 1,5; negrito 800', () => {
+    expect(naRegiao('.cmp-pi__insight')).toMatchObject({
+      display: 'flex',
+      'flex-wrap': 'wrap',
+      gap: '8px 14px',
+      padding: '12px 16px',
+      'border-radius': 'var(--rf-radius-alert)',
+      background: 'var(--rf-tone-info-bg)',
+      color: 'var(--rf-tone-info-fg)',
+      'font-size': '13px',
+      'font-weight': '600',
+      'line-height': '1.5',
+    });
+    expect(naRegiao('.cmp-pi__insight strong')).toEqual({ 'font-weight': '800' });
+  });
+
+  it('matriz: rolagem horizontal com borda de 1 px (raio 14) e foco; tabela de 920 px minimo; celulas 12/14 a direita; item fixo (sticky, 250 a 290); linha sob o mouse em --rf-cmp-linha-hover; colunas fora do ranking em --rf-surface-alt', () => {
+    expect(naRegiao('.cmp-pi__rolagem')).toMatchObject({ 'overflow-x': 'auto', border: '1px solid var(--rf-border)', 'border-radius': 'var(--rf-radius-alert)', background: 'var(--rf-surface)' });
+    expect(naRegiao('.cmp-pi__rolagem:focus-visible')).toMatchObject({ 'box-shadow': '0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action)' });
+    expect(naRegiao('.cmp-pi__matriz')).toEqual({ width: '100%', 'border-collapse': 'separate', 'border-spacing': '0', 'min-width': '920px' });
+    expect(declaracoes(semMedia, '.cmp-pi__matriz td')).toEqual({
+      padding: '12px 14px',
+      'border-bottom': '1px solid var(--rf-divider)',
+      'vertical-align': 'middle',
+      'text-align': 'right',
+      background: 'var(--rf-surface)',
+    });
+    expect(naRegiao('.cmp-pi__matriz thead th')).toEqual({ 'vertical-align': 'bottom', 'border-bottom': '1px solid var(--rf-border)', 'padding-top': '16px', 'padding-bottom': '14px' });
+    expect(naRegiao('.cmp-pi__matriz tbody tr:hover td')).toEqual({ background: 'var(--rf-cmp-linha-hover)' });
+    expect(naRegiao('.cmp-pi__matriz .cmp-pi__col-item')).toEqual({
+      position: 'sticky',
+      left: '0',
+      'z-index': '2',
+      'min-width': '250px',
+      'max-width': '290px',
+      'text-align': 'left',
+      'box-shadow': '1px 0 0 var(--rf-divider)',
+    });
+    expect(naRegiao('.cmp-pi__matriz .cmp-pi__col-qtd')).toEqual({ 'min-width': '96px', color: 'var(--rf-ink-soft)' });
+    expect(naRegiao('.cmp-pi__matriz .cmp-pi__col-forn')).toEqual({ 'min-width': '150px' });
+    expect(naRegiao('.cmp-pi__matriz td.cmp-pi__col--fora')).toEqual({ background: 'var(--rf-surface-alt)' });
+    expect(naRegiao('.cmp-pi__matriz tbody tr:hover td.cmp-pi__col--fora')).toEqual({ background: 'var(--rf-cmp-linha-hover)' });
+    expect(naRegiao('.cmp-pi__matriz tbody tr:last-child td')).toEqual({ 'border-bottom': '0' });
+  });
+
+  it('cabecalho e item: coluna alinhada a direita (gap 5); nome 14/800; posicao de 24 (mono 12/700; vencedora em --rf-action); item 14/700 com subtitulo 12 em --rf-ink-soft', () => {
+    expect(naRegiao('.cmp-pi__cab')).toMatchObject({ 'flex-direction': 'column', 'align-items': 'flex-end', gap: '5px' });
+    expect(naRegiao('.cmp-pi__cab--esq')).toEqual({ 'align-items': 'flex-start' });
+    expect(naRegiao('.cmp-pi__cab-nome')).toEqual({ 'font-size': '14px', 'font-weight': '800', 'line-height': '1.25' });
+    expect(naRegiao('.cmp-pi__cab-meta')).toMatchObject({ 'flex-wrap': 'wrap', 'justify-content': 'flex-end', gap: '6px' });
+    expect(naRegiao('.cmp-pi__posicao')).toMatchObject({ width: '24px', height: '24px', 'border-radius': 'var(--rf-radius-pill)', background: 'var(--rf-tone-neutral-bg)', 'font-family': 'var(--rf-font-mono)', 'font-size': '12px', 'font-weight': '700' });
+    expect(naRegiao('.cmp-pi__posicao--vencedora')).toEqual({ background: 'var(--rf-action)', color: 'var(--rf-on-action)' });
+    expect(naRegiao('.cmp-pi__rotulo')).toEqual({ color: 'var(--rf-ink-soft)', 'font-size': '12px', 'font-weight': '700' });
+    expect(naRegiao('.cmp-pi__item')).toMatchObject({ 'flex-direction': 'column', gap: '2px' });
+    expect(naRegiao('.cmp-pi__item-nome')).toEqual({ 'font-size': '14px', 'font-weight': '700', 'line-height': '1.3' });
+    expect(naRegiao('.cmp-pi__item-sub')).toEqual({ color: 'var(--rf-ink-soft)', 'font-size': '12px' });
+    expect(naRegiao('.cmp-pi__num')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '13px', 'font-weight': '600', 'font-variant-numeric': 'tabular-nums', 'white-space': 'nowrap' });
+    expect(naRegiao('.cmp-pi__un')).toEqual({ color: 'var(--rf-ink-soft)', 'font-weight': '500' });
+  });
+
+  it('celula: 88 de largura minima, 6/10, raio 10; valor mono 15/700; diferenca mono 11/600; menor em --rf-tone-success-bg com anel --rf-vencedora-borda; aviso de Qtd 11/700; "—" mono 15', () => {
+    expect(naRegiao('.cmp-pi__px')).toMatchObject({ display: 'inline-flex', 'flex-direction': 'column', 'align-items': 'flex-end', gap: '2px', 'min-width': '88px', padding: '6px 10px', 'border-radius': 'var(--rf-radius-control)' });
+    expect(naRegiao('.cmp-pi__px-valor')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '15px', 'font-weight': '700', 'line-height': '1.2' });
+    expect(naRegiao('.cmp-pi__px-delta')).toMatchObject({ color: 'var(--rf-ink-soft)', 'font-family': 'var(--rf-font-mono)', 'font-size': '11px', 'font-weight': '600', 'line-height': '1.2' });
+    expect(naRegiao('.cmp-pi__px--menor')).toEqual({ background: 'var(--rf-tone-success-bg)', 'box-shadow': 'inset 0 0 0 1px var(--rf-vencedora-borda)' });
+    expect(naRegiao('.cmp-pi__px--menor .cmp-pi__px-valor')).toEqual({ color: 'var(--rf-tone-success-fg)' });
+    expect(naRegiao('.cmp-pi__px--menor .cmp-pi__px-delta')).toEqual({ color: 'var(--rf-tone-success-fg)', 'font-weight': '700' });
+    expect(naRegiao('.cmp-pi__px-aviso')).toMatchObject({ display: 'inline-flex', gap: '4px', color: 'var(--rf-tone-warning-fg)', 'font-size': '11px', 'font-weight': '700' });
+    expect(naRegiao('.cmp-pi__px-nada')).toEqual({ color: 'var(--rf-ink-soft)', 'font-family': 'var(--rf-font-mono)', 'font-size': '15px' });
+  });
+
+  it('rodape: celulas em --rf-surface-alt com bordas 1 px; rotulo fixo 13/700 em --rf-ink-soft (total em --rf-ink/800); total mono 15/700 (menor em --rf-tone-success-fg); sub mono 11/600; numeros mono 13/700', () => {
+    expect(naRegiao('.cmp-pi__matriz tfoot td')).toEqual({ 'border-top': '1px solid var(--rf-border)', 'border-bottom': '1px solid var(--rf-divider)', background: 'var(--rf-surface-alt)' });
+    expect(naRegiao('.cmp-pi__matriz tfoot tr:last-child td')).toEqual({ 'border-bottom': '0' });
+    expect(naRegiao('.cmp-pi__matriz tfoot th')).toMatchObject({
+      position: 'sticky',
+      left: '0',
+      'z-index': '2',
+      'text-align': 'left',
+      color: 'var(--rf-ink-soft)',
+      'font-size': '13px',
+      'font-weight': '700',
+      'box-shadow': '1px 0 0 var(--rf-divider)',
+    });
+    expect(naRegiao('.cmp-pi__matriz tfoot tr.cmp-pi__linha-total th')).toEqual({ color: 'var(--rf-ink)', 'font-weight': '800' });
+    expect(naRegiao('.cmp-pi__total')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '15px', 'font-weight': '700' });
+    expect(naRegiao('.cmp-pi__total--menor')).toEqual({ color: 'var(--rf-tone-success-fg)' });
+    expect(naRegiao('.cmp-pi__total-sub')).toMatchObject({ display: 'block', 'font-family': 'var(--rf-font-mono)', 'font-size': '11px', 'font-weight': '600', color: 'var(--rf-ink-soft)' });
+    expect(naRegiao('.cmp-pi__rodape-num')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '13px', 'font-weight': '700' });
+    expect(naRegiao('.cmp-pi__pagamento')).toMatchObject({ 'font-family': 'var(--rf-font-mono)', 'font-size': '13px', 'margin-left': '4px' });
+    expect(naRegiao('.cmp-pi__nota')).toEqual({ margin: '0', color: 'var(--rf-ink-soft)', 'font-size': '12px', 'line-height': '1.5' });
+  });
+
+  it('o .sr-only das celulas fica contido na rolagem (position: relative), senao a pagina rola na horizontal', () => {
+    expect(naRegiao('.cmp-pi__rolagem').position).toBe('relative');
+  });
+
+  it('responsivo e movimento: legenda e item encolhem no container <= 720; 16 de respiro ate 640; alvos de 44 em pointer: coarse; sem transicao sob reduced-motion (opcao, trilho e botao do trilho)', () => {
+    const c = atRule('@container cmp (max-width: 720px)');
+    expect(declaracoes(c, '.cmp-pi__legenda')).toEqual({ 'margin-left': '0' });
+    expect(declaracoes(c, '.cmp-pi__matriz .cmp-pi__col-item')).toEqual({ 'min-width': '190px' });
+    expect(declaracoes(atRule('@media (max-width: 640px)'), '.cmp-visao')).toEqual({ 'padding-right': '16px', 'padding-left': '16px' });
+    const alvos44 = atRule('@media (pointer: coarse)').filter((r) => /min-height:\s*44px/.test(r.body)).flatMap((r) => listaDeSeletores(r.prelude));
+    for (const s of ['.cmp-visao__opcao', '.cmp-pi__switch']) expect(alvos44, s).toContain(s);
+    const reduzido = atRule('@media (prefers-reduced-motion: reduce)');
+    for (const s of ['.cmp-visao__opcao', '.cmp-pi__trilho', '.cmp-pi__trilho::after']) expect(declaracoes(reduzido, s), s).toEqual({ transition: 'none' });
+  });
+});
+
 describe('F8: movimento (D-F8-05)', () => {
   const reduzido = atRule('@media (prefers-reduced-motion: reduce)');
   const seletoresReduzidos = new Set(reduzido.flatMap((r) => listaDeSeletores(r.prelude)));
@@ -564,7 +746,7 @@ describe('F8: fixture de tokens', () => {
   const f8 = fixtureUniao().filter((t) => t.arquivo === 'suiteComexTokens.f8.json');
 
   it('a fixture .f8 so tem pares claro/escuro, nenhuma constante, e todos estao no CSS com os mesmos valores', () => {
-    expect(f8).toHaveLength(13);
+    expect(f8).toHaveLength(15);
     expect(f8.filter((t) => t.constante)).toEqual([]);
     for (const t of f8) {
       expect(lightTokens[t.token], t.token).toBe(t.claro);
@@ -579,7 +761,7 @@ describe('F8: fixture de tokens', () => {
     expect(usados.filter((t) => !nomes.has(t))).toEqual([]);
   });
 
-  it('os 13 tokens da fase estao em uso na regiao (nenhum sobrou sem consumidor)', () => {
+  it('os 15 tokens da fase (13 + 2 da visao Preco por item) estao em uso na regiao (nenhum sobrou sem consumidor)', () => {
     const usados = new Set([...(regiao?.limpo ?? '').matchAll(/var\((--rf-[\w-]+)/g)].map((m) => m[1] ?? ''));
     expect(f8.map((t) => t.token).filter((t) => !usados.has(t))).toEqual([]);
   });
@@ -614,6 +796,12 @@ const PARES = [
   [rf('primary-700'), rf('tone-success-bg')], // icone do arquivo selecionado
   [rf('tone-success-fg'), rf('tone-success-bg'), UI], // trofeu (icone)
   [rf('input-border'), rf('surface'), UI], // borda dos campos e do bloco de arquivo (D3)
+  [rf('ink'), rf('cmp-linha-hover'), TEXT], // item, fornecedor e valores da linha sob o mouse (Preco por item)
+  [rf('ink-soft'), rf('cmp-linha-hover')], // qtd., preco-alvo, "—" e diferenca % da linha sob o mouse
+  [rf('tone-warning-fg'), rf('cmp-linha-hover')], // "Qtd N" da linha sob o mouse
+  [rf('tone-warning-fg'), rf('surface-alt')], // "Qtd N" nas colunas fora do ranking
+  [rf('tone-success-fg'), rf('surface-alt')], // total "menor" no rodape da matriz
+  [rf('ink-soft'), rf('tone-neutral-bg'), UI], // botao do switch desligado (grafico: 3:1)
 ] as const satisfies ReadonlyArray<Par>;
 
 describe('F8: contraste nos 2 temas (alpha composto sobre --rf-surface)', () => {
@@ -667,6 +855,7 @@ const ARQUIVOS = [
   'pages/CotacaoTabs/ComparacaoTab.tsx',
   'pages/CotacaoTabs/PurchaseOrderModal.tsx',
   'components/InfoPopover.tsx',
+  'pages/CotacaoTabs/ComparacaoPorItem.tsx',
 ] as const;
 const fonte = (arquivo: string) => readSource(`../${arquivo}`);
 const cssInteiro = stripComments(rawLf);
@@ -682,6 +871,7 @@ describe('F8: TSX da fase sem estilo inline (fora os 2 dinamicos), token, cor li
     expect(contagem('pages/CotacaoTabs/ComparacaoTab.tsx')).toBe(1);
     expect(contagem('pages/CotacaoTabs/PurchaseOrderModal.tsx')).toBe(0);
     expect(contagem('components/InfoPopover.tsx')).toBe(1);
+    expect(contagem('pages/CotacaoTabs/ComparacaoPorItem.tsx')).toBe(0);
     expect(fonte('pages/CotacaoTabs/ComparacaoTab.tsx')).toContain('style={{ width: `${percent}%` }}');
     expect(fonte('components/InfoPopover.tsx')).toContain("position: 'fixed'");
   });
