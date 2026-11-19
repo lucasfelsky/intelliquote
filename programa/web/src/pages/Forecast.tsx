@@ -346,6 +346,7 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
             tone="info"
             className="fc-legenda__icone"
             testId="fc-legenda-botao"
+            semPortal
             trigger={<Icon name="info" size={20} />}
           >
             <strong>Status da compra</strong>

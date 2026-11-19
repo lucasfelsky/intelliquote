@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Forecast from '../Forecast';
 import { chaveDoFiltro } from '@/test/forecastFiltros';
+import { STATUS_ORDEM } from './forecastPainel';
 
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 1, name: 'U', email: 'u@exemplo.invalid', role: 'comprador' } }),
@@ -248,6 +249,15 @@ describe('Forecast - filtro sem venda ha 6 meses ou mais', () => {
     const balao = await screen.findByRole('tooltip');
     expect(balao.textContent).toContain('Status da compra');
     expect(balao.querySelectorAll('.fc-legenda__item').length).toBeGreaterThanOrEqual(4);
+    // O balao e descendente de .fc-pagina: as regras F13 `.fc-pagina i.fc-status--*` o alcancam.
+    expect(balao.closest('.fc-pagina')).not.toBeNull();
+    for (const s of STATUS_ORDEM) {
+      const marcas = balao.querySelectorAll(`i.fc-legenda__marca.fc-status--${s}`);
+      expect(marcas).toHaveLength(1);
+      const marca = marcas[0] as HTMLElement;
+      expect(Array.from(marca.classList).filter((c) => c.startsWith('fc-status--'))).toEqual([`fc-status--${s}`]);
+      expect(marca.matches(`.fc-pagina i.fc-status--${s}`)).toBe(true);
+    }
     const selo = document.querySelector('.fcsv-selo') as HTMLElement;
     expect(selo.querySelector('svg')).toBeTruthy();
     expect(selo.querySelector('.sr-only')?.textContent).toBe('sem venda ≥6 meses');
