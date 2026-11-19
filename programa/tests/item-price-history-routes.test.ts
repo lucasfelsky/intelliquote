@@ -29,6 +29,9 @@ vi.mock('../src/lib/prisma', () => {
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
 
+// loginAs faz bcryptjs hash+compare (JS puro) por teste; o 1o teste ainda aquece JIT/app.
+vi.setConfig({ testTimeout: 20_000 });
+
 type Fn = ReturnType<typeof vi.fn>;
 const prismaMock = prisma as unknown as {
   user: { findUnique: Fn; findFirst: Fn };

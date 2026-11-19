@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import * as nodePath from 'node:path';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { rodarBacktest } from '../src/utils/forecastPreditivoBacktest';
 import { executarCli } from '../src/utils/forecastPreditivoCli';
 import type { DependenciasCli } from '../src/utils/forecastPreditivoCli';
@@ -11,6 +11,9 @@ import { passaCriterio3 } from '../src/utils/forecastPreditivoLinhasP1';
 import { normalizarSeries } from '../src/utils/forecastPreditivoSerie';
 import { METODO_IDS, METODO_TODOS_IDS } from '../src/utils/forecastPreditivoTipos';
 import { gerarCsvSinteticas, seriesSinteticas } from './helpers/forecastPreditivoSinteticas';
+
+// Cada teste roda o backtest P1 completo em processo; o teste do teto roda o CLI 6x.
+vi.setConfig({ testTimeout: 30_000 });
 
 const CSV = gerarCsvSinteticas();
 const CAB = 'serie;anoMes;quantidade';
