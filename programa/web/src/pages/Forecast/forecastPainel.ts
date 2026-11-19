@@ -416,7 +416,8 @@ export type FiltroId = 'todos' | 'demanda' | 'falta' | 'andamento';
 export interface FiltroDef {
   id: FiltroId;
   rotulo: (baseDate: string) => string;
-  teste: (linha: ForecastLinha) => boolean;
+  /** `status` opcional: status efetivo da linha (derivado da cotacao); sem ele vale o status congelado `linha.status`. */
+  teste: (linha: ForecastLinha, status?: ForecastStatus) => boolean;
 }
 
 export const FILTROS: readonly FiltroDef[] = [
@@ -433,13 +434,16 @@ export const FILTROS: readonly FiltroDef[] = [
     rotulo: (baseDate) => `Falta até ${nomeDoMes(baseDate, 3)}`,
     teste: (l) => l.Q > 0 && l.projecao.slice(0, 4).some((v) => v < 0),
   },
-  { id: 'andamento', rotulo: () => 'Em andamento', teste: (l) => l.status !== 'nao' },
+  { id: 'andamento', rotulo: () => 'Em andamento', teste: (l, status = l.status) => status !== 'nao' },
 ];
 
-export function contarPorFiltro(linhas: readonly ForecastLinha[]): Record<FiltroId, number> {
+export function contarPorFiltro(
+  linhas: readonly ForecastLinha[],
+  statusDe?: (linha: ForecastLinha) => ForecastStatus,
+): Record<FiltroId, number> {
   const contagem: Record<FiltroId, number> = { todos: 0, demanda: 0, falta: 0, andamento: 0 };
   for (const filtro of FILTROS) {
-    contagem[filtro.id] = linhas.filter(filtro.teste).length;
+    contagem[filtro.id] = linhas.filter((l) => filtro.teste(l, statusDe?.(l))).length;
   }
   return contagem;
 }

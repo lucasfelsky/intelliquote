@@ -10,6 +10,7 @@ import {
   getForecastSnapshot,
   listForecastSnapshots,
   type ForecastDivergencia,
+  type ForecastLinha,
   type ForecastOrigin,
   type ForecastSnapshotDetail,
   type ForecastSnapshotSummary,
@@ -41,6 +42,7 @@ import ForecastMenuMais from './Forecast/ForecastMenuMais';
 import ForecastPendentesCadastro from './Forecast/ForecastPendentesCadastro';
 import { hojeEmSaoPaulo, proximaAnalise } from './Forecast/forecastProximaAnalise';
 import ForecastRelatorioCompras from './Forecast/ForecastRelatorioCompras';
+import { statusDoPainelPorLinha } from './Forecast/forecastTrackingRegras';
 import { useTituloDaPagina } from './Forecast/useTituloDaPagina';
 import {
   casaBusca,
@@ -236,7 +238,10 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
     );
   }, [detail.months, detail.id, ocultas, mapaDecisoes, podeEditarAnalise, aoFeedbackAnalise]);
   const base = useMemo(() => filtrarPorSemVenda(detail.linhas, mostrarSemVenda), [detail.linhas, mostrarSemVenda]);
-  const contagem = useMemo(() => contarPorFiltro(base), [base]);
+  // Status da compra igual ao do relatorio (cotacao vinculada); sem decisoes (carregando/erro) vale o congelado.
+  const statusPorLinha = useMemo(() => statusDoPainelPorLinha(detail.linhas, mapaDecisoes), [detail.linhas, mapaDecisoes]);
+  const statusDe = useCallback((l: ForecastLinha) => statusPorLinha?.get(l.linha)?.classe ?? l.status, [statusPorLinha]);
+  const contagem = useMemo(() => contarPorFiltro(base, statusDe), [base, statusDe]);
   const divergencias = useMemo(() => {
     const mapa = new Map<string, ForecastDivergencia>();
     for (const d of detail.conferencia?.divergencias ?? []) mapa.set(chaveDaDivergencia(d.linha, d.coluna), d);
@@ -245,15 +250,15 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
 
   const visiveis = useMemo(() => {
     const teste = FILTROS.find((f) => f.id === filtro)?.teste ?? (() => true);
-    return base.filter((l) => teste(l) && casaBusca(l, termo));
-  }, [base, filtro, termo]);
+    return base.filter((l) => teste(l, statusDe(l)) && casaBusca(l, termo));
+  }, [base, filtro, termo, statusDe]);
 
   // Itens ocultos pelo filtro de sem venda que casariam com o chip e a busca atuais (explica o estado vazio).
   const ocultosQueCasariam = useMemo(() => {
     if (mostrarSemVenda || visiveis.length > 0) return 0;
     const teste = FILTROS.find((f) => f.id === filtro)?.teste ?? (() => true);
-    return detail.linhas.filter((l) => ocultavelPorSemVenda(l) && teste(l) && casaBusca(l, termo)).length;
-  }, [detail.linhas, mostrarSemVenda, visiveis.length, filtro, termo]);
+    return detail.linhas.filter((l) => ocultavelPorSemVenda(l) && teste(l, statusDe(l)) && casaBusca(l, termo)).length;
+  }, [detail.linhas, mostrarSemVenda, visiveis.length, filtro, termo, statusDe]);
 
   let mensagemVazia: string | undefined;
   if (base.length === 0 && detail.linhas.length > 0) {
@@ -358,6 +363,10 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
                 </li>
               ))}
             </ul>
+            <p>
+              “Cotação criada”: cotação aberta ainda não enviada aos fornecedores (mesma cor de “Cotação não enviada”). Com
+              cotação vinculada, o status segue a cotação, como no Relatório de compras.
+            </p>
           </InfoPopover>
           <span className="fc-legenda__total">
             {visiveis.length} de {detail.linhas.length} produtos
@@ -395,6 +404,7 @@ function Painel({ detail, mostrarSemVenda, onMostrarSemVenda, ocultaveis, origem
           buscaDoItem={buscaDoItem}
           legenda={`Forecast da quinzena ${detail.label}: ${visiveis.length} de ${detail.linhas.length} produtos`}
           mensagemVazia={mensagemVazia}
+          statusPorLinha={statusPorLinha}
         />
       </section>
       {toast && <ForecastToast key={toast.id} dados={toast} onFechar={fecharToast} />}

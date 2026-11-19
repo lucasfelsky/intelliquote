@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ForecastLinha, ForecastMonths, ForecastSnapshotDetail } from '@/services/forecast';
+import type { ForecastLinha, ForecastMonths, ForecastSnapshotDetail, ForecastStatus } from '@/services/forecast';
 import {
   alertaProjecao,
   casaBusca,
@@ -258,6 +258,25 @@ describe('filtros e busca', () => {
   ];
 
   it('contagens sobre a quinzena inteira (Q = 0 fica fora de "Demanda <= 0" e de "Falta ate")', () => {
+    expect(contarPorFiltro(linhas)).toEqual({ todos: 4, demanda: 1, falta: 1, andamento: 2 });
+  });
+
+  it('"Em andamento" usa o status efetivo quando informado, senao o congelado', () => {
+    const andamento = FILTROS.find((f) => f.id === 'andamento')!;
+    expect(andamento.teste(linha({ status: 'nao' }), 'cotando')).toBe(true);
+    expect(andamento.teste(linha({ status: 'cotando' }), 'nao')).toBe(false);
+    expect(andamento.teste(linha({ status: 'cotando' }))).toBe(true);
+    expect(andamento.teste(linha({ status: 'nao' }))).toBe(false);
+  });
+
+  it('contarPorFiltro com statusDe muda so "Em andamento"; sem statusDe segue o congelado (indice nao vira status)', () => {
+    const efetivo = new Map<number, ForecastStatus>([[1, 'cotando'], [2, 'nao'], [3, 'po'], [4, 'nao']]);
+    const statusDe = (l: ForecastLinha) => efetivo.get(l.linha) ?? l.status;
+    expect(contarPorFiltro(linhas, statusDe)).toEqual({ todos: 4, demanda: 1, falta: 1, andamento: 2 });
+    const todosAndamento = contarPorFiltro(linhas, () => 'cotando');
+    expect(todosAndamento).toEqual({ todos: 4, demanda: 1, falta: 1, andamento: 4 });
+    const nenhum = contarPorFiltro(linhas, () => 'nao');
+    expect(nenhum).toEqual({ todos: 4, demanda: 1, falta: 1, andamento: 0 });
     expect(contarPorFiltro(linhas)).toEqual({ todos: 4, demanda: 1, falta: 1, andamento: 2 });
   });
 
