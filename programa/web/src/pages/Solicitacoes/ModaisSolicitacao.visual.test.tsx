@@ -254,29 +254,55 @@ describe('F9: Vincular ao catalogo', () => {
     const botao = await screen.findByRole('button', { name: 'Vincular ao catálogo' });
     comIcone(botao);
     fireEvent.click(botao);
-    await screen.findByRole('group', { name: 'Modo' });
+    await screen.findByRole('tablist', { name: 'Modo' });
     return utils;
   }
 
-  it('.vincular-catalogo sem estilo inline, subtitulo no cabecalho, segmentado role=group com aria-pressed de hoje e wrapper de fora com .solicitacao-modal', async () => {
+  it('.vincular-catalogo sem estilo inline, subtitulo no cabecalho, segmentado como tablist com aria-selected e wrapper de fora com .solicitacao-modal', async () => {
     const { container } = await abrir();
-    const modo = screen.getByRole('group', { name: 'Modo' });
+    const modo = screen.getByRole('tablist', { name: 'Modo' });
     expect(modo.className).toBe('vincular-catalogo__modo');
     expect(modo.closest('.vincular-catalogo')).not.toBeNull();
     expect(modo.closest('dialog')?.parentElement?.classList.contains('solicitacao-modal')).toBe(true);
     expect(modo.closest('.modal-content')?.querySelector('.modal-subtitle')?.textContent).toBe(
       'Solicitação #9. O item precisa estar no catálogo antes de entrar em uma cotação.',
     );
-    const [existente, cadastrar] = within(modo).getAllByRole('button');
+    const [existente, cadastrar] = within(modo).getAllByRole('tab');
     expect(existente?.textContent).toBe('Selecionar existente');
-    expect(existente?.getAttribute('aria-pressed')).toBe('true');
-    expect(cadastrar?.getAttribute('aria-pressed')).toBe('false');
+    expect(existente?.getAttribute('aria-selected')).toBe('true');
+    expect(cadastrar?.getAttribute('aria-selected')).toBe('false');
+    expect(existente?.className).toBe('vincular-catalogo__aba');
+    expect(cadastrar?.className).toBe('vincular-catalogo__aba');
+    expect(existente?.getAttribute('aria-controls')).toBe('cr-vinc-panel-select');
+    const painel = screen.getByRole('tabpanel');
+    expect(painel.getAttribute('aria-labelledby')).toBe('cr-vinc-tab-select');
+    expect(painel.closest('.vincular-catalogo')).not.toBeNull();
     semEstiloInline(container);
+  });
+
+  it('teclado no segmentado: setas, Home e End alternam as abas e os paineis', async () => {
+    await abrir();
+    const existente = screen.getByRole('tab', { name: 'Selecionar existente' });
+    const cadastrar = screen.getByRole('tab', { name: 'Cadastrar e vincular' });
+    existente.focus();
+    fireEvent.keyDown(existente, { key: 'ArrowRight' });
+    expect(cadastrar.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(cadastrar);
+    expect(screen.getByLabelText('Nome comercial *')).toBeTruthy();
+    fireEvent.keyDown(cadastrar, { key: 'Home' });
+    expect(existente.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(existente);
+    fireEvent.keyDown(existente, { key: 'End' });
+    expect(cadastrar.getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(cadastrar, { key: 'ArrowLeft' });
+    expect(existente.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel').id).toBe('cr-vinc-panel-select');
+    expect(screen.queryByLabelText('Nome comercial *')).toBeNull();
   });
 
   it('Cadastrar e vincular: NCM invalido com aria-invalid e .field-error; erro do vinculo com role=alert + icone', async () => {
     const { container } = await abrir();
-    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar e vincular' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Cadastrar e vincular' }));
     const ncm = (await screen.findByLabelText('NCM (opcional)')) as HTMLInputElement;
     expect(ncm.getAttribute('aria-invalid')).toBeNull();
     fireEvent.change(ncm, { target: { value: '3906' } });

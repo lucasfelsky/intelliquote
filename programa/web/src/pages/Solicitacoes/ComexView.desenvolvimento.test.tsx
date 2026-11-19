@@ -188,9 +188,9 @@ describe('ComexView - solicitacao de desenvolvimento', () => {
     await expandItems();
 
     fireEvent.click(screen.getByRole('button', { name: 'Vincular ao catálogo' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Cadastrar e vincular' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Cadastrar e vincular' }));
     expect((screen.getByLabelText('Nome comercial *') as HTMLInputElement).value).toBe('Aditivo Novo');
-    expect((screen.getByRole('button', { name: 'Cadastrar e vincular', hidden: false, pressed: true }) as HTMLButtonElement)).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Cadastrar e vincular', selected: true })).toBeTruthy();
 
     const submit = screen
       .getAllByRole('button', { name: 'Cadastrar e vincular' })
@@ -224,7 +224,7 @@ describe('ComexView - solicitacao de desenvolvimento', () => {
     await expandItems();
 
     fireEvent.click(screen.getByRole('button', { name: 'Vincular ao catálogo' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Cadastrar e vincular' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Cadastrar e vincular' }));
     fireEvent.change(screen.getByLabelText('Nome de mercado *'), { target: { value: 'ADT-NOVO' } });
     const submit = screen
       .getAllByRole('button', { name: 'Cadastrar e vincular' })
@@ -235,6 +235,7 @@ describe('ComexView - solicitacao de desenvolvimento', () => {
     expect(alert.textContent).toContain('O item foi cadastrado no catálogo, mas o vínculo falhou');
     // Voltou para "Selecionar existente" com o item recem-criado selecionado.
     expect(await screen.findByText('Aditivo Novo', { selector: 'strong' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Selecionar existente', selected: true })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Vincular' }) as HTMLButtonElement).disabled).toBe(false);
   });
 

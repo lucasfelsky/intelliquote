@@ -6971,13 +6971,18 @@ dialog.modal-dialog[open] {
   cursor: pointer;
   transition: background-color var(--rf-dur-base), color var(--rf-dur-base);
 }
-.vincular-catalogo__aba[aria-pressed="true"] {
+.vincular-catalogo__aba[aria-selected="true"] {
   background: var(--rf-action);
   color: var(--rf-on-action);
 }
 .vincular-catalogo__aba:focus-visible {
   outline: 2px solid transparent;
   box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+}
+.vincular-catalogo .tabs-panel:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action);
+  border-radius: var(--rf-radius-button);
 }
 .vincular-catalogo__painel {
   display: flex;

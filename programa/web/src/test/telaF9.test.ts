@@ -104,6 +104,7 @@ const CONTEXTO = new Set([
   'sr-only',
   'col-status',
   'sol-items-list',
+  'tabs-panel', // painel do Tabs do Vincular ao catalogo: so em `.vincular-catalogo .tabs-panel:focus-visible`
 ]);
 
 describe('F9: regiao `tela F9`', () => {
@@ -407,7 +408,13 @@ describe('F9: receitas dos boards (valores exatos)', () => {
       background: 'var(--rf-surface-alt)',
     });
     expect(naRegiao('.vincular-catalogo__aba')).toMatchObject({ 'min-height': '36px', padding: '0 14px', 'border-radius': '9px', 'font-size': '13px', 'font-weight': '700' });
-    expect(naRegiao('.vincular-catalogo__aba[aria-pressed="true"]')).toEqual({ background: 'var(--rf-action)', color: 'var(--rf-on-action)' });
+    expect(naRegiao('.vincular-catalogo__aba[aria-selected="true"]')).toEqual({ background: 'var(--rf-action)', color: 'var(--rf-on-action)' });
+    // O painel do Tabs (tabIndex 0) ganha anel de foco so com tokens: o .tabs-panel padrao zera o outline
+    expect(naRegiao('.vincular-catalogo .tabs-panel:focus-visible')).toEqual({
+      outline: '2px solid transparent',
+      'box-shadow': '0 0 0 3px var(--rf-surface), 0 0 0 5px var(--rf-action)',
+      'border-radius': 'var(--rf-radius-button)',
+    });
     expect(naRegiao('.vincular-catalogo__campos')).toEqual({ display: 'flex', 'flex-direction': 'column', gap: '14px' });
   });
 

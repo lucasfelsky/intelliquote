@@ -13,20 +13,30 @@ export function Tabs({
   onValueChange,
   children,
   baseId = 'tabs',
+  className,
 }: {
   value: string;
   onValueChange: (val: string) => void;
   children: ReactNode;
   baseId?: string;
+  className?: string;
 }) {
   return (
     <TabsContext.Provider value={{ value, onValueChange, baseId }}>
-      <div className="tabs-root">{children}</div>
+      <div className={className ?? 'tabs-root'}>{children}</div>
     </TabsContext.Provider>
   );
 }
 
-export function TabList({ children, 'aria-label': ariaLabel }: { children: ReactNode; 'aria-label'?: string }) {
+export function TabList({
+  children,
+  'aria-label': ariaLabel,
+  className,
+}: {
+  children: ReactNode;
+  'aria-label'?: string;
+  className?: string;
+}) {
   const listRef = useRef<HTMLDivElement>(null);
   const ctx = useContext(TabsContext);
 
@@ -68,7 +78,7 @@ export function TabList({ children, 'aria-label': ariaLabel }: { children: React
       ref={listRef}
       role="tablist"
       aria-label={ariaLabel}
-      className="tabs-list"
+      className={className ?? 'tabs-list'}
       onKeyDown={onKeyDown}
     >
       {children}
@@ -76,7 +86,15 @@ export function TabList({ children, 'aria-label': ariaLabel }: { children: React
   );
 }
 
-export function Tab({ value, children }: { value: string; children: ReactNode }) {
+export function Tab({
+  value,
+  children,
+  className,
+}: {
+  value: string;
+  children: ReactNode;
+  className?: string;
+}) {
   const ctx = useContext(TabsContext);
   if (!ctx) throw new Error('Tab must be inside Tabs');
 
@@ -90,7 +108,7 @@ export function Tab({ value, children }: { value: string; children: ReactNode })
       id={`${ctx.baseId}-tab-${value}`}
       tabIndex={isSelected ? 0 : -1}
       onClick={() => ctx.onValueChange(value)}
-      className={isSelected ? 'tabs-trigger tabs-trigger--active' : 'tabs-trigger'}
+      className={className ?? (isSelected ? 'tabs-trigger tabs-trigger--active' : 'tabs-trigger')}
     >
       {children}
     </button>

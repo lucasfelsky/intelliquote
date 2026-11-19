@@ -253,7 +253,7 @@ describe('F9: lista do COMEX', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Ver itens' })[0] as HTMLElement);
     semEstiloInline(container);
     fireEvent.click(screen.getAllByRole('button', { name: 'Vincular ao catálogo' })[0] as HTMLElement);
-    await screen.findByRole('button', { name: 'Selecionar existente' });
+    await screen.findByRole('tab', { name: 'Selecionar existente' });
     semEstiloInline(container);
   });
 

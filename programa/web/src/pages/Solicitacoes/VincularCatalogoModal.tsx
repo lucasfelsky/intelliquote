@@ -4,6 +4,7 @@ import { api, ApiError } from '@/api/client';
 import { CatalogItemPicker, PickerCatalogItem } from '@/components/CatalogItemPicker';
 import { Icon } from '@/components/icons';
 import { Modal } from '@/components/Modal';
+import { Tab, TabList, TabPanel, Tabs } from '@/components/Tabs';
 import { useCatalogItemPickerData } from '@/components/useCatalogItemPickerData';
 import {
   CommercialRequestForComex,
@@ -11,7 +12,7 @@ import {
   linkCommercialRequestItemToCatalog,
 } from '@/services/commercialRequests';
 
-type Tab = 'select' | 'create';
+type Modo = 'select' | 'create';
 
 const NCM_PATTERN = /^\d{8}$/;
 
@@ -37,7 +38,7 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
   const picker = useCatalogItemPickerData(true);
   const proposedName = item.proposedName ?? item.commercialName;
 
-  const [tab, setTab] = useState<Tab>('select');
+  const [tab, setTab] = useState<Modo>('select');
   const [selected, setSelected] = useState<PickerCatalogItem | null>(null);
   const [commercialName, setCommercialName] = useState(proposedName);
   const [marketName, setMarketName] = useState('');
@@ -117,27 +118,22 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
       subtitle={`Solicitação #${request.id}. O item precisa estar no catálogo antes de entrar em uma cotação.`}
       size="wide"
     >
-      <div className="vincular-catalogo">
-        <div className="vincular-catalogo__modo" role="group" aria-label="Modo">
-          <button
-            type="button"
-            className="vincular-catalogo__aba"
-            aria-pressed={tab === 'select'}
-            onClick={() => setTab('select')}
-          >
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v === 'create' ? 'create' : 'select')}
+        baseId="cr-vinc"
+        className="vincular-catalogo"
+      >
+        <TabList aria-label="Modo" className="vincular-catalogo__modo">
+          <Tab value="select" className="vincular-catalogo__aba">
             Selecionar existente
-          </button>
-          <button
-            type="button"
-            className="vincular-catalogo__aba"
-            aria-pressed={tab === 'create'}
-            onClick={() => setTab('create')}
-          >
+          </Tab>
+          <Tab value="create" className="vincular-catalogo__aba">
             Cadastrar e vincular
-          </button>
-        </div>
+          </Tab>
+        </TabList>
 
-        {tab === 'select' ? (
+        <TabPanel value="select">
           <div className="vincular-catalogo__painel">
             <CatalogItemPicker
               families={picker.families}
@@ -179,7 +175,9 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
               </button>
             </div>
           </div>
-        ) : (
+        </TabPanel>
+
+        <TabPanel value="create">
           <form className="vincular-catalogo__painel" onSubmit={handleCreate}>
             <div className="vincular-catalogo__campos">
               <div>
@@ -236,8 +234,8 @@ export function VincularCatalogoModal({ request, item, onClose }: Props) {
               </button>
             </div>
           </form>
-        )}
-      </div>
+        </TabPanel>
+      </Tabs>
     </Modal>
   );
 }

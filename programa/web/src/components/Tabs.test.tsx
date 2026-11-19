@@ -138,3 +138,43 @@ describe('Tabs: aparência só por classe', () => {
     for (const t of abas()) expect(t.hasAttribute('type')).toBe(false);
   });
 });
+
+describe('Tabs: className opcional', () => {
+  function ExemploComClasse() {
+    const [aba, setAba] = useState('a');
+    return (
+      <Tabs value={aba} onValueChange={setAba} baseId="cls" className="minha-raiz">
+        <TabList aria-label="Modo" className="minha-lista">
+          <Tab value="a" className="minha-aba">Aba A</Tab>
+          <Tab value="b" className="minha-aba">Aba B</Tab>
+        </TabList>
+        <TabPanel value="a"><p>Painel A</p></TabPanel>
+        <TabPanel value="b"><p>Painel B</p></TabPanel>
+      </Tabs>
+    );
+  }
+
+  it('substitui as classes padrão (tabs-root, tabs-list, tabs-trigger*) pelas passadas', () => {
+    const { container } = render(<ExemploComClasse />);
+    expect(container.querySelector('.tabs-root')).toBeNull();
+    expect(container.querySelector('.tabs-list')).toBeNull();
+    expect(container.querySelector('.tabs-trigger')).toBeNull();
+    expect(container.querySelector('.tabs-trigger--active')).toBeNull();
+    expect(container.firstElementChild?.className).toBe('minha-raiz');
+    expect(screen.getByRole('tablist').className).toBe('minha-lista');
+    expect(abas().map((t) => t.className)).toEqual(['minha-aba', 'minha-aba']);
+  });
+
+  it('roles, aria-selected, roving tabIndex e ArrowRight continuam funcionando', () => {
+    render(<ExemploComClasse />);
+    expect(abas().map((t) => t.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+    expect(abas().map((t) => t.getAttribute('tabindex'))).toEqual(['0', '-1']);
+    abas()[0]?.focus();
+    fireEvent.keyDown(abas()[0] as HTMLElement, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(abas()[1]);
+    expect(abas().map((t) => t.getAttribute('aria-selected'))).toEqual(['false', 'true']);
+    expect(abas().map((t) => t.getAttribute('tabindex'))).toEqual(['-1', '0']);
+    expect(abas().map((t) => t.className)).toEqual(['minha-aba', 'minha-aba']);
+    expect(screen.getByRole('tabpanel').id).toBe('cls-panel-b');
+  });
+});
