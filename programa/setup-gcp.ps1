@@ -1,6 +1,10 @@
 # Provisionamento de recursos GCP para o IntelliQuote
 # Tudo o que precisa ser criado UMA UNICA VEZ antes do primeiro deploy.
 # Rodar com: powershell -ExecutionPolicy Bypass -File .\setup-gcp.ps1
+#
+# LEGADO: nao rodar de novo apos o C1.
+# Este script reabre a rede 0.0.0.0/0, redefine a senha do intelliquote_app e regrava DATABASE_URL/DIRECT_URL com host
+# IP, desfazendo a rotacao, o conector e o fechamento da rede. Ver docs/OPERATIONS_RUNBOOK.md.
 
 [CmdletBinding()]
 param()
@@ -79,6 +83,10 @@ if ($LASTEXITCODE -eq 0) {
   Ok "Cloud SQL criado."
 }
 
+# LEGADO: nao rodar de novo apos o C1.
+# O comando abaixo reabre a rede 0.0.0.0/0, e as etapas de usuario/secrets mais adiante redefinem a senha do
+# intelliquote_app e regravam DATABASE_URL/DIRECT_URL com host IP, desfazendo a rotacao, o conector e o fechamento
+# da rede. Ver docs/OPERATIONS_RUNBOOK.md.
 Step "Liberando IP 0.0.0.0/0 para acesso do Cloud Run via IP publico"
 gcloud sql instances patch $SQL_INSTANCE --assign-ip --authorized-networks=0.0.0.0/0 --project $PROJECT_ID 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { Warn "Falha ao liberar IP publico; ajuste manualmente." } else { Ok "IP publico liberado." }

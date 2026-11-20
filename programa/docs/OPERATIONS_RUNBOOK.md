@@ -191,12 +191,103 @@ Observacao:
 
 - o smoke cria registos `SMOKE-*` na base apontada pelo ambiente atual
 
+## Banco de producao (Cloud SQL): conector e acesso local
+
+### Modelo
+
+Cloud Run `intelliquote-api` -> conector Cloud SQL (anexado por `--set-cloudsql-instances` no workflow
+`deploy-intelliquote-api.yml` e no `deploy-cloudrun.ps1`) -> socket
+`/cloudsql/sq-comex-updates-3d22f:southamerica-east1:intelliquote-db`.
+
+Requisitos:
+
+- Cloud SQL Admin API habilitada
+- SA de runtime do Cloud Run com `roles/cloudsql.client` (hoje coberta por `roles/editor`)
+
+Estado de transicao: enquanto `DATABASE_URL`/`DIRECT_URL` nos secrets usarem o host IP publico, o conector fica anexado mas sem uso.
+
+`--set-cloudsql-instances` substitui a lista inteira de instancias anexadas a cada deploy (idempotente); instancia anexada manualmente pelo console e removida no deploy seguinte.
+
+### Formato da URL Prisma por socket
+
+Placeholders apenas; nunca registrar senha real:
+
+```text
+postgresql://USUARIO:SENHA@localhost/intelliquote?host=/cloudsql/sq-comex-updates-3d22f:southamerica-east1:intelliquote-db&schema=public
+```
+
+Vale para `DATABASE_URL` e `DIRECT_URL` (o `prisma migrate deploy` do CMD do Dockerfile usa `DIRECT_URL`).
+
+Observacoes:
+
+- o host `localhost` e obrigatorio e ignorado (quem manda e `host=`)
+- manter os demais parametros da URL atual (ex.: `connection_limit`), mas NAO levar os parametros de SSL (`sslmode` com valor `require`, `sslaccept`) para a URL de socket (o conector ja cifra; conferir no 1o deploy)
+- essa URL so funciona DENTRO do Cloud Run: localmente o caminho `/cloudsql/...` nao existe
+
+### Acesso local pelo Cloud SQL Auth Proxy v2
+
+Rodar no PowerShell, um comando por bloco.
+
+Login (o proxy v2 usa ADC por padrao; alternativa: flag `--gcloud-auth`). O usuario precisa de `roles/cloudsql.client` no projeto:
+
+```powershell
+gcloud auth application-default login
+```
+
+Subir o proxy:
+
+```powershell
+cloud-sql-proxy sq-comex-updates-3d22f:southamerica-east1:intelliquote-db --port 5433
+```
+
+URL local (em `.env` ignorado pelo git ou em `$env:DIRECT_URL` da sessao; nunca commitar):
+
+```text
+postgresql://USUARIO:SENHA@127.0.0.1:5433/intelliquote?schema=public
+```
+
+Vale para `scripts/backup-database.ps1`, `scripts/restore-database.ps1`, `scripts/check-*.cjs`, psql e DBeaver.
+Depois da Fase 3 (rede fechada) o acesso por IP publico deixa de funcionar.
+
+### Sequencia de cutover
+
+Tudo humano (zona vermelha); nada e automatizado. Pre-requisito: Fase 0 (backup) e Fase 1 (rotacao de senha) do plano C1 concluidas.
+
+1. Merge do PR (sem auto-merge).
+2. Tag `backend-v<proximo>`: o workflow faz deploy COM o conector e URLs ainda por IP. Verificar: smoke do workflow verde; `/health/ready` ok; a anotacao do servico lista a instancia:
+
+   ```powershell
+   gcloud run services describe intelliquote-api --region southamerica-east1 --project sq-comex-updates-3d22f --format="value(spec.template.metadata.annotations)"
+   ```
+
+   O resultado deve conter `run.googleapis.com/cloudsql-instances=sq-comex-updates-3d22f:southamerica-east1:intelliquote-db`.
+3. (Recomendado) `roles/cloudsql.client` explicito na SA de runtime, antes de remover qualquer role ampla como `roles/editor`.
+4. Novas versoes de `DATABASE_URL` e `DIRECT_URL` no formato de socket (senha nunca na tela nem em arquivo versionado).
+5. Revisao nova do Cloud Run para ler `:latest` (`gcloud run services update` com `--update-labels` ou nova tag `backend-v*`; ambos preservam o conector). Verificar `/health/ready`, `/health` (buildTag), login, listagem de cotacoes e logs sem erro de conexao.
+6. Passar o acesso local (backup, `check-*.cjs`, DBeaver/psql) para o Auth Proxy e testar um `backup-database.ps1`.
+7. So depois de pelo menos 1 dia de uso real: Fase 3 (fechar a rede, `ENCRYPTED_ONLY`).
+
+### Rollback do cutover
+
+Valido ate o passo 7 (enquanto a rede nao foi fechada): nova versao dos secrets `DATABASE_URL`/`DIRECT_URL` com o host IP publico da instancia e revisao nova do Cloud Run. Obter o host com:
+
+```powershell
+gcloud sql instances describe intelliquote-db --project sq-comex-updates-3d22f --format="value(ipAddresses[0].ipAddress)"
+```
+
+Nao registrar o IP nem a URL completa neste repositorio.
+
+### Aviso: `setup-gcp.ps1` e legado
+
+Nao rodar `programa/setup-gcp.ps1` de novo. Ele reabre a rede `0.0.0.0/0`, redefine a senha do `intelliquote_app` e regrava `DATABASE_URL`/`DIRECT_URL` com host IP, desfazendo a rotacao, o conector e o fechamento da rede.
+
 ## Backup da Base
 
 Premissas:
 
 - `DIRECT_URL` precisa estar configurada
 - `pg_dump` precisa estar no `PATH`
+- producao: `DIRECT_URL` apontando para o Auth Proxy (`127.0.0.1:5433`), nunca a URL de socket do Secret Manager
 
 Backup no Windows PowerShell:
 
@@ -223,6 +314,7 @@ Premissas:
 - confirmar o ambiente de destino
 - garantir janela de manutencao quando necessario
 - `pg_restore` precisa estar no `PATH`
+- producao: `DIRECT_URL` apontando para o Auth Proxy (`127.0.0.1:5433`), nunca a URL de socket do Secret Manager
 
 Restore no Windows PowerShell:
 
