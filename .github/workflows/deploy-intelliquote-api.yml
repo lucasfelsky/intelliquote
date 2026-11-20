@@ -27,6 +27,8 @@
 #
 # Pre-requisitos no GCP:
 #   - Cloud Run API habilitada
+#   - Cloud SQL Admin API habilitada (o deploy anexa a instancia por --set-cloudsql-instances)
+#   - SA de RUNTIME do Cloud Run com roles/cloudsql.client (hoje coberto por roles/editor)
 #   - Artifact Registry com o repo `intelliquote` na regiao
 #   - Service account com roles: Cloud Run Admin, Artifact Registry Writer,
 #     Service Account User, Logging Log Writer.
@@ -82,6 +84,9 @@ env:
   GCP_REGION: ${{ vars.GCP_REGION }}
   GCP_ARTIFACT_REPO: ${{ vars.GCP_ARTIFACT_REPO }}
   GCP_CLOUD_RUN_SERVICE: ${{ vars.GCP_CLOUD_RUN_SERVICE }}
+  # Instancia Cloud SQL anexada ao Cloud Run (socket /cloudsql/<connection name>). Nao e segredo.
+  # O deploy usa --set-cloudsql-instances (substitui a lista: idempotente). Runbook: programa/docs/OPERATIONS_RUNBOOK.md.
+  CLOUD_SQL_CONNECTION_NAME: sq-comex-updates-3d22f:southamerica-east1:intelliquote-db
 
 # Variáveis e secrets do GitHub às vezes vêm com whitespace acidental;
 # normaliza no inicio do job para não dar "invalid project id".
@@ -247,6 +252,11 @@ jobs:
           REGION="${{ env.GCP_REGION }}"
           PROJECT="${{ env.GCP_PROJECT_ID }}"
           BUILD_TAG="${{ steps.tags.outputs.backend_build_tag }}"
+          CLOUDSQL_INSTANCE="${{ env.CLOUD_SQL_CONNECTION_NAME }}"
+          case "${CLOUDSQL_INSTANCE}" in
+            "${PROJECT}:${REGION}:"*) ;;
+            *) echo "::error::CLOUD_SQL_CONNECTION_NAME (${CLOUDSQL_INSTANCE}) nao bate com ${PROJECT}:${REGION}."; exit 1 ;;
+          esac
 
           # --set-env-vars nao aceita virgulas dentro do valor (o que explode
           # quando CORS_ORIGINS tem varias URLs separadas por virgula).
@@ -325,6 +335,7 @@ jobs:
             --timeout=300 \
             --env-vars-file="${ENV_VARS_FILE}" \
             --set-secrets="${SECRET_REFS}" \
+            --set-cloudsql-instances="${CLOUDSQL_INSTANCE}" \
             --quiet
           URL=$(gcloud run services describe "${SERVICE}" \
             --project="${PROJECT}" \

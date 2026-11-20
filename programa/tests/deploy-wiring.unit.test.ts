@@ -19,9 +19,12 @@ function read(...segments: string[]): string {
 
 const workflow = read(REPO, '.github', 'workflows', 'deploy-intelliquote-api.yml');
 const ps1 = read(PROGRAMA, 'deploy-cloudrun.ps1');
+const sh = read(PROGRAMA, 'deploy-cloudrun.sh');
 const secretsYaml = read(PROGRAMA, 'deploy-secrets.yaml');
 const envYaml = read(PROGRAMA, 'deploy-env-vars.yaml');
 const runbook = read(PROGRAMA, 'docs', 'OPERATIONS_RUNBOOK.md');
+
+const CLOUD_SQL = 'sq-comex-updates-3d22f:southamerica-east1:intelliquote-db';
 
 const PIPEDRIVE_SECRETS = ['PIPEDRIVE_API_TOKEN', 'PIPEDRIVE_WEBHOOK_USER', 'PIPEDRIVE_WEBHOOK_PASSWORD'];
 const EXISTING_SECRETS = [
@@ -174,6 +177,7 @@ describe('deploy wiring - repo publico sem dados reais', () => {
     ['deploy-env-vars.yaml', envYaml],
     ['deploy-secrets.yaml', secretsYaml],
     ['deploy-cloudrun.ps1', ps1],
+    ['deploy-cloudrun.sh', sh],
     ['OPERATIONS_RUNBOOK.md', runbook],
   ])('%s: sem hex de 40 caracteres nem id numerico atribuido a env do Pipedrive', (_label, text) => {
     expect(text).not.toMatch(/\b[0-9a-f]{40}\b/i);
@@ -186,5 +190,67 @@ describe('deploy wiring - repo publico sem dados reais', () => {
     expect(smokeStep).not.toMatch(/pipedrive/i);
     expect(smokeStep).toContain('/health/ready');
     expect(smokeStep).toContain('buildTag');
+  });
+});
+
+describe('deploy wiring - conector Cloud SQL', () => {
+  it('workflow declara CLOUD_SQL_CONNECTION_NAME no env de topo e o passo de deploy valida projeto/regiao', () => {
+    expect(workflow).toMatch(new RegExp(`^ {2}CLOUD_SQL_CONNECTION_NAME: ${CLOUD_SQL}$`, 'm'));
+    expect(deployStep).toContain('CLOUDSQL_INSTANCE="${{ env.CLOUD_SQL_CONNECTION_NAME }}"');
+    expect(deployStep).toContain('"${PROJECT}:${REGION}:"');
+    // a env nova nao pode entrar no bloco env: do passo (so as 4 envs do Pipedrive)
+    expect(deployEnvBlock).not.toContain('CLOUD_SQL_CONNECTION_NAME');
+  });
+
+  it('gcloud run deploy do workflow anexa a instancia com --set-cloudsql-instances', () => {
+    const deployCmd = section(deployStep, 'gcloud run deploy "${SERVICE}"', '--quiet');
+    expect(deployCmd).toContain('--set-cloudsql-instances="${CLOUDSQL_INSTANCE}"');
+  });
+
+  it('deploy-cloudrun.ps1 declara a conexao e passa a flag dentro do gcloud run deploy', () => {
+    expect(ps1).toContain(`$CLOUD_SQL_CONNECTION = "${CLOUD_SQL}"`);
+    const deployCmd = section(
+      ps1,
+      'run deploy $SERVICE',
+      '--project $PROJECT_ID 2>&1 | Tee-Object -FilePath "$env:TEMP\\cloudrun-deploy.log"',
+    );
+    expect(deployCmd).toMatch(/^\s*--set-cloudsql-instances \$CLOUD_SQL_CONNECTION `$/m);
+  });
+
+  it('deploy-cloudrun.sh documenta --set-cloudsql-instances com a instancia', () => {
+    expect(sh).toContain(`--set-cloudsql-instances ${CLOUD_SQL}`);
+  });
+
+  it.each([
+    ['workflow', workflow],
+    ['deploy-cloudrun.ps1', ps1],
+    ['deploy-cloudrun.sh', sh],
+  ])('%s: nao usa --add-cloudsql-instances', (_label, text) => {
+    expect(text).not.toContain('--add-cloudsql-instances');
+  });
+
+  it.each([
+    ['workflow', workflow],
+    ['deploy-cloudrun.ps1', ps1],
+    ['deploy-cloudrun.sh', sh],
+    ['OPERATIONS_RUNBOOK.md', runbook],
+  ])('%s: sem o IP publico da instancia', (_label, text) => {
+    expect(text).not.toContain(['35', '247', '254', '177'].join('.'));
+  });
+
+  it.each([
+    ['workflow', workflow],
+    ['deploy-cloudrun.ps1', ps1],
+    ['deploy-cloudrun.sh', sh],
+    ['OPERATIONS_RUNBOOK.md', runbook],
+  ])('%s: toda URL de banco com credencial usa senha placeholder', (_label, text) => {
+    for (const match of text.matchAll(/postgres(?:ql)?:\/\/([^:@\s/]+):([^@\s]+)@/g)) {
+      expect(match[2], `senha na URL ${match[0]}`).toMatch(/^[A-Z_]+$/);
+    }
+  });
+
+  it('runbook documenta o Auth Proxy e a URL de socket', () => {
+    expect(runbook).toContain(`cloud-sql-proxy ${CLOUD_SQL} --port 5433`);
+    expect(runbook).toContain(`host=/cloudsql/${CLOUD_SQL}`);
   });
 });

@@ -8,7 +8,10 @@
 #      JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, PIPEDRIVE_API_TOKEN, PIPEDRIVE_WEBHOOK_USER,
 #      PIPEDRIVE_WEBHOOK_PASSWORD (integracao Pipedrive do IQ Indent)
 #
-# Conexao com o banco: IP publico (host=35.247.254.177) - configurado no DATABASE_URL/DIRECT_URL
+# Conexao com o banco: conector do Cloud SQL (socket /cloudsql/<connection name>), anexado por
+# --set-cloudsql-instances. Transicao (C1, 2026-11): enquanto DATABASE_URL/DIRECT_URL no Secret Manager ainda usarem
+# o host IP publico, o conector fica anexado mas ocioso; o corte e trocar as URLs para
+# `?host=/cloudsql/<connection name>`. Detalhes: docs/OPERATIONS_RUNBOOK.md.
 #
 # Uso: powershell -ExecutionPolicy Bypass -File .\deploy-cloudrun.ps1
 
@@ -32,6 +35,7 @@ $PROJECT_ID   = "sq-comex-updates-3d22f"
 $REGION       = "southamerica-east1"
 $SERVICE      = "intelliquote-api"
 $REPOSITORY   = "intelliquote"
+$CLOUD_SQL_CONNECTION = "sq-comex-updates-3d22f:southamerica-east1:intelliquote-db"
 $IMAGE        = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:latest"
 $GCLOUD       = Join-Path $gcloudBin "gcloud.cmd"
 
@@ -85,6 +89,7 @@ Write-Host ">>> Deploy no Cloud Run" -ForegroundColor Cyan
   --timeout 60 `
   --concurrency 80 `
   --update-env-vars "BACKEND_BUILD_TAG=$BACKEND_BUILD_TAG" `
+  --set-cloudsql-instances $CLOUD_SQL_CONNECTION `
   --set-secrets "SMTP_PASS=SMTP_PASS:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_USER=SMTP_USER:latest,SMTP_PORT=SMTP_PORT:latest,SMTP_FROM=SMTP_FROM:latest,DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_ACCESS_SECRET=JWT_ACCESS_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest,PIPEDRIVE_API_TOKEN=PIPEDRIVE_API_TOKEN:latest,PIPEDRIVE_WEBHOOK_USER=PIPEDRIVE_WEBHOOK_USER:latest,PIPEDRIVE_WEBHOOK_PASSWORD=PIPEDRIVE_WEBHOOK_PASSWORD:latest" `
   --project $PROJECT_ID 2>&1 | Tee-Object -FilePath "$env:TEMP\cloudrun-deploy.log" -Append
 
