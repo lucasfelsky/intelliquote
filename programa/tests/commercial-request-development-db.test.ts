@@ -355,16 +355,26 @@ describe('Solicitacao de desenvolvimento - item novo e vinculo ao catalogo (DB)'
     expect(others.body.data.map((r: { id: number }) => r.id)).not.toContain(linkedRequest.body.id);
   });
 
-  testDbSkip('AuditLog do create nao leva o nome digitado nem a observacao do item', async () => {
+  testDbSkip('AuditLog do create nao leva cliente, nome digitado nem observacao do item', async () => {
     const name = `Resina Sigilosa ${runId}`;
-    const response = await createRequest([{ proposedName: name, ...NEW_UNIT, notes: 'observacao-sigilosa' }]);
+    const cliente = `Cliente Sigiloso ${runId}`;
+    const response = await createRequest(
+      [{ proposedName: name, ...NEW_UNIT, notes: 'observacao-sigilosa' }],
+      comercialCookies,
+      { customerName: cliente },
+    );
     expect(response.status).toBe(201);
+    expect(response.body.customerName).toBe(cliente);
+    const row = await prisma.commercialRequest.findUniqueOrThrow({ where: { id: response.body.id } });
+    expect(row.customerName).toBe(cliente);
 
     const audit = await prisma.auditLog.findFirstOrThrow({
       where: { entityType: 'commercial_request', entityId: String(response.body.id), action: 'create' },
     });
     const after = JSON.stringify(audit.afterData);
     expect(after).not.toContain(name);
+    expect(after).not.toContain(cliente);
+    expect(audit.afterData).not.toHaveProperty('customerName');
     expect(after).not.toContain('observacao-sigilosa');
     expect(audit.afterData).toMatchObject({ isDevelopment: true, items: [{ isNewItem: true }] });
   });

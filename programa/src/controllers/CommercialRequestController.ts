@@ -400,7 +400,6 @@ export class CommercialRequestController {
             performedById: userId,
             afterData: {
               status: request.status,
-              customerName: request.customerName,
               // Sem texto livre dos campos novos: nada de proposedName/notes do item.
               isDevelopment,
               items: request.items.map((item) => ({

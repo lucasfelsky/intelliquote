@@ -359,6 +359,11 @@ describe('POST /commercial-requests', () => {
       performedById: SESSION_USER_ID,
     });
     expect(client).toBe(txMock);
+    expect(input.afterData).not.toHaveProperty('customerName');
+    expect(JSON.stringify(input)).not.toContain('ACME');
+    expect(input.afterData).toMatchObject({ status: 'pending', isDevelopment: false });
+    expect(txMock.commercialRequest.create.mock.calls[0][0].data.customerName).toBe('ACME');
+    expect(response.body.customerName).toBe('ACME');
     expect(notifyMock).toHaveBeenCalledWith(7);
   });
 
