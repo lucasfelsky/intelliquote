@@ -8,6 +8,13 @@ import {
   CR_ATTACHMENT_JSON_BODY_LIMIT_BYTES,
 } from '../src/constants/commercialRequestAttachments';
 
+// Limite do rate limit dos anexos neste arquivo. Os testes de papeis/corpo compartilham o usuario 42
+// e chegam a cerca de 16 requisicoes no limiter (401/403 e o 413 do parser nao contam): se alguem
+// somar mais de 14 requisicoes autenticadas com esse usuario aqui, os testes passam a receber 429.
+vi.hoisted(() => {
+  process.env.COMMERCIAL_REQUEST_ATTACHMENT_RATE_LIMIT_MAX = '30';
+});
+
 vi.mock('../src/lib/prisma', () => {
   const prisma = {
     user: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
@@ -58,6 +65,19 @@ async function loginAs(role: Role) {
     .send({ email: base.email, password: 'ChangeMe123!' });
   const cookies = loginResponse.headers['set-cookie'] as unknown as string[];
   cookieCache.set(role, cookies);
+  return cookies;
+}
+
+// Troca o usuario da sessao (o requireAuth monta req.user a partir do findFirst): balde novo.
+async function asSessionUser(id: number, role: Role) {
+  const cookies = await loginAs(role);
+  prismaMock.user.findFirst.mockResolvedValue({
+    id,
+    name: `${role} user ${id}`,
+    email: `${role}${id}@intelliquote.local`,
+    isActive: true,
+    role: { name: role },
+  });
   return cookies;
 }
 
@@ -227,5 +247,56 @@ describe('POST /commercial-requests/:id/attachments: validacao do corpo', () => 
     expect((await post(validBody({ contentBase64: '@@@' }))).status).toBe(400);
     // "AAAA" decodifica para 3 bytes nulos (nao e PDF/PNG/JPEG): tipo nao permitido.
     expect((await post(validBody({ contentBase64: 'AAAA' }))).status).toBe(400);
+  });
+});
+
+describe('anexos da solicitacao: rate limit por usuario', () => {
+  const LIMIT = 30;
+  const RATE_LIMIT_MESSAGE = 'Muitas tentativas. Tente novamente mais tarde.';
+
+  function mockAttachment() {
+    prismaMock.commercialRequestAttachment.findFirst.mockResolvedValue({
+      fileName: 'tds.pdf',
+      mimeType: 'application/pdf',
+      file: { data: PDF_BYTES },
+    });
+  }
+
+  it('o 31o pedido do mesmo usuario recebe 429; o balde e compartilhado pelas 3 rotas', async () => {
+    const cookies = await asSessionUser(77, 'comercial');
+    mockAttachment();
+
+    for (let i = 0; i < LIMIT; i += 1) {
+      const response = await request(app).get(DOWNLOAD_URL).set('Cookie', cookies);
+      expect(response.status).toBe(200);
+      if (i === 0) {
+        expect(response.headers['ratelimit-limit']).toBe(String(LIMIT));
+      }
+    }
+
+    const blocked = await request(app).get(DOWNLOAD_URL).set('Cookie', cookies);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.message).toBe(RATE_LIMIT_MESSAGE);
+
+    const post = await request(app).post(UPLOAD_URL).set('Cookie', cookies).send(validBody());
+    const del = await request(app).delete(DELETE_URL).set('Cookie', cookies);
+    expect(post.status).toBe(429);
+    expect(del.status).toBe(429);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('a chave e o usuario, nao o IP: outro usuario no mesmo IP segue com 200', async () => {
+    const cookies = await asSessionUser(78, 'comercial');
+    mockAttachment();
+
+    const response = await request(app).get(DOWNLOAD_URL).set('Cookie', cookies);
+
+    expect(response.status).toBe(200);
+  });
+
+  it('sem login continua 401 (o limiter roda depois do requireAuth)', async () => {
+    expect((await request(app).get(DOWNLOAD_URL)).status).toBe(401);
+    expect((await request(app).post(UPLOAD_URL).send(validBody())).status).toBe(401);
+    expect((await request(app).delete(DELETE_URL)).status).toBe(401);
   });
 });

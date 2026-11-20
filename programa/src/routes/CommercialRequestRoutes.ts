@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { authEnv } from '../config/env';
 import { CommercialRequestController } from '../controllers/CommercialRequestController';
 import { CommercialRequestAttachmentController } from '../controllers/CommercialRequestAttachmentController';
 import { allowRoles, requireAuth } from '../middlewares/auth';
@@ -9,6 +11,20 @@ const commercialRequestRoutes = Router();
 const comercialOnly = [requireAuth, allowRoles(['comercial'])] as const;
 const comexRead = [requireAuth, allowRoles(COMEX_ROLES)] as const;
 const comexAct = [requireAuth, allowRoles(['admin', 'comprador'])] as const;
+
+// Rate limit dos anexos: um balde unico para as 3 rotas, por usuario autenticado (nao por IP),
+// em memoria por instancia. Roda depois de requireAuth/allowRoles, entao 401/403 nao consomem.
+// Nao confundir com o `limit` do CommercialRequestAttachmentService (teto de 5 anexos, 409).
+const commercialRequestAttachmentRateLimit = rateLimit({
+  windowMs: authEnv.commercialRequestAttachmentRateLimitWindowMs,
+  limit: authEnv.commercialRequestAttachmentRateLimitMax,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => (req.user ? `user:${req.user.id}` : ipKeyGenerator(req.ip ?? '')),
+  message: {
+    message: 'Muitas tentativas. Tente novamente mais tarde.',
+  },
+});
 
 // Rotas fixas SEMPRE antes de /:id.
 commercialRequestRoutes.get(
@@ -74,17 +90,20 @@ commercialRequestRoutes.post(
 commercialRequestRoutes.post(
   '/commercial-requests/:id/attachments',
   ...comercialOnly,
+  commercialRequestAttachmentRateLimit,
   CommercialRequestAttachmentController.upload,
 );
 commercialRequestRoutes.delete(
   '/commercial-requests/:id/attachments/:attachmentId',
   ...comercialOnly,
+  commercialRequestAttachmentRateLimit,
   CommercialRequestAttachmentController.remove,
 );
 commercialRequestRoutes.get(
   '/commercial-requests/:id/attachments/:attachmentId/download',
   requireAuth,
   allowRoles([...COMEX_ROLES, 'comercial']),
+  commercialRequestAttachmentRateLimit,
   CommercialRequestAttachmentController.download,
 );
 

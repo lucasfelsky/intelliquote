@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/lib/prisma';
@@ -7,6 +7,11 @@ import {
   CR_ATTACHMENT_JSON_BODY_LIMIT_BYTES,
   CR_ATTACHMENT_MAX_FILE_BYTES,
 } from '../src/constants/commercialRequestAttachments';
+
+// Este teste faz cerca de 45 chamadas do mesmo dono (12 em paralelo): sobe o limite dos anexos.
+vi.hoisted(() => {
+  process.env.COMMERCIAL_REQUEST_ATTACHMENT_RATE_LIMIT_MAX = '1000';
+});
 
 // So roda com RUN_DB_TESTS=true (scripts/test-critical-local.mjs: Postgres embutido com TODAS as migrations).
 const testDbSkip = process.env.RUN_DB_TESTS !== 'true' ? it.skip : it;
