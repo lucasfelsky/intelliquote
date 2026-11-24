@@ -33,6 +33,9 @@ vi.mock('../src/lib/prisma', () => {
     quoteRequest: {
       findUnique: vi.fn(),
     },
+    exchangeRate: {
+      findFirst: vi.fn(),
+    },
     quoteComparison: {},
     creditSupportRequest: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -75,6 +78,7 @@ const prismaMock = prisma as unknown as {
   quoteResponseItem: { findMany: ReturnType<typeof vi.fn> };
   supplierPortalToken: { findMany: ReturnType<typeof vi.fn> };
   creditSupportRequest: { updateMany: ReturnType<typeof vi.fn> };
+  exchangeRate: { findFirst: ReturnType<typeof vi.fn> };
 };
 
 describe('Quote response routes', () => {
@@ -931,6 +935,141 @@ describe('Quote response manual - item temporariamente indisponivel', () => {
       .send({ items: [{ quoteRequestItemId: 11, quantity: 5 }] });
     expect(missingPrice.status).toBe(400);
     expect(prismaMock.quoteResponse.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('câmbio opcional na resposta manual', () => {
+  const ptaxRow = {
+    currency: 'USD',
+    rateToBrl: 5.4,
+    referenceDate: new Date(),
+    fetchedAt: new Date(),
+    source: 'PTAX',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.quoteResponse.findFirst.mockReset();
+    prismaMock.quoteResponse.findFirst.mockResolvedValue(null);
+    prismaMock.quoteResponse.findUnique.mockReset();
+    prismaMock.quoteResponse.create.mockReset();
+    prismaMock.quoteResponse.create.mockResolvedValue({ id: 201 });
+    prismaMock.quoteResponse.update.mockReset();
+    prismaMock.quoteResponse.update.mockResolvedValue({ id: 55 });
+    prismaMock.quoteResponseItem.findMany.mockResolvedValue([]);
+    prismaMock.exchangeRate.findFirst.mockReset();
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(null);
+    prismaMock.quoteRequest.findUnique = vi
+      .fn()
+      .mockResolvedValue({ id: 1, currency: 'USD', status: 'open' });
+    prismaMock.supplier.findUnique = vi
+      .fn()
+      .mockResolvedValue({ id: 2, status: 'active', acceptedIncoterms: ['FOB'] });
+  });
+
+  async function postManual(extra: Record<string, unknown>) {
+    const cookies = await loginAs('comprador');
+    return request(app)
+      .post('/api/v1/quote-responses')
+      .set('Cookie', cookies)
+      .send({
+        quoteRequestId: 1,
+        supplierId: 2,
+        offeredPrice: 100,
+        offeredIncoterm: 'FOB',
+        paymentTermsDays: 30,
+        ...extra,
+      });
+  }
+
+  async function putManual(body: Record<string, unknown>, existingCurrency: string, existingRate: string) {
+    const cookies = await loginAs('comprador');
+    prismaMock.quoteResponse.findUnique.mockResolvedValue({
+      id: 55,
+      quoteRequestId: 1,
+      supplierId: 2,
+      offeredPrice: '100.00',
+      currency: existingCurrency,
+      exchangeRate: existingRate,
+      freightCost: '0',
+      insuranceCost: '0',
+      otherFees: '0',
+      importDuty: '0',
+      ipi: '0',
+      pis: '0',
+      cofins: '0',
+      offeredIncoterm: 'FOB',
+      quoteRequest: { status: 'open' },
+      supplier: { status: 'active', acceptedIncoterms: ['FOB'] },
+    });
+    return request(app).put('/api/v1/quote-responses/55').set('Cookie', cookies).send(body);
+  }
+
+  it('POST USD sem câmbio usa a PTAX em cache', async () => {
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(ptaxRow);
+
+    const response = await postManual({ currency: 'USD' });
+
+    expect(response.status).toBe(201);
+    expect(Number(prismaMock.quoteResponse.create.mock.calls[0][0].data.exchangeRate)).toBe(5.4);
+  });
+
+  it('POST USD sem câmbio prefere a taxa de outra resposta da cotação à PTAX', async () => {
+    prismaMock.quoteResponse.findFirst.mockResolvedValueOnce({ exchangeRate: '5.10' });
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(ptaxRow);
+
+    const response = await postManual({ currency: 'USD' });
+
+    expect(response.status).toBe(201);
+    expect(Number(prismaMock.quoteResponse.create.mock.calls[0][0].data.exchangeRate)).toBe(5.1);
+    expect(prismaMock.exchangeRate.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('POST USD com câmbio informado tem prioridade e não consulta PTAX', async () => {
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(ptaxRow);
+
+    const response = await postManual({ currency: 'USD', exchangeRate: 6 });
+
+    expect(response.status).toBe(201);
+    expect(Number(prismaMock.quoteResponse.create.mock.calls[0][0].data.exchangeRate)).toBe(6);
+    expect(prismaMock.exchangeRate.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.quoteResponse.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('POST USD sem câmbio e sem fallback -> 400 orientando informar manualmente', async () => {
+    const response = await postManual({ currency: 'USD' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Informe o câmbio manualmente');
+    expect(prismaMock.quoteResponse.create).not.toHaveBeenCalled();
+  });
+
+  it('POST BRL sem câmbio grava 1 sem consultar PTAX', async () => {
+    const response = await postManual({ currency: 'BRL' });
+
+    expect(response.status).toBe(201);
+    expect(Number(prismaMock.quoteResponse.create.mock.calls[0][0].data.exchangeRate)).toBe(1);
+    expect(prismaMock.exchangeRate.findFirst).not.toHaveBeenCalled();
+    expect(prismaMock.quoteResponse.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('PUT trocando a moeda BRL->USD sem câmbio usa a PTAX (não reaproveita 1)', async () => {
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(ptaxRow);
+
+    const response = await putManual({ currency: 'USD' }, 'BRL', '1.00');
+
+    expect(response.status).toBe(200);
+    expect(Number(prismaMock.quoteResponse.update.mock.calls[0][0].data.exchangeRate)).toBe(5.4);
+  });
+
+  it('PUT sem trocar a moeda e sem câmbio mantém a taxa existente sem consultar PTAX', async () => {
+    prismaMock.exchangeRate.findFirst.mockResolvedValue(ptaxRow);
+
+    const response = await putManual({ notes: 'ajuste' }, 'USD', '5.00');
+
+    expect(response.status).toBe(200);
+    expect(Number(prismaMock.quoteResponse.update.mock.calls[0][0].data.exchangeRate)).toBe(5);
+    expect(prismaMock.exchangeRate.findFirst).not.toHaveBeenCalled();
   });
 });
 

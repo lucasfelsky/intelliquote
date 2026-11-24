@@ -145,6 +145,50 @@ describe('RespostasTab', () => {
     expect(heading?.textContent).toBe('Nova resposta');
   });
 
+  describe('câmbio opcional no modal "Nova resposta"', () => {
+    async function openFilledForm(exchange: string) {
+      const view = renderTab();
+      await view.findByText('ACME Ltda');
+      fireEvent.click(view.getByRole('button', { name: 'Nova resposta' }));
+      const [dialogA] = getDialogs(view.container);
+      await waitFor(() => {
+        expect(dialogA.querySelector('#rf-supplier option[value="7"]')).not.toBeNull();
+      });
+      const field = (id: string) => dialogA.querySelector(`#${id}`) as HTMLInputElement;
+      fireEvent.change(field('rf-supplier'), { target: { value: '7' } });
+      fireEvent.change(field('rf-price'), { target: { value: '100' } });
+      fireEvent.change(field('rf-currency'), { target: { value: 'USD' } });
+      fireEvent.change(field('rf-exchange'), { target: { value: exchange } });
+      return { ...view, dialogA, field };
+    }
+
+    it('a. USD com câmbio vazio não bloqueia e envia exchangeRate undefined', async () => {
+      vi.mocked(createQuoteResponse).mockResolvedValue({ ...response, id: 77 });
+      const { dialogA, queryByText } = await openFilledForm('');
+      fireEvent.submit(dialogA.querySelector('form') as HTMLFormElement);
+
+      await waitFor(() => expect(createQuoteResponse).toHaveBeenCalledTimes(1));
+      expect(queryByText(/Informe a taxa de câmbio/)).toBeNull();
+      const payload = vi.mocked(createQuoteResponse).mock.calls[0]![0];
+      expect(payload.exchangeRate).toBeUndefined();
+      expect(payload.currency).toBe('USD');
+    });
+
+    it('b. câmbio 0 mostra erro e não chama create', async () => {
+      const { dialogA, findByText } = await openFilledForm('0');
+      fireEvent.submit(dialogA.querySelector('form') as HTMLFormElement);
+
+      expect(await findByText('A taxa de câmbio informada deve ser maior que zero.')).toBeTruthy();
+      expect(createQuoteResponse).not.toHaveBeenCalled();
+    });
+
+    it('c. o rótulo indica que o câmbio é opcional', async () => {
+      const { dialogA } = await openFilledForm('');
+      const label = dialogA.querySelector('label[for="rf-exchange"]');
+      expect(label?.textContent).toContain('opcional');
+    });
+  });
+
   it('3. clicar no nome do fornecedor abre o pop-up de itens com fallback (resposta manual sem items)', async () => {
     const { container, findByText, getByRole } = renderTab();
     await findByText('ACME Ltda');

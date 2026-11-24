@@ -249,6 +249,39 @@ export class ExchangeRateService {
     };
   }
 
+  /**
+   * Fallback de cambio quando a proposta nao informa a taxa (portal do fornecedor e
+   * resposta manual): taxa de outra resposta ativa da mesma cotacao e mesma moeda,
+   * senao a PTAX em cache. Retorna null se nada estiver disponivel; cada chamador
+   * decide o erro a lancar.
+   */
+  static async resolveFallbackRateToBrl(
+    client: PrismaClient | Prisma.TransactionClient,
+    quoteRequestId: number,
+    currency: string,
+  ): Promise<number | null> {
+    if (currency.toUpperCase() === 'BRL') {
+      return 1;
+    }
+    const existing = await client.quoteResponse.findFirst({
+      where: { quoteRequestId, deletedAt: null, currency: { equals: currency, mode: 'insensitive' } },
+      orderBy: { updatedAt: 'desc' },
+      select: { exchangeRate: true },
+    });
+    const candidate = existing ? Number(existing.exchangeRate) : 0;
+    if (candidate > 0) {
+      return candidate;
+    }
+    // Uma taxa de outra moeda nao pode servir de fallback (ex.: USD para EUR).
+    // Tenta usar o cache local de PTAX (BCB). So considera o valor atual
+    // (mesma data ou anterior) para nao misturar taxas de dias muito antigos.
+    const cached = await ExchangeRateService.getRateToBrl(currency, client as PrismaClient);
+    if (cached && cached.rateToBrl > 0) {
+      return cached.rateToBrl;
+    }
+    return null;
+  }
+
   static async listLatest(client: PrismaClient = prisma): Promise<ExchangeRateSnapshot[]> {
     const rows = await client.exchangeRate.findMany({
       orderBy: [{ currency: 'asc' }, { referenceDate: 'desc' }],

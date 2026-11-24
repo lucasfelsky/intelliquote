@@ -435,21 +435,9 @@ async function resolveExchangeRate(
   quoteRequestId: number,
   currency: string,
 ): Promise<number> {
-  const existing = await tx.quoteResponse.findFirst({
-    where: { quoteRequestId, deletedAt: null, currency: { equals: currency, mode: 'insensitive' } },
-    orderBy: { updatedAt: 'desc' },
-    select: { exchangeRate: true },
-  });
-  const candidate = existing ? Number(existing.exchangeRate) : 0;
-  if (candidate > 0) {
-    return candidate;
-  }
-  // Uma taxa de outra moeda nao pode servir de fallback (ex.: USD para EUR).
-  // Tenta usar o cache local de PTAX (BCB). So considera o valor atual
-  // (mesma data ou anterior) para nao misturar taxas de dias muito antigos.
-  const cached = await ExchangeRateService.getRateToBrl(currency, tx as PrismaClient);
-  if (cached && cached.rateToBrl > 0) {
-    return cached.rateToBrl;
+  const rate = await ExchangeRateService.resolveFallbackRateToBrl(tx, quoteRequestId, currency);
+  if (rate) {
+    return rate;
   }
   throw new PortalHttpError(
     400,
