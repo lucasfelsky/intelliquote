@@ -10,13 +10,19 @@ import { mailerEnv } from '../config/env';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import type { MailAttachment } from '../mailer/Mailer';
-import { SKIPPED_COMERCIAL_LOOKUP_FAILED, SKIPPED_COMERCIAL_RECIPIENT, sendAndLog } from '../mailer/MailerService';
+import {
+  SKIPPED_COMERCIAL_LOOKUP_FAILED,
+  SKIPPED_COMERCIAL_RECIPIENT,
+  getComexCcList,
+  sendAndLog,
+} from '../mailer/MailerService';
 import {
   buildIndentPortalLink,
   buildIndentSubject,
   renderIndentQuoteRequest,
   type IndentMailKindName,
 } from '../mailer/renderIndentQuoteRequest';
+import { mergeCc } from '../utils/contactRecipients';
 import { HttpError } from '../utils/http';
 import {
   buildClientTerms,
@@ -28,6 +34,7 @@ import {
 import { formatQuoteRef } from '../utils/indentQuote';
 import type { IndentSendInput } from '../validators/indentPortal';
 import { AuditLogService } from './AuditLogService';
+import { CompanyProfileService, readDispatchCc } from './CompanyProfileService';
 import {
   WRITE_ROLES,
   loadQuoteDetail,
@@ -328,6 +335,21 @@ async function createDispatches(
   return dispatches;
 }
 
+// Equipe COMEX em copia (INTELLIQUOTE_COMEX_CC_LIST + e-mails fixos do perfil da empresa), igual ao envio
+// do IQ principal. Falha ao ler o perfil nao bloqueia o envio: segue so com a lista do ambiente.
+// O guard central do sendAndLog ainda remove usuarios `comercial` de to/cc.
+async function loadComexCc(): Promise<Array<{ email: string; name: string }>> {
+  let profileCc: string[] = [];
+
+  try {
+    profileCc = readDispatchCc(await CompanyProfileService.get());
+  } catch (error) {
+    logger.warn({ err: error }, 'Indent: nao foi possivel ler o Cc fixo do perfil da empresa; envio segue so com INTELLIQUOTE_COMEX_CC_LIST.');
+  }
+
+  return mergeCc('', getComexCcList(), profileCc.map((email) => ({ email, name: '' })));
+}
+
 // Depois do commit: envia, atualiza cada IndentMailLog e devolve o resultado por destinatario.
 async function deliver(prepared: Prepared, attachments: DecodedAttachment[], quoteId: number): Promise<IndentSendRecipientResult[]> {
   const mailAttachments: MailAttachment[] = attachments.map((file) => ({
@@ -336,9 +358,14 @@ async function deliver(prepared: Prepared, attachments: DecodedAttachment[], quo
     contentType: 'application/pdf',
   }));
 
+  const comexCc = await loadComexCc();
+
   const settled = await Promise.allSettled(
     // async: uma falha ao renderizar vira `failed` so daquele destinatario (o commit ja aconteceu).
-    prepared.dispatches.map(async (dispatch) => {
+    prepared.dispatches.map(async (dispatch, index) => {
+      // Copia da equipe COMEX so no 1o e-mail do envio (mesma regra do IQ principal); sem duplicar o To.
+      const cc = index === 0 ? mergeCc(dispatch.email, comexCc) : [];
+
       const rendered = renderIndentQuoteRequest({
         ...prepared.mail,
         subject: prepared.subject,
@@ -348,6 +375,7 @@ async function deliver(prepared: Prepared, attachments: DecodedAttachment[], quo
 
       return sendAndLog({
         to: { email: dispatch.email },
+        ...(cc.length > 0 ? { cc } : {}),
         replyTo: { email: INDENT_MAILBOX, name: 'SQ Quimica Indent' },
         subject: rendered.subject,
         html: rendered.html,
