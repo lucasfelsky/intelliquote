@@ -583,7 +583,7 @@ describe('IndentClientes', () => {
       await screen.findByText('Cliente Sem Cnpj Ltda');
       const linhas = Array.from(container.querySelectorAll('tbody tr')) as HTMLElement[];
       expect(linhas).toHaveLength(4);
-      for (const linha of linhas) expect(within(linha).getByRole('button', { name: 'Editar' })).toBeTruthy();
+      for (const linha of linhas) expect(within(linha).getByRole('button', { name: /^Editar/ })).toBeTruthy();
       expect(within(linhas[3] as HTMLElement).getByRole('button', { name: 'Completar CNPJ' })).toBeTruthy();
       expect(within(linhas[0] as HTMLElement).queryByRole('button', { name: 'Completar CNPJ' })).toBeNull();
       unmount();
@@ -591,7 +591,7 @@ describe('IndentClientes', () => {
       mockRole = 'viewer';
       renderPage();
       await screen.findByText('Cliente Sem Cnpj Ltda');
-      expect(screen.queryAllByRole('button', { name: 'Editar' })).toHaveLength(0);
+      expect(screen.queryAllByRole('button', { name: /^Editar/ })).toHaveLength(0);
     });
 
     it('cliente com CNPJ: abre a edicao (nao a restricao) com os dados, ajuda e foco; mudar so o nome faz PUT sem a chave cnpj', async () => {
@@ -599,7 +599,7 @@ describe('IndentClientes', () => {
       vi.mocked(api.put).mockResolvedValue({ ...CLIENTES[1], name: NOME_NOVO });
       renderPage();
       const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
-      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+      fireEvent.click(within(linha).getByRole('button', { name: /^Editar/ }));
 
       const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
       expect(screen.queryByText('Restrição de fornecedores')).toBeNull();
@@ -626,7 +626,7 @@ describe('IndentClientes', () => {
       mockApi();
       renderPage();
       const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
-      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+      fireEvent.click(within(linha).getByRole('button', { name: /^Editar/ }));
       const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
 
       fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '' } });
@@ -640,7 +640,7 @@ describe('IndentClientes', () => {
       vi.mocked(api.put).mockResolvedValue({ ...CLIENTES[1], cnpj: '11222333000181' });
       renderPage();
       const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
-      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+      fireEvent.click(within(linha).getByRole('button', { name: /^Editar/ }));
       const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
 
       fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '11.222.333/0001-81' } });
@@ -654,13 +654,15 @@ describe('IndentClientes', () => {
       });
     });
 
-    it('"Editar" nao abre a restricao (clique e Enter no botao ficam no botao); a linha continua abrindo a restricao', async () => {
+    it('"Editar" nao abre a restricao (clique, Enter e Espaco no botao ficam no botao); a linha continua abrindo a restricao', async () => {
       mockApi();
       renderPage();
       const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
-      const botao = within(linha).getByRole('button', { name: 'Editar' });
+      const botao = within(linha).getByRole('button', { name: /^Editar/ });
 
       fireEvent.keyDown(botao, { key: 'Enter' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+      fireEvent.keyDown(botao, { key: ' ' });
       expect(screen.queryByRole('dialog')).toBeNull();
 
       fireEvent.click(botao);
@@ -679,7 +681,7 @@ describe('IndentClientes', () => {
       vi.mocked(api.put).mockResolvedValue({ ...CLIENTES[1] });
       renderPage();
       const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
-      const botao = within(linha).getByRole('button', { name: 'Editar' });
+      const botao = within(linha).getByRole('button', { name: /^Editar/ });
 
       botao.focus();
       fireEvent.click(botao);
@@ -709,7 +711,7 @@ describe('IndentClientes', () => {
       vi.mocked(api.put).mockResolvedValue({ ...PENDENTE, name: 'Cliente Sem Cnpj Renomeado Ltda' });
       renderPage();
       const linha = await linhaDe('Cliente Sem Cnpj Ltda');
-      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+      fireEvent.click(within(linha).getByRole('button', { name: /^Editar/ }));
 
       const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
       expect(within(dialog).getByText('Opcional. Sem CNPJ o cliente fica como CNPJ pendente.')).toBeTruthy();

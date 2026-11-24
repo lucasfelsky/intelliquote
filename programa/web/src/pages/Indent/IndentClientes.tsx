@@ -192,6 +192,7 @@ export default function IndentClientes() {
                                 <button
                                   type="button"
                                   className="ghost-button ghost-button--sm"
+                                  aria-label={`Editar ${cliente.name}`}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setEdicao(cliente);
@@ -211,6 +212,7 @@ export default function IndentClientes() {
                                 <button
                                   type="button"
                                   className="ghost-button ghost-button--sm"
+                                  aria-label={`Editar ${cliente.name}`}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     setEdicao(cliente);
