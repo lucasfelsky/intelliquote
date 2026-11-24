@@ -8,6 +8,7 @@ vi.mock('../src/mailer/MailerService', async (original) =>
 import '../src/app'; // carrega o app na coleta, fora do timeout do 1o teste (o helper importa tarde)
 
 import { INDENT_MAILBOX, INDENT_SEND_JSON_BODY_LIMIT_BYTES } from '../src/constants/indentPortal';
+import { mailerEnv } from '../src/config/env';
 import {
   acceptedRow,
   auditActions,
@@ -115,6 +116,29 @@ describe('POST /quotes/:id/send - validacao (400 com path, nada gravado)', () =>
     expect(res.body.message).toBe(message);
     expect(res.body.path).toBe(path);
     expectNothingSent();
+  });
+});
+
+describe('POST /quotes/:id/send - copia da equipe COMEX', () => {
+  it('copia a equipe COMEX (INTELLIQUOTE_COMEX_CC_LIST) so no 1o e-mail, sem duplicar o To', async () => {
+    const original = mailerEnv.comexCcList;
+    mailerEnv.comexCcList = [
+      { email: 'comex@sq.test', name: 'Equipe COMEX' },
+      { email: 'WEI@acme.test' },
+    ];
+
+    try {
+      const cookie = await loginAs('comprador');
+      const res = await call('post', '/quotes/100/send', cookie, sendBody({ recipients: ['wei@acme.test', 'li@acme.test'] }));
+
+      expect(res.status).toBe(200);
+      const mails = sentMails();
+      expect(mails).toHaveLength(2);
+      expect(mails[0].cc).toEqual([{ email: 'comex@sq.test', name: 'Equipe COMEX' }]);
+      expect(mails[1].cc).toBeUndefined();
+    } finally {
+      mailerEnv.comexCcList = original;
+    }
   });
 });
 
