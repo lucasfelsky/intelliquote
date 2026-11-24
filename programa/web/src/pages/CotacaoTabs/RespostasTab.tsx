@@ -347,8 +347,8 @@ export function RespostasTab({
       return null;
     }
     const exchangeRate = form.exchangeRate.trim() ? Number(form.exchangeRate) : null;
-    if (currency !== 'BRL' && !(typeof exchangeRate === 'number' && exchangeRate > 0)) {
-      setFormError('Informe a taxa de câmbio para propostas fora de BRL.');
+    if (exchangeRate !== null && !(Number.isFinite(exchangeRate) && exchangeRate > 0)) {
+      setFormError('A taxa de câmbio informada deve ser maior que zero.');
       return null;
     }
 
@@ -635,13 +635,15 @@ export function RespostasTab({
                 />
               </div>
               <div className="resposta-campo">
-                <label className="field-label" htmlFor="rf-exchange">Câmbio (BRL/{form.currency || 'USD'})</label>
+                <label className="field-label" htmlFor="rf-exchange">Câmbio (BRL/{form.currency || 'USD'}) — opcional</label>
                 <input
                   id="rf-exchange"
                   className="input resposta-form__mono"
                   type="number"
                   min="0"
                   step="0.0001"
+                  placeholder="Vazio = PTAX do dia"
+                  title="Se vazio, usa o câmbio de outra resposta desta cotação na mesma moeda ou a PTAX mais recente."
                   value={form.exchangeRate}
                   onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
                 />

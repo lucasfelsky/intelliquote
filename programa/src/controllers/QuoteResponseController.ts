@@ -10,6 +10,7 @@ import { buildDangerousGoodItems } from '../utils/dangerousGoods';
 import { buildItemOrigins, normalizeItemOriginPort } from '../utils/originPort';
 import { prisma } from '../lib/prisma';
 import { AuditLogService } from '../services/AuditLogService';
+import { ExchangeRateService } from '../services/ExchangeRateService';
 import {
   comparisonCandidateKey,
   QuoteComparisonService,
@@ -149,10 +150,15 @@ export class QuoteResponseController {
       }
 
       const normalizedCurrency = payload.currency ?? relatedQuoteRequest.currency;
+      const resolvedExchangeRate = await resolveExchangeRate(
+        payload.exchangeRate,
+        normalizedCurrency,
+        payload.quoteRequestId,
+      );
       const landedCost = QuoteComparisonService.calculateLandedCost({
         offeredPrice: finalOfferedPrice,
         currency: normalizedCurrency,
-        exchangeRate: resolveExchangeRate(payload.exchangeRate, normalizedCurrency),
+        exchangeRate: resolvedExchangeRate,
         freightCost: payload.freightCost ?? 0,
         insuranceCost: payload.insuranceCost ?? 0,
         otherFees: payload.otherFees ?? 0,
@@ -466,13 +472,25 @@ export class QuoteResponseController {
       }
 
       const nextCurrency = payload.currency ?? existingQuoteResponse.currency;
+      // Cambio informado > taxa existente (mesma moeda) > fallback (moeda trocada).
+      const sameCurrency =
+        nextCurrency.toUpperCase() === existingQuoteResponse.currency.toUpperCase();
+      const existingRate = Number(existingQuoteResponse.exchangeRate);
+      const exchangeRateInput =
+        payload.exchangeRate !== undefined
+          ? payload.exchangeRate
+          : sameCurrency && existingRate > 0
+            ? existingRate
+            : undefined;
+      const resolvedExchangeRate = await resolveExchangeRate(
+        exchangeRateInput,
+        nextCurrency,
+        existingQuoteResponse.quoteRequestId,
+      );
       const landedCost = QuoteComparisonService.calculateLandedCost({
         offeredPrice: finalOfferedPrice,
         currency: nextCurrency,
-        exchangeRate: resolveExchangeRate(
-          payload.exchangeRate ?? Number(existingQuoteResponse.exchangeRate),
-          nextCurrency,
-        ),
+        exchangeRate: resolvedExchangeRate,
         freightCost:
           payload.freightCost !== undefined
             ? payload.freightCost
@@ -2502,23 +2520,47 @@ function shouldIncrementVersion(payload: Record<string, unknown>): boolean {
   ].some((field) => field in payload);
 }
 
-function resolveExchangeRate(value: unknown, currency: string): number {
-  if (currency === 'BRL' && (value === undefined || value === null || value === '')) {
+async function resolveExchangeRate(
+  value: unknown,
+  currency: string,
+  quoteRequestId: number,
+): Promise<number> {
+  const isEmpty = value === undefined || value === null || value === '';
+
+  if (!isEmpty) {
+    // Cambio informado tem prioridade total.
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new HttpError(
+        400,
+        currency === 'BRL'
+          ? 'A exchangeRate informada deve ser maior que zero.'
+          : 'Informe exchangeRate valida para propostas em moeda estrangeira.',
+      );
+    }
+
+    return parsed;
+  }
+
+  if (currency.toUpperCase() === 'BRL') {
     return 1;
   }
 
-  const parsed = Number(value);
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  // Mesmo fallback do portal do fornecedor: outra resposta ativa da cotacao na
+  // mesma moeda e, na falta dela, a PTAX em cache.
+  const fallback = await ExchangeRateService.resolveFallbackRateToBrl(
+    prisma,
+    quoteRequestId,
+    currency,
+  );
+  if (fallback === null) {
     throw new HttpError(
       400,
-      currency === 'BRL'
-        ? 'A exchangeRate informada deve ser maior que zero.'
-        : 'Informe exchangeRate valida para propostas em moeda estrangeira.',
+      `Câmbio indisponível para ${currency}: não há PTAX em cache nem outra resposta desta cotação nessa moeda. Informe o câmbio manualmente.`,
     );
   }
-
-  return parsed;
+  return fallback;
 }
 
 function hasOwnProperty(value: unknown, key: string): boolean {
