@@ -82,7 +82,7 @@ export default function IndentClientes() {
   }
 
   function aoTeclar(event: KeyboardEvent<HTMLTableRowElement>, cliente: IndentClient) {
-    // Enter/Espaco num botao dentro da linha (Completar CNPJ) e do botao, nao da linha.
+    // Enter/Espaco num botao dentro da linha (Completar CNPJ, Editar) e do botao, nao da linha.
     if (event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -188,12 +188,41 @@ export default function IndentClientes() {
                                   }}
                                 >
                                   Completar CNPJ
+                                </button>{' '}
+                                <button
+                                  type="button"
+                                  className="ghost-button ghost-button--sm"
+                                  aria-label={`Editar ${cliente.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setEdicao(cliente);
+                                  }}
+                                >
+                                  Editar
                                 </button>
                               </>
                             )}
                           </span>
                         ) : (
-                          <span className="indent-cell-sub">{[formatCnpj(cliente.cnpj), cliente.city].filter(Boolean).join(' · ')}</span>
+                          <span className="indent-cell-sub">
+                            <span>{[formatCnpj(cliente.cnpj), cliente.city].filter(Boolean).join(' · ')}</span>
+                            {canWrite && (
+                              <>
+                                {' '}
+                                <button
+                                  type="button"
+                                  className="ghost-button ghost-button--sm"
+                                  aria-label={`Editar ${cliente.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setEdicao(cliente);
+                                  }}
+                                >
+                                  Editar
+                                </button>
+                              </>
+                            )}
+                          </span>
                         )}
                       </div>
                     </td>
@@ -468,7 +497,7 @@ function RestricaoModal({ cliente, onClose, onSaved }: RestricaoModalProps) {
 }
 
 interface ClienteModalProps {
-  /** Ausente = Novo cliente; presente = edicao dos dados (Completar CNPJ). */
+  /** Ausente = Novo cliente; presente = edicao dos dados (Editar / Completar CNPJ). */
   cliente?: IndentClient;
   onClose: () => void;
   onSaved: (nome: string) => void;
@@ -496,8 +525,8 @@ function ClienteModal({ cliente, onClose, onSaved }: ClienteModalProps) {
       }
       return updateIndentClient(cliente.id, {
         name: nome.trim(),
-        // Cliente pendente que continua sem CNPJ: nao envia a chave (o backend nao aceita remover, so completar).
-        ...(digitos === '' ? {} : { cnpj: digitos }),
+        // So envia o CNPJ quando ele muda (completar o pendente ou trocar por outro valido); vazio ou igual ao gravado nao vai.
+        ...(digitos !== '' && digitos !== (cliente.cnpj ?? '') ? { cnpj: digitos } : {}),
         city: toNullable(cidade),
         pipedriveOrgId: org === '' ? null : Number(org),
       });
@@ -511,15 +540,17 @@ function ClienteModal({ cliente, onClose, onSaved }: ClienteModalProps) {
     setErroForm(null);
     const semNome = nome.trim().length === 0;
     const preenchido = normalizeCnpj(cnpj) !== '';
-    // CNPJ e opcional (vazio = CNPJ pendente); preenchido, tem de ser valido. A edicao so abre para cliente pendente
-    // (o backend barra, com 400, remover um CNPJ ja gravado).
+    // CNPJ e opcional (vazio = CNPJ pendente); preenchido, tem de ser valido. Cliente com CNPJ ja gravado nao pode
+    // te-lo removido: o front bloqueia com o mesmo texto do 400 do backend.
+    const cnpjGravado = cliente?.cnpj ?? null;
+    const cnpjRemovido = cnpjGravado !== null && !preenchido;
     const cnpjInvalido = preenchido && !isValidCnpj(cnpj);
     const org = orgId.trim();
     const orgInvalido = org !== '' && !/^[1-9]\d*$/.test(org);
     setErroNome(semNome ? 'Informe a razão social.' : null);
-    setErroCnpj(cnpjInvalido ? 'CNPJ inválido.' : null);
+    setErroCnpj(cnpjRemovido ? 'O CNPJ não pode ser removido.' : cnpjInvalido ? 'CNPJ inválido.' : null);
     setErroOrg(orgInvalido ? 'Informe um número inteiro positivo.' : null);
-    if (semNome || cnpjInvalido || orgInvalido) return;
+    if (semNome || cnpjRemovido || cnpjInvalido || orgInvalido) return;
     salvar.mutate();
   }
 
@@ -563,7 +594,9 @@ function ClienteModal({ cliente, onClose, onSaved }: ClienteModalProps) {
               aria-invalid={erroCnpj ? true : undefined}
               onChange={(event) => setCnpj(maskCnpjInput(event.target.value))}
             />
-            <span className="field-hint">Opcional. Sem CNPJ o cliente fica como CNPJ pendente.</span>
+            <span className="field-hint">
+              {cliente?.cnpj ? 'O CNPJ pode ser corrigido, mas não removido.' : 'Opcional. Sem CNPJ o cliente fica como CNPJ pendente.'}
+            </span>
             {erroCnpj && (
               <p className="field-error" role="alert">
                 {erroCnpj}
