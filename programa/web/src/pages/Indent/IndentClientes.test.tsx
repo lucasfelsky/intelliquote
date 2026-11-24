@@ -566,4 +566,164 @@ describe('IndentClientes', () => {
       expect(await screen.findByText('Nenhum cliente sem CNPJ.')).toBeTruthy();
     });
   });
+
+  describe('Editar cliente', () => {
+    const PENDENTE = cliente(7, 'Cliente Sem Cnpj Ltda', { cnpj: null, city: 'Joinville, SC', pipedriveOrgId: null });
+    const COM_PENDENTE = [...CLIENTES, PENDENTE];
+    const NOME_NOVO = 'Tintas Serra Gaúcha Indústria S.A.';
+
+    async function linhaDe(nome: string) {
+      const celula = await screen.findByText(nome);
+      return celula.closest('tr') as HTMLElement;
+    }
+
+    it('com escrita, toda linha (com e sem CNPJ) tem "Editar"; a pendente tem tambem "Completar CNPJ"; viewer nao ve nenhum', async () => {
+      mockApi(COM_PENDENTE);
+      const { container, unmount } = renderPage();
+      await screen.findByText('Cliente Sem Cnpj Ltda');
+      const linhas = Array.from(container.querySelectorAll('tbody tr')) as HTMLElement[];
+      expect(linhas).toHaveLength(4);
+      for (const linha of linhas) expect(within(linha).getByRole('button', { name: 'Editar' })).toBeTruthy();
+      expect(within(linhas[3] as HTMLElement).getByRole('button', { name: 'Completar CNPJ' })).toBeTruthy();
+      expect(within(linhas[0] as HTMLElement).queryByRole('button', { name: 'Completar CNPJ' })).toBeNull();
+      unmount();
+
+      mockRole = 'viewer';
+      renderPage();
+      await screen.findByText('Cliente Sem Cnpj Ltda');
+      expect(screen.queryAllByRole('button', { name: 'Editar' })).toHaveLength(0);
+    });
+
+    it('cliente com CNPJ: abre a edicao (nao a restricao) com os dados, ajuda e foco; mudar so o nome faz PUT sem a chave cnpj', async () => {
+      mockApi();
+      vi.mocked(api.put).mockResolvedValue({ ...CLIENTES[1], name: NOME_NOVO });
+      renderPage();
+      const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
+      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      expect(screen.queryByText('Restrição de fornecedores')).toBeNull();
+      expect((within(dialog).getByLabelText('Razão social') as HTMLInputElement).value).toBe('Tintas Serra Gaúcha S.A.');
+      expect((within(dialog).getByLabelText('CNPJ') as HTMLInputElement).value).toBe('45.997.418/0001-53');
+      expect(within(dialog).getByText('O CNPJ pode ser corrigido, mas não removido.')).toBeTruthy();
+      expect(within(dialog).queryByText('Opcional. Sem CNPJ o cliente fica como CNPJ pendente.')).toBeNull();
+      expect(document.activeElement).toBe(within(dialog).getByLabelText('Razão social'));
+
+      fireEvent.change(within(dialog).getByLabelText('Razão social'), { target: { value: NOME_NOVO } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      expect(api.put).toHaveBeenCalledWith('/api/v1/indent/clients/2', {
+        name: NOME_NOVO,
+        city: 'Caxias do Sul, RS',
+        pipedriveOrgId: null,
+      });
+      expect(Object.keys(vi.mocked(api.put).mock.calls[0]?.[1] as object)).not.toContain('cnpj');
+      expect((await screen.findByTestId('fc-toast')).textContent).toContain(`Cliente ${NOME_NOVO} atualizado`);
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    });
+
+    it('apagar o CNPJ gravado bloqueia com "O CNPJ não pode ser removido." e nao chama o PUT', async () => {
+      mockApi();
+      renderPage();
+      const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
+      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+
+      fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      expect(within(dialog).getByRole('alert').textContent).toBe('O CNPJ não pode ser removido.');
+      expect(api.put).not.toHaveBeenCalled();
+    });
+
+    it('trocar o CNPJ gravado por outro valido envia o novo CNPJ so com digitos', async () => {
+      mockApi();
+      vi.mocked(api.put).mockResolvedValue({ ...CLIENTES[1], cnpj: '11222333000181' });
+      renderPage();
+      const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
+      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+
+      fireEvent.change(within(dialog).getByLabelText('CNPJ'), { target: { value: '11.222.333/0001-81' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      expect(api.put).toHaveBeenCalledWith('/api/v1/indent/clients/2', {
+        name: 'Tintas Serra Gaúcha S.A.',
+        cnpj: '11222333000181',
+        city: 'Caxias do Sul, RS',
+        pipedriveOrgId: null,
+      });
+    });
+
+    it('"Editar" nao abre a restricao (clique e Enter no botao ficam no botao); a linha continua abrindo a restricao', async () => {
+      mockApi();
+      renderPage();
+      const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
+      const botao = within(linha).getByRole('button', { name: 'Editar' });
+
+      fireEvent.keyDown(botao, { key: 'Enter' });
+      expect(screen.queryByRole('dialog')).toBeNull();
+
+      fireEvent.click(botao);
+      const edicao = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      expect(screen.getAllByRole('dialog')).toHaveLength(1);
+      expect(screen.queryByText('Restrição de fornecedores')).toBeNull();
+      fireEvent.click(within(edicao).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+      fireEvent.keyDown(linha, { key: 'Enter' });
+      expect(await screen.findByRole('dialog', { name: 'Tintas Serra Gaúcha S.A.' })).toBeTruthy();
+    });
+
+    it('restoreFocus: fechar o modal de edicao (Cancelar, Esc e Salvar) devolve o foco ao botao "Editar"', async () => {
+      mockApi();
+      vi.mocked(api.put).mockResolvedValue({ ...CLIENTES[1] });
+      renderPage();
+      const linha = await linhaDe('Tintas Serra Gaúcha S.A.');
+      const botao = within(linha).getByRole('button', { name: 'Editar' });
+
+      botao.focus();
+      fireEvent.click(botao);
+      const cancelar = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent.click(within(cancelar).getByRole('button', { name: 'Cancelar' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+
+      botao.focus();
+      fireEvent.click(botao);
+      const esc = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent(esc, new Event('cancel', { cancelable: true })); // Esc no <dialog> dispara 'cancel'
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+
+      botao.focus();
+      fireEvent.click(botao);
+      const salvar = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      fireEvent.click(within(salvar).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(document.activeElement).toBe(botao);
+    });
+
+    it('"Editar" na linha pendente abre o mesmo modal (ajuda de CNPJ opcional); mudar so o nome envia o PUT sem cnpj', async () => {
+      mockApi(COM_PENDENTE);
+      vi.mocked(api.put).mockResolvedValue({ ...PENDENTE, name: 'Cliente Sem Cnpj Renomeado Ltda' });
+      renderPage();
+      const linha = await linhaDe('Cliente Sem Cnpj Ltda');
+      fireEvent.click(within(linha).getByRole('button', { name: 'Editar' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Editar cliente' });
+      expect(within(dialog).getByText('Opcional. Sem CNPJ o cliente fica como CNPJ pendente.')).toBeTruthy();
+      expect(within(dialog).queryByText('O CNPJ pode ser corrigido, mas não removido.')).toBeNull();
+
+      fireEvent.change(within(dialog).getByLabelText('Razão social'), { target: { value: 'Cliente Sem Cnpj Renomeado Ltda' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+      await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+      expect(api.put).toHaveBeenCalledWith('/api/v1/indent/clients/7', {
+        name: 'Cliente Sem Cnpj Renomeado Ltda',
+        city: 'Joinville, SC',
+        pipedriveOrgId: null,
+      });
+      expect(Object.keys(vi.mocked(api.put).mock.calls[0]?.[1] as object)).not.toContain('cnpj');
+    });
+  });
 });
