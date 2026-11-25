@@ -126,6 +126,35 @@ export interface DispatchPreviewResult {
   // (CompanyProfile.dispatchCc). Serao adicionados como CC em todos os
   // envios desta empresa, independente dos recipients selecionados.
   companyCc: string[];
+  // Validade real do link calculada pelo backend (fim do dia BRT do prazo da
+  // cotacao quando ele governa; senao agora + expiresInDays).
+  linkExpiresAt?: string;
+  linkExpirySource?: 'deadline' | 'ttl';
+}
+
+const SAO_PAULO_DAY_KEY = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/**
+ * Espelho de computeTokenExpiry (backend: src/utils/portalTokenExpiry.ts):
+ * se o prazo da cotacao ainda nao venceu (fim do dia BRT > agora), o link do
+ * portal vale ate esse instante e a validade em dias deixa de ser editavel.
+ * Retorna null quando nao ha prazo governando (sem prazo ou prazo vencido).
+ * Usado so para decidir o rotulo/modo da UI; a data do e-mail vem do backend.
+ */
+export function portalLinkExpiryFromDeadline(
+  deadlineAt: string | null | undefined,
+  now: Date = new Date(),
+): Date | null {
+  if (!deadlineAt) return null;
+  const deadline = new Date(deadlineAt);
+  if (Number.isNaN(deadline.getTime())) return null;
+  const endOfDay = new Date(`${SAO_PAULO_DAY_KEY.format(deadline)}T23:59:59.999-03:00`);
+  return endOfDay.getTime() > now.getTime() ? endOfDay : null;
 }
 
 export async function previewDispatch(

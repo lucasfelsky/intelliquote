@@ -3,6 +3,7 @@ import { Incoterm, Prisma, QuoteRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { logger } from '../lib/logger';
 import { AuditLogService } from '../services/AuditLogService';
+import { computeTokenExpiry } from '../utils/portalTokenExpiry';
 import { lockQuoteRequestForPurchaseOrders } from '../services/QuotePurchaseOrderService';
 import { clearCreditWinners } from '../services/ComparisonCandidateService';
 import { CommercialRequestNotificationService } from '../services/CommercialRequestNotificationService';
@@ -299,37 +300,73 @@ export class QuoteRequestController {
         'Reabra a cotacao antes de alterar os seus dados.',
       );
 
-      const quoteRequest = await prisma.quoteRequest.update({
-        where: { id },
-        data: {
-          requestCode: payload.requestCode,
-          productName:
-            payload.productName === undefined ? undefined : payload.productName,
-          quantity: payload.quantity === undefined ? undefined : payload.quantity,
-          description: payload.description,
-          desiredIncoterm: payload.desiredIncoterm,
-          destinationPort:
-            payload.destinationPort === undefined ? undefined : payload.destinationPort,
-          originPort: payload.originPort === undefined ? undefined : payload.originPort,
-          currency: payload.currency,
-          deadlineAt: payload.deadlineAt,
-        },
-        include: {
-          items: {
-            include: { catalogItem: true },
-            orderBy: { createdAt: 'asc' as const },
+      const quoteRequest = await prisma.$transaction(async (tx) => {
+        const updated = await tx.quoteRequest.update({
+          where: { id },
+          data: {
+            requestCode: payload.requestCode,
+            productName:
+              payload.productName === undefined ? undefined : payload.productName,
+            quantity: payload.quantity === undefined ? undefined : payload.quantity,
+            description: payload.description,
+            desiredIncoterm: payload.desiredIncoterm,
+            destinationPort:
+              payload.destinationPort === undefined ? undefined : payload.destinationPort,
+            originPort: payload.originPort === undefined ? undefined : payload.originPort,
+            currency: payload.currency,
+            deadlineAt: payload.deadlineAt,
           },
-          quoteResponses: { where: { deletedAt: null } },
-        },
-      });
+          include: {
+            items: {
+              include: { catalogItem: true },
+              orderBy: { createdAt: 'asc' as const },
+            },
+            quoteResponses: { where: { deletedAt: null } },
+          },
+        });
 
-      await AuditLogService.log({
-        entityType: 'quote_request',
-        entityId: quoteRequest.id,
-        action: 'update',
-        performedById: req.user?.id ?? null,
-        beforeData: existingQuoteRequest,
-        afterData: quoteRequest,
+        await AuditLogService.log(
+          {
+            entityType: 'quote_request',
+            entityId: updated.id,
+            action: 'update',
+            performedById: req.user?.id ?? null,
+            beforeData: existingQuoteRequest,
+            afterData: updated,
+          },
+          tx,
+        );
+
+        // O link do portal acompanha o prazo da cotacao: prazo novo e futuro
+        // realinha o expiresAt dos tokens nao revogados (inclui expirados).
+        // Prazo removido ou ja passado nao mexe nos tokens.
+        const newDeadline = payload.deadlineAt;
+        if (
+          newDeadline instanceof Date &&
+          newDeadline.getTime() !== existingQuoteRequest.deadlineAt?.getTime()
+        ) {
+          const expiry = computeTokenExpiry({ deadlineAt: newDeadline }, 0);
+          if (expiry.source === 'deadline') {
+            const synced = await tx.supplierPortalToken.updateMany({
+              where: { quoteRequestId: id, revokedAt: null },
+              data: { expiresAt: expiry.expiresAt },
+            });
+            if (synced.count > 0) {
+              await AuditLogService.log(
+                {
+                  entityType: 'supplier_portal_token',
+                  entityId: id,
+                  action: 'sync_expiry',
+                  performedById: req.user?.id ?? null,
+                  metadata: { count: synced.count, expiresAt: expiry.expiresAt.toISOString() },
+                },
+                tx,
+              );
+            }
+          }
+        }
+
+        return updated;
       });
 
       return res.status(200).json(quoteRequest);

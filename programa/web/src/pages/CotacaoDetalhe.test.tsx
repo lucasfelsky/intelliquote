@@ -1133,4 +1133,43 @@ describe('CotacaoDetalhe', () => {
 
     expect(queryByRole('button', { name: 'Links do portal' })).toBeNull();
   });
+
+  describe('validade do link acompanha o prazo da cotação', () => {
+    // Datas longe do relógio real: 2099 (futuro) e 2020 (passado).
+    const useDeadline = (deadlineAt: string) => {
+      vi.mocked(api.get).mockImplementation((async (path: string, params?: Record<string, string>) =>
+        path.startsWith('/v1/quote-requests/')
+          ? { ...quoteFixture, deadlineAt }
+          : getImpl(path, params)) as unknown as typeof api.get);
+    };
+
+    it('15a. prazo futuro: envio e "Links do portal" mostram "até dd/mm/aaaa, prazo da cotação" sem input de dias', async () => {
+      useDeadline('2099-12-10T03:00:00.000Z');
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dispatchDialog = await openDispatchToPreview(container, getByRole);
+
+      expect(within(dispatchDialog).queryByLabelText('Validade do link (dias)')).toBeNull();
+      expect(within(dispatchDialog).getByText('até 10/12/2099, prazo da cotação')).toBeTruthy();
+
+      fireEvent.click(getByRole('button', { name: 'Links do portal' }));
+      const tokensDialog = dialogByTitle(container, 'Links do portal');
+      expect(within(tokensDialog).queryByLabelText('Validade (dias)')).toBeNull();
+      expect(within(tokensDialog).getByText('até 10/12/2099, prazo da cotação')).toBeTruthy();
+    });
+
+    it('15b. prazo passado: segue o input editável de dias nos dois modais', async () => {
+      useDeadline('2020-12-10T03:00:00.000Z');
+      const { container, findByRole, getByRole } = renderPage();
+      await findByRole('heading', { name: 'RFQ-001' });
+      const dispatchDialog = await openDispatchToPreview(container, getByRole);
+
+      expect(within(dispatchDialog).getByLabelText('Validade do link (dias)')).toBeTruthy();
+      expect(within(dispatchDialog).queryByText(/prazo da cotação/)).toBeNull();
+
+      fireEvent.click(getByRole('button', { name: 'Links do portal' }));
+      const tokensDialog = dialogByTitle(container, 'Links do portal');
+      expect(within(tokensDialog).getByLabelText('Validade (dias)')).toBeTruthy();
+    });
+  });
 });

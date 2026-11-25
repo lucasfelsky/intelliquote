@@ -1062,6 +1062,7 @@ export class QuoteResponseController {
             supplierId: quoteResponse.supplierId,
             supplierContactId: primaryContact.id,
             createdById: userId,
+            deadlineAt: quoteResponse.quoteRequest.deadlineAt,
             client: tx,
           });
           if (result.previous) {

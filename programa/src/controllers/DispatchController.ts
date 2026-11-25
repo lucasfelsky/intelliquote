@@ -26,6 +26,7 @@ import {
   renderDispatchFromTemplate,
 } from '../mailer/renderQuoteDispatch';
 import { buildPortalLink } from '../utils/portalLink';
+import { computeTokenExpiry } from '../utils/portalTokenExpiry';
 
 interface DispatchRecipient {
   supplierContactId: number;
@@ -74,9 +75,10 @@ export class DispatchController {
       const sample = contacts[0];
       const portalLink = buildPortalLink('__preview__');
       const locale = parsed.data.locale?.trim() || DISPATCH_DEFAULT_LOCALE;
-      // Mesma formula de SupplierPortalService.createToken (ttlDays * 86_400_000),
-      // para o preview mostrar a mesma data de expiracao do e-mail enviado.
-      const expiresAt = new Date(Date.now() + parsed.data.expiresInDays * 86_400_000);
+      const { expiresAt, source: linkExpirySource } = computeTokenExpiry(
+        quoteRequest,
+        parsed.data.expiresInDays,
+      );
       const rendered = sample
         ? await renderDispatchEmail({
             quoteRequest,
@@ -112,6 +114,8 @@ export class DispatchController {
           ? { subject: rendered.subject, html: rendered.html, text: rendered.text }
           : null,
         templateSource: rendered?.source ?? 'fallback',
+        linkExpiresAt: expiresAt.toISOString(),
+        linkExpirySource,
         cc: await excludeComercialRecipients(getComexCcList()),
         // E-mails fixos configurados no perfil da empresa que serao
         // adicionados automaticamente como copia em todos os envios
@@ -212,7 +216,7 @@ export class DispatchController {
         ? parsed.data.subject.trim()
         : defaultDispatchSubject(quoteRequest);
       const customMessage = parsed.data.message?.trim() ?? '';
-      const expiresInDays = parsed.data.expiresInDays;
+      const { expiresAt: tokenExpiresAt } = computeTokenExpiry(quoteRequest, parsed.data.expiresInDays);
             const locale = parsed.data.locale?.trim() || DISPATCH_DEFAULT_LOCALE;
 
             const dispatchEvent = await prisma.dispatchEvent.create({
@@ -263,7 +267,7 @@ export class DispatchController {
             supplierContactId: contact.supplierContactId,
             createdById: userId,
             dispatchEventId: dispatchEvent.id,
-            ttlDays: expiresInDays,
+            expiresAt: tokenExpiresAt,
           });
 
           // re-read token with full row (createToken returns an augmented object)
@@ -606,6 +610,8 @@ export class DispatchController {
               quoteRequestId: created.quoteRequestId,
               replacesTokenId: previous.id,
               ttlDays,
+              expiresAt: created.expiresAt.toISOString(),
+              expirySource: regenerated.expirySource,
             },
           },
           tx,
@@ -667,11 +673,12 @@ export class DispatchController {
 
       const quoteRequest = await prisma.quoteRequest.findFirst({
         where: { id, deletedAt: null },
-        select: { id: true, requestCode: true, productName: true },
+        select: { id: true, requestCode: true, productName: true, deadlineAt: true },
       });
       if (!quoteRequest) {
         return res.status(404).json({ message: 'Cotacao nao encontrada.' });
       }
+      const expiry = computeTokenExpiry(quoteRequest, ttlDays);
 
       const contacts = await prisma.supplierContact.findMany({
         where: { id: { in: supplierContactIds } },
@@ -723,7 +730,7 @@ export class DispatchController {
           supplierId: contact.supplierId,
           supplierContactId: contact.id,
           createdById: userId,
-          ttlDays,
+          expiresAt: expiry.expiresAt,
         });
 
         generated.push({
@@ -762,6 +769,8 @@ export class DispatchController {
           generated: generated.length,
           alreadyActive: alreadyActiveCount,
           ttlDays,
+          expiresAt: expiry.expiresAt.toISOString(),
+          expirySource: expiry.source,
         },
       });
 
@@ -954,6 +963,7 @@ function formatDate(value: Date | null | undefined): string {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
+      timeZone: 'America/Sao_Paulo',
     }).format(value);
   } catch {
     return value.toISOString().slice(0, 10);

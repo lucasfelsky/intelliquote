@@ -8,6 +8,7 @@ import {
   generatePortalTokens,
   listPortalTokens,
   regeneratePortalToken,
+  portalLinkExpiryFromDeadline,
   previewDispatch,
   revokePortalToken,
   sendDispatch,
@@ -163,6 +164,17 @@ function formatDate(iso: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Dia (dd/mm/aaaa) em Sao Paulo de um instante: a validade do link acompanha o
+// prazo no calendario BRT, independente do fuso do navegador.
+function formatPortalLinkDate(date: Date): string {
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
+  });
 }
 
 function formatDateTime(iso: string | null): string {
@@ -1128,6 +1140,8 @@ export default function CotacaoDetalhe() {
 
   const qr = detail.data;
   const items = (qr.items ?? []).map(normalizeItem);
+  // Prazo da cotacao governa a validade do link (ver portalLinkExpiryFromDeadline).
+  const portalLinkDeadlineExpiry = portalLinkExpiryFromDeadline(qr.deadlineAt);
 
   return (
     <div className="page cotacao-detalhe-page">
@@ -1561,16 +1575,27 @@ export default function CotacaoDetalhe() {
                       />
                     </div>
                     <div>
-                      <label className="field-label" htmlFor="dispatchExpires">Validade do link (dias)</label>
-                      <input
-                        id="dispatchExpires"
-                        className="input cotacao-envio__numero"
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={dispatchExpires}
-                        onChange={(e) => setDispatchExpires(e.target.value)}
-                      />
+                      {portalLinkDeadlineExpiry ? (
+                        <>
+                          <span className="field-label">Validade do link</span>
+                          <div className="cotacao-envio__numero">
+                            até {formatPortalLinkDate(portalLinkDeadlineExpiry)}, prazo da cotação
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <label className="field-label" htmlFor="dispatchExpires">Validade do link (dias)</label>
+                          <input
+                            id="dispatchExpires"
+                            className="input cotacao-envio__numero"
+                            type="number"
+                            min="1"
+                            max="60"
+                            value={dispatchExpires}
+                            onChange={(e) => setDispatchExpires(e.target.value)}
+                          />
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -1818,18 +1843,29 @@ export default function CotacaoDetalhe() {
               {canDispatch && (
                 <div className="cotacao-links__form">
                   <div className="cotacao-links__validade">
-                    <label className="field-label" htmlFor="tokensExpires">
-                      Validade (dias)
-                    </label>
-                    <input
-                      id="tokensExpires"
-                      className="input cotacao-links__numero"
-                      type="number"
-                      min={1}
-                      max={90}
-                      value={dispatchExpires}
-                      onChange={(e) => setDispatchExpires(e.target.value)}
-                    />
+                    {portalLinkDeadlineExpiry ? (
+                      <>
+                        <span className="field-label">Validade do link</span>
+                        <div className="cotacao-links__numero">
+                          até {formatPortalLinkDate(portalLinkDeadlineExpiry)}, prazo da cotação
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <label className="field-label" htmlFor="tokensExpires">
+                          Validade (dias)
+                        </label>
+                        <input
+                          id="tokensExpires"
+                          className="input cotacao-links__numero"
+                          type="number"
+                          min={1}
+                          max={90}
+                          value={dispatchExpires}
+                          onChange={(e) => setDispatchExpires(e.target.value)}
+                        />
+                      </>
+                    )}
                   </div>
                   <button
                     type="button"
