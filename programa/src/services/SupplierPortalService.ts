@@ -14,6 +14,12 @@ export const DEFAULT_TOKEN_TTL_DAYS = 14;
 export const PORTAL_INVALID_LINK_MESSAGE =
   'This link is invalid or has expired. Please contact your buyer to request a new one.';
 export const TOKEN_RANDOM_BYTES = 32;
+// Janela em torno do revokedAt dentro da qual um token com reminderSentAt e
+// considerado sucessor emitido pelo lembrete diario (token novo e criado antes
+// do envio; revogacao do antigo so apos o envio confirmado).
+export const REMINDER_SUCCESSOR_TOLERANCE_MS = 10 * 60 * 1000;
+// TTL cap 60 dias, 1 lembrete por dia util: 64 saltos cobre com folga e garante terminacao.
+export const MAX_REMINDER_SUCCESSOR_HOPS = 64;
 
 export interface TokenGeneration {
   rawToken: string;
@@ -244,9 +250,11 @@ export class SupplierPortalService {
     const client = getClient(input.client);
     const tokenHash = hashToken(input.rawToken);
 
-    const token = await client.supplierPortalToken.findUnique({
+    const original = await client.supplierPortalToken.findUnique({
       where: { tokenHash },
     });
+    let token = original;
+    let redirect: { redirectedFromTokenId: number; hops: number } | null = null;
 
     if (!token) {
       await this.logAccess({
@@ -261,15 +269,22 @@ export class SupplierPortalService {
     }
 
     if (token.revokedAt) {
-      await this.logAccess({
-        tokenId: token.id,
-        kind: 'INVALID',
-        ip: input.ip,
-        userAgent: input.userAgent,
-        meta: { reason: 'revoked' },
-        client,
-      });
-      throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+      // Link revogado pelo lembrete diario: segue a cadeia ate o sucessor ativo.
+      const resolved = await this.resolveReminderSuccessor(token, client);
+      if (resolved && resolved.token.expiresAt.getTime() > Date.now()) {
+        redirect = { redirectedFromTokenId: token.id, hops: resolved.hops };
+        token = resolved.token;
+      } else {
+        await this.logAccess({
+          tokenId: token.id,
+          kind: 'INVALID',
+          ip: input.ip,
+          userAgent: input.userAgent,
+          meta: { reason: 'revoked' },
+          client,
+        });
+        throw new PortalHttpError(404, PORTAL_INVALID_LINK_MESSAGE);
+      }
     }
 
     if (token.expiresAt.getTime() <= Date.now()) {
@@ -285,6 +300,16 @@ export class SupplierPortalService {
     }
 
     if (token.respondedAt) {
+      if (redirect) {
+        await this.logAccess({
+          tokenId: token.id,
+          kind: 'VIEW',
+          ip: input.ip,
+          userAgent: input.userAgent,
+          meta: { ...redirect, alreadyResponded: true },
+          client,
+        });
+      }
       return { token, alreadyResponded: true };
     }
 
@@ -303,10 +328,49 @@ export class SupplierPortalService {
       kind: 'VIEW',
       ip: input.ip,
       userAgent: input.userAgent,
+      ...(redirect ? { meta: redirect } : {}),
       client,
     });
 
     return { token: updated, alreadyResponded: false };
+  }
+
+  /**
+   * A partir de um token revogado, segue a cadeia de sucessores emitidos pelo
+   * lembrete (reminderSentAt != null, criados na janela do revokedAt de cada
+   * elo) e devolve o primeiro ativo. null se a cadeia termina sem ativo
+   * (revoke manual, regenerate, reenvio, rotacao), em ciclo ou ao estourar o limite.
+   */
+  private static async resolveReminderSuccessor(
+    revoked: SupplierPortalToken,
+    client: PrismaClient | Prisma.TransactionClient,
+  ): Promise<{ token: SupplierPortalToken; hops: number } | null> {
+    const visited = new Set<number>([revoked.id]);
+    let current = revoked;
+    for (let hops = 1; hops <= MAX_REMINDER_SUCCESSOR_HOPS; hops += 1) {
+      if (!current.revokedAt) return null;
+      const revokedMs = current.revokedAt.getTime();
+      const next = await client.supplierPortalToken.findFirst({
+        where: {
+          quoteRequestId: current.quoteRequestId,
+          supplierContactId: current.supplierContactId,
+          id: { not: current.id },
+          reminderSentAt: { not: null },
+          createdAt: {
+            gte: new Date(
+              Math.max(current.createdAt?.getTime() ?? 0, revokedMs - REMINDER_SUCCESSOR_TOLERANCE_MS),
+            ),
+            lte: new Date(revokedMs + REMINDER_SUCCESSOR_TOLERANCE_MS),
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      if (!next || visited.has(next.id)) return null;
+      if (!next.revokedAt) return { token: next, hops };
+      visited.add(next.id);
+      current = next;
+    }
+    return null;
   }
 
   static async logAccess(input: {

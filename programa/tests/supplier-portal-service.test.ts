@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_TOKEN_TTL_DAYS,
+  MAX_REMINDER_SUCCESSOR_HOPS,
+  REMINDER_SUCCESSOR_TOLERANCE_MS,
   SupplierPortalService,
   generateToken,
 } from '../src/services/SupplierPortalService';
@@ -50,17 +52,22 @@ describe('Supplier portal token service', () => {
     });
 
     it('lanca HttpError 404 quando o token esta revogado', async () => {
+      const createLog = vi.fn().mockResolvedValue({});
       const fakeClient = {
         supplierPortalToken: {
           findUnique: async () => ({ id: 1, revokedAt: new Date(), expiresAt: new Date(Date.now() + 1000) }),
+          findFirst: async () => null,
         },
         supplierPortalTokenLog: {
-          create: async () => ({}),
+          create: createLog,
         },
       };
       await expect(
         SupplierPortalService.validate({ rawToken: 'algum', client: fakeClient as never }),
       ).rejects.toMatchObject({ status: 404 });
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 1, kind: 'INVALID', meta: { reason: 'revoked' } }),
+      });
     });
 
     it('marca respondedAt sem incrementar accessCount', async () => {
@@ -84,6 +91,213 @@ describe('Supplier portal token service', () => {
       };
       const result = await SupplierPortalService.validate({ rawToken: 'x', client: fakeClient as never });
       expect(result.alreadyResponded).toBe(true);
+    });
+  });
+
+  describe('validate - sucessor de lembrete', () => {
+    const DAY = 86_400_000;
+    const TOL = REMINDER_SUCCESSOR_TOLERANCE_MS;
+
+    function makeToken(id: number, overrides: Record<string, unknown> = {}) {
+      return {
+        id,
+        quoteRequestId: 5,
+        supplierId: 2,
+        supplierContactId: 9,
+        createdAt: new Date(Date.now() - 3 * DAY),
+        revokedAt: null as Date | null,
+        expiresAt: new Date(Date.now() + 5 * DAY),
+        respondedAt: null as Date | null,
+        reminderSentAt: null as Date | null,
+        accessCount: 0,
+        firstSeenAt: null as Date | null,
+        ...overrides,
+      };
+    }
+
+    // findUnique devolve o original; findFirst devolve a sequencia informada
+    // (depois dela, undefined -> tratado como "sem sucessor").
+    function makeClient(original: Record<string, unknown>, successors: Array<Record<string, unknown> | null>) {
+      const findFirst = vi.fn();
+      for (const s of successors) findFirst.mockResolvedValueOnce(s);
+      const update = vi.fn().mockImplementation(({ where, data }) =>
+        Promise.resolve({ ...successors.find((s) => s?.id === where.id), ...data, id: where.id }),
+      );
+      const createLog = vi.fn().mockResolvedValue({});
+      const client = {
+        supplierPortalToken: { findUnique: vi.fn().mockResolvedValue(original), findFirst, update },
+        supplierPortalTokenLog: { create: createLog },
+      };
+      return { client, findFirst, update, createLog };
+    }
+
+    const revokedAt = new Date(Date.now() - 2 * DAY);
+
+    it('a1: revogado por lembrete com sucessor ativo resolve o sucessor e loga VIEW com redirectedFromTokenId', async () => {
+      const original = makeToken(1, { revokedAt });
+      const successor = makeToken(2, { reminderSentAt: revokedAt, createdAt: new Date(revokedAt.getTime() - 1000) });
+      const { client, findFirst, update, createLog } = makeClient(original, [successor]);
+
+      const result = await SupplierPortalService.validate({ rawToken: 'x', ip: '1.1.1.1', client: client as never });
+
+      expect(result.token.id).toBe(2);
+      expect(result.alreadyResponded).toBe(false);
+      expect(findFirst).toHaveBeenCalledTimes(1);
+      expect(findFirst).toHaveBeenCalledWith({
+        where: {
+          quoteRequestId: 5,
+          supplierContactId: 9,
+          id: { not: 1 },
+          reminderSentAt: { not: null },
+          createdAt: {
+            gte: new Date(Math.max(original.createdAt.getTime(), revokedAt.getTime() - TOL)),
+            lte: new Date(revokedAt.getTime() + TOL),
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(update.mock.calls[0][0].where).toEqual({ id: 2 });
+      expect(createLog).toHaveBeenCalledTimes(1);
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tokenId: 2,
+          kind: 'VIEW',
+          meta: { redirectedFromTokenId: 1, hops: 1 },
+        }),
+      });
+    });
+
+    it('a2: cadeia D -> R1 (revogado) -> R2 (ativo) resolve R2 com hops 2', async () => {
+      const r1RevokedAt = new Date(Date.now() - 1 * DAY);
+      const original = makeToken(1, { revokedAt });
+      const r1 = makeToken(2, { reminderSentAt: revokedAt, createdAt: revokedAt, revokedAt: r1RevokedAt });
+      const r2 = makeToken(3, { reminderSentAt: r1RevokedAt, createdAt: r1RevokedAt });
+      const { client, findFirst, update, createLog } = makeClient(original, [r1, r2]);
+
+      const result = await SupplierPortalService.validate({ rawToken: 'x', client: client as never });
+
+      expect(result.token.id).toBe(3);
+      expect(findFirst).toHaveBeenCalledTimes(2);
+      // 2o salto ancorado no revokedAt de R1.
+      expect(findFirst.mock.calls[1][0].where).toMatchObject({
+        id: { not: 2 },
+        createdAt: {
+          gte: new Date(Math.max(revokedAt.getTime(), r1RevokedAt.getTime() - TOL)),
+          lte: new Date(r1RevokedAt.getTime() + TOL),
+        },
+      });
+      expect(update.mock.calls[0][0].where).toEqual({ id: 3 });
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 3, kind: 'VIEW', meta: { redirectedFromTokenId: 1, hops: 2 } }),
+      });
+    });
+
+    it('a3: sucessor ja respondido -> alreadyResponded, sem update, log VIEW com alreadyResponded', async () => {
+      const original = makeToken(1, { revokedAt });
+      const successor = makeToken(2, { reminderSentAt: revokedAt, respondedAt: new Date() });
+      const { client, update, createLog } = makeClient(original, [successor]);
+
+      const result = await SupplierPortalService.validate({ rawToken: 'x', client: client as never });
+
+      expect(result.token.id).toBe(2);
+      expect(result.alreadyResponded).toBe(true);
+      expect(update).not.toHaveBeenCalled();
+      expect(createLog).toHaveBeenCalledTimes(1);
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tokenId: 2,
+          kind: 'VIEW',
+          meta: { redirectedFromTokenId: 1, hops: 1, alreadyResponded: true },
+        }),
+      });
+    });
+
+    it('b: sem sucessor de lembrete -> 404 e log INVALID revoked no original', async () => {
+      const original = makeToken(1, { revokedAt });
+      const { client, update, createLog } = makeClient(original, [null]);
+
+      await expect(
+        SupplierPortalService.validate({ rawToken: 'x', client: client as never }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(update).not.toHaveBeenCalled();
+      expect(createLog).toHaveBeenCalledTimes(1);
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 1, kind: 'INVALID', meta: { reason: 'revoked' } }),
+      });
+    });
+
+    it('b2: cadeia D -> R1 revogado sem sucessor -> 404', async () => {
+      const original = makeToken(1, { revokedAt });
+      const r1 = makeToken(2, { reminderSentAt: revokedAt, createdAt: revokedAt, revokedAt: new Date() });
+      const { client, findFirst, update, createLog } = makeClient(original, [r1, null]);
+
+      await expect(
+        SupplierPortalService.validate({ rawToken: 'x', client: client as never }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(findFirst).toHaveBeenCalledTimes(2);
+      expect(update).not.toHaveBeenCalled();
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 1, kind: 'INVALID', meta: { reason: 'revoked' } }),
+      });
+    });
+
+    it('c: sucessor ativo porem expirado -> 404 e log INVALID revoked', async () => {
+      const original = makeToken(1, { revokedAt });
+      const successor = makeToken(2, { reminderSentAt: revokedAt, expiresAt: new Date(Date.now() - 1000) });
+      const { client, update, createLog } = makeClient(original, [successor]);
+
+      await expect(
+        SupplierPortalService.validate({ rawToken: 'x', client: client as never }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(update).not.toHaveBeenCalled();
+      expect(createLog).toHaveBeenCalledTimes(1);
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 1, kind: 'INVALID', meta: { reason: 'revoked' } }),
+      });
+    });
+
+    it('d: token NAO revogado e expirado -> 404 expired e findFirst nao e chamado', async () => {
+      const original = makeToken(1, { expiresAt: new Date(Date.now() - 1000) });
+      const { client, findFirst, createLog } = makeClient(original, []);
+
+      await expect(
+        SupplierPortalService.validate({ rawToken: 'x', client: client as never }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(findFirst).not.toHaveBeenCalled();
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 1, kind: 'INVALID', meta: { reason: 'expired' } }),
+      });
+    });
+
+    it('e: ciclo (findFirst devolve sempre token revogado ja visitado) -> 404 sem loop infinito', async () => {
+      const original = makeToken(1, { revokedAt });
+      const loop = makeToken(2, { reminderSentAt: revokedAt, createdAt: revokedAt, revokedAt: new Date() });
+      const { client, findFirst, createLog } = makeClient(original, []);
+      findFirst.mockResolvedValue(loop);
+
+      await expect(
+        SupplierPortalService.validate({ rawToken: 'x', client: client as never }),
+      ).rejects.toMatchObject({ status: 404 });
+      // Salto 1 -> id 2 (novo); salto 2 -> id 2 de novo (visitado) -> encerra.
+      expect(findFirst).toHaveBeenCalledTimes(2);
+      expect(createLog).toHaveBeenCalledWith({
+        data: expect.objectContaining({ tokenId: 1, kind: 'INVALID', meta: { reason: 'revoked' } }),
+      });
+    });
+
+    it('e2: cadeia mais longa que o limite -> 404 apos MAX_REMINDER_SUCCESSOR_HOPS saltos', async () => {
+      const original = makeToken(1, { revokedAt });
+      const { client, findFirst } = makeClient(original, []);
+      let nextId = 2;
+      findFirst.mockImplementation(async () =>
+        makeToken(nextId++, { reminderSentAt: revokedAt, createdAt: revokedAt, revokedAt: new Date() }),
+      );
+
+      await expect(
+        SupplierPortalService.validate({ rawToken: 'x', client: client as never }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(findFirst).toHaveBeenCalledTimes(MAX_REMINDER_SUCCESSOR_HOPS);
     });
   });
 
