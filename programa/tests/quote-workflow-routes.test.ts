@@ -26,6 +26,9 @@ vi.mock('../src/lib/prisma', () => {
       update: vi.fn(),
       findFirst: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
     $queryRaw: vi.fn(),
   };
 
@@ -144,6 +147,9 @@ const prismaMock = prisma as unknown as {
     quoteRequest: {
       update: ReturnType<typeof vi.fn>;
     };
+    auditLog: {
+      create: ReturnType<typeof vi.fn>;
+    };
   };
 };
 
@@ -213,7 +219,7 @@ describe('Quote workflow routes', () => {
     const cookies = await loginAs('comprador');
 
     prismaMock.quoteRequest.findUnique.mockResolvedValue({ id: 5, status: 'open' });
-    prismaMock.quoteRequest.update.mockResolvedValue({ id: 5 });
+    prismaMock.__tx.quoteRequest.update.mockResolvedValue({ id: 5 });
 
     const response = await request(app)
       .put('/api/v1/quote-requests/5')
@@ -221,9 +227,104 @@ describe('Quote workflow routes', () => {
       .send({ description: 'Nova descricao' });
 
     expect(response.status).toBe(200);
-    const updateData = prismaMock.quoteRequest.update.mock.calls[0][0].data;
+    const updateData = prismaMock.__tx.quoteRequest.update.mock.calls[0][0].data;
     expect(updateData).not.toHaveProperty('listedAt');
     expect(updateData).not.toHaveProperty('reopenedAt');
+  });
+
+  describe('update (PUT) sincroniza a validade dos links com o prazo', () => {
+    // Datas longe do relogio real: 2099 (futuro) e 2020 (passado).
+    const FUTURE_DEADLINE = '2099-12-10T03:00:00.000Z';
+    const FUTURE_END_OF_DAY = new Date('2099-12-10T23:59:59.999-03:00');
+    const PAST_DEADLINE = '2020-12-10T03:00:00.000Z';
+
+    function arrangeUpdate(existingDeadline: Date | null) {
+      prismaMock.quoteRequest.findUnique.mockResolvedValue({
+        id: 5,
+        status: 'open',
+        deadlineAt: existingDeadline,
+      });
+      prismaMock.__tx.quoteRequest.update.mockResolvedValue({ id: 5 });
+      prismaMock.__tx.supplierPortalToken.updateMany.mockResolvedValue({ count: 3 });
+    }
+
+    it('prazo futuro diferente: alinha expiresAt dos tokens nao revogados ao fim do dia BRT e audita', async () => {
+      const cookies = await loginAs('comprador');
+      arrangeUpdate(null);
+
+      const response = await request(app)
+        .put('/api/v1/quote-requests/5')
+        .set('Cookie', cookies)
+        .send({ deadlineAt: FUTURE_DEADLINE });
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.supplierPortalToken.updateMany).toHaveBeenCalledTimes(1);
+      expect(prismaMock.__tx.supplierPortalToken.updateMany).toHaveBeenCalledWith({
+        where: { quoteRequestId: 5, revokedAt: null },
+        data: { expiresAt: FUTURE_END_OF_DAY },
+      });
+      const auditCalls = prismaMock.__tx.auditLog.create.mock.calls.map((c) => c[0].data);
+      expect(auditCalls).toContainEqual(
+        expect.objectContaining({
+          entityType: 'supplier_portal_token',
+          entityId: '5',
+          action: 'sync_expiry',
+          metadata: { count: 3, expiresAt: FUTURE_END_OF_DAY.toISOString() },
+        }),
+      );
+    });
+
+    it('prazo null: nao mexe nos tokens', async () => {
+      const cookies = await loginAs('comprador');
+      arrangeUpdate(new Date(FUTURE_DEADLINE));
+
+      const response = await request(app)
+        .put('/api/v1/quote-requests/5')
+        .set('Cookie', cookies)
+        .send({ deadlineAt: null });
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('prazo no passado: nao mexe nos tokens', async () => {
+      const cookies = await loginAs('comprador');
+      arrangeUpdate(null);
+
+      const response = await request(app)
+        .put('/api/v1/quote-requests/5')
+        .set('Cookie', cookies)
+        .send({ deadlineAt: PAST_DEADLINE });
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('sem deadlineAt no body: nao mexe nos tokens', async () => {
+      const cookies = await loginAs('comprador');
+      arrangeUpdate(new Date(FUTURE_DEADLINE));
+
+      const response = await request(app)
+        .put('/api/v1/quote-requests/5')
+        .set('Cookie', cookies)
+        .send({ description: 'Nova descricao' });
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('mesmo prazo ja gravado: nao mexe nos tokens', async () => {
+      const cookies = await loginAs('comprador');
+      arrangeUpdate(new Date(FUTURE_DEADLINE));
+
+      const response = await request(app)
+        .put('/api/v1/quote-requests/5')
+        .set('Cookie', cookies)
+        .send({ deadlineAt: FUTURE_DEADLINE });
+
+      expect(response.status).toBe(200);
+      expect(prismaMock.__tx.supplierPortalToken.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   it('reopen trava a linha QuoteRequest (FOR NO KEY UPDATE) antes de limpar vencedoras e atualizar o pai', async () => {

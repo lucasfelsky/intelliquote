@@ -8,6 +8,7 @@ import {
 import { prisma as defaultPrisma } from '../lib/prisma';
 import { HttpError } from '../utils/http';
 import { PortalHttpError } from '../utils/portalHttpError';
+import { computeTokenExpiry, type TokenExpirySource } from '../utils/portalTokenExpiry';
 import { hashToken } from '../utils/tokens';
 
 export const DEFAULT_TOKEN_TTL_DAYS = 14;
@@ -121,6 +122,7 @@ export class SupplierPortalService {
     created: SupplierPortalToken;
     rawToken: string;
     revokedCount: number;
+    expirySource: TokenExpirySource;
   }> {
     const run = async (tx: Prisma.TransactionClient) => {
       const previous = await tx.supplierPortalToken.findUnique({ where: { id: input.tokenId } });
@@ -129,7 +131,7 @@ export class SupplierPortalService {
       }
       const quoteRequest = await tx.quoteRequest.findFirst({
         where: { id: previous.quoteRequestId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, deadlineAt: true },
       });
       if (!quoteRequest) {
         throw new HttpError(404, 'Cotacao nao encontrada.');
@@ -145,17 +147,24 @@ export class SupplierPortalService {
         supplierContactId: previous.supplierContactId,
         client: tx,
       });
+      const expiry = computeTokenExpiry(quoteRequest, input.ttlDays ?? DEFAULT_TOKEN_TTL_DAYS);
       const createdWithRaw = (await this.createToken({
         quoteRequestId: previous.quoteRequestId,
         supplierId: previous.supplierId,
         supplierContactId: previous.supplierContactId,
         createdById: input.createdById,
-        ttlDays: input.ttlDays,
+        expiresAt: expiry.expiresAt,
         dispatchEventId: previous.dispatchEventId,
         client: tx,
       })) as SupplierPortalToken & { rawToken: string };
       const { rawToken, ...created } = createdWithRaw;
-      return { previous, created: created as SupplierPortalToken, rawToken, revokedCount };
+      return {
+        previous,
+        created: created as SupplierPortalToken,
+        rawToken,
+        revokedCount,
+        expirySource: expiry.source,
+      };
     };
     if (input.client) return run(input.client);
     return defaultPrisma.$transaction(run);
@@ -167,7 +176,9 @@ export class SupplierPortalService {
    * revisoes) do token ativo anterior para o novo, revogando o anterior.
    * Diferente de regenerateToken, um token ja respondido NAO bloqueia: o
    * fornecedor abre o link novo com a proposta preenchida e pode revisar.
-   * Validade = max(expiresAt do anterior, agora + DEFAULT_TOKEN_TTL_DAYS).
+   * Validade = max(expiresAt do anterior, computeTokenExpiry(deadlineAt da
+   * cotacao, DEFAULT_TOKEN_TTL_DAYS)): fim do dia BRT do prazo quando ele ainda
+   * vale, senao agora + DEFAULT_TOKEN_TTL_DAYS.
    * O raw token so' existe no retorno (nunca em log/MailLog/AuditLog).
    */
   static async rotateTokenForReply(input: {
@@ -175,6 +186,7 @@ export class SupplierPortalService {
     supplierId: number;
     supplierContactId: number;
     createdById: number;
+    deadlineAt?: Date | null;
     client?: Prisma.TransactionClient;
   }): Promise<{
     previous: SupplierPortalToken | null;
@@ -200,7 +212,10 @@ export class SupplierPortalService {
         }));
       const now = new Date();
       const expiresAt = new Date(
-        Math.max(previous?.expiresAt.getTime() ?? 0, now.getTime() + DEFAULT_TOKEN_TTL_DAYS * 86_400_000),
+        Math.max(
+          previous?.expiresAt.getTime() ?? 0,
+          computeTokenExpiry({ deadlineAt: input.deadlineAt ?? null }, DEFAULT_TOKEN_TTL_DAYS, now).expiresAt.getTime(),
+        ),
       );
       await this.revokeTokensForContact({
         quoteRequestId: input.quoteRequestId,

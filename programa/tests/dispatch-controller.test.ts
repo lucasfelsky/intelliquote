@@ -598,7 +598,12 @@ describe('Dispatch controller', () => {
 
   describe('preview acompanha assunto/mensagem/validade do modal', () => {
     const formatEnGb = (d: Date) =>
-      new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+      new Intl.DateTimeFormat('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'America/Sao_Paulo',
+      }).format(d);
 
     function mockPreviewData(overrides: Record<string, unknown> = {}) {
       prismaMock.quoteRequest.findFirst.mockResolvedValue({
@@ -670,6 +675,60 @@ describe('Dispatch controller', () => {
       expect(res.status).toBe(200);
       expect(res.body.preview.text).toContain(`Link expires on: ${formatEnGb(in30)}`);
       expect(res.body.preview.text).not.toContain(`Link expires on: ${formatEnGb(today)}`);
+    });
+
+    // Datas longe do relogio real: 2099 (futuro) e 2020 (passado).
+    const FUTURE_DEADLINE = new Date('2099-12-10T03:00:00.000Z');
+    const FUTURE_END_OF_DAY = new Date('2099-12-10T23:59:59.999-03:00');
+
+    it('preview com prazo futuro: "Link expires on" segue o prazo (fim do dia BRT), nao expiresInDays', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData({ deadlineAt: FUTURE_DEADLINE });
+      const res = await postPreview(cookieHeader, { recipientContactIds: [1], expiresInDays: 30 });
+      expect(res.status).toBe(200);
+      expect(res.body.preview.text).toContain(`Link expires on: ${formatEnGb(FUTURE_END_OF_DAY)}`);
+      expect(res.body.linkExpirySource).toBe('deadline');
+      expect(res.body.linkExpiresAt).toBe(FUTURE_END_OF_DAY.toISOString());
+    });
+
+    it('preview com prazo passado: segue expiresInDays (source ttl)', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData({ deadlineAt: new Date('2020-12-10T03:00:00.000Z') });
+      const in30 = new Date(Date.now() + 30 * 86_400_000);
+      const res = await postPreview(cookieHeader, { recipientContactIds: [1], expiresInDays: 30 });
+      expect(res.status).toBe(200);
+      expect(res.body.preview.text).toContain(`Link expires on: ${formatEnGb(in30)}`);
+      expect(res.body.linkExpirySource).toBe('ttl');
+    });
+
+    it('create com prazo futuro: o token nasce com expiresAt = fim do dia BRT do prazo', async () => {
+      const cookieHeader = await loginAndGetCookie();
+      mockPreviewData({ deadlineAt: FUTURE_DEADLINE });
+      prismaMock.supplierPortalToken.findUnique.mockResolvedValue({
+        id: 44,
+        expiresAt: FUTURE_END_OF_DAY,
+        revokedAt: null,
+        quoteRequestId: 7,
+        supplierId: 1,
+        supplierContactId: 1,
+        dispatchEventId: 123,
+      });
+      prismaMock.supplierPortalToken.updateMany.mockResolvedValue({ count: 0 });
+      prismaMock.supplierPortalToken.create.mockImplementation(({ data }) =>
+        Promise.resolve({ id: 44, ...data }),
+      );
+      sendAndLogMock.mockResolvedValue({ providerMessageId: 'msg-d', status: 'sent' });
+
+      const res = await request(app)
+        .post('/api/v1/quote-requests/7/dispatch')
+        .set('Cookie', cookieHeader)
+        .send({ recipientContactIds: [1], expiresInDays: 7 });
+
+      expect(res.status).toBe(201);
+      expect(prismaMock.supplierPortalToken.create).toHaveBeenCalledTimes(1);
+      expect(prismaMock.supplierPortalToken.create.mock.calls[0][0].data.expiresAt).toEqual(
+        FUTURE_END_OF_DAY,
+      );
     });
 
     it('paridade: preview e envio geram o mesmo assunto, html e texto', async () => {
@@ -1258,6 +1317,61 @@ describe('Portal tokens - listagem sem hash e "Gerar novo link"', () => {
     expect(auditDump).not.toContain(rawToken);
     expect(auditDump).not.toContain('hash-secreto-do-fixture');
     expect(auditDump).not.toContain('tokenHash');
+  });
+
+  it('POST regenerate com prazo futuro na cotacao: novo token vale ate o fim do dia BRT do prazo', async () => {
+    const cookie = await loginAs('comprador');
+    tx.quoteRequest.findFirst.mockResolvedValue({ id: 1, deadlineAt: new Date('2099-12-10T03:00:00.000Z') });
+
+    const res = await request(app).post('/api/v1/portal-tokens/99/regenerate').set('Cookie', cookie).send({});
+
+    expect(res.status).toBe(201);
+    expect(tx.supplierPortalToken.create.mock.calls[0][0].data.expiresAt).toEqual(
+      new Date('2099-12-10T23:59:59.999-03:00'),
+    );
+    const generateAudit = tx.auditLog.create.mock.calls
+      .map((c: any[]) => c[0].data)
+      .find((d: { action: string }) => d.action === 'generate');
+    expect(generateAudit.metadata).toMatchObject({
+      expiresAt: '2099-12-11T02:59:59.999Z',
+      expirySource: 'deadline',
+    });
+  });
+
+  it('POST generate (portal-tokens) com prazo futuro: tokens valem ate o fim do dia BRT do prazo', async () => {
+    const cookie = await loginAs('admin');
+    prismaMock.quoteRequest.findFirst.mockResolvedValue({
+      id: 1,
+      requestCode: 'QR-1',
+      productName: 'X',
+      deadlineAt: new Date('2099-12-10T03:00:00.000Z'),
+    });
+    prismaMock.supplierContact.findMany.mockResolvedValue([
+      { id: 10, name: 'Contato', email: 'c@acme.com', supplierId: 5, supplier: { id: 5, name: 'ACME Ltda' } },
+    ]);
+    prismaMock.supplierPortalToken.findFirst.mockResolvedValue(null);
+    prismaMock.supplierPortalToken.create.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+      Promise.resolve({
+        id: 100,
+        ...data,
+        revokedAt: null,
+        firstSeenAt: null,
+        lastSeenAt: null,
+        accessCount: 0,
+        createdAt: new Date(),
+      }),
+    );
+
+    const res = await request(app)
+      .post('/api/v1/quote-requests/1/portal-tokens')
+      .set('Cookie', cookie)
+      .send({ supplierContactIds: [10], expiresInDays: 7 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.generatedCount).toBe(1);
+    expect(prismaMock.supplierPortalToken.create.mock.calls[0][0].data.expiresAt).toEqual(
+      new Date('2099-12-10T23:59:59.999-03:00'),
+    );
   });
 
   it('POST regenerate com token ja respondido retorna 409 sem criar token', async () => {
