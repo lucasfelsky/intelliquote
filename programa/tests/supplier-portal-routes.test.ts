@@ -1786,3 +1786,211 @@ describe('Portal - item temporariamente indisponivel', () => {
     expect(html).not.toContain('dg-badge');
   });
 });
+
+describe('Portal - link revogado por lembrete', () => {
+  let tokenSeq = 0;
+  let agentSeq = 0;
+  // O rate limiter do portal e por IP + User-Agent (10/min): isola cada requisicao.
+  const uniqueAgent = () => `vitest-reminder-${(agentSeq += 1)}`;
+  const INVALID_MESSAGE = 'This link is invalid or has expired. Please contact your buyer to request a new one.';
+  const DAY = 24 * 60 * 60 * 1000;
+  const ORIGINAL_ID = 700;
+  const SUCCESSOR_ID = 701;
+
+  function baseToken(id: number, extra: Record<string, unknown> = {}) {
+    return {
+      id,
+      tokenHash: 'h',
+      createdAt: new Date(Date.now() - 3 * DAY),
+      expiresAt: new Date(Date.now() + 5 * DAY),
+      revokedAt: null,
+      respondedAt: null,
+      reminderSentAt: null,
+      accessCount: 0,
+      firstSeenAt: null,
+      quoteRequestId: 5,
+      supplierId: 2,
+      supplierContactId: 9,
+      ...extra,
+    };
+  }
+
+  function newRawToken() {
+    tokenSeq += 1;
+    return `tok-reminder-${tokenSeq}-` + 'r'.repeat(40);
+  }
+
+  const revokedOriginal = () => baseToken(ORIGINAL_ID, { revokedAt: new Date(Date.now() - 2 * DAY) });
+
+  function fullSuccessorView(successor: Record<string, unknown>) {
+    return {
+      ...successor,
+      quoteRequest: {
+        id: 5,
+        requestCode: 'QR-REM',
+        productName: 'Acido',
+        description: null,
+        desiredIncoterm: [],
+        currency: 'USD',
+        deadlineAt: null,
+        items: [],
+      },
+      supplier: { id: 2, name: 'Acme' },
+      supplierContact: { id: 9, name: 'John', email: 'john@acme.com' },
+    };
+  }
+
+  // Mocks do caminho feliz: validate -> findUnique(tokenHash) devolve o original revogado,
+  // findFirst devolve o sucessor ativo e o update do validate devolve o sucessor.
+  function mockRedirect(successor: Record<string, unknown>) {
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(revokedOriginal());
+    prismaMock.supplierPortalToken.findFirst.mockResolvedValue(successor);
+    prismaMock.supplierPortalToken.update.mockResolvedValue({ ...successor, accessCount: 1 });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.supplierPortalToken.findUnique.mockReset();
+    prismaMock.supplierPortalToken.findFirst.mockReset();
+    prismaMock.supplierPortalToken.update.mockReset();
+    prismaMock.supplierPortalToken.update.mockResolvedValue({});
+    prismaMock.supplierPortalResponse.findUnique.mockReset();
+  });
+
+  it('GET /api/portal/:token com original revogado redireciona para o sucessor ativo (200)', async () => {
+    const successor = baseToken(SUCCESSOR_ID, { reminderSentAt: new Date(Date.now() - 2 * DAY) });
+    mockRedirect(successor);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(fullSuccessorView(successor));
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue(null);
+
+    const res = await request(app).get(`/api/portal/${newRawToken()}`).set('User-Agent', uniqueAgent());
+
+    expect(res.status).toBe(200);
+    expect(res.body.readOnly).toBe(false);
+    expect(prismaMock.supplierPortalToken.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ reminderSentAt: { not: null }, id: { not: ORIGINAL_ID } }),
+      }),
+    );
+    expect(prismaMock.supplierPortalToken.findUnique).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: { id: SUCCESSOR_ID } }),
+    );
+    // Acesso contado so no sucessor.
+    expect(prismaMock.supplierPortalToken.update).toHaveBeenCalledTimes(1);
+    expect(prismaMock.supplierPortalToken.update.mock.calls[0][0].where).toEqual({ id: SUCCESSOR_ID });
+  });
+
+  it('GET /api/portal/:token/respond com original revogado redireciona e responde readOnly', async () => {
+    const successor = baseToken(SUCCESSOR_ID, { reminderSentAt: new Date(Date.now() - 2 * DAY) });
+    mockRedirect(successor);
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(fullSuccessorView(successor));
+    prismaMock.supplierPortalResponse.findUnique.mockResolvedValue(null);
+
+    const res = await request(app).get(`/api/portal/${newRawToken()}/respond`).set('User-Agent', uniqueAgent());
+
+    expect(res.status).toBe(200);
+    expect(res.body.readOnly).toBe(true);
+    expect(prismaMock.supplierPortalToken.findUnique).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: { id: SUCCESSOR_ID } }),
+    );
+  });
+
+  it('POST /api/portal/:token/respond com original revogado grava a resposta no sucessor (201, 1 resposta)', async () => {
+    const successor = baseToken(SUCCESSOR_ID, { reminderSentAt: new Date(Date.now() - 2 * DAY) });
+    mockRedirect(successor);
+    prismaMock.quoteRequest.findUnique.mockResolvedValue({ desiredIncoterm: [] });
+    prismaMock.quoteRequestItem.findMany.mockResolvedValue([{ id: 11, productName: 'Acido' }]);
+    prismaMock.__tx.supplierPortalResponse.findUnique.mockResolvedValue(null);
+    prismaMock.__tx.supplierPortalResponse.create.mockResolvedValue({
+      id: 99,
+      version: 1,
+      totalPrice: { toString: () => '100.00' },
+      currency: 'USD',
+      incoterm: 'FOB',
+      paymentTermsDays: 30,
+      notes: null,
+      submittedAt: new Date(),
+      items: [
+        {
+          id: 1,
+          quoteRequestItemId: 11,
+          unitPrice: '10.00',
+          quantity: 10,
+          totalPrice: { toString: () => '100.00' },
+          leadTimeDays: null,
+          notes: null,
+          incotermPrices: null,
+        },
+      ],
+    });
+    prismaMock.__tx.quoteResponse.upsert.mockResolvedValue({ id: 501 });
+    prismaMock.__tx.supplierPortalToken.update.mockResolvedValue({});
+
+    const res = await request(app)
+      .post(`/api/portal/${newRawToken()}/respond`)
+      .set('User-Agent', uniqueAgent())
+      .send({
+        currency: 'USD',
+        incoterm: 'FOB',
+        exchangeRate: 5,
+        paymentTermsDays: 30,
+        totalPrice: 100,
+        validityDays: 30,
+        items: [{ quoteRequestItemId: 11, unitPrice: 10, quantity: 10, totalPrice: 100 }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.revised).toBe(false);
+    expect(prismaMock.__tx.supplierPortalResponse.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.__tx.supplierPortalToken.update).toHaveBeenCalledTimes(1);
+    expect(prismaMock.__tx.supplierPortalToken.update.mock.calls[0][0].where.id).toBe(SUCCESSOR_ID);
+    expect(prismaMock.__tx.supplierPortalResponse.create.mock.calls[0][0].data.portalTokenId).toBe(SUCCESSOR_ID);
+  });
+
+  it('original revogado sem sucessor de lembrete responde 404 com a mensagem generica', async () => {
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(revokedOriginal());
+    prismaMock.supplierPortalToken.findFirst.mockResolvedValue(null);
+
+    const res = await request(app).get(`/api/portal/${newRawToken()}`).set('User-Agent', uniqueAgent());
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe(INVALID_MESSAGE);
+    expect(prismaMock.supplierPortalToken.update).not.toHaveBeenCalled();
+  });
+
+  it('original revogado com findFirst indefinido (sem mock) tambem responde 404', async () => {
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(revokedOriginal());
+
+    const res = await request(app).get(`/api/portal/${newRawToken()}`).set('User-Agent', uniqueAgent());
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe(INVALID_MESSAGE);
+  });
+
+  it('sucessor expirado responde 404', async () => {
+    const expired = baseToken(SUCCESSOR_ID, {
+      reminderSentAt: new Date(Date.now() - 2 * DAY),
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(revokedOriginal());
+    prismaMock.supplierPortalToken.findFirst.mockResolvedValue(expired);
+
+    const res = await request(app).get(`/api/portal/${newRawToken()}`).set('User-Agent', uniqueAgent());
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe(INVALID_MESSAGE);
+    expect(prismaMock.supplierPortalToken.update).not.toHaveBeenCalled();
+  });
+
+  it('token expirado e NAO revogado responde 404 sem procurar sucessor', async () => {
+    prismaMock.supplierPortalToken.findUnique.mockResolvedValueOnce(
+      baseToken(ORIGINAL_ID, { expiresAt: new Date(Date.now() - 1000) }),
+    );
+
+    const res = await request(app).get(`/api/portal/${newRawToken()}`).set('User-Agent', uniqueAgent());
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe(INVALID_MESSAGE);
+    expect(prismaMock.supplierPortalToken.findFirst).not.toHaveBeenCalled();
+  });
+});
