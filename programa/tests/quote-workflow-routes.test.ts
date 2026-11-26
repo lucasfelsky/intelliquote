@@ -443,6 +443,7 @@ describe('Quote workflow routes', () => {
 
     prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 5,
+      requestCode: 'QR-5',
       deletedAt: null,
       items: [{ id: 10, catalogItemId: 100 }, { id: 11, catalogItemId: 101 }],
       quoteResponses: [{ id: 21 }, { id: 22 }, { id: 23 }],
@@ -491,9 +492,20 @@ describe('Quote workflow routes', () => {
         data: expect.objectContaining({
           deletedAt: expect.any(Date),
           status: 'closed',
+          requestCode: 'QR-5#del5',
         }),
       }),
     );
+
+    // AuditLog do soft_delete dentro da transacao (client tx), com o codigo original.
+    expect(prismaMock.__tx.auditLog.create).toHaveBeenCalledTimes(1);
+    const auditData = prismaMock.__tx.auditLog.create.mock.calls[0][0].data;
+    expect(auditData.action).toBe('soft_delete');
+    expect(auditData.entityType).toBe('quote_request');
+    expect(auditData.entityId).toBe('5');
+    expect(auditData.beforeData).toMatchObject({ requestCode: 'QR-5' });
+    expect(auditData.afterData).toMatchObject({ requestCode: 'QR-5#del5' });
+    expect(auditData.metadata).toMatchObject({ originalRequestCode: 'QR-5' });
   });
 
   it('soft-delete trava a linha QuoteRequest (FOR NO KEY UPDATE) antes de qualquer updateMany', async () => {
@@ -501,6 +513,7 @@ describe('Quote workflow routes', () => {
 
     prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 5,
+      requestCode: 'QR-5',
       deletedAt: null,
       items: [{ id: 10, catalogItemId: 100 }],
       quoteResponses: [{ id: 21 }],
@@ -535,6 +548,7 @@ describe('Quote workflow routes', () => {
 
     prismaMock.quoteRequest.findFirst.mockResolvedValue({
       id: 6,
+      requestCode: 'QR-6',
       deletedAt: null,
       items: [],
       quoteResponses: [],

@@ -355,6 +355,10 @@ describe('Email template routes — avisos internos de resposta (preview)', () =
     expect(res.body.html).toContain('/cotacoes/');
     expect(res.body.html).not.toContain('portal/credit');
     expect(res.body.text).not.toContain('portal/credit');
+    // A amostra nunca pode vir de cotacao excluida (mostraria o codigo com tombstone).
+    expect(prismaMock.quoteRequest.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { deletedAt: null } }),
+    );
 
     const draft = res.body.draft as { subject: string; htmlBody: string; textBody: string };
     expect(draft.subject).toBe('{{subject}}');
@@ -414,6 +418,10 @@ describe('Email template routes — avisos internos de resposta (preview)', () =
     expect(res.body.html).not.toContain('/respostas');
     expect(res.body.text).toContain('/cotacoes/');
     expect(res.body.text).not.toContain('/respostas');
+    // A amostra nunca pode vir de cotacao excluida (mostraria o codigo com tombstone).
+    expect(prismaMock.quoteRequest.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { deletedAt: null } }),
+    );
   });
 
   it('supplier_response_received fallback devolve rascunho cru (salvar nao grava dados de exemplo)', async () => {

@@ -12,6 +12,7 @@ import { SupplierRegretNotificationService } from '../services/SupplierRegretNot
 import { ForecastCotacaoVinculoService } from '../services/ForecastCotacaoVinculoService';
 import {
   quoteRequestCloseSchema,
+  quoteRequestCodeAvailabilityQuerySchema,
   quoteRequestCreateSchema,
   quoteRequestMonthQuerySchema,
   quoteRequestPoSentQuerySchema,
@@ -29,7 +30,13 @@ import {
   parseOptionalQueryString,
   parsePagination,
 } from '../utils/http';
-import { buildRequestCode } from '../utils/requestCode';
+import {
+  buildRequestCode,
+  buildRequestCodeTombstone,
+  isRequestCodeUniqueViolation,
+  REQUEST_CODE_ERROR_PATH,
+  requestCodeTakenError,
+} from '../utils/requestCode';
 
 export class QuoteRequestController {
   static async create(req: Request, res: Response): Promise<Response> {
@@ -107,6 +114,12 @@ export class QuoteRequestController {
           },
           quoteResponses: { where: { deletedAt: null } },
         },
+      }).catch((createError: unknown) => {
+        // Codigo informado pelo usuario ja em uso (inclusive por cotacao excluida ainda sem tombstone).
+        if (payload.requestCode && isRequestCodeUniqueViolation(createError)) {
+          throw requestCodeTakenError(payload.requestCode);
+        }
+        throw createError;
       });
 
       await AuditLogService.log({
@@ -119,6 +132,9 @@ export class QuoteRequestController {
 
       return res.status(201).json(quoteRequest);
     } catch (error) {
+      if (error instanceof HttpError && error.code === REQUEST_CODE_ERROR_PATH) {
+        return res.status(409).json({ message: error.message, path: REQUEST_CODE_ERROR_PATH });
+      }
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
     }
@@ -323,6 +339,11 @@ export class QuoteRequestController {
             },
             quoteResponses: { where: { deletedAt: null } },
           },
+        }).catch((updateError: unknown) => {
+          if (payload.requestCode !== undefined && isRequestCodeUniqueViolation(updateError)) {
+            throw requestCodeTakenError(payload.requestCode);
+          }
+          throw updateError;
         });
 
         await AuditLogService.log(
@@ -371,6 +392,9 @@ export class QuoteRequestController {
 
       return res.status(200).json(quoteRequest);
     } catch (error) {
+      if (error instanceof HttpError && error.code === REQUEST_CODE_ERROR_PATH) {
+        return res.status(409).json({ message: error.message, path: REQUEST_CODE_ERROR_PATH });
+      }
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });
     }
@@ -662,27 +686,40 @@ export class QuoteRequestController {
           data: { revokedAt: deletedAt },
         });
 
+        // Tombstone: libera o codigo original (indice unico global) para nova cotacao.
+        const tombstoneCode = buildRequestCodeTombstone(existingQuoteRequest.requestCode, id);
+
         await tx.quoteRequest.update({
           where: { id },
-          data: { deletedAt, status: QuoteRequestStatus.closed, closedAt: deletedAt },
+          data: {
+            deletedAt,
+            status: QuoteRequestStatus.closed,
+            closedAt: deletedAt,
+            requestCode: tombstoneCode,
+          },
         });
-      });
 
-      await AuditLogService.log({
-        entityType: 'quote_request',
-        entityId: existingQuoteRequest.id,
-        action: 'soft_delete',
-        performedById: req.user?.id ?? null,
-        beforeData: existingQuoteRequest,
-        afterData: {
-          deletedAt,
-          status: QuoteRequestStatus.closed,
-          cascadedResponses: existingQuoteRequest.quoteResponses.length,
-          cascadedItems: existingQuoteRequest.items.length,
-        },
-        metadata: {
-          cascade: 'quote_responses+items+portal_tokens',
-        },
+        await AuditLogService.log(
+          {
+            entityType: 'quote_request',
+            entityId: existingQuoteRequest.id,
+            action: 'soft_delete',
+            performedById: req.user?.id ?? null,
+            beforeData: existingQuoteRequest,
+            afterData: {
+              deletedAt,
+              status: QuoteRequestStatus.closed,
+              requestCode: tombstoneCode,
+              cascadedResponses: existingQuoteRequest.quoteResponses.length,
+              cascadedItems: existingQuoteRequest.items.length,
+            },
+            metadata: {
+              cascade: 'quote_responses+items+portal_tokens',
+              originalRequestCode: existingQuoteRequest.requestCode,
+            },
+          },
+          tx,
+        );
       });
 
       return res.status(200).json({
@@ -692,6 +729,25 @@ export class QuoteRequestController {
         cascadedResponses: existingQuoteRequest.quoteResponses.length,
         cascadedItems: existingQuoteRequest.items.length,
       });
+    } catch (error) {
+      const handled = handleControllerError(error);
+      return res.status(handled.status).json({ message: handled.message });
+    }
+  }
+
+  // GET /quote-requests/code-availability?requestCode=...
+  // Somente leitura. Consulta SEM filtro de deletedAt de proposito: o indice unico e global,
+  // entao cotacao excluida ainda sem tombstone continua ocupando o codigo.
+  static async checkCodeAvailability(req: Request, res: Response): Promise<Response> {
+    try {
+      const { requestCode } = quoteRequestCodeAvailabilityQuerySchema.parse(req.query);
+
+      const existing = await prisma.quoteRequest.findUnique({
+        where: { requestCode },
+        select: { id: true },
+      });
+
+      return res.status(200).json({ requestCode, available: existing === null });
     } catch (error) {
       const handled = handleControllerError(error);
       return res.status(handled.status).json({ message: handled.message });

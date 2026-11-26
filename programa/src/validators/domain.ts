@@ -1098,6 +1098,16 @@ export const quoteRequestSeenParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+// GET /quote-requests/code-availability?requestCode=...
+// Mesma normalizacao do create (trim + maiusculas).
+export const quoteRequestCodeAvailabilityQuerySchema = z.object({
+  requestCode: z
+    .string({ error: 'Informe o código.' })
+    .trim()
+    .min(1, 'Informe o código.')
+    .transform((value) => value.toUpperCase()),
+});
+
 // GET /quote-request-items/:id/price-history
 export const quoteRequestItemPriceHistoryParamsSchema = z.object({
   id: z.coerce.number().int().positive(),

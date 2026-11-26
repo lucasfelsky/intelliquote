@@ -387,6 +387,7 @@ emailTemplateRoutes.get(
         const [noticeTemplate, latestQuoteRequest] = await Promise.all([
           EmailTemplateService.get(key, effectiveLocale),
           prisma.quoteRequest.findFirst({
+            where: { deletedAt: null },
             orderBy: { createdAt: 'desc' },
             select: { id: true, requestCode: true, productName: true },
           }),
@@ -446,6 +447,7 @@ emailTemplateRoutes.get(
         const [creditNoticeTemplate, latestQuoteRequestForCredit] = await Promise.all([
           EmailTemplateService.get(key, effectiveLocale),
           prisma.quoteRequest.findFirst({
+            where: { deletedAt: null },
             orderBy: { createdAt: 'desc' },
             select: { id: true, requestCode: true, productName: true },
           }),

@@ -262,7 +262,7 @@
       "QuoteRequestStatus",
       "SupplierStatus"
     ],
-    "migrations": 84
+    "migrations": 85
   },
   "emailTemplates": [
     "commercial_request_created@pt",
@@ -367,6 +367,7 @@
     "GET /quote-requests/:id/dispatches",
     "GET /quote-requests/:id/portal-tokens",
     "GET /quote-requests/:quoteRequestId/comparisons",
+    "GET /quote-requests/code-availability",
     "GET /quote-responses",
     "GET /quote-responses/:id",
     "GET /quote-responses/:id/price-history",

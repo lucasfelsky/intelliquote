@@ -1,5 +1,6 @@
 // POST /quote-requests com commercialRequestIds + items (PR2): cotacao, itens e vinculo
 // na MESMA transacao; corrida vira 409 com rollback; caminho antigo intacto.
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword } from '../src/utils/password';
@@ -417,5 +418,27 @@ describe('POST /quote-requests com solicitacoes do comercial', () => {
 
     expect(response.status).toBe(403);
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /quote-requests com solicitacoes: codigo informado ja em uso', () => {
+  it('P2002 de requestCode no create da transacao -> 409 especifico com path, sem notificacao', async () => {
+    txMock.quoteRequest.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: ['requestCode'] },
+      }),
+    );
+
+    const response = await post({ ...BODY, requestCode: 'cmx-9' });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+      message: 'O código CMX-9 já está em uso por outra cotação.',
+      path: 'requestCode',
+    });
+    expect(notifyMock).not.toHaveBeenCalled();
+    expect(txMock.quoteRequestItem.create).not.toHaveBeenCalled();
   });
 });
