@@ -243,6 +243,45 @@ describe('SupplierPortalService.validate - redirecionamento de link revogado (DB
     expect(result.token.id).toBe(r1.id);
   });
 
+  testDbSkip('(d4) sucessor dentro da janela de tolerancia mas criado ANTES de D.createdAt: 404', async () => {
+    const q = await makeQuote('d4');
+    const dCreatedAt = T.getTime() - 5 * MINUTE;
+    const rCreatedAt = T.getTime() - 8 * MINUTE;
+    const d = await makeToken({
+      quoteRequestId: q,
+      contactId: contactA,
+      createdAt: new Date(dCreatedAt),
+      revokedAt: T,
+    });
+    const rDate = new Date(rCreatedAt);
+    await makeToken({ quoteRequestId: q, contactId: contactA, reminderSentAt: rDate, createdAt: rDate });
+    // Guardas: R esta dentro de [revokedAt - tolerancia, revokedAt + tolerancia] e antes de D.createdAt.
+    expect(rCreatedAt).toBeGreaterThan(T.getTime() - REMINDER_SUCCESSOR_TOLERANCE_MS);
+    expect(rCreatedAt).toBeLessThan(dCreatedAt);
+
+    // So o limite inferior current.createdAt do Math.max exclui R; sem ele R redirecionaria.
+    await expectInvalid(d);
+  });
+
+  testDbSkip('(d5) controle positivo: sucessor criado DEPOIS de D.createdAt e dentro da janela redireciona', async () => {
+    const q = await makeQuote('d5');
+    const d = await makeToken({
+      quoteRequestId: q,
+      contactId: contactA,
+      createdAt: new Date(T.getTime() - 5 * MINUTE),
+      revokedAt: T,
+    });
+    const rDate = new Date(T.getTime() - 4 * MINUTE);
+    const r = await makeToken({ quoteRequestId: q, contactId: contactA, reminderSentAt: rDate, createdAt: rDate });
+
+    const result = await SupplierPortalService.validate({ rawToken: d.rawToken });
+
+    expect(result.token.id).toBe(r.id);
+    const logs = await viewLogs(r.id);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].meta).toMatchObject({ redirectedFromTokenId: d.id, hops: 1 });
+  });
+
   testDbSkip('(e) sucessor do lembrete na janela mas expirado: 404 com INVALID/revoked no original', async () => {
     const q = await makeQuote('e');
     const d = await makeRevoked(q);
