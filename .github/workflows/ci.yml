@@ -5,6 +5,7 @@ name: CI
 # - tsc build do backend
 # - Vite build do web
 # - Vitest do web (programa/web, jsdom); typecheck do web ja roda dentro do build (tsc --noEmit)
+# - Vitest de banco (portal/lembrete, RUN_DB_TESTS=true) no Postgres do job E2E, antes do Playwright
 # - Playwright E2E com Postgres 16 + MailHog como services
 # - Upload de programa/dist/ + programa/web/dist/ como artifacts (10 dias)
 # - Upload de playwright-report/ em caso de falha (7 dias)
@@ -159,6 +160,19 @@ jobs:
       - name: Prisma seed
         working-directory: programa
         run: npm run prisma:seed
+
+      # Testes de banco do portal (redirect do link revogado pelo lembrete). Rodam ANTES do
+      # Playwright no mesmo Postgres: cada arquivo usa runId proprio e limpa no afterAll.
+      # RUN_DB_TESTS so neste passo (no job inteiro desligaria tests/setup/prisma-guard.ts).
+      # critical-fixes-db fica fora: guard exige 127.0.0.1/iq_critical_test (so roda via
+      # scripts/test-critical-local.mjs).
+      - name: Testes de banco (portal/lembrete)
+        working-directory: programa
+        timeout-minutes: 5
+        env:
+          RUN_DB_TESTS: 'true'
+          MAILER_PROVIDER: 'console'
+        run: npx vitest run tests/supplier-portal-redirect-db.test.ts tests/supplier-portal-reminder-db.test.ts --maxWorkers=1
 
       - name: Versao do Playwright (chave do cache)
         id: pw
