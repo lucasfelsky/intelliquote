@@ -474,6 +474,10 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
   });
 
   it('portal nao reutiliza cambio USD ao receber proposta em EUR sem taxa', async () => {
+    // Hermetico: no CI o scheduler do servidor do Playwright (ExchangeRateService.refresh) ja populou
+    // ExchangeRate com a PTAX real de EUR, e o fallback do portal usaria esse cache em vez de recusar.
+    // Banco descartavel (guard do beforeAll): limpar o cache de EUR e seguro e so afeta este caso.
+    await prisma.exchangeRate.deleteMany({ where: { currency: 'EUR' } });
     const { SupplierPortalResponseService } = await import('../src/services/SupplierPortalResponseService');
     const token = await prisma.supplierPortalToken.create({ data: {
       tokenHash: `eur-${quote.id}`, quoteRequestId: quote.id, supplierId: suppliers[0].id,
