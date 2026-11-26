@@ -3,6 +3,55 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { hashPassword } from '../src/utils/password';
 
 const run = process.env.RUN_DB_TESTS === 'true';
+
+// Banco descartavel apenas: local (runner local ou service do CI) + nome de banco de teste + NODE_ENV=test.
+// Query params: so 'schema' e permitido. O Prisma sobrescreve o host da URL por ?host=/?hostaddr=
+// (formato da URL do Cloud SQL), entao 'localhost' na URL nao prova que o destino e local.
+export function isDisposableDatabaseUrl(rawUrl: string | undefined, nodeEnv: string | undefined): boolean {
+  if (!rawUrl || nodeEnv !== 'test') return false;
+  let url: URL;
+  try { url = new URL(rawUrl); } catch { return false; }
+  const localHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  const testDb = url.pathname === '/iq_critical_test' || url.pathname === '/intelliquote_test';
+  const onlySchemaParam = [...url.searchParams.keys()].every(key => key === 'schema');
+  return localHost && testDb && onlySchemaParam;
+}
+
+// Sem banco: roda sempre (nao depende de RUN_DB_TESTS).
+describe('guard do banco descartavel (critical-fixes-db)', () => {
+  const ok = (u: string) => isDisposableDatabaseUrl(u, 'test');
+  it('aceita localhost e 127.0.0.1 com banco de teste, com ou sem ?schema=public', () => {
+    for (const host of ['localhost', '127.0.0.1']) {
+      for (const db of ['iq_critical_test', 'intelliquote_test']) {
+        expect(ok(`postgresql://u:p@${host}:5432/${db}`)).toBe(true);
+        expect(ok(`postgresql://u:p@${host}:5432/${db}?schema=public`)).toBe(true);
+      }
+    }
+  });
+  it('recusa URL do Cloud SQL com ?host=/cloudsql/...', () => {
+    expect(ok('postgresql://u:p@localhost/intelliquote_test?host=/cloudsql/proj:southamerica-east1:inst')).toBe(false);
+    expect(ok('postgresql://u:p@localhost/intelliquote_test?host=/cloudsql/proj:southamerica-east1:inst&schema=public')).toBe(false);
+  });
+  it('recusa ?hostaddr= e qualquer query param alem de schema', () => {
+    expect(ok('postgresql://u:p@localhost/intelliquote_test?hostaddr=10.1.2.3')).toBe(false);
+    expect(ok('postgresql://u:p@127.0.0.1/iq_critical_test?schema=public&hostaddr=10.1.2.3')).toBe(false);
+    expect(ok('postgresql://u:p@localhost/intelliquote_test?sslmode=require')).toBe(false);
+  });
+  it('recusa host remoto, mesmo com ?host=localhost', () => {
+    expect(ok('postgresql://u:p@db.exemplo.com:5432/intelliquote_test')).toBe(false);
+    expect(ok('postgresql://u:p@db.exemplo.com:5432/intelliquote_test?host=localhost')).toBe(false);
+    expect(ok('postgresql://u:p@localhost.evil.com/intelliquote_test')).toBe(false);
+  });
+  it('recusa banco com outro nome, URL invalida/ausente e NODE_ENV diferente de test', () => {
+    expect(ok('postgresql://u:p@localhost:5432/intelliquote')).toBe(false);
+    expect(ok('postgresql://u:p@localhost:5432/intelliquote_test_prod')).toBe(false);
+    expect(ok('nao-e-url')).toBe(false);
+    expect(isDisposableDatabaseUrl(undefined, 'test')).toBe(false);
+    expect(isDisposableDatabaseUrl('postgresql://u:p@localhost:5432/intelliquote_test', 'development')).toBe(false);
+    expect(isDisposableDatabaseUrl('postgresql://u:p@localhost:5432/intelliquote_test', undefined)).toBe(false);
+  });
+});
+
 describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
   let prisma: any;
   let app: any;
@@ -23,10 +72,10 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
       quantity: item.quantity, unitPrice: prices[i] })),
   });
   beforeAll(async () => {
-    const url = new URL(process.env.DATABASE_URL!);
-    if (url.hostname !== '127.0.0.1' || url.pathname !== '/iq_critical_test') {
-      throw new Error('Execute scripts/test-critical-local.mjs para usar um banco descartavel.');
+    if (!isDisposableDatabaseUrl(process.env.DATABASE_URL, process.env.NODE_ENV)) {
+      throw new Error('Banco recusado: use 127.0.0.1/localhost com iq_critical_test ou intelliquote_test, sem ?host=/?hostaddr= (so ?schema=) e NODE_ENV=test (local: scripts/test-critical-local.mjs).');
     }
+    // O import dinamico de src/app transforma o app inteiro dentro do hook: timeout explicito.
     ({ prisma } = await import('../src/lib/prisma'));
     ({ app } = await import('../src/app'));
     for (const name of ['admin', 'comprador']) {
@@ -47,7 +96,7 @@ describe.skipIf(!run)('Correcoes criticas em Postgres isolado', () => {
     suppliers = await Promise.all(['A', 'B'].map(name => prisma.supplier.create({ data: {
       name, acceptedIncoterms: ['FOB'], contacts: { create: { name, email: `${name}@local.test`, isPrimary: true } },
     }, include: { contacts: true } })));
-  });
+  }, 60_000);
   beforeEach(async () => {
     await prisma.companyProfile.update({ where: { id: 1 }, data: { awardApprovalThreshold: null } });
     quote = await prisma.quoteRequest.create({ data: {

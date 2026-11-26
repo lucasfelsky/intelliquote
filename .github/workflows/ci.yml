@@ -164,8 +164,8 @@ jobs:
       # Testes de banco do portal (redirect do link revogado pelo lembrete). Rodam ANTES do
       # Playwright no mesmo Postgres: cada arquivo usa runId proprio e limpa no afterAll.
       # RUN_DB_TESTS so neste passo (no job inteiro desligaria tests/setup/prisma-guard.ts).
-      # critical-fixes-db fica fora: guard exige 127.0.0.1/iq_critical_test (so roda via
-      # scripts/test-critical-local.mjs).
+      # critical-fixes-db roda em passo proprio depois do Playwright (deixa fornecedores/cotacoes
+      # de teste no banco).
       - name: Testes de banco (portal/lembrete)
         working-directory: programa
         timeout-minutes: 5
@@ -212,3 +212,13 @@ jobs:
           name: playwright-report
           path: programa/playwright-report/
           retention-days: 7
+
+      # Depois do Playwright: deixa fornecedores A/B/C, cotacoes TEST-* e companyName de teste no
+      # banco do job. Guard do arquivo aceita so localhost/127.0.0.1 + intelliquote_test + NODE_ENV=test.
+      - name: Testes de banco (correcoes criticas)
+        working-directory: programa
+        timeout-minutes: 5
+        env:
+          RUN_DB_TESTS: 'true'
+          MAILER_PROVIDER: 'console'
+        run: npx vitest run tests/critical-fixes-db.test.ts --maxWorkers=1
