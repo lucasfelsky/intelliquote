@@ -140,11 +140,20 @@ describe('SupplierPortalReminderService (DB)', () => {
   afterAll(async () => {
     if (process.env.RUN_DB_TESTS !== 'true') return;
 
+    // O MailLog do dia 2 do (k) aponta para fresh1Id (candidato do dia), fora de originalTokenIds.
     await prisma.mailLog.deleteMany({
       where: {
-        templateId: { in: ['quote_reminder', 'quote_reminder_digest'] },
-        relatedEntityType: 'supplierPortalToken',
-        relatedEntityId: { in: originalTokenIds.map(String) },
+        OR: [
+          {
+            templateId: { in: ['quote_reminder', 'quote_reminder_digest'] },
+            relatedEntityType: 'supplierPortalToken',
+            relatedEntityId: { in: originalTokenIds.map(String) },
+          },
+          {
+            templateId: { in: ['quote_reminder', 'quote_reminder_digest'] },
+            toEmail: { in: suffixes.map(emailOf) },
+          },
+        ],
       },
     });
     // Claims por endereco nao tem FK: apagar pelos hashes dos e-mails do teste.
@@ -402,6 +411,10 @@ describe('SupplierPortalReminderService (DB)', () => {
     expect(viaDay2.token.id).toBe(fresh2Id);
     const day2Logs = await redirectLogs(fresh2Id);
     expect(day2Logs).toHaveLength(1);
+    // hops nao e assertado: createdAt/revokedAt dos tokens sao relogio real (so reminderSentAt usa
+    // NOW/NOW2), entao original, fresh1 e fresh2 caem na mesma janela de 10 min e a busca pode pular
+    // direto para o fresh2. Logo hops aqui nao reflete os 2 saltos de producao; a contagem de saltos
+    // e coberta pelo (a2) de supplier-portal-redirect-db.test.ts, com timestamps fixos.
     expect(day2Logs[0].meta).toMatchObject({ redirectedFromTokenId: original.id });
 
     // Regenerate (acao manual): token novo sem reminderSentAt; o link original deixa de redirecionar.
