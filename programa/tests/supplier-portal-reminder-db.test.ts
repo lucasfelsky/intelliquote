@@ -4,6 +4,8 @@ import { prisma } from '../src/lib/prisma';
 import { hashPassword } from '../src/utils/password';
 import { SupplierPortalReminderService } from '../src/services/SupplierPortalReminderService';
 import { SupplierPortalService } from '../src/services/SupplierPortalService';
+import { PortalHttpError } from '../src/utils/portalHttpError';
+import type { SupplierPortalToken } from '@prisma/client';
 
 // So roda com RUN_DB_TESTS=true (scripts/test-critical-local.mjs: Postgres embutido com TODAS as migrations).
 const testDbSkip = process.env.RUN_DB_TESTS !== 'true' ? it.skip : it;
@@ -12,6 +14,9 @@ const runId = `supplier-portal-reminder-db-${Date.now()}`;
 // Terca 2030-01-08 04:00 BRT; os tokens nascem na vespera (24 h, data BRT anterior).
 const NOW = new Date('2030-01-08T07:00:00Z');
 const TODAY = '2030-01-08';
+// Quarta 2030-01-09 04:00 BRT (2o sweep do caso k).
+const NOW2 = new Date('2030-01-09T07:00:00Z');
+const TODAY2 = '2030-01-09';
 const TOKEN_CREATED_AT = new Date('2030-01-07T07:00:00Z');
 const TOKEN_EXPIRES_AT = new Date('2030-01-20T12:00:00Z');
 
@@ -29,7 +34,7 @@ describe('SupplierPortalReminderService (DB)', () => {
   const emailOf = (suffix: string) => `contato-${suffix.toLowerCase()}-${runId}@fornecedor.example`;
   const addressHashOf = (suffix: string) =>
     createHash('sha256').update(emailOf(suffix).trim().toLowerCase()).digest('hex');
-  const suffixes = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+  const suffixes = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
 
   async function makeContact(suffix: string) {
     const contact = await prisma.supplierContact.create({
@@ -348,5 +353,71 @@ describe('SupplierPortalReminderService (DB)', () => {
     expect(await remindersOf(quoteB, contactId)).toHaveLength(0);
     const total = (await mailsTo('I', 'quote_reminder')).length + (await mailsTo('I', 'quote_reminder_digest')).length;
     expect(total).toBe(1);
+  });
+  testDbSkip('(k) sweep real: link original redireciona ao token do lembrete; regenerate quebra a cadeia', async () => {
+    const contactId = await makeContact('J');
+    const quoteId = await makeQuote('Q12');
+    extraQuoteIds.push(quoteId);
+
+    // createdAt REAL (nao usar makeToken: ele fixa createdAt em 2030-01-07, no futuro, o que
+    // zeraria a janela do sucessor [max(createdAt, revokedAt - 10 min), revokedAt + 10 min]).
+    const original = (await SupplierPortalService.createToken({
+      quoteRequestId: quoteId,
+      supplierId,
+      supplierContactId: contactId,
+      createdById: userId,
+      dispatchEventId: dispatchIds.get(quoteId),
+      expiresAt: TOKEN_EXPIRES_AT,
+    })) as SupplierPortalToken & { rawToken: string };
+    originalTokenIds.push(original.id);
+
+    const redirectLogs = (tokenId: number) =>
+      prisma.supplierPortalTokenLog.findMany({ where: { tokenId, kind: 'VIEW' }, orderBy: { id: 'asc' } });
+
+    // Dia 1: o sweep real emite o token do lembrete e revoga o original.
+    await SupplierPortalReminderService.runReminderSweep(NOW);
+    const [day1] = await remindersOf(quoteId, contactId);
+    expect(day1).toMatchObject({ reminderDate: TODAY, tokenId: original.id, status: 'sent' });
+    const fresh1Id = day1.freshTokenId as number;
+    expect(fresh1Id).toBeGreaterThan(0);
+    const originalRow = await prisma.supplierPortalToken.findUniqueOrThrow({ where: { id: original.id } });
+    expect(originalRow.revokedAt).not.toBeNull();
+
+    const viaDay1 = await SupplierPortalService.validate({ rawToken: original.rawToken });
+    expect(viaDay1.token.id).toBe(fresh1Id);
+    expect(viaDay1.alreadyResponded).toBe(false);
+    const day1Logs = await redirectLogs(fresh1Id);
+    expect(day1Logs).toHaveLength(1);
+    expect(day1Logs[0].meta).toMatchObject({ redirectedFromTokenId: original.id });
+
+    // Dia 2 (quarta): novo sweep real; o link original continua levando ao token ativo.
+    await SupplierPortalReminderService.runReminderSweep(NOW2);
+    const day2 = (await remindersOf(quoteId, contactId)).find((r) => r.reminderDate === TODAY2);
+    expect(day2).toMatchObject({ status: 'sent', tokenId: fresh1Id });
+    const fresh2Id = day2?.freshTokenId as number;
+    expect(fresh2Id).toBeGreaterThan(0);
+    expect(fresh2Id).not.toBe(fresh1Id);
+
+    const viaDay2 = await SupplierPortalService.validate({ rawToken: original.rawToken });
+    expect(viaDay2.token.id).toBe(fresh2Id);
+    const day2Logs = await redirectLogs(fresh2Id);
+    expect(day2Logs).toHaveLength(1);
+    expect(day2Logs[0].meta).toMatchObject({ redirectedFromTokenId: original.id });
+
+    // Regenerate (acao manual): token novo sem reminderSentAt; o link original deixa de redirecionar.
+    const active = await prisma.supplierPortalToken.findFirstOrThrow({
+      where: { quoteRequestId: quoteId, supplierContactId: contactId, revokedAt: null },
+    });
+    expect(active.id).toBe(fresh2Id);
+    const regenerated = await SupplierPortalService.regenerateToken({ tokenId: active.id, createdById: userId });
+
+    await expect(SupplierPortalService.validate({ rawToken: original.rawToken })).rejects.toBeInstanceOf(
+      PortalHttpError,
+    );
+    await expect(SupplierPortalService.validate({ rawToken: original.rawToken })).rejects.toMatchObject({
+      status: 404,
+    });
+    const viaRegenerated = await SupplierPortalService.validate({ rawToken: regenerated.rawToken });
+    expect(viaRegenerated.token.id).toBe(regenerated.created.id);
   });
 });
