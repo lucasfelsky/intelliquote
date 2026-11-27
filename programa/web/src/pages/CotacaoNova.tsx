@@ -71,6 +71,7 @@ export default function CotacaoNova() {
     const [description, setDescription] = useState('');
 
   const [stepError, setStepError] = useState<string | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
 
   const [items, setItems] = useState<DraftItem[]>([]);
   const [showItemModal, setShowItemModal] = useState(false);
@@ -238,7 +239,17 @@ export default function CotacaoNova() {
         navigate(`/cotacoes/${created.id}`);
       }
     },
-    onError: (err) => setSubmitError(messageOf(err)),
+    onError: (err) => {
+      // Código tomado entre o passo 1 e o "Criar cotação": volta ao passo 1 com a mensagem.
+      const body = (err as Error & { body?: { path?: unknown } }).body;
+      if (body && body.path === 'requestCode') {
+        setStep(1);
+        setStepError(messageOf(err));
+        setSubmitError(null);
+        return;
+      }
+      setSubmitError(messageOf(err));
+    },
   });
 
   function openNewItem() {
@@ -330,7 +341,8 @@ export default function CotacaoNova() {
     );
   }
 
-  function handleNextStep() {
+  async function handleNextStep() {
+    if (checkingCode) return;
     setStepError(null);
     if (!currency.trim()) {
       setStepError('Informe a moeda.');
@@ -339,6 +351,25 @@ export default function CotacaoNova() {
     if (desiredIncoterm.length === 0) {
       setStepError('Selecione ao menos um incoterm aceitável.');
       return;
+    }
+    const typedCode = requestCode.trim();
+    if (typedCode) {
+      // Checagem antecipada do código. Falha de rede/HTTP não bloqueia: o servidor continua
+      // sendo a autoridade (o 409 do "Criar cotação" devolve o usuário a este passo).
+      setCheckingCode(true);
+      try {
+        const result = await api.get<{ available: boolean }>('/v1/quote-requests/code-availability', {
+          requestCode: typedCode,
+        });
+        if (result.available === false) {
+          setStepError(`O código ${typedCode.toUpperCase()} já está em uso por outra cotação.`);
+          return;
+        }
+      } catch {
+        // segue para o passo 2
+      } finally {
+        setCheckingCode(false);
+      }
     }
     setStep(2);
   }
@@ -408,7 +439,7 @@ export default function CotacaoNova() {
           className="card cotacao-nova__form"
           onSubmit={(e) => {
             e.preventDefault();
-            handleNextStep();
+            void handleNextStep();
           }}
         >
           <div className="form-grid">
@@ -502,7 +533,7 @@ export default function CotacaoNova() {
           )}
 
           <div className="cotacao-nova__acoes">
-            <button type="submit" className="primary-button">
+            <button type="submit" className="primary-button" disabled={checkingCode}>
               Próximo
               <Icon name="arrow-right" size={16} strokeWidth={2} />
             </button>

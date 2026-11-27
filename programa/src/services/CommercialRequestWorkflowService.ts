@@ -6,7 +6,11 @@ import { lockQuoteRequestForPurchaseOrders } from './QuotePurchaseOrderService';
 import { buildQuoteRequestItemCreateData } from './QuoteRequestItemFactory';
 import type { QuoteRequestCreateInput } from '../validators/domain';
 import { HttpError } from '../utils/http';
-import { buildRequestCode } from '../utils/requestCode';
+import {
+  buildRequestCode,
+  isRequestCodeUniqueViolation,
+  requestCodeTakenError,
+} from '../utils/requestCode';
 
 // Acoes do COMEX sobre uma solicitacao do comercial (PR2).
 //
@@ -157,6 +161,12 @@ export class CommercialRequestWorkflowService {
           createdById: userId,
           isDevelopment: requests.some((row) => row.isDevelopment === true),
         },
+      }).catch((createError: unknown) => {
+        // Codigo informado pelo usuario ja em uso: erro especifico (rollback da transacao).
+        if (payload.requestCode && isRequestCodeUniqueViolation(createError)) {
+          throw requestCodeTakenError(payload.requestCode);
+        }
+        throw createError;
       });
 
       await AuditLogService.log(

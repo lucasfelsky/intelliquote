@@ -17,6 +17,13 @@ quoteRequestRoutes.get(
   allowRoles(['admin', 'comprador', 'gestor', 'viewer']),
   QuoteRequestController.getAll,
 );
+// Registrada ANTES de '/quote-requests/:id', senao cai no getById com id invalido.
+quoteRequestRoutes.get(
+  '/quote-requests/code-availability',
+  requireAuth,
+  allowRoles(['admin', 'comprador']),
+  QuoteRequestController.checkCodeAvailability,
+);
 quoteRequestRoutes.get(
   '/quote-requests/:id',
   requireAuth,

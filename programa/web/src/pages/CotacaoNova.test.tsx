@@ -77,6 +77,9 @@ function mockApiGet(url: string, params?: Record<string, unknown>): Promise<unkn
       });
     }
   }
+  if (url === '/v1/quote-requests/code-availability') {
+    return Promise.resolve({ requestCode: params?.requestCode, available: true });
+  }
   return Promise.resolve({ data: [] });
 }
 
@@ -496,5 +499,152 @@ describe('CotacaoNova a partir de solicitacao do comercial', () => {
     fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
     expect(await findByText('Inclua ao menos um item para vincular a solicitação.')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
+  });
+});
+
+// Checagem do codigo no passo 1 + volta ao passo 1 quando o servidor rejeita o codigo.
+describe('CotacaoNova: codigo informado ja em uso', () => {
+  const AVAILABILITY_URL = '/v1/quote-requests/code-availability';
+  const availabilityCalls = () =>
+    vi.mocked(api.get).mock.calls.filter(([url]) => url === AVAILABILITY_URL);
+
+  beforeEach(() => {
+    routerState.search = '';
+    routerState.navigate.mockReset();
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.post).mockReset();
+    vi.mocked(api.get).mockImplementation(mockApiGet as any);
+  });
+
+  it('codigo vazio: "Próximo" nao consulta a disponibilidade e segue ao passo 2', async () => {
+    const { getByRole } = renderPage();
+    await goToStep2(getByRole);
+    expect(availabilityCalls()).toHaveLength(0);
+  });
+
+  it('codigo digitado e ocupado: fica no passo 1 com a mensagem especifica', async () => {
+    vi.mocked(api.get).mockImplementation(((url: string, params?: Record<string, unknown>) =>
+      url === AVAILABILITY_URL
+        ? Promise.resolve({ requestCode: params?.requestCode, available: false })
+        : mockApiGet(url, params)) as any);
+    const { getByRole, getByLabelText, findByText, queryByRole } = renderPage();
+
+    fireEvent.change(getByLabelText('Código'), { target: { value: ' abc-1 ' } });
+    fireEvent.click(getByRole('button', { name: 'Próximo' }));
+
+    expect(await findByText('O código ABC-1 já está em uso por outra cotação.')).toBeTruthy();
+    expect(api.get).toHaveBeenCalledWith(AVAILABILITY_URL, { requestCode: 'abc-1' });
+    expect(queryByRole('button', { name: 'Adicionar item' })).toBeNull();
+  });
+
+  it('codigo digitado e livre: vai ao passo 2', async () => {
+    const { getByRole, getByLabelText } = renderPage();
+
+    fireEvent.change(getByLabelText('Código'), { target: { value: 'ABC-2' } });
+    await goToStep2(getByRole);
+
+    expect(availabilityCalls()).toHaveLength(1);
+  });
+
+  it('checagem com erro: nao bloqueia e vai ao passo 2 (o servidor decide no "Criar cotação")', async () => {
+    vi.mocked(api.get).mockImplementation(((url: string, params?: Record<string, unknown>) =>
+      url === AVAILABILITY_URL ? Promise.reject(new Error('HTTP 500')) : mockApiGet(url, params)) as any);
+    const { getByRole, getByLabelText } = renderPage();
+
+    fireEvent.change(getByLabelText('Código'), { target: { value: 'ABC-3' } });
+    await goToStep2(getByRole);
+
+    expect(availabilityCalls()).toHaveLength(1);
+  });
+
+  // api.get de disponibilidade fica pendente ate o teste resolver manualmente.
+  function mockPendingAvailability() {
+    let resolveAvailability: (value: { requestCode: string; available: boolean }) => void = () => {};
+    const pending = new Promise<{ requestCode: string; available: boolean }>((resolve) => {
+      resolveAvailability = resolve;
+    });
+    vi.mocked(api.get).mockImplementation(((url: string, params?: Record<string, unknown>) =>
+      url === AVAILABILITY_URL ? pending : mockApiGet(url, params)) as any);
+    return resolveAvailability;
+  }
+
+  it('durante a checagem: "Próximo" fica desabilitado, reenvio nao duplica a consulta e available:false reabilita no passo 1', async () => {
+    const resolveAvailability = mockPendingAvailability();
+    const { getByRole, getByLabelText, findByText, queryByRole } = renderPage();
+
+    fireEvent.change(getByLabelText('Código'), { target: { value: 'ABC-5' } });
+    const nextButton = getByRole('button', { name: 'Próximo' }) as HTMLButtonElement;
+    expect(nextButton.disabled).toBe(false);
+    fireEvent.click(nextButton);
+
+    await waitFor(() => expect(nextButton.disabled).toBe(true));
+    expect(availabilityCalls()).toHaveLength(1);
+
+    // Clique em botao desabilitado e ignorado; o submit direto do form exercita o guard de handleNextStep.
+    fireEvent.click(nextButton);
+    const form = nextButton.closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(availabilityCalls()).toHaveLength(1);
+    expect(nextButton.disabled).toBe(true);
+
+    resolveAvailability({ requestCode: 'ABC-5', available: false });
+
+    expect(await findByText('O código ABC-5 já está em uso por outra cotação.')).toBeTruthy();
+    await waitFor(() => expect(nextButton.disabled).toBe(false));
+    expect(queryByRole('button', { name: 'Adicionar item' })).toBeNull();
+    expect(getByRole('button', { name: 'Próximo' })).toBeTruthy();
+    expect(availabilityCalls()).toHaveLength(1);
+  });
+
+  it('durante a checagem: reenvio nao duplica a consulta e available:true segue ao passo 2', async () => {
+    const resolveAvailability = mockPendingAvailability();
+    const { getByRole, getByLabelText } = renderPage();
+
+    fireEvent.change(getByLabelText('Código'), { target: { value: 'ABC-6' } });
+    const nextButton = getByRole('button', { name: 'Próximo' }) as HTMLButtonElement;
+    fireEvent.click(nextButton);
+
+    await waitFor(() => expect(nextButton.disabled).toBe(true));
+    fireEvent.submit(nextButton.closest('form') as HTMLFormElement);
+    expect(availabilityCalls()).toHaveLength(1);
+
+    resolveAvailability({ requestCode: 'ABC-6', available: true });
+
+    await waitFor(() => {
+      const addButton = getByRole('button', { name: 'Adicionar item' }) as HTMLButtonElement;
+      expect(addButton.disabled).toBe(false);
+    });
+    expect(availabilityCalls()).toHaveLength(1);
+  });
+
+  it('POST rejeitado com path requestCode: volta ao passo 1 com a mensagem do servidor', async () => {
+    const message = 'O código ABC-4 já está em uso por outra cotação.';
+    vi.mocked(api.post).mockRejectedValue(
+      Object.assign(new Error('HTTP 409'), { body: { message, path: 'requestCode' } }),
+    );
+    const { getByRole, getByLabelText, findByText, queryByRole } = renderPage();
+
+    fireEvent.change(getByLabelText('Código'), { target: { value: 'ABC-4' } });
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+
+    expect(await findByText(message)).toBeTruthy();
+    expect(queryByRole('button', { name: 'Criar cotação' })).toBeNull();
+    expect(getByRole('button', { name: 'Próximo' })).toBeTruthy();
+    expect((getByLabelText('Código') as HTMLInputElement).value).toBe('ABC-4');
+  });
+
+  it('POST rejeitado por outro motivo: continua no passo 2 com o erro de envio', async () => {
+    vi.mocked(api.post).mockRejectedValue(
+      Object.assign(new Error('HTTP 500'), { body: { message: 'Falha qualquer.' } }),
+    );
+    const { getByRole, findByText } = renderPage();
+
+    await goToStep2(getByRole);
+    fireEvent.click(getByRole('button', { name: 'Criar cotação' }));
+
+    expect(await findByText('Falha qualquer.')).toBeTruthy();
+    expect(getByRole('button', { name: 'Criar cotação' })).toBeTruthy();
   });
 });
